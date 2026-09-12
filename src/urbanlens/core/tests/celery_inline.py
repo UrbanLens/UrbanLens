@@ -18,6 +18,14 @@ With no worker draining the broker, those tasks are silently dropped and the
 assertion can never hold - which reads as a bug in the feature rather than a
 missing runner.
 
+The patch target is the subtle part. Every caller binds the name into its own
+module at import (``from ... import safely_enqueue_task``), so patching where the
+function is *defined* replaces an attribute none of them read: the real enqueue
+runs, the task goes to a broker with no worker, and the test waits for something
+that will never arrive. When the waiting is done by a `WebsocketCommunicator`,
+that surfaces as `TimeoutError` on a socket - which reads as a slow host rather
+than a broken fixture, and was mistaken for one.
+
 ``CELERY_TASK_ALWAYS_EAGER`` would fix all of them at once and is what several
 of these tests' own docstrings assume, but it is far too blunt in practice:
 turning it on runs *every* task a test incidentally triggers, and merely
@@ -28,7 +36,8 @@ the blast radius to the behaviour being asserted.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+import sys
 from typing import TYPE_CHECKING
 from unittest import mock
 
@@ -51,6 +60,8 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
         The patched ``safely_enqueue_task`` mock, so a test can additionally
         assert on what else was enqueued.
     """
+    from urbanlens.dashboard.services.core import celery as celery_module
+
     selected = set(tasks)
 
     def _dispatch(task, *args, **kwargs):
@@ -61,7 +72,22 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
             return task(*args, **kwargs)
         return None
 
-    with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", side_effect=_dispatch) as enqueue:
+    original = celery_module.safely_enqueue_task
+    # Patching where the function is defined rebinds an attribute nobody reads:
+    # every caller does `from ... import safely_enqueue_task`, which copies the
+    # reference into its own module at import. Resolved from sys.modules rather
+    # than listed, so a module that starts importing it later is covered without
+    # anyone remembering to add it here.
+    holders = [
+        module for module in list(sys.modules.values()) if getattr(module, "safely_enqueue_task", None) is original
+    ]
+
+    enqueue = mock.MagicMock(side_effect=_dispatch)
+    with ExitStack() as stack:
+        stack.enter_context(mock.patch.object(celery_module, "safely_enqueue_task", enqueue))
+        for module in holders:
+            if module is not celery_module:
+                stack.enter_context(mock.patch.object(module, "safely_enqueue_task", enqueue))
         yield enqueue
 
 

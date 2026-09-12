@@ -4266,6 +4266,35 @@ Two corrections to the audit came out of building it, both of which would have b
   normal deployment the route does not exist. Throttled anyway, because a demo instance is still a
   deployment.
 
+**The twelve WebSocket `TimeoutError`s were a broken fixture, not the environment**
+(2026-09-12). They survived several CI runs being called environment-sensitive, and at one point
+were explicitly cleared of any connection to the broadcast batching. Both of those were wrong.
+
+`core/tests/celery_inline.py` patched `services.core.celery.safely_enqueue_task` - where the
+function is defined. Every caller binds the name into its own module at import
+(`from ... import safely_enqueue_task`; twelve modules do), so the patch replaced an attribute none
+of them read. The real enqueue ran, the task went to a broker with no worker draining it, and was
+dropped. The test then waited for a broadcast that was never coming, and `WebsocketCommunicator`
+raised `TimeoutError`.
+
+Three things made this read as an environment problem for longer than it should have:
+
+- **The symptom is a hung socket**, which looks exactly like host contention — and this host is
+  genuinely contended, so the wrong explanation was always available and always plausible.
+- **It only fails where a test *awaits* the broadcast.** In `test_spotguessr_socket_scopes.py` the
+  two tests that wait failed and the three that do not passed, in the same file, on the same
+  fixture. A fixture that breaks a strict subset of one file does not look like a fixture.
+- **It is a test-only defect in an effort about production availability**, so the reflex was to
+  clear production and stop, rather than to ask what else could hang a socket.
+
+The helper now resolves the holders from `sys.modules` and patches each, rather than naming them —
+a list would rot on the next module to import it. `test_celery_inline_harness.py` asserts the mock
+reaches every holder, that there is more than one holder to reach (with one, the bug cannot exist),
+that unselected tasks are still dropped, and that the original is restored.
+
+No production code was wrong here. The cost was the signal: twelve failures normalised into
+"expected", which is what a persistently failing set does to a suite.
+
 **A rate limit bounds frequency, not duration** (2026-09-12). The throttle closed H17 and H50, and
 H51's first half, but H51 named two things and the second survived it: every one of those endpoints
 sends mail synchronously, and `EMAIL_TIMEOUT` was never set, so Django passed **no** `timeout` to
