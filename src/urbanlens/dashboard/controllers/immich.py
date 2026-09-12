@@ -255,29 +255,44 @@ class PinImmichSearchView(LoginRequiredMixin, View):
         # return two different shapes - a MapMarker carries coordinates, a
         # SearchAsset does not. All this view needs from either is the id it
         # renders and de-dupes on, which is what the annotation says.
-        results: Sequence[_HasAssetId]
+        results: Sequence[_HasAssetId] | None
+        from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+
         try:
             if mode == PhotoImportMode.VISITS:
                 dates = visit_dates_for_pin(pin)
                 if not dates:
                     return render(request, _PICKER_PARTIAL, {**context, "assets": [], "empty_message": "No recorded visits for this pin yet."})
-                results = gateway.search_by_dates(dates)
+                # One metadata search per date, because Immich's search takes a
+                # range rather than a set of days. The per-call timeout bounds
+                # each of up to MAX_VISIT_DATES calls and nothing bounded their
+                # sum, so the request could outlast every one of them being met.
+                results = call_with_deadline(lambda: gateway.search_by_dates(dates), timeout=EXTERNAL_CALL_DEADLINE, default=None, name="immich_search_by_dates")
             elif mode == PhotoImportMode.ALL:
-                results = gateway.list_recent()
+                results = call_with_deadline(gateway.list_recent, timeout=EXTERNAL_CALL_DEADLINE, default=None, name="immich_list_recent")
             else:
                 if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
                     return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
                 pin_point = (float(pin.location.latitude), float(pin.location.longitude))
                 # Measured and cached per pin, so the radius <select>'s six
                 # options share one library download instead of one each.
-                neighbourhood = nearby_assets(gateway, account, pin_point)
-                results = within_radius(neighbourhood, radius_m)
-                context["nearby_limit"] = NEARBY_ASSET_LIMIT
-                # Reported by the cap, not inferred from the result's length: a
-                # library of exactly the cap size shows everything it has.
-                context["nearby_truncated"] = neighbourhood.truncated
+                neighbourhood = call_with_deadline(lambda: nearby_assets(gateway, account, pin_point), timeout=EXTERNAL_CALL_DEADLINE, default=None, name="immich_nearby_assets")
+                if neighbourhood is not None:
+                    results = within_radius(neighbourhood, radius_m)
+                    context["nearby_limit"] = NEARBY_ASSET_LIMIT
+                    # Reported by the cap, not inferred from the result's length: a
+                    # library of exactly the cap size shows everything it has.
+                    context["nearby_truncated"] = neighbourhood.truncated
+                else:
+                    results = None
         except GatewayRequestError as exc:
             logger.warning("Immich picker request failed: %s", exc)
+            return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Immich library right now."})
+
+        # `call_with_deadline` returns its default only on timeout; anything the
+        # gateway itself raises has already been handled above.
+        if results is None:
+            logger.warning("Immich picker exceeded the external-call deadline for pin %s", pin.pk)
             return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Immich library right now."})
 
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))

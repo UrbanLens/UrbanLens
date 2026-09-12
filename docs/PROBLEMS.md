@@ -4423,6 +4423,27 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**H36 is fixed, on both pickers** (2026-09-12). The finding named Flickr; the Immich picker has the
+identical shape and would have been left holding a worker after the other was capped.
+
+Both "visits" modes issue one search per visit date, because both providers' taken-date filters take
+a range rather than a set of days. `MAX_VISIT_DATES` is 15 and each gateway's own
+`_REQUEST_TIMEOUT` is 30 seconds - so the inner timeouts bound each call and nothing bounded their
+sum. **Every per-call timeout could be honoured and the request still run for 450 seconds.** That is
+the shape worth remembering: a per-call timeout is not a request budget, and a fan-out of N calls
+needs its own.
+
+`call_with_deadline` already existed for this and `controllers/pin.py` already used it for its own
+provider fan-out. Both pickers now wrap all three modes - including Immich's "nearby", which
+measures against a whole library download - and degrade to the same error card the gateway-failure
+path already showed.
+
+What this does *not* do is stop the abandoned call: Python cannot kill a blocked thread, which is
+why the helper keeps a small dedicated pool. It stops the *request* waiting on it, which is what the
+worker is for. The tests assert the view returns promptly under a hanging gateway (the red run took
+37 seconds; the green one takes 8), and pair it with a prompt-search case so a view that simply
+always errored could not pass.
+
 **The read half of H24/H38 is fixed; the cache half was already done** (2026-09-12).
 `bounded_cache.set_if_small` already refuses to store an oversized body, with a comment noting the
 server is the user's own and `size=thumbnail` is a request rather than a guarantee - the ninth audit

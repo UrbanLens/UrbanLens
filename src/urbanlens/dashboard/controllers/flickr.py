@@ -207,26 +207,46 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
         if not profile.external_apis_enabled:
             return render(request, _PICKER_PARTIAL, {**context, "error": "External lookups are turned off in your settings."})
 
+        from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+
         gateway = FlickrGateway(account=account)
         try:
             if mode == PhotoImportMode.VISITS:
                 dates = visit_dates_for_pin(pin)
                 if not dates:
                     return render(request, _PICKER_PARTIAL, {**context, "assets": [], "empty_message": "No recorded visits for this pin yet."})
-                photos = gateway.search_by_dates(dates)
+                # One search per visit date, because Flickr's taken-date filter
+                # takes a range rather than a set of days. The per-call timeout
+                # bounds each of up to MAX_VISIT_DATES calls and nothing bounded
+                # their sum, so every inner timeout could be respected while the
+                # request itself ran for minutes.
+                photos = call_with_deadline(lambda: gateway.search_by_dates(dates), timeout=EXTERNAL_CALL_DEADLINE, default=None, name="flickr_search_by_dates")
             elif mode == PhotoImportMode.ALL:
-                photos = gateway.list_recent()
+                photos = call_with_deadline(gateway.list_recent, timeout=EXTERNAL_CALL_DEADLINE, default=None, name="flickr_list_recent")
             else:
                 if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
                     return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
-                photos = gateway.search_near(float(pin.location.latitude), float(pin.location.longitude), radius_m / 1000)
-                # Flickr's radius search is already server-side; re-check distance
-                # locally only for photos that reported coordinates (some may not),
-                # matching the search's own radius rather than trusting it blindly.
-                pin_point = (float(pin.location.latitude), float(pin.location.longitude))
-                photos = [photo for photo in photos if _within_radius(pin_point, photo, radius_m)]
+                latitude, longitude = float(pin.location.latitude), float(pin.location.longitude)
+                photos = call_with_deadline(
+                    lambda: gateway.search_near(latitude, longitude, radius_m / 1000),
+                    timeout=EXTERNAL_CALL_DEADLINE,
+                    default=None,
+                    name="flickr_search_near",
+                )
+                if photos is not None:
+                    # Flickr's radius search is already server-side; re-check distance
+                    # locally only for photos that reported coordinates (some may not),
+                    # matching the search's own radius rather than trusting it blindly.
+                    pin_point = (latitude, longitude)
+                    photos = [photo for photo in photos if _within_radius(pin_point, photo, radius_m)]
         except GatewayRequestError as exc:
             logger.warning("Flickr picker request failed: %s", exc)
+            return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Flickr library right now."})
+
+        # `call_with_deadline` returns its default only on timeout; anything the
+        # gateway itself raises has already been handled above.
+        if photos is None:
+            logger.warning("Flickr picker exceeded the external-call deadline for pin %s", pin.pk)
             return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Flickr library right now."})
 
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
