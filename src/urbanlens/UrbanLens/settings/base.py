@@ -827,7 +827,6 @@ IMMICH_MARKER_CACHE_MAX_ASSETS = _app_settings.immich_marker_cache_max_assets
 SEARCH_MAX_LABEL_GROUPS = _app_settings.search_max_label_groups
 SEARCH_MAX_LABEL_FILTER_IDS = _app_settings.search_max_label_filter_ids
 SEARCH_MAX_LABEL_EXPANSION = _app_settings.search_max_label_expansion
-COMMENT_COUNT_SCAN_LIMIT = _app_settings.comment_count_scan_limit
 WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT = _app_settings.websocket_max_sockets_per_account
 
 # Default primary key field type

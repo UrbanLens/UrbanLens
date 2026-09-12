@@ -42,6 +42,7 @@ from urbanlens.dashboard.services.profile.identity_visibility import mask_profil
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
+    from urbanlens.dashboard.models.comments.queryset import CommentQuerySet
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -72,33 +73,6 @@ class EmptyCommentTextError(CommentValidationError):
 
 class UnsupportedReactionEmojiError(CommentValidationError):
     """``toggle_reaction`` was called with an emoji outside :data:`ALLOWED_EMOJIS`."""
-
-
-@dataclass(frozen=True, slots=True)
-class VisibleCommentCount:
-    """How many comments a viewer may see, and whether the scan stopped early.
-
-    Behaves like the integer it replaced everywhere a template touches it -
-    ``{% if count %}`` and ``{{ count }}`` - so the badge renders ``512+``
-    rather than a number it did not verify.
-
-    Attributes:
-        total: Comments confirmed visible. A floor when ``capped``.
-        capped: Whether more mentioning comments existed than
-            ``settings.COMMENT_COUNT_SCAN_LIMIT`` allows the badge to evaluate.
-    """
-
-    total: int
-    capped: bool = False
-
-    def __bool__(self) -> bool:
-        return self.total > 0
-
-    def __int__(self) -> int:
-        return self.total
-
-    def __str__(self) -> str:
-        return f"{self.total}+" if self.capped else str(self.total)
 
 
 @dataclass(slots=True)
@@ -251,7 +225,7 @@ def _render_if_visible(comment: Comment, profile: Profile, pinned: set[Any], can
     return render_comment_text(comment.text, pinned)
 
 
-def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> VisibleCommentCount:
+def visible_comment_count(comments: CommentQuerySet, profile: Profile) -> int:
     """How many of *comments* this viewer may actually see.
 
     The number rendered beside a thread has to agree with the thread, or it
@@ -260,52 +234,23 @@ def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> Visi
     ``.count()`` then announces that something was hidden - and, from the
     position, roughly what.
 
-    Deliberately answers only gates 2 and 3, both O(1) queries regardless of
-    how many comments or authors are in *comments*. Gate 1
-    (``can_view_comments_from``) is left out on purpose: it is evaluated per
-    *author*, and each evaluation is itself several relationship queries
-    (friends, common pin, common trip) for anyone who isn't already a friend -
-    so counting it here scales with the number of distinct authors in the
-    whole thread, not with the page actually being rendered.
-    ``test_query_amplification.WikiPageAmplificationTests`` caught exactly
-    that: every added comment came from a new author, and the query count grew
-    with it. Author-visibility hiding a comment is not the leak gate 3 exists
-    to close - it is an ordinary content setting, not a fact about a specific
-    place - so the count is allowed to include those comments even though the
-    rendered thread (``visible_comment_tree``, applied only to the page being
-    shown) will not.
+    Every gate is a queryset filter, so this is one ``COUNT`` whose cost does
+    not grow with the thread. It used to apply gates 2 and 3 only, and to stop
+    being exact above a ceiling, because both were answered in Python over the
+    text of every mentioning comment - work anyone who could comment set for
+    every later viewer of the page. Neither compromise is needed now, so the
+    badge counts what the thread shows.
 
     Args:
-        comments: The comments to count (any queryset over ``Comment``).
+        comments: The comments to count. A ``CommentQuerySet`` rather than a
+            bare ``QuerySet``, because the gates it applies are queryset
+            methods.
         profile: The viewing profile.
 
     Returns:
-        The number of comments visible to *profile* under gates 2 and 3 - exact
-        while the thread is a normal size, and a floor marked ``capped`` above
-        ``settings.COMMENT_COUNT_SCAN_LIMIT``. A floor is safe in the direction
-        that matters: a badge below the thread reveals nothing, a badge above it
-        is the oracle.
+        The number of comments visible to *profile*.
     """
-    from django.conf import settings
-    from django.db.models import Q
-
-    from urbanlens.dashboard.services.notifications.mentions import LOCATION_MENTION_MARKER, is_visible_to
-
-    # Gate 2.
-    candidates = comments.exclude(Q(pending_scan=True) & ~Q(profile_id=profile.pk))
-
-    # Gate 3, and only for the subset that could possibly trip it - nothing
-    # without the marker can be dropped by it.
-    plain_total = candidates.exclude(text__contains=LOCATION_MENTION_MARKER).count()
-    pinned = viewer_pinned_uuids(profile)
-    ceiling = settings.COMMENT_COUNT_SCAN_LIMIT
-    # One past the ceiling, so "there are more" is answered by the same read.
-    texts = list(candidates.filter(text__contains=LOCATION_MENTION_MARKER).values_list("text", flat=True)[: ceiling + 1])
-    capped = len(texts) > ceiling
-    # `is_visible_to` rather than `render_comment_text`: the badge needs the
-    # decision, not the HTML, and rendering resolves a URL per mention.
-    visible = sum(1 for text in texts[:ceiling] if is_visible_to(text, pinned))
-    return VisibleCommentCount(total=plain_total + visible, capped=capped)
+    return comments.visible_to(profile).count()
 
 
 def comment_is_visible(comment: Comment, profile: Profile) -> bool:

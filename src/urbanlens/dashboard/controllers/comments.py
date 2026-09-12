@@ -203,7 +203,12 @@ def _render_comments(request, context: dict) -> HttpResponse:
 
 
 def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_qs=None, conceal: bool = False, **extra) -> dict:
-    top_level_qs = top_level_comment_queryset(comments_qs, replies_qs=replies_qs)
+    # Before the page is cut, not after: a gate applied to the page makes the
+    # page size mean nothing, and a viewer who cannot see most of a thread got
+    # two comments where the panel shows eight.
+    visible_qs = comments_qs.visible_to(profile)
+    visible_replies = (replies_qs if replies_qs is not None else Comment.objects.all()).visible_to(profile)
+    top_level_qs = top_level_comment_queryset(visible_qs, replies_qs=visible_replies)
     # Default to the last page so the most recent activity (comments are
     # ordered oldest-to-newest) is what a viewer sees without paging back.
     page_obj = get_page(request, top_level_qs, _COMMENTS_PAGE_SIZE, default_last=True)

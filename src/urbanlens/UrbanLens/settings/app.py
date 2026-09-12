@@ -389,16 +389,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "to exclude. Trimming logs a warning so it is never silent."
         ),
     )
-    comment_count_scan_limit: int = Field(
-        default=500,
-        description=(
-            "How many @loc-mentioning comments the comment-count badge evaluates before it stops being exact. The "
-            "badge has to agree with the rendered thread rather than report a raw count, which means applying the "
-            "mention gate in Python over the text of every mentioning comment - work anyone who can comment sets for "
-            "every later viewer of the page. Above this the count is a floor, displayed with a '+': a badge below "
-            "the thread reveals nothing, while a badge above it is the existence oracle the gate exists to deny."
-        ),
-    )
     websocket_max_sockets_per_account: int = Field(
         default=20,
         description=(

@@ -40,6 +40,8 @@ from urbanlens.dashboard.models.abstract.versioned import concrete_field, resolv
 from urbanlens.dashboard.models.abstract.versioning import WriteSource
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from urbanlens.dashboard.models.article.model import Article, ArticleRevision
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -307,7 +309,7 @@ _ACTOR_FIELDS: dict[str, str] = {
 }
 
 
-def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
+def conceal_rows[QuerySetT: QuerySet[Any]](queryset: QuerySetT, viewer: Profile | None) -> QuerySetT:
     """Narrow a wiki-scoped queryset to what a concealed viewer may see.
 
     Keeps rows nobody contributed (provider and enrichment data, which a
@@ -315,7 +317,10 @@ def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
     their friends. Drops everybody else's.
 
     Args:
-        queryset: Rows already scoped to one wiki.
+        queryset: Rows already scoped to one wiki. Generic, so a caller that
+            handed in a model's own queryset class gets it back rather than a
+            bare ``QuerySet`` - narrowing rows never changes what a queryset
+            can do.
         viewer: Who is looking, or None when signed out.
 
     Returns:
