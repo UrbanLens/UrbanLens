@@ -298,35 +298,46 @@ def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
     polygon_cache: dict[int, object] = {}
-    nearby_cache: dict[tuple[int, int], list[Pin]] = {}
+    nearby_cache: dict[tuple[int, int], list[tuple[Pin, float, float]]] = {}
 
     def _polygon_for(pin: Pin):
         if pin.pk not in polygon_cache:
             polygon_cache[pin.pk] = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
         return polygon_cache[pin.pk]
 
-    def _nearby_pins(key: tuple[int, int]) -> list[Pin]:
+    def _nearby_pins(key: tuple[int, int]) -> list[tuple[Pin, float, float]]:
+        """A cell's candidate pins, each with its coordinates already floats.
+
+        Converted once per cell rather than inside the per-hit sort key: the
+        coordinates are ``Decimal`` on the model, and re-converting them for
+        every hit made the sort cost more than the queries it replaced.
+        """
         if key not in nearby_cache:
             centre = Point((key[1] + 0.5) * _PREFILTER_GRID_DEGREES, (key[0] + 0.5) * _PREFILTER_GRID_DEGREES, srid=4326)
             radius = _BOUNDARY_PREFILTER_RADIUS_KM + _PREFILTER_GRID_SLACK_KM
-            nearby_cache[key] = list(Pin.objects.filter(profile=profile).near_point(centre, radius_km=radius).select_related("location"))
+            candidates = Pin.objects.filter(profile=profile).near_point(centre, radius_km=radius).select_related("location")
+            resolved: list[tuple[Pin, float, float]] = []
+            for pin in candidates:
+                location = pin.location
+                if location is None or location.latitude is None or location.longitude is None:
+                    resolved.append((pin, float("inf"), float("inf")))
+                else:
+                    resolved.append((pin, float(location.latitude), float(location.longitude)))
+            nearby_cache[key] = resolved
         return nearby_cache[key]
 
-    def _distance_from_hit(hit: LocationHit):
+    def _nearest_first(hit: LocationHit, candidates: list[tuple[Pin, float, float]]) -> list[Pin]:
         """Order a cell's shared candidates by distance from this hit.
 
         The query is answered for the cell, so its own ordering is by distance
         from the cell centre. Re-sorting keeps the original tie-break - where two
-        boundaries overlap and both contain the hit, the nearer pin still wins.
+        boundaries overlap and both contain the hit, the nearer pin still wins -
+        and is skipped outright when there is nothing to reorder.
         """
-
-        def _key(pin: Pin) -> float:
-            location = pin.location
-            if location is None or location.latitude is None or location.longitude is None:
-                return float("inf")
-            return _haversine_km((hit.latitude, hit.longitude), (float(location.latitude), float(location.longitude)))
-
-        return _key
+        if len(candidates) < 2:
+            return [pin for pin, _, _ in candidates]
+        here = (hit.latitude, hit.longitude)
+        return [pin for pin, _, _ in sorted(candidates, key=lambda row: _haversine_km(here, (row[1], row[2])))]
 
     matched: dict[Pin, list[LocationHit]] = {}
     unmatched: list[LocationHit] = []
@@ -334,7 +345,7 @@ def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict
         point = Point(hit.longitude, hit.latitude, srid=4326)
         matched_pin: Pin | None = None
         cell = (int(hit.latitude // _PREFILTER_GRID_DEGREES), int(hit.longitude // _PREFILTER_GRID_DEGREES))
-        for pin in sorted(_nearby_pins(cell), key=_distance_from_hit(hit)):
+        for pin in _nearest_first(hit, _nearby_pins(cell)):
             polygon = _polygon_for(pin)
             if polygon is not None:
                 if polygon.contains(point):

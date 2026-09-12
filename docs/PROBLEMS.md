@@ -4345,6 +4345,17 @@ real coordinates. The candidate list is re-sorted per hit by true distance, so t
 Measured after: 200 hits → 4 queries, 2,000 hits → 4 queries. Flat rather than merely smaller, which
 is the property worth having: the cost no longer tracks the size of anyone's photo library.
 
+A review pass caught the cost this moved rather than removed. Re-sorting a cell's candidates per hit
+converts each pin's `Decimal` coordinates to float again every time: 2,000 hits against 400 nearby
+pins cost **2.92s of CPU**. Converting once per cell instead, and skipping the sort when there is
+nothing to reorder, brings that to **1.96s** for the same 45 queries and the same answers.
+
+Left there deliberately. Removing the sort entirely would mean tie-breaking on distance from the cell
+centre rather than from the hit, which is a semantic change — small, since a cell is 11m — and this
+work claims the tie-break is exact. 2s of bulk-worker CPU for 2,000 distinct places is a fair price
+for that claim, and the DB load, which is the genuinely shared resource, is down from 2,002 queries
+to 45 either way.
+
 **And the same sweep held one object per photo, for a fix that also already existed** (2026-09-12).
 `sweep_immich_library_locations` appended a `LocationHit` per geotagged asset and kept them all until
 the sweep ended, so peak memory tracked the size of someone's library rather than the number of
