@@ -23,6 +23,7 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
     LocationContextUnavailableError,
     RedataLocationContextGateway,
 )
+from urbanlens.dashboard.services.core.gateway import read_capped
 
 if TYPE_CHECKING:
     import datetime
@@ -134,12 +135,12 @@ class RedataImageryGateway(RedataLocationContextGateway):
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         target = url if url.startswith(("http://", "https://")) else f"{base_url.rstrip('/')}/{url.lstrip('/')}"
         try:
-            response = self.session.get(target, headers=self._headers, timeout=_DOWNLOAD_TIMEOUT)
+            response = self.session.get(target, headers=self._headers, timeout=_DOWNLOAD_TIMEOUT, stream=True)
         except OSError as exc:
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
         if response.status_code != 200:
             self._raise_for_error_status(response, url)
-        return response.content
+        return read_capped(response, what="REData imagery")
 
     def download_archived_copy(self, asset_uuid: str, *, width: int | None = None, height: int | None = None) -> bytes:
         """Fetch REData's own composed, permanently archived copy of an imagery asset.
@@ -181,12 +182,12 @@ class RedataImageryGateway(RedataLocationContextGateway):
         path = f"/api/v1/imagery/{asset_uuid}/download/"
         target = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
         try:
-            response = self.session.get(target, params=params, headers=self._headers, timeout=_DOWNLOAD_TIMEOUT)
+            response = self.session.get(target, params=params, headers=self._headers, timeout=_DOWNLOAD_TIMEOUT, stream=True)
         except OSError as exc:
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
         if response.status_code != 200:
             self._raise_for_error_status(response, path)
-        return response.content
+        return read_capped(response, what="REData imagery")
 
     def capture_time_series(self, asset_uuid: str, date: datetime.date, *, width: int = 1024, height: int = 1024) -> dict[str, Any] | None:
         """Materialize one date from a continuous (``time_series``) imagery source.

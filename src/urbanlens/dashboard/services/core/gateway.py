@@ -124,3 +124,45 @@ class GatewayRateLimitedError(GatewayRequestError):
     catch this specific type to stop early instead of retrying every
     remaining candidate against a budget that will not refill mid-run.
     """
+
+
+#: Largest body a gateway will pull into the web worker for one proxied file.
+#:
+#: Generous against real content - a full-resolution listing photo, a map tile,
+#: a scanned attachment - and small against the worker's own memory limit, which
+#: is the number that matters: under gevent a worker killed for memory takes
+#: every other in-flight request on it down too.
+MAX_PROXIED_MEDIA_BYTES = 25 * 1024 * 1024
+
+
+def read_capped(response: requests.Response, *, max_bytes: int = MAX_PROXIED_MEDIA_BYTES, what: str) -> bytes:
+    """Read a proxied body, refusing one larger than *max_bytes*.
+
+    The response must have been requested with ``stream=True``. That is not a
+    style preference: without it ``requests`` has already read the whole body
+    into memory during ``send()``, so a size check here would be measuring
+    memory that is already spent, and ``response.raw.read()`` would return an
+    empty body - a refusal that looks exactly like a successful download of
+    nothing. Handed such a response this raises instead, so the mistake is loud
+    at the call site rather than silent in production.
+
+    Args:
+        response: A streamed response whose body has not been read.
+        max_bytes: Largest body to accept.
+        what: What is being downloaded, for the refusal message.
+
+    Returns:
+        The body, at most *max_bytes* long.
+
+    Raises:
+        GatewayRequestError: The body is larger than *max_bytes*, or the
+            response was not streamed and so cannot be capped.
+    """
+    if response.raw is None or getattr(response, "_content_consumed", False):
+        raise GatewayRequestError(f"{what} was fetched without stream=True, so its size cannot be bounded")
+    # One byte past the ceiling: enough to know it was exceeded, without
+    # reading the rest of whatever is on the other end.
+    body = response.raw.read(max_bytes + 1, decode_content=True)
+    if len(body) > max_bytes:
+        raise GatewayRequestError(f"{what} is larger than the {max_bytes // (1024 * 1024)}MB limit for proxied media")
+    return body

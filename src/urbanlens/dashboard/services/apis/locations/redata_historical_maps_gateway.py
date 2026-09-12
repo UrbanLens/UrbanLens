@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.core.gateway import read_capped
 
 _MAPS_PATH = "/api/v1/maps/"
 
@@ -114,5 +115,5 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
         """
         base_url = (self.base_url or "").rstrip("/")
         url = f"{base_url}/api/v1/maps/georeferences/{georeference_uuid}/tiles/{z}/{x}/{y}.png"
-        response = self.session.get(url, headers=self._headers, timeout=30)
-        return response.status_code, response.content, response.headers.get("Content-Type", "image/png")
+        response = self.session.get(url, headers=self._headers, timeout=30, stream=True)
+        return response.status_code, read_capped(response, what="historical map tile"), response.headers.get("Content-Type", "image/png")
