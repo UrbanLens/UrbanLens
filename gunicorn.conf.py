@@ -1,7 +1,11 @@
 """Gunicorn configuration for the production ``app`` service.
 
-Loaded explicitly via ``-c gunicorn.conf.py`` in package.json's ``start``
-script.
+Named explicitly by package.json's ``start`` script - but gunicorn also reads
+``gunicorn.conf.py`` out of the working directory when nothing names it, and
+that directory is ``/app`` for every service built from this image. So this file
+also configures ``ai-inference``, which runs a different WSGI application with
+no Django and no ORM. Each hook below therefore checks that it applies to the
+process it has landed in, rather than assuming it is the app.
 
 Why ``--worker-connections 20`` is on that command line, since package.json
 cannot carry a comment. gevent's default is **1000 greenlets per worker**, and
@@ -132,6 +136,13 @@ def post_fork(server, worker):
     config (celery workers, the daphne app-ws container, manage.py) keep
     stock blocking psycopg2 behaviour, which is correct for them.
 
+    Only under the gevent worker. The patch registers a *gevent* wait callback
+    on psycopg2, so under any other worker class there is no hub to yield to -
+    it is at best inert and at worst a query waiting on a loop nobody runs.
+    ``ai-inference`` already inherits this hook while running ``gthread``, and
+    D11 moves the app itself to ``gthread``, so the guard is what makes that
+    switch a flag change rather than a code change.
+
     Deliberately does NOT also warm the URLconf (see ``post_worker_init``
     below for why that has to happen later, in a different hook, not just
     later in this same one).
@@ -140,6 +151,9 @@ def post_fork(server, worker):
         server: The gunicorn Arbiter instance.
         worker: The freshly forked worker process.
     """
+    if getattr(server.cfg, "worker_class_str", "") != "gevent":
+        return
+
     from psycogreen.gevent import patch_psycopg
 
     patch_psycopg()
@@ -151,6 +165,11 @@ def post_worker_init(worker):
     Args:
         worker: The freshly initialised worker, used for its logger.
     """
+    if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+        # Not the Django app - nothing to warm, and reporting that as a failure
+        # puts an ImproperlyConfigured traceback in the boot log of a service
+        # that is configured exactly as intended.
+        return
     _warm_urlconf(worker)
 
 

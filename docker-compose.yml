@@ -670,7 +670,16 @@ services:
           - urbanlens_egress_proxy
       ai_egress_network: {}
     healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "8888"]
+      # A complete request, not `nc -z`: a bare connect that closes without
+      # sending anything makes tinyproxy log an ERROR every interval, and this
+      # log is where a blocked provider call would show up. The 403 is the
+      # healthy answer - tinyproxy.stats is not in the allowlist on purpose, so
+      # the probe exercises parsing and policy without sending real egress.
+      test:
+        [
+          "CMD-SHELL",
+          "printf 'GET http://tinyproxy.stats/ HTTP/1.0\r\n\r\n' | nc 127.0.0.1 8888 | grep -q '^HTTP/'",
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -703,6 +712,11 @@ services:
         "1",
         "-t",
         "120",
+        # This container is read_only, so gunicorn cannot create its control
+        # socket under $HOME and logs an Errno 30 every boot. Nothing drives
+        # this service through that socket, and refusing it outright suits a
+        # tier whose whole purpose is isolation better than a writable mount.
+        "--no-control-socket",
       ]
     user: "1001:1001"
     read_only: true
