@@ -4344,6 +4344,32 @@ The sweep is the reusable part. "Where else does this exact defect live" found a
 the sixteen-dimension audit had swept and missed, which is an argument for running the class outward
 from each fix rather than only working down a finding list.
 
+**The part of that sweep worth keeping is which population is exposed.** A first pass counted 45
+`request.POST.getlist()` sites and read as a large open class. It is not: Django's
+`DATA_UPLOAD_MAX_NUMBER_FIELDS` is at its default of **1000**, so every form-encoded list is already
+bounded at a thousand entries before any view sees it. The guard does not apply to
+`json.loads(request.body)` — a JSON body is bounded only by `DATA_UPLOAD_MAX_MEMORY_SIZE` (2.5MB),
+and 2.5MB of small integers is roughly 300,000 of them.
+
+So the exposed population is the JSON-body list sites, not the form ones, and the two were being
+conflated. Sweeping only those found the reorder above plus two more of the same shape:
+`PinListReorderView` → `reorder_list_items`, and the trip activity reorder → `reorder_activities`.
+Both do `filter(pk__in=ids)` with whatever was submitted.
+
+**Deliberately not capped, because a fixed ceiling here would be a functional regression.** A
+drag-and-drop reorder submits the *complete* desired order, `SiteSettings.max_pins_per_list` defaults
+to `0` meaning unlimited, and `reorder_list_items` documents that stale ids from another tab are
+tolerated and still consume their index — so a legitimate submission can be slightly *larger* than
+the list's current count. Any constant low enough to bound the statement is one a large list could
+legitimately exceed, and silently trimming a reorder produces an order the user did not ask for,
+which is worse than a slow one.
+
+The ceiling that would be correct is derived rather than configured — the list's own item count plus
+slack for stale ids — and choosing the slack is a product call about the largest list anyone should
+be able to reorder at once. Recorded with the analysis rather than guessed at. The labels case was
+different and safe to fix: 1000 was already the number the external API had chosen, and no profile
+has a thousand labels.
+
 **A cache whose key never repeats is not a cache** (2026-09-12, H01's last half). The Immich
 "Scan your library" sweep named three things and two were already closed: it declares `Queue.BULK`
 since D13, so it no longer holds an interactive worker slot, and `ImmichLibraryScanStartView` claims
