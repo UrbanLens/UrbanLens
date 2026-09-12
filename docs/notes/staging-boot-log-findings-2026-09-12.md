@@ -120,13 +120,16 @@ worker wait for it. That is the standing requirement's own failure shape, at low
 
 ## H64 — a permanently unreadable file is retried hourly, forever (open)
 
-`generate_image_thumbnails` logged 50 tracebacks on staging for files the database references and
-the disk does not have (2,444 `Image` rows against 25 files — a restored database with an
-unrestored media volume, environmental rather than a bug).
+`generate_image_thumbnails` (`tasks.py:1432`) logged 50 tracebacks on staging for files the
+database references and the disk does not have (2,444 `Image` rows against 25 files — a restored
+database with an unrestored media volume, environmental rather than a bug).
+`generate_image_marker_thumbnails` (`tasks.py:1675`) does the same over the same rows, so each
+unreadable file is reported twice per wrap; a later 10-minute window showed 50 more from the
+marker path alone, which is how the loop was confirmed to be ongoing rather than a boot artifact.
 
-The design around it is sound: `backfill_image_thumbnails` walks by primary key, the cursor
-advances past failures, and an exhausted cursor resets. But that means a file that can *never* be
-read is retried on every wrap, logging a full traceback each time, with no way to stop.
+The design around both is sound: the backfill walks by primary key, the cursor advances past
+failures, and an exhausted cursor resets. But that means a file that can *never* be read is
+retried on every wrap, logging a full traceback each time, with no way to stop.
 
 The codebase already has the concept — `write_image_preview` caches `UNPREVIEWABLE` against a
 failure TTL so a bad file is not re-examined. The thumbnail path has no equivalent. Low severity
