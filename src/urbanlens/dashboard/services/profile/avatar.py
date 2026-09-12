@@ -340,8 +340,19 @@ def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile
         AvatarMalwareDetectedError: The antivirus scan flagged the file.
         AvatarScanUnavailableError: The antivirus scanner couldn't be reached.
     """
+    from django.conf import settings
+
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.media.images import image_upload_error
+
+    # Before the gauntlet, because the gauntlet's last step is the antivirus
+    # scan and that is what costs: the file is copied into this worker and
+    # streamed to the shared clamd daemon. Refusing after scanning would save
+    # nothing, and the site-wide photo ceiling the gauntlet applies is three
+    # orders of magnitude larger than any picture needs to be.
+    ceiling = settings.AVATAR_MAX_UPLOAD_BYTES
+    if (uploaded_file.size or 0) > ceiling:
+        raise AvatarTooLargeError(f"Avatar is {uploaded_file.size} bytes, over the {ceiling}-byte ceiling")
 
     upload_error = image_upload_error(uploaded_file, MediaKind.PHOTO)
     if upload_error:

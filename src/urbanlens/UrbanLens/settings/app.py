@@ -283,6 +283,18 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "this should still render what fits and say that it did."
         ),
     )
+    avatar_max_upload_bytes: int = Field(
+        default=5_000_000,
+        description=(
+            "Largest profile picture an upload may carry. Avatars were bounded only by the site-wide photo/video "
+            "ceiling - 250MB by default - and the antivirus scan runs inside the request, copying the file into the "
+            "worker and streaming it to the shared clamd daemon, so one person changing their picture could occupy "
+            "a worker and that daemon for as long as a quarter-gigabyte scan takes. Bounded rather than moved off "
+            "the request: deferring would mean serving a picture nobody has scanned yet, and unlike a comment image "
+            "an avatar has no `pending_scan` gate to hide behind. The OAuth download path is tighter still at 512KB, "
+            "where the bytes are not the user's choice at all."
+        ),
+    )
     immich_max_thumbnail_bytes: int = Field(
         default=8_000_000,
         description=(

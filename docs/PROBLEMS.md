@@ -4423,6 +4423,30 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**H45 is fixed** (2026-09-12). `set_profile_avatar` runs the shared `image_upload_error` gauntlet
+without `skip_malware_scan`, so the antivirus scan happens inside the request - the file is copied
+into a BytesIO in the worker and streamed to the shared clamd daemon. The only size bound on it was
+`file_size_error_for_upload`, the *site-wide photo/video* cap: 250MB by default, and an admin may
+raise it to 900MB. One person changing their profile picture could hold a worker, and the clamd
+daemon every other upload shares, for as long as a quarter-gigabyte scan takes.
+
+The asymmetry is the argument for the number. `_download_avatar_from_url` - the OAuth path, fetching
+from Discord or Google - already refuses anything over 512KB. The same product concept was bounded
+two orders of magnitude apart depending on which door it came through, and the *tighter* door was
+the one where the size is not even the user's choice.
+
+**Bounded rather than deferred, and that is a deliberate trade.** Moving the scan off the request
+the way comment images do would mean storing, and potentially serving, a picture nothing has scanned
+yet. Comment images only get away with that because `pending_scan` hides them from everyone but
+their author until it clears; a profile picture has no equivalent gate. So the fix makes the scan
+cheap rather than late - the cost is proportional to the bytes, and an avatar has no business being
+250MB. Adding a `pending_scan` equivalent would be the alternative, and it is a schema and render
+change rather than a ceiling.
+
+The test that carries the weight asserts the scan is never *called* for an oversized upload. Before
+the fix that test failed with `AvatarMalwareDetectedError` - the scan had already run on the
+oversized file, which is the defect stated exactly.
+
 **H36 is fixed, on both pickers** (2026-09-12). The finding named Flickr; the Immich picker has the
 identical shape and would have been left holding a worker after the other was capped.
 
