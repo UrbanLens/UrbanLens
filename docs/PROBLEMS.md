@@ -4356,6 +4356,54 @@ The third door: `SafetyContactMarkupJsonView` builds its own listing, so capping
 would have left the *less* guarded of the two unbounded — that route is reachable by anyone holding
 the magic link, with no account at all. Both now read through one helper.
 
+**A fourth and fifth door, and H37 with them** (2026-09-12). Re-reading H39's own recommendation
+found it had named `_sanitize_latlngs` — a function the first fix never touched, because the
+controller was where the finding pointed. The snapshot composer reaches the same table by a
+different route entirely: `sanitize_map_data` → `replace_items_from_snapshot`, capping neither how
+many shapes a snapshot carries nor how many points each one does. Six callers share it — pin and
+wiki comments, visits, memories, trips and lists — and `replace_items_from_snapshot` saves row by
+row, each save firing the two `PinMarkup` receivers, so N shapes is N inserts plus 2N receiver runs
+inside one request. `MARKUP_MAX_SHAPES_PER_SNAPSHOT` and the existing point ceiling now bound both.
+
+Trimmed rather than refused, which is the opposite of the geometry door's choice and deliberate:
+the callers read a `None` snapshot as "no map was submitted", and `materialize_markup_map` responds
+to that by **deleting the map the user already had**. Refusing an oversized snapshot would have
+destroyed data. `_sanitize_markup_shapes` was already a sanitizer that silently drops malformed
+entries, so returning fewer shapes extends what it already did; trimming markup is direction-safe
+in a way trimming a `not` filter is not, because a shape omitted is only a shape not drawn.
+
+The fifth door is the read side, and the one other people actually pay for. `MarkupMap.to_snapshot()`
+is a separate path from `MarkupJsonView` with no ceiling of its own, and `Comment.map_snapshot`
+calls it per comment — so a wiki thread embedded one unbounded snapshot per comment for everyone who
+opened the page. It is sliced at `MARKUP_MAX_ITEMS_PER_RESPONSE` now. Rows written before any of
+these ceilings existed are still stored, which is the second reason the read side needed its own.
+This closes H37, which named the same function from the memories-maps end.
+
+Capping the read introduced a way to lose data, which the fix had to close rather than ship: items
+are created one at a time and nothing counted how many an owner held, so a map could pass the
+listing ceiling item by item — and then the composer prefill or `clone_markup_map`, both of which
+round-trip through `to_snapshot()`, would write back only what they could read and delete the rest.
+The create door now refuses past the same ceiling for a standalone map, so no map can outgrow its
+reader and the round-trip is lossless. Cloning inherits the ceiling deliberately: the alternative is
+one button press copying an unbounded number of rows, and the recipient still gets everything the
+reader showed.
+
+Scoped to `parent_map` on purpose, and the first attempt got this wrong. Capping every owner kind
+would have put a ceiling on a *community wiki* — a surface many people draw on — so one person
+filling it would lock everybody else out, which is the exact harm this work exists to remove, just
+relocated. Pin and wiki markup is never written back from a snapshot, so neither can lose anything,
+and each create is one cheap insert against a read that is already capped.
+
+`_coordinate_count` was checked against the obvious evasions and holds: padding a payload with
+nested empty lists does not get pairs past the ceiling, and walking the largest body Django will
+accept costs ~0.08s. `json.loads` raising `RecursionError` on a deeply nested body did escape
+`_parse_body`, which caught only `JSONDecodeError`/`ValueError` — a 500 rather than a fallback.
+
+Still open here: the `truncated` flag the listing returns is read by nothing. Three consumers do
+`(data.markup_items || []).forEach(...)` and ignore the rest of the payload, so the cut is reported
+in JSON and invisible to the person looking at the map. The photo layer already solved this
+(`map-annotations.ts` renders a note only when capped); markup should match it.
+
 Still open in family 4: the findings N21 lists beyond these, most of which are request-path
 loops over one account's data in surfaces nobody has measured yet.
 

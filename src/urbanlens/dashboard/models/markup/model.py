@@ -283,8 +283,11 @@ class MarkupMap(abstract.FrontendDashboardModel):
             to 0,0 when the viewport was never saved).
         """
         # .all() (not .order_by()) so a prefetched items cache is reused; the
-        # model's default ordering is already ["created"].
-        shapes = [shape for shape in (item.to_snapshot_shape() for item in self.items.all()) if shape is not None]
+        # model's default ordering is already ["created"]. Slicing a populated
+        # prefetch cache stays a list slice, so the ceiling costs no query.
+        from django.conf import settings
+
+        shapes = [shape for shape in (item.to_snapshot_shape() for item in self.items.all()[: settings.MARKUP_MAX_ITEMS_PER_RESPONSE]) if shape is not None]
         return {
             "center_lat": self.center_latitude if self.center_latitude is not None else 0.0,
             "center_lng": self.center_longitude if self.center_longitude is not None else 0.0,

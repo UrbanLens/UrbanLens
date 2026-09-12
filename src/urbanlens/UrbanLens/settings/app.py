@@ -283,6 +283,16 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "this should still render what fits and say that it did."
         ),
     )
+    markup_max_shapes_per_snapshot: int = Field(
+        default=2_000,
+        description=(
+            "How many shapes one submitted map snapshot may carry. The snapshot composer is a second write door onto "
+            "the same markup table that `markup_max_geometry_points` guards, reached by pin and wiki comments, "
+            "visits, memories, trips and lists - and each shape is stored with its own INSERT plus two receivers, so "
+            "the cost is whatever the submitter puts in one field. Trimmed rather than refused: the callers read a "
+            "rejected snapshot as \"no map was submitted\", which deletes the map the user already had."
+        ),
+    )
     label_bulk_edit_max_ids: int = Field(
         default=500,
         description=(

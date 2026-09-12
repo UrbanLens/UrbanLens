@@ -172,6 +172,34 @@ def _bounded_markup_rows(items: Any) -> tuple[list[Any], bool]:
     return rows[:ceiling], len(rows) > ceiling
 
 
+def _map_is_full(owner_kwargs: dict) -> JsonResponse | None:
+    """Refuse a create once a standalone map holds as many items as it can show.
+
+    Only ``parent_map``: a MarkupMap is the one owner kind that round-trips
+    through ``to_snapshot()`` - the composer prefill and ``clone_markup_map``
+    both read it and write it back - so one that grows past the listing ceiling
+    item by item would come back from an ordinary edit with the excess deleted.
+    Pin and wiki markup is never written back that way, and capping a community
+    wiki would let one person use up a surface everybody draws on.
+
+    Args:
+        owner_kwargs: The ``parent_pin``/``parent_wiki``/``parent_map`` filter
+            identifying what the new item would hang off.
+
+    Returns:
+        A 400 when a map is already at ``settings.MARKUP_MAX_ITEMS_PER_RESPONSE``,
+        else None.
+    """
+    from django.conf import settings
+
+    if "parent_map" not in owner_kwargs:
+        return None
+    ceiling = settings.MARKUP_MAX_ITEMS_PER_RESPONSE
+    if PinMarkup.objects.filter(**owner_kwargs).count() >= ceiling:
+        return JsonResponse({"ok": False, "error": f"This map already has {ceiling} annotations, which is the most one map shows."}, status=400)
+    return None
+
+
 def _sanitize_text_box_corner(geometry: dict) -> None:
     """Drop ``geometry["box_corner"]`` if it isn't a valid [lng, lat] pair.
 
@@ -191,7 +219,7 @@ def _parse_body(request: HttpRequest) -> dict:
     """Parse JSON or fall back to POST data."""
     try:
         return json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError, RecursionError):
         return dict(request.POST)
 
 
@@ -793,6 +821,9 @@ class MarkupView(LoginRequiredMixin, View):
             owner_kwargs = {"parent_map": owner}
         else:
             owner_kwargs = {"parent_wiki": owner}
+
+        if full := _map_is_full(owner_kwargs):
+            return full
 
         # CustomLayer only ever attaches to a Pin or Wiki (never a standalone
         # MarkupMap), so owner_kwargs' parent_pin/parent_wiki double as the

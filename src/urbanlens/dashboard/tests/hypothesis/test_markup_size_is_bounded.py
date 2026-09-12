@@ -23,7 +23,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.markup.model import PinMarkup
+from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 
@@ -130,3 +130,80 @@ class TheListingIsCappedTests(_MarkupCase):
 
         self.assertEqual(len(body["markup_items"]), 3)
         self.assertFalse(body["truncated"])
+
+
+class AMapCannotOutgrowItsReaderTests(_MarkupCase):
+    """Items are created one at a time, and nothing counted how many there were.
+
+    The listing ceiling alone leaves a gap with teeth on a standalone map: it
+    can pass the ceiling one item at a time, and a snapshot round-trip - the
+    composer prefill, or `clone_markup_map` - then writes back only what it
+    could read and deletes the rest. Refused at the create door for maps, which
+    makes the round-trip lossless.
+
+    Deliberately not applied to pin or wiki markup: neither is ever written
+    back from a snapshot, so neither can lose anything - and a ceiling on a
+    community wiki would let one person use up a surface everybody draws on,
+    which is the harm this whole effort exists to remove.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.markup_map = baker.make(
+            MarkupMap, profile=self.profile, center_latitude=40.0, center_longitude=-74.0, zoom=13
+        )
+
+    def _line(self) -> dict:
+        return {"type": "LineString", "coordinates": [[-74.0, 40.0], [-74.1, 40.1]]}
+
+    def _create_on_map(self):
+        return self.client.post(
+            reverse("markup_map.markup", kwargs={"map_uuid": str(self.markup_map.uuid)}),
+            data=json.dumps({"markup_type": "line", "geometry": self._line()}),
+            content_type="application/json",
+        )
+
+    def _seed_map(self, count: int) -> None:
+        for _ in range(count):
+            assert self._create_on_map().status_code == 200  # nosec B101
+
+    @override_settings(**{ITEMS_SETTING: 3})
+    def test_a_create_past_the_ceiling_is_refused(self) -> None:
+        self._seed_map(3)
+
+        response = self._create_on_map()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(PinMarkup.objects.count(), 3, "the item over the ceiling was stored anyway")
+
+    @override_settings(**{ITEMS_SETTING: 3})
+    def test_creates_under_the_ceiling_still_work(self) -> None:
+        """The half that stops the test above passing against a view that refuses everything."""
+        self._seed_map(2)
+
+        self.assertEqual(PinMarkup.objects.count(), 2)
+
+    @override_settings(**{ITEMS_SETTING: 3})
+    def test_the_ceiling_is_per_map_not_site_wide(self) -> None:
+        """A full map must not stop anyone from drawing on a different one."""
+        self._seed_map(3)
+        other = baker.make(MarkupMap, profile=self.profile, center_latitude=40.0, center_longitude=-74.0, zoom=13)
+
+        response = self.client.post(
+            reverse("markup_map.markup", kwargs={"map_uuid": str(other.uuid)}),
+            data=json.dumps({"markup_type": "line", "geometry": self._line()}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+
+    @override_settings(**{ITEMS_SETTING: 3})
+    def test_a_shared_wiki_surface_is_not_capped_at_the_create_door(self) -> None:
+        """One person must not be able to use up a surface everybody draws on."""
+        for _ in range(5):
+            response = self._create(
+                {"type": "LineString", "coordinates": [[-74.0, 40.0], [-74.1, 40.1]]}, markup_type="line"
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+
+        self.assertEqual(PinMarkup.objects.count(), 5)

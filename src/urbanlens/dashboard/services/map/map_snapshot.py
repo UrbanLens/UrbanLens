@@ -21,6 +21,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from django.conf import settings
 from django.utils import timezone
 from django.utils.dateformat import format as format_date
 
@@ -76,11 +77,19 @@ def _sanitize_number(v: object, lo: float, hi: float, default: float) -> float:
 
 
 def _sanitize_latlngs(raw: object) -> list[list[float]]:
-    """Return only the valid ``[lat, lng]`` pairs found in ``raw``."""
+    """Return the valid ``[lat, lng]`` pairs in ``raw``, up to the point ceiling.
+
+    Stops at ``settings.MARKUP_MAX_GEOMETRY_POINTS`` - the same ceiling the
+    markup controller refuses an oversized ``geometry`` with, so the two write
+    doors onto ``PinMarkup`` cannot disagree about how big a shape may be.
+    """
     if not isinstance(raw, list):
         return []
-    result = []
+    ceiling = settings.MARKUP_MAX_GEOMETRY_POINTS
+    result: list[list[float]] = []
     for item in raw:
+        if len(result) >= ceiling:
+            break
         if isinstance(item, list | tuple) and len(item) >= 2:
             lat, lng = item[0], item[1]
             if _is_valid_lat(lat) and _is_valid_lng(lng):
@@ -89,11 +98,20 @@ def _sanitize_latlngs(raw: object) -> list[list[float]]:
 
 
 def _sanitize_markup_shapes(shapes: object) -> list[dict]:
-    """Return cleaned shape dicts, dropping malformed or unknown-typed entries."""
+    """Return cleaned shape dicts, dropping malformed, unknown or excess entries.
+
+    Trimmed at ``settings.MARKUP_MAX_SHAPES_PER_SNAPSHOT``: every kept shape
+    becomes its own INSERT in ``replace_items_from_snapshot`` plus the two
+    ``PinMarkup`` receivers, and nothing else bounds how many one request asks
+    for.
+    """
     if not isinstance(shapes, list):
         return []
+    ceiling = settings.MARKUP_MAX_SHAPES_PER_SNAPSHOT
     clean: list[dict] = []
     for s in shapes:
+        if len(clean) >= ceiling:
+            break
         if not isinstance(s, dict):
             continue
         shape_type = s.get("type")
