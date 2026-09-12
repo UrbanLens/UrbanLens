@@ -23,6 +23,8 @@ field. Instantiations move with exactly the thing that is wrong here.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
 from urbanlens.core.tests.instantiation_scaling import count_instantiations
@@ -153,3 +155,69 @@ class TheHistoryIsStillRightTests(_RevisionCase):
         rows = self._rows(f"{BASE}/pins/{self.pin.slug}/article/revisions/")
 
         self.assertEqual(rows[0]["editor"], str(self.profile))
+
+
+class TheWindowRespectsTheCallersFilterTests(_RevisionCase):
+    """A revision the caller filtered out must not be what a delta measures against.
+
+    The wiki door hands `revision_history_page` a queryset already narrowed by
+    `visible_rows`, so a concealed viewer pages through a history with holes in
+    it. The window is computed over that filtered queryset, which means a delta
+    spans the gap - exactly what the list comprehension this replaced did, since
+    it indexed into the already-filtered list.
+
+    Pinned directly rather than through a concealment fixture: the property is
+    "the window sees what the caller passed", and passing a filtered queryset
+    states that without depending on what makes a viewer concealed.
+    """
+
+    def test_a_filtered_out_revision_is_not_the_neighbour(self) -> None:
+        from urbanlens.dashboard.models.article.model import ArticleRevision
+        from urbanlens.dashboard.services.wiki.articles import revision_history_page
+
+        for length in (100, 500, 700):
+            save_article(editor=self.profile, content="y" * length, pin=self.pin)
+        middle = ArticleRevision.objects.order_by("created", "pk")[1]
+
+        queryset, build = revision_history_page(ArticleRevision.objects.exclude(pk=middle.pk), self.profile)
+        rows = [build(revision) for revision in queryset]
+
+        # Newest first: 700 measured against 100 (not the excluded 500), then 100 from nothing.
+        self.assertEqual([row["size_delta"] for row in rows], [600, 100])
+
+    def test_the_unfiltered_history_still_measures_every_step(self) -> None:
+        """The half that stops the test above passing against a window that ignores order."""
+        from urbanlens.dashboard.models.article.model import ArticleRevision
+        from urbanlens.dashboard.services.wiki.articles import revision_history_page
+
+        for length in (100, 500, 700):
+            save_article(editor=self.profile, content="y" * length, pin=self.pin)
+
+        queryset, build = revision_history_page(ArticleRevision.objects.all(), self.profile)
+        rows = [build(revision) for revision in queryset]
+
+        self.assertEqual([row["size_delta"] for row in rows], [200, 400, 100])
+
+
+class TheDeferredBodyIsNeverTouchedTests(_RevisionCase):
+    """`defer("content")` turns a stray `.content` read into a query per row.
+
+    A different axis from the instantiation budget above: deferring the field is
+    what stops the 200,000-character bodies being loaded, but a later caller
+    touching `revision.content` would load them one query at a time instead -
+    slower than before the fix, and invisible to an object count.
+    """
+
+    def _queries_for(self, revisions: int) -> int:
+        self._seed_pin_revisions(revisions)
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(f"{BASE}/pins/{self.pin.slug}/article/revisions/?page_size=10", **self._headers)
+        assert response.status_code == 200, response.status_code  # nosec B101
+        return len(captured.captured_queries)
+
+    def test_more_rows_on_a_page_do_not_cost_more_queries(self) -> None:
+        small = self._queries_for(2)
+        ArticleRevision.objects.all().delete()
+        large = self._queries_for(10)
+
+        self.assertLessEqual(large - small, 1, f"eight more rows on one page cost {large - small} more queries")

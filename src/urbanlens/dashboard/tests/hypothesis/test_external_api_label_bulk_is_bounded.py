@@ -125,3 +125,47 @@ class OrdinaryEditsStillWorkTests(_BulkEditCase):
         )
 
         self.assertEqual(response.status_code, 400, response.content[:200])
+
+
+@override_settings(**{CEILING_SETTING: 3})
+class EverySharedCeilingMovesTogetherTests(_BulkEditCase):
+    """Raising the ceiling must not apply to one of three endpoints.
+
+    Bulk delete and bulk convert carried the same literal 500 that bulk edit
+    did, so with the rule moved into settings they would have kept a ceiling
+    nothing configures - and each fires the same per-label receivers that touch
+    every pin carrying the label, so they want the same number.
+
+    Reorder keeps its own, larger literal on purpose: it is one `bulk_update`
+    of an order column, not per-label graph work, so it is not this ceiling.
+    """
+
+    def _post_to(self, path: str, payload: dict):
+        return self.client.post(
+            f"{_BASE}{path}",
+            data=payload,
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {self.raw_key}",
+        )
+
+    def test_bulk_delete_honours_the_configured_ceiling(self) -> None:
+        response = self._post_to("bulk/delete/", {"uuids": self._uuids(4)})
+
+        self.assertEqual(response.status_code, 400, response.content[:200])
+
+    def test_bulk_convert_honours_the_configured_ceiling(self) -> None:
+        response = self._post_to("bulk/convert/", {"uuids": self._uuids(4), "target_kind": "category"})
+
+        self.assertEqual(response.status_code, 400, response.content[:200])
+
+    def test_a_delete_under_the_ceiling_still_works(self) -> None:
+        """The anti-vacuity half for both of the above."""
+        response = self._post_to("bulk/delete/", {"uuids": self._uuids(2)})
+
+        self.assertEqual(response.status_code, 200, response.content[:200])
+
+    def test_reorder_keeps_its_own_larger_ceiling(self) -> None:
+        """Not governed by this setting - a different operation with a different cost."""
+        response = self._post_to("reorder/", {"uuids": self._uuids(4)})
+
+        self.assertEqual(response.status_code, 200, response.content[:200])

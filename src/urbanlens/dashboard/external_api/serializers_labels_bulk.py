@@ -43,10 +43,42 @@ class LabelReorderResponseSerializer(serializers.Serializer):
     skipped_global_uuids = serializers.ListField(child=serializers.UUIDField(), read_only=True)
 
 
-class LabelBulkDeleteSerializer(serializers.Serializer):
+class _CeilingOnUuids(serializers.Serializer):
+    """Bounds ``uuids`` by ``LABEL_BULK_EDIT_MAX_IDS`` at validation time.
+
+    Every bulk label action here does per-label work against the database, and
+    saving a label touches every pin carrying it, so the three share a ceiling.
+    Read from settings rather than bound as a field ``max_length``, which is
+    fixed at import and so could be neither configured nor overridden.
+
+    Reorder deliberately does not inherit this: it is one ``bulk_update`` of an
+    order column rather than per-label graph work, and carries its own literal.
+    """
+
+    def validate(self, attrs: dict) -> dict:
+        """Refuse a list over the shared ceiling.
+
+        Args:
+            attrs: The validated field values.
+
+        Returns:
+            ``attrs`` unchanged.
+
+        Raises:
+            ValidationError: When ``uuids`` is over the ceiling.
+        """
+        from django.conf import settings
+
+        ceiling = settings.LABEL_BULK_EDIT_MAX_IDS
+        if len(attrs.get("uuids") or []) > ceiling:
+            raise serializers.ValidationError({"uuids": f"Select at most {ceiling} items at a time."})
+        return attrs
+
+
+class LabelBulkDeleteSerializer(_CeilingOnUuids):
     """Validates a bulk label-delete request."""
 
-    uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=500)
+    uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
 
 
 class LabelBulkDeleteResponseSerializer(serializers.Serializer):
@@ -55,7 +87,7 @@ class LabelBulkDeleteResponseSerializer(serializers.Serializer):
     deleted = serializers.IntegerField(read_only=True)
 
 
-class LabelBulkEditSerializer(serializers.Serializer):
+class LabelBulkEditSerializer(_CeilingOnUuids):
     """Validates a bulk label-edit request. Every field but ``uuids`` is optional.
 
     Absent means untouched, matching the rest of this API - contrast the
@@ -80,14 +112,11 @@ class LabelBulkEditSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         """Bound every list against the same ceiling the internal door uses.
 
-        `uuids` carried a literal ceiling and the two hierarchy lists carried
-        none, which left the real cost - for every label, for every proposed
-        parent, a `would_create_cycle` walk of the label graph in the database -
-        as one capped number multiplied by an uncapped one.
-
-        Read from settings at validation time rather than bound as a field
-        `max_length`, which is fixed at import and so could be neither
-        configured nor overridden in a test.
+        The base bounds `uuids`; this adds the two hierarchy lists, which
+        carried no ceiling at all. That left the real cost - for every label,
+        for every proposed parent, a `would_create_cycle` walk of the label
+        graph in the database - as one capped number multiplied by an uncapped
+        one.
 
         Args:
             attrs: The validated field values.
@@ -103,8 +132,9 @@ class LabelBulkEditSerializer(serializers.Serializer):
         """
         from django.conf import settings
 
+        attrs = super().validate(attrs)
         ceiling = settings.LABEL_BULK_EDIT_MAX_IDS
-        for field in ("uuids", "add_parent_uuids", "add_child_uuids"):
+        for field in ("add_parent_uuids", "add_child_uuids"):
             if len(attrs.get(field) or []) > ceiling:
                 raise serializers.ValidationError({field: f"Select at most {ceiling} items at a time."})
         return attrs
@@ -116,7 +146,7 @@ class LabelBulkEditResponseSerializer(serializers.Serializer):
     count = serializers.IntegerField(read_only=True)
 
 
-class LabelBulkConvertSerializer(serializers.Serializer):
+class LabelBulkConvertSerializer(_CeilingOnUuids):
     """Validates a bulk label-kind-conversion request.
 
     A label already at ``target_kind``, or already a ``status`` label being
@@ -125,7 +155,7 @@ class LabelBulkConvertSerializer(serializers.Serializer):
     ``LabelBulkConvertView._resolved_target_kind``).
     """
 
-    uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=500)
+    uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
     target_kind = serializers.ChoiceField(choices=_CONVERTIBLE_KIND_CHOICES)
 
 
