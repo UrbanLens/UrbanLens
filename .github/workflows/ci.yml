@@ -27,8 +27,11 @@ env:
   UL_UNSAFE_ALLOW_HTTP: "True"
   # Required for the gateway to construct at all. Unroutable on purpose, and the
   # test suite's network guard refuses a real socket regardless - without it,
-  # every REData test fails here and passes on a developer machine.
+  # every REData test fails here and passes on a developer machine. The key is
+  # checked for presence before any request is built, so a placeholder is what
+  # the tests need and a real credential is what they must not have.
   UL_REDATA_API_URL: http://redata.invalid/api/
+  UL_REDATA_API_KEY: ci-placeholder-not-a-real-key
   UL_ENVIRONMENT: testing
 
 jobs:

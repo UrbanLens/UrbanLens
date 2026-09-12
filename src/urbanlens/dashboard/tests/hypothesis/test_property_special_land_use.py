@@ -76,7 +76,9 @@ class SpecialLandUseRowTests(SimpleTestCase):
 
 class PropertyCardRenderTests(SimpleTestCase):
     def _context(self, **extra) -> dict:
-        return _render_available({"available": True, "situs_address": "1 Main St", **extra}, show_owner=False)
+        return _render_available(
+            {"available": True, "situs_address": "1 Main St", **extra}, show_owner=False, show_demographics=True
+        )
 
     def test_a_restricted_parcel_is_chipped_not_only_listed(self) -> None:
         """A row halfway down a definition list is not a warning."""

@@ -923,6 +923,9 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     # of material as the other entries here.
     "redata_cultural_resources": "Reference & Archives",
     "redata_public_locations": "Reference & Archives",
+    # Mapped historical features near a pin, standing or long gone - survey
+    # material like the two above, and the sibling of redata_reference_documents.
+    "redata_historical_features": "Reference & Archives",
     # Parks & Regulatory
     "nps": "Parks & Regulatory",
     "epa_echo": "Parks & Regulatory",

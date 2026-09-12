@@ -51,12 +51,15 @@ class GroupRemovalStopsDeliveryTests(TestCase):
 
     def _recipients(self) -> set[str]:
         """Channel groups addressed when the creator posts a message."""
+        # One batched call carrying (group, message) pairs - a message to a
+        # fifty-person group used to be fifty separate sends, and so fifty
+        # Celery tasks. Which groups were addressed is still the question.
         with (
-            patch("urbanlens.dashboard.services.messaging.group_chats.send_group_message") as send,
+            patch("urbanlens.dashboard.services.messaging.group_chats.send_group_messages") as send,
             self.captureOnCommitCallbacks(execute=True),
         ):
             create_group_message(self.creator, self.group, "anyone there?")
-        return {call.args[0] for call in send.call_args_list}
+        return {group for call in send.call_args_list for group, _message in call.args[0]}
 
     def test_every_active_member_is_addressed(self) -> None:
         """Anchors the rest: delivery works before anyone is removed."""

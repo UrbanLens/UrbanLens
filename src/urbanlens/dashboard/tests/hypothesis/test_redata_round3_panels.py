@@ -65,7 +65,7 @@ class AssessmentHistoryTests(SimpleTestCase):
             "situs_address": "1 Main St",
             "assessment_history": [{"tax_year": 2024, "total_value": 45000, "value_stage": "board"}],
         }
-        context = _render_available(data, show_owner=False)
+        context = _render_available(data, show_owner=False, show_demographics=True)
         values = {entry["label"]: entry["value"] for entry in context["meta"]}
         self.assertEqual(values.get("Assessed 2024"), "$45,000 (board)")
 

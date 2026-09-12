@@ -26,7 +26,7 @@ class SendGroupMessageTests(SimpleTestCase):
     def test_no_channel_layer_does_not_enqueue(self) -> None:
         with (
             mock.patch.object(channel_broadcast, "get_channel_layer", return_value=None),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch.object(channel_broadcast, "safely_enqueue_task") as enqueue,
         ):
             channel_broadcast.send_group_message("some-group", {"type": "x"})
 
@@ -35,7 +35,7 @@ class SendGroupMessageTests(SimpleTestCase):
     def test_channel_layer_present_enqueues_the_broadcast_task(self) -> None:
         with (
             mock.patch.object(channel_broadcast, "get_channel_layer", return_value=mock.Mock()),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch.object(channel_broadcast, "safely_enqueue_task") as enqueue,
         ):
             channel_broadcast.send_group_message("some-group", {"type": "x", "payload": 1})
 
