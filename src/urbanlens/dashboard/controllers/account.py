@@ -12,6 +12,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from django import forms
+from django.conf import settings as django_settings
 
 # Aliased: several functions here bind a local `settings` to SiteSettings.
 from django.contrib import messages
@@ -411,6 +412,27 @@ class RegistrationForm(UserCreationForm):
 # -- Sign-up view ----------------------------------------------------------
 
 
+def _offer_verify_url_to_developers(request: HttpRequest, verify_url: str) -> None:
+    """Stash a verification link for on-page display, in development only.
+
+    Following the link is the whole of the verification - it sets
+    ``is_active`` - so showing it to whoever submitted the form means email
+    verification stops proving control of the address for as long as the mail
+    server is unhealthy. Somebody could sign up as another person, with a
+    password of their choosing, and activate the account from the response.
+
+    The template has always labelled this block "Development mode"; nothing
+    enforced it until now.
+
+    Args:
+        request: The request whose session carries the value to the next page.
+        verify_url: The absolute verification link.
+    """
+    if not django_settings.DEBUG:
+        return
+    request.session["debug_verify_url"] = verify_url
+
+
 class SignupView(generic.CreateView):
     """Create a new user account and send a verification email."""
 
@@ -469,8 +491,7 @@ class SignupView(generic.CreateView):
             logger.info("Verification email sent to %s", user.email)
         except (smtplib.SMTPException, OSError):
             logger.exception("Failed to send verification email to %s", user.email)
-            # Store the verify URL in session for debug display
-            self.request.session["debug_verify_url"] = verify_url
+            _offer_verify_url_to_developers(self.request, verify_url)
 
 
 def _store_signup_auth_salt(user: User, auth_salt: str) -> None:
@@ -501,7 +522,10 @@ class VerifyEmailSentView(View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         email = request.session.pop("pending_verification_email", None)
-        debug_url = request.session.pop("debug_verify_url", None)
+        # Popped either way, so a value stored before this gate existed cannot
+        # sit in a session waiting to be rendered.
+        stored = request.session.pop("debug_verify_url", None)
+        debug_url = stored if django_settings.DEBUG else None
         return render(
             request,
             "registration/verify_email_sent.html",
@@ -603,7 +627,7 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
         msg.send()
     except (smtplib.SMTPException, OSError):
         logger.exception("Failed to send verification email to %s", user.email)
-        request.session["debug_verify_url"] = verify_url
+        _offer_verify_url_to_developers(request, verify_url)
 
 
 # -- Password reset (E2EE-aware) --------------------------------------------
