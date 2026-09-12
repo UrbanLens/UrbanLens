@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P115` · `T3` · `PL8` · `D15` · `X18` · `I5` · `R29` · `N22`
+**Next free id:** `P115` · `T3` · `PL8` · `D15` · `X18` · `I5` · `R29` · `N23`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -190,3 +190,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N19 | current | 2026-09-10 | The staging metrics exporter's 30-hour restart loop is stopped at 4,410; the permanent fix is a 52-commit staging deploy, not a container fix | [`docs/handoffs/infrastructure-metrics-exporter-loop-closed.md`](handoffs/infrastructure-metrics-exporter-loop-closed.md) |
 | N20 | current | 2026-09-10 | The neighbour test runs, and what it measured changes what staging should expect | [`docs/handoffs/infrastructure-neighbour-test-results.md`](handoffs/infrastructure-neighbour-test-results.md) |
 | N21 | current | 2026-09-11 | The availability audit of 2026-09-11, and what it found | [`docs/notes/availability-audit-2026-09-11.md`](notes/availability-audit-2026-09-11.md) |
+| N22 | current | 2026-09-12 | Staging crash-looped on an nginx config three tests called correct, and its logs held five more defects | [`docs/notes/staging-boot-log-findings-2026-09-12.md`](notes/staging-boot-log-findings-2026-09-12.md) |
