@@ -108,3 +108,38 @@ class TheOriginalIsRestoredTests(TestCase):
 
         self.assertIs(channel_broadcast.safely_enqueue_task, original)
         self.assertIs(celery_module.safely_enqueue_task, original)
+
+
+class AModuleImportedInsideTheBlockTests(TestCase):
+    """The holders are resolved on entry, so a late import needs restoring too.
+
+    Three of the twelve modules that bind the name are not imported at Django
+    startup. A test that is the first to import one - inside a `tasks_run_inline`
+    block - binds whatever `celery.safely_enqueue_task` is at that moment, which
+    is the mock. `mock.patch` then restores only the modules it was given, so
+    that one keeps a dead mock for the rest of the process and every later
+    enqueue through it silently does nothing.
+
+    Exactly the failure this helper's own bug had: not an error, just work that
+    quietly never happens.
+    """
+
+    def test_a_module_that_binds_the_name_late_is_still_restored(self) -> None:
+        import sys
+
+        from urbanlens.dashboard.services.core import celery as celery_module
+
+        original = celery_module.safely_enqueue_task
+        name = "urbanlens.dashboard.services.media.upload_failures"
+        sys.modules.pop(name, None)
+
+        with tasks_run_inline():
+            import urbanlens.dashboard.services.media.upload_failures as late  # noqa: PLC0415
+
+            self.assertIs(
+                late.safely_enqueue_task, celery_module.safely_enqueue_task, "the late import did not pick up the mock"
+            )
+
+        self.assertIs(
+            late.safely_enqueue_task, original, "a module imported inside the block kept the mock after it exited"
+        )

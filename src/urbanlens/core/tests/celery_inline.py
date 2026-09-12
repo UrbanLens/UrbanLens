@@ -83,12 +83,23 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
     ]
 
     enqueue = mock.MagicMock(side_effect=_dispatch)
-    with ExitStack() as stack:
-        stack.enter_context(mock.patch.object(celery_module, "safely_enqueue_task", enqueue))
-        for module in holders:
-            if module is not celery_module:
-                stack.enter_context(mock.patch.object(module, "safely_enqueue_task", enqueue))
-        yield enqueue
+    try:
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.object(celery_module, "safely_enqueue_task", enqueue))
+            for module in holders:
+                if module is not celery_module:
+                    stack.enter_context(mock.patch.object(module, "safely_enqueue_task", enqueue))
+            yield enqueue
+    finally:
+        # A module imported for the first time *inside* the block binds whatever
+        # the celery module held at that moment, which is the mock - and
+        # mock.patch restores only the modules it was handed. Three of the
+        # holders are not imported at Django startup, so this is reachable, and
+        # the symptom would be the same silent one this helper's own bug had:
+        # every later enqueue through that module quietly doing nothing.
+        for module in list(sys.modules.values()):
+            if getattr(module, "safely_enqueue_task", None) is enqueue:
+                module.safely_enqueue_task = original
 
 
 @contextmanager

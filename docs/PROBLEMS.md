@@ -4301,9 +4301,18 @@ the reach computation. `visible_wiki_location_ids` builds the viewer's whole rea
 queries; `location_visible_to` answers the same question for one location in **1**. Using the cheap
 one on the media path would take 11 to about 8.
 
-The prerequisite — an agreement test between the two, since they are separate implementations of one
-rule — is now written (`test_wiki_reach_implementations_agree.py`), and it immediately earned its
-keep by failing: **the equivalence has a precondition.** The set form filters `wiki__isnull=False`,
+**Correcting the estimate above**, now that the per-query breakdown is visible: swapping the reach
+form saves 2 queries, not 3, and it is no longer where the cost is. At the default settings the 11
+divide into roughly seven relationship lookups and, only when the uploader is *allowed*, four for
+reach. Making the relationship half cheaper means replacing "load both full friend sets and
+intersect" with targeted `EXISTS` queries — which would make the **gallery** path worse, since that
+one deliberately resolves the viewer's sets once and reuses them across N uploaders. The two call
+shapes want opposite things, and picking between them is a trade-off to decide rather than an
+optimisation to apply. Left for an owner call, with the numbers above.
+
+The prerequisite for the reach swap — an agreement test between the two forms, since they are
+separate implementations of one rule — is now written (`test_wiki_reach_implementations_agree.py`),
+and it immediately earned its keep by failing: **the equivalence has a precondition.** The set form filters `wiki__isnull=False`,
 so it lists wikis that *exist*; `location_visible_to` answers "may you reach a wiki here" whether or
 not one was created. For a location with no wiki they disagree by construction, which is not a defect
 — there is nothing to show — but it does mean the substitution is sound only where a wiki exists.
@@ -4389,6 +4398,18 @@ that unselected tasks are still dropped, and that the original is restored.
 
 No production code was wrong here. The cost was the signal: twelve failures normalised into
 "expected", which is what a persistently failing set does to a suite.
+
+A review pass then found the same shape once more in the fix itself. The holders are resolved from
+`sys.modules` when the block opens, so a module imported for the first time *inside* it binds
+whatever `celery.safely_enqueue_task` held at that moment — the mock — and `mock.patch` restores only
+the modules it was handed. Three of the twelve holders are not imported at Django startup, so this is
+reachable, and the symptom is identical to the original bug: not an error, just every later enqueue
+through that module quietly doing nothing. The helper now restores any module still holding the mock
+when the block exits.
+
+Worth noting that the original code had this defect too, so it is not a regression — but it is the
+third time in this effort that the interesting failure has been *silence* rather than an exception.
+A test that asserts work happened is worth more here than one that asserts nothing raised.
 
 **A rate limit bounds frequency, not duration** (2026-09-12). The throttle closed H17 and H50, and
 H51's first half, but H51 named two things and the second survived it: every one of those endpoints
