@@ -85,6 +85,40 @@ class Comment(abstract.FrontendDashboardModel):
 
     objects = CommentManager()
 
+    def save(self, *args, **kwargs) -> None:
+        """Persist the comment and re-derive the locations its text names.
+
+        The mention rows are an index of ``text`` rather than data of their own
+        (see :mod:`~urbanlens.dashboard.models.comments.location_mention`), so
+        they are rebuilt here rather than at each call site - a visibility gate
+        that depends on them must not be able to go stale because somebody
+        added a write path and forgot.
+
+        Args:
+            *args: Passed through to ``Model.save``.
+            **kwargs: Passed through to ``Model.save``. ``update_fields``
+                without ``text`` skips the sync, since nothing it reads moved.
+        """
+        update_fields = kwargs.get("update_fields")
+        text_may_have_changed = update_fields is None or "text" in set(update_fields)
+        super().save(*args, **kwargs)
+        if text_may_have_changed:
+            self.sync_location_mentions()
+
+    def sync_location_mentions(self) -> None:
+        """Make the mention rows match what ``text`` currently names."""
+        from urbanlens.dashboard.models.comments.location_mention import CommentLocationMention
+        from urbanlens.dashboard.services.notifications.mentions import extract_location_uuids
+
+        named = set(extract_location_uuids(self.text or ""))
+        recorded = set(self.location_mentions.values_list("location_uuid", flat=True))
+        if named == recorded:
+            return
+        if stale := recorded - named:
+            self.location_mentions.filter(location_uuid__in=stale).delete()
+        if added := named - recorded:
+            CommentLocationMention.objects.bulk_create([CommentLocationMention(comment=self, location_uuid=value) for value in added], ignore_conflicts=True)
+
     @property
     def map_data(self) -> dict | None:
         """Client snapshot of the attached markup map, if any.
