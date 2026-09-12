@@ -259,6 +259,18 @@ def _merge_links(existing: list[dict[str, str]], hits: list[LocationHit]) -> lis
 #: deliberately generous upper bound on any real property boundary's size, so
 #: it can only ever exclude pins that couldn't possibly contain a hit anyway.
 _BOUNDARY_PREFILTER_RADIUS_KM = 5
+#: Candidate pins are cached per grid cell rather than per exact coordinate.
+#: Two photos taken standing in one spot differ in the sixth decimal place, so an
+#: exact-coordinate key is unique per photo and the cache never hits - which cost
+#: one spatial query per photo on a whole-library sweep.
+_PREFILTER_GRID_DEGREES = 0.01
+#: Added to the search radius so one cell's shared query still returns every pin
+#: within the real radius of any point in that cell. A cell's half-diagonal is
+#: 0.786km at the equator, where a degree of longitude is longest; this is
+#: rounded up rather than fitted to it, because that figure is spherical while
+#: PostGIS measures on the WGS84 ellipsoid, and the difference between them is
+#: about the size of the margin it would otherwise leave.
+_PREFILTER_GRID_SLACK_KM = 1.0
 
 
 def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict[Pin, list[LocationHit]], list[LocationHit]]:
@@ -286,24 +298,43 @@ def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
     polygon_cache: dict[int, object] = {}
-    nearby_cache: dict[tuple[float, float], list[Pin]] = {}
+    nearby_cache: dict[tuple[int, int], list[Pin]] = {}
 
     def _polygon_for(pin: Pin):
         if pin.pk not in polygon_cache:
             polygon_cache[pin.pk] = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
         return polygon_cache[pin.pk]
 
-    def _nearby_pins(point: Point, key: tuple[float, float]) -> list[Pin]:
+    def _nearby_pins(key: tuple[int, int]) -> list[Pin]:
         if key not in nearby_cache:
-            nearby_cache[key] = list(Pin.objects.filter(profile=profile).near_point(point, radius_km=_BOUNDARY_PREFILTER_RADIUS_KM).select_related("location"))
+            centre = Point((key[1] + 0.5) * _PREFILTER_GRID_DEGREES, (key[0] + 0.5) * _PREFILTER_GRID_DEGREES, srid=4326)
+            radius = _BOUNDARY_PREFILTER_RADIUS_KM + _PREFILTER_GRID_SLACK_KM
+            nearby_cache[key] = list(Pin.objects.filter(profile=profile).near_point(centre, radius_km=radius).select_related("location"))
         return nearby_cache[key]
+
+    def _distance_from_hit(hit: LocationHit):
+        """Order a cell's shared candidates by distance from this hit.
+
+        The query is answered for the cell, so its own ordering is by distance
+        from the cell centre. Re-sorting keeps the original tie-break - where two
+        boundaries overlap and both contain the hit, the nearer pin still wins.
+        """
+
+        def _key(pin: Pin) -> float:
+            location = pin.location
+            if location is None or location.latitude is None or location.longitude is None:
+                return float("inf")
+            return _haversine_km((hit.latitude, hit.longitude), (float(location.latitude), float(location.longitude)))
+
+        return _key
 
     matched: dict[Pin, list[LocationHit]] = {}
     unmatched: list[LocationHit] = []
     for hit in hits:
         point = Point(hit.longitude, hit.latitude, srid=4326)
         matched_pin: Pin | None = None
-        for pin in _nearby_pins(point, (hit.latitude, hit.longitude)):
+        cell = (int(hit.latitude // _PREFILTER_GRID_DEGREES), int(hit.longitude // _PREFILTER_GRID_DEGREES))
+        for pin in sorted(_nearby_pins(cell), key=_distance_from_hit(hit)):
             polygon = _polygon_for(pin)
             if polygon is not None:
                 if polygon.contains(point):

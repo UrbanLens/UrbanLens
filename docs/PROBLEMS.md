@@ -4266,6 +4266,59 @@ Two corrections to the audit came out of building it, both of which would have b
   normal deployment the route does not exist. Throttled anyway, because a demo instance is still a
   deployment.
 
+**H44 is real and measured, and deliberately not fixed in the same breath** (2026-09-12).
+Authorizing one media file costs **15 queries**, confirmed by capturing the SQL: four friendship
+lookups (both directions, for viewer *and* uploader), three `user_pins` scans, two trip-membership
+lookups, a site-wide aggregate over `dashboard_places`, and the final visibility check. A gallery
+tile is its own HTTP request, so a 30-photo gallery is ~450 queries, each holding a connection.
+
+`prime_viewer_scope` does not help here and cannot: it memoises on the `Profile` *instance*, which
+lives for one request, and a media request authorizes exactly one image. There is nothing to share
+within the call. The audit's own suggested fix says as much, hedged — it is worth reading a
+suggested fix for what it concedes.
+
+Two ways to fix it, and they are not equally safe:
+
+- **Cache the viewer's scope across requests.** Cheapest, and wrong to reach for first: this is a
+  visibility gate, so a stale entry means someone sees a photo after losing access. That is a
+  security change wearing a performance change's clothes.
+- **Resolve only what the answer needs.** For one image there is exactly one uploader, so the
+  uploader's `photo_upload_visibility` decides which relationship even matters — `FRIENDS` needs one
+  friendship test, not the viewer's whole friend set, and a public photo needs none of it. Same
+  rules, narrower queries, no new staleness.
+
+The second is right, but it is a rewrite of a gate's internals, and the rule here is that gates get
+an agreement test pinning the current answer across the full matrix of `photo_upload_visibility` x
+`viewer_photo_filter` x relationship *before* anything underneath moves — extract unchanged first,
+then optimise. Not started rather than half-started, and recorded with the measurement so the next
+person does not have to re-derive the 15.
+
+**A cache whose key never repeats is not a cache** (2026-09-12, H01's last half). The Immich
+"Scan your library" sweep named three things and two were already closed: it declares `Queue.BULK`
+since D13, so it no longer holds an interactive worker slot, and `ImmichLibraryScanStartView` claims
+a `single_flight` lock *before* the enqueue, so a double-click cannot start two sweeps.
+
+The third was real. `_match_hits_to_pins` prefilters candidate pins with an indexed `near_point`
+query and caches the result — and its docstring correctly explains that this exists to avoid the
+O(hits x pins) class of bug that once blew past nginx's upstream timeout in production. But the
+cache was keyed on the hit's **exact float coordinates**. Two photos taken standing in the same spot
+differ in the sixth decimal place, so the key was effectively unique per photo and the cache never
+hit. Measured: 200 hits cost 202 queries.
+
+This is the interesting part — the fix was already written, correctly reasoned, and documented; only
+its key was wrong, and nothing about reading the code says so. A cache's hit rate is not visible in
+its source. It needs a test that counts.
+
+Now keyed to a 0.01-degree grid cell, with the search radius widened by the cell's half-diagonal
+(0.79km at the equator, where a degree of longitude is longest) so one cell's shared query still
+returns every pin within the real radius of any point in that cell. Safe because the prefilter only
+has to return a **superset**: the exact `polygon.contains(point)` check afterwards runs on the hit's
+real coordinates. The candidate list is re-sorted per hit by true distance, so the original tie-break
+— where two boundaries overlap and both contain a hit, the nearer pin wins — is unchanged.
+
+Measured after: 200 hits → 4 queries, 2,000 hits → 4 queries. Flat rather than merely smaller, which
+is the property worth having: the cost no longer tracks the size of anyone's photo library.
+
 **The twelve WebSocket `TimeoutError`s were a broken fixture, not the environment**
 (2026-09-12). They survived several CI runs being called environment-sensitive, and at one point
 were explicitly cleared of any connection to the broadcast batching. Both of those were wrong.

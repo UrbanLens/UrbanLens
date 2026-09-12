@@ -182,6 +182,21 @@ The general lesson, since it is the second time this shape has appeared in this 
 that names two properties needs two fixes, and closing one of them makes the entry look closed.**
 Re-read the finding text against the fix, not the finding's ID.
 
+### `test_oauth_client_provisioning` fails under `--reuse-db`, and is not a real failure (2026-09-12)
+
+`FirstPartyClientMigrationTests` (4 tests) fails locally with `--reuse-db` and passes in CI and on a
+fresh database — verified, not assumed: 11 passed against a freshly-migrated `UL_TEST_DB_NAME`. The
+tests assert on rows a data migration creates, and `--reuse-db` skips migrations on an existing test
+database, so the rows are absent. Nothing is wrong with the code.
+
+Recorded because the shape is a time sink: it looks exactly like a real regression, and it only
+appears on the flag you reach for to make iteration fast. If these four fail, re-run that one file
+without `--reuse-db` before investigating anything.
+
+The opposite trap is in P113, and cost far more: the twelve WebSocket `TimeoutError`s *also* looked
+environmental and were not. "It is the test environment" is worth verifying rather than concluding —
+in both directions.
+
 ### H17, H50 and H03 were already closed when re-checked (2026-09-12)
 
 H17 (`signup` PBKDF2) and H50 (`demo.start`, five hashes) were closed by family 1 in `ab22f74be` the
