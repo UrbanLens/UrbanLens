@@ -4336,6 +4336,31 @@ real coordinates. The candidate list is re-sorted per hit by true distance, so t
 Measured after: 200 hits → 4 queries, 2,000 hits → 4 queries. Flat rather than merely smaller, which
 is the property worth having: the cost no longer tracks the size of anyone's photo library.
 
+**And the same sweep held one object per photo, for a fix that also already existed** (2026-09-12).
+`sweep_immich_library_locations` appended a `LocationHit` per geotagged asset and kept them all until
+the sweep ended, so peak memory tracked the size of someone's library rather than the number of
+places in it. The worker it runs on has no `mem_limit`, so that is host memory, and a host OOM is
+everyone's outage.
+
+`LocationHit.weight` exists for exactly this, and its docstring records the same bug being fixed on
+the *other* ingest path: the local-scan upload used to expand a cluster's `count` into that many
+identical synthetic hits, and "a scan with a few hundred clusters averaging hundreds of photos each
+could balloon into hundreds of thousands of hits". `controllers.tools._parse_cluster` now emits one
+weighted hit per cluster. The Immich sweep never got the same treatment.
+
+So this is not a new ceiling, it is the existing mechanism applied to the path that was missed.
+Assets sharing a place are folded into one weighted hit as they arrive, keeping up to
+`MAX_SUGGESTION_PHOTOS` (3) sample asset ids so the review queue still has thumbnails. Nothing is
+dropped that anything downstream reads: `weight` carries the count and `extra_dates` the date spread,
+which is what `_dates_from_hits` and every `hit_count` derivation actually consume. Bucketed at four
+decimal places (~11m), chosen to sit well inside `CLUSTER_RADIUS_M` (50m) — collapsing points that
+clustering would merge anyway cannot change which cluster they land in.
+
+Two of these three H01 findings were a fix that existed elsewhere in the same file and had not been
+carried across. That is worth more than either fix: when a defect class has already been solved once
+here, the question is not how to solve it but **where else it still lives**.
+
+
 **The twelve WebSocket `TimeoutError`s were a broken fixture, not the environment**
 (2026-09-12). They survived several CI runs being called environment-sensitive, and at one point
 were explicitly cleared of any connection to the broadcast batching. Both of those were wrong.

@@ -41,6 +41,7 @@ from urbanlens.dashboard.services.sandbox.queues import Queue
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit
 
 logger = logging.getLogger(__name__)
 
@@ -2190,6 +2191,72 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
     return counts
 
 
+#: Coordinate precision the library sweep groups assets by, about 11m. Chosen to
+#: sit well inside ``CLUSTER_RADIUS_M`` (50m): collapsing points that clustering
+#: would merge anyway cannot change which cluster they land in.
+_SWEEP_BUCKET_DECIMALS = 4
+
+
+class _SweptPlace:
+    """Assets from one place in a library sweep, held as counts rather than rows.
+
+    A library has far fewer places in it than photos, so grouping as the sweep
+    reads means peak memory tracks places. Nothing is discarded that anything
+    downstream reads: ``weight`` carries how many photos the place stands for and
+    ``extra_dates`` carries their date spread, which is what ``_dates_from_hits``
+    and every ``hit_count`` derivation actually consume.
+    """
+
+    __slots__ = ("_dates", "_label", "_latitude", "_longitude", "_samples", "_taken_at", "_total")
+
+    def __init__(self, latitude: float, longitude: float, taken_at: datetime, label: str | None) -> None:
+        self._latitude = latitude
+        self._longitude = longitude
+        self._taken_at = taken_at
+        self._label = label
+        self._total = 0
+        self._dates: set[str] = set()
+        self._samples: list[str] = []
+
+    def add(self, asset, sample_limit: int) -> None:
+        """Fold one asset into this place.
+
+        Args:
+            asset: The ``SearchAsset`` being swept.
+            sample_limit: How many asset ids to keep for review-queue thumbnails.
+        """
+        self._total += 1
+        self._dates.add(asset.taken_at.date().isoformat())
+        if len(self._samples) < sample_limit and asset.id:
+            self._samples.append(asset.id)
+        if not self._label and asset.city:
+            self._label = asset.city
+
+    def to_hits(self) -> list[LocationHit]:
+        """One hit per kept sample, carrying this place's whole weight between them.
+
+        Returns:
+            Hits whose ``weight`` sums to every asset folded in here.
+        """
+        from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit
+
+        samples: list[str | None] = list(self._samples) or [None]
+        extra = tuple(sorted(self._dates - {self._taken_at.date().isoformat()}))
+        # The first hit carries the unattributed remainder and the full date
+        # spread; the rest exist only to keep their sample asset ids.
+        first = LocationHit(
+            latitude=self._latitude,
+            longitude=self._longitude,
+            taken_at=self._taken_at,
+            label=self._label,
+            asset_id=samples[0],
+            weight=self._total - (len(samples) - 1),
+            extra_dates=extra,
+        )
+        rest = [LocationHit(latitude=self._latitude, longitude=self._longitude, taken_at=self._taken_at, label=self._label, asset_id=sample) for sample in samples[1:]]
+        return [first, *rest]
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     """Sweep a user's entire Immich library for places they've been.
@@ -2214,11 +2281,11 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     from urbanlens.dashboard.models.immich.model import ImmichAccount
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestionOrigin
+    from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_PHOTOS, PinSuggestionOrigin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.immich import ImmichGateway
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-    from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, ingest_location_hits
+    from urbanlens.dashboard.services.pins.pin_suggestions import ingest_location_hits
     from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
     empty = {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0}
@@ -2237,7 +2304,11 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     except GatewayRequestError:
         library_total = 0
 
-    hits: list[LocationHit] = []
+    # Collapsed per place as they arrive rather than kept per photo. LocationHit.weight
+    # exists for exactly this and its docstring records the same fix on the local-scan
+    # path; this sweep was the one that never got it, so peak memory tracked the size of
+    # someone's library instead of the number of places in it.
+    buckets: dict[tuple[float, float], _SweptPlace] = {}
     scanned = 0
     try:
         for page, _page_total in gateway.iter_library_assets():
@@ -2245,7 +2316,11 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
                 scanned += 1
                 if asset.lat is None or asset.lon is None or asset.taken_at is None:
                     continue
-                hits.append(LocationHit(latitude=asset.lat, longitude=asset.lon, taken_at=asset.taken_at, label=asset.city, asset_id=asset.id))
+                key = (round(asset.lat, _SWEEP_BUCKET_DECIMALS), round(asset.lon, _SWEEP_BUCKET_DECIMALS))
+                place = buckets.get(key)
+                if place is None:
+                    place = buckets[key] = _SweptPlace(latitude=asset.lat, longitude=asset.lon, taken_at=asset.taken_at, label=asset.city)
+                place.add(asset, sample_limit=MAX_SUGGESTION_PHOTOS)
             # library_total is the true library-wide count (see library_asset_count) -
             # unlike the deprecated per-page "total" iter_library_assets also yields,
             # which mirrors the current page size and would make this message read
@@ -2259,6 +2334,7 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
         return {**empty, "scanned": scanned}
 
     update_task_progress(self, current=scanned, total=max(scanned, 1), message="Matching against your pins...")
+    hits = [hit for place in buckets.values() for hit in place.to_hits()]
     summary = ingest_location_hits(profile, hits, origin=PinSuggestionOrigin.IMMICH)
 
     result = {"scanned": scanned, "matched_suggestions": summary.matched_suggestions, "new_pin_suggestions": summary.new_pin_suggestions}
