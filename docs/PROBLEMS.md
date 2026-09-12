@@ -4367,8 +4367,14 @@ which is worse than a slow one.
 The ceiling that would be correct is derived rather than configured — the list's own item count plus
 slack for stale ids — and choosing the slack is a product call about the largest list anyone should
 be able to reorder at once. Recorded with the analysis rather than guessed at. The labels case was
-different and safe to fix: 1000 was already the number the external API had chosen, and no profile
-has a thousand labels.
+different and safe to fix, and the difference is worth stating precisely rather than by assertion.
+1000 was already the number the external API enforced for this same action, so the internal door now
+matches a constraint the project had already chosen rather than inheriting a new one; the ceiling is
+configurable, and refusal is an explicit 400 naming it rather than a silent trim. Measured for
+reassurance rather than assumed: the whole development database holds 284 labels, one of them global,
+and the busiest profile has 48 — about twenty times under the ceiling. Worth measuring because the
+Organize page's list is `visible_to(profile)`, so it carries site-wide globals as well as the
+profile's own, and nothing caps how many labels either side may create.
 
 **A cache whose key never repeats is not a cache** (2026-09-12, H01's last half). The Immich
 "Scan your library" sweep named three things and two were already closed: it declares `Queue.BULK`

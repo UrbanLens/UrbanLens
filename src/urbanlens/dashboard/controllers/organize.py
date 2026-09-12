@@ -211,19 +211,22 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
         """
         try:
             data = json.loads(request.body)
-            item_ids = [int(x["id"]) for x in data.get("items", [])]
+            items = data.get("items", [])
+            # Counted before the ids are read out of it: the list goes into one
+            # `id__in` statement whatever its length, and the unresolved ones come
+            # back out in the response, so an oversized request is expensive in
+            # both directions. Measured against the length rather than the parsed
+            # ids so an oversized body is not converted first. The refusal
+            # deliberately does not name what was submitted.
+            ceiling = settings.LABEL_REORDER_MAX_IDS
+            if len(items) > ceiling:
+                return JsonResponse({"error": f"Reorder at most {ceiling} labels at a time."}, status=400)
+            item_ids = [int(x["id"]) for x in items]
         except (json.JSONDecodeError, ValueError, TypeError, KeyError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
         if not item_ids:
             return JsonResponse({"error": "No items provided"}, status=400)
-        # Before any database work: the id list goes into one `id__in` statement
-        # whatever its length, and the unresolved ones come back out in the
-        # response, so an oversized request is expensive in both directions. The
-        # refusal deliberately does not name them.
-        ceiling = settings.LABEL_REORDER_MAX_IDS
-        if len(item_ids) > ceiling:
-            return JsonResponse({"error": f"Reorder at most {ceiling} labels at a time."}, status=400)
 
         profile = request.user.profile
         # for_profile, not visible_to: the latter includes globals by design.
