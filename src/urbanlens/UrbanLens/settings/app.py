@@ -283,6 +283,17 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "this should still render what fits and say that it did."
         ),
     )
+    immich_max_thumbnail_bytes: int = Field(
+        default=8_000_000,
+        description=(
+            "Largest thumbnail body the Immich proxy will read from a user's own server. The server on the other "
+            "end is configured by the account holder and `size=thumbnail` is a request rather than a guarantee, so "
+            "without this one account's server decides how much memory a shared worker spends. Streamed and refused "
+            "as soon as the ceiling is passed, so a hostile or broken server costs a few chunks rather than its "
+            "whole body. Far above any real thumbnail. Originals are bounded separately, by the site's own upload "
+            "limit - a file the site would refuse from a browser is not one it should accept from Immich."
+        ),
+    )
     public_costs_page_cache_seconds: int = Field(
         default=600,
         description=(

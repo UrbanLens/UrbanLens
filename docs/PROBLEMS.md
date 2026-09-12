@@ -4423,6 +4423,26 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**The read half of H24/H38 is fixed; the cache half was already done** (2026-09-12).
+`bounded_cache.set_if_small` already refuses to store an oversized body, with a comment noting the
+server is the user's own and `size=thumbnail` is a request rather than a guarantee - the ninth audit
+entry to turn out already fixed. What that never touched is the read: `_get_binary` called
+`response.content`, buffering the whole body in the gunicorn worker before any size was known. So
+the cache was safe and the worker was not, and the server on the other end is configured by the
+account holder - which makes the response size something one user picks and everyone sharing that
+worker pays for.
+
+Streamed now, and refused as soon as the ceiling is passed, because a refusal *after* buffering
+saves nothing. The test that matters asserts a 2,000-chunk response is refused within 20 chunks;
+a fix that checked `len(content)` at the end would pass a naive size assertion and fail that one.
+
+Two ceilings, because one helper serves two doors, and neither is an invented number.
+`IMMICH_MAX_THUMBNAIL_BYTES` bounds the thumbnail. The original is bounded by
+`max_upload_file_size_bytes()` - the site's own upload limit, already clamped to the ingress cap -
+on the reasoning that a file the site would refuse from a browser is not one it should accept from
+someone's Immich. `max_bytes` is a required keyword so a third caller has to state its own ceiling
+rather than inherit one chosen for a different door.
+
 **The trip half of H43/H52 is fixed, and it led to a defect in a shared helper** (2026-09-12).
 `visible_comment_tree` - the pin and wiki path - builds a `can_view` dict keyed by author precisely
 because, in its own words, "each call runs up to 3 extra query pairs, which is redundant when one

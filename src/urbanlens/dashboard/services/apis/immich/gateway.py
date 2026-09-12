@@ -25,6 +25,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30
+
+#: Read size for a streamed binary body. Small enough that an oversized
+#: response is refused within a few chunks rather than after a large read.
+_BINARY_CHUNK_BYTES = 65536
 _DEFAULT_RECENT_LIMIT = 100
 _DEFAULT_PAGE_SIZE = 1000
 #: Runaway-loop guard for ``iter_library_assets`` - 500 pages at the default
@@ -108,11 +112,19 @@ class ImmichGateway(Gateway):
             raise GatewayRequestError(f"Immich API request failed with status {response.status_code}.")
         return response.json()
 
-    def _get_binary(self, path: str, *, params: dict[str, Any] | None = None) -> tuple[bytes, str, str]:
+    def _get_binary(self, path: str, *, max_bytes: int, params: dict[str, Any] | None = None) -> tuple[bytes, str, str]:
         """Perform an authenticated GET and return the raw response body.
+
+        Streamed and stopped at ``max_bytes`` rather than read whole: the server
+        is the account holder's own, so its response size is a thing one user
+        chooses and every request sharing that worker pays for. Refusing after
+        buffering would save nothing, so the ceiling is enforced while reading.
 
         Args:
             path: API path beginning with ``/``.
+            max_bytes: Largest body to accept. Required, so a new caller has to
+                say what it considers too big rather than inherit a number
+                chosen for a different door.
             params: Optional query parameters.
 
         Returns:
@@ -120,18 +132,29 @@ class ImmichGateway(Gateway):
             response's Content-Disposition header, or the asset id when absent).
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
+            GatewayRequestError: On a network error, a non-2xx response, or a
+                body over ``max_bytes``.
         """
         try:
-            response = self.session.get(f"{self._base_url}{path}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+            with self.session.get(f"{self._base_url}{path}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT, stream=True) as response:
+                if not response.ok:
+                    logger.warning("Immich API GET %s failed (%s): %s", path, response.status_code, response.text[:200])
+                    raise GatewayRequestError(f"Immich API request failed with status {response.status_code}.")
+                content_type = response.headers.get("Content-Type", "application/octet-stream")
+                filename = _filename_from_content_disposition(response.headers.get("Content-Disposition"))
+                chunks: list[bytes] = []
+                total = 0
+                for chunk in response.iter_content(chunk_size=_BINARY_CHUNK_BYTES):
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > max_bytes:
+                        logger.warning("Immich GET %s exceeded %d bytes; refusing", path, max_bytes)
+                        raise GatewayRequestError(f"Immich response exceeded {max_bytes} bytes.")
+                    chunks.append(chunk)
         except OSError as exc:
             raise GatewayRequestError(f"Could not reach Immich server: {exc}") from exc
-        if not response.ok:
-            logger.warning("Immich API GET %s failed (%s): %s", path, response.status_code, response.text[:200])
-            raise GatewayRequestError(f"Immich API request failed with status {response.status_code}.")
-        content_type = response.headers.get("Content-Type", "application/octet-stream")
-        filename = _filename_from_content_disposition(response.headers.get("Content-Disposition"))
-        return response.content, content_type, filename
+        return b"".join(chunks), content_type, filename
 
     def _post(self, path: str, *, json: dict[str, Any]) -> Any:
         """Perform an authenticated POST and return the decoded JSON body.
@@ -323,7 +346,13 @@ class ImmichGateway(Gateway):
         Raises:
             GatewayRequestError: On a network error or non-2xx response.
         """
-        content, content_type, _filename = self._get_binary(f"/assets/{asset_id}/thumbnail", params={"size": "thumbnail"})
+        from django.conf import settings
+
+        content, content_type, _filename = self._get_binary(
+            f"/assets/{asset_id}/thumbnail",
+            max_bytes=settings.IMMICH_MAX_THUMBNAIL_BYTES,
+            params={"size": "thumbnail"},
+        )
         return content, content_type
 
     def get_asset_original(self, asset_id: str) -> tuple[bytes, str, str]:
@@ -338,7 +367,12 @@ class ImmichGateway(Gateway):
         Raises:
             GatewayRequestError: On a network error or non-2xx response.
         """
-        content, content_type, filename = self._get_binary(f"/assets/{asset_id}/original")
+        from urbanlens.dashboard.services.media.storage import max_upload_file_size_bytes
+
+        # The original is a photo the site is about to store, so it is bounded
+        # by the same limit a direct upload is: a file the site would refuse
+        # from a browser is not one it should accept from someone's Immich.
+        content, content_type, filename = self._get_binary(f"/assets/{asset_id}/original", max_bytes=max_upload_file_size_bytes())
         return content, filename, content_type
 
 

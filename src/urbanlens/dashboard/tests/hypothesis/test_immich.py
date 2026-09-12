@@ -53,6 +53,15 @@ def _mock_response(
     resp.content = content
     resp.headers = headers or {}
     resp.text = ""
+    # Binary bodies are streamed and bounded (see gateway._get_binary), so the
+    # double serves both shapes: `.content` for the JSON paths, and a real
+    # `iter_content` plus context manager for the binary ones. Without the
+    # latter a MagicMock yields nothing and the body silently reads as empty.
+    resp.iter_content.side_effect = lambda chunk_size=8192: iter(
+        [content[i : i + chunk_size] for i in range(0, len(content), chunk_size)]
+    )
+    resp.__enter__.return_value = resp
+    resp.__exit__.return_value = None
     return resp
 
 
