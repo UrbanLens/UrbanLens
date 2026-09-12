@@ -34,6 +34,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests import socket_clients
 from urbanlens.core.tests.fake_redis import FakeRedis
+from urbanlens.core.tests.nginx_config import misplaced_directives
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer
 from urbanlens.dashboard.services.security import socket_budget
@@ -302,8 +303,10 @@ class TheEdgeBoundsWhatTheAppCannotTests(SimpleTestCase):
     occupies an nginx connection and a daphne slot before Django closes it.
 
     Read off the config rather than exercised, because what is being asserted is
-    that the directive is present and in the right place - nginx itself is not
-    under test here.
+    that the directive is present - whether nginx *accepts* where it was put is
+    `test_nginx_config_is_loadable`, which exists because this class once read
+    "and in the right place" while an `assertIn` against whole-file text let a
+    zone sit in `events{}` and stop nginx from starting at all.
     """
 
     ZONE = "ws_conn"
@@ -312,6 +315,7 @@ class TheEdgeBoundsWhatTheAppCannotTests(SimpleTestCase):
         text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "nginx.conf").read_text(encoding="utf-8")
 
         self.assertIn(f"limit_conn_zone $binary_remote_addr zone={self.ZONE}:", text)
+        self.assertEqual([entry for entry in misplaced_directives(text) if entry[0] == "limit_conn_zone"], [])
 
     def test_the_socket_location_uses_it(self) -> None:
         text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "django.conf").read_text(encoding="utf-8")

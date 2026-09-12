@@ -68,6 +68,15 @@ repos:
         language: system
         files: '\.(html|txt)$'
         pass_filenames: false
+      - id: nginx-config
+        # always_run, not files: - the top-level `files` filter above admits no
+        # .conf extension, so a path-scoped hook on these would never fire. That
+        # filter is why a broken nginx.conf reached staging in the first place.
+        name: nginx would load the config it is given
+        entry: bash bin/check_nginx_config.sh
+        language: system
+        always_run: true
+        pass_filenames: false
 
   # REPOSITORY CONSISTENCY
   # re-reads all tracked files regardless of what changed
