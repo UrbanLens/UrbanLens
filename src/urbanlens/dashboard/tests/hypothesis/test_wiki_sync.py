@@ -10,6 +10,7 @@ from __future__ import annotations
 import itertools
 
 from django.contrib.auth.models import User
+from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
 
@@ -269,8 +270,16 @@ class PinAliasToWikiSyncTests(TestCase):
         self.assertFalse(WikiAlias.objects.filter(name="No Wiki Yet").exists())
 
 
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True)
 class WikiAliasToPinSyncTests(TestCase):
-    """A newly-added wiki alias mirrors onto every opted-in profile's pin at that location."""
+    """A newly-added wiki alias mirrors onto every opted-in profile's pin at that location.
+
+    The mirror runs in a Celery task now (one wiki alias used to write a row
+    into every other profile's pin at that location, synchronously in the
+    request). `captureOnCommitCallbacks` only gets as far as enqueueing it, so
+    without eager execution the positive assertions fail - and, less obviously,
+    the negative ones pass for the wrong reason, since nothing runs either way.
+    """
 
     def setUp(self) -> None:
         self.owner_user = baker.make(User)
