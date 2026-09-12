@@ -116,6 +116,7 @@ class PaginatedListMixin:
         request: Request,
         *,
         context: dict[str, Any] | None = None,
+        page_builder: Callable[[list[Any]], list[Any]] | None = None,
         row_builder: Callable[[Any], Any] | None = None,
     ) -> Response:
         """Serialize one page of *queryset* into the standard envelope.
@@ -132,6 +133,14 @@ class PaginatedListMixin:
             context: Extra serializer context. Used to hand a serializer the
                 parent object its fields need (e.g. the pin an alias belongs
                 to), so a whole page resolves without a query per row.
+            page_builder: Optional whole-page shaping applied *after*
+                pagination and before ``row_builder``, for work that has to
+                see the page at once rather than a row at a time - resolving a
+                visibility decision per distinct author, say, where doing it
+                per row would repeat the same queries. It may return fewer rows
+                than it was given; the envelope's ``count`` comes from the
+                queryset, so narrow the queryset rather than relying on this to
+                drop rows.
             row_builder: Optional per-row shaping applied *after* pagination,
                 for endpoints whose payload is a dict built from a model rather
                 than the model itself. Passing a queryset plus this is strictly
@@ -150,6 +159,7 @@ class PaginatedListMixin:
         """
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(stable_ordering(queryset), request, view=self)
-        rows = [row_builder(item) for item in page] if row_builder is not None else page
+        shaped = page_builder(list(page)) if page_builder is not None else page
+        rows = [row_builder(item) for item in shaped] if row_builder is not None else shaped
         serializer = serializer_class(rows, many=True, context=context or {})
         return paginator.get_paginated_response(serializer.data)

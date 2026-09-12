@@ -1113,13 +1113,23 @@ class _CommentListMixin(PaginatedListMixin):
         Returns:
             A paginated envelope of serialized comments.
         """
-        top_level = list(top_level_comment_queryset(comments_qs))
-        # Every visibility decision - including the @location mention gate that
-        # drops a comment entirely rather than redacting it - happens here, in
-        # the same call the internal comment panel makes.
-        visible = visible_comment_tree(top_level, profile)
-        rows = [_serialize_comment(item, profile) for item in visible]
-        return self.paginated_response(rows, CommentSerializer, request)
+        # Gates 1-3 in SQL, so the database cuts the page rather than the whole
+        # thread being built and then sliced. Replies are narrowed by the same
+        # filter, since comment.replies is keyed on the parent's pk and survives
+        # whatever was done to the queryset its parent came out of.
+        visible_qs = comments_qs.visible_to(profile)
+        top_level = top_level_comment_queryset(visible_qs, replies_qs=Comment.objects.visible_to(profile))
+        # visible_comment_tree still runs, on the page: it applies gate 4
+        # (identity masking) and resolves mentions, and re-applying gates 1-3
+        # keeps the SQL filter narrowing-only - a divergence hides a comment
+        # rather than exposing one.
+        return self.paginated_response(
+            top_level,
+            CommentSerializer,
+            request,
+            page_builder=lambda page: visible_comment_tree(page, profile),
+            row_builder=lambda item: _serialize_comment(item, profile),
+        )
 
     def _create_comment(self, request: Request, profile: Profile, *, pin: Pin | None = None, wiki: Any = None) -> Response:
         """Validate and create a comment on a pin or wiki.
