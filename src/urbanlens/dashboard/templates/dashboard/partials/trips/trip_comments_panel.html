@@ -244,6 +244,7 @@
   {% else %}
   <p class="comment-empty">No comments yet.</p>
   {% endif %}
+  {% include "dashboard/partials/ui/_pagination_controls.html" with page_url=comments_url page_noun="trip comments" %}
 
   {# -- Compose -- #}
   {% if not viewer_has_joined %}

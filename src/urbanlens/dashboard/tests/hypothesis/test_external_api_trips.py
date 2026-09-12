@@ -832,11 +832,21 @@ class TripCommentTests(_TripApiTestCase):
         self.assertEqual(body["results"][0]["replies"][0]["text"], "Reply")
 
     def test_comment_visibility_gate_hides_the_whole_comment(self) -> None:
-        """An author whose comment_visibility excludes this viewer is filtered out."""
+        """An author whose comment_visibility excludes this viewer is filtered out.
+
+        Sets the author's real preference rather than patching
+        ``can_view_comments_from``: the gate is a queryset now
+        (``TripComment.objects.visible_to``), so a mocked predicate would leave
+        the row in the page and its count while removing it from the results -
+        which tests the mock rather than the rule.
+        """
+        Profile.objects.filter(pk=self.other_profile.pk).update(comment_visibility=VisibilityChoice.NO_ONE)
         TripComment.objects.create(trip=self.trip, author=self.other_profile, text="Hidden")
-        with mock.patch.object(Profile, "can_view_comments_from", return_value=False):
-            response = self._get("external_api:trips.comments", self.trip.slug)
-        self.assertEqual(response.json()["count"], 0)
+
+        body = self._get("external_api:trips.comments", self.trip.slug).json()
+
+        self.assertEqual(body["count"], 0)
+        self.assertEqual(body["results"], [])
 
     def test_pending_scan_hides_a_comment_from_everyone_but_its_author(self) -> None:
         """An unscanned image keeps the comment private until the scan clears."""

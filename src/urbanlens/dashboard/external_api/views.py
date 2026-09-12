@@ -176,7 +176,7 @@ from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.routes.model import Route
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinStatus, SafetyPreference
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.core.colors import InvalidColorError, require_color
@@ -319,7 +319,7 @@ from urbanlens.dashboard.services.trips.trip_activities import (
     set_activity_vote,
     update_activity,
 )
-from urbanlens.dashboard.services.trips.trip_comments import add_comment, build_comment_tree, delete_comment, get_comment, set_comment_reaction
+from urbanlens.dashboard.services.trips.trip_comments import add_comment, build_comment_tree, delete_comment, get_comment, set_comment_reaction, visible_comment_queryset
 from urbanlens.dashboard.services.trips.trip_crud import create_trip, delete_trip, update_trip
 from urbanlens.dashboard.services.trips.trip_errors import TripError, TripNotFoundError, TripPermissionError, TripValidationError
 from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
@@ -5273,10 +5273,12 @@ class TripCommentsView(TripScopedApiView, PaginatedListMixin):
         except TripError as exc:
             return self.error_response(exc)
 
-        rows = build_comment_tree(trip, profile)
+        # The queryset is paged, not the built tree: building first meant the
+        # page-size parameter bounded the response body and nothing else.
         paginator = self.pagination_class()
-        page = paginator.paginate_queryset(rows, request, view=self)
-        return paginator.get_paginated_response(TripCommentSerializer(page, many=True, context={"viewer": profile}).data)
+        page = paginator.paginate_queryset(visible_comment_queryset(trip, profile), request, view=self)
+        rows = build_comment_tree(trip, profile, comments=page)
+        return paginator.get_paginated_response(TripCommentSerializer(rows, many=True, context={"viewer": profile}).data)
 
     @extend_schema(request=TripCommentCreateSerializer, responses={201: TripCommentSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, trip_slug: str) -> Response:
@@ -5309,7 +5311,10 @@ def _serialize_one_comment(trip: Trip, profile: Profile, comment_id: int) -> dic
     Returns:
         The serialized comment, or an empty dict when it isn't visible.
     """
-    rows = build_comment_tree(trip, profile)
+    # Only the branch this comment lives on, rather than the whole thread: a
+    # reply renders under its parent, so the root is what has to be built.
+    root_id = TripComment.objects.filter(pk=comment_id).values_list("parent_id", flat=True).first() or comment_id
+    rows = build_comment_tree(trip, profile, comments=visible_comment_queryset(trip, profile).filter(pk=root_id))
     for row in rows:
         if row["comment"].id == comment_id:
             return TripCommentSerializer(row, context={"viewer": profile}).data

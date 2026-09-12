@@ -882,6 +882,11 @@ class TripActivityVoteView(LoginRequiredMixin, View):
         return _render_activities_panel(request, trip, profile)
 
 
+#: Top-level comments per page in the trip comments panel, matching the
+#: pin/wiki panel's own page size.
+_TRIP_COMMENTS_PAGE_SIZE = 8
+
+
 def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the comments panel from the shared visible-comment tree.
 
@@ -893,15 +898,29 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
     Returns:
         The rendered comments panel.
     """
-    rendered: list[TripCommentData] = build_comment_tree(trip, profile)
-    comment_count = sum(1 + len(item["replies"]) for item in rendered)
+    from django.urls import reverse
+
+    from urbanlens.dashboard.services.core.pagination import get_page
+    from urbanlens.dashboard.services.trips.trip_comments import visible_comment_count, visible_comment_queryset
+
+    # Default to the last page: comments run oldest to newest, so the most
+    # recent activity is what a viewer should see without paging back.
+    page_obj = get_page(request, visible_comment_queryset(trip, profile), _TRIP_COMMENTS_PAGE_SIZE, default_last=True)
+    rendered: list[TripCommentData] = build_comment_tree(trip, profile, comments=page_obj.object_list)
     return render(
         request,
         "dashboard/partials/trips/trip_comments_panel.html",
         {
             "trip": trip,
             "rendered_comments": rendered,
-            "comment_count": comment_count,
+            "page_obj": page_obj,
+            # The panel partial is also rendered inside the full trip page, so
+            # the pagination bar cannot fall back to request.path - a click
+            # there would swap a whole document into the panel.
+            "comments_url": reverse("trips.comments", args=[trip.slug]),
+            # The whole visible thread, not the page - a badge taken from the
+            # page would shrink the moment paging started.
+            "comment_count": visible_comment_count(trip, profile),
             "profile": profile,
             "allowed_emojis": ALLOWED_COMMENT_EMOJIS,
             "viewer_has_joined": _viewer_has_joined(profile, trip),

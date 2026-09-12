@@ -17,6 +17,7 @@ masks their name and avatar while the content stays visible - see
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
@@ -29,6 +30,8 @@ from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGT
 from urbanlens.dashboard.services.notifications.comment_notifications import notify_reaction, notify_reply
 from urbanlens.dashboard.services.trips.trip_access import require_perform
 from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripPermissionError, TripValidationError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.controllers.comments import _ReactionData
@@ -103,12 +106,65 @@ def can_delete_comment(comment: TripComment, viewer: Profile, trip: Trip) -> boo
     return viewer.id in {comment.author_id, trip.creator_id}
 
 
-def build_comment_tree(trip: Trip, viewer: Profile) -> list[TripCommentData]:
+def visible_comment_queryset(trip: Trip, viewer: Profile):
+    """Top-level comments of *trip* that *viewer* may see, ready to be paged.
+
+    Every gate is applied in SQL (see ``TripComment.objects.visible_to``), which
+    is what lets a caller take a page with LIMIT rather than building the whole
+    thread and slicing the result. Replies are narrowed by the same filter, and
+    have to be: ``comment.replies`` is keyed on the parent's primary key and
+    survives whatever was done to the queryset its parent came out of.
+
+    Args:
+        trip: The trip whose comments are wanted.
+        viewer: The profile reading them.
+
+    Returns:
+        A ``TripCommentQuerySet`` of visible top-level comments, oldest first,
+        with the relations :func:`build_comment_tree` reads already preloaded.
+    """
+    from django.db.models import Prefetch
+
+    visible = TripComment.objects.visible_to(viewer)
+    return (
+        visible.filter(trip=trip, parent__isnull=True)
+        .select_related("author__user", "markup_map")
+        .prefetch_related(
+            "reactions",
+            # comment.map_data derives its snapshot from the markup map's items.
+            "markup_map__items",
+            Prefetch("replies", queryset=visible.select_related("author__user", "markup_map").prefetch_related("reactions", "markup_map__items")),
+        )
+        .order_by("created")
+    )
+
+
+def visible_comment_count(trip: Trip, viewer: Profile) -> int:
+    """How many of *trip*'s comments and replies *viewer* may see.
+
+    Counted over the whole thread rather than the page, so the badge does not
+    shrink the moment paging starts, and gated so it cannot disagree with what
+    the panel shows.
+
+    Args:
+        trip: The trip whose comments are being counted.
+        viewer: The profile reading them.
+
+    Returns:
+        Visible comments and replies together, as the badge has always counted.
+    """
+    return TripComment.objects.filter(trip=trip).visible_to(viewer).count()
+
+
+def build_comment_tree(trip: Trip, viewer: Profile, *, comments: Any = None) -> list[TripCommentData]:
     """Build the trip's visible comment tree for one viewer.
 
     Args:
         trip: The trip whose comments are wanted.
         viewer: The profile reading them.
+        comments: The rows to render, when the caller has already taken a page
+            of :func:`visible_comment_queryset`. Defaults to the whole visible
+            thread, which is only appropriate where there is nothing to page.
 
     Returns:
         Top-level comments in creation order, each a dict with ``comment``,
@@ -129,13 +185,10 @@ def build_comment_tree(trip: Trip, viewer: Profile) -> list[TripCommentData]:
     act_index_for_render = {idx: act_objects[act_id] for idx, act_id in act_by_index.items()}
 
     pinned = viewer_pinned_uuids(viewer)
-    top_comments = list(
-        trip.comments.filter(parent__isnull=True)
-        .select_related("author__user", "markup_map")
-        # comment.map_data derives its snapshot from the markup map's items.
-        .prefetch_related("reactions", "replies__reactions", "replies__author__user", "markup_map__items", "replies__markup_map__items")
-        .order_by("created"),
-    )
+    # The gates below still run, on whatever rows arrived: they resolve mentions
+    # and are the authority on visibility, so the queryset above can only ever
+    # narrow - a divergence hides a comment rather than exposing one.
+    top_comments = list(comments if comments is not None else visible_comment_queryset(trip, viewer))
 
     # select_related gives each comment/reply its own author instance even for
     # the same underlying profile, so resolve once per distinct author and
@@ -204,6 +257,20 @@ def build_comment_tree(trip: Trip, viewer: Profile) -> list[TripCommentData]:
                 "replies": replies_rendered,
                 "parent_was_deleted": c.parent_deleted,
             },
+        )
+
+    # The queryset above is meant to admit exactly what this loop admits, so a
+    # caller paging on it reports a count that matches what it renders. If the
+    # two ever part company the count becomes an upper bound - it announces
+    # that something was hidden, which is the oracle gate 3 exists to deny - and
+    # nothing else would say so.
+    if len(rendered) != len(top_comments):
+        logger.error(
+            "Trip comment gates disagree: SQL admitted %s top-level comments, the render pass kept %s (trip %s, viewer %s).",
+            len(top_comments),
+            len(rendered),
+            trip.pk,
+            viewer.pk,
         )
     return rendered
 
