@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Count, DateField, F, Max, Min, Prefetch, Q
+from django.db.models import Count, DateField, Exists, F, Max, Min, OuterRef, Prefetch, Q
 from django.db.models.functions import Cast, Coalesce, Greatest
 from django.utils import timezone
 
@@ -302,6 +302,52 @@ class TripMembershipManager(abstract.DashboardManager.from_queryset(TripMembersh
 
 class TripCommentQuerySet(abstract.DashboardQuerySet):
     """Custom queryset for TripComment models."""
+
+    def mentions_all_visible_to(self, profile: Profile) -> TripCommentQuerySet:
+        """Drop comments naming a location *profile* has not pinned.
+
+        The trip-side twin of ``CommentQuerySet.mentions_all_visible_to``, over
+        the same rows - see ``models.comments.location_mention``.
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            The subset whose every named location the viewer has pinned.
+        """
+        from urbanlens.dashboard.models.comments.location_mention import CommentLocationMention
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        pinned = Pin.objects.filter(profile=profile).exclude(location__isnull=True).values("location__uuid")
+        unpinned_mention = CommentLocationMention.objects.filter(trip_comment_id=OuterRef("pk")).exclude(location_uuid__in=pinned)
+        return self.filter(~Exists(unpinned_mention))
+
+    def visible_to(self, profile: Profile) -> TripCommentQuerySet:
+        """The three gates ``trip_comments.build_comment_tree`` applies, in SQL.
+
+        The queryset counterpart to ``trip_comments.trip_comment_is_visible``,
+        and held to it across the product of every visibility setting and every
+        relationship by ``test_trip_comment_visibility_is_a_queryset``.
+
+        Answering these in SQL is what lets the panel and the API page a trip
+        thread with LIMIT instead of building all of it and slicing the result.
+        Identity masking is absent, as it is on the pin/wiki side: it shapes how
+        a surviving author is displayed, not whether a row is admitted.
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            The subset *profile* may see.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+
+        # permit_null_author: the FK is SET_NULL, and a deleted account has no
+        # visibility preference left to enforce - the tree builder's own
+        # `c.author is not None and ...` says the same thing.
+        author_permits = ProfileModel.visibility_permits_q(profile, author_path="author", visibility_field="comment_visibility", permit_null_author=True)
+        unscanned_and_not_mine = Q(pending_scan=True) & ~Q(author_id=profile.pk)
+        return self.filter(author_permits).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
 
     def by_author(self, profile: Profile) -> TripCommentQuerySet:
         """Comments a profile has left across any of their trips, most recent first.

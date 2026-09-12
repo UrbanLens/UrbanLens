@@ -1388,6 +1388,105 @@ class Profile(abstract.PublicDashboardModel):
         return visible
 
     @staticmethod
+    def visibility_permits_q(
+        viewer: Profile,
+        *,
+        author_path: str,
+        visibility_field: str,
+        allow_pending_request: bool = True,
+        permit_null_author: bool = False,
+    ) -> Q:
+        """:meth:`visibility_permits` as a ``Q`` over rows that name their author.
+
+        The third member of this family, and a genuinely different question
+        again. :meth:`visible_profile_pks` answers "which of these subjects may
+        I see" for subjects already in memory; :meth:`related_profile_ids`
+        answers "which rows are worth resolving" as a deliberate superset. This
+        one is exact, and exists so a list can be *paginated* correctly: a gate
+        applied after the page is cut makes the page size mean nothing, and a
+        superset leaves the gate to run again afterwards, which is what returns
+        a page shorter than the one that was asked for.
+
+        Mirrors :meth:`visibility_permits` branch for branch, including its
+        ordering - ``NO_ONE`` is refused before a friendship is considered, and
+        a friendship (or an unanswered request the author sent the viewer)
+        passes every other setting. A value outside ``VisibilityChoice``
+        behaves as it does there: friendship passes it, nothing else does.
+
+        Every relationship stays a subquery. The viewer's friends, places,
+        mutual friends and trips are their own data, and materialising them
+        into an ``IN`` list would make reading a list cost more for a viewer
+        who has more of it.
+
+        Args:
+            viewer: The profile doing the looking.
+            author_path: Name of the row's author relation, e.g. ``"profile"``
+                on ``Comment`` or ``"author"`` on ``TripComment``.
+            visibility_field: The ``VisibilityChoice`` field on the author that
+                governs this content, e.g. ``"comment_visibility"``.
+            allow_pending_request: Whether an unanswered request from the
+                author to the viewer opens the author's gate, as in
+                :meth:`visibility_permits`.
+            permit_null_author: Whether a row whose author is gone passes. True
+                for models whose author FK is ``SET_NULL`` - a deleted account
+                has no visibility preference left to enforce - and False where
+                the FK cannot be null.
+
+        Returns:
+            A ``Q`` admitting exactly the rows whose author permits *viewer*.
+        """
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        author_id = f"{author_path}_id"
+        setting = f"{author_path}__{visibility_field}"
+        accepted = FriendshipStatus.ACCEPTED
+
+        friends_out = Friendship.objects.filter(from_profile=viewer, status=accepted).values("to_profile_id")
+        friends_in = Friendship.objects.filter(to_profile=viewer, status=accepted).values("from_profile_id")
+        connected = models.Q(**{f"{author_id}__in": friends_out}) | models.Q(**{f"{author_id}__in": friends_in})
+        if allow_pending_request:
+            # One way, matching has_pending_request_to(author, viewer): asking
+            # to connect opens the asker's own gates to the person being asked.
+            askers = Friendship.objects.filter(to_profile=viewer, status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING)).values("from_profile_id")
+            connected |= models.Q(**{f"{author_id}__in": askers})
+
+        # Place-keyed where a pin has a place, exact Location otherwise - the
+        # SQL form of services.pins.common_pins.pinned_place_keys, so two pins
+        # fifty metres apart on one parcel count as shared.
+        viewer_pins = Pin.objects.filter(profile=viewer, location__isnull=False)
+        common_pin = models.Q(
+            **{
+                f"{author_id}__in": Pin.objects.filter(
+                    models.Q(location__place_id__in=viewer_pins.exclude(location__place__isnull=True).values("location__place_id")) | models.Q(location_id__in=viewer_pins.filter(location__place__isnull=True).values("location_id")),
+                ).values("profile_id"),
+            },
+        )
+
+        common_friend = models.Q()
+        for mine in (friends_out, friends_in):
+            common_friend |= models.Q(**{f"{author_id}__in": Friendship.objects.filter(status=accepted, to_profile_id__in=mine).values("from_profile_id")})
+            common_friend |= models.Q(**{f"{author_id}__in": Friendship.objects.filter(status=accepted, from_profile_id__in=mine).values("to_profile_id")})
+
+        viewer_trips = TripMembership.objects.filter(profile=viewer).values("trip_id")
+        common_trip = models.Q(**{f"{author_id}__in": TripMembership.objects.filter(trip_id__in=viewer_trips).values("profile_id")})
+
+        anything = VisibilityChoice.ANYTHING_IN_COMMON
+        permitted = (
+            models.Q(**{author_id: viewer.pk})
+            | models.Q(**{setting: VisibilityChoice.ANYONE})
+            | (~models.Q(**{setting: VisibilityChoice.NO_ONE}) & connected)
+            | (models.Q(**{f"{setting}__in": (VisibilityChoice.COMMON_PIN, anything)}) & common_pin)
+            | (models.Q(**{f"{setting}__in": (VisibilityChoice.COMMON_FRIEND, anything)}) & common_friend)
+            | (models.Q(**{f"{setting}__in": (VisibilityChoice.COMMON_TRIP, anything)}) & common_trip)
+        )
+        if permit_null_author:
+            permitted |= models.Q(**{f"{author_path}__isnull": True})
+        return permitted
+
+    @staticmethod
     def related_profile_ids(viewer: Profile) -> set[int]:
         """Every profile that could pass a non-``ANYONE`` visibility gate for ``viewer``.
 

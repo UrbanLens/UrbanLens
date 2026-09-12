@@ -20,6 +20,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, DateTime
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.comments.location_mention import LocationMentioningModel
 from urbanlens.dashboard.models.trips.queryset import TripCommentManager, TripManager, TripMembershipManager
 from urbanlens.dashboard.services.core.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
@@ -470,8 +471,11 @@ class TripActivityRSVP(abstract.DashboardModel):
         indexes = []
 
 
-class TripComment(abstract.DashboardModel):
+class TripComment(LocationMentioningModel, abstract.DashboardModel):
     """A comment left on a trip by one of its members."""
+
+    #: Names this model's foreign key on CommentLocationMention.
+    mention_owner_field = "trip_comment"
 
     text = TextField(max_length=MAX_COMMENT_TEXT_LENGTH, validators=[MaxLengthValidator(MAX_COMMENT_TEXT_LENGTH)])
     image = ImageField(upload_to="comment_images/", null=True, blank=True)
