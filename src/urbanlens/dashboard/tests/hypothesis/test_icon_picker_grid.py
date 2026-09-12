@@ -1,21 +1,4 @@
-"""The icon catalogue is fetched once, not rendered into every picker.
-
-`_icon_picker.html` used to nest two loops over all 1,249 ``ICON_CATEGORIES``
-entries inside every picker on the page. One grid is 594,669 bytes and 2,498
-buttons; the achievement admin renders one per award plus one for its create
-form, so sixty awards came to about 34.6 MB, and Organize Labels renders
-thirteen as a flat page cost on every load (P68).
-
-The gate is `RenderTimeScalingMixin`, whose own budget was calibrated against
-exactly this workload - a row rendering an icon grid measured 4.82 baselines
-against a 0.10 budget - so a regression that puts the catalogue back into the
-row fails here rather than in a bug report about a slow admin page.
-
-The rest of these are the contract that makes one shared response usable by
-every picker: no picker id in the markup, a version that tracks the content, and
-a cache policy that cannot pin a browser to a catalogue this deployment no
-longer has.
-"""
+"""The icon catalogue is fetched once, not rendered into every picker."""
 
 from __future__ import annotations
 
@@ -91,10 +74,8 @@ class IconPickerGridEndpointTests(TestCase):
     def test_the_response_carries_no_picker_id(self) -> None:
         """One response serves every picker on the page, so it cannot name one.
 
-        The per-item handler resolves the id from the enclosing dropdown; a
-        hardcoded id here would send every pick to whichever picker rendered
-        first.
-        """
+        The per-item handler resolves the id from the enclosing dropdown; a hardcoded id here would send every
+        pick to whichever picker rendered first."""
         self.client.force_login(self.user)
 
         body = self.client.get(self.url).content.decode()
@@ -164,14 +145,9 @@ class IconPickerPartialTests(TestCase):
         self.assertEqual(inlined, [], "the picker partial is rendering catalogue icons again")
 
     def test_the_partial_is_a_small_fraction_of_the_catalogue(self) -> None:
-        """A byte budget rather than a shape assertion: the defect was size, and a
-        future edit can put the size back without restoring the loops.
+        """A byte budget rather than a shape assertion: the defect was size, and a future edit can put the size back without restoring the loops.
 
-        A ratio rather than a constant so it keeps meaning something as the
-        catalogue grows. 5% is roughly three times what the remaining chrome
-        costs today - the trigger, the search row and the "All" tab - and two
-        orders of magnitude under the 594 KB this used to be.
-        """
+        A ratio rather than a constant so it keeps meaning something as the catalogue grows."""
         markup = self._render()
 
         self.assertLess(

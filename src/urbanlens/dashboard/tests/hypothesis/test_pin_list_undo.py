@@ -1,10 +1,4 @@
-"""Deleting a pin list is restorable from Undo History, like every comparable delete.
-
-Pins, wikis, trips, safety check-ins and saved filters already stash before deleting;
-lists were the gap - and a list is exactly the kind of thing undo exists for, since
-deleting one destroys hand-built curation (which pins, in what order) while the pins
-themselves survive.
-"""
+"""Deleting a pin list is restorable from Undo History, like every comparable delete."""
 
 from __future__ import annotations
 

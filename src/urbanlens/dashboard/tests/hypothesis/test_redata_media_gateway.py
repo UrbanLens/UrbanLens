@@ -1,16 +1,4 @@
-"""Tests for the REData media gateway and the street-view carousel providers.
-
-The three providers (Mapillary, KartaView, Panoramax) now source their slides
-from REData's ``/street-view/timeline/`` - one dated slide per capture date,
-representative frame nearest the point - rather than ``/media/lookup/``'s
-undated recent photos. ``RedataMediaGateway.lookup`` itself remains (the
-``/media/lookup/`` contract still serves other consumers), so its tests stay.
-
-Mirrors ``test_redata_context_gateway.py``'s conventions: a mocked ``session``
-for the gateway-level tests (no DB, no network), and a mocked
-``RedataStreetViewGateway.get_timeline`` for the provider-level slide-mapping
-tests.
-"""
+"""Tests for the REData media gateway and the street-view carousel providers."""
 
 from __future__ import annotations
 
@@ -128,13 +116,6 @@ class _ProviderSlideMappingMixin(_MixinBase):
     display_name: str
 
     def _slides(self, dates: list[dict]) -> tuple[list[StreetViewSlide], mock.Mock]:
-        # __post_init__ is neutralised alongside get_timeline because the
-        # provider builds its own RedataStreetViewGateway() from the
-        # module-level settings, and that constructor raises unless
-        # UL_REDATA_API_URL/API_KEY happen to be set in the environment
-        # running the tests. These are pure slide-mapping assertions - what
-        # they must not depend on is whether the machine has REData
-        # credentials configured.
         with (
             mock.patch.object(RedataStreetViewGateway, "__post_init__", return_value=None),
             mock.patch.object(RedataStreetViewGateway, "get_timeline", return_value=_timeline(dates)) as mock_timeline,

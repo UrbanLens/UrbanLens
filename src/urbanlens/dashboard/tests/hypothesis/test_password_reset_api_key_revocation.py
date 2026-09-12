@@ -1,25 +1,4 @@
-"""Resetting a password offers to revoke API keys, and defaults to keeping them.
-
-Resetting a password invalidates every session, which is what makes it the
-standard answer to a suspected compromise. It does not touch ``ApiKey`` rows -
-and ``ApiKeyCreateView`` mints a key behind ``LoginRequiredMixin`` alone, with
-no current-password proof. So a session-only compromise (a stolen cookie, a
-borrowed unlocked laptop) is enough to mint a long-lived credential, and the
-victim's natural remedy does not remove it.
-
-The offer has to happen on this POST, because ``post_reset_login`` is False:
-this is the only moment in the flow where the account is identified.
-
-Two properties matter more than the feature itself, and both are pinned here:
-
-* **The default is to keep the keys.** Most resets are ordinary forgetfulness,
-  and a key that stops working without the owner choosing that is a broken
-  integration they have to debug.
-* **The page must leak nothing.** Django resolves ``self.user`` from the uidb64
-  *before* checking the token, and a uidb64 is an encoded integer primary key -
-  so anything rendered from ``self.user`` alone is readable for any account by
-  anyone who can count.
-"""
+"""Resetting a password offers to revoke API keys, and defaults to keeping them."""
 
 from __future__ import annotations
 
@@ -63,11 +42,10 @@ class PasswordResetApiKeyRevocationTests(TestCase):
         """Walk the emailed link so the session carries the internal reset token.
 
         Args:
-            user: Whose link to build. Defaults to the fixture user.
+            user: Whose link to build.
 
         Returns:
-            The URL to POST the new password to.
-        """
+            The URL to POST the new password to."""
         user = user or self.user
         uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
@@ -159,11 +137,8 @@ class PasswordResetApiKeyRevocationTests(TestCase):
     def test_an_expired_link_for_a_real_account_reveals_nothing(self) -> None:
         """The disclosure this page must not become.
 
-        ``self.user`` is resolved from the uidb64 before the token is checked,
-        and a uidb64 is an encoded integer pk. Keying the count on ``self.user``
-        rather than on ``validlink`` would publish any account's key state to
-        anyone willing to count.
-        """
+        ``self.user`` is resolved from the uidb64 before the token is checked, and a uidb64 is an encoded
+        integer pk."""
         uidb64 = urlsafe_base64_encode(force_bytes(self.user.pk))
 
         response = self.client.get(reverse("password_reset_confirm", args=[uidb64, "bad-token"]))

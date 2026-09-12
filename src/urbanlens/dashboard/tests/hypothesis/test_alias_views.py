@@ -38,11 +38,9 @@ class PinAliasViewTestsBase(TestCase):
 class PinDetailHasEverUsedAliasesContextTests(TestCase):
     """has_ever_used_aliases (drives the aliases onboarding card) is profile-wide.
 
-    Regression coverage: it used to be scoped per-pin (checking only the
-    viewed pin's own alias list), so a user who had thoroughly used the alias
-    feature on other pins still got nagged with "Save private alternate
-    names for this pin" on every new, not-yet-named pin.
-    """
+    Regression coverage: it used to be scoped per-pin (checking only the viewed pin's own alias list), so a user
+    who had thoroughly used the alias feature on other pins still got nagged with "Save private alternate names
+    for this pin" on every new, not-yet-named pin."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # first user is auto-promoted to bootstrap site admin
@@ -169,14 +167,11 @@ class PinAliasNicknameTests(PinAliasViewTestsBase):
     def test_create_alias_that_sanitizes_to_empty_is_rejected(self) -> None:
         """A name made only of stripped characters must be rejected with 400, not crash.
 
-        ``create_pin_alias`` sanitizes the name internally and raises
-        ``ValueError`` when nothing survives (see ``test_alias_name_validation.py``),
-        but this view's own pre-check only catches an *already*-empty submission
-        and does not catch that ``ValueError`` - unlike the wiki alias view's
-        equivalent branch, which sanitizes before checking for emptiness for
-        exactly this reason (see ``LocationAliasNicknameTests`` in this file).
-        Currently reproduces a real bug: see audit concerns.
-        """
+        ``create_pin_alias`` sanitizes the name internally and raises ``ValueError`` when nothing survives (see
+        ``test_alias_name_validation.py``), but this view's own pre-check only catches an *already*-empty
+        submission and does not catch that ``ValueError`` - unlike the wiki alias view's equivalent branch,
+        which sanitizes before checking for emptiness for exactly this reason (see
+        ``LocationAliasNicknameTests`` in this file)."""
         response = self.client.post(reverse("pin.aliases", args=[self.pin.slug]), {"name": "<>"})
         self.assertEqual(response.status_code, 400)
         self.assertFalse(self.pin.aliases.filter(name="").exists())
@@ -211,11 +206,7 @@ class LocationAliasUseViewTests(TestCase):
         self.assertTrue(self.wiki.aliases.filter(name="Curated Mill").exists())
 
     def test_add_alias_form_is_collapsed_behind_a_header_button(self) -> None:
-        """The wiki aliases panel used to show its add-alias input fields
-        unconditionally - inconsistent with the pin page's own aliases panel
-        (and every other add-flow on pin/wiki pages), which reveals its input
-        only after the header "+" button is clicked. Regression guard for
-        making the wiki panel match that same consistent pattern."""
+        """Regression guard for making the wiki panel match that same consistent pattern."""
         response = self.client.get(reverse("location.wiki.aliases", args=[self.location.slug]))
         self.assertContains(response, 'title="Add alias"')
         self.assertContains(response, "alias-add-form--collapsed")
@@ -262,10 +253,9 @@ class LocationAliasNicknameTests(TestCase):
     def test_create_alias_that_sanitizes_to_empty_is_rejected(self) -> None:
         """A name made only of stripped characters must not silently become a blank alias.
 
-        Contrast with ``PinAliasNicknameTests.test_create_alias_that_sanitizes_to_empty_is_rejected``:
-        this view sanitizes *before* checking for emptiness, precisely to avoid
-        the bug that check reproduces on the pin side.
-        """
+        Contrast with ``PinAliasNicknameTests.test_create_alias_that_sanitizes_to_empty_is_rejected``: this view
+        sanitizes *before* checking for emptiness, precisely to avoid the bug that check reproduces on the pin
+        side."""
         response = self.client.post(reverse("location.wiki.aliases", args=[self.location.slug]), {"name": "<>"})
         self.assertEqual(response.status_code, 400)
         self.assertFalse(self.wiki.aliases.filter(name="").exists())
@@ -287,12 +277,10 @@ class LocationAliasNicknameTests(TestCase):
 class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
     """persist_official_aliases_for_location() backfills PinAlias rows too, not just WikiAlias.
 
-    Regression coverage: it used to only call _add_wiki_aliases, so a pin
-    whose location's external data was cached by something other than that
-    pin's own panel fetch (background enrichment, another user's pin at the
-    same location triggering the fetch first, ...) could go on showing no
-    aliases indefinitely even after the wiki for the same location had them.
-    """
+    Regression coverage: it used to only call _add_wiki_aliases, so a pin whose location's external data was
+    cached by something other than that pin's own panel fetch (background enrichment, another user's pin at the
+    same location triggering the fetch first, ...) could go on showing no aliases indefinitely even after the
+    wiki for the same location had them."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
@@ -332,14 +320,7 @@ class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
 
 
 class SharedAliasesExplainerDismissalTests(TestCase):
-    """The pin-details and wiki aliases panels share one explainer dismissal key.
-
-    Regression coverage: they used to render with different explainer_id
-    values ("pin-aliases-explainer" vs "location-aliases-explainer"), so
-    dismissing the "What are aliases and nicknames?" explainer on one page
-    had no effect on the other, even though it's the same explanation of the
-    same feature.
-    """
+    """The pin-details and wiki aliases panels share one explainer dismissal key."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
@@ -359,17 +340,7 @@ class SharedAliasesExplainerDismissalTests(TestCase):
 
 
 class AliasPanelHeaderTitleAlignmentTests(TestCase):
-    """The "Aliases" card-header title sat visibly out of place compared to
-    every other section on the wiki/pin page. Root cause: the explainer
-    anchor icon was rendered as its own sibling *before* the title <span>,
-    instead of nested inside it like every other page's title does (see
-    _page_explainer_anchor.html's own docstring example) - .card-header's CSS
-    grid explicitly excludes `.ul-explainer-anchor` from the title's grid
-    area (`> span:not(...):not(.ul-explainer-anchor)`), so the anchor got
-    auto-placed into a stray grid cell instead, throwing the header's layout
-    off. Moving the include inside the <span> fixes it without touching the
-    shared header CSS at all.
-    """
+    """The "Aliases" card-header title sat visibly out of place compared to every other section on the wiki/pin page. Root cause: the explainer anchor icon was rendered as its own sibling *before* the title <span>, instead of nested inside it like every other page's title does (see _page_explainer_anchor.html's own docstring example) - .card-header's CSS grid explicitly excludes `.ul-explainer-anchor` from the title's grid area (`> span:not(...):not(.ul-explainer-anchor)`), so the anchor got auto-placed into a stray grid cell instead, throwing the header's layout off."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
@@ -390,12 +361,8 @@ class AliasPanelHeaderTitleAlignmentTests(TestCase):
 class LocationAliasUseGoesThroughTheServiceTests(TestCase):
     """The wiki "use this name" view must not re-implement the rename itself.
 
-    It used to assign ``wiki.name`` and hand-write a ``WikiEdit`` row, which is
-    a second implementation of ``services.wiki.wiki_aliases.promote_wiki_alias_to_name``
-    and carried two defects the service does not have. Both are covered here so
-    a future re-inlining of the logic fails loudly rather than quietly
-    reintroducing them.
-    """
+    Both are covered here so a future re-inlining of the logic fails loudly rather than quietly reintroducing
+    them."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
@@ -409,13 +376,8 @@ class LocationAliasUseGoesThroughTheServiceTests(TestCase):
     def test_promoting_the_name_the_wiki_already_has_writes_no_history(self) -> None:
         """A no-op rename must leave the audit trail untouched.
 
-        The old inline version always wrote a ``WikiEdit``, so promoting the
-        alias that was already the name produced a junk
-        ``{"name": {"from": "X", "to": "X"}}`` row. Those rows are not
-        cosmetic: the history is what people read to see who changed what, and
-        a client retrying a request whose response it never saw could pad it
-        with edits that changed nothing.
-        """
+        The old inline version always wrote a ``WikiEdit``, so promoting the alias that was already the name
+        produced a junk ``{"name": {"from": "X", "to": "X"}}`` row."""
         alias = self.wiki.aliases.get(name="Curated Mill")
         before = WikiEdit.objects.filter(wiki=self.wiki).count()
 
@@ -430,13 +392,8 @@ class LocationAliasUseGoesThroughTheServiceTests(TestCase):
     def test_announced_name_is_the_one_that_was_actually_stored(self) -> None:
         """The toast and the wikiRenamed event must report the sanitized name.
 
-        ``Wiki.save()`` runs the incoming name through ``sanitize_name``, so the
-        alias text and the stored name can differ. The old inline version echoed
-        the raw alias, telling the user the place had been renamed to something
-        that is not what the database now holds. The alias row here is written
-        with ``.update()`` to bypass ``WikiAlias.save()``'s own sanitizing, which
-        is how a row predating that sanitizer would look.
-        """
+        ``Wiki.save()`` runs the incoming name through ``sanitize_name``, so the alias text and the stored name
+        can differ."""
         alias = baker.make(WikiAlias, wiki=self.wiki, name="Placeholder Mill")
         raw_name = "Restored <b>Mill</b>"
         WikiAlias.objects.filter(pk=alias.pk).update(name=raw_name)

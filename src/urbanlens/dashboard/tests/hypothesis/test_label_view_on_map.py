@@ -1,13 +1,4 @@
-"""Tests for the Organize > Labels "View on map" button.
-
-Each row on the Labels page (tag/category/status) can jump to the main map
-pre-filtered to just that label, via a `label_groups` query param the main
-map's existing `_restoreFiltersFromUrl()` (map/index.html) already knows how
-to apply - see `dashboard_tags.label_map_url`.
-
-A label whose whole subtree holds no pins would land on an empty map, so its
-button renders inert (no href, `aria-disabled`) instead.
-"""
+"""Tests for the Organize > Labels "View on map" button."""
 
 from __future__ import annotations
 
@@ -93,10 +84,8 @@ class LabelRowsEmptyLabelButtonTests(TestCase):
     def _card(self, response, label_id: int) -> str:
         """Return just one label's card markup.
 
-        The tag rows also carry every seeded global tag, most of which have no
-        pins and so legitimately render disabled - assertions about a specific
-        label have to be scoped to its own card.
-        """
+        The tag rows also carry every seeded global tag, most of which have no pins and so legitimately render
+        disabled - assertions about a specific label have to be scoped to its own card."""
         content = response.content.decode()
         start = content.index(f'id="tag-card-{label_id}"')
         end = content.find('<div class="tag-card"', start)

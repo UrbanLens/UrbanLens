@@ -167,11 +167,7 @@ class AlbumOrderingTests(TestCase):
         self.assertEqual(reorder_album_items(self.album, [foreign_id, *ids]), 3)
 
     def test_reorder_survives_an_item_deleted_between_its_two_queries(self) -> None:
-        """The display-order read and the hydration read aren't atomic - a row
-        removed in between (another tab, a concurrent remove-from-album request)
-        must not 500 the whole reorder over one photo that's already gone. Same
-        bug class as _hydrate_album_items, fixed the same way: skip the missing
-        row rather than KeyError on it."""
+        """The display-order read and the hydration read aren't atomic - a row removed in between (another tab, a concurrent remove-from-album request) must not 500 the whole reorder over one photo that's already gone. Same bug class as _hydrate_album_items, fixed the same way: skip the missing row rather than KeyError on it."""
         ids = self._display_item_ids()
         victim_id = ids[1]
         real_for_album = AlbumItem.objects.for_album
@@ -271,14 +267,9 @@ class AlbumCoverTests(TestCase):
 class AlbumVisibilityTests(TestCase):
     """Every read here must chain ``Image.visible_to`` - an album can't widen who sees a photo.
 
-    A stranger profile shares no friendship, trip, or wiki with the pin's
-    owner, so ``visible_to`` denies them regardless of the default visibility
-    settings (see ``ImageQuerySet._shared_within_reach_of``: filing a photo
-    under a pin is not itself sharing it). That makes "the owner sees the
-    photos, a stranger sees none of them" a deterministic check that a future
-    refactor didn't quietly drop the visibility filter from one of these
-    helpers.
-    """
+    A stranger profile shares no friendship, trip, or wiki with the pin's owner, so ``visible_to`` denies them
+    regardless of the default visibility settings (see ``ImageQuerySet._shared_within_reach_of``: filing a photo
+    under a pin is not itself sharing it)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -357,11 +348,8 @@ class AlbumBatchingTests(TestCase):
     def test_query_count_does_not_grow_with_album_count(self) -> None:
         """The invariant is constancy, not a specific number.
 
-        ``visible_to`` issues several queries of its own to build the viewer's
-        allowed-uploader set, and that's free to change - what must not change
-        is that resolving eight albums costs the same as resolving two.
-
-        """
+        ``visible_to`` issues several queries of its own to build the viewer's allowed-uploader set, and that's
+        free to change - what must not change is that resolving eight albums costs the same as resolving two."""
         pin, images = _pin_with_photos(4)
         for index in range(2):
             album = Album.objects.create(name=f"A{index}", profile=pin.profile, parent_pin=pin)

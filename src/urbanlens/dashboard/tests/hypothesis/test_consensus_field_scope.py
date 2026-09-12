@@ -1,20 +1,4 @@
-"""Applying a consensus answer must write only the field the round decided.
-
-The fourth site of the defect fixed in chunk 617, and the one the manual sweep
-missed: ``_wiki_field_strategy.apply_answer`` set one attribute and then
-bare-saved the whole ``Wiki``. It was found afterwards by
-``bin/report_model_writers.py``, which ranks models by how many modules write
-them - ``Wiki`` has thirteen - and lists the bare saves against them.
-
-The staleness window here is wider than the web edit paths that were fixed
-first. A consensus round loads its wiki when the round is built and applies the
-answer when the round resolves, which is a whole game session later, and rounds
-resolve for a wiki that other people are editing in the meantime.
-
-``pin_type`` is the case worth having a test for: its setter assigns *two*
-columns, so scoping the save to the strategy's named field alone would have
-silently stopped recording ``pin_type_is_user_provided``.
-"""
+"""Applying a consensus answer must write only the field the round decided."""
 
 from __future__ import annotations
 

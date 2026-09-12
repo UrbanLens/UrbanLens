@@ -1,18 +1,4 @@
-"""The site-features panel reaches REData's registry without hardcoding it.
-
-REData's points-of-interest registry holds about two dozen providers and
-UrbanLens reached two. The rest are the ones closest to this app's subject:
-agency surveillance-camera registers, OpenStreetMap's worldwide contributed
-camera set, FCC-registered antenna structures, FAA facility groups, EPA
-contamination programmes, storage tanks.
-
-The thing worth testing is not that a panel renders - it is *how the provider
-list is arrived at*. Most of these providers are generated on REData's side from
-dataset tables, so a list written into UrbanLens would stop growing silently.
-These tests pin the two properties that keep that from happening: the panel asks
-REData which providers cover the point, and the only tags it names itself are
-ones that identify an **UrbanLens panel**, not a REData source.
-"""
+"""The site-features panel reaches REData's registry without hardcoding it."""
 
 from __future__ import annotations
 
@@ -132,11 +118,8 @@ class ProviderDiscoveryTests(TestCase):
     def test_the_excluded_tags_all_name_an_urbanlens_panel(self) -> None:
         """`_SHOWN_ELSEWHERE` is about this app's UI, which is why it may be written down.
 
-        If a tag here stopped matching a panel, the list would have quietly
-        become a REData-taxonomy list - the kind that goes stale. Judgements
-        about REData's taxonomy live in `_TOO_GENERIC` instead, where the fact
-        that they can go stale is stated rather than hidden among these.
-        """
+        If a tag here stopped matching a panel, the list would have quietly become a REData-taxonomy list - the
+        kind that goes stale."""
         from urbanlens.dashboard.services.pins.external_data import panel_sources
 
         keys = set(panel_sources())

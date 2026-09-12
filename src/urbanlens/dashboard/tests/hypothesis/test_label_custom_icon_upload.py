@@ -1,16 +1,4 @@
-"""Tests for uploading a custom icon file via LabelCreateView/LabelEditView.
-
-Invariants verified:
-  - The uploaded file is accepted whether the client names the field
-    "custom_icon" (legacy/manual clients) or "custom_icon-<picker_id>" (what
-    the shared _icon_picker.html partial now renders - see _uploaded_custom_icon
-    in controllers/labels.py). The partial used to hardcode a bare
-    "custom_icon" name on every icon-picker instance it renders; scoping it per
-    picker_id closes off a latent risk where two such pickers ending up in the
-    same submitted form (e.g. a future refactor nesting one dialog inside
-    another) would silently collide and let one entity's uploaded icon land on
-    a different entity.
-"""
+"""Tests for uploading a custom icon file via LabelCreateView/LabelEditView."""
 
 from __future__ import annotations
 
@@ -28,12 +16,8 @@ from urbanlens.dashboard.models.labels.model import Label
 def _png(name: str = "icon.png") -> SimpleUploadedFile:
     """A real PNG.
 
-    Was `b"fake-png-bytes"`, which the upload path used to accept because
-    content sniffing failed open on anything it could not fingerprint. Photos
-    now need a positive identification, so a placeholder string is refused -
-    which is right, and means a test wanting a successful upload has to supply
-    an actual image.
-    """
+    Photos now need a positive identification, so a placeholder string is refused - which is right, and means a
+    test wanting a successful upload has to supply an actual image."""
     return SimpleUploadedFile(name, PNG_BYTES, content_type="image/png")
 
 

@@ -1,23 +1,4 @@
-"""Priming subtree pin counts must be faster *and* produce identical numbers.
-
-``Label.total_pin_count`` walks the label hierarchy with a BFS that issues one
-query per node visited, adds a ``Count`` aggregate, and memoizes only on the
-instance it was called on. Rendering a page of labels therefore cost
-O(labels x subtree) queries: measured on the Organize page's deferred rows
-endpoint, 143 labels cost 113 (tags) and 146 (categories) queries, growing by
-exactly one per added label.
-
-``prime_total_pin_counts`` resolves the same numbers in a fixed three queries by
-loading the edge list once and traversing in Python. That is only worth having if
-it agrees with the original in every case, so these tests assert equality against
-the unprimed path rather than against hand-written expected totals - a
-hand-written number would encode whatever the fast path happens to do.
-
-The awkward cases are the point: multi-level chains (the BFS is not
-direct-children-only), diamonds where one label is reachable by two routes and
-must not be counted twice, and cycles, which the original BFS tolerates and any
-replacement must too.
-"""
+"""Priming subtree pin counts must be faster *and* produce identical numbers."""
 
 from __future__ import annotations
 

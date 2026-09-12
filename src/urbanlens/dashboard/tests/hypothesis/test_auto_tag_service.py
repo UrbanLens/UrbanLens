@@ -1,13 +1,4 @@
-"""Tests for AutoTagService's independent keyword-based and AI-based gating.
-
-Regression coverage for the keyword-based auto-tagging user setting: previously
-keyword matching (local pattern/substring matching, no external API call) and AI
-matching (LLM call) shared a single set of profile gates (ai_enabled/ai_label_*),
-so a user could not disable the free keyword path independently of the paid AI
-path, or vice versa. Profile gained keyword_tagging_enabled/keyword_label_tags/
-keyword_label_categories/keyword_label_statuses (default True, since keyword
-matching is free and local) alongside the existing ai_* fields (default False).
-"""
+"""Tests for AutoTagService's independent keyword-based and AI-based gating."""
 
 from __future__ import annotations
 
@@ -105,12 +96,8 @@ class KeywordKindEnabledForProfileTests(TestCase):
 class SuggestForPinStageGatingTests(TestCase):
     """suggest_for_pin must only invoke the stages the profile allows.
 
-    The pin path's first stage is REData suggestions rather than keyword
-    matching (a wiki, which has no owner and so no per-user taxonomy, still
-    keyword-matches). The two stages are independently gated: REData on
-    SiteFeature.AUTO_TAGGING plus the user's own switch, AI on SiteFeature.AI
-    plus the per-kind AI preferences.
-    """
+    The pin path's first stage is REData suggestions rather than keyword matching (a wiki, which has no owner
+    and so no per-user taxonomy, still keyword-matches)."""
 
     def setUp(self) -> None:
         super().setUp()

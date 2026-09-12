@@ -1,16 +1,4 @@
-"""`WikiBoundaryView` - the community boundary editor - had no test anywhere.
-
-Only its pin-scoped sibling `BoundaryController` was covered (`test_boundary.py`),
-so three behaviours specific to the community half went unexercised: the area
-limit against `SiteSettings.max_bbox_area_km2`, the `WikiEdit` audit-trail write,
-and the `just_drawn` bypass that stops concealment hiding a writer's own save
-from that write's own response.
-
-Community drawings are keyed by Wiki, and the shared location-default rows only
-ever hold API-generated geometry, so nothing here can influence point→location
-matching. That separation is what the "a community edit lands on a wiki-keyed
-row" assertions below pin down.
-"""
+"""`WikiBoundaryView` - the community boundary editor - had no test anywhere."""
 
 from __future__ import annotations
 

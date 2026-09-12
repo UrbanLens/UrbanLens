@@ -101,10 +101,8 @@ class InviteCheckinPartnerTests(TestCase):
     def test_over_cap_raises_even_for_unknown_username(self):
         """The cap check must fire before username resolution.
 
-        Otherwise "check-in full" only ever answers for a real account,
-        letting a caller who fills their own check-in once turn the cap into
-        a free, repeatable username-existence oracle.
-        """
+        Otherwise "check-in full" only ever answers for a real account, letting a caller who fills their own
+        check-in once turn the cap into a free, repeatable username-existence oracle."""
         settings = SiteSettings.get_current()
         settings.max_safety_checkin_partners = 1
         settings.save(update_fields=["max_safety_checkin_partners"])
@@ -144,11 +142,7 @@ class AcceptCheckinPartnerInviteTests(TestCase):
         self.assertFalse(NotificationLog.objects.exists())
 
     def test_accept_after_concurrent_removal_is_a_no_op(self):
-        """Regression guard: accepting a stale in-memory ``partner`` whose row the owner
-        already removed concurrently must not resurrect it or send a phantom "partner
-        accepted" notification - save() on a deleted row would otherwise silently
-        no-op the UPDATE while the rest of the function ran anyway.
-        """
+        """Regression guard: accepting a stale in-memory ``partner`` whose row the owner already removed concurrently must not resurrect it or send a phantom "partner accepted" notification - save() on a deleted row would otherwise silently no-op the UPDATE while the rest of the function ran anyway."""
         SafetyCheckinPartner.objects.filter(pk=self.partner.pk).delete()
 
         accept_checkin_partner_invite(self.partner)
@@ -160,12 +154,10 @@ class AcceptCheckinPartnerInviteTests(TestCase):
 class IsOwnerOrAcceptedPartnerTests(TestCase):
     """is_owner_or_accepted_partner: the owner and unrelated-profile boundary cases.
 
-    Kept in a class of its own, separate from the @given property test below -
-    per this repo's CLAUDE.md, Hypothesis example-shrinking and this TestCase's
-    per-test transaction rollback don't always compose cleanly, so a plain
-    fixture-sharing test placed alongside a `@given` method in the same class
-    can see leftover data from it.
-    """
+    Kept in a class of its own, separate from the @given property test below - per this repo's CLAUDE.md,
+    Hypothesis example-shrinking and this TestCase's per-test transaction rollback don't always compose cleanly,
+    so a plain fixture-sharing test placed alongside a `@given` method in the same class can see leftover data
+    from it."""
 
     def setUp(self):
         self.owner = _profile()
@@ -408,11 +400,7 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         self.assertEqual(close_two.get("code"), 4404)
 
     def test_write_access_is_revoked_immediately_even_before_the_close_arrives(self):
-        """Regression guard for _create_message's in-band recheck: a removed partner's
-        connection may not have processed its close frame yet (or the revocation
-        broadcast may never arrive at all, see the periodic-revalidation test below) -
-        either way, an attempted send in that window must be rejected, not accepted.
-        """
+        """Regression guard for _create_message's in-band recheck: a removed partner's connection may not have processed its close frame yet (or the revocation broadcast may never arrive at all, see the periodic-revalidation test below) - either way, an attempted send in that window must be rejected, not accepted."""
         _run(self._write_access_is_revoked_immediately_even_before_the_close_arrives())
 
     async def _write_access_is_revoked_immediately_even_before_the_close_arrives(self):
@@ -449,11 +437,7 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         self.assertEqual(await _message_count(), 0)
 
     def test_dropped_revocation_broadcast_is_caught_by_periodic_revalidation(self):
-        """Regression guard: partner_access_revoked (the group_send remove_checkin_partner
-        fires) is best-effort, like every other broadcast in this module - if it's ever
-        lost (a channel-layer hiccup), the periodic re-validation backstop must still
-        close the connection on its own, rather than leaving it open indefinitely.
-        """
+        """Regression guard: partner_access_revoked (the group_send remove_checkin_partner fires) is best-effort, like every other broadcast in this module - if it's ever lost (a channel-layer hiccup), the periodic re-validation backstop must still close the connection on its own, rather than leaving it open indefinitely."""
         _run(self._dropped_revocation_broadcast_is_caught_by_periodic_revalidation())
 
     async def _dropped_revocation_broadcast_is_caught_by_periodic_revalidation(self):

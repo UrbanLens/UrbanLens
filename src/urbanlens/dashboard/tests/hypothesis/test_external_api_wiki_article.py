@@ -1,11 +1,4 @@
-"""Article read/save/history on the external API's wiki surface.
-
-The behavior under the most scrutiny here is optimistic concurrency. Two people
-editing one wiki article is the normal case, not the exceptional one, and a save
-that silently overwrites the other person's work is unrecoverable from the
-client's side. So a stale (or absent) ``base_revision_id`` must refuse the
-write, and must refuse it *without* recording a revision.
-"""
+"""Article read/save/history on the external API's wiki surface."""
 
 from __future__ import annotations
 

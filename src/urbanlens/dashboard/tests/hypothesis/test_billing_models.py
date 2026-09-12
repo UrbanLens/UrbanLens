@@ -46,11 +46,9 @@ class SubscriptionRoleCleanTests(TestCase):
     def test_a_static_minimum_requires_pay_what_you_want(self) -> None:
         """The symmetric half of the dynamic-threshold rule, which clean() was missing.
 
-        With pay-what-you-want off there is nothing for a minimum *pledge* to be a
-        minimum of - the role is either fixed-price or free - so the field is inert
-        rather than wrong, and an admin gets no signal that the number they typed
-        does nothing.
-        """
+        With pay-what-you-want off there is nothing for a minimum *pledge* to be a minimum of - the role is
+        either fixed-price or free - so the field is inert rather than wrong, and an admin gets no signal that
+        the number they typed does nothing."""
         role = baker.prepare(
             SubscriptionRole, pay_what_you_want=False, pwyw_dynamic_threshold=False, pwyw_minimum_cents=300
         )
@@ -227,10 +225,7 @@ class RoleSubscriptionGrantingAccessForTests(TestCase):
 
 
 class RoleSubscriptionBankedAccessBoundaryTests(TestCase):
-    """Both grants_access and the queryset filter use a strict `usage_covered_until > now`
-    comparison - pin the exact cutoff instant itself (not just a value safely on either side)
-    so a `>` -> `>=` regression (or vice versa) is caught. Time is frozen so the read inside
-    grants_access/currently_granting can't drift past the instant the row was written with."""
+    """Both grants_access and the queryset filter use a strict `usage_covered_until > now` comparison - pin the exact cutoff instant itself (not just a value safely on either side) so a `>` -> `>=` regression (or vice versa) is caught. Time is frozen so the read inside grants_access/currently_granting can't drift past the instant the row was written with."""
 
     def setUp(self) -> None:
         super().setUp()

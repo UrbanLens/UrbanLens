@@ -1,12 +1,4 @@
-"""Tests for area-suffixed unnamed-location display names.
-
-Covers:
-- Location.area_label - [City, State] in the USA, [City, Country] elsewhere,
-  with graceful fallbacks when components are missing (property-based)
-- Location.display_name - "Unnamed Location in {area}" fallback
-- is_meaningful_name - the area-suffixed placeholder stays non-meaningful so
-  it never leaks into external API queries or saved names
-"""
+"""Tests for area-suffixed unnamed-location display names."""
 
 from __future__ import annotations
 

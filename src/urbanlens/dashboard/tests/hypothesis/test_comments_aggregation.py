@@ -1,11 +1,4 @@
-"""Tests for aggregating a pin's notes (private Comments) across its child pins.
-
-Mirrors the page-wide "show child pin details" toggle already applied to the
-map, photo gallery, and visit history: a note left on a child pin must not be
-invisible from the parent's own Notes tab just because it lives on a nested
-row. Posting and deleting still always act on the exact pin/comment in the
-URL - only the listing (``?children=1``) aggregates.
-"""
+"""Tests for aggregating a pin's notes (private Comments) across its child pins."""
 
 from __future__ import annotations
 

@@ -1,17 +1,4 @@
-"""Building places follow the nesting REData reports, not a flat parcel list.
-
-REData's reconciled `/parcels/{uuid}/buildings/` reports structure: a coarse
-footprint enclosing finer ones becomes their ``parent_ref`` rather than a
-duplicate of them (its ``../REData/docs/archive/buildings-dedup-spec.md``). `parcel_buildings`
-already reads that for display order and counting.
-
-`ensure_building_places` did not: every building was created with
-``parent=parcel``, so a Kirkbride block and the wings inside it became
-*siblings* whose footprints overlap. The Place tree then asserts two peers
-occupy the same ground - which is exactly the ambiguity the reconciliation
-exists to remove, and the shape `resolve_locations_in` then has to guess at when
-a pin lands inside both.
-"""
+"""Building places follow the nesting REData reports, not a flat parcel list."""
 
 from __future__ import annotations
 
@@ -69,12 +56,8 @@ class BuildingPlaceNestingTests(TestCase):
     def test_a_pin_already_resolved_to_the_parcel_moves_onto_the_new_building(self) -> None:
         """The bug this whole module exists to fix.
 
-        Before REData had described this footprint, the coordinate could only
-        resolve to the parcel - that is how 124 pins on one campus each ended
-        up claiming the whole property. Creating the building place is not
-        enough; `ensure_building_places` must re-run resolution for what it
-        just created, not just leave it for the next unrelated refresh.
-        """
+        Before REData had described this footprint, the coordinate could only resolve to the parcel - that is
+        how 124 pins on one campus each ended up claiming the whole property."""
         location = baker.make(Location, latitude=0.19, longitude=0.19)
         self.assertEqual(
             location.place_id, self.parcel.pk, "only the parcel exists yet, so that is the only possible answer"
@@ -122,10 +105,8 @@ class BuildingPlaceNestingTests(TestCase):
     def test_a_parent_ref_cycle_does_not_hang_and_loses_no_building(self) -> None:
         """Two buildings each claiming the other as parent.
 
-        Resolved by repeated passes rather than recursion precisely so this
-        terminates - and both still become places, because the import already
-        told the user it would create them.
-        """
+        Resolved by repeated passes rather than recursion precisely so this terminates - and both still become
+        places, because the import already told the user it would create them."""
         places = self._places(
             [
                 {"ref": "a", "name": "A", "parent_ref": "b", "geometry": _square(0.15, 0.15, 0.08)},
@@ -160,14 +141,8 @@ class BuildingPlaceNestingTests(TestCase):
 class DistinctRecordsStayDistinctTests(TestCase):
     """A stable id the provider gave is stronger evidence than overlapping shapes.
 
-    `find_matching_place` falls back to mutual centroid containment when no
-    place carries the record's id - sensible for providers that publish no id,
-    and how two sources' views of one parcel get merged. But it applied to
-    *identified* records too, and nested buildings are exactly where that goes
-    wrong: an L-shaped block can contain a wing's centroid while the wing
-    contains the block's. The two would then collapse into one place, undoing
-    the reconciliation REData did to keep them apart.
-    """
+    `find_matching_place` falls back to mutual centroid containment when no place carries the record's id -
+    sensible for providers that publish no id, and how two sources' views of one parcel get merged."""
 
     def setUp(self) -> None:
         super().setUp()

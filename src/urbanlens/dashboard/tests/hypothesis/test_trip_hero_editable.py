@@ -1,15 +1,4 @@
-"""Tests for the trip detail hero's click-to-edit-in-place name/description.
-
-Covers:
-- TripEditView's partial-update fix: submitting one field must not silently
-  clear the other three (name/description/start_date/end_date) - previously
-  every field was unconditionally overwritten from the request body even
-  when the key was absent, safe only because the pre-existing "Edit Trip"
-  dialog always submitted all four together.
-- The trip hero renders name/description as click-to-edit-in-place for a
-  joined member (including a placeholder when description is empty, rather
-  than hiding it), and as plain read-only text otherwise.
-"""
+"""Tests for the trip detail hero's click-to-edit-in-place name/description."""
 
 from __future__ import annotations
 

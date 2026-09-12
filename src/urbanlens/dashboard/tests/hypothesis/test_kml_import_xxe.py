@@ -1,18 +1,4 @@
-"""KML import must reject XML entity attacks before fastkml sees the document.
-
-``takeout_kml_to_dict`` hands raw upload bytes to ``fastkml``, which parses with
-``lxml`` and no hardening of its own - the same gap the GPX importers already
-close with a defusedxml pre-parse (``import_formats/gpx.py``). Without it a KML
-upload is an XXE and entity-expansion surface: the payloads below read a local
-file into a placemark name, and expand a few hundred bytes into gigabytes of
-memory inside the process doing the parse.
-
-The attacks are written as *rejections* rather than as assertions about what
-gets read. "The file contents did not appear in the output" would pass against a
-build where lxml simply had entity resolution off by default, and would keep
-passing if that default ever changed. Refusing to parse a document that declares
-a DTD at all is the property that actually holds.
-"""
+"""KML import must reject XML entity attacks before fastkml sees the document."""
 
 from __future__ import annotations
 

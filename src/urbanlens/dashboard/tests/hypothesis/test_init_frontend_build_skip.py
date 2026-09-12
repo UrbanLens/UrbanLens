@@ -1,20 +1,4 @@
-"""The frontend build must be skippable, because bind-mounting makes it fatal.
-
-`docker-compose.hot-reload.yml` mounts the checkout over `/app/src` so an edit is
-live without a rebuild. That makes the build's output directories the *host*
-user's, and `build_frontend` opens by creating them — so unless the host uid
-happens to equal the container's, `mkdir` raises `PermissionError`, the
-initializer turns it into `UnrecoverableError`, and the container crash-loops
-before serving anything. The overlay already redirects the log directory out of
-the mounted tree for exactly this reason; the build needed the same treatment.
-
-The build is also redundant there: the overlay runs a `sass-watch` sidecar, and
-`UL_ENVIRONMENT: development` leaves `DEBUG` on, where staticfiles serves from
-the app directories rather than from a collected root.
-
-Two halves, and the second is what makes the first mean anything: the flag has
-to be read, and the overlay has to set it.
-"""
+"""The frontend build must be skippable, because bind-mounting makes it fatal."""
 
 from __future__ import annotations
 

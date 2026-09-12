@@ -1,23 +1,4 @@
-"""Replacing or deleting an icon must not leave its file on disk.
-
-Django has not deleted `FileField` files since 1.3, so two ordinary actions
-stranded one every time: replacing an icon or avatar with a new upload, and
-deleting the row that named it. Small files, but they accumulate with normal
-use - and a stranded file is exactly the "orphan" `services/media/access.py` had
-to start refusing to serve, because an orphan cannot be told from a live file
-whose owner the viewer may not learn about.
-
-Three things these pin hardest, each of which the obvious implementation gets
-wrong:
-
-- **The unlink waits for the commit.** `post_save`/`post_delete` fire inside the
-  transaction, so deleting there survives a rollback that put the row back.
-- **A save that does not touch the column deletes nothing** - the mistake a
-  naive `pre_save` delete makes on every unrelated edit.
-- **`Pin` and `Label` are not managed at all.** The undo framework stashes their
-  icon as a stored *name*, so unlinking it would make an undo within the window
-  restore a row pointing at nothing.
-"""
+"""Replacing or deleting an icon must not leave its file on disk."""
 
 from __future__ import annotations
 

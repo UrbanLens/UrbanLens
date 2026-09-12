@@ -1,24 +1,4 @@
-"""Search must offer exactly the wikis whose pages the searcher can open.
-
-Wiki access is a four-clause place-domain rule (``services.wiki.wiki_access``):
-a pin on the exact Location, a pin sharing the place's domain root, membership
-reached through aggregate places, or an explicit grant. The search providers
-never called it. They asked ``location__pins__profile=profile`` - clause one
-only - and added a ``created_by`` clause the authority does not have.
-
-That is wrong in both directions, and both directions are visible to a user:
-
-- **Too narrow.** A pin on a building inside the same parcel unlocks the wiki
-  page, but the wiki did not come up in search. The user could reach it only by
-  navigating from the pin.
-- **Too broad.** Creating a wiki is not one of the four clauses, so a creator
-  with no pin was offered a search result whose page answers 404 - and 404
-  rather than 403 deliberately, so the "fix" of relaxing the page would leak
-  the existence of a location.
-
-Both are asserted against the real page, not against a restatement of the rule,
-so the two cannot drift apart again without a failure here.
-"""
+"""Search must offer exactly the wikis whose pages the searcher can open."""
 
 from __future__ import annotations
 

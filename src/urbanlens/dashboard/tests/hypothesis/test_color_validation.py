@@ -1,11 +1,4 @@
-"""Colour values must be validated on the way in, not only on the way out.
-
-`Label.color` declares `choices` and `MarkupShape.color`/`border_color` declare nothing,
-and Django enforces field `choices` only in `full_clean()` - which `save()` does not call.
-Every write path assigned straight from request data, so a value like
-`x" onmouseover="alert(1)` stored cleanly and was later interpolated into a `style="…"`
-attribute by the map and label renderers.
-"""
+"""Colour values must be validated on the way in, not only on the way out."""
 
 from __future__ import annotations
 
@@ -26,12 +19,9 @@ class CleanColorTests(SimpleTestCase):
     def test_three_digit_shorthand_is_rejected(self) -> None:
         """Storage is restricted to what the renderers can actually mean.
 
-        `#abc` used to be accepted here as "unambiguously a colour, and free to
-        allow". The merged rule is the stricter one that arrived with the markup
-        XSS work: a 6-digit hex colour, matching `safeColor` in
-        `frontend/ts/shared/markup-engine.ts`, so neither side has to guess what
-        the other permits. Nothing in the palettes emits shorthand.
-        """
+        The merged rule is the stricter one that arrived with the markup XSS work: a 6-digit hex colour,
+        matching `safeColor` in `frontend/ts/shared/markup-engine.ts`, so neither side has to guess what the
+        other permits."""
         self.assertIsNone(clean_color("#abc"))
 
     def test_attribute_breakout_is_rejected(self) -> None:

@@ -1,11 +1,4 @@
-"""Tests for the profile page's "Additional Details" section and privacy hints.
-
-Covers the gap found in an audit of the FAQ/Values claim "any data we store
-about you is visible on your own profile page": birth_date and secondary
-emails were collected but never displayed anywhere. This adds a compact
-own-profile-only section for them, plus a hover-reveal privacy hint icon next
-to data governed by a VisibilityChoice setting.
-"""
+"""Tests for the profile page's "Additional Details" section and privacy hints."""
 
 from __future__ import annotations
 

@@ -1,11 +1,4 @@
-"""Tests for contact information fields and their visibility control.
-
-Covers:
-- Profile contact field defaults
-- ContactMethodsForm validation and DB persistence
-- PrivacySettingsForm contact_visibility persistence
-- Profile.can_view_contact_info() for each VisibilityChoice
-"""
+"""Tests for contact information fields and their visibility control."""
 
 from __future__ import annotations
 

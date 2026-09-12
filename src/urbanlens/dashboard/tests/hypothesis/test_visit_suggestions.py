@@ -1,15 +1,4 @@
-"""Tests for the visit-suggestion feature: services/visits.py business logic.
-
-Covers:
-- build_visit_suggestion_message: privacy-safe place description fallback chain.
-- find_pin_at / get_or_create_pin_at: pin dedup by location id or coordinates.
-- create_visit_suggestion: suggestion/notification creation, the "nothing would
-  change so don't notify" skip, and the existing-visit merge-offer path.
-- accept_visit_suggestion / merge_visit_suggestion: pin creation, participant
-  mutual-connection filtering, and VisitSource selection.
-- TripActivityCompleteView: completer auto-logs immediately, other rsvp=yes
-  members get suggestions, rsvp=no/maybe/None members get nothing.
-"""
+"""Tests for the visit-suggestion feature: services/visits.py business logic."""
 
 from __future__ import annotations
 
@@ -217,17 +206,9 @@ class GetOrCreatePinAtTests(TestCase):
 class SuggesterIdentityMaskingTests(TestCase):
     """A visit suggestion must mask its sender like every other notification does.
 
-    The sibling of `test_calendar_sync.CalendarInviteIdentityMaskingTests`, found
-    by `bin/report_defect_history.py`'s incomplete-fix query: the commit that
-    fixed the calendar importer said it masked "like its sibling does", which is
-    exactly the phrase that means more instances exist. This was one.
-
-    The message is stored as plain text and is picked up by push delivery and by
-    `notification_text_alerts`, which builds an SMS body from the stored text -
-    so a name masked only at render time has already left the app. Being
-    connected is not sufficient permission: `VisibilityChoice`'s own docstring
-    notes accepted friends qualify for every level *except* `NO_ONE`.
-    """
+    The sibling of `test_calendar_sync.CalendarInviteIdentityMaskingTests`, found by
+    `bin/report_defect_history.py`'s incomplete-fix query: the commit that fixed the calendar importer said it
+    masked "like its sibling does", which is exactly the phrase that means more instances exist."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -674,10 +655,7 @@ class VisitSuggestionOriginCascadeTests(TestCase):
         return baker.make(VisitSuggestion, **defaults)
 
     def test_bulk_deleting_pin_with_accepted_suggestion_does_not_raise(self) -> None:
-        """Reproduces the production bug: bulk-deleting a pin whose visit had an
-        accepted VisitSuggestion raised IntegrityError against
-        db_visit_suggestion_exactly_one_origin, because origin_visit was
-        SET_NULL and the collector nulled it without clearing from_my_activity."""
+        """Reproduces the production bug: bulk-deleting a pin whose visit had an accepted VisitSuggestion raised IntegrityError against db_visit_suggestion_exactly_one_origin, because origin_visit was SET_NULL and the collector nulled it without clearing from_my_activity."""
         origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
         origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
         suggestion = self._make_suggestion(origin_visit=origin_visit, status=VisitSuggestionStatus.ACCEPTED)

@@ -1,15 +1,8 @@
 /**
- * Watches a page for the failures an assertion never looks at.
- *
- * "The heading rendered" is a weak claim when a script threw before it could
- * wire up the page's behaviour, when the JavaScript bundle 404'd, or when an
- * HTMX swap came back 500 and the only trace is a toast that has since faded.
- * Every one of those leaves the page looking approximately right, and every one
- * is exactly the regression a staging run exists to catch.
- *
- * The `page` fixture attaches one of these to every UI test and asserts on it
- * during teardown, so a spec gets the check without opting in. A spec that
- * legitimately provokes an error calls {@link PageGuard.allow} to narrow it.
+ * Watches a page for the failures an assertion never looks at. "The heading rendered" is a weak
+ * claim when a script threw before it could wire up the page's behaviour, when the JavaScript
+ * bundle 404'd, or when an HTMX swap came back 500 and the only trace is a toast that has since
+ * faded.
  */
 
 import type { Page, Request, Response, ConsoleMessage } from "@playwright/test";

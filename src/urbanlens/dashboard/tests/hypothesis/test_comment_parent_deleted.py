@@ -1,15 +1,4 @@
-"""Tests for UL-219: replies must survive their parent comment's deletion
-with their thread context preserved, not silently become unexplained
-top-level comments.
-
-Comment.parent is on_delete=SET_NULL (replies were never lost - see
-PinCommentDeleteView/WikiCommentDeleteView's own comments), but a reply
-whose parent is nulled queries identically to a genuine top-level comment,
-so nothing distinguished the two in the UI. models/comments/signals.py's
-pre_delete handler now flags every reply with parent_deleted=True before the
-FK is nulled, and the comment panel renders a "Replying to a comment that
-was deleted" placeholder for exactly those rows.
-"""
+"""Tests for UL-219: replies must survive their parent comment's deletion with their thread context preserved, not silently become unexplained top-level comments."""
 
 from __future__ import annotations
 

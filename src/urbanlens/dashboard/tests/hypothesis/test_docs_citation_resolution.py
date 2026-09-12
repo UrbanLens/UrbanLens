@@ -1,19 +1,4 @@
-"""One citation string can resolve from one directory and not another.
-
-`bin/check_docs_refs.py` tries a citation against the repository root, against
-`docs/`, and against the citing file's own directory - so `GUIDE.md` is a live
-pointer from a directory that holds one and a dangling pointer from anywhere
-else. Its resolution cache was keyed on the citation string alone, which made
-whichever file happened to be scanned first decide the answer for every other
-file citing the same name, in both directions.
-
-That was harmless while every citation carried a `docs/` prefix. Matching bare
-capitalised filenames - which is what lets a root `TODO.md` citation be seen at
-all - makes basenames that recur in several directories the normal case.
-
-These run the checker against throwaway repositories rather than this one, so a
-regression fails here instead of waiting for a filename to collide in the tree.
-"""
+"""One citation string can resolve from one directory and not another."""
 
 from __future__ import annotations
 

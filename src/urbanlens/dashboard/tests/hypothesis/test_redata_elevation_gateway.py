@@ -1,10 +1,4 @@
-"""Tests for RedataElevationGateway against REData's ``/elevation/`` contract
-(``../REData/docs/api-reference.md``, "GET /elevation/ - metres above sea level").
-
-Constructs the gateway with a mock ``session`` (Gateway.__post_init__ leaves a
-non-default session untouched, skipping the DB-backed rate-limiting wrapper -
-see gateway.py) so these stay pure unit tests with no database access.
-"""
+"""Tests for RedataElevationGateway against REData's ``/elevation/`` contract (``../REData/docs/api-reference.md``, "GET /elevation/ - metres above sea level")."""
 
 from __future__ import annotations
 

@@ -1,24 +1,8 @@
 /**
- * No page may scroll sideways on a phone.
- *
- * A horizontal scrollbar at phone width is the one layout fault that affects
- * every page at once and that nobody notices on a desktop, which is how this
- * one survived: `.app-nav-right` ran 40px past a 390px viewport on every page
- * in the application, and it was first reported against the map because that is
- * where somebody happened to look (P52).
- *
- * The assertion is deliberately about the *document* rather than about any
- * element. Naming the culprit would have to be rewritten every time the nav is,
- * and the defect this exists for is "the page scrolls sideways", not
- * "`.app-nav-right` is 227px wide". When it fails, the diagnostic below names
- * the widest offending elements so the message ends the investigation rather
- * than starting one.
- *
- * `getBoundingClientRect` reports geometry as if nothing clipped it, so a naive
- * probe blames every Leaflet tile drawn past its own `overflow: hidden`
- * container. The diagnostic therefore skips elements an ancestor clips, which is
- * the correction the original 2026-08-23 investigation needed before it found
- * the real culprit.
+ * No page may scroll sideways on a phone. A horizontal scrollbar at phone width is the one layout
+ * fault that affects every page at once and that nobody notices on a desktop, which is how this one
+ * survived: `.app-nav-right` ran 40px past a 390px viewport on every page in the application, and
+ * it was first reported against the map because that is where somebody happened to look (P52).
  */
 
 import { expect, test } from "../../lib/fixtures.js";

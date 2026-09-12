@@ -1,20 +1,4 @@
-"""Tests for the production-only guard on REData's ML-training write surfaces.
-
-Dev and staging deployments point at *production* REData on purpose: nearly
-every REData endpoint - including the POST-shaped ones - only asks REData to go
-fetch and cache third-party data about a place, so sharing one instance saves
-third-party quota instead of burning it. Four endpoints are different in kind:
-they send UrbanLens's own content for REData to store and train models on.
-Those must never fire from a throwaway deployment, or demo data lands in the
-production ML corpus indistinguishable from real data.
-
-Two things are proved here: that the environment classifier fails closed (only
-an explicit ``production`` counts, so an unset or garbage ``UL_ENVIRONMENT``
-never enables writes), and that the classification actually reaches every one
-of the four write surfaces while leaving reads and cache-fill calls alone.
-
-Every HTTP call is mocked - nothing here touches the network.
-"""
+"""Tests for the production-only guard on REData's ML-training write surfaces."""
 
 from __future__ import annotations
 
@@ -72,10 +56,8 @@ def _labels(session: mock.Mock) -> RedataLabelsGateway:
 def _as_environment(name: str | None):
     """Run a block as if ``UL_ENVIRONMENT`` were ``name``.
 
-    Drives ``IS_PRODUCTION`` through the real classifier rather than restating
-    the rule, so a test naming an environment proves the whole chain from the
-    env var to the guard.
-    """
+    Drives ``IS_PRODUCTION`` through the real classifier rather than restating the rule, so a test naming an
+    environment proves the whole chain from the env var to the guard."""
     return override_settings(ENVIRONMENT_NAME=name, IS_PRODUCTION=is_production_environment(name))
 
 
@@ -260,11 +242,8 @@ class TrueWriteSurfacesAreAttemptedOnProductionTests(SimpleTestCase):
 class ReadAndCacheFillSurfacesAreUnaffectedTests(SimpleTestCase):
     """Everything that is not a contribution still calls REData from any environment.
 
-    This is the whole point of the distinction: dev pointed at production REData
-    is *better* than dev with its own instance, so the guard must not creep past
-    the four surfaces that actually store our data. Three of the calls below are
-    POSTs - being a POST is not what makes an endpoint a write.
-    """
+    This is the whole point of the distinction: dev pointed at production REData is *better* than dev with its
+    own instance, so the guard must not creep past the four surfaces that actually store our data."""
 
     def test_get_confidence_batch_is_a_post_shaped_read_and_still_calls(self) -> None:
         for name in NON_PRODUCTION_NAMES:

@@ -1,33 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark raw pytest throughput on this machine against a fixed test sample.
-
-Building the test database and running tests against it are different costs
-that do not blend into one number - see pyproject.toml's ``[tool.mutmut]``
-comment ("about three minutes against 3.5 seconds"). This script measures both
-separately, on a deterministic, stride-sampled slice of
-``src/urbanlens/dashboard/tests/hypothesis/`` (stride rather than a plain
-alphabetical prefix, since files cluster by feature name - `test_billing_*`,
-`test_boundary_*` - and a prefix slice would just benchmark one feature area):
-
-1. a cold run against a freshly created, uniquely-named test database
-   (``--reuse-db --create-db``, kept afterward instead of torn down)
-2. a warm run of the same sample against that same database (``--reuse-db``)
-
-``cold_seconds - warm_seconds`` approximates one-time database setup cost;
-``tests_total / warm_seconds`` approximates steady-state throughput. Compare
-either number across machines - this script does not try to average them into
-a single "score".
-
-Usage::
-
-    python bin/benchmark_test_speed.py [--sample-size N] [--label NAME] [--keep-db]
-
-Run it with whichever interpreter already has this project's dependencies
-installed: the project venv directly on a local checkout, or the container's
-venv via ``docker exec``/``docker compose run`` on a Docker-based environment.
-Prints one JSON object to stdout summarizing the result; progress goes to
-stderr so stdout stays parseable.
-"""
+"""Benchmark raw pytest throughput on this machine against a fixed test sample."""
 
 from __future__ import annotations
 

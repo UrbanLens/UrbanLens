@@ -1,14 +1,4 @@
-"""Tests for direct messages between users.
-
-Covers:
-- Profile.direct_message_visibility default and PrivacySettingsForm persistence
-- Profile.accepts_direct_messages_from / services.can_direct_message for each
-  VisibilityChoice, including the reply exception and community gating
-- create_direct_message validation, permission enforcement, and notifications
-- DirectMessageQuerySet conversation helpers (between/unread_for/conversation_rows)
-- conversations_for / has_used_direct_messages service helpers
-- The HTTP endpoints (page, conversation, send, dropdown, unread count)
-"""
+"""Tests for direct messages between users."""
 
 from __future__ import annotations
 
@@ -396,10 +386,7 @@ class DirectMessageEndpointTests(TestCase):
         self.assertContains(response, "1")
 
     def test_encrypted_message_placeholder_has_no_redundant_lock_emoji(self) -> None:
-        """Regression guard: the server-rendered "Decrypting…" placeholder used
-        to start with a 🔒 emoji, duplicating the separate dedicated lock icon
-        (.dm-lock-icon, "End-to-end encrypted") already rendered right next to
-        it - two lock glyphs for one encrypted message."""
+        """Regression guard: the server-rendered "Decrypting…" placeholder used to start with a 🔒 emoji, duplicating the separate dedicated lock icon (.dm-lock-icon, "End-to-end encrypted") already rendered right next to it - two lock glyphs for one encrypted message."""
         DirectMessage.objects.create(
             sender=self.partner, recipient=self.me, ciphertext="abc123", nonce="def456", key_version=1
         )
@@ -446,10 +433,7 @@ class DirectMessageEndpointTests(TestCase):
         self.assertContains(response, self.partner.username)
 
     def test_recipient_search_excludes_a_profile_masked_from_the_requester(self) -> None:
-        """Regression: a messageable profile with profile_visibility=NO_ONE was
-        still returned with its real username/slug/avatar, letting anyone
-        enumerate hidden identities by substring even though every other
-        surface (thread, sidebar, notifications) masks them."""
+        """Regression: a messageable profile with profile_visibility=NO_ONE was still returned with its real username/slug/avatar, letting anyone enumerate hidden identities by substring even though every other surface (thread, sidebar, notifications) masks them."""
         Profile.objects.filter(pk=self.partner.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
         response = self.client.get(reverse("messages.recipients"), {"q": self.partner.username[:5]})
         self.assertEqual(response.status_code, 200)
@@ -564,20 +548,12 @@ class ConversationPaginationTests(TestCase):
 
 
 class ThreadRenderingRegressionTests(TestCase):
-    """Regression coverage for a reported "no longer see X" batch of complaints:
-    per-message controls, timestamps, and date-separator headers between days.
+    """Regression coverage for a reported "no longer see X" batch of complaints: per-message controls, timestamps, and date-separator headers between days.
 
-    Investigated first: the hover-reveal CSS for .dm-bubble__menu-btn/.dm-bubble__time
-    (opacity: 0 until hover/focus/tap) predates every change in this session by over a
-    week, and the group-chat commit touched neither _message_items.html nor this CSS -
-    so there was no code regression to find for the "controls"/"timestamps" complaints;
-    that's long-standing, deliberate chat-app-style design, not a bug. This class instead
-    locks in the one thing that actually deserved direct verification: the date-separator
-    <ifchanged> logic on the server, which had zero prior test coverage - plus confirms,
-    directly against the rendered markup, that every control/timestamp element these
-    complaints named is genuinely present (not literally missing), so nothing to disable/
-    hover is disabled by nothing being there at all.
-    """
+    Investigated first: the hover-reveal CSS for .dm-bubble__menu-btn/.dm-bubble__time (opacity: 0 until
+    hover/focus/tap) predates every change in this session by over a week, and the group-chat commit touched
+    neither _message_items.html nor this CSS - so there was no code regression to find for the
+    "controls"/"timestamps" complaints; that's long-standing, deliberate chat-app-style design, not a bug."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -630,11 +606,7 @@ class ThreadRenderingRegressionTests(TestCase):
         self.assertEqual(content.count("dm-day-sep"), 1)
 
     def test_every_message_renders_its_own_menu_button_and_timestamp(self) -> None:
-        """The controls/timestamps aren't literally absent - they're always in the
-        DOM, just CSS-hidden until hover/tap (verified separately in _messages.scss:
-        opacity: 0 with a :hover/:focus-within/--peek reveal). A regression that
-        actually removed them from the markup would be a much more severe bug than
-        "hidden until hover" - this guards against that happening by accident."""
+        """The controls/timestamps aren't literally absent - they're always in the DOM, just CSS-hidden until hover/tap (verified separately in _messages.scss: opacity: 0 with a :hover/:focus-within/--peek reveal). A regression that actually removed them from the markup would be a much more severe bug than "hidden until hover" - this guards against that happening by accident."""
         DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="one")
         DirectMessage.objects.create(sender=self.me, recipient=self.partner, body="two")
 
@@ -646,13 +618,7 @@ class ThreadRenderingRegressionTests(TestCase):
 class ThreadMapAttachmentRenderingTests(TestCase):
     """Each map-carrying message must render its own snapshot/dialog DOM ids.
 
-    Regression: `_message_items.html` built the viewer id with
-    `"dm-"|add:message.id`. Django's `add` filter returns '' when asked to
-    concatenate a str and an int, so every map message in a thread shared the
-    same empty id suffix - `getElementById` then resolved every thumbnail and
-    dialog to the *first* map's snapshot, making a second sent map display as
-    a duplicate of the first (while being stored correctly server-side).
-    """
+    Regression: `_message_items.html` built the viewer id with `"dm-"|add:message.id`."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -691,12 +657,8 @@ class ThreadMapAttachmentRenderingTests(TestCase):
 class NotificationChannelPreferenceTests(TestCase):
     """The `message` delivery preference actually selects the channels used.
 
-    Regression: _notify_recipient only skipped the in-app row for NONE, so a
-    user who chose "Email" (not "Notification and email") still got bell
-    notifications. EMAIL must mean email only; the messages icon's unread
-    badge still reflects the message either way (it counts DirectMessage
-    rows, not NotificationLog rows).
-    """
+    Regression: _notify_recipient only skipped the in-app row for NONE, so a user who chose "Email" (not
+    "Notification and email") still got bell notifications."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -739,11 +701,7 @@ class NotificationChannelPreferenceTests(TestCase):
         self.assertEqual(self._message_notifications().count(), 0)
 
     def test_notification_title_masks_a_sender_the_recipient_cant_view(self) -> None:
-        """Regression: the thread itself anonymizes a sender the recipient has
-        no standing access to (display_identity_for), but this notification's
-        title used the raw username directly - exposing the hidden sender in
-        the bell/dropdown before the anonymized thread was ever opened.
-        """
+        """Regression: the thread itself anonymizes a sender the recipient has no standing access to (display_identity_for), but this notification's title used the raw username directly - exposing the hidden sender in the bell/dropdown before the anonymized thread was ever opened."""
         from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for
 
         Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
@@ -758,12 +716,8 @@ class NotificationChannelPreferenceTests(TestCase):
 class MessageTextAlertTests(TestCase):
     """The message_whatsapp/message_sms toggles actually deliver.
 
-    Regression: the preference booleans were stored and settable but no
-    delivery code ever read them - enabling "new message -> WhatsApp/SMS"
-    silently did nothing. The send path now schedules a delayed task
-    (mirroring the delayed-email flow) that re-checks unreadness and a
-    per-streak debounce before dispatching through notification_delivery.
-    """
+    Regression: the preference booleans were stored and settable but no delivery code ever read them - enabling
+    "new message -> WhatsApp/SMS" silently did nothing."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -804,10 +758,7 @@ class MessageTextAlertTests(TestCase):
         mock_sms.assert_not_called()
 
     def test_second_message_in_same_streak_is_debounced(self) -> None:
-        """The debounce marker is claimed atomically by ``is_text_alert_debounced()``
-        itself (called from the delayed task), not by a separate ``cache.set()``
-        inside ``send_message_text_alerts_now`` - see that function's docstring for
-        why. Exercise it through the real task entry point both messages go through."""
+        """The debounce marker is claimed atomically by ``is_text_alert_debounced()`` itself (called from the delayed task), not by a separate ``cache.set()`` inside ``send_message_text_alerts_now`` - see that function's docstring for why. Exercise it through the real task entry point both messages go through."""
         from urbanlens.dashboard.tasks import send_direct_message_text_alerts_if_unread
 
         self._set_toggles(whatsapp=True)
@@ -872,11 +823,9 @@ class MessageTextAlertTests(TestCase):
 class SelfDeletedMessageVisibilityTests(TestCase):
     """Messages deleted-for-self stay out of the sidebar preview and unread badge.
 
-    Regression: conversation_rows/unread_conversation_count ran on the raw
-    involving() set, so a message the recipient had removed from their own
-    view could still light the navbar badge and surface as the sidebar's
-    last-message preview.
-    """
+    Regression: conversation_rows/unread_conversation_count ran on the raw involving() set, so a message the
+    recipient had removed from their own view could still light the navbar badge and surface as the sidebar's
+    last-message preview."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -931,20 +880,11 @@ class SelfDeletedMessageVisibilityTests(TestCase):
 class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
     """visible_to() must never hide a sender's own sent message from themselves.
 
-    Regression found while adding SelfDeletedMessageVisibilityTests above:
-    the pre-existing `visible_to()` filter gated the SENDER's own rows on
-    `deleted_by_sender_at__isnull=True` too - so once a sender used "delete
-    for everyone" (which only tombstones the RECIPIENT's view -
-    tombstone_text_for always returns None for the sender), any call site
-    built on visible_to() silently dropped that message from the sender's
-    OWN results. Applying visible_to() to conversations_for() (this session's
-    fix for self-deleted-by-recipient leaking into the sidebar) turned that
-    into a much bigger problem: a sender's entire conversation could vanish
-    from their own sidebar once every message in it had been "deleted for
-    everyone" by them. The filter itself is fixed so `deleted_by_sender_at`
-    never gates the sender's own view anywhere - only `deleted_by_recipient_at`
-    gates the recipient's own view.
-    """
+    Regression found while adding SelfDeletedMessageVisibilityTests above: the pre-existing `visible_to()`
+    filter gated the SENDER's own rows on `deleted_by_sender_at__isnull=True` too - so once a sender used
+    "delete for everyone" (which only tombstones the RECIPIENT's view - tombstone_text_for always returns None
+    for the sender), any call site built on visible_to() silently dropped that message from the sender's OWN
+    results."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -990,12 +930,8 @@ class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
 class UnreadDropdownScalingTests(TestCase):
     """The navbar dropdown shows at most eight unread rows.
 
-    It used to build the entire inbox to find them - every partner's identity,
-    last message and mute state - and then slice. A user with hundreds of
-    conversations paid for all of them on every `msgOpen`, and the empty-state
-    flag ("all caught up" vs "no messages yet") was answered by testing the
-    length of that same list.
-    """
+    A user with hundreds of conversations paid for all of them on every `msgOpen`, and the empty-state flag
+    ("all caught up" vs "no messages yet") was answered by testing the length of that same list."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -1,9 +1,4 @@
-"""Tests for REData historical-map tile overlays (2026-08-15).
-
-Covers the tile proxy's status-contract caching (200/404 cached, 503 never),
-the browse/add flow creating a locked tile overlay whose template points at
-UrbanLens's own proxy, and the model changes that let a tile overlay render.
-"""
+"""Tests for REData historical-map tile overlays (2026-08-15)."""
 
 from __future__ import annotations
 
@@ -41,12 +36,9 @@ def _match(
 class GeoreferenceAccuracyTests(TestCase):
     """How well a sheet is placed - reported only where the number means something.
 
-    `rmse_meters` is the fit's own residual, and REData's model docstring warns
-    that a thin-plate spline interpolates its control points *by construction*,
-    so its residual is ~0 whatever the placement is actually like. Printing
-    "±0 m" for one would advertise a perfect fit for what may be the worst sheet
-    in the list, which is worse than printing nothing.
-    """
+    `rmse_meters` is the fit's own residual, and REData's model docstring warns that a thin-plate spline
+    interpolates its control points *by construction*, so its residual is ~0 whatever the placement is actually
+    like."""
 
     def test_a_loose_polynomial_fit_reports_its_error(self) -> None:
         from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
@@ -160,12 +152,8 @@ class HistoricalMapBrowseTests(TestCase):
     def test_the_sheet_thumbnail_and_catalogue_link_are_offered(self) -> None:
         """Choosing between a dozen scans of one neighbourhood is a visual task.
 
-        REData caches the institution's own thumbnail and catalogue page, and
-        the picker showed neither - eleven rows reading "Sanborn Map of ..." is
-        not a way to pick one. Both are the *institution's* public URLs, not
-        REData-authenticated ones, so unlike the tile template they need no
-        proxy.
-        """
+        REData caches the institution's own thumbnail and catalogue page, and the picker showed neither - eleven
+        rows reading "Sanborn Map of ..." is not a way to pick one."""
         match = _match(self.georeference_uuid)
         match["sheet"]["thumbnail_url"] = "https://tile.loc.gov/thumb/sanborn-1893.jpg"
         match["sheet"]["landing_page_url"] = "https://www.loc.gov/item/sanborn01234_001/"

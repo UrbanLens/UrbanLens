@@ -1,10 +1,4 @@
-"""Tests for the parcel-buildings plugin.
-
-Covers the REData-then-Overpass provider order, the panel's gate, the row
-builder that pairs each building with the child marker covering it, and the
-"Buildings on this Property" panel endpoint on both the pin and wiki pages.
-Both gateways are mocked - no network access occurs.
-"""
+"""Tests for the parcel-buildings plugin."""
 
 from __future__ import annotations
 
@@ -69,10 +63,7 @@ def _make_location(**kwargs) -> Location:
 
 
 class _FakeMarker:
-    """A lightweight stand-in for a child Pin/Wiki - enough of the surface
-    unpinned_building_child_rows/parcel_child_rows read (pin_type, uuid,
-    effective_name/effective_latitude/effective_longitude) without touching
-    the database, matching this module's other SimpleTestCase-friendly helpers."""
+    """A lightweight stand-in for a child Pin/Wiki - enough of the surface unpinned_building_child_rows/parcel_child_rows read (pin_type, uuid, effective_name/effective_latitude/effective_longitude) without touching the database, matching this module's other SimpleTestCase-friendly helpers."""
 
     def __init__(
         self, *, name: str, pin_type: str, latitude: float | None = None, longitude: float | None = None

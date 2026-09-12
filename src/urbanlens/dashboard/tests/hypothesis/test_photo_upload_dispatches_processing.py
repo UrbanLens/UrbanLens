@@ -1,16 +1,4 @@
-"""Every caller of ``upload_photo_for_owner`` must enqueue EXIF processing.
-
-``upload_photo_for_owner`` stores the file exactly as uploaded; GPS/EXIF
-stripping, downscaling and conversion all live in
-``tasks.process_image_upload``. A caller that forgets the dispatch leaves a
-user's camera GPS in a stored, servable file - a privacy leak that no test
-of the helper itself would catch, because the helper is behaving correctly.
-
-Today there is exactly one caller (the gallery upload controller) and it
-dispatches. This is the guard for the *next* one: a source-level check, in
-the spirit of the bulk-write signal guard, because the failure mode is an
-omission at a new call site rather than a wrong result at an existing one.
-"""
+"""Every caller of ``upload_photo_for_owner`` must enqueue EXIF processing."""
 
 from __future__ import annotations
 

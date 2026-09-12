@@ -1,11 +1,4 @@
-"""Tests for the explicit, user-initiated wiki creation flow.
-
-Wikis are never auto-created: ``WikiShareService.share_from_pin`` is the
-single creation entry point, invoked by the Private Pin page's "Create wiki"
-button. The user chooses which pin fields, aliases, and photos to seed the
-new wiki with; nothing is copied unless explicitly selected, and an existing
-wiki is never overwritten with personal data.
-"""
+"""Tests for the explicit, user-initiated wiki creation flow."""
 
 from __future__ import annotations
 
@@ -114,13 +107,9 @@ class WikiShareServiceTests(TestCase):
     def test_unprocessed_photo_is_enqueued_for_processing_and_skipped_from_this_share(self) -> None:
         """An unprocessed photo is never attached to the wiki from this request.
 
-        ``process_image_upload`` is decorated ``@untrusted_parse`` and may only run
-        in the sandbox worker (``queue=SANDBOX_QUEUE``), never inline here - so the
-        guarantee is structural: the service hands it to ``safely_enqueue_task``
-        rather than calling it directly, the same pattern every other upload path
-        uses. Assert that dispatch, rather than a mocked return value from the task
-        itself, mirroring ``test_building_wiki_mirror.test_a_wiki_side_failure_does_not_fail_the_import``.
-        """
+        ``process_image_upload`` is decorated ``@untrusted_parse`` and may only run in the sandbox worker
+        (``queue=SANDBOX_QUEUE``), never inline here - so the guarantee is structural: the service hands it to
+        ``safely_enqueue_task`` rather than calling it directly, the same pattern every other upload path uses."""
         from urbanlens.dashboard.tasks import process_image_upload
 
         image = baker.make("dashboard.Image", pin=self.pin, upload_processed_at=None)
@@ -137,12 +126,8 @@ class WikiShareServiceTests(TestCase):
     def test_sharing_to_an_existing_wiki_contributes_without_renaming_it(self) -> None:
         """The case that used to be impossible.
 
-        Seeding only ran when the click created the page, so sharing to a page
-        that already existed did nothing at all. Contributing is now something
-        a person does to a page that is already there - but naming stays a
-        creation-time act, since renaming a page other people read because
-        somebody shared a stat to it is a side effect nobody asked for.
-        """
+        Seeding only ran when the click created the page, so sharing to a page that already existed did nothing
+        at all."""
         existing = baker.make("dashboard.Wiki", location=self.location, name="Community Name")
 
         wiki, shared = self._create(include={"danger"})
@@ -217,10 +202,8 @@ class SeedableAliasesAndPhotosTests(TestCase):
     def test_seedable_photos_offers_the_newest_first(self) -> None:
         """The cap has to drop the oldest photos, and drop the same ones every time.
 
-        A LIMIT over an unordered queryset is free to return a different slice
-        per call, so which photos are offerable would depend on the plan
-        Postgres happened to pick.
-        """
+        A LIMIT over an unordered queryset is free to return a different slice per call, so which photos are
+        offerable would depend on the plan Postgres happened to pick."""
         images = baker.make("dashboard.Image", pin=self.pin, _quantity=3)
         newest = images[-1]
 

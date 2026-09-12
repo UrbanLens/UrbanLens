@@ -1,19 +1,4 @@
-"""CSRF/CORS trusted origins are derived from this deployment's own configuration.
-
-The bug this replaces was quiet in the worst way. ``CSRF_TRUSTED_ORIGINS`` came
-from a hardcoded domain list, so an ephemeral dev environment
-(``bin/dev_env.py``), served on a generated ``<slug>.dev.urbanlens.org``
-hostname, rendered every page perfectly and rejected every POST - login
-included - on its Referer. That reads as "the app is broken", not as "this
-origin is untrusted", and no hardcoded list can ever enumerate a hostname that
-does not exist yet.
-
-Deriving them widens nothing: a host gets here only by already being in
-``ALLOWED_HOSTS`` or by being ``UL_SITE_URL``, both of which an operator sets
-deliberately per deployment. The tests below pin that boundary - the ``*``
-catch-all mints no origin, plain HTTP appears only where it is already allowed,
-and junk entries are skipped rather than turned into malformed origins.
-"""
+"""CSRF/CORS trusted origins are derived from this deployment's own configuration."""
 
 from __future__ import annotations
 

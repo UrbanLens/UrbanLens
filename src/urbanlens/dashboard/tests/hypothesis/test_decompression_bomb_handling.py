@@ -1,23 +1,4 @@
-"""A decompression bomb must not take the photo-processing task down with it.
-
-Pillow refuses to decode an image above `Image.MAX_IMAGE_PIXELS` (89 MP by
-default), which is what stops the memory exhaustion. It signals that with
-`DecompressionBombError` - and unlike the rest of Pillow's failures, that
-inherits straight from `Exception`, **not** from `OSError`:
-
-    UnidentifiedImageError -> OSError -> Exception     (caught)
-    DecompressionBombError -> Exception                (was not)
-
-`_process_photo_upload` caught `(OSError, ValueError)` around the downscale, so
-a bomb escaped and failed the whole Celery task: the upload stayed stored but
-unprocessed - no checksum, no EXIF, no downscale - and the failure surfaced as an
-unhandled task exception rather than the logged warning every other
-unprocessable image gets.
-
-Tested by lowering `MAX_IMAGE_PIXELS` rather than building a real 89-megapixel
-file, which would need gigabytes of memory to construct. That exercises the same
-error from the same call, which is the part that was unhandled.
-"""
+"""A decompression bomb must not take the photo-processing task down with it."""
 
 from __future__ import annotations
 
@@ -90,17 +71,7 @@ class DecompressionBombHandlingTests(TestCase):
 class EnrichmentPathBombHandlingTests(TestCase):
     """The second caller of `downscale_stored_image` needed the same guard.
 
-    `tasks.py` carries the fix above *and the comment explaining it*. The
-    enrichment path calls the identical function and still caught only
-    `(OSError, ValueError)` - exactly the handler that comment says is
-    insufficient - so an over-89MP photo materialised from an external source
-    (Yelp, Wikimedia, Flickr) raised out of the enrichment run instead of
-    degrading to a logged warning.
-
-    Asserted against `downscale_stored_image` directly rather than through a
-    full enrichment run: the fetch/gateway machinery around it is irrelevant to
-    which exception types the handler names, and mocking it would test the mock.
-    """
+    `tasks.py` carries the fix above *and the comment explaining it*."""
 
     def setUp(self) -> None:
         self._media_root = tempfile.mkdtemp(prefix="ul_bomb_enrich_")

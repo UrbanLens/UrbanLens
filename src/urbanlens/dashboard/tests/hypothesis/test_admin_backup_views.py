@@ -41,11 +41,10 @@ class ToolsIndexViewTests(TestCase):
 class BackupStartViewTests(TestCase):
     """BackupStartView requires the site-admin permission and queues the Celery backup task.
 
-    Routed through ``self.client`` (not the view's ``post()`` called directly)
-    so ``PermissionRequiredMixin.dispatch()`` actually runs - calling ``post()``
-    on a bare instance skips ``dispatch()`` entirely and would let a
-    permission regression (e.g. the check always passing) through unnoticed.
-    """
+    Routed through ``self.client`` (not the view's ``post()`` called directly) so
+    ``PermissionRequiredMixin.dispatch()`` actually runs - calling ``post()`` on a bare instance skips
+    ``dispatch()`` entirely and would let a permission regression (e.g. the check always passing) through
+    unnoticed."""
 
     def test_permission_gate_denies_then_admits_the_same_user(self) -> None:
         baker.make("auth.User")  # absorbs the bootstrap site-admin promotion

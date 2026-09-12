@@ -1,17 +1,4 @@
-"""Tests for direct-message end-to-end encryption.
-
-Covers:
-- The E2EE storage endpoints (login-params enumeration behavior, enroll
-  idempotency + auth rotation, partner-key gating, conversation-key create +
-  race, rewrap, reset).
-- DirectMessage body/ciphertext mutual exclusivity in create_direct_message.
-- Generic previews in the notification/email/serializer paths for encrypted
-  messages (the server never sees plaintext).
-- The export path emitting ciphertext + a note instead of a readable body.
-- PyNaCl interop round-trips proving the documented blob formats match what
-  the browser's libsodium produces (Argon2id derive, secretbox wrap, sealed
-  box, message encrypt/decrypt).
-"""
+"""Tests for direct-message end-to-end encryption."""
 
 from __future__ import annotations
 
@@ -244,11 +231,9 @@ class EnrollEndpointTests(TestCase):
 class OwnKeysEndpointTests(TestCase):
     """The caller's own "keys" endpoint always returns 200, not 404.
 
-    Not being enrolled is a common, expected state (checked unconditionally
-    on every page load to render the encryption status indicator) - it must
-    not surface as an HTTP error status, which would show up as a spurious
-    error in the browser console for most accounts on every page view.
-    """
+    Not being enrolled is a common, expected state (checked unconditionally on every page load to render the
+    encryption status indicator) - it must not surface as an HTTP error status, which would show up as a
+    spurious error in the browser console for most accounts on every page view."""
 
     def test_not_enrolled_reports_200_with_enrolled_false(self) -> None:
         profile = _profile()
@@ -510,11 +495,7 @@ class RewrapAllAndResetPreservationTests(TestCase):
     def test_reset_refuses_when_the_bundle_moved_mid_flight(self) -> None:
         """A second reset landing between our read and our write must not be applied.
 
-        The client rewraps every conversation against the key it read at the start. If
-        another reset bumps the bundle in between, applying these rewraps would seal
-        some threads to the superseded key while the bundle advertises the newer one -
-        undecryptable, and unrecoverable. The request has to lose, not half-succeed.
-        """
+        The client rewraps every conversation against the key it read at the start."""
         me, partner = _profile(), _profile()
         _enroll(me)
         row = self._pair_key(me, partner)
@@ -621,13 +602,6 @@ class RewrapAllAndResetPreservationTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    # -- What the reset left behind -------------------------------------------
-    #
-    # A payload only has to name rows the caller *owns*; it does not have to
-    # name all of them, and that is correct - someone who lost their key cannot
-    # re-seal anything and resets to get a working account back. But the rows
-    # left out are now sealed to a key that no longer exists. The server is the
-    # only party that knows how many, so it has to say.
 
     def test_reset_reports_the_copies_it_could_not_re_seal(self) -> None:
         me, partner = _profile(), _profile()
@@ -774,15 +748,9 @@ class ExportTests(TestCase):
 class ConversationKeyGetOracleTests(TestCase):
     """The conversation-key GET must not be a profile-slug existence oracle.
 
-    Regression: the GET returned 200-with-empty-keys for any existing profile
-    slug (no relationship required) and a 404 only for unknown slugs, letting
-    a logged-in user enumerate which slugs exist - which ConversationView
-    deliberately prevents. With no keys and no permitted DM relationship in
-    either direction, the response must now be the same 404 an unknown slug
-    produces. Existing keys stay fetchable regardless of the current
-    relationship, because a participant must still decrypt their history
-    after a block or privacy change.
-    """
+    Regression: the GET returned 200-with-empty-keys for any existing profile slug (no relationship required)
+    and a 404 only for unknown slugs, letting a logged-in user enumerate which slugs exist - which
+    ConversationView deliberately prevents."""
 
     def setUp(self) -> None:
         super().setUp()

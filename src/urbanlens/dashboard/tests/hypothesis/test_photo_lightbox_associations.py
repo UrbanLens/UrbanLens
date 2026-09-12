@@ -128,13 +128,6 @@ class ImageAssociationsTests(TestCase):
     def test_concealed_wiki_album_is_omitted_for_a_concealed_viewer(self) -> None:
         from unittest.mock import patch
 
-        # The photo itself is NOT on this wiki (wiki=None) - only the album
-        # is (parent_wiki=old_wiki) - a real, reachable state, since
-        # send-to-wiki repoints image.wiki without touching pre-existing
-        # AlbumItem rows from a previous wiki. Proves the concealment check
-        # is keyed on the album's own parent_wiki, not image.wiki (which here
-        # is None - a mutation checking the wrong object would call
-        # _owner_conceal(None, viewer) instead and this assertion would fail).
         old_wiki = _wiki_with_pin(self.profile, name="Old Ridge")
         album = Album.objects.create(name="Community shots", profile=self.profile, parent_wiki=old_wiki)
         image = baker.make(Image, profile=self.profile, wiki=None, pin=None, media_type=MediaKind.PHOTO)
@@ -324,11 +317,9 @@ class SendToWikiActionTests(TestCase):
 def _upload_real_photo(owner, profile, name="photo.jpg"):
     """A real uploaded Image with an actual stored file.
 
-    Needed anywhere the share action's DM broadcast path runs for real (it
-    serializes the attached image's .image.url) - a bare baker.make(Image)
-    row has no file behind it and raises there, which a bare baker fixture
-    would not reveal since it's not what any real share() call ever acts on.
-    """
+    Needed anywhere the share action's DM broadcast path runs for real (it serializes the attached image's
+    .image.url) - a bare baker.make(Image) row has no file behind it and raises there, which a bare baker
+    fixture would not reveal since it's not what any real share() call ever acts on."""
     from django.core.files.uploadedfile import SimpleUploadedFile
 
     from urbanlens.core.tests.images import JPEG_BYTES
@@ -359,12 +350,7 @@ class ShareActionTests(TestCase):
         self.assertTrue(Image.objects.filter(pk=image.pk, direct_message=message).exists())
 
     def test_sharing_the_same_never_attached_photo_twice_never_double_attaches_the_original(self) -> None:
-        """Two share() calls for a photo that started unattached (the shape a
-        race between two near-simultaneous clicks would produce) must not both
-        attach the same original Image to two different messages - the
-        second call has to see the first's attachment and make its own
-        deduped copy instead. Guards the select_for_update fix in share().
-        """
+        """Two share() calls for a photo that started unattached (the shape a race between two near-simultaneous clicks would produce) must not both attach the same original Image to two different messages - the second call has to see the first's attachment and make its own deduped copy instead. Guards the select_for_update fix in share()."""
         image = _upload_real_photo(self.profile, self.profile)
         other_friend_user = baker.make(User, username="other_pal")
         other_friend = other_friend_user.profile

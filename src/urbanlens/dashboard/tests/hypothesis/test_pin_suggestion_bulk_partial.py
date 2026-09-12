@@ -1,13 +1,4 @@
-"""A partial bulk suggestion action must report itself as partial.
-
-The view skips ids it cannot act on (not the caller's, already handled, gone) and
-logs any that raise, then returns ``processed`` alongside ``requested``. The page
-reported only ``processed`` as a success, so accepting 3 of 5 looked exactly like
-accepting 5 - the user is told a number with nothing to compare it to.
-
-These tests pin the response contract the toast now depends on. Without both
-numbers there is no way for the frontend to tell a whole batch from a partial one.
-"""
+"""A partial bulk suggestion action must report itself as partial."""
 
 from __future__ import annotations
 
@@ -79,14 +70,7 @@ class BulkSuggestionPartialReportingTests(TestCase):
         second.refresh_from_db()
         self.assertEqual(second.status, PinSuggestionStatus.REJECTED)
 
-    # Accepting is the only action here that creates a Pin. Bulk accepts pass
-    # fetch_if_missing=False down the chain so no live Google lookup happens
-    # inside the request (see BulkAcceptDeferredNameResolutionTests, which
-    # asserts that) - the _resolve_name patch stays as a network-guard backstop
-    # so a regression fails on the assertion rather than by reaching the real
-    # internet. safely_enqueue_task is stubbed (both the controller's
-    # module-level reference and the source module) because eager mode would
-    # run any dispatched backfill task inline.
+    # Accepting is the only action here that creates a Pin.
     def test_accepting_marks_the_suggestions_handled(self) -> None:
         suggestion = self._suggestion()
 
@@ -109,15 +93,9 @@ class BulkSuggestionPartialReportingTests(TestCase):
 class BulkAcceptDeferredNameResolutionTests(TestCase):
     """Bulk accepts must never make a live Google name lookup inside the request.
 
-    Accepting a new-pin suggestion at coordinates with no existing Location
-    used to resolve the place's canonical name synchronously - up to
-    ``_MAX_BULK_SUGGESTIONS`` (200) sequential outbound calls in one
-    request/response cycle. Both bulk endpoints now pass
-    ``fetch_if_missing=False`` down the accept chain (the Location is created
-    with ``official_name=None``) and instead dispatch
-    ``tasks.resolve_location_place_name`` per name-less Location - the same
-    lazy backfill PinOverviewView uses. Single accepts stay synchronous.
-    """
+    Both bulk endpoints now pass ``fetch_if_missing=False`` down the accept chain (the Location is created with
+    ``official_name=None``) and instead dispatch ``tasks.resolve_location_place_name`` per name-less Location -
+    the same lazy backfill PinOverviewView uses."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -125,12 +103,8 @@ class BulkAcceptDeferredNameResolutionTests(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
-        # Every test here asserts on the same two things: no live Google name
-        # lookup, and what the view dispatched. The controller imports
-        # safely_enqueue_task at module level, so its own dispatches must be
-        # patched there; the services.core.celery patch guards everything else
-        # (signals import it at call time) from running inline under eager
-        # mode - see tests/CLAUDE.md.
+        # Every test here asserts on the same two things: no live Google name lookup, and what the view
+        # dispatched.
         self.mock_resolve_name = self.enterContext(
             mock.patch(
                 "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",

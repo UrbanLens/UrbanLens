@@ -139,10 +139,8 @@ class ConnectionHeadroomTests(TestCase):
     def test_it_reports_backends_in_use_and_the_ceiling(self) -> None:
         """The number P104's postmortem needed and nothing exposed.
 
-        The outage read 97 of 100 connections in use, and the first anyone knew
-        of it was the site being down; a count turns that into something a scrape
-        can watch climb.
-        """
+        The outage read 97 of 100 connections in use, and the first anyone knew of it was the site being down; a
+        count turns that into something a scrape can watch climb."""
         report = json.loads(Client().get(self.url).content)
 
         connections = report["connections"]
@@ -154,10 +152,8 @@ class ConnectionHeadroomTests(TestCase):
     def test_pressure_is_reported_as_a_field_not_a_status_code(self) -> None:
         """A readiness probe that 503s under connection pressure causes an outage.
 
-        It removes the instances that are still serving, which is the opposite of
-        what it is for - and this deployment has done it before. So the endpoint
-        keeps answering 200 and something else alerts on `degraded`.
-        """
+        It removes the instances that are still serving, which is the opposite of what it is for - and this
+        deployment has done it before."""
         from urbanlens.dashboard.controllers.health import HealthController
 
         with mock.patch.object(HealthController, "_probe_connections", return_value={"used": 99, "max": 100}):
@@ -178,11 +174,8 @@ class ConnectionHeadroomTests(TestCase):
     def test_a_cache_outage_is_degraded_but_not_a_readiness_failure_of_its_own(self) -> None:
         """`degraded` is the field that distinguishes serving-badly from down.
 
-        Whether an unreachable cache should fail readiness outright is a separate
-        question this does not change - the existing test asserting 503 still
-        holds. This asserts only that the flag is set, so an operator reading the
-        body can tell the two apart.
-        """
+        Whether an unreachable cache should fail readiness outright is a separate question this does not change
+        - the existing test asserting 503 still holds."""
         from urbanlens.dashboard.controllers.health import HealthController
 
         self.assertTrue(
@@ -192,10 +185,8 @@ class ConnectionHeadroomTests(TestCase):
     def test_unreadable_connection_stats_are_not_a_failure(self) -> None:
         """`pg_stat_activity` needs a privilege a hardened deployment may not grant.
 
-        Reporting None there has to mean "not measured", never "degraded" - a
-        probe that fails closed on a missing read privilege takes the site down
-        for a permissions choice.
-        """
+        Reporting None there has to mean "not measured", never "degraded" - a probe that fails closed on a
+        missing read privilege takes the site down for a permissions choice."""
         from urbanlens.dashboard.controllers.health import HealthController
 
         self.assertFalse(HealthController._is_degraded(cache_status="ok", db_status="ok", connections=None))

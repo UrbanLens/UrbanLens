@@ -1,12 +1,4 @@
-"""Tests for Image attribution field extraction and auto-population.
-
-Covers:
-- extract_author/extract_copyright_notice/extract_caption_from_metadata - EXIF
-  Artist/Copyright/ImageDescription tags
-- is_camera_generated_filename() - phone/camera auto-naming pattern matching
-- process_image_upload() - the uploader-as-author fallback for unattributed
-  camera-named photos, and that it does not apply to other filenames
-"""
+"""Tests for Image attribution field extraction and auto-population."""
 
 from __future__ import annotations
 

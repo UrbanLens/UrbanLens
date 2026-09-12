@@ -1,12 +1,4 @@
-"""Tests for the external API's pin sub-resource endpoints.
-
-Covers ``pins/{slug}/notes/``, ``aliases/``, ``links/`` and ``visits/`` - the
-list/create/delete surface layered on top of pin detail. The behavior most
-worth pinning down here is the part that is invisible in a response body: an
-alias or link deletion must leave a ``PinAutoRemoval`` tombstone behind, or
-the plugin panels and the pin<->wiki alias mirror recreate the deleted row on
-their next run and silently undo the user's deletion.
-"""
+"""Tests for the external API's pin sub-resource endpoints."""
 
 from __future__ import annotations
 
@@ -306,10 +298,8 @@ _PURE_LOGIC_SETTINGS = hyp_settings(suppress_health_check=[HealthCheck.too_slow]
 class SubResourcePureLogicTests(SimpleTestCase):
     """Property-based checks for the pure helpers these endpoints rely on.
 
-    ``@given`` is used only here: this repo's TestCase keeps ``self.client``
-    state across generated examples, so view-level tests above stay
-    example-based on purpose.
-    """
+    ``@given`` is used only here: this repo's TestCase keeps ``self.client`` state across generated examples, so
+    view-level tests above stay example-based on purpose."""
 
     @_PURE_LOGIC_SETTINGS
     @given(st.text())

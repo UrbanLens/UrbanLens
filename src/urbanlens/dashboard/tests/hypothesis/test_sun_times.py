@@ -1,10 +1,4 @@
-"""Tests for UL-345: sunrise/sunset and golden-hour times on the pin weather panel.
-
-get_sun_times() always goes through Open-Meteo (timezone=auto resolves local
-time server-side, so no separate timezone lookup is needed here) regardless
-of which provider serves the temperature/condition forecast, since
-OpenWeatherMap's 5-day/3-hour endpoint doesn't carry sunrise/sunset.
-"""
+"""Tests for UL-345: sunrise/sunset and golden-hour times on the pin weather panel."""
 
 from __future__ import annotations
 
@@ -60,15 +54,8 @@ class GetSunTimesTests(SimpleTestCase):
 class WeatherPanelSunTimesTests(TestCase):
     """The weather panel's *direct-provider* path.
 
-    Both the forecast and the sun-times lookup now go through
-    ``weather_resolution``, which asks REData first whenever it is configured
-    and only then falls back to OpenWeatherMap/Open-Meteo. These tests are
-    about that fallback chain (UL-345 is a fact about Open-Meteo's endpoint),
-    so REData is explicitly switched off rather than left to whether the
-    machine running the tests happens to have credentials - which is what let
-    them start making a real outbound call and tripping the suite's network
-    guard. REData's own branch is covered in ``test_weather_resolution.py``.
-    """
+    Both the forecast and the sun-times lookup now go through ``weather_resolution``, which asks REData first
+    whenever it is configured and only then falls back to OpenWeatherMap/Open-Meteo."""
 
     def setUp(self) -> None:
         super().setUp()

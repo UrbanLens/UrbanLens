@@ -1,21 +1,4 @@
-"""Concurrent schema requests must not race drf-spectacular's target_class resolution.
-
-`OpenApiGeneratorExtension._load_class` (drf_spectacular/plumbing.py) resolves
-an extension's `target_class` from a dotted string to the class object by
-mutating that class attribute in place, with no lock of its own. Two
-gevent-concurrent requests both resolving extensions can interleave, and one
-can observe the other's `target_class` mid-mutation - e.g. as the `None` a
-failed-import branch just wrote - raising `AttributeError: 'NoneType' object
-has no attribute 'startswith'` instead of producing a schema.
-
-`external_api.schema.patch_extension_thread_safety` (applied once from
-`DashboardConfig.ready()`) wraps `_load_class` in a lock. This proves the
-installed wrapper actually holds that lock for the duration of the real
-resolution - the property the whole fix depends on - rather than trying to
-reproduce the original timing-dependent 500 directly.
-
-See PROBLEMS.md, "concurrent requests to schema/ can 500".
-"""
+"""Concurrent schema requests must not race drf-spectacular's target_class resolution."""
 
 from __future__ import annotations
 
@@ -30,13 +13,9 @@ from urbanlens.dashboard.external_api import schema as schema_module
 def _fake_extension(target_class):
     """A fresh, throwaway class shaped like an OpenApiGeneratorExtension subclass.
 
-    `_load_class` only touches `target_class`/`optional` on whatever `cls` it
-    is given - real inheritance is not required - so this proves the
-    wrapper's locking behavior without registering a spurious entry in the
-    real extension registry, which every other schema test in the suite
-    shares. A fresh class per call, rather than one shared constant, keeps
-    the two tests below from seeing each other's mutations.
-    """
+    `_load_class` only touches `target_class`/`optional` on whatever `cls` it is given - real inheritance is not
+    required - so this proves the wrapper's locking behavior without registering a spurious entry in the real
+    extension registry, which every other schema test in the suite shares."""
     return type("FakeExtension", (), {"target_class": target_class, "optional": True})
 
 

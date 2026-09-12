@@ -1,21 +1,4 @@
-"""Editing one label must not cost work proportional to the pins carrying it.
-
-A label's icon and colour appear on every pin that carries it and has none of
-its own, so editing a label really does change what a lot of pins draw. What
-P102 was about is *where* that work happened: the receiver walked every carrying
-pin and rebuilt its cached payload, each one re-fetching the profile, re-fetching
-the pin and constructing a fresh Redis client - inside the editing user's own
-request. A user with 20,000 pins who recoloured a label they used everywhere
-spent tens of thousands of round trips before their request returned.
-
-That mechanism is gone: there is no per-pin cache to rewrite, and the edit is one
-`UPDATE` moving the carrying pins' `updated`. This holds the shape - the cost of
-editing a label must not track how many pins carry it - because the obvious way
-to make some later feature work is a loop over exactly those pins.
-
-Counted, not timed: a wall-clock assertion on a shared host is a flaky test that
-gets deleted, and a statement count is exact and machine-independent.
-"""
+"""Editing one label must not cost work proportional to the pins carrying it."""
 
 from __future__ import annotations
 
@@ -76,12 +59,11 @@ class LabelEditCostIsFlatTests(TestCase):
     def edit_the_label(self) -> int:
         """Recolour the label, and report how many statements it took.
 
-        Counted across the commit callbacks too, since a receiver that deferred
-        its work to `on_commit` would otherwise look free.
+        Counted across the commit callbacks too, since a receiver that deferred its work to `on_commit` would
+        otherwise look free.
 
         Returns:
-            Statements executed.
-        """
+            Statements executed."""
         self.label.color = f"#{self._seeded:06x}"
         with CaptureQueriesContext(connection) as captured, self.captureOnCommitCallbacks(execute=True):
             self.label.save(update_fields=["color"])

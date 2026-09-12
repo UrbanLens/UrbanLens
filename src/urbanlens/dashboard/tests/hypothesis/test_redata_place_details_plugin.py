@@ -1,10 +1,4 @@
-"""Tests for the REData place-details plugin's panel and enrichment source.
-
-``RedataPlaceDetailsPanelSource``/``RedataPlaceDetailsEnrichmentSource`` both
-read ``RedataCidGateway.get_place_detail`` - these tests mock that gateway
-and check the ``LocationCache`` row/API payload it produces, never any real
-HTTP call.
-"""
+"""Tests for the REData place-details plugin's panel and enrichment source."""
 
 from __future__ import annotations
 
@@ -273,20 +267,14 @@ class RedataPlaceDetailsEnrichmentSourceTests(TestCase):
 
 class RedataPlaceDetailsRequiredFeatureTests(TestCase):
     def test_gated_behind_the_places_feature(self) -> None:
-        """Decided 2026-09-08: reuses the flag that already gates the map's Places
-        layer for this same Google Places provider - see the module docstring."""
+        """Decided 2026-09-08: reuses the flag that already gates the map's Places layer for this same Google Places provider - see the module docstring."""
         from urbanlens.dashboard.models.subscriptions import SiteFeature
 
         self.assertEqual(RedataPlaceDetailsPanelSource().required_feature, SiteFeature.PLACES)
 
 
 class PanelDispatchGatingTests(TestCase):
-    """The info card (``pin.panel``) and the photo gallery (``pin.media``) both
-    actually refuse a non-subscriber, and both actually serve a subscriber -
-    the panel declares MEDIA as well as INFO (see ``_MAX_PHOTOS``), so the
-    gate has to hold on both routes, not just the one the generic
-    ``InfoPanelSource`` dispatch was already proven against in
-    test_panel_feature_gate.py."""
+    """The info card (``pin.panel``) and the photo gallery (``pin.media``) both actually refuse a non-subscriber, and both actually serve a subscriber - the panel declares MEDIA as well as INFO (see ``_MAX_PHOTOS``), so the gate has to hold on both routes, not just the one the generic ``InfoPanelSource`` dispatch was already proven against in test_panel_feature_gate.py."""
 
     def setUp(self) -> None:
         super().setUp()

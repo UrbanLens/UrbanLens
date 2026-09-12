@@ -1,14 +1,4 @@
-"""The list-detail overview map plots a bounded number of pins (P69).
-
-`_items_map_data` had no cap, unlike the near-identical saved-filter preview
-map in the same feature, which has had `_PREVIEW_MAP_PIN_LIMIT = 500` all
-along - and each marker here carries far more than that one does: name,
-address, description, rating, last-visited and every tag chip.
-
-The cap is on the fetch as well as the payload. `_paginated_items_context`
-used to materialize every item on the list to serve both the map and one page
-of rows, so a payload-only cap would have left the expensive half in place.
-"""
+"""The list-detail overview map plots a bounded number of pins (P69)."""
 
 from __future__ import annotations
 
@@ -110,12 +100,8 @@ class PinListOverviewMapCapTests(TestCase):
 class PinListItemOrderingTests(TestCase):
     """The list's ordering has to be total, now that two slices of it are taken.
 
-    `add_pins_to_list` numbers new items from the current row count, not from
-    `max(order) + 1`, so a duplicate `order` is reachable through ordinary use.
-    While `_paginated_items_context` materialized the list once and sliced in
-    Python that was harmless; taking the page and the map as two separate
-    queries makes it a source of disagreement.
-    """
+    `add_pins_to_list` numbers new items from the current row count, not from `max(order) + 1`, so a duplicate
+    `order` is reachable through ordinary use."""
 
     def setUp(self) -> None:
         super().setUp()

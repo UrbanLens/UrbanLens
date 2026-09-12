@@ -1,26 +1,4 @@
-"""Accepting and rejecting a pin someone shared with you, over the external API.
-
-Three distinct risks are covered here, and only the first is ordinary CRUD.
-
-**Anti-enumeration is load-bearing, and it is a write.** ``PinShare`` primary
-keys are sequential integers. If the lookup were ``pk=share_id`` alone, a caller
-could walk other people's inboxes and *accept or reject* their shares - not just
-read metadata. ``to_profile=`` in the same ``get_object_or_404`` is the whole
-defence, so it gets its own tests rather than being assumed.
-
-**The provenance trap.** The project rule is that any pin/location share path
-calls ``resolve_origin_share`` + ``record_share_exposure``. Applying it to
-*acceptance* is wrong: the exposure already fired when the share was created,
-and a second one duplicates the ``LocationExposure`` row that
-``resolve_origin_share`` uses to pick a reshare chain's ancestor. The test below
-asserts the row count is unchanged across an accept, so a future "fix" that
-adds the call fails immediately instead of quietly corrupting lineage.
-
-**Scope choice.** ``pins:write``, not ``messages:*``. The same ``PinShare`` is
-delivered by bare notification as well as by message, and ``messages:*`` is
-OAuth2-only, so scoping this to messaging would lock personal-access-token
-holders out of notification-delivered shares entirely.
-"""
+"""Accepting and rejecting a pin someone shared with you, over the external API."""
 
 from __future__ import annotations
 
@@ -56,16 +34,14 @@ class PinShareRespondApiTests(TestCase):
     def _make_share(self, recipient: Profile) -> PinShare:
         """Create a pending share of the sender's pin, exposure included.
 
-        The exposure is recorded here because that is what happens in
-        production at share creation - and it is exactly the row the
-        acceptance path must not duplicate.
+        The exposure is recorded here because that is what happens in production at share creation - and it is
+        exactly the row the acceptance path must not duplicate.
 
         Args:
             recipient: The profile the share is addressed to.
 
         Returns:
-            The created, pending share.
-        """
+            The created, pending share."""
         share = PinShare.objects.create(
             pin=self.sender_pin,
             location=self.sender_pin.location,
@@ -83,21 +59,17 @@ class PinShareRespondApiTests(TestCase):
             raw_key: A raw key to use instead of the fixture's.
 
         Returns:
-            Request kwargs carrying the Authorization header.
-        """
+            Request kwargs carrying the Authorization header."""
         return {"HTTP_AUTHORIZATION": f"Bearer {raw_key or self.raw_key}"}
 
     def _respond(self, action: str, *, share_id: int | None = None, raw_key: str | None = None):
         """POST one accept/reject decision.
 
         Args:
-            action: The raw ``action`` value to submit.
-            share_id: The share to address; defaults to the fixture share.
-            raw_key: A raw key to use instead of the fixture's.
+            action: The raw ``action`` value to submit. share_id: The share to address; defaults to the fixture share. raw_key: A raw key to use...
 
         Returns:
-            The Django test-client response.
-        """
+            The Django test-client response."""
         pk = self.share.pk if share_id is None else share_id
         return self.client.post(
             f"{BASE}/{pk}/respond/", {"action": action}, content_type="application/json", **self._headers(raw_key)
@@ -110,8 +82,7 @@ class PinShareRespondApiTests(TestCase):
             scopes: Raw scope values to store on the row.
 
         Returns:
-            The raw key value.
-        """
+            The raw key value."""
         api_key, raw = generate_api_key(self.user, "Scoped")
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         return raw
@@ -140,14 +111,7 @@ class PinShareRespondApiTests(TestCase):
     def test_accept_does_not_record_a_second_location_exposure(self) -> None:
         """The provenance trap, asserted directly.
 
-        ``record_share_exposure`` already fired when the share was created. A
-        second call on accept would add a duplicate ``LocationExposure`` for the
-        same (profile, location), and ``resolve_origin_share`` picks the
-        *earliest* exposure to parent a reshare chain - so a duplicate inflates
-        exposure counts and can re-parent the chain onto the wrong ancestor.
-        Anyone "fixing" the acceptance path to obey the project-wide
-        ``record_share_exposure`` rule breaks this test, which is the point.
-        """
+        ``record_share_exposure`` already fired when the share was created."""
         before = LocationExposure.objects.count()
 
         self._respond("accept")
@@ -203,10 +167,8 @@ class PinShareRespondApiTests(TestCase):
     def test_an_unrecognized_action_is_a_400_and_leaves_the_share_pending(self) -> None:
         """The service would answer "Unknown action." with a 200; the API must not.
 
-        Silently succeeding is worse than failing here: a client sending
-        ``"Accept"`` would believe the share had been accepted while it sat
-        pending forever.
-        """
+        Silently succeeding is worse than failing here: a client sending ``"Accept"`` would believe the share
+        had been accepted while it sat pending forever."""
         response = self._respond("Accept")
 
         self.assertEqual(response.status_code, 400)

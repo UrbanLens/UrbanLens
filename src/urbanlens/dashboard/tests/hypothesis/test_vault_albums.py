@@ -1,10 +1,4 @@
-"""Tests for Vault (Profile-owned) albums: model scoping and the view layer.
-
-Vault albums reuse the same Album/AlbumItem models and the same view classes
-as pin/wiki albums (controllers.albums), just resolved with ``vault=True``
-instead of a pin/location slug - see services/photos/albums.py and
-controllers/albums.py's Pin | Wiki | Profile widening.
-"""
+"""Tests for Vault (Profile-owned) albums: model scoping and the view layer."""
 
 from __future__ import annotations
 
@@ -128,14 +122,9 @@ class VaultAlbumViewTests(TestCase):
     def test_can_add_own_pin_filed_photo_to_vault_album(self) -> None:
         """A vault album may reference any of the profile's own uploads, filed or not.
 
-        This is deliberate, not a gap: Vault Photos' own gallery already shows
-        every photo the profile has uploaded regardless of pin/wiki filing, so
-        a vault album (a curated subset of that same library) can hold a
-        photo that's also filed to one of the profile's pins. Adding it here
-        doesn't move or duplicate it - AlbumItem already supports an image
-        belonging to more than one album. See owner_kwargs_to_image_scope's
-        docstring in services/photos/albums.py.
-        """
+        This is deliberate, not a gap: Vault Photos' own gallery already shows every photo the profile has
+        uploaded regardless of pin/wiki filing, so a vault album (a curated subset of that same library) can
+        hold a photo that's also filed to one of the profile's pins."""
         pin = baker.make_recipe("dashboard.pin", profile=self.profile)
         album = Album.objects.create(name="Interior", profile=self.profile, parent_profile=self.profile)
         pin_photo = baker.make(Image, profile=self.profile, pin=pin, wiki=None)
@@ -284,8 +273,6 @@ class VaultPinAlbumsViewTests(TestCase):
         self.assertNotContains(response, "My vault album")
 
     def test_lists_one_page_at_a_time(self) -> None:
-        # P69: this panel loaded every album and every album membership row
-        # across all of a profile's pins the moment its toggle was opened.
         pin = baker.make_recipe("dashboard.pin", profile=self.profile)
         for index in range(_PIN_ALBUMS_PAGE_SIZE + 3):
             Album.objects.create(name=f"Album {index:03d}", profile=self.profile, parent_pin=pin)
@@ -334,11 +321,9 @@ class VaultPinAlbumsViewTests(TestCase):
 class VaultUploadDedupeTests(TestCase):
     """The widened, unfiled-only duplicate-upload scope for a Vault (Profile) owner.
 
-    Distinct from owner_kwargs_to_image_scope (which deliberately scopes a
-    vault's *eligible* photos to everything the profile has uploaded): this is
-    about whether a fresh *upload* is a duplicate, which stays narrower - see
-    uploads.py's _duplicate_scope.
-    """
+    Distinct from owner_kwargs_to_image_scope (which deliberately scopes a vault's *eligible* photos to
+    everything the profile has uploaded): this is about whether a fresh *upload* is a duplicate, which stays
+    narrower - see uploads.py's _duplicate_scope."""
 
     def setUp(self) -> None:
         super().setUp()

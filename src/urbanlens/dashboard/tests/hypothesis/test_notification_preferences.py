@@ -1,9 +1,4 @@
-"""Tests for gating WhatsApp/SMS notification channels on having a number connected.
-
-Regression coverage for a bug where WhatsApp/SMS toggles in Settings >
-Notifications were always clickable, even for a profile with no WhatsApp
-number or phone number on file to actually deliver to.
-"""
+"""Tests for gating WhatsApp/SMS notification channels on having a number connected."""
 
 from __future__ import annotations
 
@@ -83,11 +78,9 @@ class EveryCategoryOffersAWorkingEmailColumnTests(TestCase):
     """Every category's Email checkbox is a normal, uniformly interactive one.
 
     All 13 categories now have a real email-sending path behind them (see
-    services.notifications.notification_delivery.send_notification_email),
-    so the settings page must not special-case any of them - a category-
-    specific "unavailable" cell used to exist here for eight of them; this
-    guards against that reappearing once it's no longer true.
-    """
+    services.notifications.notification_delivery.send_notification_email), so the settings page must not
+    special-case any of them - a category- specific "unavailable" cell used to exist here for eight of them;
+    this guards against that reappearing once it's no longer true."""
 
     def setUp(self) -> None:
         self.user: User = baker.make(User)

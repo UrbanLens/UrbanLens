@@ -1,16 +1,4 @@
-"""Tests for CustomLayer: model, PinMarkup.layer, and the manage-layers endpoints.
-
-Covers:
-- CustomLayer.to_json() shape and for_pin/for_wiki querysets.
-- Deleting a CustomLayer SET_NULLs referencing PinMarkup.layer without
-  deleting the items.
-- PinMarkup.to_json() layer_uuid field and MarkupJsonView's select_related.
-- CustomLayerListCreateView / CustomLayerEditView / CustomLayerReorderView:
-  create, rename, recolor, delete, reorder, and cross-owner/cross-user
-  permission enforcement (pin-scoped vs. shared wiki-scoped access).
-- MarkupView/MarkupEditView accepting layer_uuid to assign/reassign an item
-  onto a layer in place, including the cross-owner silent-None case.
-"""
+"""Tests for CustomLayer: model, PinMarkup.layer, and the manage-layers endpoints."""
 
 from __future__ import annotations
 

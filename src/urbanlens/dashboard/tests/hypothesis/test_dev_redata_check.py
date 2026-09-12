@@ -1,16 +1,4 @@
-"""`dashboard.W003`: a development box pointed at somebody's real REData.
-
-REData is this project's own service, which is why the demo's spend guard
-exempts it - calling our own instance costs only our own capacity. That stops
-being true one hop later, because REData reaches Google Places, which bills. A
-development checkout carrying the production REData URL and a live key is one
-flag away from spending a real budget on background work nobody is watching, and
-a single pin import enqueues thousands of such calls (P109).
-
-The check is a warning rather than an error and fires whether or not
-`UL_ALLOW_OUTBOUND_APIS` is on, because the whole point is that turning it on -
-which is exactly what working on an integration means - makes it live.
-"""
+"""`dashboard.W003`: a development box pointed at somebody's real REData."""
 
 from __future__ import annotations
 

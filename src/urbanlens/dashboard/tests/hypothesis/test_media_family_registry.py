@@ -1,15 +1,4 @@
-"""Tests for the structural half of media authorization.
-
-The media gate is default-deny, which is only safe if nothing can quietly land
-outside it. Two mechanisms hold that up, and this module tests both:
-
-- ``dashboard.checks.check_media_authorizers`` fails ``manage.py check`` when a
-  model stores files under a directory no authorizer covers, so a new media
-  field cannot ship without someone deciding who may read it.
-- The upload-path callables file each upload under a random directory, so a
-  stored path cannot be derived from the name it was uploaded under - fuzzing
-  ``/media/pin_images/IMG_4821.jpg`` never names a file that exists.
-"""
+"""Tests for the structural half of media authorization."""
 
 from __future__ import annotations
 
@@ -130,13 +119,9 @@ class UnguessableUploadPathTests(SimpleTestCase):
     def test_a_camera_filename_never_survives_into_storage(self, filename: str):
         """The uploaded name - camera-generated or not - never reaches the stored path.
 
-        The attribution heuristic used to read the stored name, which is why a
-        camera-named upload's stem used to be kept intact through storage. It
-        now reads ``Image.original_filename`` instead (captured off to the
-        side before this runs - see ``Image.save``), specifically so this
-        function no longer has to leak anything recognisable into the URL a
-        photo's stored path becomes.
-        """
+        It now reads ``Image.original_filename`` instead (captured off to the side before this runs - see
+        ``Image.save``), specifically so this function no longer has to leak anything recognisable into the URL
+        a photo's stored path becomes."""
         from urbanlens.dashboard.services.media.images import is_camera_generated_filename
 
         stored = pin_image_upload_path(Image(), filename)
@@ -168,8 +153,7 @@ def _resolve(field: FileField) -> tuple[str | None, str | None]:
         field: The file field to inspect.
 
     Returns:
-        ``(family, hint)`` - see ``dashboard.checks._declared_family``.
-    """
+        ``(family, hint)`` - see ``dashboard.checks._declared_family``."""
     from urbanlens.dashboard.checks import _declared_family
 
     return _declared_family(field)

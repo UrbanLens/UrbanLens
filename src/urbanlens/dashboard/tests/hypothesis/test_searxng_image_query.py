@@ -1,13 +1,4 @@
-"""Tests for the SearXNG image-search media provider's relevance query builder.
-
-The value of this provider is the shape of its query: three ``OR``-groups that
-a general image engine reads as required, disambiguating clauses. These cover:
-
-* ``assemble_image_query`` - the pure string assembly (aliases · area · subject),
-  including dedup, quote-stripping, and the "no alias -> no query" rule.
-* ``build_image_query`` - pulling aliases (nickname-excluded) and area terms off
-  a real ``Pin``/``Location``, including the US-state vs country choice.
-"""
+"""Tests for the SearXNG image-search media provider's relevance query builder."""
 
 from __future__ import annotations
 
@@ -83,12 +74,6 @@ class AssembleImageQueryTests(SimpleTestCase):
         with_empty = assemble_image_query(["Foo"], ["NY"], [])
         self.assertEqual(with_none, with_empty)
 
-    # "(" is excluded from the generated terms alongside '"' because this test
-    # counts group delimiters by counting "(" characters: a generated term that
-    # itself contains a parenthesis is indistinguishable from a group opener and
-    # made the count read one too high. Whether a paren *inside* a quoted term
-    # is handled correctly is a separate question from how many groups there
-    # are, and is not what this property is about.
     @given(
         st.lists(
             st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s),

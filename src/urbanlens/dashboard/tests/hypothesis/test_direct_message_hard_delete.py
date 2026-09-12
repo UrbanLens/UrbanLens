@@ -1,14 +1,4 @@
-"""Tests for the direct-message disappearing-message hard-delete sweep.
-
-Regression coverage for a privacy gap: DirectMessage.is_expired_for_recipient
-only ever gated *display* (the recipient saw a tombstone instead of the
-content) - the row, its body/ciphertext, and any attached images stayed in
-the database untouched forever, still returned by search, regardless of the
-sender's "Delete My Messages After" setting. This is the sweep
-(tasks.hard_delete_expired_direct_messages, driven by
-DirectMessageQuerySet.due_for_hard_delete) that actually removes the row -
-for both parties, including the sender - once the timer elapses.
-"""
+"""Tests for the direct-message disappearing-message hard-delete sweep."""
 
 from __future__ import annotations
 
@@ -158,11 +148,9 @@ class HardDeleteExpiredDirectMessagesTaskTests(TestCase):
 class HardDeleteBatchingTests(TestCase):
     """A backlog is drained in batches, not pulled into one `IN (...)` list.
 
-    Steady state is one hour of expiries and fits in a single batch; the case
-    this covers is the backlog - a retention-policy change, or the beat worker
-    having been down - where the due set can approach the size of the whole
-    read message history.
-    """
+    Steady state is one hour of expiries and fits in a single batch; the case this covers is the backlog - a
+    retention-policy change, or the beat worker having been down - where the due set can approach the size of
+    the whole read message history."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -223,13 +211,8 @@ class HardDeleteBatchingTests(TestCase):
 class WhenReadFirstOpenTests(TestCase):
     """A "delete as soon as read" message is readable exactly once on a cold open.
 
-    Regression test: _thread_context used to mark the thread read BEFORE
-    loading the page, so is_expired_for_recipient was already True by render
-    time and a recipient who opened the conversation cold only ever saw the
-    "no longer available" tombstone - the content was destroyed by the act of
-    trying to read it. The read mark must land after the page is loaded, so
-    the first render shows the content and only later renders tombstone it.
-    """
+    The read mark must land after the page is loaded, so the first render shows the content and only later
+    renders tombstone it."""
 
     SECRET = "the water tower ladder is on the north side"
 
@@ -274,14 +257,11 @@ class WhenReadFirstOpenTests(TestCase):
 class SidebarPreviewTombstoneTests(TestCase):
     """The conversation-list sidebar's last-message preview honors tombstone state too.
 
-    Regression: `_conversation_list.html` rendered `conv.last_message.body`
-    directly (only branching on `is_encrypted`), so a message tombstoned in
-    its own thread bubble - deleted-for-everyone, or expired via the
-    "delete as soon as read" retention setting - still leaked its raw text
-    into the sidebar preview line on every other page render, including the
-    full messages page loaded right after the thread itself had already
-    started tombstoning it.
-    """
+    Regression: `_conversation_list.html` rendered `conv.last_message.body` directly (only branching on
+    `is_encrypted`), so a message tombstoned in its own thread bubble - deleted-for-everyone, or expired via the
+    "delete as soon as read" retention setting - still leaked its raw text into the sidebar preview line on
+    every other page render, including the full messages page loaded right after the thread itself had already
+    started tombstoning it."""
 
     SECRET = "the spare key is under the third flowerpot"
 

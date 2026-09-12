@@ -1,32 +1,4 @@
-"""A view wired to several routes must accept every parameter any of them supplies.
-
-Django resolves a handler's arguments at *request* time, so a view class wired
-to two routes with different parameters fails only when someone actually
-requests the mismatched one - as a ``TypeError`` that surfaces as a 500 with
-nothing in the signature to suggest it. Nothing at import time, in review, or in
-`makemigrations` notices.
-
-This audit met the shape three times in three chunks:
-
-- ``saved_filters.new`` - ``SavedFilterEditView.post`` required ``filter_uuid``,
-  which only the *edit* route supplies. Every POST to ``new/`` was a 500 (chunk 552).
-- ``pin.link.to`` - ``PinRelinkView.get`` omitted ``location_slug`` entirely,
-  which its own ``post`` declares. Every GET was a 500 (chunk 556).
-- ``pin.link`` - the same view's POST half, which still declares
-  ``location_slug`` so the shared signature holds, and refuses the route that
-  cannot supply one with a 405.
-
-All three were found by requesting routes nobody requests. This checks the
-property directly instead: for every view class wired to two or more routes, each
-handler must accept the union of the parameters those routes can pass.
-
-**Verified to bind**: restoring ``PinRelinkView.get``'s pre-fix signature makes
-this report exactly that method and parameter. A guard nobody has watched fail
-is a guard nobody knows works.
-
-A handler taking ``**kwargs`` is skipped - it accepts anything by construction,
-which is a legitimate way to serve several routes.
-"""
+"""A view wired to several routes must accept every parameter any of them supplies."""
 
 from __future__ import annotations
 
@@ -48,11 +20,9 @@ _NON_ROUTE_ARGS = {"self", "request", "args", "kwargs"}
 def _routes() -> list[tuple[str | None, frozenset[str], object]]:
     """Every URL pattern as ``(name, parameters, callback)``.
 
-    Parameters accumulate down the resolver tree, because a route nested under
-    ``path("<str:label_kind>/", include(...))`` receives that parameter too -
-    reading only the leaf pattern was what made an earlier sweep in this
-    codebase miss most parameterised routes (see ``test_route_query_scaling``).
-    """
+    Parameters accumulate down the resolver tree, because a route nested under ``path("<str:label_kind>/",
+    include(...))`` receives that parameter too - reading only the leaf pattern was what made an earlier sweep
+    in this codebase miss most parameterised routes (see ``test_route_query_scaling``)."""
     found: list[tuple[str | None, frozenset[str], object]] = []
 
     def walk(resolver, inherited: frozenset[str]) -> None:
@@ -91,15 +61,7 @@ def _unacceptable(func: object, supplied: frozenset[str]) -> set[str]:
 def _signature_mismatches() -> list[str]:
     """Every handler that cannot accept a parameter one of its routes supplies.
 
-    Checks *every* parameterised route, not only those on views wired to two or
-    more. The original version looked at multi-route views alone because all
-    three known instances were multi-route - but a handler that omits its own
-    single route's parameter raises the same ``TypeError``, and nothing about
-    the property depends on how many routes reach the view. Widening it changed
-    no result (810 handler checks across 596 parameterised routes, all clean),
-    which is the answer to the narrower question rather than a reason to have
-    asked it narrowly.
-    """
+    Checks *every* parameterised route, not only those on views wired to two or more."""
     problems: list[str] = []
     by_view: dict[type, list[tuple[str | None, frozenset[str]]]] = collections.defaultdict(list)
 
@@ -153,10 +115,8 @@ class ViewSignatureRouteGuardTests(SimpleTestCase):
     def test_the_scan_examines_single_route_views_too(self) -> None:
         """The widened scope must actually be exercising handlers, not just present.
 
-        Counted the same way the check itself counts, so a refactor that stopped
-        resolving view classes - and would then report zero problems forever -
-        fails here instead of passing silently.
-        """
+        Counted the same way the check itself counts, so a refactor that stopped resolving view classes - and
+        would then report zero problems forever - fails here instead of passing silently."""
         checked = sum(
             1
             for _name, params, callback in _routes()

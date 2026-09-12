@@ -1,29 +1,5 @@
 #!/usr/bin/env python3
-"""Rank files by repair history, and surface fixes their own message calls partial.
-
-Where bugs have been found is where bugs are. Two queries over git history
-produced the most valuable findings of the 2026-08-17 audit, including both
-money bugs in the billing ledger:
-
-**Fix density** - the share of a file's commits that are fixes. A file whose
-history is mostly repair is a file whose next change is likely to be repair.
-``controllers/labels.py`` led this list at 8 of 18 commits and yielded three
-real defects.
-
-**The incomplete-fix query** - commits whose message says the fix reached one
-place and implies others, in the author's own words: "like its sibling already
-did", "the same fix", "also". Each names a spot where someone knew a pattern had
-more than one instance. Following one of those ("the enrichment path catches
-decompression bombs, like its sibling already did") ruled out a third instance;
-following another led to the pay-what-you-want ledger's lost update.
-
-Both are heuristics for *where to look*, not defect predictions. A file can be
-fix-dense because it is old and well-maintained. The value is a ranked worklist
-instead of a guess, on a codebase too large to read.
-
-Usage:
-    bin/report_defect_history.py [--since 2026-01-01] [--top N] [--min-commits N]
-"""
+"""Rank files by repair history, and surface fixes their own message calls partial."""
 
 from __future__ import annotations
 
@@ -60,8 +36,6 @@ _INCOMPLETE_PHRASES = (
     "other paths",
 )
 
-#: Files with fewer commits than this have too little history for the ratio to
-#: mean anything - one fix out of two commits is not a 50% defect rate.
 _DEFAULT_MIN_COMMITS = 5
 
 
@@ -72,8 +46,7 @@ def _git(*args: str) -> str:
         *args: Arguments after ``git``.
 
     Returns:
-        Standard output, stripped.
-    """
+        Standard output, stripped."""
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.strip()
 
 
@@ -83,8 +56,7 @@ def fix_density(since: str, min_commits: int, top: int) -> None:
     Args:
         since: Git date to start from.
         min_commits: Ignore files with fewer commits than this.
-        top: How many rows to print.
-    """
+        top: How many rows to print."""
     log = _git("log", f"--since={since}", "--pretty=format:%H%x00%s", "--name-only")
     commits: dict[str, tuple[str, list[str]]] = {}
     current: str | None = None
@@ -125,8 +97,7 @@ def incomplete_fixes(since: str, top: int) -> None:
 
     Args:
         since: Git date to start from.
-        top: How many commits to print.
-    """
+        top: How many commits to print."""
     log = _git("log", f"--since={since}", "--pretty=format:%h%x00%s%x00%b%x00%x00")
     hits = []
     for entry in log.split("\x00\x00"):
@@ -158,8 +129,7 @@ def main(argv: list[str]) -> int:
         argv: Command-line arguments.
 
     Returns:
-        Always 0 - this reports, it does not gate.
-    """
+        Always 0 - this reports, it does not gate."""
     since = argv[argv.index("--since") + 1] if "--since" in argv else "2 years ago"
     top = int(argv[argv.index("--top") + 1]) if "--top" in argv else 20
     min_commits = int(argv[argv.index("--min-commits") + 1]) if "--min-commits" in argv else _DEFAULT_MIN_COMMITS

@@ -1,14 +1,4 @@
-"""Tests for trip controller helper functions (pure logic, no DB needed where possible).
-
-Covers:
-- _parse_scheduled_at() - date/time string parsing
-- _activity_coords() - coordinate resolution with override/pin/location priority
-- _expand_trip_dates() - trip date range expansion
-- _is_organizer() - organizer detection
-- _can_perform() - permission level checking
-- _compute_activity_index_map() - map-index assignment
-- _build_activity_forecasts() - weather slot matching
-"""
+"""Tests for trip controller helper functions (pure logic, no DB needed where possible)."""
 
 from __future__ import annotations
 
@@ -219,11 +209,9 @@ class ExpandTripDatesTests(TestCase):
 class TripElapsedDayTests(TestCase):
     """Trip.elapsed_day - 1-indexed day-of-trip while active, else None.
 
-    Uses unsaved instances where possible (elapsed_day never touches the DB
-    once both dates are set - effective_start_date/effective_end_date
-    short-circuit before falling back to querying activities), except for
-    the undated case below, which needs a real pk for that fallback query.
-    """
+    Uses unsaved instances where possible (elapsed_day never touches the DB once both dates are set -
+    effective_start_date/effective_end_date short-circuit before falling back to querying activities), except
+    for the undated case below, which needs a real pk for that fallback query."""
 
     def _trip(self, start, end):
         return Trip(start_date=start, end_date=end)
@@ -426,10 +414,8 @@ class BuildActivityForecastsTests(SimpleTestCase):
     """_build_activity_forecasts matches activities to weather slots.
 
     ``get_raw_forecast_slots`` (REData-first, OWM/Open-Meteo-fallback - see
-    ``services.apis.locations.weather_resolution``) is mocked directly rather
-    than a gateway instance, since ``_build_activity_forecasts`` no longer
-    picks a provider itself.
-    """
+    ``services.apis.locations.weather_resolution``) is mocked directly rather than a gateway instance, since
+    ``_build_activity_forecasts`` no longer picks a provider itself."""
 
     def _make_activity(self, lat=51.5, lng=-0.12, scheduled_at=None, status="proposed"):
         act = MagicMock()
@@ -747,11 +733,7 @@ _HISTORY_ROW = {
 
 
 class TripRecordedWeatherTests(TestCase):
-    """A past trip's weather panel was empty: the view filtered to activities
-    scheduled today or later, so a finished trip had nothing to forecast and the
-    whole card hid. REData's `/weather/history/` answers the question that
-    actually applies to a finished trip.
-    """
+    """A past trip's weather panel was empty: the view filtered to activities scheduled today or later, so a finished trip had nothing to forecast and the whole card hid. REData's `/weather/history/` answers the question that actually applies to a finished trip."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -1,13 +1,4 @@
-"""Tests for boolean environment-variable parsing in the settings modules.
-
-``EMAIL_USE_TLS`` is the one that matters: it was parsed with a literal
-``os.getenv(...) == "True"``, so any spelling but exactly ``True`` disabled
-STARTTLS. That is the quiet-failure direction - SMTP credentials and every
-outbound mail go over the wire in plaintext while ``.env`` says TLS is on - and
-``UL_EMAIL_TLS`` is *also* declared in ``app.py`` as a pydantic ``bool``, which
-happily accepts ``true``/``1``/``yes``. So the two readers of one variable
-disagreed, and the disagreement resolved toward plaintext.
-"""
+"""Tests for boolean environment-variable parsing in the settings modules."""
 
 from __future__ import annotations
 

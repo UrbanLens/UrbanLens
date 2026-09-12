@@ -1,36 +1,4 @@
-"""The map's whole-account endpoints must have a ceiling the account cannot raise.
-
-`MapController.map_data_context` (`controllers/maps.py:1149-1178`) serialises every
-root pin the profile owns - `MapPinPayloadService.all()`, whose own docstring says
-"Unbounded in output by design" - and hands the list to `map/data.html`, which
-embeds it as one JSON document. Both `search_map_post` (`:520-538`) and `init_map`
-(`:1102-1103`) go through it, neither passes a limit, and neither is cached.
-
-R27 made that cheap per pin: 10,000 pins now cost ~0.33s of CPU instead of 5.8s.
-Cheap per pin is not the same as bounded. The response is still O(account), so the
-cost of one request is still set by how many pins the requester happens to own,
-and the *keyset-paginated* sibling endpoint (`map.pins`, clamped to
-`MAX_LIMIT = 1000`) exists precisely because that is not an acceptable shape for a
-request path.
-
-D12 gave `map.document` that ceiling: `MAP_DOCUMENT_MAX_PINS`, read by
-`services/map_pins/document.max_pins()`, which hands an over-ceiling account the
-paged mode instead. `test_map_document.py` covers it. **`map.search` was left
-out**, and it is the one a user triggers repeatedly by changing a filter, so the
-reproduction below stays red under `xfail(strict=True)` until it is capped too.
-
-The first version of this file could never have turned red. It asserted
-`hasattr(settings, "UL_MAP_DOCUMENT_MAX_PINS")` - the environment variable's
-name, not the Django setting's - so it went on xfailing after the ceiling landed
-and reported nothing. That is precisely the trap the paragraph below describes,
-committed by the file that describes it, which is why
-`test_the_name_is_one_production_reads` now exercises the override rather than
-trusting it.
-
-`override_settings` will happily invent a name production does not have, so a
-test that goes straight to overriding would configure a ceiling nothing reads and
-then pass against code that has none.
-"""
+"""The map's whole-account endpoints must have a ceiling the account cannot raise."""
 
 from __future__ import annotations
 
@@ -77,9 +45,7 @@ def _embedded_pins(html: str) -> list[dict[str, Any]]:
         One dict per pin the page shipped to the client.
 
     Raises:
-        AssertionError: The document is missing, which would make every
-            count assertion below pass without measuring anything.
-    """
+        AssertionError: The document is missing, which would make every count assertion below pass without measuring anything."""
     match = _JSON_SCRIPT.search(html)
     if match is None:
         raise AssertionError(
@@ -180,15 +146,7 @@ class TheFilterPostMustRespectItTests(_SeededMapCase):
 class TheSeedIsRealTests(_SeededMapCase):
     """Guards the reproduction itself: these counts must come from real rows.
 
-    Not xfail. If this ever fails, every assertion above is measuring an empty
-    page rather than an uncapped one, and their failures would mean nothing.
-
-    It is also a deliberate tripwire on the response *shape*. D12 replaces
-    `map/data.html` with a streamed NDJSON document, at which point
-    `_embedded_pins` stops finding its script tag and this fails with a message
-    saying so - which is the right moment to rewrite this file against the new
-    contract, rather than leaving a regex quietly matching nothing.
-    """
+    Not xfail."""
 
     def test_the_profile_really_owns_the_pins(self) -> None:
         self.assertEqual(Pin.objects.filter(profile=self.profile).root_pins().count(), SEEDED)

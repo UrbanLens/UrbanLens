@@ -1,17 +1,4 @@
-"""The reputation ledger: recording, scoring, decay, caps and retraction.
-
-The ledger is the only part of this system with no source of truth outside
-itself - every achievement metric is a count over other tables and can be
-rebuilt at any time, and this cannot. That is why rows are written
-synchronously and only their *value* is deferred, and it is why most of what
-these tests pin is about rows surviving: idempotency under retry, null-vs-zero,
-and retraction being reversible.
-
-The scoring tests exist mainly to hold the traps that were found by reading the
-models these rules touch - a materialised external photo is attributed to
-whoever voted for it, and one Suggest-Edits submit spanning six fields writes a
-single WikiEdit row.
-"""
+"""The reputation ledger: recording, scoring, decay, caps and retraction."""
 
 from __future__ import annotations
 
@@ -93,12 +80,9 @@ class LedgerWriteTests(TestCase):
     def test_a_first_ever_contributor_is_marked_for_the_sweep(self) -> None:
         """The staleness flag has to survive there being no totals row yet.
 
-        Marking was a filter().update(), which silently matches nothing for a
-        profile that has never earned anything - so the very first event from a
-        brand-new account would never have been picked up by the sweep that
-        looks for stale rows. That account is precisely the one this system
-        exists to measure.
-        """
+        Marking was a filter().update(), which silently matches nothing for a profile that has never earned
+        anything - so the very first event from a brand-new account would never have been picked up by the sweep
+        that looks for stale rows."""
         self.assertFalse(ProfileReputation.objects.for_profile(self.profile).exists())
 
         record_event(self.profile, "photo_upload", target=self._photo(), wiki=self.wiki)
@@ -173,14 +157,8 @@ class ScoringTests(TestCase):
     def test_metadata_is_a_bonus_and_its_absence_is_never_a_penalty(self) -> None:
         """EXIF extraction is skipped when the uploader has track_pin_visits off.
 
-        A penalty for missing metadata would quietly pay those users less for
-        having a privacy setting enabled, so the bonus has to be additive.
-
-        Two profiles on two wikis, because need and decay are both stateful:
-        each photo has to be the first of its kind for its wiki *and* the first
-        of its rule for its uploader, or the comparison measures those instead
-        of the metadata.
-        """
+        A penalty for missing metadata would quietly pay those users less for having a privacy setting enabled,
+        so the bonus has to be additive."""
         other_profile = baker.make(User).profile
         other_wiki = baker.make(Wiki, location=baker.make(Location))
 

@@ -416,13 +416,7 @@ class TripAiSuggestionsViewTests(TestCase):
         self.client.force_login(self.alice.user)
 
     def test_non_member_cannot_tell_the_trip_exists(self) -> None:
-        """404, not 403: someone with no access to the trip at all must not be
-        able to distinguish "somebody else's trip" from "no such slug" - that
-        difference is exactly the enumeration ``trip_or_not_found`` exists to
-        close (it replaced a ``_trip_or_403`` that leaked it). The meaningful
-        403 is the sibling test below: a viewer who *can* see the trip but has
-        not joined it.
-        """
+        """404, not 403: someone with no access to the trip at all must not be able to distinguish "somebody else's trip" from "no such slug" - that difference is exactly the enumeration ``trip_or_not_found`` exists to close (it replaced a ``_trip_or_403`` that leaked it). The meaningful 403 is the sibling test below: a viewer who *can* see the trip but has not joined it."""
         outsider = _profile()
         self.client.force_login(outsider.user)
         response = self.client.get(reverse("trips.ai_suggestions", args=[self.trip.slug]))

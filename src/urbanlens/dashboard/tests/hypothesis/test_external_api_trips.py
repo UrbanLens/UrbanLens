@@ -1,20 +1,4 @@
-"""Tests for the external API's trip surface.
-
-Trips are the first *shared-space* resource this API exposes: unlike pins,
-which belong to exactly one person, a trip carries other members' identities,
-their comments, and coordinates they may have chosen to reveal only to some
-people. So alongside the usual CRUD and scope checks, these tests pin down
-three enumeration/authorization defects the extraction deliberately fixed:
-
-1. a missing trip and a trip that isn't yours must be indistinguishable (both 404),
-2. member lookups must never leave the trip's own roster,
-3. dragging an activity marker must require edit-activities permission, and its
-   coordinates must be bounds-checked.
-
-They also assert the trip-map payload is byte-identical between the internal
-HTMX endpoint and this one, which is what keeps ``services.trips.trip_map`` an
-actual single source rather than two implementations that happen to agree.
-"""
+"""Tests for the external API's trip surface."""
 
 from __future__ import annotations
 
@@ -133,10 +117,8 @@ class TripCrudTests(_TripApiTestCase):
     def test_upcoming_trip_quota_is_enforced(self) -> None:
         """The site's max-upcoming-trips cap answers 400, not a 500.
 
-        The existing trip needs a future start date to actually count: an
-        undated trip with no scheduled activities is not "upcoming" (see
-        ``TripQuerySet.upcoming``), so it consumes no quota.
-        """
+        The existing trip needs a future start date to actually count: an undated trip with no scheduled
+        activities is not "upcoming" (see ``TripQuerySet.upcoming``), so it consumes no quota."""
         settings_row = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_row.pk).update(max_upcoming_trips_per_user=1)
         self._make_trip(name="Already planning", start_date=datetime.date.today() + datetime.timedelta(days=7))
@@ -246,10 +228,8 @@ class TripScopeEnforcementTests(_TripApiTestCase):
     def test_default_issued_key_cannot_reach_trips(self) -> None:
         """A key issued today gets the original four scopes - none of them trips.
 
-        The whole point of leaving ``trips:*`` out of
-        ``_default_api_key_scopes``: every already-issued key would otherwise
-        have silently gained access to other people's trip data.
-        """
+        The whole point of leaving ``trips:*`` out of ``_default_api_key_scopes``: every already-issued key
+        would otherwise have silently gained access to other people's trip data."""
         _api_key, raw = generate_api_key(self.user, "Default grant")
         response = self.client.get(reverse("external_api:trips"), **_bearer(raw))
         self.assertEqual(response.status_code, 403)
@@ -322,10 +302,8 @@ class TripMemberTests(_TripApiTestCase):
     def test_blocked_user_cannot_be_invited(self) -> None:
         """A block stops a forced membership the same way it stops a DM.
 
-        404, identical to an unknown username - a 403 would confirm the
-        account exists and is blocking the caller, which is itself an
-        enumeration leak.
-        """
+        404, identical to an unknown username - a 403 would confirm the account exists and is blocking the
+        caller, which is itself an enumeration leak."""
         with mock.patch.object(Profile, "are_blocked", return_value=True):
             response = self._add("invitee")
         self.assertEqual(response.status_code, 404)
@@ -342,10 +320,8 @@ class TripMemberTests(_TripApiTestCase):
     def test_member_cap_is_enforced_even_for_unknown_username(self) -> None:
         """The cap check must fire before username resolution.
 
-        Otherwise "trip full" only ever answers for a real, unblocked account,
-        letting a caller who fills their own trip once turn the cap into a
-        free, repeatable username-existence oracle.
-        """
+        Otherwise "trip full" only ever answers for a real, unblocked account, letting a caller who fills their
+        own trip once turn the cap into a free, repeatable username-existence oracle."""
         settings_row = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_row.pk).update(max_trip_members=1)
         response = self._add("no-such-person-at-all")
@@ -369,11 +345,7 @@ class TripMemberTests(_TripApiTestCase):
     def test_member_lookup_never_leaves_the_trip(self) -> None:
         """Regression guard for the global-profile enumeration defect.
 
-        The member endpoints used to resolve the target with a site-wide
-        ``get_object_or_404(Profile, pk=...)`` before narrowing to the trip, so
-        the status code told a caller whether an arbitrary profile existed.
-        A real profile that simply isn't on this trip is now a plain 404.
-        """
+        A real profile that simply isn't on this trip is now a plain 404."""
         outsider = baker.make(User, username="outsider")
         outsider_profile = Profile.objects.get(user=outsider)
         self.assertIsNotNone(outsider_profile.slug)
@@ -498,11 +470,7 @@ class TripActivityTests(_TripApiTestCase):
     def test_create_refuses_another_accounts_pin(self) -> None:
         """Naming a pin_slug that belongs to someone else must not attach it - or succeed quietly.
 
-        P91: the live security spec caught this attaching nothing while still
-        answering 201, which told the caller their pin was saved when it
-        wasn't. ``resolve_activity_place`` now raises rather than falling
-        through to "no place given".
-        """
+        ``resolve_activity_place`` now raises rather than falling through to "no place given"."""
         other_location = Location.objects.create(latitude=42.4, longitude=-83.1, official_name="Someone else's place")
         their_pin = Pin.objects.create(profile=self.other_profile, location=other_location, name="Not yours")
 
@@ -614,12 +582,9 @@ class TripActivityTests(_TripApiTestCase):
     def test_hidden_location_masks_effective_title_when_it_falls_back_to_the_pin(self) -> None:
         """effective_title must go through the same masking as latitude/longitude.
 
-        Regression for TripActivitySerializer sourcing the raw, unmasked
-        ``activity.effective_title`` model property instead of the row's already-masked
-        ``display_title`` - see docs/audits/GOALS_CODE_AUDIT.md ("Trip activities sourcing"). A
-        title-less, location-hidden activity used to leak the adder's private pin name
-        through this field even though latitude/longitude were correctly nulled.
-        """
+        Regression for TripActivitySerializer sourcing the raw, unmasked ``activity.effective_title`` model
+        property instead of the row's already-masked ``display_title`` - see docs/audits/GOALS_CODE_AUDIT.md
+        ("Trip activities sourcing")."""
         pin = Pin.objects.create(profile=self.profile, location=self.location, name="My Secret Cabin")
         activity = TripActivity.objects.create(
             trip=self.trip, location=self.location, pin=pin, added_by=self.profile, title="", location_hidden=True
@@ -634,13 +599,9 @@ class TripActivityTests(_TripApiTestCase):
     def test_hidden_location_masks_child_trip_uuid(self) -> None:
         """child_trip_uuid must go through the same masking as latitude/longitude.
 
-        Regression: TripActivitySerializer.get_child_trip_uuid read
-        row["activity"].child_trip directly - the raw relation, with no
-        location_hidden/viewer-privacy awareness - the same class of leak
-        effective_title (above) exists to avoid. A location-hidden activity
-        linking a child trip leaked that trip's real uuid through this field
-        even though latitude/longitude were correctly nulled.
-        """
+        Regression: TripActivitySerializer.get_child_trip_uuid read row["activity"].child_trip directly - the
+        raw relation, with no location_hidden/viewer-privacy awareness - the same class of leak effective_title
+        (above) exists to avoid."""
         child = Trip.objects.create(creator=self.profile, name="Secret Getaway")
         activity = TripActivity.objects.create(
             trip=self.trip,
@@ -683,9 +644,8 @@ class TripActivityTests(_TripApiTestCase):
     def test_position_requires_edit_permission(self) -> None:
         """Regression guard: an invited-not-joined member could move any marker.
 
-        The reposition endpoint used to check trip *membership* only, so anyone
-        who had merely been invited could drag any activity on the map.
-        """
+        The reposition endpoint used to check trip *membership* only, so anyone who had merely been invited
+        could drag any activity on the map."""
         trip = self._make_trip(creator=self.other_profile, name="Theirs")
         activity = TripActivity.objects.create(
             trip=trip, location=self.location, added_by=self.other_profile, title="Theirs"
@@ -895,10 +855,8 @@ class TripCommentTests(_TripApiTestCase):
 class TripMapParityTests(_TripApiTestCase):
     """The external map payload must equal the internal one, byte for byte.
 
-    This is the regression guard for ``services.trips.trip_map`` being a genuine
-    single source: if either surface ever grows its own point-building code,
-    these payloads drift and this test fails.
-    """
+    This is the regression guard for ``services.trips.trip_map`` being a genuine single source: if either
+    surface ever grows its own point-building code, these payloads drift and this test fails."""
 
     def setUp(self) -> None:
         """Build a trip exercising numbering, a completed stop, and a child trip."""

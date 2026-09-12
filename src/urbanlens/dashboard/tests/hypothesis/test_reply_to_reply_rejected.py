@@ -1,16 +1,4 @@
-"""A reply to a reply must be refused at creation, not silently swallowed.
-
-Every comment tree in this app (pin, wiki, trip, and the external API's own
-copy) renders replies exactly one level deep: `visible_comment_tree` /
-`build_comment_tree` walk a top-level comment's `.replies.all()` once and
-never recurse into a reply's own replies. Before this fix, none of the four
-comment-creation call sites restricted `parent_id` to a top-level comment, so
-replying to an existing reply was accepted and persisted - and then rendered
-nowhere, forever, while the comment-count badge (which counts the full,
-depth-blind queryset) still included it. This pins that a reply-to-a-reply is
-refused the same way an unknown/foreign parent id already was, on all four
-paths.
-"""
+"""A reply to a reply must be refused at creation, not silently swallowed."""
 
 from __future__ import annotations
 

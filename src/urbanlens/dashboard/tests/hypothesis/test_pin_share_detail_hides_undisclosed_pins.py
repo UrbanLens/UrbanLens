@@ -1,19 +1,4 @@
-"""The shared-Private Pin page must not read through to a pin nobody offered.
-
-``PinShareStatus.DETECTED`` rows are provenance bookkeeping, auto-recorded when
-a place was revealed indirectly - a shared map's geometry, a location mentioned
-in a DM, a pin added to a shared trip. Nobody offered the pin and nobody
-accepted it, so the sender's live ``Pin`` is not the recipient's to see: its
-current name, its address, and whatever the sender renames it to next.
-
-The detail view is addressable by primary key and filtered only by recipient,
-so reaching it does not require the Sharing page to have linked it. The listing
-page already refused to read through (``controllers.memories._safe_incoming_place_label``);
-this covers the page it links to.
-
-An explicit PENDING share is the opposite case and is asserted alongside, since
-previewing the pin is the entire point of an offer awaiting accept/reject.
-"""
+"""The shared-Private Pin page must not read through to a pin nobody offered."""
 
 from __future__ import annotations
 
@@ -71,10 +56,8 @@ class PinShareDetailDisclosureTests(TestCase):
     def test_a_detected_share_still_renders_the_place_it_recorded(self):
         """The page is not blank - the exposure it documents is still shown.
 
-        The map reads ``share.shared_location``, the snapshot taken when the
-        share happened, so it neither depends on the live pin nor follows it if
-        the sender moves it later.
-        """
+        The map reads ``share.shared_location``, the snapshot taken when the share happened, so it neither
+        depends on the live pin nor follows it if the sender moves it later."""
         share = self._share(PinShareStatus.DETECTED, origin=PinShareOrigin.MAP_DETECTED)
 
         response = self._detail(share)

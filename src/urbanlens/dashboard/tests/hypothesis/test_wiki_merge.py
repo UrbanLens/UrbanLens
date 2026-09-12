@@ -1,13 +1,4 @@
-"""Tests for automatic wiki parent/child nesting on boundary containment (services.wiki.wiki_merge).
-
-Two independently-created community wikis - a campus and one of its own
-buildings - should read as parent/child once both have a real property
-boundary, without asking anyone. Covers both directions reconciliation checks
-(a wiki finding a bigger container; a wiki absorbing smaller wikis already
-inside it), the circle-fallback guard that must never drive a merge, and that
-reconciliation only ever touches ``parent_wiki`` - never Pins, Articles, or
-edit history, since ``Wiki.location`` never moves.
-"""
+"""Tests for automatic wiki parent/child nesting on boundary containment (services.wiki.wiki_merge)."""
 
 from __future__ import annotations
 
@@ -38,12 +29,9 @@ WING_SIZE = 0.01
 BUILDING_SIZE = 0.001
 TINY_SIZE = 0.0001
 
-#: Default offset (degrees) between a wiki and whatever it's placed "near" -
-#: must sit strictly between the two boundary sizes in play, so the container
-#: really contains the point while the (much smaller) nested wiki's own
+#: Default offset (degrees) between a wiki and whatever it's placed "near" - must sit strictly between the two
+#: boundary sizes in play, so the container really contains the point while the (much smaller) nested wiki's own
 #: boundary does not reach back and contain the container's point in turn.
-#: Works for any BUILDING_SIZE/TINY_SIZE-vs-CAMPUS_SIZE pairing; the WING_SIZE
-#: pairings need their own explicit, tighter offset (see call sites).
 _NEAR_OFFSET = 0.01
 
 
@@ -76,18 +64,7 @@ def _make_wiki_with_boundary(
 ) -> Wiki:
     """A wiki anchored to a place whose official outline is a square of ``size``.
 
-    ``size=None`` leaves the wiki placeless, exercising ``resolve_for_wiki``'s
-    circle fallback. ``near`` places the new wiki ``near_offset`` degrees from
-    another wiki's own coordinate (never identical - Location's (lat, lng) pair
-    must be unique) - a "building" passed the "campus" it should nest inside
-    of, for example. Callers pairing two boundary sizes closer together than
-    the default (e.g. WING_SIZE as the container) must pass a tighter
-    ``near_offset`` themselves - see the module-level size/offset comments.
-
-    The place lineage is built from containment here (see
-    ``place_helpers.nest_by_containment``), standing in for what the provider
-    chain produces for real. Nesting reads that lineage, not the geometry.
-    """
+    ``size=None`` leaves the wiki placeless, exercising ``resolve_for_wiki``'s circle fallback."""
     if near is not None:
         location = baker.make(
             Location,
@@ -149,14 +126,9 @@ class ReconcileWikiNestingTests(TestCase):
     def test_the_tightest_fitting_container_wins_not_the_outermost(self) -> None:
         """A building inside a wing inside a campus becomes the wing's child, not the campus's.
 
-        One reconciliation call handles both hops: direction 1 (on wing) finds
-        campus as wing's own container, and direction 2 (also on wing, using
-        wing's own polygon) finds building already sitting inside it - both in
-        the single call triggered by wing's own boundary generation. Real
-        usage never reconciles two different wikis' Python objects in the same
-        process without reloading, so this mirrors that rather than calling
-        reconcile a second time on a stale in-memory ``building``.
-        """
+        One reconciliation call handles both hops: direction 1 (on wing) finds campus as wing's own container,
+        and direction 2 (also on wing, using wing's own polygon) finds building already sitting inside it - both
+        in the single call triggered by wing's own boundary generation."""
         campus = _make_wiki_with_boundary(size=CAMPUS_SIZE)
         # WING_SIZE (0.01) is close enough to the default offset (0.01) that a
         # wider offset is needed here so wing's own boundary can't reach back

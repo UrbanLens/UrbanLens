@@ -1,38 +1,4 @@
-"""Integration coverage for grandfathered access after a real-estate parcel split.
-
-Two mechanisms, tested separately because they are triggered independently and
-must not be confused with each other:
-
-- **Split-family permanence** (:class:`GrandfatheredParcelSplitAccessTests`).
-  When a parcel (M) splits into successors (N, O, P -
-  ``services.places.splits.process_split``), every profile who held the
-  undivided parcel is permanently granted the *whole* family - the split and
-  every successor together, regardless of which one their own pin
-  re-resolves onto (:meth:`PlaceAccessGrantManager.snapshot_family`). A
-  profile who was never a prior holder can still reach the family the
-  ordinary way - by independently pinning every current successor at once -
-  and the moment that happens they are *also* permanently snapshotted (see
-  ``wiki_access._snapshot_earned_split_families``). Confirmed with Jess
-  2026-08-31: grandfathering here is truly permanent - once granted, no
-  amount of unpinning ever takes it away again. A brand-new profile who
-  holds fewer than every current successor gets none of it, and the parent
-  wiki must never be discoverable (including as a candidate on the pin
-  detail page's linked-wikis list, see ``services.places.ambiguity.
-  linked_wiki_locations``) until it's actually earned.
-
-- **Engagement grandfathering** (:class:`WikiEngagementGrandfatheringTests`).
-  Independent of any split: a profile who actually viewed a wiki, or shared
-  content to it, while they held access keeps that access even after every
-  qualifying pin is later moved or deleted
-  (:meth:`PlaceAccessGrantManager.record_engagement`, called from
-  ``wiki_access.resolve_visible_wiki`` and
-  ``wiki_share.WikiShareService.share_from_pin``). A profile who never
-  engaged with a wiki loses it the moment their last qualifying pin is gone,
-  exactly as before this existed. Confirmed with Jess 2026-09-08 (P88):
-  permanent-on-view is intended, the same as split-family permanence above -
-  viewing a wiki once while access is legitimately held is enough to keep it
-  forever, even after the qualifying pin is later moved or deleted.
-"""
+"""Integration coverage for grandfathered access after a real-estate parcel split."""
 
 from __future__ import annotations
 

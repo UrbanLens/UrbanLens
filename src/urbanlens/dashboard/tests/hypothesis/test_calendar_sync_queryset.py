@@ -1,11 +1,4 @@
-"""Tests for TripCalendarLinkQuerySet.
-
-Part of the ongoing "every model gets its own queryset/manager" cleanup -
-TripCalendarLink (and GoogleCalendarAccount, covered by
-test_calendar_sync.py::GetCalendarAccountTests) were still on the bare
-default manager despite several genuinely duplicated call-site shapes across
-controllers/services/calendar_sync.py.
-"""
+"""Tests for TripCalendarLinkQuerySet."""
 
 from __future__ import annotations
 

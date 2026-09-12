@@ -1,9 +1,4 @@
-"""Tests for the iNaturalist panel's render_context(), fetch(), and gate().
-
-Regression coverage for linking to specific observations/area instead of
-iNaturalist's homepage -. Now sourced through REData's
-``/nature-observations/`` endpoint instead of a direct iNaturalist call.
-"""
+"""Tests for the iNaturalist panel's render_context(), fetch(), and gate()."""
 
 from __future__ import annotations
 

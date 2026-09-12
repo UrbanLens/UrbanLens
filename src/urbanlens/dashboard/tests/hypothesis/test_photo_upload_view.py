@@ -108,8 +108,7 @@ class PhotoUploadViewContentTypeTests(TestCase):
     def test_upload_within_max_file_size_allowed(self) -> None:
         settings_obj = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_obj.pk).update(max_upload_file_size_mb=1)
-        # A real JPEG, well under the 1MB cap set above. It has to be a real one
-        # now: the size check passes first, and then the bytes are inspected.
+        # It has to be a real one now: the size check passes first, and then the bytes are inspected.
         small_file = SimpleUploadedFile("photo.jpg", JPEG_BYTES, content_type="image/jpeg")
         response = self.client.post(_UPLOAD_URL, {"image": small_file})
         self.assertEqual(response.status_code, 201)

@@ -1,20 +1,4 @@
-"""Tests for the byte-level metadata stripper.
-
-``services.media.metadata_strip`` rewrites a container by walking its segments
-rather than decoding the image, so it is cheap enough to run inside a request -
-which is the point, since the alternative is writing the raw upload to
-``MEDIA_ROOT`` and cleaning it up after a Celery re-encode.
-
-That makes two properties load-bearing, and both are asserted for every format
-it handles:
-
-- the metadata really is gone (the whole reason to run it), and
-- the result is still a valid image with the same pixels (it is what gets
-  stored and served, and nothing decodes it first to find out).
-
-Anything it does not handle must return ``None``, meaning "leave it to the
-re-encode" - never a partially-rewritten file.
-"""
+"""Tests for the byte-level metadata stripper."""
 
 from __future__ import annotations
 

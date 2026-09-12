@@ -1,24 +1,4 @@
-"""Tests for PanelSource's JSON read interface (``api_kinds`` / ``api_payload``).
-
-The pin-detail panels are a plugin extension point, so the set of classes
-reaching this interface is open-ended and includes code this repository will
-never see. That makes two properties worth pinning down hard, because a
-regression in either is silent:
-
-1. **It fails closed.** A source that says nothing about the API is absent from
-   the API. Not "renders empty", not "dumps its cache row" - absent. A future
-   plugin author who never reads ``external_data.py`` must not be able to
-   publish whatever their ``fetch`` happened to cache by doing nothing.
-2. **The uniform base classes opt in on purpose, and only through their own
-   contracts.** ``InfoPanelSource`` derives its payload from ``render_context``
-   and ``GalleryMediaSource`` from ``media_items`` - and the info projection is
-   an allowlist, so a presentation-only context key never leaks.
-
-The rest covers the bulk readiness helper (which exists to kill an N+1 and is
-therefore tested for query *count*, not just correctness) and the hand-written
-payloads on the bespoke sources, each of which has to reproduce its web panel's
-own emptiness rule so the two surfaces agree on when a panel has nothing to say.
-"""
+"""Tests for PanelSource's JSON read interface (``api_kinds`` / ``api_payload``)."""
 
 from __future__ import annotations
 
@@ -107,12 +87,8 @@ class PanelApiFailClosedTests(SimpleTestCase):
     def test_imagery_carousels_are_deliberately_excluded(self) -> None:
         """Regression guard for the base64-slide payload-size decision.
 
-        Satellite and street-view slides carry base64 ``data:`` URIs fetched
-        server-side; several providers x ~5 slides is plausibly 5-15 MB in one
-        response, and the external API's throttle counts requests, not bytes.
-        They stay off the API until a signed slide-image proxy exists - if
-        someone "helpfully" wires them up, this fails.
-        """
+        They stay off the API until a signed slide-image proxy exists - if someone "helpfully" wires them up,
+        this fails."""
         for source in (SatellitePanelSource(), StreetViewPanelSource()):
             with self.subTest(source=source.key):
                 self.assertEqual(source.api_kinds, frozenset())
@@ -143,11 +119,9 @@ class PanelApiRegistryConsistencyTests(TestCase):
     def test_required_feature_is_only_set_where_the_web_gates_too(self) -> None:
         """The gated set is exactly EPA's nearby-facility list, today.
 
-        This is a "notice when it changes" test rather than a rule: adding a
-        gated panel is fine, but it has to be a deliberate edit here, because
-        ``PinController._NEARBY_RESEARCH_TABS`` needs the matching entry or the
-        web and the API will disagree about who may see it.
-        """
+        This is a "notice when it changes" test rather than a rule: adding a gated panel is fine, but it has to
+        be a deliberate edit here, because ``PinController._NEARBY_RESEARCH_TABS`` needs the matching entry or
+        the web and the API will disagree about who may see it."""
         gated = {key for key, source in panel_sources().items() if source.required_feature is not None}
         self.assertEqual(gated, {"epa_echo"})
 
@@ -187,10 +161,7 @@ class InfoPanelApiPayloadTests(TestCase):
     def test_presentation_only_context_keys_are_not_published(self) -> None:
         """Regression guard for the allowlist projection.
 
-        ``nested`` is a template layout flag. If the projection ever becomes a
-        straight copy of the render context, it - and anything else a plugin
-        stashes there - starts appearing in the API response.
-        """
+        ``nested`` is a template layout flag."""
         card = info_card_from_render_context(
             {"heading_name": "X", "nested": True, "internal_raw_response": {"secret": 1}}
         )
@@ -221,14 +192,9 @@ class GalleryMediaApiPayloadTests(TestCase):
     def test_items_serialize_field_for_field(self) -> None:
         """Every MediaItem field survives the trip to JSON.
 
-        ``content_type`` and ``author`` are included even when the provider
-        publishes neither: an API client deciding whether it can render an
-        item needs to see the field as empty rather than have to guess
-        whether its absence means "unknown" or "this server predates the
-        field". Asserting the whole dict field-for-field (rather than a
-        subset) is what makes adding a MediaItem field without deciding how
-        it serializes a test failure.
-        """
+        ``content_type`` and ``author`` are included even when the provider publishes neither: an API client
+        deciding whether it can render an item needs to see the field as empty rather than have to guess whether
+        its absence means "unknown" or "this server predates the field"."""
         item = {
             "url": "https://example.test/a.jpg",
             "thumb_url": "https://example.test/t.jpg",
@@ -260,10 +226,8 @@ class BoundaryApiPayloadTests(TestCase):
     def test_synthesized_circle_is_flagged_as_a_fallback(self) -> None:
         """Regression guard: a client must never draw the circle as a parcel line.
 
-        With no real geometry anywhere, ``resolve_for_pin`` synthesizes a
-        fixed-radius circle so the map has something to show. Emitting that
-        unflagged would assert a property boundary this app never looked up.
-        """
+        With no real geometry anywhere, ``resolve_for_pin`` synthesizes a fixed-radius circle so the map has
+        something to show."""
         payload = self.source.api_payload(self.pin)
         assert payload is not None
         property_side = payload[PanelApiKind.BOUNDARY.value]["property"]
@@ -308,12 +272,9 @@ class PanelReadinessTests(TestCase):
     def test_cache_backed_sources_cost_a_constant_number_of_queries(self) -> None:
         """The whole point: readiness for N panels is not N queries.
 
-        One query for the site's cache-age setting, one for the location's
-        fresh rows, and one more for the payloads of the panels that opt into a
-        content check (``inspects_content``) - those cannot answer "is there
-        anything to show" from a row's existence alone. Asking each source
-        individually is one query *per source*, on every pin detail render.
-        """
+        One query for the site's cache-age setting, one for the location's fresh rows, and one more for the
+        payloads of the panels that opt into a content check (``inspects_content``) - those cannot answer "is
+        there anything to show" from a row's existence alone."""
         cache_backed = [source for source in panel_sources().values() if hasattr(source, "cache_source")]
         self.assertGreater(len(cache_backed), 5)
         with self.assertNumQueries(3):
@@ -322,10 +283,8 @@ class PanelReadinessTests(TestCase):
     def test_the_content_check_does_not_scale_with_how_many_panels_use_it(self) -> None:
         """The property the count above is a proxy for.
 
-        A per-source payload fetch would reintroduce exactly the N+1 this
-        function exists to remove, so every opted-in source must be served by
-        the same single extra query.
-        """
+        A per-source payload fetch would reintroduce exactly the N+1 this function exists to remove, so every
+        opted-in source must be served by the same single extra query."""
         from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource
 
         cache_backed = [source for source in panel_sources().values() if isinstance(source, LocationCachePanelSource)]
@@ -355,15 +314,7 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         self.profile = baker.make(User).profile
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
         self.source = ParcelBuildingsPanelSource()
-        # Both buildings have to actually sit on the parcel. `building_rows`
-        # drops a building that falls outside the property's real boundary,
-        # and a boundary gets derived as soon as this pin has a child - so a
-        # "second building" parked 200km away (as this fixture used to be)
-        # silently vanished from the payload the moment a test added one,
-        # rather than being reported as the unpinned building it stands for.
-        # Tool Shed therefore sits at the parcel pin's own coordinates: inside
-        # any boundary derived from it, and far enough from the Powerhouse
-        # child pin not to be matched to it.
+        # Both buildings have to actually sit on the parcel.
         self.buildings = [
             {
                 "name": "Powerhouse",
@@ -422,13 +373,8 @@ class ParcelBuildingsApiPayloadTests(TestCase):
     def test_a_building_on_the_parent_pins_own_point_is_not_creatable(self) -> None:
         """Unpinned is not the same as creatable, and the count follows creatable.
 
-        This fixture's Tool Shed sits at the parcel pin's own coordinates, which
-        is not contrived - a parcel's coordinate is frequently one of its
-        buildings' centroids. ``resolve_child_pin_location`` refuses a second
-        pin of the same profile at one exact point, so the import would skip it.
-        Counting it advertised "add 2 buildings" where pressing the button
-        created 1 and silently dropped the other.
-        """
+        This fixture's Tool Shed sits at the parcel pin's own coordinates, which is not contrived - a parcel's
+        coordinate is frequently one of its buildings' centroids."""
         self._cache()
         payload = self.source.api_payload(self.pin)
         assert payload is not None
@@ -456,10 +402,8 @@ class ParcelBuildingsApiPayloadTests(TestCase):
     def test_the_count_matches_what_the_web_dialog_would_add(self) -> None:
         """The two surfaces must not answer this differently.
 
-        The web button asks ``missing_buildings``; this asks the same rule
-        through ``importable_building_indexes``. They were separate rules until
-        now, and drifted.
-        """
+        The web button asks ``missing_buildings``; this asks the same rule through
+        ``importable_building_indexes``."""
         from urbanlens.dashboard.services.pins import pin_restructure
 
         self._cache()
@@ -563,10 +507,8 @@ class CrisBuildingApiPayloadTests(TestCase):
     def test_declares_both_kinds(self) -> None:
         """Regression guard for the MRO trap.
 
-        ``CrisBuildingPanelSource`` inherits from an info base and a media
-        base; Python resolves ``api_kinds`` to the first, silently dropping the
-        media half, unless the class declares it explicitly.
-        """
+        ``CrisBuildingPanelSource`` inherits from an info base and a media base; Python resolves ``api_kinds``
+        to the first, silently dropping the media half, unless the class declares it explicitly."""
         self.assertEqual(self.source.api_kinds, frozenset({PanelApiKind.INFO, PanelApiKind.MEDIA}))
 
     def test_no_cache_row_yields_none(self) -> None:
@@ -827,10 +769,8 @@ class InfoCardContractTests(SimpleTestCase):
     def test_blank_scalars_normalize_to_none(self, heading_name: str) -> None:
         """Only truly empty strings normalize - whitespace is the source's business.
 
-        Trimming here would quietly diverge from what the web panel renders for
-        the same cached row, which is exactly the drift this contract exists to
-        prevent.
-        """
+        Trimming here would quietly diverge from what the web panel renders for the same cached row, which is
+        exactly the drift this contract exists to prevent."""
         card = info_card(heading_name=heading_name)
         self.assertEqual(card["heading_name"], heading_name or None)
 

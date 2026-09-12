@@ -32,11 +32,9 @@ from urbanlens.dashboard.services.undo.service import (
 def _expire(undo_action: UndoAction) -> None:
     """Push ``undo_action`` past its retention window, simulating elapsed time.
 
-    ``.update()`` bypasses the instance, so the caller's in-memory ``created``
-    (and therefore ``is_expired``) would still read fresh without the
-    refresh - production callers always re-fetch the row, so the staleness
-    is a test-fixture artifact, not something restore() needs to guard.
-    """
+    ``.update()`` bypasses the instance, so the caller's in-memory ``created`` (and therefore ``is_expired``)
+    would still read fresh without the refresh - production callers always re-fetch the row, so the staleness is
+    a test-fixture artifact, not something restore() needs to guard."""
     UndoAction.objects.filter(pk=undo_action.pk).update(
         created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1)
     )
@@ -402,17 +400,7 @@ class UndoClearViewTests(TestCase):
 class UndoDescriptionFitsItsColumnTests(TestCase):
     """A legally-named object must still be deletable.
 
-    `stash_for_undo` writes `handler.describe(instances)` into
-    `UndoAction.object_repr`, a `CharField(255)`. Several of the names that
-    description embeds are themselves 255 characters - `Label.name`, `Pin.name` -
-    and `describe()` wraps them in fixed text. So a name the app fully permits
-    produced a `DataError` on **delete**: the user could create the object and
-    then never remove it, and the failure surfaced as a 500 rather than anything
-    naming the cause.
-
-    Found by the write-route smoke sweep, which hit `label.delete` with a
-    baker-generated long name (PROBLEMS.md, 2026-08-16).
-    """
+    `stash_for_undo` writes `handler.describe(instances)` into `UndoAction.object_repr`, a `CharField(255)`."""
 
     def setUp(self) -> None:
         super().setUp()

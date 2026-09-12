@@ -1,20 +1,4 @@
-"""The direct-Nominatim geocode fallbacks go through NominatimGateway, not raw geopy.
-
-Two call sites fell back to constructing geopy's ``Nominatim`` client
-directly - ``geocode_resolution.geocode_address`` with
-``user_agent="geoapiExercises"`` (the copy-pasted tutorial string Nominatim's
-operators block outright) and ``controllers/settings.geocode_address`` with
-its own ad-hoc agent. Both bypassed the project's rate limiter, call logging
-and timeout injection while ``NominatimGateway`` (rate-limited, logged,
-properly identified, 1-call/minute budget enforced app-wide) sat in the same
-package. See the 2026-08-15 STATUS entry in
-``docs/reports/2026-08-11-codebase-audit.md``.
-
-The error contract improves as a side effect: geopy's ``GeocoderTimedOut``/
-``GeocoderUnavailable`` used to escape to callers that only handle
-``(None, None)``; the gateway returns ``[]`` on failure, which resolves to
-the callers' own clean "couldn't convert address" paths.
-"""
+"""The direct-Nominatim geocode fallbacks go through NominatimGateway, not raw geopy."""
 
 from __future__ import annotations
 
@@ -59,10 +43,8 @@ class GeocodeResolutionFallbackTests(SimpleTestCase):
     def test_neither_fallback_constructs_geopy_nominatim(self) -> None:
         """The banned tutorial user agent (and raw geopy geocoding) must not return.
 
-        A source-text assertion rather than a behavioural one, deliberately:
-        the failure mode being guarded is someone re-adding the "simple"
-        direct client in either module, which no mock-based test would see.
-        """
+        A source-text assertion rather than a behavioural one, deliberately: the failure mode being guarded is
+        someone re-adding the "simple" direct client in either module, which no mock-based test would see."""
         import urbanlens.dashboard.controllers.settings as settings_controller
 
         for module in (geocode_resolution, settings_controller):

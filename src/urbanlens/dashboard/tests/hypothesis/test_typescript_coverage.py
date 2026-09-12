@@ -1,15 +1,4 @@
-"""A tsconfig glob has to mean what TypeScript means by it.
-
-`bin/check_typescript_coverage.py` decides whether a file is checked by
-matching it against each project's `include`/`exclude` globs itself, rather than
-starting a compiler to ask. That is only worth doing if the translation is
-right: a glob read as broader than TypeScript reads it silently reports a file
-as covered when no project compiles it, which is the exact failure the check
-exists to catch, restored one level up.
-
-The three wildcards under test are the ones TypeScript documents - `**` for any
-number of path segments, `*` within one segment, `?` for one character.
-"""
+"""A tsconfig glob has to mean what TypeScript means by it."""
 
 from __future__ import annotations
 

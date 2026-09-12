@@ -1,20 +1,4 @@
-"""Vision and image classification go through ai-inference, not a provider SDK.
-
-The vision migration's actual claim, in four parts:
-
-1. ``services/ai/vision.py`` builds no provider client and reads no provider
-   credential - it hands an :class:`ImagePart` to the inference client like
-   every other AI feature (:class:`VisionRoutingTests`,
-   :class:`VisionSourceTests`).
-2. The wire schema carries an image as inline base64, never a URL the
-   inference tier would have to fetch, and every adapter translates it into
-   its own provider's shape (:class:`ImageWireShapeTests`).
-3. ``policy.py`` bounds what a caller may send: image size, image count, and
-   which providers accept images or offer classification at all
-   (:class:`VisionPolicyTests`).
-4. Classification is its own call, not a chat completion wearing one
-   (:class:`ClassifyTests`).
-"""
+"""Vision and image classification go through ai-inference, not a provider SDK."""
 
 from __future__ import annotations
 
@@ -46,10 +30,6 @@ class VisionSourceTests(SimpleTestCase):
     """vision.py never touches a provider SDK or credential again."""
 
     def test_imports_no_provider_sdk(self) -> None:
-        # The specific regression: this module used to do `from openai import
-        # OpenAI` and build a client with settings.openai_api_key, which is a
-        # second provider-key surface on the ordinary worker - the exact thing
-        # ai-inference exists to remove.
         tree = ast.parse(_VISION_PATH.read_text(encoding="utf-8"))
         imported: set[str] = set()
         for node in ast.walk(tree):

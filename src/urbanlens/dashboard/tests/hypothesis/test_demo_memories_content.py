@@ -1,10 +1,4 @@
-"""The Memories-page content: routes, markup maps, shares, check-ins, unlogged visits, on-this-day.
-
-Same setup pattern as test_demo_social.py - a real location pool so every
-code path actually executes - but focused on the surfaces this batch of
-work added, and on the Memories queries themselves rather than just the
-models each page reads from.
-"""
+"""The Memories-page content: routes, markup maps, shares, check-ins, unlogged visits, on-this-day."""
 
 from __future__ import annotations
 

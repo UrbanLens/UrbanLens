@@ -1,23 +1,4 @@
-"""Run callables against the database at genuinely the same time.
-
-Every lost-update fixed during the 2026-08-17 audit - the pay-what-you-want
-ledger, the Stripe sync, wiki edits, settings forms, the map quick-edit, round
-ratings - was a read-modify-write that only misbehaves when two writers overlap.
-Most of them can be demonstrated by driving two stale snapshots in sequence, but
-a *lock* cannot: `select_for_update` does nothing observable on one connection,
-so proving it works needs real threads on real connections.
-
-That means ``TransactionTestCase`` rather than the project's usual ``TestCase``:
-the threads have to see each other's committed rows, which a single wrapping
-transaction hides.
-
-One trap this encodes, learned the hard way. A race test seeded with a
-brand-new parent row exercises ``get_or_create``'s *insert* path, where the
-unique index blocks the second thread until the first commits - serialising the
-threads by accident and hiding the very defect under test. The damaging path is
-the ordinary one, where the row already exists and both threads merely SELECT
-it. Seed the row first; :func:`run_concurrently` cannot check that for you.
-"""
+"""Run callables against the database at genuinely the same time."""
 
 from __future__ import annotations
 
@@ -37,21 +18,18 @@ DEFAULT_TIMEOUT_SECONDS = 30
 def run_concurrently(callables: Sequence[Callable[[], Any]], *, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> list[Any]:
     """Run every callable on its own thread, released together at a barrier.
 
-    Each thread closes its database connections on the way out; leaking them
-    keeps the test database busy and makes teardown hang.
+    Each thread closes its database connections on the way out; leaking them keeps the test database busy and
+    makes teardown hang.
 
     Args:
-        callables: The work to run simultaneously. Two is the usual case.
+        callables: The work to run simultaneously.
         timeout: Seconds to wait, both at the barrier and when joining.
 
     Returns:
         Each callable's return value, in the order given.
 
     Raises:
-        AssertionError: A thread raised, or did not finish within *timeout*.
-            The original exceptions are attached to the message, since a race
-            that errors is a different bug from a race that corrupts.
-    """
+        AssertionError: A thread raised, or did not finish within *timeout*."""
     barrier = threading.Barrier(len(callables), timeout=timeout)
     results: list[Any] = [None] * len(callables)
     failures: list[BaseException] = []

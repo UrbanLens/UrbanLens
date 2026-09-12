@@ -1,34 +1,4 @@
-"""Bearer-credential access to the Google Maps panel image proxy.
-
-The proxy serves *bytes*, from an ``<img src>``, and was session-only - so
-every panel image on a pin was simply unreachable to the mobile client, which
-holds an API credential and no session cookie at all. It now shares the
-byte-serving authentication rule in
-:class:`~urbanlens.dashboard.controllers.media_auth.CredentialOrSessionMediaMixin`
-with the media gate.
-
-The four properties that matter, and why each is here rather than left to the
-mixin's own tests (which exercise the rule through a throwaway view, and so
-cannot see how *this* view sequences it):
-
-1. **The URL signature check still runs first.** ``photo_name`` is entirely
-   client-controlled and the proxy will fetch it from Google; the signature is
-   what stops the endpoint being an open image-fetching relay against the
-   site's own Places quota. If authentication were to run first - or if the
-   signature check were moved after it - a valid credential would become a
-   licence to fetch arbitrary photo references, which is precisely the failure
-   the signature exists to prevent.
-2. **Authentication runs before the cache is consulted.** The cache lookup
-   returns real bytes; leaving it ahead of the gate would let anyone holding a
-   signed URL pull previously-fetched imagery with no credential at all.
-3. **An unscoped credential gets 404, not 403** - the no-oracle rule the rest
-   of the media surface follows.
-4. **The external-lookups opt-out follows the credential's owner.** The check
-   used to read ``request.user.profile``, which on a credential-authenticated
-   request is the anonymous user and would have raised; it must consult the
-   profile the credential resolved to, so a user who opted out of external
-   lookups stays opted out through their own API client.
-"""
+"""Bearer-credential access to the Google Maps panel image proxy."""
 
 from __future__ import annotations
 
@@ -63,8 +33,7 @@ def _signed_url(photo_name: str = _PHOTO_NAME) -> str:
         photo_name: The raw (unquoted) Places photo reference.
 
     Returns:
-        The proxy path with a valid ``sig`` query parameter.
-    """
+        The proxy path with a valid ``sig`` query parameter."""
     from urbanlens.dashboard.controllers.media_proxy import sign_photo_name
 
     return (
@@ -79,10 +48,8 @@ class MediaProxyCredentialAccessTests(TestCase):
     def setUp(self) -> None:
         """A key-holding user, an empty cache, and a configured Places key.
 
-        The first user in a fresh database is auto-promoted to bootstrap site
-        admin; a throwaway user absorbs that so the credential owner under test
-        is an ordinary account.
-        """
+        The first user in a fresh database is auto-promoted to bootstrap site admin; a throwaway user absorbs
+        that so the credential owner under test is an ordinary account."""
         super().setUp()
         baker.make(User)
         self.user = baker.make(User)
@@ -98,12 +65,10 @@ class MediaProxyCredentialAccessTests(TestCase):
         """Issue an API key carrying exactly *scopes*.
 
         Args:
-            scopes: The scopes to store on the key row.
-            user: The key's owner; defaults to the fixture user.
+            scopes: The scopes to store on the key row. user: The key's owner; defaults to the fixture user.
 
         Returns:
-            The raw (unhashed) key value, for use as a bearer token.
-        """
+            The raw (unhashed) key value, for use as a bearer token."""
         api_key, raw = generate_api_key(user or self.user, "Panel image client")
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=[scope.value for scope in scopes])
         return raw
@@ -112,13 +77,10 @@ class MediaProxyCredentialAccessTests(TestCase):
         """Fetch *url*, optionally as a bearer-credential request.
 
         Args:
-            url: The proxy URL to fetch.
-            raw_key: A raw API key to present as a bearer token; omitted for an
-                anonymous (no ``Authorization`` header) request.
+            url: The proxy URL to fetch. raw_key: A raw API key to present as a bearer token; omitted for an anonymous (no ``Authorization`` header)...
 
         Returns:
-            The proxy's response.
-        """
+            The proxy's response."""
         headers = {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"} if raw_key else {}
         return self.client.get(url, **headers)
 
@@ -134,11 +96,9 @@ class MediaProxyCredentialAccessTests(TestCase):
     def test_credential_fetch_is_charged_to_the_media_throttle_bucket(self) -> None:
         """One screen of a gallery is dozens of these; unmetered they are free bandwidth.
 
-        Asserts the ``external_api_media`` throttle is the one consulted rather
-        than counting requests: how big the budget is belongs to the throttle's
-        own tests, while what matters here is that this view participates in it
-        at all.
-        """
+        Asserts the ``external_api_media`` throttle is the one consulted rather than counting requests: how big
+        the budget is belongs to the throttle's own tests, while what matters here is that this view
+        participates in it at all."""
         raw_key = self._key_with_scopes([ApiKeyScope.MEDIA_READ])
         with (
             mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")),
@@ -206,11 +166,9 @@ class MediaProxyOrderingTests(TestCase):
     def test_signature_is_checked_before_the_credential_is_even_read(self) -> None:
         """A credential is not a licence to fetch arbitrary photo references.
 
-        The signature is the only thing binding a proxy URL to a photo name the
-        server itself issued; if authentication were allowed to run first and
-        satisfy the request, any key holder could burn the site's Places quota
-        on guessed or copied references.
-        """
+        The signature is the only thing binding a proxy URL to a photo name the server itself issued; if
+        authentication were allowed to run first and satisfy the request, any key holder could burn the site's
+        Places quota on guessed or copied references."""
         unsigned = reverse("media.google_maps_photo", args=[quote(_PHOTO_NAME, safe="")])
         with (
             mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked,
@@ -226,11 +184,9 @@ class MediaProxyOrderingTests(TestCase):
     def test_anonymous_request_cannot_read_an_already_cached_photo(self) -> None:
         """Authentication runs ahead of the cache, which serves real bytes.
 
-        Regression guard for the obvious way to write this change: leaving the
-        gate where the old profile lookup was (below the cache read) would turn
-        a signed URL alone into anonymous access to any photo someone else had
-        already fetched.
-        """
+        Regression guard for the obvious way to write this change: leaving the gate where the old profile lookup
+        was (below the cache read) would turn a signed URL alone into anonymous access to any photo someone else
+        had already fetched."""
         self.client.force_login(self.user)
         with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")):
             self.assertEqual(self.client.get(_signed_url()).status_code, HTTPStatus.OK)

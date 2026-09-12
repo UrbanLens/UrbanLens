@@ -1,37 +1,4 @@
-"""The AI sandbox boundary (batch 1): urbanlens_ai stays Django-free, and every
-provider call is either policy-checked and routed through it, or explicitly
-refused.
-
-Mirrors test_sandbox_isolation.py's shape for the same reason: several
-separable claims, each of which fails differently.
-
-1. urbanlens_ai never imports django or urbanlens, even transitively
-   (:class:`UrbanlensAiIsolationTests`) - the whole point of the split.
-2. check_direct_inference enforces the role/policy matrix
-   (:class:`DirectInferenceGuardTests`), and LocalInferenceClient actually
-   calls it before ever touching a provider key
-   (:class:`LocalInferenceClientGuardTests`).
-3. policy.py refuses a server-side tool, an unlisted model, and an
-   over-cap max_tokens (:class:`PolicyTests`) - the mechanical checks inside
-   ai-inference, independent of the egress-proxy allowlist that is the real
-   network boundary.
-4. docker-compose.yml's topology matches what this batch actually wires up
-   (:class:`ComposeTopologyTests`) - ai-inference holds no DB/cache/secret
-   credential and no volumes, and egress-proxy is never reachable from
-   app_network.
-5. No module under ``services/ai/tools/`` imports REData, a
-   ``*_resolution`` chokepoint, or a raw HTTP library
-   (:class:`ToolsPackageImportTests`) - the code-level half of the "no
-   REData, no web" guarantee (the network is the real boundary; this is
-   the fail-fast rail that catches a violation even if a reviewer misses it
-   and ``ai_network`` somehow didn't).
-6. The egress-proxy allowlist (``config/egress/filter``) never carries a
-   REData host, and does carry every host a shipped provider adapter or
-   tool gateway actually calls (:class:`EgressFilterTests`) - the allowlist
-   is the real network boundary the other five claims are defense in depth
-   for, so a host silently missing here is the sandbox stack failing at
-   runtime with nothing in the test suite having caught it beforehand.
-"""
+"""The AI sandbox boundary (batch 1): urbanlens_ai stays Django-free, and every provider call is either policy-checked and routed through it, or explicitly refused."""
 
 from __future__ import annotations
 
@@ -105,11 +72,9 @@ class UrbanlensAiIsolationTests(SimpleTestCase):
 def _subprocess_env() -> dict[str, str]:
     """The current environment, plus what the subprocess needs to import urbanlens_ai.
 
-    Starting from a *copy* of the real environment (not a minimal replacement)
-    so Python's own startup - DLL search, temp dirs, and the rest of what a
-    bare interpreter needs on Windows - still works; only PYTHONPATH and the
-    inference token are added.
-    """
+    Starting from a *copy* of the real environment (not a minimal replacement) so Python's own startup - DLL
+    search, temp dirs, and the rest of what a bare interpreter needs on Windows - still works; only PYTHONPATH
+    and the inference token are added."""
     import os
     import pathlib
 
@@ -304,11 +269,9 @@ def _compose() -> dict[str, Any]:
 class ComposeTopologyTests(SimpleTestCase):
     """docker-compose.yml's AI sandbox topology matches what batch 1 actually wires up.
 
-    PyYAML resolves the ``<<:`` merge-key anchors (x-app-env, x-app-build,
-    ...) the same way Compose does; ``${VAR}`` stays a literal string in
-    both, so these assertions check structure and literal values, never
-    values Compose would only fill in at runtime.
-    """
+    PyYAML resolves the ``<<:`` merge-key anchors (x-app-env, x-app-build, ...) the same way Compose does;
+    ``${VAR}`` stays a literal string in both, so these assertions check structure and literal values, never
+    values Compose would only fill in at runtime."""
 
     def test_ai_inference_never_loads_the_host_env_file(self) -> None:
         # It does take an env_file now - .env.ai, holding the provider keys
@@ -390,12 +353,6 @@ class ComposeTopologyTests(SimpleTestCase):
             self.assertEqual(shared, set(), f"egress-proxy shares {shared} with {service}")
 
     def test_egress_proxy_starts_as_the_tinyproxy_user(self) -> None:
-        # Not cosmetic: cap_drop: [ALL] means the container can't setuid/setgid
-        # itself away from root at startup, so tinyproxy's own User/Group
-        # directives can't do the drop either - confirmed live on chiron
-        # (2026-09-02): without this, tinyproxy crash-loops with "Unable to
-        # change to group", and neither this repo's tests nor a config-only
-        # review catches it - only an actual `docker compose up` does.
         compose = _compose()
         self.assertEqual(compose["services"]["egress-proxy"]["user"], "tinyproxy:tinyproxy")
 
@@ -586,13 +543,9 @@ def _egress_filter_lines() -> list[str]:
 class EgressFilterTests(SimpleTestCase):
     """The egress-proxy allowlist matches what ai-worker's own tools actually call.
 
-    A host missing here isn't a code-level failure - it's ``ai-worker`` (or
-    ``ai-inference``) silently unable to reach a host that's genuinely on the
-    allowlist's intended set, discovered only once the sandbox stack is
-    actually running with FilterDefaultDeny enforcing it. This is what
-    would have caught ``distance_and_drive_time``/``get_weather`` shipping
-    without their hosts ever being added here.
-    """
+    A host missing here isn't a code-level failure - it's ``ai-worker`` (or ``ai-inference``) silently unable to
+    reach a host that's genuinely on the allowlist's intended set, discovered only once the sandbox stack is
+    actually running with FilterDefaultDeny enforcing it."""
 
     def test_no_redata_host_is_ever_allowed(self) -> None:
         lines = _egress_filter_lines()
@@ -605,12 +558,7 @@ class EgressFilterTests(SimpleTestCase):
         expected_hosts = {
             "api.anthropic.com",
             "api.openai.com",
-            # Both Cloudflare Workers AI hosts. A deployment picks one with
-            # UL_CLOUDFLARE_WORKER_AI_ENDPOINT, and chiron's picks the AI
-            # Gateway - which this list originally missed, so the default
-            # vision provider and the only image classifier were both
-            # unreachable while every test here passed. That is the exact
-            # failure this class's docstring describes.
+            # Both Cloudflare Workers AI hosts.
             "api.cloudflare.com",
             "gateway.ai.cloudflare.com",
             "router.project-osrm.org",
@@ -640,10 +588,8 @@ _FORBIDDEN_IMPORT_ROOTS = {"requests", "httpx", "urllib"}
 def _imported_module_names(path: pathlib.Path) -> set[str]:
     """Every module named in a top-level or function-local import in ``path``.
 
-    ``ast.walk`` (not just ``tree.body``) so a local import inside a function
-    body - the pattern every tool module actually uses to defer Django model
-    imports - is caught the same as a module-level one.
-    """
+    ``ast.walk`` (not just ``tree.body``) so a local import inside a function body - the pattern every tool
+    module actually uses to defer Django model imports - is caught the same as a module-level one."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     names: set[str] = set()
     for node in ast.walk(tree):
@@ -665,11 +611,9 @@ def _is_forbidden_import(module_name: str) -> bool:
 class ToolsPackageImportTests(SimpleTestCase):
     """No module under ``services/ai/tools/`` may import REData or raw HTTP libraries directly.
 
-    ``redata_configured()`` already returns ``False`` under ``ProcessRole.AI``
-    (defense in depth) and the network topology is the real boundary - this
-    is the fastest-failing rail: a violation here is a lint-speed failure
-    instead of something only a running sandbox or a reviewer catches.
-    """
+    ``redata_configured()`` already returns ``False`` under ``ProcessRole.AI`` (defense in depth) and the
+    network topology is the real boundary - this is the fastest-failing rail: a violation here is a lint-speed
+    failure instead of something only a running sandbox or a reviewer catches."""
 
     def test_no_tool_module_imports_redata_resolution_or_raw_http(self) -> None:
         from urbanlens.dashboard.services.ai import tools

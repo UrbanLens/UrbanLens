@@ -1,13 +1,4 @@
-"""Tests for archive_extractor service - ZIP/TGZ extraction with security checks.
-
-Covers:
-- is_archive() magic-byte detection
-- validate_content_type() for JSON, location_history, KML, CSV, My Activity HTML formats
-- extract_archive() for well-formed ZIP and TGZ archives
-- Security: path traversal, symlink skipping, per-file size limit, total size limit,
-  file count limit, compression-ratio (zip bomb) detection
-- _safe_basename() and _extension() helpers
-"""
+"""Tests for archive_extractor service - ZIP/TGZ extraction with security checks."""
 
 from __future__ import annotations
 
@@ -207,12 +198,8 @@ class ValidateContentTypeTests(SimpleTestCase):
     def test_csv_with_utf8_bom_and_only_latitude_longitude_columns(self):
         """Excel's UTF-8 CSV export prefixes a BOM on the first header cell.
 
-        When that first cell is ``latitude``, the BOM used to glue itself to the
-        column name (``\\ufefflatitude``), so format sniffing missed both
-        coordinate columns and rejected the whole file. Wider CSVs that put
-        ``name`` (or anything else) before the coordinate columns still worked,
-        which made the failure look like "lat/lng-only CSVs aren't supported".
-        """
+        Wider CSVs that put ``name`` (or anything else) before the coordinate columns still worked, which made
+        the failure look like "lat/lng-only CSVs aren't supported"."""
         data = "\ufefflatitude,longitude\n42.3601,-71.0589".encode("utf-8")
         self.assertEqual(validate_content_type("export.csv", data), "csv")
 
@@ -416,9 +403,6 @@ class ExtractZipTests(SimpleTestCase):
         self.assertEqual(names, {"track.gpx", "geom.wkt", "export.osm"})
 
     def test_symlink_entries_skipped_in_zip(self):
-        # _extract_zip's symlink check is separate from tarfile's (it reads the
-        # Unix mode bits out of external_attr), and was previously only
-        # exercised on the TGZ path - this covers the ZIP branch directly.
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
             zf.writestr("real.json", '{"features":[]}')
@@ -536,16 +520,8 @@ class ExtractArchiveDispatchTests(SimpleTestCase):
 class SharedExtractionBudgetTests(SimpleTestCase):
     """One upload gets one allowance, however many archives it nests.
 
-    `_MAX_UNCOMPRESSED_BYTES` / `_MAX_FILE_COUNT` are per *archive*, and the
-    upload-preview controller calls `extract_archive` again for every nested
-    archive it finds. Each call therefore started a fresh allowance, so an
-    outer ZIP holding N nested bombs bought N times the cap - the limit bound
-    each call and nothing bound the total, all inside one request.
-
-    These use tiny explicit budgets rather than the 2 GB default: the property
-    under test is that the allowance is *shared and consumed*, which a small
-    budget demonstrates exactly as well and in milliseconds.
-    """
+    `_MAX_UNCOMPRESSED_BYTES` / `_MAX_FILE_COUNT` are per *archive*, and the upload-preview controller calls
+    `extract_archive` again for every nested archive it finds."""
 
     def _zip(self, entries: dict[str, bytes]) -> bytes:
         buf = io.BytesIO()
@@ -603,13 +579,8 @@ class SharedExtractionBudgetTests(SimpleTestCase):
 class DeclaredSizeIsNotAnAttackVectorTests(SimpleTestCase):
     """Checked, and false: an understated `file_size` truncates, it does not overrun.
 
-    Charging the cumulative budget against the *declared* size looks like it
-    should be forgeable - the declaration is attacker-supplied. It is not:
-    CPython's `zipfile` bounds a read by `file_size` and then verifies the
-    CRC, so a lying header yields a short read and a `BadZipFile`, never more
-    bytes than declared. This is recorded as a test rather than a note because
-    the reasoning depends on CPython internals that could change.
-    """
+    Charging the cumulative budget against the *declared* size looks like it should be forgeable - the
+    declaration is attacker-supplied."""
 
     def test_understating_the_declared_size_cannot_smuggle_bytes_past_the_cap(self) -> None:
         payload = b"A" * (5 * 1024 * 1024)

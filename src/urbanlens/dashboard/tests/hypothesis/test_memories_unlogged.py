@@ -1,11 +1,4 @@
-"""Tests for the Memories "log your visits" flow.
-
-Covers the queryset that finds pins marked visited without a dated record
-(``PinQuerySet.visited_without_record``), the service that surfaces them
-(``unlogged_visited_pins``), and the view that logs/edits those visits
-(``MemoriesVisitView``). All require the database because a Pin's coordinates
-live on its linked PostGIS-backed Location.
-"""
+"""Tests for the Memories "log your visits" flow."""
 
 from __future__ import annotations
 

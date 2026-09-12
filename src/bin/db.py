@@ -22,19 +22,15 @@ logger = logging.getLogger(__name__)
 # The project root: src/bin/db.py → src/ → project root
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
-# Data/log defaults are relative to the src/ directory (original behaviour).
 DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Default path to the data directory, which we pass directly to postgres
 DEFAULT_DATA_PATH = os.environ.get("URBANLENS_DB_DATA_PATH", f"{DIR}/pgsql/data")
-# Default path to the logfile we want to use.
 DEFAULT_LOG_PATH = os.environ.get("URBANLENS_LOG_PATH", f"{DIR}/pgsql/pgsql.log")
-# Command to use to interact with the DB. This must be in our path.
 EXE = os.environ.get("URBANLENS_POSTGRES_BIN", "pg_ctl")
 
 
 def _resolve_executable(name: str) -> str:
-    """Return an absolute executable path, failing closed when it is unavailable."""
+    """Return an absolute executable path, failing closed when unavailable."""
     resolved = which(name) if not os.path.isabs(name) else name
     if resolved is None:
         raise FileNotFoundError(f'Required executable not found on PATH: "{name}"')
@@ -60,15 +56,13 @@ class Db:
 
     @log_path.setter
     def log_path(self, user_input_path: str) -> None:
-        """
-        Sets the log path. Assumes that input_path is user input and sanitizes it accordingly.
+        """Sanitize and set the log path.
 
         Args:
-            user_input_path (str): The path provided via user input to sanitize and set.
+            user_input_path: User-supplied path.
 
         Returns:
-            None
-
+            None.
         """
         self._log_path = self.sanitize_path(user_input_path)
 
@@ -78,15 +72,13 @@ class Db:
 
     @data_path.setter
     def data_path(self, user_input_path: str) -> None:
-        """
-        Sets the data directory path. Assumes that input_path is user input and sanitizes it accordingly.
+        """Sanitize and set the data directory path.
 
         Args:
-            user_input_path(str): The path provided via user input to sanitize and set.
+            user_input_path: User-supplied path.
 
         Returns:
-            None
-
+            None.
         """
         self._data_path = self.sanitize_path(user_input_path)
 
@@ -100,33 +92,22 @@ class Db:
 
     @property
     def socket_dir(self) -> Path:
-        """Local directory for postgres socket/lock files (avoids /var/run/postgresql permission issues)."""
+        """Directory for postgres socket/lock files."""
         return Path(self._data_path).parent / "tmp" / "socket"
 
     def __init__(self, data_path: str = DEFAULT_DATA_PATH, log_path: str = DEFAULT_LOG_PATH):
-        """
-        Sets up our Db object with config options we'll use for this run.
+        """Set up the Db object.
 
         Args:
-            data_path (str, optional):
-                The data directory path to use, which is passed directly to Postgres.
-                Note: This is sanitized and only accepts these characters: a-zA-Z0-9/_.-
-                On windows, this also accepts colons and backslashes.
-                Defaults to the DEFAULT_DATA_PATH constant.
-            log_path:
-                The logfile we want Postgres to use.
-                Note: This is sanitized and only accepts these characters: a-zA-Z0-9/_.-
-                On windows, this also accepts colons and backslashes.
-                Defaults to the DEFAULT_LOG_PATH constant.
+            data_path: Postgres data directory (sanitized).
+            log_path: Postgres log file (sanitized).
 
         Raises:
-            ValueError: If the config options provided are not valid, or the files they reference are not found.
-            FileNotFoundError: If the postgres executable cannot be found.
-
+            ValueError: If paths are invalid.
+            FileNotFoundError: If the postgres executable is missing.
         """
         load_dotenv(ROOT_DIR / ".env")
 
-        # Validation
         if not os.path.isdir(data_path):
             raise ValueError(f'Data path not found: "{data_path}"')
         if not os.path.isfile(log_path):
@@ -134,7 +115,6 @@ class Db:
         if which(EXE) is None and not os.path.exists(EXE):
             raise FileNotFoundError(f'DB executable not found. Is "{EXE}" in your path?')
 
-        # Set our paths. Note: This calls the property setter, which sanitizes them.
         self.data_path = data_path
         self.log_path = log_path
 
@@ -153,16 +133,13 @@ class Db:
         """Build and run a pg_ctl command.
 
         Args:
-            command (str): The pg_ctl subcommand (start, stop, status, restart, ...).
-            with_server_opts (bool): When True, pass socket dir and port via -o so the
-                server process uses them.  Should be True for start/restart only.
-            pg_wait (bool): When True, pass -w to pg_ctl so it blocks until the server
-                is ready to accept connections.
+            command: The pg_ctl subcommand.
+            with_server_opts: Pass socket dir/port (start/restart only).
+            pg_wait: Block until ready.
             **kwargs: Forwarded to subprocess.run.
 
         Returns:
-            subprocess.CompletedProcess: The completed process result.
-
+            The completed process result.
         """
         cmd = [_resolve_executable(EXE), "-D", self.data_path, "-l", self.log_path]
         if pg_wait:
@@ -176,15 +153,14 @@ class Db:
         return subprocess.run(cmd, **kwargs)  # noqa: PLW1510  # nosec B603
 
     def execute_sql(self, sql: str, database: str | None = None) -> int:
-        """Run a SQL statement via psql and return the exit code.
+        """Run SQL via psql; return the exit code.
 
         Args:
-            sql (str): The SQL statement to execute.
-            database (str | None): Database to connect to; defaults to self.database.
+            sql: The SQL statement to execute.
+            database: Database to connect to; defaults to self.database.
 
         Returns:
-            int: psql exit code (0 on success).
-
+            psql exit code (0 on success).
         """
         cmd = [
             _resolve_executable(PSQL_EXE),
@@ -298,15 +274,13 @@ class Db:
             time.sleep(5)
 
     def is_running(self) -> bool:
-        """
-        Determines if the postgres server is running, without printing anything to stdout.
+        """Return True when the server is running.
 
         Returns:
-            bool: True if the server is running, False otherwise.
+            True if running, False otherwise.
 
         Raises:
-            FileNotFoundError: If postgres is not able to find the data directory
-
+            FileNotFoundError: If the data directory is missing.
         """
         child = self._pg_ctl("status", check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if child.returncode == 4:
@@ -314,18 +288,13 @@ class Db:
         return child.returncode == 0
 
     def sanitize_path(self, user_input_path: str) -> str:
-        """
-        Takes arbitrary user input, and sanitizes it to prevent injection attacks.
-
-        NOTE: The return value from this function will generally be passed directly to the command line,
-        so we must be especially careful with what we return.
+        """Sanitize user input for shell use.
 
         Args:
-            user_input_path (str): The user input to turn into a path
+            user_input_path: The user input to turn into a path.
 
         Returns:
-            str: The sanitized path
-
+            The sanitized path.
         """
         if os.name == "nt":
             return re.sub(r"[^a-zA-Z0-9:/\\_.-]", "", user_input_path)
@@ -335,11 +304,10 @@ class Db:
         """Dispatch to the method matching the action name.
 
         Args:
-            action (Actions): The action to run.
+            action: The action to run.
 
         Raises:
             SystemExit: If the action is unknown.
-
         """
         method = getattr(self, action.value, None)
         if method is None or not callable(method):
@@ -349,14 +317,10 @@ class Db:
 
 
 class DbInitializer:
-    """Handles first-time database setup: create role, create DB, enable PostGIS, run migrations."""
+    """First-time setup: role, DB, PostGIS, migrations."""
 
     def __init__(self):
-        """Read connection parameters from environment variables.
-
-        Defaults match Django settings/base.py so behaviour is consistent
-        whether the caller sets the env vars or not.
-        """
+        """Read connection parameters from the environment."""
         load_dotenv(ROOT_DIR / ".env")
         self.db_host = os.environ.get("UL_DB_HOST", "localhost")
         self.db_port = os.environ.get("UL_DB_PORT", "5432")
@@ -365,17 +329,14 @@ class DbInitializer:
         self.db_pass = os.environ.get("UL_DB_PASS", "")
 
     def run(self) -> None:
-        """Run the full database initialisation sequence.
-
-        Steps: create .pgpass → ensure role exists → create DB + enable PostGIS → run migrations.
-        """
+        """Run the full initialisation sequence."""
         self.create_pgpass()
         self._ensure_role()
         self.init_db()
         self.run_migrations()
 
     def create_pgpass(self) -> None:
-        """Write a ~/.pgpass entry so psql commands don't prompt for a password."""
+        """Write ~/.pgpass so psql doesn't prompt."""
         pgpass = Path(os.path.expanduser("~/.pgpass"))
         if pgpass.exists():
             logger.debug(".pgpass file already exists.")
@@ -389,7 +350,7 @@ class DbInitializer:
             raise
 
     def _psql_env(self) -> dict[str, str]:
-        """Return an env dict with PGPASSWORD set for psql subprocesses."""
+        """Env dict with PGPASSWORD set."""
         env = os.environ.copy()
         env["PGPASSWORD"] = self.db_pass
         return env
@@ -401,16 +362,15 @@ class DbInitializer:
         check: bool = True,
         variables: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
-        """Run a SQL statement via psql against the maintenance database.
+        """Run SQL via psql.
 
         Args:
-            sql (str): The SQL statement to execute.
-            database (str | None): Database to connect to; defaults to 'postgres' maintenance DB.
-            check (bool): If True, raise CalledProcessError on non-zero exit.
+            sql: The SQL statement to execute.
+            database: Database to connect to; defaults to maintenance DB.
+            check: Raise on non-zero exit.
 
         Returns:
-            subprocess.CompletedProcess: The completed process result.
-
+            The completed process result.
         """
         cmd = [
             _resolve_executable(PSQL_EXE),
@@ -429,7 +389,7 @@ class DbInitializer:
                 raise ValueError(f"Invalid psql variable name: {key!r}")
             cmd.extend(["-v", f"{key}={value}"])
         if variables:
-            # psql expands :'var' only when SQL is read from stdin, not via -c.
+            # psql expands :'var' only from stdin, not via -c.
             return subprocess.run(  # nosec B603
                 cmd,
                 env=self._psql_env(),
@@ -442,15 +402,7 @@ class DbInitializer:
         return subprocess.run(cmd, env=self._psql_env(), check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # nosec B603
 
     def _check_role_exists(self) -> bool:
-        """Return True if the db_user role already exists in this cluster.
-
-        Uses COUNT(*) and checks stdout because a SELECT that finds no rows
-        still exits with code 0 - only the output distinguishes the cases.
-
-        Returns:
-            bool: True if the role exists, False otherwise.
-
-        """
+        """Return True when the role exists (COUNT(*) distinguishes empty SELECT)."""
         result = self.execute_sql(
             "SELECT COUNT(*) FROM pg_roles WHERE rolname = :'role_name'",
             check=False,
@@ -474,16 +426,7 @@ class DbInitializer:
         self.execute_sql(f"CREATE ROLE {self._quote_identifier(self.db_user)} WITH LOGIN SUPERUSER")
 
     def check_db(self) -> bool:
-        """Return True if the application database already exists.
-
-        Attempts a direct connection to the target database rather than
-        querying pg_database - a SELECT always exits 0 even with no rows,
-        but a connection to a non-existent database exits non-zero.
-
-        Returns:
-            bool: True if the database exists and is reachable, False otherwise.
-
-        """
+        """Return True when the database exists (direct connect; missing DB exits non-zero)."""
         result = subprocess.run(  # nosec B603
             [
                 _resolve_executable(PSQL_EXE),
@@ -507,11 +450,11 @@ class DbInitializer:
         return result.returncode == 0
 
     def enable_postgis(self) -> None:
-        """Enable the PostGIS extension in the application database (idempotent)."""
+        """Enable PostGIS (idempotent)."""
         self.execute_sql("CREATE EXTENSION IF NOT EXISTS postgis", database=self.db_name, check=False)
 
     def init_db(self) -> None:
-        """Create the application database and enable PostGIS if not already present."""
+        """Create the database and enable PostGIS when missing."""
         if self.check_db():
             logger.info("Database %s already exists.", self.db_name)
         else:
@@ -522,14 +465,10 @@ class DbInitializer:
         self.enable_postgis()
 
     def run_migrations(self) -> None:
-        """Run Django database migrations.
-
-        Passes UL_DB_PASS explicitly so Django's psycopg2 connection has the
-        password even when it isn't already in the shell environment.
+        """Run Django migrations with UL_DB_PASS available.
 
         Raises:
-            subprocess.CalledProcessError: if the migration command fails.
-
+            subprocess.CalledProcessError: if migrations fail.
         """
         manage = ROOT_DIR / "src" / "urbanlens" / "manage.py"
         env = os.environ.copy()
@@ -538,16 +477,7 @@ class DbInitializer:
 
 
 class Actions(Enum):
-    """
-    Defines the options we allow to be passed in from the command line when this script is run.
-
-    Attributes:
-        status: check the DB status
-        start: start the DB (if it is not already running)
-        restart: stop the DB (if it is running) and start it again.
-        stop: stop the DB (if it is running)
-        init: initialize the project (create DB, run migrations)
-    """
+    """Command-line actions for this script."""
 
     start = "start"
     restart = "restart"
@@ -563,7 +493,7 @@ class Actions(Enum):
     init = "init"
 
     def __str__(self):
-        """Turns an option into a string representation."""
+        """Return the string value."""
         return self.value
 
 
@@ -610,7 +540,6 @@ def main():
     options = parser.parse_args()
 
     if options.action == Actions.init:
-        # Load .env early so UL_DB_PORT/UL_DB_USER are available for cluster config.
         load_dotenv(ROOT_DIR / ".env")
         db_port = os.environ.get("UL_DB_PORT", "5432")
         db_user = os.environ.get("UL_DB_USER", "urbanlens")
@@ -619,18 +548,16 @@ def main():
         data_path = Path(options.data)
         log_path = Path(options.log)
 
-        # Create directories and an empty log file if they don't exist yet.
         data_path.mkdir(parents=True, exist_ok=True)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         if not log_path.exists():
             log_path.touch()
 
-        # Initialize the postgres cluster if the data directory is empty.
+        # Initialize the cluster when empty.
         if not (data_path / "PG_VERSION").exists():
             logger.info("Initializing postgres cluster at %s ...", data_path)
             try:
-                # --username sets the superuser name so it matches UL_DB_USER.
-                # Without this, initdb defaults to the OS user.
+                # --username keeps the superuser matching UL_DB_USER.
                 subprocess.run(  # nosec B603
                     [_resolve_executable(EXE), "initdb", "-D", str(data_path), "-o", f"--username={db_user}"],
                     check=True,
@@ -639,13 +566,12 @@ def main():
                 logger.exception("pg_ctl initdb failed.")
                 sys.exit(1)
 
-        # Patch postgresql.conf for local dev.  Runs on every init so the config
-        # is always consistent even after a failed previous start.
+        # Re-apply local-dev config every init so it stays consistent.
         conf_path = data_path / "postgresql.conf"
         if conf_path.exists():
             conf = conf_path.read_text(encoding="utf-8")
             conf = re.sub(r"^#?port\s*=\s*\d+", f"port = {db_port}", conf, flags=re.MULTILINE)
-            # Use the data directory for socket/lock files - /var/run/postgresql requires root.
+            # Data dir for sockets; /var/run/postgresql needs root.
             conf = re.sub(
                 r"^#?unix_socket_directories\s*=\s*'[^']*'",
                 f"unix_socket_directories = '{data_path}'",
@@ -655,14 +581,12 @@ def main():
             conf_path.write_text(conf, encoding="utf-8")
             print(f"Configured postgresql.conf (port={db_port}, socket dir={data_path})")
 
-        # Now that paths exist we can build the Db wrapper.
         try:
             db = Db(data_path=str(data_path), log_path=str(log_path))
         except (ValueError, FileNotFoundError) as e:
             print(f"Cannot initialize postgres: {e}")
             sys.exit(1)
 
-        # Start the server and wait until it is ready to accept connections.
         if not db.is_running():
             print(f"Starting postgres server on port {db_port} ...")
             try:
@@ -676,7 +600,6 @@ def main():
                     print(f"  (could not read log: {log_err})")
                 sys.exit(1)
 
-        # Create the application database, enable PostGIS, and run migrations.
         try:
             DbInitializer().run()
         except (subprocess.CalledProcessError, RuntimeError, OSError):

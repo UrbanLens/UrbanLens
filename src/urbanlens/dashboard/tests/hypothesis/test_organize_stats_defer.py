@@ -1,15 +1,4 @@
-"""The Organize page defers pin-count stats to a follow-up HTMX request.
-
-Computing pin_count/location_count (a correlated subquery per label) and, for
-any label with children, `tag_total_pins`'s full descendant BFS was slow
-enough on a large label set to noticeably delay the Organize page's first
-paint. The initial page load now renders label cards via
-`LabelQuerySet.with_hierarchy()` (no stat annotations) with a loading
-placeholder in place of the numbers, and each tab's rows re-fetch themselves
-through the existing `label.rows` endpoint (which still uses
-`with_pin_counts()`) once shown - see `organize_label_panel.html`'s
-`hx-trigger="revealed"`.
-"""
+"""The Organize page defers pin-count stats to a follow-up HTMX request."""
 
 from __future__ import annotations
 

@@ -1,12 +1,4 @@
-"""Tests for the external API's account-settings sync endpoint.
-
-The endpoint has to hold three lines at once: it must not become a back door
-around the site's own gating (feature entitlements, the community kill switch),
-it must be genuinely partial so a one-toggle sync never clobbers concurrent web
-edits, and it must report what the profile *actually ended up as* rather than
-echoing the submission - because ``Profile.save()`` rewrites community-gated
-fields underneath it.
-"""
+"""Tests for the external API's account-settings sync endpoint."""
 
 from __future__ import annotations
 
@@ -254,11 +246,9 @@ class SettingsFeatureGatingTests(_SettingsApiTestCase):
 class SettingsNameAndContactTests(_SettingsApiTestCase):
     """``first_name``/``last_name`` and the six contact methods, via /settings/.
 
-    These live on ``User`` (name) and ``Profile`` (contact) respectively, but
-    both are meant to look like an ordinary settings field to a client - see
-    ``services.profile.profile_settings``'s docstring on why they're allowlisted here
-    rather than left to ``PATCH /profiles/{slug}/``.
-    """
+    These live on ``User`` (name) and ``Profile`` (contact) respectively, but both are meant to look like an
+    ordinary settings field to a client - see ``services.profile.profile_settings``'s docstring on why they're
+    allowlisted here rather than left to ``PATCH /profiles/{slug}/``."""
 
     def test_patch_writes_first_and_last_name_to_the_user(self) -> None:
         response = self.client.patch(
@@ -329,11 +319,9 @@ class SettingsNameAndContactTests(_SettingsApiTestCase):
     def test_email_and_username_remain_unwritable(self) -> None:
         """Login identity stays off the allowlist even though name/contact are now on it.
 
-        Neither is a declared ``SettingsPatchSerializer`` field, so - like any
-        other undeclared key - it is silently dropped rather than rejected;
-        see ``test_patch_ignores_a_field_outside_the_allowlist`` for the same
-        contract against ``is_superuser``.
-        """
+        Neither is a declared ``SettingsPatchSerializer`` field, so - like any other undeclared key - it is
+        silently dropped rather than rejected; see ``test_patch_ignores_a_field_outside_the_allowlist`` for the
+        same contract against ``is_superuser``."""
         original_email = self.user.email
         original_username = self.user.username
         response = self.client.patch(

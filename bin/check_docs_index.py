@@ -1,39 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if `docs/INDEX.md` and the entries it indexes have drifted apart.
-
-The index is the allocator: `docs/README.md` says a duplicate id should become a
-merge conflict rather than a silent collision, and `CLAUDE.md` sends every
-session to `INDEX.md` before it reads anything else in `docs/`. Neither promise
-survives without something checking it - the first generated index in this repo
-gave `P1` to both a problem entry and a design document, and nothing noticed.
-
-Seven invariants, all cheap and all unambiguous:
-
-1. No id appears twice - in the index, in `PROBLEMS.md`, or in the archive.
-2. Every `## P# --` heading in `PROBLEMS.md` has a row, and vice versa.
-3. A `P#` row's claim matches its heading, so grepping the index finds the same
-   sentence the entry opens with.
-4. Every status is one the record's own prefix allows (`docs/README.md`).
-5. The "Next free id" header is actually free - one past the highest id ever
-   allocated, counting ids that have since been archived.
-6. An archived id is not still live in `PROBLEMS.md` or `INDEX.md`; resolving an
-   entry moves it, and a half-move leaves two copies to disagree.
-7. No id appears twice inside the archive.
-
-Invariants 5-7 need `archive/PROBLEMS-ARCHIVE.md` to carry the id of what it
-holds. Resolved entries are removed from the index, so without that the highest
-allocated id *falls* as work is finished, and this check would then demand the
-next writer reuse the id of the entry just archived - the collision the index
-exists to prevent. An archived entry keeps its `id:` metadata line for that
-reason; it is also what lets a citation of `P70` still be resolvable after the
-entry it names has been fixed.
-
-Deliberately NOT checked: whether a claim is true, and whether a `status` is
-current. Both need a human reading the code, and a checker that guesses at them
-would be wrong in a way nobody could act on.
-
-Exits non-zero listing each drift. Safe to run by hand from the repo root.
-"""
+"""Fail if `docs/INDEX.md` and the entries it indexes have drifted apart."""
 
 from __future__ import annotations
 
@@ -65,9 +31,7 @@ _ROW = re.compile(r"^\|\s*([A-Z]+)(\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*(
 _HEADING = re.compile(r"^## (P\d+) — (.+)$", re.MULTILINE)
 _NEXT_FREE = re.compile(r"^\*\*Next free id:\*\*\s*(.+)$", re.MULTILINE)
 
-#: The metadata line an entry opens with, wherever it lives: ``id: P70`` in
-#: backticks at the start of a line. The archive keeps it so an id stays
-#: allocated after the entry stops being live.
+#: The archive keeps it so an id stays allocated after the entry stops being live.
 _ARCHIVED_ID = re.compile(r"^`id: ([A-Z]+)(\d+)`", re.MULTILINE)
 
 
@@ -80,8 +44,7 @@ def audit(index: str, problems: str, archive: str) -> list[str]:
         archive: Contents of `docs/archive/PROBLEMS-ARCHIVE.md`.
 
     Returns:
-        One human-readable line per drift, empty when everything agrees.
-    """
+        One human-readable line per drift, empty when everything agrees."""
     rows = _ROW.findall(index)
     headings = _HEADING.findall(problems)
     archived = _ARCHIVED_ID.findall(archive)

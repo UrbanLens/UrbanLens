@@ -1,11 +1,4 @@
-"""Tests for services.auth.api_keys: generation, hash-based verification, and revocation.
-
-Mirrors the coverage shape of backup codes (test_backup_services.py doesn't
-cover BackupCode itself, so this is closer to two_factor's own
-verify_and_consume_backup_code tests in spirit): plaintext is only ever
-returned at generation time, every later check goes through a salted hash,
-and revocation is immediate and scoped to the owning user.
-"""
+"""Tests for services.auth.api_keys: generation, hash-based verification, and revocation."""
 
 from __future__ import annotations
 
@@ -52,11 +45,9 @@ class GenerateApiKeyTests(TestCase):
     def test_default_scopes_are_the_original_fixed_grant(self) -> None:
         """Every new key gets exactly the original four-scope grant, not the full vocabulary.
 
-        See ``_default_api_key_scopes``'s docstring and
-        ``test_external_api_scopes.py::DefaultScopesTests`` - deliberately not
-        widened as ``ApiKeyScope`` grew, so an existing (or newly issued
-        PAT-style) key never silently gains reach the owner didn't consent to.
-        """
+        See ``_default_api_key_scopes``'s docstring and ``test_external_api_scopes.py::DefaultScopesTests`` -
+        deliberately not widened as ``ApiKeyScope`` grew, so an existing (or newly issued PAT-style) key never
+        silently gains reach the owner didn't consent to."""
         user = baker.make(User)
         api_key, _raw_key = generate_api_key(user, "Zapier")
         self.assertCountEqual(

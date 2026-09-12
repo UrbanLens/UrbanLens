@@ -1,20 +1,4 @@
-"""`map.document` is the largest response the application serves; gate it.
-
-It streams every root pin the profile owns, so its cost per pin is the number
-that decides whether a large account can be served at all. R27's defect was
-exactly this shape and cost 5.8s of worker CPU at 10,000 pins - the projection
-path fixed it, and nothing until now asserted it stays fixed.
-
-It could not be gated before: `EndpointScalingMixin` read `len(response.content)`,
-which raises on a `StreamingHttpResponse`, so the repo's most complete instrument
-was structurally unable to look at its most important endpoint.
-`AStreamedResponseIsMeasurableTests` in `test_endpoint_scaling_harness.py` holds
-that extension honest.
-
-Budgets are per row and absolute, because the asymptotic half is already covered
-(`test_map_payload_instantiation_scaling.py`) and a 3x constant-factor regression
-passes every ratio test in the repo.
-"""
+"""`map.document` is the largest response the application serves; gate it."""
 
 from __future__ import annotations
 
@@ -32,12 +16,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.map_pins import document as map_document
 
-#: Response bytes one pin may add. Measured by this test on 2026-09-11 at
-#: **444 B/pin** with two labels each - re-measure by setting this to 1 and
-#: reading the figure the failure reports. Set at roughly 2x so a real regression
-#: (a field carrying a rendered body, an absolute signed URL) trips it and an
-#: extra short field does not. `bin/perf/measure_map_payload.py` measures the
-#: same thing at 10,000 pins, which is the number to trust for capacity work.
+#: Response bytes one pin may add.
 MAX_DOCUMENT_BYTES_PER_PIN = 900
 
 #: Labels attached to each seeded pin. More than zero on purpose: `label_ids`
@@ -45,12 +24,9 @@ MAX_DOCUMENT_BYTES_PER_PIN = 900
 #: would not exercise the part of the payload most likely to regress.
 LABELS_PER_PIN = 2
 
-#: Database rows one rendered pin may cost. Derived rather than chosen: the pin's
-#: own projected row, plus one through-row per label it names, which is what
-#: emitting `label_ids` legitimately costs. The headroom is deliberately small -
-#: anything reading beyond a pin and its own labels is the defect this axis
-#: exists for, and the mixin's default of 1.5 is simply the wrong budget for an
-#: endpoint whose payload carries an m2m list.
+#: Database rows one rendered pin may cost.
+#: Derived rather than chosen: the pin's own projected row, plus one through-row per label it names, which is
+#: what emitting `label_ids` legitimately costs.
 MAX_ROWS_FETCHED_PER_PIN = 1.0 + LABELS_PER_PIN + 0.5
 
 
@@ -95,8 +71,7 @@ class MapDocumentScalingTests(EndpointScalingMixin, TestCase):
             response: The streamed response.
 
         Returns:
-            The pin-line count.
-        """
+            The pin-line count."""
         lines = [line for line in read_body(response).decode().splitlines() if line.strip()]
         return sum(1 for line in lines if json.loads(line).get("t") == "pin")
 

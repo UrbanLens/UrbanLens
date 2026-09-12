@@ -1,11 +1,4 @@
-"""Tests for the REData building-attributes plugin.
-
-Retrieval calls REData's parcel/buildings endpoints (see the module docstring
-in plugins.builtin.redata_building_attributes) - RedataGateway itself is
-mocked, so no real network access occurs. Covers nearest-building selection
-among multiple returned buildings, fetch()'s graceful degradation, and
-render_context/plugin-contribution shapes.
-"""
+"""Tests for the REData building-attributes plugin."""
 
 from __future__ import annotations
 
@@ -72,12 +65,8 @@ class NearestBuildingTests(SimpleTestCase):
     def test_ranks_by_ground_distance_not_degrees(self) -> None:
         """A degree of longitude is shorter than a degree of latitude away from the equator.
 
-        Comparing raw degree deltas therefore over-weights east-west separation and
-        can rank a genuinely farther building first. The existing cases above never
-        caught it: their far building is a third of a degree away, so no correction
-        changes the answer. This pair is the case that matters - both buildings on
-        one parcel, comparable distances, different bearings.
-        """
+        Comparing raw degree deltas therefore over-weights east-west separation and can rank a genuinely farther
+        building first."""
         lat, lng = 42.65, -73.75
         east = {"name": "East Wing", "latitude": lat, "longitude": lng + _EAST_20M_DEGREES}
         north = {"name": "North Wing", "latitude": lat + _NORTH_25M_DEGREES, "longitude": lng}
@@ -125,10 +114,8 @@ class FetchBuildingPayloadTests(TestCase):
     def test_a_transient_outage_propagates_rather_than_caching_emptiness(self) -> None:
         """A LocationCache row marks the source fetched, so an outage must not write one.
 
-        This returned ``{}`` until 2026-08-19, which blanked the card for the
-        whole external-data cache window after any REData hiccup - the defect
-        ``test_outage_not_cached_as_empty.py`` exists to prevent.
-        """
+        This returned ``{}`` until 2026-08-19, which blanked the card for the whole external-data cache window
+        after any REData hiccup - the defect ``test_outage_not_cached_as_empty.py`` exists to prevent."""
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(
@@ -141,17 +128,9 @@ class FetchBuildingPayloadTests(TestCase):
     def test_an_unconfigured_gateway_propagates_too(self) -> None:
         """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
 
-        The unconfigured state is simulated rather than left to the ambient
-        environment: an install that *does* configure REData (any dev machine
-        with UL_REDATA_API_URL set) would otherwise reach the real API here
-        instead of exercising this branch. ``__post_init__`` is what raises
-        that ValueError, and it's the only patchable seam - RedataGateway is a
-        slotted dataclass, so ``base_url`` itself is read-only on the class.
-
-        The panel's own gate keeps it from ever being scheduled in that state;
-        this covers the background enrichment and wiki paths, which reach the
-        fetch by other routes.
-        """
+        The unconfigured state is simulated rather than left to the ambient environment: an install that *does*
+        configure REData (any dev machine with UL_REDATA_API_URL set) would otherwise reach the real API here
+        instead of exercising this branch."""
         with (
             patch.object(
                 RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")
@@ -303,11 +282,8 @@ class PluginContributionsTests(SimpleTestCase):
 class NearestBuildingExclusionTests(SimpleTestCase):
     """The nearest record is not always the right record.
 
-    REData labels three kinds of record this card cannot honour, and ranking
-    the raw list let each of them win on distance. The chosen building's name is
-    given outright priority when naming a detail pin's location, so a wrong pick
-    renames the user's pin.
-    """
+    REData labels three kinds of record this card cannot honour, and ranking the raw list let each of them win
+    on distance."""
 
     def _far(self, **extra) -> dict:
         return {"name": "Far", "latitude": 42.6510, "longitude": -73.7510, **extra}

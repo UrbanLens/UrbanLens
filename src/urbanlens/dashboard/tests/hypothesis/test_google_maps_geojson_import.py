@@ -1,14 +1,4 @@
-"""Tests for GoogleMapsGateway.geojson_to_dict() - GeoJSON pin extraction.
-
-This method (renamed from ``takeout_json_to_dict``) handles two shapes:
-
-- Google Takeout's "Saved Places" export: ``Point`` geometry, ``name``/
-  ``description``/``address`` properties. This is the pre-existing behavior
-  and must be unaffected by the broadening below.
-- Generic GeoJSON (Overpass Turbo exports, custom scripts): arbitrary geometry
-  types (reduced to a centroid) and arbitrary property names (via the
-  ``pick_name_and_description`` fallback heuristic).
-"""
+"""Tests for GoogleMapsGateway.geojson_to_dict() - GeoJSON pin extraction."""
 
 from __future__ import annotations
 

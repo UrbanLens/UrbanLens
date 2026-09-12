@@ -1,10 +1,4 @@
-"""Property-based tests for the map-based pin-share detection algorithm.
-
-Covers the pure-function geometry/bearing/viewport math in
-``services.sharing.map_pin_share_detection`` - no database round-trips required.
-See ``test_map_pin_share_detection_integration.py`` for the DB-backed
-``detect_shared_pins``/``share_markup_map_with_profile`` behavior.
-"""
+"""Property-based tests for the map-based pin-share detection algorithm."""
 
 from __future__ import annotations
 
@@ -67,10 +61,8 @@ class BearingDegreesTests(SimpleTestCase):
     def test_reverse_bearing_is_roughly_opposite(self, pair) -> None:
         """Bearing(A, B) and Bearing(B, A) should differ by ~180 degrees (mod 360).
 
-        Only approximately true on a sphere for non-antipodal points, which
-        the strategy guarantees by keeping the two points within 10 degrees
-        of each other.
-        """
+        Only approximately true on a sphere for non-antipodal points, which the strategy guarantees by keeping
+        the two points within 10 degrees of each other."""
         (lat1, lon1), (lat2, lon2) = pair
         forward = bearing_degrees(lat1, lon1, lat2, lon2)
         backward = bearing_degrees(lat2, lon2, lat1, lon1)

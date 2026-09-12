@@ -1,12 +1,4 @@
-"""`services.core.numbers` is the module that exists so a malformed field is not a 500.
-
-It had no tests, and one input got through it: `int(float("inf"))` raises
-`OverflowError`, which `safe_int` did not catch. That is reachable, not
-theoretical - Python's `json.loads` accepts the bare literals `Infinity`,
-`-Infinity` and `NaN`, and `controllers/detail_pins.py` and
-`controllers/markup.py` both call `safe_int(body.get(...))` on a body parsed
-that way.
-"""
+"""`services.core.numbers` is the module that exists so a malformed field is not a 500."""
 
 from __future__ import annotations
 

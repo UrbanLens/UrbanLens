@@ -1,13 +1,4 @@
-"""Sending gallery media to a wiki must not download inside the request.
-
-A full selection is up to 20 remote fetches. Done inline that is a multi-second
-hang with no progress indicator, against a project standard that says anything
-non-instant shows one; worse, a request that times out partway attaches some
-photos and silently drops the rest, with the user's toast reporting success.
-
-The split mirrors ``cache_media_item_into_album``: validate and enqueue in the
-request, download in the task.
-"""
+"""Sending gallery media to a wiki must not download inside the request."""
 
 from __future__ import annotations
 

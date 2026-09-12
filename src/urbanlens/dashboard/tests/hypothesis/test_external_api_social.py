@@ -1,10 +1,4 @@
-"""External API: friends list, friend-request transitions, and scope enforcement.
-
-The transition tests assert the *exact* wire value of ``FriendshipStatus``,
-which is capitalized ("Accepted", not "accepted"). Asserting merely that it
-isn't lowercase would not have caught the real bug this guards against, which
-was a serializer normalizing the value on the way out.
-"""
+"""External API: friends list, friend-request transitions, and scope enforcement."""
 
 from __future__ import annotations
 
@@ -28,25 +22,23 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Kwargs to splat into a test-client call.
-    """
+        Kwargs to splat into a test-client call."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
 def _key_with_scopes(user: User, *scopes: ApiKeyScope) -> str:
     """Issue an API key granting exactly ``scopes``.
 
-    Newly issued keys deliberately do not carry the social/notification
-    scopes (see ``_default_api_key_scopes``), so every test that needs one
-    must opt in explicitly - which is itself the behaviour being relied on.
+    Newly issued keys deliberately do not carry the social/notification scopes (see
+    ``_default_api_key_scopes``), so every test that needs one must opt in explicitly - which is itself the
+    behaviour being relied on.
 
     Args:
         user: The key's owner.
         scopes: The scopes to grant.
 
     Returns:
-        The plaintext key.
-    """
+        The plaintext key."""
     api_key, raw_key = generate_api_key(user, "Test")
     api_key.scopes = [scope.value for scope in scopes]
     api_key.save(update_fields=["scopes"])
@@ -65,10 +57,8 @@ class SocialScopeEnforcementTests(TestCase):
     def test_default_api_key_does_not_grant_social_scopes(self) -> None:
         """A freshly issued key must not reach the social surface at all.
 
-        This is the cross-domain "no widening, no backfill" rule: adding
-        social scopes to the default grant would silently hand every
-        already-issued integration access to the owner's friends list.
-        """
+        This is the cross-domain "no widening, no backfill" rule: adding social scopes to the default grant
+        would silently hand every already-issued integration access to the owner's friends list."""
         _api_key, raw_key = generate_api_key(self.user, "Zapier")
         response = self.client.get(reverse("external_api:friends"), **_bearer(raw_key))
         self.assertEqual(response.status_code, 403)
@@ -172,11 +162,7 @@ class FriendshipTransitionMatrixTests(TestCase):
     def test_mute_sets_the_flag_and_keeps_the_friendship(self) -> None:
         """Mute is the one action here that is NOT a status transition.
 
-        It used to write ``status="Muted"``, which un-friended the pair for
-        every gate that reads ``Profile.are_friends`` - so an API client that
-        muted a friend silently revoked their own access. The endpoint now
-        moves the caller's own mute column and leaves the relationship intact.
-        """
+        The endpoint now moves the caller's own mute column and leaves the relationship intact."""
         friendship = self._pending_request()
         friendship.status = FriendshipStatus.ACCEPTED
         friendship.save()

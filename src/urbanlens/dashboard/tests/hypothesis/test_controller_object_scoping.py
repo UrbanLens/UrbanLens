@@ -1,17 +1,4 @@
-"""Object-level authorization tests for HTMX controller endpoints.
-
-Covers the regressions where several endpoints resolved objects from
-client-supplied identifiers without scoping them to the requesting user:
-
-- Pin gallery endpoints (and the map upload endpoint) looked pins up by bare
-  slug. Pin slugs are only unique per profile, so this both matched other
-  users' pins and raised MultipleObjectsReturned (a 500) whenever two users
-  shared a slug.
-- The label membership panels fetched any Label by id, letting a forged id
-  attach (and thereby expose) another user's private label.
-- Comment reactions accepted any comment id, and trip-comment reactions never
-  checked trip membership.
-"""
+"""Object-level authorization tests for HTMX controller endpoints."""
 
 from __future__ import annotations
 
@@ -243,10 +230,8 @@ class TripCommentReactionMembershipTests(TestCase):
     def test_non_member_cannot_react(self) -> None:
         """A non-member is told the trip does not exist, rather than refused.
 
-        This answered 403 until the trip lookup moved to
-        ``services.trips.trip_access.get_trip_for_viewer``, which reports a trip the
-        viewer has no standing access to as simply not found - a 403 confirms
-        the slug is real, which is the enumeration leak that change closed.
-        """
+        This answered 403 until the trip lookup moved to ``services.trips.trip_access.get_trip_for_viewer``,
+        which reports a trip the viewer has no standing access to as simply not found - a 403 confirms the slug
+        is real, which is the enumeration leak that change closed."""
         self.client.force_login(self.outsider)
         self.assertEqual(self._react().status_code, 404)

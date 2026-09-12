@@ -1,18 +1,4 @@
-"""A database failure must not uncap spend at a paid API.
-
-`check_rate_limit` reads its configuration from the database. When that read
-raises it used to answer "allowed", which is the wrong direction for the one
-thing this limiter exists to do: it is the only cap on outbound spend at paid
-third-party providers, so a `DatabaseError` turned a degraded database into an
-unbounded bill - during the exact window in which nobody is watching the spend.
-
-It now refuses, except where the registry records the service as free, so the
-same failure does not also take out geocoding, weather and the archives.
-
-`billable` defaults to True, and that default carries the weight: `cost_per_call`
-is `None` for both "free" and "not yet priced", so it cannot decide this. A newly
-added service is capped until someone reads the provider's terms.
-"""
+"""A database failure must not uncap spend at a paid API."""
 
 from __future__ import annotations
 
@@ -51,10 +37,8 @@ class RateLimitDatabaseFailureTests(SimpleTestCase):
     def test_every_free_marking_is_backed_by_its_own_notes(self) -> None:
         """`billable=False` is a claim about a provider's terms, not a guess.
 
-        Each exemption must be justified where a reader will find it - in the
-        service's own registry entry - so the next person can check it against
-        the provider rather than take this file's word for it.
-        """
+        Each exemption must be justified where a reader will find it - in the service's own registry entry - so
+        the next person can check it against the provider rather than take this file's word for it."""
         for service, defaults in SERVICE_REGISTRY.items():
             if defaults.billable:
                 continue

@@ -1,11 +1,4 @@
-"""Tests for the external API's credential-introspection endpoint.
-
-``auth/session/`` is the single deliberate exception to the fail-closed
-``HasApiKeyScope`` default, so these tests pin down both halves of that: it must
-still require *authentication* (the exception is about scopes, not about being
-open), and it must describe either credential kind accurately enough for a
-client to hide unreachable UI and refresh before expiry.
-"""
+"""Tests for the external API's credential-introspection endpoint."""
 
 from __future__ import annotations
 

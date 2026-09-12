@@ -1,15 +1,6 @@
 /**
- * User-defined custom fields: the definitions, and a value on a real photo.
- *
- * Worth a deployed test because the definition and the value live apart. A
- * field is defined once, against an `entity_type`, and then set per object
- * through a *different* endpoint - so "the field exists" and "a value can be
- * stored against it" are two claims, and a suite that only makes the first one
- * passes while the feature does nothing.
- *
- * The `entity_type` enum matters more than it looks: a field defined for
- * `photo` must not be settable on a pin. That is the kind of cross-check that
- * is easy to omit when each endpoint is written and tested on its own.
+ * User-defined custom fields: the definitions, and a value on a real photo. Worth a deployed test
+ * because the definition and the value live apart.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

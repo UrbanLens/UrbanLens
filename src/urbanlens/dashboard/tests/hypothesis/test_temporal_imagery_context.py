@@ -1,24 +1,4 @@
-"""Tests for the beta time-slider's context wiring.
-
-Three surfaces have to agree for the slider to ever appear:
-
-1. ``context_processors.add_feature_access`` exposes ``has_beta_features`` -
-   a generic "does this user get beta stuff at all" flag reused by future
-   beta features, not slider-specific.
-2. ``PinController.view()`` and ``LocationWikiView.get()`` both expose
-   ``temporal_slider_years`` (empty unless the viewer holds
-   ``SiteFeature.BETA_FEATURES`` *and* OHM has confirmed, cached coverage for
-   the location) and ``temporal_imagery_url_template`` (always present - it's
-   only a URL template, gated separately by the years list being non-empty,
-   which is what the partial actually checks).
-
-The four combinations of (has beta feature) x (has cached OHM coverage) are
-exercised directly against the pin detail and wiki page controllers, since
-``services.locations.temporal_imagery.temporal_slider_years`` is the single
-place both are supposed to delegate to - a controller-level regression here
-(e.g. one page forgetting the feature gate) would not be caught by a unit
-test of that function alone.
-"""
+"""Tests for the beta time-slider's context wiring."""
 
 from __future__ import annotations
 
@@ -69,10 +49,8 @@ class AddFeatureAccessBetaFlagTests(TestCase):
     def test_present_in_the_import_error_fallback_shape(self) -> None:
         """The fallback dict (ImportError/DatabaseError branch) must carry the same key.
 
-        Called directly rather than by breaking the import, since the point is
-        just that the two dicts declare the same keys - drifting would leave
-        one branch's templates referencing an undefined variable.
-        """
+        Called directly rather than by breaking the import, since the point is just that the two dicts declare
+        the same keys - drifting would leave one branch's templates referencing an undefined variable."""
         request = self.factory.get("/")
         request.user = self.user
         self.assertIn("has_beta_features", add_feature_access(request))

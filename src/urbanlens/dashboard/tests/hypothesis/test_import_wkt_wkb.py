@@ -1,11 +1,4 @@
-"""Tests for services.import_formats.wkt_wkb - WKT/WKB pin import.
-
-Unlike the other formats, a WKT/WKB file is N independent one-line records: a
-malformed line must be skipped with a warning rather than aborting the whole
-file, since these are typically hand-pasted rather than produced by a single
-trusted export pipeline. That per-line fault tolerance is the main regression
-risk covered here.
-"""
+"""Tests for services.import_formats.wkt_wkb - WKT/WKB pin import."""
 
 from __future__ import annotations
 

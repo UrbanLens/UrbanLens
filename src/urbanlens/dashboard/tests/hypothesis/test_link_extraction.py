@@ -1,11 +1,4 @@
-"""Tests for AI link extraction: registry parsing/sanitization, the untrusted-input
-allowlist, availability gating, the daily limit, the endpoints, and the pipeline.
-
-The AI itself is always mocked - what's under test is everything around it: the
-deterministic parse of its output, the strict per-field sanitization, the
-never-overwrite apply rules, and the security posture (only allowlisted keys can
-ever touch the pin, no matter what the model returns).
-"""
+"""Tests for AI link extraction: registry parsing/sanitization, the untrusted-input allowlist, availability gating, the daily limit, the endpoints, and the pipeline."""
 
 from __future__ import annotations
 

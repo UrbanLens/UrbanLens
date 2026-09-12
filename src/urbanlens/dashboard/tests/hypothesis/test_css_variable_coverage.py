@@ -1,17 +1,4 @@
-"""A `var()` against a token nothing defines renders its fallback, forever.
-
-That is the whole reason this needs a check rather than a review: it is not a
-syntax error, and it is not a visible one either. `var(--border-color, #cbd5e1)`
-renders `#cbd5e1` on every theme, so the rule reads as themed, reviews as
-themed, and is a hard-coded colour - dark mode never reaches it.
-
-`bin/check_css_variables.py` decides which reads resolve, so what needs pinning
-is the three cases where "undefined" is the wrong answer: an interpolated name
-Sass assembles at build time, a name set at runtime by TypeScript or a
-template's inline style, and a name inside a comment - including a comment that
-records a broken reference having been removed, which is exactly the shape this
-check's own fixes leave behind.
-"""
+"""A `var()` against a token nothing defines renders its fallback, forever."""
 
 from __future__ import annotations
 

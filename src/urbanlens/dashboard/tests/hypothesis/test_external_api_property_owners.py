@@ -1,16 +1,4 @@
-"""External API guard: the mobile/API-key surface must honor the same
-subscriber gate as the web UI on officially-sourced property owner data.
-
-``services.property.owner_access`` exists precisely so every surface that
-renders owner identity/contact details asks the same question - see its
-module docstring and ``test_property_owner_access.py`` for the web-UI half.
-``WikiOwnershipView``/``WikiPropertySalesView`` (``external_api/views_wiki.py``)
-originally queried ``WikiOwner``/``WikiPropertySale`` straight into their
-serializers with no call into that module at all, so any API key with the
-generic ``wiki:read`` scope - no subscription required - could pull an
-official owner's name, mailing address, phone and email for free. Found by
-the round-3 FEATURES.md-vs-code audit; this file is the regression guard.
-"""
+"""External API guard: the mobile/API-key surface must honor the same subscriber gate as the web UI on officially-sourced property owner data."""
 
 from __future__ import annotations
 
@@ -37,11 +25,9 @@ _USER_NAME = "Community Contributed Owner"
 def _plain_user() -> User:
     """A user with no subscription and no feature grants.
 
-    The first user in a fresh test database is auto-promoted to bootstrap
-    site admin, which ``user_has_feature`` grants every feature - so a
-    throwaway user absorbs that promotion, matching
-    ``test_property_owner_access.py``'s own precedent.
-    """
+    The first user in a fresh test database is auto-promoted to bootstrap site admin, which ``user_has_feature``
+    grants every feature - so a throwaway user absorbs that promotion, matching
+    ``test_property_owner_access.py``'s own precedent."""
     baker.make(User)
     return baker.make(User)
 
@@ -155,11 +141,9 @@ class WikiPropertySalesApiGateTests(_OwnerApiTestCase):
     def test_filtering_a_plain_users_view_never_touches_the_stored_m2m_relation(self) -> None:
         """Regression guard: shaping the response must not mutate the database.
 
-        An earlier draft of this fix called ``sale.previous_owners.set(...)``
-        to build the filtered response, which would have persisted the
-        withheld-for-this-caller list as the sale's *actual* recorded
-        parties - destroying the official record for every other viewer too.
-        """
+        An earlier draft of this fix called ``sale.previous_owners.set(...)`` to build the filtered response,
+        which would have persisted the withheld-for-this-caller list as the sale's *actual* recorded parties -
+        destroying the official record for every other viewer too."""
         self._get(self._key_for(_plain_user()))
         self.sale.refresh_from_db()
         self.assertEqual(list(self.sale.previous_owners.all()), [self.official])

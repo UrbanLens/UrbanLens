@@ -1,22 +1,4 @@
-"""AI vision calls must record their estimated cost on the ApiCallLog row.
-
-``CLAUDE.md``: "When calling any API, track usage and cost per call (keep a
-running estimate). This is required groundwork for future cost reporting."
-
-Gateway-based services get this for free - ``rate_limiter``'s HTTP wrapper reads
-``ServiceDefaults.cost_per_call`` and passes it to ``log_api_call`` itself. The
-AI services don't go through that wrapper, so each one passes its own cost, and
-the OpenAI vision path is the one that computes the *most accurate* figure of
-any of them: real prompt/completion token counts off the response, priced per
-model. It was computing that, logging it to the application log, and then not
-passing it on - so the row that cost reporting will actually read had a null
-cost for the single most expensive call type in the app.
-
-Since the vision migration these calls go through ``inference_client`` to
-``ai-inference`` rather than an in-process OpenAI SDK client, so the mock sits
-at that seam - but the property under test is unchanged, which is the point of
-keeping this file rather than rewriting it around the new plumbing.
-"""
+"""AI vision calls must record their estimated cost on the ApiCallLog row."""
 
 from __future__ import annotations
 

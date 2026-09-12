@@ -25,11 +25,8 @@ def _grant_ai_to_everyone() -> None:
 def _plain_profile(*, ai_enabled: bool = True, external_apis_enabled: bool = True) -> Profile:
     """A profile whose user has no subscription and no feature grants.
 
-    The first user created in a fresh test database is auto-promoted to
-    bootstrap site admin, and ``user_has_feature`` grants a site admin every
-    feature - so a throwaway user absorbs that promotion first. Same
-    precedent as ``test_property_owner_access.py``.
-    """
+    The first user created in a fresh test database is auto-promoted to bootstrap site admin, and
+    ``user_has_feature`` grants a site admin every feature - so a throwaway user absorbs that promotion first."""
     baker.make("auth.User")
     return _make_profile(ai_enabled=ai_enabled, external_apis_enabled=external_apis_enabled)
 
@@ -81,10 +78,8 @@ def test_unavailable_when_site_ai_disabled() -> None:
 def test_unavailable_without_an_ai_worker_deployed() -> None:
     """Every other condition satisfied, but nothing drains Queue.AI.
 
-    Must fail closed rather than degrade the tool loop onto the regular
-    worker, which holds REData/OAuth credentials the loop must never run
-    alongside - see services.sandbox.queues.ai_queue.
-    """
+    Must fail closed rather than degrade the tool loop onto the regular worker, which holds REData/OAuth
+    credentials the loop must never run alongside - see services.sandbox.queues.ai_queue."""
     _grant_ai_to_everyone()
     profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
 
@@ -96,12 +91,8 @@ def test_unavailable_without_an_ai_worker_deployed() -> None:
 def test_ai_worker_absence_does_not_disable_other_ai_features() -> None:
     """The whole reason the two predicates are separate.
 
-    ``UL_AI_WORKER_ENABLED`` describes the sandboxed ``ai-worker`` container,
-    which only the interactive assistant runs in. Label styling, auto-tagging
-    and import assist resolve an inference client through the shared
-    ``ai-inference`` tier instead, so a resource-constrained self-host that
-    turns the chat assistant off must keep them.
-    """
+    ``UL_AI_WORKER_ENABLED`` describes the sandboxed ``ai-worker`` container, which only the interactive
+    assistant runs in."""
     _grant_ai_to_everyone()
     profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
 
@@ -128,8 +119,6 @@ def test_features_disabled_without_the_subscription_entitlement() -> None:
 
 @pytest.mark.django_db
 def test_features_disabled_when_site_ai_is_off() -> None:
-    # style_suggestions used to reach get_gateway before learning this, which
-    # is the check the shared predicate pulls forward.
     _grant_ai_to_everyone()
     profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
     SiteSettings.objects.filter(pk=SiteSettings.get_current().pk).update(ai_enabled=False)

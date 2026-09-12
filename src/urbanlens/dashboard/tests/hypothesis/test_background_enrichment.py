@@ -1,12 +1,4 @@
-"""Scheduled background enrichment: budget math, run window, prioritization, and the cycle.
-
-Covers services.locations.enrichment end to end with the network fully mocked:
-compute_service_budget must honor the admin buffer and pace multi-day limits
-evenly (the "300 calls per 30 days, 6 used today -> enrich 3 more" contract),
-enrichment_window_open must respect the admin's UTC window including midnight
-wrap, prioritized_location_candidates must rank high-impact locations first,
-and run_enrichment_cycle must respect budgets, caps, and per-source isolation.
-"""
+"""Scheduled background enrichment: budget math, run window, prioritization, and the cycle."""
 
 from __future__ import annotations
 
@@ -312,11 +304,7 @@ class PrioritizedCandidatesTests(TestCase):
         self.assertIn(uncached.pk, pks)
 
     def test_nearby_density_breaks_ties_among_equal_priority_candidates(self) -> None:
-        """The shortlist-then-rescore step must actually change the outcome. All 4
-        candidates here tie on priority_score, so with limit=3 the shortlist (4 >
-        limit) triggers the density rescore; a no-op density function would instead
-        fall back to -updated order and keep the most-recently-created (isolated)
-        one, which this asserts against."""
+        """The shortlist-then-rescore step must actually change the outcome. All 4 candidates here tie on priority_score, so with limit=3 the shortlist (4 > limit) triggers the density rescore; a no-op density function would instead fall back to -updated order and keep the most-recently-created (isolated) one, which this asserts against."""
         clustered = []
         for index in range(3):
             location = _make_location(lat=f"40.00000{index}")
@@ -484,10 +472,7 @@ class RunEnrichmentCycleTests(TestCase):
         self.assertEqual(len(source.enriched_pks), 1)
 
     def test_generic_exception_mid_run_is_counted_and_run_continues(self) -> None:
-        """Unlike a rate-limit signal (which stops the source), an arbitrary
-        exception must be counted as a failure and the run must continue to the
-        next candidate - a continue/break mix-up would either lose this count or
-        wrongly abort the rest of the batch."""
+        """Unlike a rate-limit signal (which stops the source), an arbitrary exception must be counted as a failure and the run must continue to the next candidate - a continue/break mix-up would either lose this count or wrongly abort the rest of the batch."""
         for index in range(3):
             baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
         source = _RecordingSource(fail_after=1, fail_with=ValueError("boom"))
@@ -666,10 +651,9 @@ class SelfReportedSkipTests(SimpleTestCase):
     """self_reported_skip - a source's own "can't run at all" gate.
 
     The "service_disabled" branch is exercised end-to-end by
-    RunEnrichmentCycleTests.test_service_disabled_on_api_limits_page_skips_source;
-    the gate()-based "unavailable" branch was not exercised anywhere - every other
-    source in this file uses the base class's default gate()->True.
-    """
+    RunEnrichmentCycleTests.test_service_disabled_on_api_limits_page_skips_source; the gate()-based
+    "unavailable" branch was not exercised anywhere - every other source in this file uses the base class's
+    default gate()->True."""
 
     class _GatedSource(EnrichmentSource):
         key = "gated"

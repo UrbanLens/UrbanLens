@@ -1,20 +1,4 @@
-"""A stored video never carries the container location tag it arrived with.
-
-The scrub is unconditional, exactly as the photo pipeline's EXIF strip is: the
-stored file is served to everyone who can reach the container it was
-contributed to, so coordinates inside the file are outside the app's visibility
-rules. The coordinates are kept on the ``Image`` row, where those rules apply.
-
-It was previously a caller's choice, keyed on the uploader's *visit-tracking*
-preference - a setting about whether the app records where they have been -
-which meant the default left every uploaded video serving its own coordinates.
-Before that it was worse still: ``_process_video_upload`` expressed "strip the
-location" by passing ``max_height=None``, which means "skip processing
-entirely", so asking to scrub guaranteed the original file was stored untouched.
-
-Exercised against real ffmpeg, and skipped when it isn't on PATH so this stays
-runnable outside the container.
-"""
+"""A stored video never carries the container location tag it arrived with."""
 
 from __future__ import annotations
 
@@ -112,16 +96,7 @@ class VideoLocationStripTests(TestCase):
     def test_a_location_tag_we_cannot_parse_is_still_stripped(self) -> None:
         """The scrub must key off the tag's presence, not off it being readable.
 
-        ``extract_video_metadata`` parses ISO 6709; a tag in any other notation
-        yields no coordinates. Gating the strip on parsed *coordinates* - which
-        is how this was first written - leaves exactly those tags in place, and
-        an unreadable tag discloses the location just as well.
-
-        The fixture is Matroska because the MP4 muxer silently refuses to write
-        a non-ISO 6709 ``location`` (verified), while Matroska stores it
-        verbatim - and ``mkv``/``webm`` are both accepted uploads. Under the
-        parse-gated version this file was left untouched, tag intact.
-        """
+        ``extract_video_metadata`` parses ISO 6709; a tag in any other notation yields no coordinates."""
         out = Path(tempfile.mkdtemp(dir=self._media_root)) / "odd.mkv"
         subprocess.run(
             [
@@ -152,12 +127,7 @@ class VideoLocationStripTests(TestCase):
         self.assertNotIn("location", _location_tags(Path(image.image.path)))
 
     def test_the_uploaders_visit_tracking_setting_does_not_keep_the_tag(self) -> None:
-        """There is no setting that leaves coordinates in a served file.
-
-        This is the case that used to be the *default*: visit tracking on meant
-        no scrub, so an ordinary upload served its own coordinates to everybody
-        who could see the video.
-        """
+        """There is no setting that leaves coordinates in a served file."""
         stored = self._stored_after(240, max_height=720)
 
         self.assertNotIn("location", _location_tags(stored))

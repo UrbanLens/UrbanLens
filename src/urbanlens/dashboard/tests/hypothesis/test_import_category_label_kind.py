@@ -1,12 +1,4 @@
-"""Import category creation matches on kind, not name alone.
-
-PROBLEMS 2026-08-13: both Google Maps import paths looked up the list's
-category label with ``kind`` in ``defaults`` only, so the get half matched
-across every kind - a user with a *tag* named like the imported list got that
-tag used as the category, and no category was ever created. ``kind`` now
-lives in the lookup, matching the pattern the other label-creating sites
-already used.
-"""
+"""Import category creation matches on kind, not name alone."""
 
 from __future__ import annotations
 

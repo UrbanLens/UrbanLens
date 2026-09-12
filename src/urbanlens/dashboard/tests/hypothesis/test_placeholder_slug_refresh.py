@@ -1,17 +1,4 @@
-"""A pin named after the fact must stop being addressed as `unnamed-location`.
-
-Reported from staging: a pin named "HRSH", carrying three aliases, was still at
-`/unnamed-location`. Slugs are generated once, when the row is first saved, and
-nothing ever revisits them - so a pin created before anything knew what it was
-keeps the placeholder in its URL permanently, however well-named it later
-becomes.
-
-The rule is deliberately narrow, because slugs are addresses and changing one
-breaks whatever links to it: a slug is replaced only when it *still reads as a
-placeholder*, judged by the same `is_meaningful_name` the naming service uses on
-any other name. A slug derived from a real name is never touched, even if the pin
-is renamed afterwards.
-"""
+"""A pin named after the fact must stop being addressed as `unnamed-location`."""
 
 from __future__ import annotations
 
@@ -103,15 +90,9 @@ class PlaceholderSlugTests(TestCase):
     def test_the_sweep_will_not_reslug_a_pin_somebody_may_be_looking_at(self) -> None:
         """A pin created minutes ago is not the legacy data this sweep is for.
 
-        Its detail page has the old slug baked into every HTMX panel URL it
-        rendered, so changing the slug underneath 404s those panels and the
-        global `htmx:responseError` handler raises an error toast for each -
-        on a pin the user has just created. Found by `tests/integration/`;
-        see docs/PROBLEMS.md, 2026-08-23.
-
-        The pin still heals, an hour later, by which point nobody is holding a
-        page that was rendered before it.
-        """
+        Its detail page has the old slug baked into every HTMX panel URL it rendered, so changing the slug
+        underneath 404s those panels and the global `htmx:responseError` handler raises an error toast for each
+        - on a pin the user has just created."""
         fresh = self._pin(slug="unnamed-location", name="HRSH", age=timedelta(minutes=2))
 
         upgrade_placeholder_pin_names()

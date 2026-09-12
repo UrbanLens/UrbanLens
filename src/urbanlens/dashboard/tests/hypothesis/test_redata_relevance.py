@@ -1,9 +1,4 @@
-"""Tests for services.photos.redata_relevance - wiring photos/votes to REData.
-
-Covers the submission payload builder, the queue_* helpers' REData-not-configured
-no-ops, and the two Celery tasks (submit_redata_photos/submit_redata_photo_vote).
-Every REData HTTP call is mocked - never hits the network.
-"""
+"""Tests for services.photos.redata_relevance - wiring photos/votes to REData."""
 
 from __future__ import annotations
 

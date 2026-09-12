@@ -1,12 +1,4 @@
-"""Tests for the multi-file upload form and its supporting widget/field classes.
-
-No database access required - these are pure form-validation tests.
-
-Classes under test:
-    _MultipleFileInput  - widget that extracts a list from the file dict
-    _MultipleFileField  - field that validates and returns a list of files
-    UploadDataFile      - the public form
-"""
+"""Tests for the multi-file upload form and its supporting widget/field classes."""
 
 from __future__ import annotations
 

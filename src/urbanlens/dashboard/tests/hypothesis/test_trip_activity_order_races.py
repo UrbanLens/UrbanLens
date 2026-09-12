@@ -1,23 +1,4 @@
-"""Concurrency tests for trip activity ordering.
-
-Two check-then-act sequences share the ``order`` column:
-
-``reorder_activities`` validates that the submitted ids are an exact permutation
-of the trip's non-completed activities, then applies the new positions with one
-``update()`` per activity. Nothing holds between the check and the writes, so two
-members dragging the itinerary at once interleave and the trip ends up in an order
-neither of them asked for - with the same position written to two rows.
-
-``create_activity`` appends at ``order=trip.activities.count()``. Two concurrent
-adds both read the same count and both take that position.
-
-A unique constraint on ``(trip, order)`` is *not* the fix, which is worth stating
-because it is the obvious first idea. Reordering assigns positions one row at a
-time, so a partial permutation legitimately collides mid-loop; and reordering only
-covers non-completed activities, leaving completed ones holding whatever positions
-they already had, which collide with the reassigned range by design. Serialising
-on the parent trip is what actually matches how the data is used.
-"""
+"""Concurrency tests for trip activity ordering."""
 
 from __future__ import annotations
 

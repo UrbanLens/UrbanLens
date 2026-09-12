@@ -1,11 +1,4 @@
-"""Tests for services.apis.weather.forecast's provider-shape converters.
-
-Each converter must also honor the ``ForecastSlot`` timezone contract:
-``date`` keeps the provider's own wall clock for display, while ``date_utc``
-is the same instant as aware UTC (OpenWeatherMap naive = UTC, REData naive
-assumed UTC / aware converted, Open-Meteo local anchored by the response's
-``utc_offset_seconds``).
-"""
+"""Tests for services.apis.weather.forecast's provider-shape converters."""
 
 from __future__ import annotations
 
@@ -197,11 +190,8 @@ class OpenMeteoDateUtcTests(SimpleTestCase):
     def test_each_slot_uses_its_own_dates_offset_across_a_dst_transition(self) -> None:
         """One fixed offset cannot anchor a five-day window that crosses a transition.
 
-        US DST ends 2026-11-01, so 10-30 is UTC-4 and 11-02 is UTC-5. Applying
-        the single reported ``utc_offset_seconds`` to both put half the
-        forecast an hour out, which is enough for ``_build_activity_forecasts``
-        to pick the wrong morning or evening slot.
-        """
+        Applying the single reported ``utc_offset_seconds`` to both put half the forecast an hour out, which is
+        enough for ``_build_activity_forecasts`` to pick the wrong morning or evening slot."""
         payload = self._payload(-14400)
         payload["timezone"] = "America/New_York"
         payload["hourly"]["time"] = ["2026-10-30T09:00", "2026-11-02T09:00"]

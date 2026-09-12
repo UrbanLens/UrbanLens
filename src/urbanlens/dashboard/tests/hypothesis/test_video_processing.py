@@ -1,9 +1,4 @@
-"""Unit tests for services.media.videos - ffmpeg/ffprobe-backed video processing.
-
-External binaries (ffmpeg/ffprobe) are mocked throughout: these tests verify
-the Python-side logic (JSON parsing, ISO 6709 parsing, decision-making about
-whether to re-encode), not the actual media processing, which needs Docker.
-"""
+"""Unit tests for services.media.videos - ffmpeg/ffprobe-backed video processing."""
 
 from __future__ import annotations
 

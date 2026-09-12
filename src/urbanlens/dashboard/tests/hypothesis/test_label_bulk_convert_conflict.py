@@ -1,13 +1,4 @@
-"""Bulk-converting a label into a kind that already has that name must not 500.
-
-`Label` is unique on `(lower(name), profile, kind)`. The single create/edit paths
-check `find_conflicting_label` first and return a readable message; the bulk-convert
-path changes `label.kind` and saves without any check, so converting a tag whose name
-already exists as a category violates the constraint.
-
-The names are deliberately distinctive: a new profile is seeded with ~46 default
-labels, so ordinary words collide with the fixtures rather than with each other.
-"""
+"""Bulk-converting a label into a kind that already has that name must not 500."""
 
 from __future__ import annotations
 

@@ -1,49 +1,6 @@
 /**
- * Where the parcel on the map came from - not merely whether one is drawn.
- *
- * `hrsh-boundary.spec.ts` asks whether a boundary arrives. It can pass while
- * the product is badly wrong, and on this deployment it did: a boundary was
- * drawn, it was roughly the right size, it contained the pin - and it was a
- * shape the application had invented rather than one any provider offered.
- *
- * ## What was actually wrong
- *
- * REData answers six scored candidates for this parcel and flags one
- * `is_suggested`. The app drew none of them. It drew the convex hull of the
- * campus pin and its three child pins - an outline of *the markers we happen to
- * know about*, which is a drawing of our own ignorance rather than evidence
- * about the world. It is a legitimate last resort and a terrible thing to
- * prefer, because it is indistinguishable on screen from a real parcel and
- * silently wrong by however much the building set is incomplete.
- *
- * Three defects compounded, and each needed its own guard because fixing any
- * one alone still left the wrong shape on the map:
- *
- * 1. **The chain was never asked.** `resolve_location_place` consults places
- *    already on record and calls no provider - its own docstring says so - yet
- *    it stamped `Location.place_resolved_at`, which `generation_status` reads
- *    as "the provider chain ran". Every pin was therefore born marked as
- *    already-enriched: generation was never scheduled, the boundary panel
- *    reported itself ready, and REData went uncalled until the stamp went
- *    stale 60 days later.
- * 2. **Our hull outranked their parcel.** `resolve_for_pin` returned the pin's
- *    own `generated_polygon` before consulting the place, so even geometry that
- *    did arrive stayed invisible on the page that fetched it.
- * 3. **Nothing superseded the stand-in.** The hull row survived the arrival of
- *    real geometry and was refitted on every hierarchy change.
- *
- * ## Why the pytest suite could not catch this
- *
- * All three are agreements between our cache-keeping and a live provider's
- * answers. A unit test supplies the provider's answer itself, so it can only
- * ever confirm the arrangement it already assumes; nothing in-process can
- * notice "REData had six candidates and we drew none of them". That is the
- * structural gap `docs/audits/TEST_COVERAGE_GAPS.md` exists to record, and it is why
- * these assertions live here rather than there.
- *
- * The counterpart unit tests - which pin the precedence rules themselves, and
- * run in CI - are in
- * `dashboard/tests/hypothesis/test_redata_parcel_beats_generated_hull.py`.
+ * Where the parcel on the map came from - not merely whether one is drawn. `hrsh-boundary.spec.ts`
+ * asks whether a boundary arrives.
  */
 
 import { allPins, expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";

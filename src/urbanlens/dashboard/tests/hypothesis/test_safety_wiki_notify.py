@@ -1,14 +1,4 @@
-"""Tests for the community-wiki notification on safety check-in escalation.
-
-Covers:
-- find_community_wiki: point-to-wiki resolution (50 m proximity, existing wikis only).
-- post_checkin_to_community_wiki via escalate_checkin: the wiki comment, the
-  pin-owner notifications/emails, per-user delivery preferences, and idempotency.
-- SafetyCheckinWikiOptionView: the HTMX toggle fragment.
-- SafetyCheckinCreateView: persisting the notify_community_wiki flag.
-- SafetyCheckinDetailView: the read-only community status page for non-owners.
-- render_comment_text: bare URLs (like the posted check-in link) become safe anchors.
-"""
+"""Tests for the community-wiki notification on safety check-in escalation."""
 
 from __future__ import annotations
 

@@ -1,23 +1,4 @@
-"""A visit is a record of somewhere the user has been, so it cannot be ahead of now.
-
-Found by the integration suite on 2026-08-24: `POST pins/{slug}/visits/`
-accepted a `visited_at` a week in the future and answered 201. Nothing here
-asserted the *absence* of that validation, because every existing visit test
-supplies a sensible timestamp - the author writing a test is thinking about the
-feature working, not about it being abused. See `docs/audits/TEST_COVERAGE_GAPS.md`,
-which records that blind spot as the common thread through most of what the
-integration suite caught.
-
-The damage is not local. `create_manual_visit` calls `sync_last_visited`, which
-sets `Pin.last_visited`, which is displayed and ordered by - so one mistyped
-year makes a pin permanently the most recently visited thing its owner has, and
-nothing about the pin looks wrong.
-
-Both layers are tested here, deliberately. The serializer is the API's
-first line and gives a client field-level detail; the service is the choke point
-the *web form* also goes through, so it is what stops the same value arriving by
-the other road.
-"""
+"""A visit is a record of somewhere the user has been, so it cannot be ahead of now."""
 
 from __future__ import annotations
 
@@ -98,10 +79,7 @@ class VisitTimeServiceTests(TestCase):
     def test_a_refused_visit_does_not_move_last_visited(self) -> None:
         """The reason this matters at all.
 
-        `last_visited` is what the pin list sorts on and what the detail page
-        shows. A future visit that is stored corrupts an ordering the user never
-        thinks to question.
-        """
+        `last_visited` is what the pin list sorts on and what the detail page shows."""
         create_manual_visit(self.pin, visited_at=timezone.now() - datetime.timedelta(days=1))
         self.pin.refresh_from_db()
         before = self.pin.last_visited

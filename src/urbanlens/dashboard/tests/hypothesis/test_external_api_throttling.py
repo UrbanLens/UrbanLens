@@ -1,13 +1,4 @@
-"""Tier classification for the external API's throttles.
-
-The tier is derived from a view's own ``required_scopes_by_method``, so these
-tests pin down the derivation rather than the rates themselves: a
-misclassification would either strangle a legitimate sync client (reads counted
-as writes) or, worse, let a runaway write loop spend the far more generous read
-budget.
-
-Pure logic, so no database is needed.
-"""
+"""Tier classification for the external API's throttles."""
 
 from __future__ import annotations
 
@@ -119,11 +110,9 @@ class RequestTierTests(SimpleTestCase):
 class ThrottleConfigurationTests(SimpleTestCase):
     """The three throttle classes are wired to configured rates.
 
-    ``SimpleRateThrottle`` resolves its rate in ``__init__`` and raises
-    ``ImproperlyConfigured`` on a missing key, so merely constructing each class
-    proves the settings entry exists - which is why the settings change and the
-    class change had to ship together.
-    """
+    ``SimpleRateThrottle`` resolves its rate in ``__init__`` and raises ``ImproperlyConfigured`` on a missing
+    key, so merely constructing each class proves the settings entry exists - which is why the settings change
+    and the class change had to ship together."""
 
     def test_read_throttle_constructs_with_its_rate(self) -> None:
         """external_api_read is configured and bound to the read tier."""

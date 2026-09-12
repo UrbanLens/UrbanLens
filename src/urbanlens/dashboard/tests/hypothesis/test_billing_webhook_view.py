@@ -50,10 +50,7 @@ class StripeWebhookViewTests(TestCase):
         self.assertEqual(webhook_event.payload, _EVENT)
 
     def test_endpoint_is_reachable_without_a_csrf_token(self) -> None:
-        """The one deliberately CSRF-exempt endpoint in the codebase (see class docstring) -
-        Stripe posts server-to-server with no Django session/CSRF token. The default test
-        client doesn't enforce CSRF, so every other test here would pass even if the
-        `csrf_exempt` decorator were dropped; only an `enforce_csrf_checks` client proves it."""
+        """The one deliberately CSRF-exempt endpoint in the codebase (see class docstring) - Stripe posts server-to-server with no Django session/CSRF token. The default test client doesn't enforce CSRF, so every other test here would pass even if the `csrf_exempt` decorator were dropped; only an `enforce_csrf_checks` client proves it."""
         with (
             mock.patch("stripe.Webhook.construct_event", return_value=_mock_event()),
             mock.patch("urbanlens.dashboard.services.billing.webhooks.handle_event"),
@@ -96,12 +93,7 @@ class StripeWebhookViewTests(TestCase):
         self.assertFalse(StripeWebhookEvent.objects.exists())
 
     def test_missing_webhook_secret_is_a_clean_refusal_not_a_503(self) -> None:
-        """A deployment with no UL_STRIPE_WEBHOOK_SECRET configured can never verify any
-        signature, so every POST here is refused the same way a bad signature is (400) -
-        not a 503, which Stripe (and any prober) reads as a transient crash worth retrying.
-        Reproduces the live-deployment Playwright finding at
-        specs/security/surfaces.spec.ts:224 ("the Stripe webhook does not accept an unsigned
-        POST"), which failed against this exact misconfiguration on a dev stack."""
+        """A deployment with no UL_STRIPE_WEBHOOK_SECRET configured can never verify any signature, so every POST here is refused the same way a bad signature is (400) - not a 503, which Stripe (and any prober) reads as a transient crash worth retrying."""
         with mock.patch.object(app_settings, "stripe_webhook_secret", None):
             response = self.client.post(
                 reverse("billing.stripe_webhook"),
@@ -137,10 +129,7 @@ class StripeWebhookViewTests(TestCase):
         self.assertEqual(StripeWebhookEvent.objects.filter(stripe_event_id="evt_123").count(), 1)
 
     def test_a_handler_that_raises_leaves_the_event_recorded_but_unprocessed(self) -> None:
-        """The audit row is written before handle_event runs, in its own transaction, so a
-        blown-up handler still leaves the payload behind to debug from - but processed_at
-        must NOT get set, or a Stripe retry would see it as already-handled and never
-        re-run the handler (see the ordering comment in StripeWebhookView.post)."""
+        """The audit row is written before handle_event runs, in its own transaction, so a blown-up handler still leaves the payload behind to debug from - but processed_at must NOT get set, or a Stripe retry would see it as already-handled and never re-run the handler (see the ordering comment in StripeWebhookView.post)."""
         with (
             mock.patch("stripe.Webhook.construct_event", return_value=_mock_event()),
             mock.patch("urbanlens.dashboard.services.billing.webhooks.handle_event", side_effect=RuntimeError("boom")),

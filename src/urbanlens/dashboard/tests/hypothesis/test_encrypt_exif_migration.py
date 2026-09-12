@@ -1,16 +1,4 @@
-"""The data pass in migration 0066, exercised against rows that predate it.
-
-A fresh test database has no pre-0066 rows, so migrating it proves the schema
-change applies and nothing else. What actually matters in production is the
-backfill: every existing snapshot is plaintext JSON text the moment the column
-becomes ``text``, and if the pass misses one, that row reads as undecryptable
-forever after.
-
-The functions are called directly rather than through ``migrate``, so the state
-before and after each pass can be inspected - and so the idempotency guard and
-the reverse are covered, both of which are silent-corruption risks rather than
-loud ones.
-"""
+"""The data pass in migration 0066, exercised against rows that predate it."""
 
 from __future__ import annotations
 

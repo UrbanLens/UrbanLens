@@ -1,12 +1,4 @@
-"""Tests for services.ai.tools.pins - search_pins and find_unvisited_pins.
-
-Ported (unchanged in behavior) from the pre-registry ``_tool_search_pins``/
-``_tool_find_unvisited_pins`` in services.ai.assistant, which
-test_ai_assistant.py still covers directly for as long as that module's own
-loop keeps calling them - see that file's own tests for the same scoping
-assertions against the pre-migration code path. These exercise the same
-tools through the new registry.execute() entry point instead.
-"""
+"""Tests for services.ai.tools.pins - search_pins and find_unvisited_pins."""
 
 from __future__ import annotations
 

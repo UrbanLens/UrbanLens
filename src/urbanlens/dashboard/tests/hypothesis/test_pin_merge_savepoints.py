@@ -1,25 +1,4 @@
-"""`merge_pins`' collision recoveries have to run inside savepoints.
-
-Every reassignment in `services.pins.pin_merge` runs inside one
-`transaction.atomic()` block, and eight of them were written as
-
-    try:
-        row.save(update_fields=["pin", "updated"])
-    except IntegrityError:
-        row.delete()          # drop the duplicate, carry on
-
-Postgres aborts the *whole* transaction on a failed statement, so the recovery
-query itself raised `TransactionManagementError: You can't execute queries
-until the end of the 'atomic' block`. Every one of those graceful "drop the
-duplicate" paths was therefore dead code, and any merge that hit a uniqueness
-collision failed outright rather than deduping.
-
-Reproduced before the fix by merging a pin into its own descendant while
-another top-level pin occupied the location a child had to be detached to:
-the merge raised `TransactionManagementError`, not the intended recovery.
-
-See PROBLEMS.md, "merge_pins' IntegrityError recoveries could not run".
-"""
+"""`merge_pins`' collision recoveries have to run inside savepoints."""
 
 from __future__ import annotations
 
@@ -102,13 +81,8 @@ class SavepointKeepsTheTransactionUsableTests(_PinFixtures):
 class MergeRefusesRatherThanDestroyingTheSurvivorTests(_PinFixtures):
     """A child that cannot be detached must stop the merge, not be carried into it.
 
-    `_reparent_children` detaches a child to top level when re-parenting it
-    under the survivor would close a loop - which happens exactly when the
-    survivor sits *beneath* that child. Leaving it parented to the loser is not
-    a survivable fallback: `Pin.parent_pin` CASCADEs, so `loser.delete()` would
-    take the child and the survivor with it. Before the savepoint fix this was
-    masked, because the poisoned transaction raised first.
-    """
+    `_reparent_children` detaches a child to top level when re-parenting it under the survivor would close a
+    loop - which happens exactly when the survivor sits *beneath* that child."""
 
     def setUp(self) -> None:
         super().setUp()

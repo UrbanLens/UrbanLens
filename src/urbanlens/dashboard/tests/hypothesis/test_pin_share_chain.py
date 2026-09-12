@@ -1,12 +1,4 @@
-"""Tests for pin-share lineage tracking and the Memories → Sharing page.
-
-Covers:
-- PinShare.chain_share_count - transitive reshare counting (the spec example:
-  A→B, B→C and B→D, D→E and D→F counts 5 shares for A's pin)
-- _create_pin_from_share - stamps the new pin's source_share
-- PinShareCreateView - links a reshare to the share the pin came from
-- MemoriesSharingView - groups shares by pin with chain totals
-"""
+"""Tests for pin-share lineage tracking and the Memories → Sharing page."""
 
 from __future__ import annotations
 
@@ -147,13 +139,7 @@ class MemoriesSharingPageTests(_ShareChainTestCase):
 
 
 class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
-    """The received side of the Sharing page must not read the sharer's live pin for a
-    DETECTED-status share (auto-recorded from a shared map, a DM, or a trip activity - see
-    PinShareStatus.DETECTED's docstring: "never actionable"). Unlike an EXPLICIT share
-    awaiting accept/reject, the recipient never consented to see anything about these, so
-    unconditionally reading share.pin/share.place_label - which the goal's own litmus test
-    flags as a live reference - was a real leak. See docs/audits/GOALS_CODE_AUDIT.md
-    ("Trip activities sourcing")."""
+    """The received side of the Sharing page must not read the sharer's live pin for a DETECTED-status share (auto-recorded from a shared map, a DM, or a trip activity - see PinShareStatus.DETECTED's docstring: "never actionable"). Unlike an EXPLICIT share awaiting accept/reject, the recipient never consented to see anything about these, so unconditionally reading share.pin/share.place_label - which the goal's own litmus test flags as a live reference - was a real leak."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -288,10 +274,8 @@ class MemoriesSharingMapsPageTests(_ShareChainTestCase):
 class SharingPagePaginationTests(_ShareChainTestCase):
     """P69: the Sharing page rendered both halves of its toggle, unbounded.
 
-    The two halves are a client-side toggle, so the received half was queried,
-    grouped and rendered on every load for a panel nobody had opened - and
-    neither half had a slice, so both grew with the account.
-    """
+    The two halves are a client-side toggle, so the received half was queried, grouped and rendered on every
+    load for a panel nobody had opened - and neither half had a slice, so both grew with the account."""
 
     def _pins_shared_to_b(self, count: int) -> list[Pin]:
         made = []

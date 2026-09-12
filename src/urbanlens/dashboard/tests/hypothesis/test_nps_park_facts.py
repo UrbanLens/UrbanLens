@@ -1,16 +1,4 @@
-"""The national-park panel reads the fields it has been caching all along.
-
-REData's NPS catalog carries entrance fees, published operating hours, a
-directions page and seasonal weather prose for every unit, and UrbanLens cached
-all of it and displayed none. The hours case was the sharpest: the template
-rendered "Standard hours vary - check NPS.gov" *whenever `standardHours` was
-present* - that is, precisely when it did not have to say that.
-
-For this app's subject the two that matter are "what does it cost to get in"
-and "when is it open". Both are answered here, from NPS's own shapes: `cost` is
-a string even for free entry, and `standardHours` is a seven-key mapping whose
-values are free text ("9:00AM - 5:00PM", "All Day", "Closed").
-"""
+"""The national-park panel reads the fields it has been caching all along."""
 
 from __future__ import annotations
 
@@ -289,11 +277,7 @@ class ParkFactsTests(SimpleTestCase):
 
 
 class FacilityFacetsGateTests(SimpleTestCase):
-    """``show_facility_facets=False`` hides alerts and visitor-centers/campgrounds -
-    see P9's subscription-gating decision (2026-09-08): this pin is merely near
-    the park, not inside it, so this section is nearby-area data, not data
-    about the pin's own place.
-    """
+    """``show_facility_facets=False`` hides alerts and visitor-centers/campgrounds - see P9's subscription-gating decision (2026-09-08): this pin is merely near the park, not inside it, so this section is nearby-area data, not data about the pin's own place."""
 
     def test_alerts_are_hidden_when_facets_are_not_visible(self) -> None:
         alerts = [{"title": "Bridge out", "category": "Danger", "url": "https://nps.gov/x/alert1"}]

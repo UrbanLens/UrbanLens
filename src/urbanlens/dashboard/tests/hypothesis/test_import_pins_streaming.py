@@ -1,17 +1,4 @@
-"""Regression tests for the direct (no-preview) pin import path.
-
-Every import parser (CSV, KML, GeoJSON, shapefile, GPX, WKT/WKB, OSM XML)
-embeds ``"profile": user_profile`` in the pin dicts it yields, and
-``import_pins_streaming`` passes those dicts straight through as the
-``defaults`` for ``Pin.objects.get_nearby_or_create`` - which also receives
-``profile`` as an explicit argument.  Creating a *new* pin then raised
-``TypeError: create() got multiple values for keyword argument 'profile'``,
-killing the SSE stream mid-response (seen in production as nginx
-"upstream prematurely closed connection").
-
-These tests run the real import path without mocking ``get_nearby_or_create``
-so the collision cannot silently regress.
-"""
+"""Regression tests for the direct (no-preview) pin import path."""
 
 from __future__ import annotations
 
@@ -26,14 +13,13 @@ from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LE
 
 
 def _events(sse_lines: list[str]) -> list[dict]:
-    """Decode a list of ``data: {...}\\n\\n`` SSE strings into event dicts.
+    """Decode a list of ``data: {...}\n\n`` SSE strings into event dicts.
 
     Args:
         sse_lines: Raw SSE strings yielded by an import generator.
 
     Returns:
-        The decoded JSON payload of each event, in order.
-    """
+        The decoded JSON payload of each event, in order."""
     return [json.loads(line.removeprefix("data: ").strip()) for line in sse_lines]
 
 
@@ -163,13 +149,7 @@ class ImportPinsStreamingCreatesPinsTests(TestCase):
         self.assertEqual(len(pin.description), MAX_PIN_DESCRIPTION_LENGTH)
 
     def test_takeout_url_row_does_not_crash_on_preview_only_dict_keys(self) -> None:
-        """_csv_row_iter() embeds "s2_guess"/"maps_url" in every Takeout-URL row for the
-        preview/deferred-lookup flow (see cid_resolution.resolve_cids) - this direct,
-        no-preview path never consumes them and must strip them before they reach
-        Pin.objects.create(**defaults), which has no such fields and would raise
-        TypeError, killing the SSE stream mid-response (the same failure mode as the
-        get_nearby_or_create profile-collision bug this file otherwise covers).
-        """
+        """_csv_row_iter() embeds "s2_guess"/"maps_url" in every Takeout-URL row for the preview/deferred-lookup flow (see cid_resolution.resolve_cids) - this direct, no-preview path never consumes them and must strip them before they reach Pin.objects.create(**defaults), which has no such fields and would raise TypeError, killing the SSE stream mid-response (the same failure mode as the get_nearby_or_create profile-collision bug this file otherwise covers)."""
         csv_bytes = (
             b"Title,URL\n"
             b'Black Point Ruins,"https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"\n'

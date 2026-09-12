@@ -1,10 +1,4 @@
-"""Deleting a markup map is restorable from Undo History, annotations included.
-
-The map row is trivial; the hand-drawn ``PinMarkup`` annotations that cascade with
-it are the expensive part. Shares are deliberately NOT restored - the delete severed
-those relationships, and undo brings back the owner's work, not other people's
-access to it.
-"""
+"""Deleting a markup map is restorable from Undo History, annotations included."""
 
 from __future__ import annotations
 

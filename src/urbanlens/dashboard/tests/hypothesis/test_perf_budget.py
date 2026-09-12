@@ -1,19 +1,4 @@
-"""`bin/perf/derive_budget.py` decides whether every phase of a load run passes.
-
-It is the one number the whole neighbour suite is judged against, and it is
-computed from a measurement rather than written down - which is the right
-design and also means a mistake in it is invisible: a budget that came out too
-generous makes a failing run pass, and nothing else in the suite would notice.
-
-The formula's three terms each cover a case the others get wrong, so each is
-tested at a size where it is the term that decides.
-
-Written as plain functions rather than in the `*Tests` classes used elsewhere
-here: those are collected because they subclass `TestCase`, and this needs
-`tmp_path` and `capsys`, which pytest does not inject into unittest cases. A
-`*Tests` class that subclasses nothing is silently not collected at all - this
-file collected zero tests in its first draft for exactly that reason.
-"""
+"""`bin/perf/derive_budget.py` decides whether every phase of a load run passes."""
 
 from __future__ import annotations
 
@@ -31,10 +16,7 @@ _MODULE_PATH = Path(__file__).resolve().parents[5] / "bin" / "perf" / "derive_bu
 def _load() -> Any:
     """Import the script by path.
 
-    It lives in ``bin/`` and is a command rather than a package member, so there
-    is no import path to it. Loading it here rather than shelling out keeps the
-    assertions on the functions instead of on stdout parsing.
-    """
+    It lives in ``bin/`` and is a command rather than a package member, so there is no import path to it."""
     spec = importlib.util.spec_from_file_location("derive_budget", _MODULE_PATH)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

@@ -1,9 +1,4 @@
-"""Tests for RedataSatelliteProvider - the satellite carousel's REData-backed slides.
-
-Mocks ``RedataImageryGateway`` at the plugin module's import site rather than
-performing real HTTP, per this codebase's existing gateway-consumer test
-convention (see e.g. ``test_nps_plugin.py``).
-"""
+"""Tests for RedataSatelliteProvider - the satellite carousel's REData-backed slides."""
 
 from __future__ import annotations
 
@@ -90,20 +85,16 @@ class RedataSatelliteProviderTests(SimpleTestCase):
     def test_nothing_applicable_asks_nothing_rather_than_everything(self) -> None:
         """An empty `provider` list reads as *all* providers at REData's end.
 
-        That would fan the request out across the scanned-map collections this
-        carousel deliberately leaves out, so "everything here belongs to another
-        panel" has to mean no request at all - not a request with no filter.
-        """
+        That would fan the request out across the scanned-map collections this carousel deliberately leaves out,
+        so "everything here belongs to another panel" has to mean no request at all - not a request with no
+        filter."""
         self.assertEqual(self._requested(["map_warper", "loc_sanborn"]), [])
 
     def test_an_outage_propagates_so_the_caller_can_tell(self) -> None:
         """Deliberately not swallowed any more.
 
-        Swallowing made "this place has no imagery" and "we could not ask"
-        identical, and `get_satellite_slides` then cached the outage as a
-        permanent absence. Letting it out is what lets that layer cache the
-        first and not the second - see test_slide_outage_not_cached.py.
-        """
+        Swallowing made "this place has no imagery" and "we could not ask" identical, and `get_satellite_slides`
+        then cached the outage as a permanent absence."""
         with (
             mock.patch(_CONFIGURED_PATH, return_value=True),
             mock.patch(_CAPABILITIES_PATH, return_value=[]),
@@ -213,10 +204,8 @@ class RedataSatelliteProviderTests(SimpleTestCase):
     def test_a_provider_with_no_display_name_still_renders(self) -> None:
         """Gating on a known name is what made a new REData source invisible.
 
-        It reached this code twice - once because it was requested, and once as
-        a historical capture the timeline returned - and was dropped both times
-        for having no entry in a dict in this repo.
-        """
+        It reached this code twice - once because it was requested, and once as a historical capture the
+        timeline returned - and was dropped both times for having no entry in a dict in this repo."""
         slides = self._slides(
             [{"provider": "some_new_provider", "url": "https://example.test/x.jpg", "delivery": "image"}],
             discovered=["some_new_provider"],

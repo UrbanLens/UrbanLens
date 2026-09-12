@@ -1,15 +1,4 @@
-"""The shared page hero renders on both of the pages that use it.
-
-`_page_hero.html` builds a localStorage key for the saved cover-image position
-from whichever of `pin` or `wiki` the current page has. Written as
-``pin.slug|default:wiki.location.slug``, that named a variable the pin page does
-not have - and a filter *argument* is resolved with no failure tolerance, so it
-raised straight out of the render rather than falling through.
-
-The block only renders when `hero_image_url` is passed, and the Private Pin page
-is currently the only include site that passes it, so reaching this took a pin
-that actually had a cover photo - which is why it went unnoticed.
-"""
+"""The shared page hero renders on both of the pages that use it."""
 
 from __future__ import annotations
 
@@ -60,11 +49,8 @@ class PinCoverHeroTests(TestCase):
 class OtherHeroPagesTests(TestCase):
     """The same partial on a page that passes no cover image at all.
 
-    The Private Pin page is currently the only include site that passes
-    `hero_image_url`, so nothing else renders the block this is about - which is
-    how a 500 in it went unnoticed. Pinned here so a page that starts passing
-    one is not the way that is rediscovered.
-    """
+    The Private Pin page is currently the only include site that passes `hero_image_url`, so nothing else
+    renders the block this is about - which is how a 500 in it went unnoticed."""
 
     def setUp(self) -> None:
         baker.make("auth.User")

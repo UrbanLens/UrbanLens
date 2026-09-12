@@ -1,39 +1,4 @@
-"""The import-confirm step must not let a client name an unbounded amount of work.
-
-`GoogleMapsGateway.MAX_PREVIEW_PINS = 20_000` is enforced on the *preview* step -
-`controllers/pin.py:1281` stops previewing past it and `maps.py:984` slices the
-list - and on the *confirm* step it is not enforced at all. `import_confirmed`
-(`controllers/pin.py:2051-2076`) reads `payload.get("lists", [])`, checks only
-that it is non-empty, and streams `import_preview_streaming` straight out of the
-web worker. The preview cap is not a security boundary: nothing requires the
-confirmed list to be one the server previously previewed, or to be any particular
-size.
-
-So the request creates as many pins as the JSON says, synchronously, on the
-worker serving it. That is P96, and it is the same class of defect as the map
-504s: a bounded-looking endpoint whose cost is set by the caller.
-
-**These tests fail today, deliberately** - they are the TDD reproduction, written
-before the fix, under `xfail(strict=True)` so the suite stays green now and turns
-red the day the behaviour changes, which is the prompt to drop the markers rather
-than let them rot. Two separate claims, because two different fixes are needed and
-a partial one should not look complete:
-
-- a payload above the cap is refused outright, rather than attempted;
-- a payload below the cap does its work in a task, so the request returns without
-  having created the pins itself.
-
-The second is what actually satisfies *"tasks that do take CPU should occur in
-background processes which play nicely with the rest of the site"*. The first is
-the cheap guard that should exist regardless.
-
-Verified against the live endpoint before being trusted, because the first draft
-of this file was vacuous: it sent `latitude`/`longitude`/`address`, the generator
-recognised none of it, no pins were created, and every "it created no pins"
-assertion passed while proving nothing. The stream now answers
-``{"type": "start", "total": 3}`` and creates a row per pin - see `_pin_payload`
-for the second thing that draft got wrong.
-"""
+"""The import-confirm step must not let a client name an unbounded amount of work."""
 
 from __future__ import annotations
 
@@ -58,14 +23,10 @@ TEST_CAP = 5
 def _pin_payload(index: int) -> dict[str, Any]:
     """One confirmed pin, in the shape the preview step hands the client.
 
-    Keys are `import_preview_streaming`'s documented contract (`name`, `lat`,
-    `lng`, `description`, `cid`, `maps_url`, `label_ids`), and getting them
-    wrong is not a harmless mismatch: a payload the generator does not recognise
-    imports nothing, so an "it created no pins" assertion over it passes without
-    the endpoint having done anything. Deliberately no `cid` - a pin carrying one
-    with no matching Location is queued for background resolution rather than
-    placed, which would produce the same vacuous pass.
-    """
+    Keys are `import_preview_streaming`'s documented contract (`name`, `lat`, `lng`, `description`, `cid`,
+    `maps_url`, `label_ids`), and getting them wrong is not a harmless mismatch: a payload the generator does
+    not recognise imports nothing, so an "it created no pins" assertion over it passes without the endpoint
+    having done anything."""
     return {
         "name": f"Imported {index}",
         # Spread by whole degrees, not fractions. At 0.0001 degrees apart (~11m)
@@ -175,15 +136,8 @@ class ImportConfirmedDoesTheWorkOffTheRequestTests(TestCase):
     def test_an_accepted_import_creates_no_pins_inside_the_request(self) -> None:
         """The request should hand the work to a task and return.
 
-        Asserted on the row count rather than on which function was called, so
-        it stays true whichever task ends up doing the work - the claim is about
-        where the CPU is spent.
-
-        `safely_enqueue_task` is stubbed because this suite runs Celery eager
-        (`dashboard/tests/CLAUDE.md`): with eager dispatch an enqueued task runs
-        inline, so the pins would appear inside the request and this would fail
-        against a *correct* fix. Stubbing it keeps the assertion about the view.
-        """
+        Asserted on the row count rather than on which function was called, so it stays true whichever task ends
+        up doing the work - the claim is about where the CPU is spent."""
         with (
             mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", TEST_CAP),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=None),

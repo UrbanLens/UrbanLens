@@ -1,24 +1,4 @@
-"""Route viewport filtering already survives the date line - this pins why.
-
-``RouteQuerySet.intersecting_bbox`` builds the same
-``Polygon.from_bbox((min_lng, min_lat, max_lng, max_lat))`` that broke
-``PinQuerySet.within_bounds`` for viewports crossing the antimeridian, so it looks
-like the same bug. It is not, and these tests exist to record the difference.
-
-``Route.path`` is ``geography=True`` and this filter uses ``bboverlaps`` (PostGIS
-``&&``), which is evaluated geodetically and handles the wrap itself: with the
-box built naively, the query still returns the routes on screen. ``within_bounds``
-differs by using ``__within`` (``ST_Within``), which has no geography
-implementation and is evaluated as planar geometry - which is why *it* needed
-splitting and this does not.
-
-Confirmed rather than assumed: the same fixtures were run against the naive
-single-box version and returned the correct routes.
-
-So these are characterisation tests. If ``path`` ever becomes a plain geometry
-column, or this filter moves to ``__within``, they fail - which is exactly when
-the splitting logic would need to be added here too.
-"""
+"""Route viewport filtering already survives the date line - this pins why."""
 
 from __future__ import annotations
 

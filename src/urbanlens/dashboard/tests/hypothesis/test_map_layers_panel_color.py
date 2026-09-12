@@ -1,9 +1,4 @@
-"""Tests that a CustomLayer's color survives into the rendered layers panel.
-
-Regression coverage for a bug where the color was captured, stored, and
-serialized correctly but never actually rendered anywhere the layer's
-button/thumbnail appeared - see custom_layer_button() and _layers_panel.html.
-"""
+"""Tests that a CustomLayer's color survives into the rendered layers panel."""
 
 from __future__ import annotations
 

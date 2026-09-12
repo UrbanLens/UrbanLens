@@ -1,23 +1,4 @@
-"""Wiki-owned albums: the community half of the Album model, and its concealment.
-
-`test_albums.py`, `test_album_cover_move_dedupe.py`, `test_album_view_ux.py` and
-`test_album_add_race.py` construct only Pin-owned albums, so `parent_wiki` and the
-concealment path the community route runs through had no coverage at all (P57).
-
-**Why a naive test here proves nothing.** `concealment_active` is hardcoded False
-today - the reputation threshold it needs does not exist yet - so a concealment
-test that does not force it passes against *any* implementation, including one
-with the narrowing deleted. Every test below that is about concealment patches it
-to True, which is the idiom `test_concealed_render.py` and
-`test_concealment_own_contribution_round4.py` already use, and each has a
-counterpart with the gate off so the assertion cannot be satisfied by the
-narrowing simply never running.
-
-The rule under test, from `_resolve_album_owner`: a community album is *filtered
-by who created it*, not hidden outright - "your own work back is not a leak".
-`Album` is in `concealment._ACTOR_FIELDS` keyed on `profile_id`, which is the
-field that decides this; a test keyed on anything else would not exercise it.
-"""
+"""Wiki-owned albums: the community half of the Album model, and its concealment."""
 
 from __future__ import annotations
 
@@ -121,12 +102,9 @@ class WikiAlbumConcealmentTests(TestCase):
 class WikiAlbumBySlugScopingTests(TestCase):
     """A by-slug lookup must be scoped to the viewer, not to the wiki.
 
-    `concealment.visible_rows`' docstring records that nine call sites were once
-    scoped to the wiki instead - "an existence oracle that answers 'is there a row
-    N here' for rows concealment has already decided the account cannot see, and,
-    on the mutating routes, lets it act on one". `_get_album` resolves through the
-    concealed queryset rather than around it; this is what keeps that true.
-    """
+    `concealment.visible_rows`' docstring records that nine call sites were once scoped to the wiki instead -
+    "an existence oracle that answers 'is there a row N here' for rows concealment has already decided the
+    account cannot see, and, on the mutating routes, lets it act on one"."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -143,12 +121,7 @@ class WikiAlbumBySlugScopingTests(TestCase):
     def _rename(self, *, concealed: bool):
         """POST a rename, which is the shape that matters.
 
-        `AlbumEditView` is POST-only. An earlier version of this test used GET
-        and got a 405 from the method check, before any lookup ran - so it
-        exercised nothing, and an anti-vacuity assertion loose enough to accept
-        405 would not have noticed. A *mutating* route is also the case
-        `visible_rows`' docstring singles out.
-        """
+        `AlbumEditView` is POST-only."""
         url = reverse("location.wiki.albums.edit", args=[self.location.slug, self.theirs.slug])
         with mock.patch(_CONCEALED, return_value=concealed):
             return self.client.post(url, {"name": "Renamed By Someone Else"})

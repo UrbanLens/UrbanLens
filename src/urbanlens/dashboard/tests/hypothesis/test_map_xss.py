@@ -1,17 +1,4 @@
-"""XSS regression tests for the main map page and its data feed.
-
-Invariants verified:
-  - A Label (tag/category) name is never embedded raw into the `<script>` block
-    that builds `filter_labels_json` (map/index.html, view_map), which is a JSON
-    payload written directly into an executing <script> tag via `|safe`, so an
-    unescaped `</script>` (or `<`/`&`) in a label name would let stored label
-    data break out of the script and inject arbitrary markup/script.
-  - The same holds for the pin document map/data.html emits. It carries the
-    payload through `json_script` rather than a per-pin object literal now, so
-    the escaping is Django's rather than a filter per field - which is why the
-    pin cases below assert only that the payload never appears raw, and not
-    which mechanism kept it out.
-"""
+"""XSS regression tests for the main map page and its data feed."""
 
 from __future__ import annotations
 
@@ -93,16 +80,9 @@ class PinIconColorEscapejsTests(_MapXssTestCase):
     def test_malicious_pin_color_is_escaped(self) -> None:
         """The template's own escaping, with the column's coercion stepped around.
 
-        `Pin.save()` coerces `color` to NULL for anything that is not a colour,
-        so a payload written through `baker.make` never reaches the database and
-        this test would pass against a template with no escaping at all. What is
-        under test here is the escaping, which still has to hold: rows written
-        before that coercion existed are still served.
-
-        `queryset.update()` is how the payload gets past it - the same bypass the
-        coercion's own docstring names as the reason the render sites are guarded
-        too.
-        """
+        `Pin.save()` coerces `color` to NULL for anything that is not a colour, so a payload written through
+        `baker.make` never reaches the database and this test would pass against a template with no escaping at
+        all."""
         location = baker.make(Location, latitude=40.0, longitude=-75.0)
         pin = baker.make(Pin, profile=self.profile, location=location, icon=None, color=None)
         Pin.objects.filter(pk=pin.pk).update(color=_QUOTE_BREAKOUT_PAYLOAD_SHORT)

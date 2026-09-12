@@ -1,10 +1,4 @@
-"""Property tests for the pin export writers (UL-377/UL-382).
-
-Pure-logic tests over a lightweight duck-typed stand-in for ``Pin`` (name,
-coordinates, description) rather than real model instances, per this
-project's "@given and self.client don't mix" rule - these writers never
-touch the DB, so there's no reason to pay for one.
-"""
+"""Property tests for the pin export writers (UL-377/UL-382)."""
 
 from __future__ import annotations
 
@@ -77,14 +71,6 @@ def test_kml_round_trips_placemark_count_and_coordinates(pins: list[_FakePin]) -
         assert (placemark.name or "").strip() == pin.effective_name.strip()
         geometry = placemark.geometry
         assert isinstance(geometry, Point)
-        # Exact equality on purpose, and deliberately kept after this test failed
-        # once in a full run (PROBLEMS.md, 2026-08-16). It holds across 12,000
-        # generated examples and 13 of 14 full suites, so it documents a property
-        # that is really true; loosening it to a tolerance because of one
-        # unexplained failure would delete the only signal that would catch
-        # whatever caused it. The messages exist so a recurrence is diagnosable
-        # from the run output alone - `float.hex` shows a one-ulp difference that
-        # decimal repr can hide.
         assert geometry.x == pin.effective_longitude, (
             f"longitude changed: {geometry.x!r} ({float(geometry.x).hex()}) != {pin.effective_longitude!r} ({pin.effective_longitude.hex()})"
         )

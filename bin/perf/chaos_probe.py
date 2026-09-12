@@ -1,26 +1,5 @@
 #!/usr/bin/env python3
-r"""Assert what should still work while one piece of the infrastructure is broken.
-
-`infrastructure/bin/chaos.py` breaks a dev environment and guarantees the
-restore; it deliberately asserts nothing, because whether the application then
-degrades or falls over is a question about the application. This is that half.
-
-Run it as the command of an injection::
-
-    chaos.py inject perf cache-outage --for 180s -- \\
-        bin/perf/chaos_probe.py --url https://perf.dev.urbanlens.org \\
-            --manifest /tmp/perf.json --scenario cache-outage
-
-Each scenario carries the expectations from the availability programme (PL7
-§4.5). Some of them are **expected to fail today** and are marked `known`: those
-are recorded problems, and the point of running this is to watch them turn from
-predictions into measurements, and later to notice the day they stop failing.
-An `unexpected` failure is the interesting one - something degraded in a way
-nobody had written down.
-
-Exit status is the number of unexpected failures, so a green run is 0 and
-chaos.py propagates it.
-"""
+r"""Assert what should still work while one piece of the infrastructure is broken."""
 
 from __future__ import annotations
 
@@ -61,11 +40,8 @@ class Expectation:
 class Session:
     """A signed-in browser, roughly.
 
-    Carries its own cookies rather than using `http.cookiejar`, which appends
-    ``.local`` to a dotless host - so a cookie set by `localhost` is stored
-    under `localhost.local` and never sent back. Every request to a dev
-    environment by port would silently be unauthenticated.
-    """
+    Carries its own cookies rather than using `http.cookiejar`, which appends ``.local`` to a dotless host - so
+    a cookie set by `localhost` is stored under `localhost.local` and never sent back."""
 
     base_url: str
     cookies: dict[str, str] = field(default_factory=dict)
@@ -129,12 +105,8 @@ def _authenticated_page_renders(session: Session) -> tuple[bool, str]:
 def _uncached_pins_answer(session: Session) -> tuple[bool, str]:
     """The pins endpoint on a path the cache cannot serve.
 
-    `map_pins_json` only caches the profile's whole unbounded root-pin set, so a
-    `bbox` request is explicitly `cacheable=False` and must reach Postgres. The
-    plain endpoint answers `cache=hit` and touches no connection at all, which
-    makes it useless for a connection-exhaustion scenario — it passed against 97
-    of 100 backends held, having queried nothing.
-    """
+    `map_pins_json` only caches the profile's whole unbounded root-pin set, so a `bbox` request is explicitly
+    `cacheable=False` and must reach Postgres."""
     status, body = session.get("/dashboard/map/pins/?bbox=-31,-141,-28,-138&limit=5")
     if status == 0:
         return False, f"no answer ({body[:60]})"
@@ -199,21 +171,17 @@ SCENARIOS: dict[str, list[Expectation]] = {
 def establish(base_url: str, manifest: Path, role: str, session_file: Path | None) -> Session:
     """A signed-in session, from a saved one when there is one.
 
-    The saved path matters: every scenario here asks what an *already* signed-in
-    user still sees while something is broken. Signing in during a cache outage
-    answers a different question - it exercises the sign-in path, which needs
-    Valkey and is P105 - and it fails, so the probe never reaches the checks it
-    exists for.
+    The saved path matters: every scenario here asks what an *already* signed-in user still sees while something
+    is broken.
 
     Args:
         base_url: Origin under test.
         manifest: Provisioning manifest.
         role: Which account.
-        session_file: Where cookies are kept. None signs in every time.
+        session_file: Where cookies are kept.
 
     Returns:
-        A session with cookies loaded.
-    """
+        A session with cookies loaded."""
     if session_file is not None and session_file.exists():
         return Session(base_url, json.loads(session_file.read_text(encoding="utf-8")))
 
@@ -227,13 +195,11 @@ def establish(base_url: str, manifest: Path, role: str, session_file: Path | Non
 def sign_in(base_url: str, manifest: Path, role: str) -> Session:
     """Sign in as *role* from the provisioning manifest.
 
-    Redirects are deliberately not followed: a successful sign-in is a 302, and
-    following it without carrying the new session cookie lands back on the login
-    page and reads as a failure that did not happen.
+    Redirects are deliberately not followed: a successful sign-in is a 302, and following it without carrying
+    the new session cookie lands back on the login page and reads as a failure that did not happen.
 
     Raises:
-        SystemExit: The manifest has no such role, or sign-in did not happen.
-    """
+        SystemExit: The manifest has no such role, or sign-in did not happen."""
     accounts = json.loads(manifest.read_text(encoding="utf-8")).get("accounts", [])
     account = next((entry for entry in accounts if entry["role"] == role), None)
     if account is None:
@@ -262,8 +228,8 @@ def sign_in(base_url: str, manifest: Path, role: str) -> Session:
     except urllib.error.HTTPError as error:
         session.absorb(error)
         if error.code != 302:
-            # A finding rather than a crash: signing in is a thing that can break
-            # while the infrastructure is broken. A cache outage does this (P105).
+            # A finding rather than a crash: signing in is a thing that can break while the infrastructure is
+            # broken.
             raise SystemExit(f"Sign-in as {account['username']} was refused with HTTP {error.code}. If a cache outage is injected, that is P105.") from error
 
     if "sessionid" not in session.cookies:

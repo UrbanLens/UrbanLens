@@ -1,15 +1,4 @@
-"""The undo-history list must not read the payloads it never shows.
-
-`UndoAction.payload` is the whole serialized snapshot needed to reverse an
-action - for a bulk pin delete, the entire stashed subtree. The history partial
-renders six fields and none of them is that one, but the view selected every
-column, so opening the panel pulled every payload in the profile's seven-day
-window into the worker to render a list of labels.
-
-Deferred at the view rather than in `get_undo_history`, because the external API
-shares that function and does serialize the payload - deferring there would turn
-one query into one per row for the caller that actually needs it.
-"""
+"""The undo-history list must not read the payloads it never shows."""
 
 from __future__ import annotations
 

@@ -24,10 +24,7 @@ def _befriend(a: Profile, b: Profile) -> None:
 
 class VisibleFriendRatingsTests(TestCase):
     def test_a_friend_who_only_played_named_place_still_shows_a_rating(self) -> None:
-        """Regression guard: the lookup used to hardcode mode=photos, so a
-        friend whose only session was Named Place or Street View appeared
-        to have never played, even though their rating was updating fine
-        in the database all along."""
+        """Regression guard: the lookup used to hardcode mode=photos, so a friend whose only session was Named Place or Street View appeared to have never played, even though their rating was updating fine in the database all along."""
         me = _make_profile()
         friend = _make_profile()
         _befriend(me, friend)

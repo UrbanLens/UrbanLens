@@ -1,19 +1,4 @@
-"""A backup code must be consumable exactly once, even under concurrent submission.
-
-``verify_totp_code`` claims a TOTP step with a conditional UPDATE and explains why
-in a comment: reading the marker and then writing it unconditionally lets two
-submissions of one intercepted code - "a phishing proxy replaying it against a
-parallel session" - both pass the check before either writes.
-
-``verify_and_consume_backup_code``, in the same module, had the read-then-write
-shape that comment warns about: it selected unused codes, matched one in Python,
-then wrote ``used_at`` unconditionally. Two racing submissions of the same
-intercepted backup code could therefore both succeed.
-
-The interleaving is simulated deterministically rather than with threads: the
-hash comparison is patched to consume the row first, which is exactly the state
-the losing request would find when it reaches its own write.
-"""
+"""A backup code must be consumable exactly once, even under concurrent submission."""
 
 from __future__ import annotations
 

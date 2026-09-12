@@ -1,21 +1,4 @@
-"""Posting to an archived check-in through the no-JS fallback must not 500.
-
-`post_chat_message` raises two failures, and they are **siblings** rather than
-parent and child - `SafetyValidationError` and `CheckinMessagingArchivedError`
-both derive from `ValueError` directly. The external API catches both, deliberately
-distinguishing them (409 vs 400: the body was fine, the check-in's plaintext is
-already sealed into its encrypted archive, so a client should retire the
-conversation rather than ask the user to retype). The HTML fallback caught only
-`SafetyValidationError`, so the archived case escaped as a 500.
-
-Where it lands matters: this view is the path used when JavaScript is off or
-the WebSocket is down, on a *safety* feature - the surface that runs precisely
-when something is already degraded.
-
-Found by sweeping for functions whose callers catch different exception sets,
-which is the same shape as the decompression-bomb handler that had reached one
-of its two call sites (PROBLEMS.md, 2026-08-16).
-"""
+"""Posting to an archived check-in through the no-JS fallback must not 500."""
 
 from __future__ import annotations
 
@@ -58,10 +41,8 @@ class ArchivedCheckinChatFallbackTests(TestCase):
     def _archive(self) -> None:
         """Archive the check-in for real, rather than faking the closed state.
 
-        `archive_checkin` seals the plaintext to the owner's E2EE public key, so
-        the bundle needs a genuine 32-byte key - a placeholder string makes
-        NaCl reject it and the archive silently never happens.
-        """
+        `archive_checkin` seals the plaintext to the owner's E2EE public key, so the bundle needs a genuine
+        32-byte key - a placeholder string makes NaCl reject it and the archive silently never happens."""
         import base64
         import os
 

@@ -1,22 +1,4 @@
-"""A region drawn across the date line must match the pins inside it.
-
-``filter_by_criteria``'s ``include_regions``/``exclude_regions`` run a planar
-``__within`` (``ST_Within`` has no geography implementation, so it is evaluated
-as flat degrees). Map clients report *unwrapped* coordinates when the user draws
-across the antimeridian - Leaflet gives a box from 179 to 181 rather than 179 to
--179 - while stored points are always folded into [-180, 180].
-
-Measured before the fix: a region drawn across the line matched only the pins
-west of it. ``exclude_regions`` is the worse half of the same bug - a region that
-matches almost nothing excludes almost nothing, so a filter meant to hide an area
-quietly stops hiding it.
-
-``split_at_antimeridian`` folds the overhanging part back to the coordinates
-points are stored at. A polygon whose vertices are already folded but which spans
-more than 180 degrees is left alone: written literally, those coordinates *do*
-describe the long way round, and guessing otherwise would silently reinterpret a
-region the user may have meant.
-"""
+"""A region drawn across the date line must match the pins inside it."""
 
 from __future__ import annotations
 

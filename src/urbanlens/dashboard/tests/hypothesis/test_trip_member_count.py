@@ -1,12 +1,4 @@
-"""Regression test for TripQuerySet.for_list_page's member_count annotation.
-
-`.filter(profiles=profile)` and the `Count("memberships")` annotation both
-join through Trip -> TripMembership; Django reused that single join, so the
-membership-count annotation inherited the filter's `profile_id = viewer`
-clause and always came out as 1 regardless of how many actual members a trip
-had. Fixed by filtering via a pk subquery instead, so the annotation gets its
-own unfiltered join.
-"""
+"""Regression test for TripQuerySet.for_list_page's member_count annotation."""
 
 from __future__ import annotations
 

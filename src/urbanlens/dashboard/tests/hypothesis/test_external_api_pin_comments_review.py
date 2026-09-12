@@ -1,10 +1,4 @@
-"""Pin-scoped comments and reviews, plus properties of ``visible_comment_tree``.
-
-These endpoints deliberately use ``pins:read``/``pins:write`` rather than the
-wiki scopes: a pin's comment thread and star rating are the owner's own private
-annotations of their own pin, not shared community content, so a key granted
-only wiki access must not reach them.
-"""
+"""Pin-scoped comments and reviews, plus properties of ``visible_comment_tree``."""
 
 from __future__ import annotations
 

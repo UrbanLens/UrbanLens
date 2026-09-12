@@ -1,20 +1,4 @@
-"""Tests for batch photo-location ingestion: matching/clustering, accept/reject, and the
-Tools-page local-scan upload endpoint.
-
-Covers:
-- ingest_location_hits - matches a hit against an existing pin's default
-  (circle-fallback) boundary, clusters unmatched hits by proximity, and
-  merges into existing pending suggestions on a re-run instead of duplicating.
-- accept_pin_suggestion - logs one PinVisit per distinct date (skipping dates
-  already visited), creates a new pin only when none matched, applies
-  suggested_name only when the target pin has no name yet, and respects
-  visit_logging_allowed.
-- reject_pin_suggestion - flips status with no other side effects.
-- PinSuggestionActionView - accept/reject over HTTP, ownership and
-  already-handled guards.
-- PhotoLocationScanUploadView - payload validation for the client-uploaded
-  cluster list.
-"""
+"""Tests for batch photo-location ingestion: matching/clustering, accept/reject, and the Tools-page local-scan upload endpoint."""
 
 from __future__ import annotations
 
@@ -169,10 +153,7 @@ class IngestLocationHitsTests(TestCase):
 
 
 class LocationHitWeightTests(TestCase):
-    """LocationHit.weight/extra_dates let one hit stand in for many identically-
-    located photos (see controllers.tools._parse_cluster) without inflating the
-    number of hits matching/clustering actually has to process - hit_count and
-    visit_dates must come out identical either way."""
+    """LocationHit.weight/extra_dates let one hit stand in for many identically- located photos (see controllers.tools._parse_cluster) without inflating the number of hits matching/clustering actually has to process - hit_count and visit_dates must come out identical either way."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -218,10 +199,7 @@ class LocationHitWeightTests(TestCase):
         self.assertEqual(suggestion.hit_count, 250)
 
     def test_new_pin_centroid_is_weighted_toward_the_heavier_cluster(self) -> None:
-        """Two representative points ~33m apart (within the 50m cluster radius, so
-        they merge into one suggestion), one standing in for far more photos than
-        the other - the resulting suggestion's coordinates must land much closer to
-        the heavier one than to the naive (unweighted) midpoint."""
+        """Two representative points ~33m apart (within the 50m cluster radius, so they merge into one suggestion), one standing in for far more photos than the other - the resulting suggestion's coordinates must land much closer to the heavier one than to the naive (unweighted) midpoint."""
         heavy_lat, light_lat = 41.0, 41.0003
         heavy = LocationHit(latitude=heavy_lat, longitude=-76.0, taken_at=_dt("2024-04-01"), weight=999)
         light = LocationHit(latitude=light_lat, longitude=-76.0, taken_at=_dt("2024-04-02"), weight=1)
@@ -233,10 +211,7 @@ class LocationHitWeightTests(TestCase):
 
 
 class HitCountRaceConditionTests(TestCase):
-    """hit_count is updated via F() so a concurrent ingest can't clobber it (see
-    _upsert_matched_suggestion/_upsert_new_pin_suggestion - two overlapping scans for one
-    profile, e.g. a repeated Immich sweep overlapping a local-scan upload, is the documented
-    case)."""
+    """hit_count is updated via F() so a concurrent ingest can't clobber it (see _upsert_matched_suggestion/_upsert_new_pin_suggestion - two overlapping scans for one profile, e.g. a repeated Immich sweep overlapping a local-scan upload, is the documented case)."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -895,12 +870,7 @@ class PhotoLocationScanUploadViewTests(TestCase):
         self.assertEqual(sorted(suggestion.visit_dates), ["2024-05-01", "2024-05-02"])
 
     def test_a_large_per_cluster_count_stays_a_single_underlying_hit(self) -> None:
-        """A cluster's `count` used to expand into that many separate synthetic
-        hits, each independently checked against every one of the profile's pin
-        boundaries - up to 500 clusters x 2000 photos each could balloon into a
-        million-plus hits processed synchronously in one request, easily enough
-        to trip a reverse proxy's read timeout. `count` must still land correctly
-        on the suggestion's hit_count without that blow-up."""
+        """`count` must still land correctly on the suggestion's hit_count without that blow-up."""
         response = self._post(
             {"clusters": [{"latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01"], "count": 2000}]}
         )
@@ -1281,10 +1251,7 @@ class PinSuggestionQueueViewSelectMapTests(TestCase):
         self.assertNotContains(response, 'id="pin-suggestions-map"')
 
     def test_map_uses_the_shared_toolbar_not_the_bespoke_pill_button(self) -> None:
-        """Regression guard for the identical defect test_memories_unlogged.py
-        already fixed on the sibling visits.html page - this page still had
-        its own bespoke .pin-select-toggle pill (no layers panel or toolbar
-        styling) until now. See docs/audits/GOALS_CODE_AUDIT.md ("Map UI consistency")."""
+        """Regression guard for the identical defect test_memories_unlogged.py already fixed on the sibling visits.html page - this page still had its own bespoke .pin-select-toggle pill (no layers panel or toolbar styling) until now."""
         location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
         pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
         PinSuggestion.objects.create(
@@ -1609,9 +1576,7 @@ class AttachSuggestionPhotosTests(TestCase):
         self.assertTrue(image.checksum)
 
     def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
+        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
         with (
             mock.patch(
                 "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()

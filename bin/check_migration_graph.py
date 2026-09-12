@@ -1,33 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if a migration depends on one the committed tree won't have.
-
-``makemigrations`` builds a new migration's ``dependencies`` from whatever files
-are sitting in ``migrations/`` - it has no idea which of them git is tracking. So
-an in-progress feature's uncommitted migration, left on disk in the same
-checkout, can silently become the parent of a migration that *is* committed. The
-result is invisible locally, because the parent is right there on disk, and fatal
-everywhere else: any other checkout or deploy raises ``NodeNotFoundError`` on the
-dangling dependency, before the app, the workers or the suite can start.
-
-That is the same blind spot ``check_imports_tracked.py`` exists for, one level
-over - the working copy is exactly the thing whose intactness was never in doubt.
-It is checked structurally here rather than by loading Django, for the same
-reason: importing the app would only prove this machine's files are complete.
-
-Also refuses a dependency naming a migration that exists nowhere at all, which is
-what a rename or a hand-edited graph leaves behind.
-
-And refuses a **branched graph**: two migrations with no descendant means two
-parallel branches each added migrations from the same parent, and Django will
-not migrate at all ("Conflicting migrations detected; multiple leaf nodes").
-That is not hypothetical - it is what merging this branch with `origin` on
-2026-08-17 produced, and this check did not catch it, because every dependency
-resolved perfectly well. The fix is a merge migration (``makemigrations
---merge``); the point of checking is to find out before the test suite does.
-
-Exits non-zero listing each dangling dependency. Run by CI; safe to run by hand
-from the repo root.
-"""
+"""Fail if a migration depends on one the committed tree won't have."""
 
 from __future__ import annotations
 
@@ -57,9 +29,7 @@ def check() -> int:
     """Report migrations whose in-app dependencies are missing or untracked.
 
     Returns:
-        Process exit code: non-zero when any dependency would dangle in a fresh
-        checkout.
-    """
+        Process exit code: non-zero when any dependency would dangle in a fresh checkout."""
     tracked = _tracked_paths()
     problems: list[str] = []
     scanned = 0

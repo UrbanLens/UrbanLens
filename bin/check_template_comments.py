@@ -67,9 +67,7 @@ def unclosed_hash_comment_lines(source: str) -> list[int]:
         source: Template source, including any ``{% comment %}`` regions.
 
     Returns:
-        Sorted unique line numbers that open a hash-comment and do not close it
-        before the newline.
-    """
+        Sorted unique line numbers that open a hash-comment and do not close it before the newline."""
     visible = _blank_hidden_blocks(source)
     flagged: list[int] = []
     # ``str.splitlines()`` also splits on U+0085/U+2028/U+2029, which would
@@ -94,11 +92,10 @@ def check(paths: list[pathlib.Path] | None = None) -> int:
     """Report hash-comments that are not closed on the line they open.
 
     Args:
-        paths: Templates to read. ``None`` means every committed template.
+        paths: Templates to read.
 
     Returns:
-        Process exit code: non-zero when any such comment exists.
-    """
+        Process exit code: non-zero when any such comment exists."""
     problems: list[str] = []
     scanned = 0
     for path in paths if paths is not None else _tracked_template_paths():

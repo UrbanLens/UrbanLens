@@ -1,21 +1,4 @@
-"""Merging REData's two imagery-timeline shapes into one chronology.
-
-REData answers with dated `captures` and continuous `time_series` ranges
-because its sources genuinely differ, and nothing consumed either. A time
-slider needs one ordered set of offerings, so they are merged - but the merge
-must not flatten away the distinctions that make the two different, because
-each one lost produces a specific user-visible failure:
-
-- `continuous: false` means a granule-based source (a satellite overpass) may
-  have nothing on a date inside its own range, which REData documents as a
-  `404 no_imagery` rather than an error. Losing the flag means offering a date
-  and then failing to load it.
-- `capture_date_resolved: false` means the date shown is Esri's *publication*
-  date, typically months off the real acquisition. Losing it means captioning a
-  photograph with a date it was not taken.
-- `time_series_asset_uuid` is per layer and never merges across layers, so a
-  date is always attributable to the layer it came from.
-"""
+"""Merging REData's two imagery-timeline shapes into one chronology."""
 
 from __future__ import annotations
 
@@ -154,11 +137,7 @@ class TimelineYearsTests(SimpleTestCase):
 class HistoricalCarouselSlideTests(SimpleTestCase):
     """Dated captures reach the satellite carousel; ranges deliberately do not.
 
-    `/imagery/` answers "what can I show for this point now". The timeline
-    answers "what dates exist" - and for a site that has been demolished,
-    re-roofed or cleared, the older frames are the interesting ones, which is
-    the whole reason this application wants them.
-    """
+    `/imagery/` answers "what can I show for this point now"."""
 
     def _provider(self):
         from urbanlens.dashboard.plugins.builtin.satellite_imagery import RedataSatelliteProvider

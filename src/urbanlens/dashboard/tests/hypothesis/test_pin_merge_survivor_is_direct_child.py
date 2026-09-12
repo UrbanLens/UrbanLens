@@ -1,16 +1,4 @@
-"""`merge_pins` must not delete the survivor when it is the loser's direct child.
-
-`_reparent_children` walks `loser.detail_pins.all()` re-parenting each child
-onto survivor - except survivor itself, which used to just be skipped (`if
-child.pk == survivor.pk: continue`). Skipping left `survivor.parent_pin ==
-loser`, and `loser.delete()` at the end of `merge_pins` CASCADEs on
-`Pin.parent_pin`, taking survivor down with it: a 500, every time, with no
-workaround from the UI, since the losing side of a merge is always the one
-whose data disappears.
-
-See PROBLEMS.md, "merge_pins cannot complete when the survivor is the loser's
-direct child".
-"""
+"""`merge_pins` must not delete the survivor when it is the loser's direct child."""
 
 from __future__ import annotations
 

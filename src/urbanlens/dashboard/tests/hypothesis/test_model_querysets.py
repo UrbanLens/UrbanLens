@@ -1,12 +1,4 @@
-"""DB-backed tests for small queryset methods across multiple models.
-
-Covers: CommentQuerySet, PinMarkupQuerySet, VisitQuerySet, SocialLinkQuerySet,
-NotificationQuerySet, SiteSettings.get_current(), and
-ProfileNote/ProfileNickname/ProfileTrust's for_pair().
-
-Each test creates minimal fixture data via baker and exercises the queryset
-filter methods, verifying inclusion/exclusion semantics.
-"""
+"""DB-backed tests for small queryset methods across multiple models."""
 
 from __future__ import annotations
 

@@ -94,9 +94,7 @@ class AdvanceUsageLedgerTests(TestCase):
         self.assertIsNone(sub.usage_covered_until)
 
     def test_period_start_exactly_at_as_of_is_entered(self) -> None:
-        """cursor <= as_of, not cursor < as_of - a period counts as started the instant
-        as_of reaches its start, not only strictly after. Balance is ample, so only this
-        comparison decides whether the second period (starting exactly at as_of) is entered."""
+        """cursor <= as_of, not cursor < as_of - a period counts as started the instant as_of reaches its start, not only strictly after. Balance is ample, so only this comparison decides whether the second period (starting exactly at as_of) is entered."""
         RoleSubscription.objects.filter(pk=self.sub.pk).update(total_paid_cents=100_000)
         self.sub.refresh_from_db()
         banking.advance_usage_ledger(self.sub, as_of=self.start + timedelta(days=30))
@@ -240,14 +238,8 @@ class ApplyRefundTests(TestCase):
     def test_two_refunds_from_stale_instances_both_land(self) -> None:
         """Stripe delivers concurrently, and both handlers hold their own instance.
 
-        Two partial refunds on one charge arrive at once, each handler having
-        read ``total_paid_cents`` before the other wrote. Subtracting from that
-        in-memory value made the second write erase the first - while the
-        webhook's StripeProcessedRefund row still committed, so the lost debit
-        was never retried and access stayed funded by refunded money. Both
-        instances here are deliberately stale, which is what that looks like
-        without needing real threads.
-        """
+        Two partial refunds on one charge arrive at once, each handler having read ``total_paid_cents`` before
+        the other wrote."""
         first = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
         second = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
 

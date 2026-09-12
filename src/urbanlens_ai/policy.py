@@ -1,12 +1,4 @@
-"""Everything this service refuses to do, in one place.
-
-The proxy allowlist (``config/egress/``) is the actual network boundary - see
-the plan's architecture note. This module is the mechanical check *inside*
-the process: it validates an already-parsed request before any provider
-client is built, so a caller that tries to smuggle a server-side tool, an
-unlisted model, or an inflated ``max_tokens`` gets a clean 4xx instead of a
-provider call that might have honored it.
-"""
+"""Everything this service refuses to do, in one place."""
 
 from __future__ import annotations
 
@@ -16,12 +8,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from urbanlens_ai.schema import ClassifyRequest, InferenceRequest, Provider, ToolSpec
 
-#: Per-request SDK timeout and retry budget. A hung provider connection must
-#: not pin one of this service's ``-k gthread`` worker threads indefinitely -
-#: see the architecture note on why this is a single-worker, multi-threaded
-#: service. One retry (not zero) tolerates a single dropped connection
-#: without doubling worst-case latency the way the SDK's own default
-#: (several retries with backoff) would.
+#: Per-request SDK timeout and retry budget.
+#: A hung provider connection must not pin one of this service's ``-k gthread`` worker threads indefinitely -
+#: see the architecture note on why this is a single-worker, multi-threaded service.
 PROVIDER_TIMEOUT_SECONDS = 30
 PROVIDER_MAX_RETRIES = 1
 
@@ -39,14 +28,9 @@ OPENAI_BASE_URL = "https://api.openai.com/v1"
 #: validated by shape instead: HTTPS, and a Cloudflare-owned host.
 _CLOUDFLARE_HOST_RE = re.compile(r"^[a-z0-9.-]+\.cloudflare\.com$")
 
-#: Every model each curated provider is allowed to serve, mirroring that
-#: provider's own ``MODEL_COSTS`` catalog in ``dashboard.services.ai`` -
-#: those two lists are kept in sync by hand; a model absent from both is
-#: refused by this policy rather than silently costed at the generic
-#: fallback estimate. Cloudflare is deliberately absent: ``SiteSettings.
-#: cloudflare_model`` is free text so an admin can point at any Workers AI
-#: model, so it is validated by shape (see ``_CLOUDFLARE_MODEL_RE``) instead
-#: of an exact-match set.
+#: Every model each curated provider is allowed to serve, mirroring that provider's own ``MODEL_COSTS`` catalog
+#: in ``dashboard.services.ai`` - those two lists are kept in sync by hand; a model absent from both is refused
+#: by this policy rather than silently costed at the generic fallback estimate.
 ALLOWED_MODELS: dict[Provider, frozenset[str]] = {
     "anthropic": frozenset({"claude-haiku-4-5", "claude-sonnet-5", "claude-opus-4-8"}),
     "openai": frozenset({"gpt-5.2", "gpt-5-mini", "gpt-5-nano"}),
@@ -61,14 +45,8 @@ _CLOUDFLARE_MODEL_RE = re.compile(r"^@cf/[a-z0-9_.-]+/[a-z0-9_.-]+$", re.IGNOREC
 #: caller cannot ask for an unbounded response.
 MAX_ALLOWED_TOKENS = 16000
 
-#: Tool names naming a provider's own built-in, server-executed tool (web
-#: search, code execution, computer use, ...) rather than a JSON-schema
-#: function the caller implements itself. ``ToolSpec`` has no ``type`` field -
-#: every tool this service is asked to declare is translated as a plain
-#: function/custom tool, so there is structurally no way to request a
-#: server-side tool through it - this list is the defense-in-depth check for
-#: a caller trying anyway via the name, and what the "no web search" tests
-#: exercise.
+#: Tool names naming a provider's own built-in, server-executed tool (web search, code execution, computer use,
+#: ...) rather than a JSON-schema function the caller implements itself.
 _SERVER_TOOL_NAMES = frozenset(
     {
         "web_search",
@@ -101,9 +79,7 @@ def validate_model(provider: Provider, model: str) -> None:
         model: The model identifier the caller requested.
 
     Raises:
-        PolicyError: The model is not on the provider's allowlist (or, for
-            Cloudflare, does not look like a Workers AI model identifier).
-    """
+        PolicyError: The model is not on the provider's allowlist (or, for Cloudflare, does not look like a Workers AI model identifier)."""
     if provider == "cloudflare":
         if not _CLOUDFLARE_MODEL_RE.match(model):
             raise PolicyError(f"Model {model!r} does not look like a Cloudflare Workers AI model identifier")
@@ -121,8 +97,7 @@ def validate_tools(tools: list[ToolSpec]) -> None:
         tools: The tools the caller wants the model to have available.
 
     Raises:
-        PolicyError: A tool name matches a known server-side tool identifier.
-    """
+        PolicyError: A tool name matches a known server-side tool identifier."""
     for tool in tools:
         if tool.name.lower() in _SERVER_TOOL_NAMES:
             raise PolicyError(f"Tool {tool.name!r} names a provider server-side tool, which this service never declares")
@@ -135,8 +110,7 @@ def validate_cloudflare_endpoint(endpoint: str) -> None:
         endpoint: The configured ``cloudflare_worker_ai_endpoint`` URL.
 
     Raises:
-        PolicyError: The URL is not HTTPS or its host is not ``*.cloudflare.com``.
-    """
+        PolicyError: The URL is not HTTPS or its host is not ``*.cloudflare.com``."""
     if not endpoint.startswith("https://"):
         raise PolicyError("Cloudflare Workers AI endpoint must be HTTPS")
     host = endpoint.removeprefix("https://").split("/", 1)[0].split(":", 1)[0]
@@ -174,9 +148,7 @@ def validate_image(image: object) -> None:
         image: The :class:`~urbanlens_ai.schema.ImagePart` to check.
 
     Raises:
-        PolicyError: The payload is not decodable base64, or decodes to more
-            than :data:`MAX_IMAGE_BYTES`.
-    """
+        PolicyError: The payload is not decodable base64, or decodes to more than :data:`MAX_IMAGE_BYTES`."""
     import base64
     import binascii
 
@@ -196,10 +168,7 @@ def validate_classify_request(request: ClassifyRequest) -> None:
         request: The normalized, already-schema-validated classify request.
 
     Raises:
-        PolicyError: The provider does not offer classification here, the
-            model identifier is not one this service recognizes, or the image
-            failed :func:`validate_image`.
-    """
+        PolicyError: The provider does not offer classification here, the model identifier is not one this service recognizes, or the image failed..."""
     if request.provider not in _CLASSIFY_PROVIDERS:
         raise PolicyError(f"Provider {request.provider!r} does not offer image classification through this service")
     validate_model(request.provider, request.model)
@@ -213,9 +182,7 @@ def validate_request(request: InferenceRequest) -> None:
         request: The normalized, already-schema-validated inference request.
 
     Raises:
-        PolicyError: Any check failed - see the individual ``validate_*``
-            functions for what each one covers.
-    """
+        PolicyError: Any check failed - see the individual ``validate_*`` functions for what each one covers."""
     validate_model(request.provider, request.model)
     validate_tools(request.tools)
     if request.provider == "cloudflare" and request.tools:

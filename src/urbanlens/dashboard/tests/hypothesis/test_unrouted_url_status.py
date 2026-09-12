@@ -1,30 +1,4 @@
-"""An unrouted URL answers 404, including under `/dashboard/`.
-
-`dashboard/urls.py` ended with its own catch-all::
-
-    re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404")
-
-`TemplateView` has no `status`, so it renders the 404 *page* with a **200**
-status. Because that pattern lives inside the `dashboard/` include, it matched
-first and shadowed the root URLconf's catch-all - which calls
-`_render_404_page` and does set `status=404`, and which every other prefix on
-the site reaches correctly. So the one prefix that holds essentially the whole
-application was the one answering 200 to a URL that does not exist.
-
-Three things that costs, none of them visible from the page:
-
-* Any `fetch()` that branches on `response.ok` treats a removed or renamed
-  endpoint as success, and then parses an HTML error page as JSON. There are
-  ~40 raw `fetch()` call sites (P11); this turns a clean failure into a
-  confusing one for all of them.
-* Alerting on 4xx rates cannot see a broken internal link at all.
-* A crawler indexes every mistyped path as a real page (a soft 404).
-
-The fix is deleting that line: `handler404` and the root catch-all already
-render the same template, with the right status. The test asserts the status
-rather than the markup, because rendering the styled page was never the part
-that was wrong.
-"""
+"""An unrouted URL answers 404, including under `/dashboard/`."""
 
 from __future__ import annotations
 

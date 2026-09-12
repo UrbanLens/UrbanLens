@@ -1,13 +1,4 @@
-"""Tests for UL-288: the satellite and street-view carousel endpoints.
-
-satellite_view_carousell() and street_view() used to be two independent,
-near-identical ~50-line methods (pin lookup, coordinate-null check,
-warm-cache readiness gate, deadline-guarded collector call, debug-entry
-loop, render) differing only in their service key, collector function,
-template, and a couple of extra context keys. This exercises the shared
-_render_media_carousel() helper they were consolidated into, through both
-call sites, to confirm the extraction didn't change behavior.
-"""
+"""Tests for UL-288: the satellite and street-view carousel endpoints."""
 
 from __future__ import annotations
 

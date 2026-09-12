@@ -1,12 +1,4 @@
-"""Tests for services.spotguessr.prewarm and its session.py/tasks.py integration.
-
-See docs: the SpotGuessr /start/ slowness fix - selection.py's N+1 fix
-addresses the round trip's own dominant cost, and this background prewarm
-addresses what's left (mainly Street View mode's live Google Maps lookup -
-services.spotguessr.street_view) by running the next round's selection
-ahead of time and caching the result, so the request that actually needs it
-can consume a cache hit instead of generating live.
-"""
+"""Tests for services.spotguessr.prewarm and its session.py/tasks.py integration."""
 
 from __future__ import annotations
 
@@ -135,12 +127,6 @@ class GetOrCreateRoundConsumesSessionPrewarmTests(TestCase):
         _make_photo_location(profile)
 
         session = start_solo_session(profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=3)
-        # This round is made the session's *last* one (bypassing the
-        # MIN_ROUNDS_PER_SESSION=3 floor start_solo_session's own
-        # total_rounds param would clamp to) so creating it doesn't also
-        # enqueue - and eagerly run - a prewarm for a round after it, which
-        # would call the mocked generate_round_content too and confuse the
-        # "never called live" assertion below with an unrelated call.
         session.total_rounds = 1
         session.save(update_fields=["total_rounds"])
         picked = generate_round_content(SpotGuessrMode.PHOTOS, GameConfig(), [profile], [], None)
@@ -266,10 +252,7 @@ class PrewarmSpotguessrRoundTaskTests(TestCase):
         self.assertFalse(result)
 
     def test_creating_a_round_live_triggers_the_background_prewarm_of_the_next_one(self) -> None:
-        """End-to-end: get_or_create_round's own enqueue (run inline under
-        Celery's eager-mode test setting) should leave the *next* round
-        already cached, so completing the current one serves the next from
-        cache instead of generating it live."""
+        """End-to-end: get_or_create_round's own enqueue (run inline under Celery's eager-mode test setting) should leave the *next* round already cached, so completing the current one serves the next from cache instead of generating it live."""
         profile = _make_profile()
         _make_photo_location(profile)
         _make_photo_location(profile)

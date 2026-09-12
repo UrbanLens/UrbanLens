@@ -97,15 +97,10 @@ class MergeRetainsPropertiesTests(TestCase):
 class MergeRetainsPropertiesPropertyTests(TestCase):
     """Property-based generalization of MergeRetainsPropertiesTests above.
 
-    PinBulkMergeView.post has no extracted service function to call directly
-    (the reparenting - ``source.parent_pin = target; source.save(...)`` - is
-    inline in the view), so this exercises that same ORM-level operation
-    directly rather than going through self.client, per this repo's
-    documented @given + self.client incompatibility. Verifies the merge
-    invariant - a pin's own fields (name, priority, and its Location) survive
-    reparenting unchanged - for arbitrary generated names/priorities/
-    coordinates rather than one hand-picked example.
-    """
+    PinBulkMergeView.post has no extracted service function to call directly (the reparenting -
+    ``source.parent_pin = target; source.save(...)`` - is inline in the view), so this exercises that same
+    ORM-level operation directly rather than going through self.client, per this repo's documented @given +
+    self.client incompatibility."""
 
     @given(name=nonempty_name, priority=priority_strategy, coords=coord_pair_float)
     @_db_settings
@@ -183,12 +178,9 @@ class MapChildPinsJsonTests(TestCase):
 class MapSearchExcludesChildPinsTests(TestCase):
     """POST /map/search/ (the filter-formula search path) must not surface child pins as if they were root pins.
 
-    Unlike every other map-data query, this path built its queryset without
-    ``.root_pins()`` before ``map_data_context()`` was called with an explicit
-    (non-None) query - which only applies that filter itself when no query is
-    given. Left unfixed, a search would show a merged/detail pin as a normal
-    top-level marker, the opposite of the "merged pins disappear" symptom.
-    """
+    Unlike every other map-data query, this path built its queryset without ``.root_pins()`` before
+    ``map_data_context()`` was called with an explicit (non-None) query - which only applies that filter itself
+    when no query is given."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -452,12 +444,7 @@ class PinSwapWithParentModelTests(TestCase):
 
 
 class PinSwapWithParentPropertyTests(TestCase):
-    """Property-based generalization of PinSwapWithParentModelTests above:
-    the "child becomes parent of former parent", "child takes over
-    grandparent slot", and "no cycle results" invariants must hold for a
-    chain of arbitrary depth, not just the one hand-picked 3-level chain
-    above. Pure model-method test (Pin.swap_with_parent()) - no self.client.
-    """
+    """Property-based generalization of PinSwapWithParentModelTests above: the "child becomes parent of former parent", "child takes over grandparent slot", and "no cycle results" invariants must hold for a chain of arbitrary depth, not just the one hand-picked 3-level chain above. Pure model-method test (Pin.swap_with_parent()) - no self.client."""
 
     @given(depth=st.integers(min_value=2, max_value=6))
     @_db_settings
@@ -575,16 +562,9 @@ class DetailPinJsonChildrenTests(TestCase):
 class DetailPinCoordinateDedupTests(TestCase):
     """Detail pins placed near each other must keep distinct coordinates.
 
-    ``Location.objects.get_nearby_or_create``'s default 50m proximity dedup
-    would otherwise snap two nearby detail pins (or a detail pin and its own
-    parent) onto the same Location, collapsing their marker coordinates
-    together - reported after several detail pins placed around a map all
-    ended up stacked on one point.
-
-    The exact-point case (as opposed to the nearby case covered here) is
-    rejected outright - see ``test_child_pin_overlap``, which also carries the
-    property-based generalization of this class.
-    """
+    ``Location.objects.get_nearby_or_create``'s default 50m proximity dedup would otherwise snap two nearby
+    detail pins (or a detail pin and its own parent) onto the same Location, collapsing their marker coordinates
+    together - reported after several detail pins placed around a map all ended up stacked on one point."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -731,9 +711,7 @@ class PinShareBundleTests(TestCase):
         self.assertIsNone(new_root.parent_pin_id)
         self.assertEqual(new_child.parent_pin_id, new_root.pk)
         self.assertEqual(new_grandchild.parent_pin_id, new_child.pk)
-        # The shape of the bundle travels; the sender's icon does not. This used
-        # to assert the icon came too - see test_share_pin_copy_fidelity's
-        # NOT_COPIED for what stays with its owner and why.
+        # The shape of the bundle travels; the sender's icon does not.
         self.assertNotEqual(new_child.icon, "factory")
 
     def test_reject_rejects_the_whole_bundle(self) -> None:
@@ -861,10 +839,7 @@ class PinActionsFabVisibilityTests(TestCase):
         return self.client.get(reverse("pin.details", kwargs={"pin_slug": pin.slug}))
 
     def test_hierarchy_items_hidden_but_the_fab_remains_for_its_article_actions(self) -> None:
-        """The fab itself always renders (it also holds the Article tab's
-        Source/Clear controls - see _hierarchy_actions_fab.html and
-        test_articles.py's test_pin_detail_page_offers_source_and_clear_via_the_actions_menu),
-        even for the common case of a pin with neither children nor a parent."""
+        """The fab itself always renders (it also holds the Article tab's Source/Clear controls - see _hierarchy_actions_fab.html and test_articles.py's test_pin_detail_page_offers_source_and_clear_via_the_actions_menu), even for the common case of a pin with neither children nor a parent."""
         pin = _make_pin(self.profile, name="Lonely")
         response = self._page(pin)
         self.assertContains(response, "pin-actions-fab")

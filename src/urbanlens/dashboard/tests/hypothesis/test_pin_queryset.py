@@ -1,11 +1,4 @@
-"""Tests for PinQuerySet filter methods and PinManager.get_nearby_or_create.
-
-Covers structural pin-type filters (root_pins, detail_pins, location_detail_pins),
-temporal visit filters (never_visited), rating filters (rated/rated_over/rated_under),
-tag hierarchy traversal (by_tag), and the proximity-based manager method.
-
-All tests require the database.
-"""
+"""Tests for PinQuerySet filter methods and PinManager.get_nearby_or_create."""
 
 from __future__ import annotations
 
@@ -324,11 +317,9 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
 class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
     """get_nearby_or_create() must also dedupe against an existing *child* pin.
 
-    Import previously only looked for a root pin (parent_pin__isnull=True) at the
-    Location, so importing a placemark that matched an existing child/child pin's
-    coordinates silently created a brand-new, disconnected root pin instead of
-    merging into it.
-    """
+    Import previously only looked for a root pin (parent_pin__isnull=True) at the Location, so importing a
+    placemark that matched an existing child/child pin's coordinates silently created a brand-new, disconnected
+    root pin instead of merging into it."""
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile

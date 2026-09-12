@@ -299,7 +299,6 @@ class ImportCustomFieldsTests(TestCase):
         )
 
 
-# -- The four previously-importerless categories (decision 2026-07-23: build all) --
 
 
 class RoundTripCommentsTests(TestCase):
@@ -543,9 +542,7 @@ class RoundTripPhotosTests(TestCase):
         self.assertTrue(any("storage quota" in w for w in result.warnings))
 
     def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
+        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
         from unittest import mock
 
         row = {"uuid": "8a4f0a53-1111-4f77-9111-00000000000a", "filename": "mill.jpg"}
@@ -609,9 +606,7 @@ class RestoreOverlayImageQuotaLockTests(TestCase):
         self.importer = baker.make(User).profile
 
     def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
+        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
         from unittest import mock
 
         with tempfile.TemporaryDirectory() as temp_dir:

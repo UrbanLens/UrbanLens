@@ -1,13 +1,4 @@
-"""Tests for storage-quota exemptions.
-
-Two rules, both about not charging one user for storage the whole community
-benefits from:
-
-- Locally cached external media never counts against anyone's quota.
-- A user's own wiki-shared photo stops counting once enough *other* people
-  mark it relevant, and starts counting again only if that same user takes the
-  photo back off the wiki.
-"""
+"""Tests for storage-quota exemptions."""
 
 from __future__ import annotations
 
@@ -239,10 +230,8 @@ class CommunityQuotaBonusTests(TestCase):
 class RevokingTheCommunityBonusTests(TestCase):
     """Withdrawing the contribution ends the bonus it earned.
 
-    The forward rule is one-way against everyone else - see
-    ``test_the_bonus_is_never_revoked`` above, which must keep passing. This is
-    the one case it was never meant to cover.
-    """
+    The forward rule is one-way against everyone else - see ``test_the_bonus_is_never_revoked`` above, which
+    must keep passing."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -321,11 +310,7 @@ class RevokingTheCommunityBonusTests(TestCase):
 class WikiDeleteQuotaBonusTests(TestCase):
     """Deleting a whole wiki ends the deleter's own bonuses and nobody else's.
 
-    ``Image.wiki`` is ``SET_NULL``, so one delete detaches every contributor's
-    photos at once. The one-way rule protects all of them except the deleter,
-    whose own contribution stopped existing because they ended it - the same
-    withdrawal ``revoke_community_quota_bonus`` covers one photo at a time.
-    """
+    ``Image.wiki`` is ``SET_NULL``, so one delete detaches every contributor's photos at once."""
 
     def setUp(self) -> None:
         super().setUp()

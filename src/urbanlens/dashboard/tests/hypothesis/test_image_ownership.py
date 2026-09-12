@@ -1,23 +1,4 @@
-"""Who owns a photo: ``Image.is_own_contribution`` and its ORM twin.
-
-Several independent gates ask the same question - may a concealed viewer see
-this, may this profile withdraw it from a wiki, does it earn reputation, does it
-count towards an upload achievement - and every one of them used to answer it
-with ``source == ImageSource.UPLOAD``. That is wrong in both directions:
-
-* A photo picked out of the user's own Immich server, Google Photos library or
-  Flickr account is their own picture, but carries the provider's name in
-  ``source``. Gating on ``UPLOAD`` showed a stranger's personal photos to a
-  concealed viewer.
-* A row materialised from somebody else's provider search can carry ``UPLOAD``
-  in ``source`` anyway, because ``media_materialize._translated_source`` falls
-  back to it for an unrecognised panel key.
-
-So ownership is three conjuncts, and the completeness test at the bottom is what
-keeps them honest: adding an ``ImageSource`` without deciding which side it falls
-on fails the build, rather than silently defaulting to "not personal" - which is
-the direction that leaks.
-"""
+"""Who owns a photo: ``Image.is_own_contribution`` and its ORM twin."""
 
 from __future__ import annotations
 
@@ -112,10 +93,8 @@ class IsOwnContributionTests(TestCase):
     def test_the_queryset_agrees_with_the_property_row_for_row(self) -> None:
         """The two are written separately and must not drift.
 
-        A page filters with the queryset form and then renders each row through
-        the property; disagreement is a photo listed but marked withdrawable, or
-        the reverse.
-        """
+        A page filters with the queryset form and then renders each row through the property; disagreement is a
+        photo listed but marked withdrawable, or the reverse."""
         rows = [
             self._image(),
             self._image(source=ImageSource.IMMICH),

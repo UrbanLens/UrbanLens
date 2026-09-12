@@ -1,13 +1,4 @@
-"""Tests for manual sync between a pin's child pins and its wiki's child wikis
-(services/controllers pin_wiki_sync).
-
-Two hierarchies can drift apart even when both exist: a hand-placed child pin
-nobody's documented on the wiki yet, or a wiki child nobody's personally
-pinned. Covers both directions, dedup (REData building-footprint containment
-for two building-typed markers when the parcel's buildings are known -
-proximity otherwise, and always for non-building markers), and that neither
-direction ever creates a wiki that doesn't already exist.
-"""
+"""Tests for manual sync between a pin's child pins and its wiki's child wikis (services/controllers pin_wiki_sync)."""
 
 from __future__ import annotations
 
@@ -109,13 +100,9 @@ class SendPinsToWikiTests(TestCase):
     def test_a_pin_at_the_parent_wikis_own_point_is_skipped_not_a_500(self) -> None:
         """A child pin landing exactly on the parent wiki's own coordinate.
 
-        `_location_for_child_wiki` refuses a second Location at a point that
-        already carries a wiki (`ChildWikiLocationError`) - most often the
-        parent wiki itself, since a parcel's own coordinate is frequently one
-        of its buildings' centroids. Left uncaught, that used to abort the
-        whole `transaction.atomic()` block, rolling back every child wiki this
-        same call had already created and 500ing the request.
-        """
+        `_location_for_child_wiki` refuses a second Location at a point that already carries a wiki
+        (`ChildWikiLocationError`) - most often the parent wiki itself, since a parcel's own coordinate is
+        frequently one of its buildings' centroids."""
         wiki = baker.make(Wiki, location=self.location, name="Campus")
         # Location has a real unique constraint on (latitude, longitude) - the
         # collision under test is reusing the parent wiki's own point, not a
@@ -175,11 +162,9 @@ class SendPinsToWikiTests(TestCase):
 class BuildingFootprintMatchingTests(TestCase):
     """Two building-typed markers match by REData's real footprint, not just proximity.
 
-    A building pin shared from one end of a long hall and the receiving
-    side's own pin for the same building at the other end can easily sit
-    farther apart than site_scope.BUILDING_MATCH_METERS - but the parcel's
-    building footprint settles unambiguously that they're the same structure.
-    """
+    A building pin shared from one end of a long hall and the receiving side's own pin for the same building at
+    the other end can easily sit farther apart than site_scope.BUILDING_MATCH_METERS - but the parcel's building
+    footprint settles unambiguously that they're the same structure."""
 
     def setUp(self) -> None:
         super().setUp()

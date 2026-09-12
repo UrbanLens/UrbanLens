@@ -1,13 +1,4 @@
-"""Guards on admin-initiated account deletion.
-
-`SiteAdminUsersView.post` deletes other people's accounts. The coverage run over the
-full suite showed it never executes - so the three things standing between an admin
-misclick and someone's data (no self-deletion, no deleting admin accounts, and a typed
-confirmation) were unverified.
-
-The handler's class docstring still describes it as a "read-only directory of
-registered users", documenting only GET; that is corrected alongside these tests.
-"""
+"""Guards on admin-initiated account deletion."""
 
 from __future__ import annotations
 
@@ -94,10 +85,7 @@ class AdminUserDeletionGuardTests(TestCase):
         self.assertFalse(self._pending(self.target_profile))
 
     def test_a_hidden_user_is_confirmed_with_the_placeholder_not_their_username(self) -> None:
-        """The handler avoids echoing a username the admin is not allowed to see, so the
-        confirmation string for a hidden profile is the fixed literal "hidden user".
-        Worth pinning: it means the typed confirmation is a constant for every user an
-        admin cannot see, which by default is most of them."""
+        """The handler avoids echoing a username the admin is not allowed to see, so the confirmation string for a hidden profile is the fixed literal "hidden user". Worth pinning: it means the typed confirmation is a constant for every user an admin cannot see, which by default is most of them."""
         hidden = baker.make(User, username="zzaudit-hidden")
         hidden_profile = Profile.objects.get(user=hidden)
 

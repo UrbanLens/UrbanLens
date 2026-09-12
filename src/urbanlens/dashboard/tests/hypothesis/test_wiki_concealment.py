@@ -1,15 +1,4 @@
-"""What a concealed wiki shows: automatic writes, your own, and your friends'.
-
-The friend clause is the one that shapes the design, and the one worth testing
-hardest. Friends talk offline - "just check the wiki, I put a load of stuff up
-there" - so a concealed page that hides a friend's contribution does not just
-conceal a place, it makes the site look broken to somebody who was told what to
-expect.
-
-The security-indicator rule is the other ruling with teeth: those are unset
-whatever their provenance, including when a provider supplied them, because a
-place that reads as surveyed is exactly what concealment exists to prevent.
-"""
+"""What a concealed wiki shows: automatic writes, your own, and your friends'."""
 
 from __future__ import annotations
 
@@ -168,11 +157,8 @@ class AggregateConcealmentTests(TestCase):
     def test_the_concealed_community_summary_never_reaches_the_fuzz_cache(self) -> None:
         """The shared fuzz is keyed on an id with no viewer in it.
 
-        So a concealed viewer arriving *after* an ordinary one would be handed
-        the value that viewer populated - silently, only under concurrency.
-        The concealed path has to short-circuit before the function, which is
-        why this asserts on the call rather than on the number.
-        """
+        So a concealed viewer arriving *after* an ordinary one would be handed the value that viewer populated -
+        silently, only under concurrency."""
         from unittest import mock
 
         from urbanlens.dashboard.services.wiki.concealment import concealed_community_summary
@@ -203,15 +189,9 @@ class AggregateConcealmentTests(TestCase):
     def test_a_concealed_composite_still_reflects_the_viewers_own_vote(self) -> None:
         """The subtle half, and the one the branch was written for.
 
-        Returning a flatly empty composite is its own tell: the page still
-        renders "Your vote" from my_vote, so a concealed viewer who votes would
-        see their stars filled beside a Community row that stays empty forever.
-        A fresh wiki does not behave that way - there the sole voter's value
-        *is* the composite - so one vote would be a reliable discriminator.
-
-        Without passing `viewer`, the branch exits on its None guard and this
-        goes untested, which is what the previous version of this test did.
-        """
+        Returning a flatly empty composite is its own tell: the page still renders "Your vote" from my_vote, so
+        a concealed viewer who votes would see their stars filled beside a Community row that stays empty
+        forever."""
         from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField, WikiStatVote
 
         for _ in range(4):
@@ -307,15 +287,9 @@ class RelatedRowConcealmentTests(TestCase):
     def test_provider_photos_stay_and_strangers_uploads_go(self) -> None:
         """Image.profile is the up-voter on a materialised provider row.
 
-        So authorship only means anything for a row the profile actually
-        contributed - reading the actor column alone would drop provider media a
-        fresh wiki would show, and credit a voter for somebody else's
-        photograph. What separates the two is ``media_source_key``, which
-        ``services.media.media_materialize`` sets on exactly the rows it
-        materialises; ``source`` cannot, because a photo out of the uploader's
-        own Immich or Google Photos library carries a provider's name in that
-        column while still being their own picture.
-        """
+        So authorship only means anything for a row the profile actually contributed - reading the actor column
+        alone would drop provider media a fresh wiki would show, and credit a voter for somebody else's
+        photograph."""
         from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
@@ -355,12 +329,8 @@ class RelatedRowConcealmentTests(TestCase):
     def test_a_strangers_photo_from_their_own_library_is_concealed(self) -> None:
         """A photo out of the uploader's own Immich/Google Photos/Flickr library.
 
-        These are the stranger's own pictures - the picker dialog fetched them
-        from an account they connected - so a concealed viewer must not see them,
-        exactly as for a form upload. They carry a provider's name in ``source``
-        and no ``media_source_key``, which is what separates them from a row
-        materialised out of somebody else's provider search results.
-        """
+        These are the stranger's own pictures - the picker dialog fetched them from an account they connected -
+        so a concealed viewer must not see them, exactly as for a form upload."""
         from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
@@ -389,12 +359,8 @@ class RelatedRowConcealmentTests(TestCase):
     def test_automatic_imagery_belonging_to_nobody_stays(self) -> None:
         """``photo_enrichment`` writes profile-less rows, and they are not a contribution.
 
-        Google Maps / Street View / Satellite imagery is fetched for a place, so
-        it has no uploader and carries no ``media_source_key`` either. An
-        ownership test that looked only at ``media_source_key`` would read these
-        as somebody's own photo and conceal the automatic imagery a fresh wiki
-        is supposed to show.
-        """
+        Google Maps / Street View / Satellite imagery is fetched for a place, so it has no uploader and carries
+        no ``media_source_key`` either."""
         from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
@@ -441,10 +407,8 @@ class RelatedRowConcealmentTests(TestCase):
     def test_a_rename_created_alias_is_concealed_despite_a_null_author(self) -> None:
         """The exact case created_by gets wrong, and why the spec rejected it.
 
-        Wiki.save() auto-creates an alias on every rename with created_by unset,
-        so filtering on the author would re-expose - as an alias row - the very
-        name concealed as a field.
-        """
+        Wiki.save() auto-creates an alias on every rename with created_by unset, so filtering on the author
+        would re-expose - as an alias row - the very name concealed as a field."""
         from urbanlens.dashboard.models.aliases.model import AliasSource, WikiAlias
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
@@ -459,10 +423,8 @@ class RelatedRowConcealmentTests(TestCase):
     def test_an_unknown_model_returns_nothing_rather_than_everything(self) -> None:
         """Failing closed is the only safe default for a concealment filter.
 
-        A model nobody has written a rule for must not quietly return every
-        row - that is the "one call site at a time" failure this table exists
-        to avoid, and it would fail silently and permissively.
-        """
+        A model nobody has written a rule for must not quietly return every row - that is the "one call site at
+        a time" failure this table exists to avoid, and it would fail silently and permissively."""
         from urbanlens.dashboard.models.trips.model import Trip
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
@@ -475,11 +437,8 @@ class RelatedRowConcealmentTests(TestCase):
 class ProjectionTests(TestCase):
     """The object ``conceal_wiki`` hands back, and what may be done with it.
 
-    The rework these cover replaced a ``__getattr__`` proxy, which failed *open*:
-    anything it did not explicitly override - far more than what it did - fell
-    through to the real row. A projection is a real ``Wiki`` instead, so the
-    failure mode inverts. These pin the properties that inversion depends on.
-    """
+    The rework these cover replaced a ``__getattr__`` proxy, which failed *open*: anything it did not explicitly
+    override - far more than what it did - fell through to the real row."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -530,10 +489,8 @@ class ProjectionTests(TestCase):
     def test_the_display_helper_reflects_the_concealed_value(self) -> None:
         """``get_cameras_display()`` reads the field, so it must read the concealed one.
 
-        The proxy needed explicit code for this and the security chips render
-        through exactly this call - if it regressed, a concealed page would show
-        a stranger's survey in words while the field said otherwise.
-        """
+        The proxy needed explicit code for this and the security chips render through exactly this call - if it
+        regressed, a concealed page would show a stranger's survey in words while the field said otherwise."""
         projection = self._concealed()
         unset = Wiki(cameras=Wiki._meta.get_field("cameras").get_default())
 
@@ -580,13 +537,7 @@ class ProjectionTests(TestCase):
     def test_a_property_computed_from_concealed_fields_reads_the_concealed_ones(self) -> None:
         """The failure the projection exists to make impossible.
 
-        ``effective_date_last_active`` derives from two versioned fields. The
-        proxy this replaced answered it by delegating to the real row, so the
-        property computed from the *stored* dates and handed back a stranger's
-        answer through a concealed object - the fields were hidden and the
-        conclusion drawn from them was not. A projection is a real ``Wiki``, so
-        the property runs against the values this viewer is entitled to.
-        """
+        ``effective_date_last_active`` derives from two versioned fields."""
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
             Wiki.objects.filter(pk=self.wiki.pk).update(date_last_active=datetime.date(2019, 6, 1))
         self.wiki.refresh_from_db()
@@ -599,10 +550,9 @@ class ProjectionTests(TestCase):
     def test_an_ungated_viewer_never_inherits_someone_elses_projection(self) -> None:
         """The fail-open the viewer key exists to close.
 
-        Reuse is an optimisation; if the second viewer is not gated at all, the
-        cheap answer would be to hand the projection straight back, which serves
-        one person's redacted view to somebody entitled to the whole row.
-        """
+        Reuse is an optimisation; if the second viewer is not gated at all, the cheap answer would be to hand
+        the projection straight back, which serves one person's redacted view to somebody entitled to the whole
+        row."""
         projection = self._concealed()
 
         # Gate off for this second viewer - the ordinary, ungated path.
@@ -624,16 +574,7 @@ class ProjectionTests(TestCase):
 class ConcealedArticleTests(TestCase):
     """What a concealed viewer reads on the Article tab.
 
-    An article is prose, not fields, so there is nothing to resolve write-by-
-    write. What makes it tractable is that every ``ArticleRevision`` stores the
-    complete source as of that revision: showing the newest revision a viewer
-    may see needs no reconstruction.
-
-    The rule with teeth is the null editor. It means a Wikipedia seed *or* a
-    deleted account, and treating the two alike would hand a stranger's prose to
-    a concealed viewer on the strength of that stranger having closed their
-    account.
-    """
+    An article is prose, not fields, so there is nothing to resolve write-by- write."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -709,16 +650,8 @@ class ConcealedArticleTests(TestCase):
 class ByIdScopeTests(TestCase):
     """The queryset every by-id lookup on a wiki-scoped row is now scoped to.
 
-    Fifteen call sites looked up a comment, alias, link, edit, photo or article
-    revision by id, scoped to the wiki rather than to the viewer. That is an
-    existence oracle - "is there a row N here" is answered for rows concealment
-    had already decided the account cannot see - and on the mutating routes it
-    let the account act on one: reverting an edit it was never shown, deleting
-    a stranger's alias, promoting one to the wiki's name.
-
-    They all go through ``visible_rows`` now, so this covers the property they
-    share rather than fifteen views separately.
-    """
+    Fifteen call sites looked up a comment, alias, link, edit, photo or article revision by id, scoped to the
+    wiki rather than to the viewer."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-"""Turn a baseline k6 summary into the p95 ceiling the measured pass is judged against.
-
-A fixed millisecond budget is a claim about one machine on one day. This suite
-is meant to run on a shared box where another build may be compiling, so the
-budget is derived from a baseline measured minutes earlier in the same place -
-which keeps the question the one that matters: *did the actor slow the
-neighbour down*, rather than *is this host fast today*.
-
-The formula is deliberately not a plain multiple::
-
-    budget = min(CEILING, max(baseline x SLACK_FACTOR, baseline + SLACK_FLOOR_MS))
-
-Each term covers a case the others get wrong:
-
-- the multiple alone is useless when the baseline is small - 3 x 4ms is a 12ms
-  budget that ordinary jitter fails;
-- the additive floor alone is far too generous when the baseline is already
-  large, which is the case where the site is *already* struggling;
-- the absolute ceiling stops a slow baseline from licensing an unusable one. A
-  neighbour above it is not having a good time whatever the baseline said.
-
-Prints one integer on stdout, so a shell can capture it.
-"""
+"""Turn a baseline k6 summary into the p95 ceiling the measured pass is judged against."""
 
 from __future__ import annotations
 
@@ -30,10 +8,6 @@ import json
 from pathlib import Path
 import sys
 
-#: Multiple of the baseline p95 the neighbour may reach before it counts as
-#: having been affected. Three, not two: a shared host's own noise routinely
-#: doubles a p95 measured a minute apart, and a threshold that fires on the
-#: harness rather than on the application would be abandoned within a week.
 SLACK_FACTOR = 3.0
 
 #: Added to the baseline when the multiple would be smaller. Below roughly this
@@ -67,10 +41,7 @@ def baseline_p95(summary: dict) -> float:
         The p95 in milliseconds.
 
     Raises:
-        SystemExit: The summary has no usable trend, which means the baseline
-            pass issued no requests - deriving a budget from it would produce a
-            number with nothing behind it.
-    """
+        SystemExit: The summary has no usable trend, which means the baseline pass issued no requests - deriving a budget from it would produce a number..."""
     metrics = summary.get("metrics", {})
     for name in (_METRIC, _FALLBACK_METRIC):
         values = metrics.get(name, {}).get("values", {})
@@ -93,27 +64,20 @@ def derive(p95: float) -> int:
         p95: The baseline p95 in milliseconds.
 
     Returns:
-        The ceiling every asserted phase's p95 must stay below.
-    """
+        The ceiling every asserted phase's p95 must stay below."""
     return int(min(CEILING_MS, max(p95 * SLACK_FACTOR, p95 + SLACK_FLOOR_MS)))
 
 
 def ceiling_dominates(p95: float) -> bool:
     """Whether the absolute ceiling, not the slack, is what set the budget.
 
-    Worth saying out loud rather than leaving in the arithmetic. When the
-    baseline is already close to the ceiling the run can only fail, and it will
-    fail every phase at once - which reads as "the actor broke everything" when
-    what it means is that the site was already too slow before the actor did
-    anything. A verdict about the host wearing the costume of a verdict about
-    the actor is worse than no verdict.
+    Worth saying out loud rather than leaving in the arithmetic.
 
     Args:
         p95: The baseline p95 in milliseconds.
 
     Returns:
-        True when the ceiling is doing the work.
-    """
+        True when the ceiling is doing the work."""
     return max(p95 * SLACK_FACTOR, p95 + SLACK_FLOOR_MS) > CEILING_MS
 
 
@@ -124,8 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         argv: Command-line arguments, for testing.
 
     Returns:
-        Process exit status.
-    """
+        Process exit status."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("summary", type=Path, help="Path to the baseline pass's JSON summary.")
     parser.add_argument("--explain", action="store_true", help="Also write the reasoning to stderr.")

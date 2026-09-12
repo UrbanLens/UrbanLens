@@ -1,28 +1,4 @@
-"""Nothing in the web tier limits how often an anonymous caller may ask.
-
-`CustomLoginView` is the exception and is deliberately not covered here: it
-already carries per-identifier and per-IP failure lockouts of its own, so a
-second limiter in front of it would be two gates disagreeing about one rule.
-
-`external_api/throttling.py` is rich and DRF-only; `services/core/rate_limiter.py`
-caps *outbound* third-party spend. Between them there was no inbound limit on a
-plain Django view, which is why `POST /signup/` - about 1.1s of PBKDF2 CPU per
-request, measured by the slow-request middleware - could be called in a loop by
-anyone, occupying the gunicorn workers every signed-in user shares. That is the
-governing requirement failing to an attacker with no account.
-
-Two properties here are load-bearing and easy to get backwards:
-
-**It fails open.** A throttle that refuses when it cannot read its counter turns
-a Valkey outage into a site-wide lockout, and P105 already records that a Valkey
-outage 500s every request. An abuse control is not worth an availability
-incident, so an unreachable cache means "allowed" - and that is asserted, not
-assumed.
-
-**The window is keyed, not shared.** Two callers, two counters; two scopes, two
-counters. A throttle that pools callers is a denial-of-service tool pointed at
-the site by whoever hits it first.
-"""
+"""Nothing in the web tier limits how often an anonymous caller may ask."""
 
 from __future__ import annotations
 

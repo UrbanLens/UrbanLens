@@ -1,28 +1,4 @@
-"""The OpenAPI document under test, and where the requests it drives are sent.
-
-This module exists so the conformance tests do not have to care which of two
-very different things they are pointed at:
-
-*In-process* (the default). The schema is generated straight from the urlconf
-and every generated request is handed to Django's WSGI callable. No server, no
-network, no deployment - it runs anywhere ``pytest`` runs, and it is the mode a
-pre-merge check would use.
-
-*Live*. Set :data:`BASE_URL_ENV` and the schema is fetched from a deployment and
-the requests go over HTTP, through the proxy, into the real process. Use it to
-answer "does the thing we actually shipped still match its contract", which is
-the question the in-process mode structurally cannot ask.
-
-Why the in-process mode generates the document rather than fetching it from
-``schema/`` over WSGI: the fetch would be a request, and a request means
-middleware, ``ALLOWED_HOSTS`` and possibly the database, all at *collection*
-time, before pytest has set anything up. drf-spectacular's generator is pure
-introspection and applies the same preprocessing hooks the view does, so the
-document is identical and cannot fail for reasons unrelated to the schema.
-That the endpoint serves it is a separate claim, and one that
-``test_external_api_schema_e2ee.py`` and the Playwright ``api`` project already
-make.
-"""
+"""The OpenAPI document under test, and where the requests it drives are sent."""
 
 from __future__ import annotations
 
@@ -34,8 +10,7 @@ from typing import Any, Final
 import schemathesis
 from schemathesis import BaseSchema
 
-#: Path the published schema is served at. Only used to label the live fetch and
-#: to tell schemathesis where the document came from.
+#: Path the published schema is served at.
 SCHEMA_PATH: Final[str] = "/dashboard/api/external/v1/schema/"
 
 #: Set to a deployment's base URL to switch from in-process to live mode.
@@ -86,19 +61,13 @@ def live_base_url() -> str | None:
 def selected_methods() -> tuple[str, ...] | None:
     """Which HTTP methods to generate requests for.
 
-    ``safe`` restricts generation to :data:`SAFE_METHODS`. ``all`` lifts the
-    restriction, which means the run will create, modify and delete data as
-    whichever account it is authenticated as - fine against a throwaway test
-    database, and fine against the disposable accounts
-    ``provision_integration_env`` makes, but not something to point at an
-    account anybody cares about.
+    ``safe`` restricts generation to :data:`SAFE_METHODS`.
 
     Returns:
         The methods to include, or ``None`` to include every method.
 
     Raises:
-        ContractConfigurationError: If the variable holds neither value.
-    """
+        ContractConfigurationError: If the variable holds neither value."""
     raw = os.environ.get(METHODS_ENV, "safe").strip().lower()
     if raw == "safe":
         return SAFE_METHODS
@@ -114,8 +83,7 @@ def max_examples() -> int:
         A positive example count.
 
     Raises:
-        ContractConfigurationError: If the variable is not a positive integer.
-    """
+        ContractConfigurationError: If the variable is not a positive integer."""
     raw = os.environ.get(MAX_EXAMPLES_ENV, "").strip()
     if not raw:
         return DEFAULT_MAX_EXAMPLES
@@ -155,29 +123,11 @@ def strict_enabled() -> bool:
 def response_checks() -> list:
     """The checks each response is held to.
 
-    The default pair is the part that is about *this* application's behaviour:
-    it must not 500, and a body it returns must validate against the schema it
-    published for that response. Both are green today, so a failure means
-    something drifted.
-
-    ``status_code_conformance`` and ``content_type_conformance`` are strong
-    checks that this schema is not yet ready for, because it documents only
-    success. A GET on ``pins/{pin_slug}/`` with a generated slug correctly
-    returns 404, which is undocumented, so the check fires on a correct
-    response - and it would fire on almost every parameterised operation. Turn
-    them on with :data:`STRICT_ENV` once the error responses are declared; the
-    document-shape tests measure how far off that is.
-
-    ``ignored_auth`` is excluded in both modes. It works by re-sending a request
-    with the credential removed or corrupted, but it can only tamper with a
-    credential it generated - and this suite deliberately supplies a real one
-    outside that model, so the check sees its "invalid" request succeed and
-    reports an authentication bypass that is not there. Auth rejection is
-    covered for real by the Playwright suite's ``api/auth.spec.ts``.
+    The default pair is the part that is about *this* application's behaviour: it must not 500, and a body it
+    returns must validate against the schema it published for that response.
 
     Returns:
-        Check callables to pass to ``call_and_validate``.
-    """
+        Check callables to pass to ``call_and_validate``."""
     from schemathesis.checks import not_a_server_error
     from schemathesis.specs.openapi.checks import (
         content_type_conformance,
@@ -194,22 +144,7 @@ def response_checks() -> list:
 def _build_config():
     """Configuration shared by both modes.
 
-    Two deliberate restrictions, both because of what this suite is *for*.
-
-    ``with_security_parameters=False`` stops schemathesis generating a value for
-    the declared bearer scheme. Left on, it invents a random token, and every
-    operation then fails with 401 for a reason that says nothing about the
-    contract. The real credential is applied per-test instead.
-
-    The coverage phase is off by default. It is the part that deliberately drops
-    a required header, sends undeclared methods and mistypes parameters - all
-    genuinely useful, and all of which this API answers with a status its schema
-    does not document (401, 405), so every operation fails for the same systemic
-    reason. That gap is asserted once, precisely, by
-    ``TestDocumentShape.test_authenticated_operations_document_rejection``
-    rather than a hundred times here. Set :data:`COVERAGE_ENV` to run it
-    anyway, which is worth doing when auditing error responses.
-    """
+    Two deliberate restrictions, both because of what this suite is *for*."""
     from schemathesis import Config, GenerationMode
     from schemathesis.config import CoveragePhaseConfig, GenerationConfig, PhasesConfig, ProjectConfig, ProjectsConfig
 
@@ -225,13 +160,8 @@ def _in_process_schema() -> BaseSchema:
     from django.core.wsgi import get_wsgi_application
 
     schema = schemathesis.openapi.from_dict(generate_schema_document(), config=_build_config())
-    # `transport` is chosen from `app`, so assigning it is what makes generated
-    # calls go through WSGI instead of over the network. This is exactly what
-    # `schemathesis.openapi.from_wsgi` does after it fetches the document.
-    #
-    # `get_wsgi_application()` rather than importing `UrbanLens.wsgi`: the
-    # deployed module is entitled to have import-time side effects aimed at a
-    # server process, and none of them are wanted inside a test runner.
+    # `transport` is chosen from `app`, so assigning it is what makes generated calls go through WSGI instead of
+    # over the network.
     schema.app = get_wsgi_application()
     schema.location = SCHEMA_PATH
     return schema
@@ -261,12 +191,10 @@ def manifest_api_key() -> str | None:
     """The primary account's API key, from the shared accounts manifest.
 
     Returns:
-        A raw ``ulk_`` key, or ``None`` when no manifest is configured or the
-        manifest holds no key.
+        A raw ``ulk_`` key, or ``None`` when no manifest is configured or the manifest holds no key.
 
     Raises:
-        ContractConfigurationError: If the manifest is named but unreadable.
-    """
+        ContractConfigurationError: If the manifest is named but unreadable."""
     location = os.environ.get(ACCOUNTS_FILE_ENV, "").strip()
     if not location:
         return None

@@ -1,16 +1,4 @@
-"""Structural guarantees about the two templates every page is built from.
-
-Both properties here were found missing by the Playwright suite
-(`tests/integration/`, see docs/PROBLEMS.md 2026-08-23). That suite runs by hand
-against a deployment, so it can go months between runs; these assertions are the
-cheap half, and they run on every commit.
-
-Deliberately reading the template *source* rather than rendering it. Neither
-property depends on context, rendering `themes/base.html` needs a request with an
-authenticated user and a profile, and - more to the point - the useful form of
-the second assertion is "no unpinned tag exists anywhere in this file", which is
-a statement about the file, not about one rendering of it.
-"""
+"""Structural guarantees about the two templates every page is built from."""
 
 from __future__ import annotations
 
@@ -48,8 +36,7 @@ def _template_source(name: str) -> str:
         name: Template name as it would be given to ``render``.
 
     Returns:
-        The file's contents.
-    """
+        The file's contents."""
     for directory in settings.TEMPLATES[0]["DIRS"]:
         candidate = Path(directory) / name
         if candidate.exists():
@@ -67,12 +54,9 @@ class PageLanguageTests(SimpleTestCase):
     def test_every_theme_declares_a_language(self) -> None:
         """``<html>`` must carry ``lang``.
 
-        Without it a screen reader guesses which language to pronounce the page
-        in, and guesses wrong for anyone whose system language differs. axe
-        reported ``html-has-lang`` at *serious* on all ten scanned pages, which
-        was ten of the integration suite's thirteen failures - one attribute,
-        repeated everywhere.
-        """
+        Without it a screen reader guesses which language to pronounce the page in, and guesses wrong for anyone
+        whose system language differs. axe reported ``html-has-lang`` at *serious* on all ten scanned pages,
+        which was ten of the integration suite's thirteen failures - one attribute, repeated everywhere."""
         for name in _THEME_TEMPLATES:
             with self.subTest(template=name):
                 opening = _OPENING_HTML_TAG.search(_template_source(name))
@@ -83,13 +67,8 @@ class PageLanguageTests(SimpleTestCase):
 class BlockNameTests(SimpleTestCase):
     """A child block whose name no ancestor defines is silently discarded.
 
-    Django treats an unmatched ``{% block %}`` in a child template as dead
-    content rather than an error, so the page renders and simply never shows
-    what the block was for. Twelve pages declared ``{% block title %}`` against
-    ``themes/base.html``, whose ``<title>`` block is ``page_title`` - every one
-    of them showed the site default instead of its own name, for as long as they
-    have existed.
-    """
+    Django treats an unmatched ``{% block %}`` in a child template as dead content rather than an error, so the
+    page renders and simply never shows what the block was for."""
 
     def _ancestor_blocks(self, template: Path) -> set[str] | None:
         """Collect block names defined anywhere up this template's extends chain.
@@ -98,10 +77,7 @@ class BlockNameTests(SimpleTestCase):
             template: Path to the child template.
 
         Returns:
-            The set of block names an ancestor defines, or ``None`` when the
-            chain cannot be resolved from source (a variable ``extends``
-            target, or a parent that is not on disk).
-        """
+            The set of block names an ancestor defines, or ``None`` when the chain cannot be resolved from source (a variable ``extends`` target, or..."""
         names: set[str] = set()
         current = template
         seen: set[Path] = set()
@@ -120,17 +96,13 @@ class BlockNameTests(SimpleTestCase):
     def _top_level_blocks(source: str) -> list[str]:
         """Block names declared outside any other block in this template.
 
-        Only these can be dropped. A block *nested* inside one the ancestor does
-        define renders as part of it, and introducing a new name there is how a
-        template offers an override point to its own children - which is what
-        ``errors/404.html`` does with ``error_title`` for ``pin_not_found.html``.
+        Only these can be dropped.
 
         Args:
             source: The template's raw text.
 
         Returns:
-            The names declared at depth zero, in document order.
-        """
+            The names declared at depth zero, in document order."""
         names: list[str] = []
         depth = 0
         for match in re.finditer(r"{%\s*(block\s+([A-Za-z0-9_]+)|endblock)", source):
@@ -173,19 +145,8 @@ class SubresourceIntegrityTests(SimpleTestCase):
     def test_every_cross_origin_script_is_pinned(self) -> None:
         """A remote ``<script>`` without ``integrity`` is total control of the app.
 
-        HTMX was loaded from unpkg with no hash while the jQuery and toastr tags
-        either side of it both had one, which is the tell that it was an
-        oversight rather than a decision. HTMX drives essentially every
-        interaction here, so whoever controls that CDN response controls the
-        application for every visitor.
-
-        Asserted over the whole file rather than against one known URL, so the
-        next unpinned tag fails too.
-
-        Stylesheets are out of scope on purpose: Google Fonts serves a different
-        stylesheet per user agent and cannot be hashed at all, so a blanket rule
-        over ``<link>`` would have to carry an exception list that quietly grows.
-        """
+        HTMX was loaded from unpkg with no hash while the jQuery and toastr tags either side of it both had one,
+        which is the tell that it was an oversight rather than a decision."""
         for name in _THEME_TEMPLATES:
             source = _template_source(name)
             for tag in _REMOTE_SCRIPT.findall(source):

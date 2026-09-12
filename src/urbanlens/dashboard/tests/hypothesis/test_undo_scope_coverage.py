@@ -1,26 +1,4 @@
-"""Every undo handler must declare read *and* write scopes for its domain.
-
-``UndoRestoreView`` documents its rule plainly: "Requires ``undo:write`` and the
-entry's own domain write scope - restoring a delete needs the same authority the
-delete itself needed." It implements that with
-
-    domain_scope = _DOMAIN_WRITE_SCOPES_BY_MODEL_LABEL.get(entry.model_label)
-    required = {UNDO_WRITE, domain_scope} if domain_scope else {UNDO_WRITE}
-
-so a label missing from the map does not fail closed - it falls through to
-``undo:write`` alone. Three of the eight registered undo handlers were missing
-(`pin_list`, `label`, `markup_map`), which meant a credential holding only
-``undo:write`` could restore a deleted pin list, label, or markup map without the
-matching domain write scope the docstring promises.
-
-The listing side of the same maps fails the other way, harmlessly: an unmapped
-label was simply omitted from the API's undo history. That asymmetry is the tell -
-the same omission was invisible in one direction and a scope escalation in the
-other.
-
-This pins both maps against the handler registry, so a ninth undo handler cannot
-repeat it.
-"""
+"""Every undo handler must declare read *and* write scopes for its domain."""
 
 from __future__ import annotations
 

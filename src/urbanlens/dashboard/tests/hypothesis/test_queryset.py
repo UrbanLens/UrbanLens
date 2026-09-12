@@ -1,17 +1,4 @@
-"""Property-based tests for PinQuerySet.filter_by_criteria.
-
-filter_by_criteria is the primary server-side search engine.  For each filter
-key the invariants are:
-
-    Completeness  - every matching pin IS in the result.
-    Soundness     - every pin in the result DOES match the criterion.
-    Idempotency   - applying the same criteria twice yields the same result.
-    Monotonicity  - removing a criterion never produces a smaller result set.
-
-The pin fixtures are created once in setUp so they survive across all
-@given examples (which are each wrapped in an individually rolled-back
-savepoint by hypothesis.extra.django.TestCase).
-"""
+"""Property-based tests for PinQuerySet.filter_by_criteria."""
 
 from __future__ import annotations
 
@@ -118,11 +105,7 @@ class FilterByCriteriaPriorityTests(TestCase):
 
 
 class FilterByCriteriaDangerTests(TestCase):
-    """min_danger / max_danger criteria - unlike rating, danger is a plain
-    always-populated IntegerField(default=0) on Pin, so 0 is a real,
-    meaningful value with no "unrated" special case needed - the only
-    regression here is UL-296's `if x := ...:` truthiness bug silently
-    skipping the filter whenever the threshold was exactly 0."""
+    """min_danger / max_danger criteria - unlike rating, danger is a plain always-populated IntegerField(default=0) on Pin, so 0 is a real, meaningful value with no "unrated" special case needed - the only regression here is UL-296's `if x := ...:` truthiness bug silently skipping the filter whenever the threshold was exactly 0."""
 
     profile: Profile
 
@@ -136,10 +119,7 @@ class FilterByCriteriaDangerTests(TestCase):
         return Pin.objects.filter(profile=self.profile)
 
     def test_min_danger_zero_is_applied_not_skipped(self) -> None:
-        """Before the fix, min_danger=0 was indistinguishable from "no
-        criterion at all" - since every pin here has danger>=0, that
-        happens to look identical either way, so assert against a stricter
-        min_danger=1 in the same call to prove 0 was actually evaluated."""
+        """Before the fix, min_danger=0 was indistinguishable from "no criterion at all" - since every pin here has danger>=0, that happens to look identical either way, so assert against a stricter min_danger=1 in the same call to prove 0 was actually evaluated."""
         result_ids = set(
             self._base_qs().filter_by_criteria({"min_danger": 0, "max_danger": 0}).values_list("pk", flat=True)
         )
@@ -211,13 +191,9 @@ class FilterByCriteriaDateTests(TestCase):
 class FilterByCriteriaRatingTests(TestCase):
     """min_rating / max_rating criteria filter by review score.
 
-    UL-296/UL-270 regression coverage: `min_rating`/`max_rating` used to be
-    silently skipped whenever the slider was set to 0 (`if x := ...:` treats
-    0 as falsy), so a "0 = unrated" filter did nothing. There is also no
-    Review row with rating=0 in real data - pin_edit.py deletes the review
-    instead of ever writing one - so 0 has to be special-cased as "unrated",
-    not filtered via a literal `rating__lte=0`/`rating__gte=0` comparison.
-    """
+    There is also no Review row with rating=0 in real data - pin_edit.py deletes the review instead of ever
+    writing one - so 0 has to be special-cased as "unrated", not filtered via a literal
+    `rating__lte=0`/`rating__gte=0` comparison."""
 
     user: User
     profile: Profile
@@ -268,20 +244,14 @@ class FilterByCriteriaRatingTests(TestCase):
                 self.assertLessEqual(rating_val, max_r)
 
     def test_min_rating_zero_is_a_no_op_and_includes_unrated_pins(self) -> None:
-        """The regression this fixes: min_rating=0 used to be silently
-        skipped by an `if x := ...:` truthiness check - confirm it no
-        longer is, AND that the result is every pin including unrated ones
-        (0 is the floor of the scale, not a real threshold)."""
+        """The regression this fixes: min_rating=0 used to be silently skipped by an `if x := ...:` truthiness check - confirm it no longer is, AND that the result is every pin including unrated ones (0 is the floor of the scale, not a real threshold)."""
         result_ids = set(self._base_qs().filter_by_criteria({"min_rating": 0}).values_list("pk", flat=True))
         all_ids = set(self._base_qs().values_list("pk", flat=True))
         self.assertEqual(result_ids, all_ids)
         self.assertIn(self.unrated_pin.pk, result_ids)
 
     def test_max_rating_zero_returns_only_unrated_pins(self) -> None:
-        """max_rating=0 asks for "unrated only" - there is no stored Review
-        with rating=0 (pin_edit.py deletes the review instead), so this must
-        resolve via reviews__isnull, not a literal rating__lte=0 comparison
-        (which would silently match nothing)."""
+        """max_rating=0 asks for "unrated only" - there is no stored Review with rating=0 (pin_edit.py deletes the review instead), so this must resolve via reviews__isnull, not a literal rating__lte=0 comparison (which would silently match nothing)."""
         result_ids = set(self._base_qs().filter_by_criteria({"max_rating": 0}).values_list("pk", flat=True))
         self.assertEqual(result_ids, {self.unrated_pin.pk})
         for rating, pin in self.pins_by_rating.items():

@@ -1,16 +1,4 @@
-"""Tests for the external API's saved-filter surface.
-
-The load-bearing case here is ``test_criteria_change_resyncs_derived_lists``:
-``PinList.smart_filter`` is a one-time copy of a SavedFilter's criteria, not a
-live reference, so a PATCH that changes criteria without resyncing leaves every
-derived smart list silently stale. That is the single easiest correctness bug in
-this feature, and the ``lists_resynced`` count is what proves it didn't happen.
-
-Also covers the criteria-ownership check, which has no internal equivalent: the
-web form constrains its label and custom-field pickers in the UI, not at the
-data layer, so a naive port would let a client probe other users' primary-key
-space through result counts.
-"""
+"""Tests for the external API's saved-filter surface."""
 
 from __future__ import annotations
 

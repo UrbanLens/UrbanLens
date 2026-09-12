@@ -1,18 +1,4 @@
-"""Tests for the TEMPORARY legacy CID coordinate repair.
-
-Delete this file together with
-``services.apis.locations.legacy_cid_coordinate_fix`` once every user has had
-the chance to re-import their pins.
-
-Parsing (pure, no DB): a name that is wholly a coordinate parses in every
-supported format, a name that merely mentions one does not, and a hypothesis
-round-trip covers arbitrary in-range pairs.
-
-Matching/moving (DB): a legacy pin is found by CID and by coordinate-shaped
-name (verbatim and cross-format) and moved onto its corrected Location, while
-post-cutoff pins, other profiles' pins, already-correct pins and collisions with
-an existing pin are all left alone.
-"""
+"""Tests for the TEMPORARY legacy CID coordinate repair."""
 
 from __future__ import annotations
 
@@ -145,13 +131,10 @@ class RepairLegacyPinCoordinatesTests(TestCase):
     def _set_cid(self, location: Location, cid: int) -> None:
         """Link a CID to *location* without the live place-name lookup.
 
-        Assigning ``location.cid`` goes through ``GooglePlaceService`` with
-        ``fetch_if_missing=True``, which calls REData's nearby-places search to
-        name the coordinates - a real network call, so under the test harness's
-        network block every test in this class died on a ``RuntimeError`` before
-        reaching its own assertions. The service's own bulk-path flag skips that
-        lookup, which is all these tests ever wanted.
-        """
+        Assigning ``location.cid`` goes through ``GooglePlaceService`` with ``fetch_if_missing=True``, which
+        calls REData's nearby-places search to name the coordinates - a real network call, so under the test
+        harness's network block every test in this class died on a ``RuntimeError`` before reaching its own
+        assertions."""
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
         GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
@@ -319,12 +302,10 @@ class RepairLegacyPinCoordinatesTests(TestCase):
 class PreviewNeedsLegacyRepairTests(TestCase):
     """preview_needs_legacy_repair - the import preview's "don't dedupe this" flag.
 
-    Regression coverage for the bug where a re-import's preview step deselected
-    exactly the pins the legacy repair exists to fix: its "already on your map"
-    check compared the preview's own (still S2-guessed) coordinates against the
-    user's existing pins, found the legacy pin sitting at that same wrong spot,
-    and pre-deselected the record before it ever reached the server-side repair.
-    """
+    Regression coverage for the bug where a re-import's preview step deselected exactly the pins the legacy
+    repair exists to fix: its "already on your map" check compared the preview's own (still S2-guessed)
+    coordinates against the user's existing pins, found the legacy pin sitting at that same wrong spot, and
+    pre-deselected the record before it ever reached the server-side repair."""
 
     def setUp(self):
         super().setUp()

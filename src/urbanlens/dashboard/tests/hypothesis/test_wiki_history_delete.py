@@ -1,10 +1,4 @@
-"""Tests for permanently deleting a user's own WikiEdit from the history.
-
-Covers LocationWikiEditDeleteView: restoring the pre-edit value (when the
-edit hasn't already been reverted), erasing the WikiEdit row - and its
-paired revert record, if any - and rejecting attempts to delete someone
-else's edit.
-"""
+"""Tests for permanently deleting a user's own WikiEdit from the history."""
 
 from __future__ import annotations
 

@@ -1,12 +1,4 @@
-"""Tests for the EXIF-only photo metadata fields and their extraction.
-
-Covers:
-- extract_gps_altitude/extract_gps_orientation/extract_camera_info/
-  extract_lens_model/extract_shutter_speed/extract_aperture/extract_focal_length
-- process_image_upload() wiring those (and exif_latitude/exif_longitude) onto
-  the row, and that the coordinate/altitude/orientation trio is write-once -
-  a re-run must not overwrite a value that's already there.
-"""
+"""Tests for the EXIF-only photo metadata fields and their extraction."""
 
 from __future__ import annotations
 

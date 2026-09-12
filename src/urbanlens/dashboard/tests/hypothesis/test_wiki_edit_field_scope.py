@@ -1,28 +1,4 @@
-"""A wiki edit must write only the fields it edited.
-
-``apply_wiki_edit`` collects the submitted fields into ``new_vals``, sets them
-on the wiki, and then calls a bare ``save()`` - which writes *every* column from
-that instance, not just the edited ones. The instance was loaded when the
-request started, so a whole-row write reverts anything committed in between.
-
-A wiki is the worst possible model for this. It is community-editable by
-design: concurrent editors are the normal case, not the pathological one, and
-two people editing different fields of one wiki is exactly what the feature
-invites. The row also has writers that are not edits at all - viewing a wiki
-sets ``cover_photo`` through a targeted ``.update()``, and the naming and
-consensus services write their own columns.
-
-The service already knows this hazard exists: ``revert_edit_fields`` checks each
-field's current value against the edit's recorded "to" value and refuses to
-restore a field someone changed since, precisely so a revert "would [not]
-silently clobber that later change". The bare ``save()`` two lines later
-clobbers it anyway, through every field the revert did *not* touch.
-
-Both call sites are covered here. The interleaving is modelled with two
-snapshots of one row rather than threads: two instances loaded from the same
-wiki are two concurrent editors' request state, and driving them in sequence
-reproduces the write-after-stale-read that concurrency produces.
-"""
+"""A wiki edit must write only the fields it edited."""
 
 from __future__ import annotations
 
@@ -75,10 +51,7 @@ class WikiEditFieldScopeTests(TestCase):
     def test_a_revert_does_not_clobber_a_field_it_deliberately_skipped(self) -> None:
         """The complement to ``revert_edit_fields``' own conflict check.
 
-        That check leaves a field alone when someone changed it since. It is
-        defeated if the save then writes the whole row from a snapshot that
-        predates the change.
-        """
+        That check leaves a field alone when someone changed it since."""
         target = apply_wiki_edit(self._snapshot(), self.editor, {"name": "Mill Complex"})
         stale = self._snapshot()
 

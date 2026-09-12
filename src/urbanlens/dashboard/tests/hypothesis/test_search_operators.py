@@ -1,9 +1,4 @@
-"""Operator tokenizing for the global search box.
-
-The operator layer runs ahead of the English heuristics, so its job is to be
-exact about what it claims and to hand everything else back untouched. Most of
-these tests are about what it must *not* swallow.
-"""
+"""Operator tokenizing for the global search box."""
 
 from __future__ import annotations
 

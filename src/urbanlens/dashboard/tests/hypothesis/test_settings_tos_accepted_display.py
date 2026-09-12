@@ -1,10 +1,4 @@
-"""Regression coverage for surfacing Profile.tos_accepted_at on the Settings page.
-
-The field was stored (set when a user accepts the Terms of Service) but never
-shown anywhere in the UI - docs/PROBLEMS.md flagged it as the one Profile
-field with no home in any template. Added a small read-only line in the
-Account tab's new "Account Info" section.
-"""
+"""Regression coverage for surfacing Profile.tos_accepted_at on the Settings page."""
 
 from __future__ import annotations
 

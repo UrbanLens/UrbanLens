@@ -1,20 +1,4 @@
-"""Changing the map pin payload's shape must bump the client cache version.
-
-``CLAUDE.md``: "``pin-cache.ts`` has a ``CACHE_VERSION`` constant that must be
-bumped whenever the pin payload shape changes - it goes silently stale
-otherwise."
-
-``pin-cache.contract.test.ts`` already guards the *other* half of this: that the
-TypeScript reader and the map template's inline writer agree on the same version
-number. It cannot catch this half. Add a field to
-``MapPinPayloadService.serialize`` without touching the version and both sides
-still say 8, that test still passes, and every browser holding a v8 cache keeps
-serving payloads missing the new field until something else invalidates them.
-
-So this pins the payload's key set to the version. Change the shape and this
-fails, telling you to bump ``PIN_CACHE_VERSION`` (which forces every client to
-refetch) and update the snapshot here.
-"""
+"""Changing the map pin payload's shape must bump the client cache version."""
 
 from __future__ import annotations
 

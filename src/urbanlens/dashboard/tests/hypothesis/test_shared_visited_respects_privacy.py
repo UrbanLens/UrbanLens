@@ -1,23 +1,4 @@
-""" "Visited Together" must obey the same opt-in as "Places in Common".
-
-``_add_common_context`` gates ``common_pin_count`` behind
-``Profile.can_view_common_pins_with`` - deliberately mutual, because, as that
-method's docstring puts it, "revealing which locations a pair of users have both
-pinned exposes information about *both* of them, not just this profile". The
-comment above the gate in the controller spells out that the *count* had to be
-gated too, not just the link to the detail page.
-
-``shared_visited`` was computed and put in the context unconditionally, and the
-profile template renders it as a "Visited Together" stat whenever it is non-empty.
-So a profile whose ``common_pins_visibility`` forbids this viewer (or a viewer
-whose own setting forbids it - the check is mutual) still discloses how many
-locations the two have both *visited*.
-
-That is strictly more than the thing deliberately protected: a shared pin means
-two people bookmarked a place, while a shared visit means both were physically
-there. There is no separate visits-visibility setting, so the common-pins gate is
-the applicable one - the same class of "what we have in common" disclosure.
-"""
+""""Visited Together" must obey the same opt-in as "Places in Common"."""
 
 from __future__ import annotations
 

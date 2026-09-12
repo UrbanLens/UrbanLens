@@ -1,22 +1,4 @@
-"""The "add from this place" picker fetches its photos instead of being rendered with them.
-
-`_album_detail_context` used to put every eligible photo into the page, inside a
-`<dialog>` that stays closed until a click. For a pin or wiki album that is
-bounded by one place's photos; for a Vault album it is *every photo the profile
-has ever uploaded*, so a photographer with years of uploads paid for thousands
-of tiles on every album page view, for a dialog they usually never open (P69).
-
-Paginated rather than capped, and that is the decision these tests are mostly
-about. A cap would have been the smaller change and the wrong one: this picker's
-purpose can be "find the photo from last year", which is exactly what a
-newest-first slice removes. So the assertions are that the page is bounded *and*
-that the rest is reachable.
-
-The count survives the move, because two things still need it: whether the "Add
-from this place" affordance appears at all, and which of two empty-state
-sentences the album shows. A version that dropped it would ship a picker with no
-way to open it - which looks fine on a page whose album happens to be empty.
-"""
+"""The "add from this place" picker fetches its photos instead of being rendered with them."""
 
 from __future__ import annotations
 
@@ -118,12 +100,8 @@ class AlbumEligibleImagesEndpointTests(TestCase):
     def test_a_tile_carries_the_same_fields_the_album_grid_gets(self) -> None:
         """A page of ids the client cannot draw is not a page.
 
-        Compared against ``AlbumItemsView``'s own payload rather than against a
-        hand-written list: both go through ``_photo_tile``, and holding them to
-        each other is what catches one of them drifting. Asserted on the keys,
-        not their values - a baker-made ``Image`` has no file behind it, so
-        ``thumb_url`` is legitimately empty here.
-        """
+        Compared against ``AlbumItemsView``'s own payload rather than against a hand-written list: both go
+        through ``_photo_tile``, and holding them to each other is what catches one of them drifting."""
         add_images_to_album(self.album, self.images[:1], self.pin.profile)
         items_url = reverse("pin.albums.items", kwargs={"pin_slug": self.pin.slug, "album_slug": self.album.slug})
 

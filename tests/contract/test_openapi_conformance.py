@@ -1,20 +1,4 @@
-"""Does the API do what its published schema says it does?
-
-The external API's OpenAPI document is not a build artefact - it is served at
-``schema/``, third parties generate clients from it, and the Flutter app is one
-of them. That makes every mismatch between the document and the running code a
-break in somebody else's build, discovered by them rather than by us.
-
-Nothing else checks this. The Python suite asserts endpoint behaviour against
-hand-written expectations, and the same author writes both, so a serializer and
-its test can agree with each other while both disagree with the schema. The
-Playwright ``api`` project checks that the document *generates* and describes
-the right paths, not that responses match it. Schemathesis reads the document
-as the specification it claims to be, generates inputs from it, and holds the
-responses to it.
-
-Run it with ``bin/run_contract_tests.sh``; see ``docs/CONTRACT_TESTS.md``.
-"""
+"""Does the API do what its published schema says it does?"""
 
 from __future__ import annotations
 
@@ -38,28 +22,18 @@ schema = load_schema()
     # default, and a deadline breach here would be a statement about this
     # machine rather than about the contract.
     deadline=None,
-    # Same reasoning applied to Hypothesis's own view of the run: generation is
-    # cheap, the request is not, so "this is taking a while" is expected.
-    #
-    # function_scoped_fixture is suppressed because `contract_headers` is meant
-    # to be per-operation rather than per-example. The health check exists to
-    # catch a fixture whose reset the author assumed was happening between
-    # examples; here the account is deliberately shared by every example in one
-    # operation's test, and the surrounding transaction rolls all of it back.
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 def test_operation_matches_its_schema(case, contract_headers: dict[str, str]) -> None:
     """Every generated request produces a response the schema describes.
 
-    Schemathesis's default checks cover the failures that actually reach client
-    authors: a 500, a status code the operation never declared, a content type
-    it never declared, and a body that does not validate against the declared
-    response schema.
+    Schemathesis's default checks cover the failures that actually reach client authors: a 500, a status code
+    the operation never declared, a content type it never declared, and a body that does not validate against
+    the declared response schema.
 
     Args:
         case: One generated request, supplied by ``schema.parametrize``.
-        contract_headers: Bearer credentials for the account under test.
-    """
+        contract_headers: Bearer credentials for the account under test."""
     # Assigned onto the case rather than passed to `call_and_validate`, because
     # the operations declare a security scheme and schemathesis generates a
     # value for it - which wins over anything handed to the call. The generated
@@ -87,12 +61,9 @@ class TestDocumentShape:
     def test_operation_ids_are_unique(self, document: dict) -> None:
         """No two operations may share an ``operationId``.
 
-        This is the one property a generated client cannot survive losing.
-        drf-spectacular does not fail on a collision - it appends ``_2`` to the
-        loser and logs a warning - and *which* operation loses depends on the
-        order the urlconf is walked. Add a route and the suffix can move to the
-        other operation, silently renaming a method that downstream code calls.
-        """
+        This is the one property a generated client cannot survive losing. drf-spectacular does not fail on a
+        collision - it appends ``_2`` to the loser and logs a warning - and *which* operation loses depends on
+        the order the urlconf is walked."""
         seen: dict[str, list[str]] = defaultdict(list)
         for path, operations in document["paths"].items():
             for method, operation in operations.items():
@@ -130,13 +101,8 @@ class TestDocumentShape:
     def test_authenticated_operations_declare_their_security(self, document: dict) -> None:
         """A documented endpoint that needs a key must say so.
 
-        The schema once described the entire API as unauthenticated because
-        drf-spectacular could not resolve ``ApiKeyAuthentication``; a client
-        generated from it had no way to know a bearer token existed.
-        ``ApiKeyAuthenticationScheme`` fixed that, and this notices if the
-        registration is ever lost - which would look, from the document, like
-        the whole API becoming public.
-        """
+        The schema once described the entire API as unauthenticated because drf-spectacular could not resolve
+        ``ApiKeyAuthentication``; a client generated from it had no way to know a bearer token existed."""
         schemes = document.get("components", {}).get("securitySchemes", {})
         assert schemes, "the document declares no security schemes at all - the API reads as fully anonymous."
 
@@ -151,18 +117,8 @@ class TestDocumentShape:
     def test_authenticated_operations_document_rejection(self, document: dict) -> None:
         """An operation that can answer 401 has to say so.
 
-        Every authenticated endpoint returns ``401`` to a request without
-        credentials - correctly - and the schema documents only ``200``. A
-        client generated from this document has no branch for the single most
-        likely failure it will meet, and a strict generated client will treat
-        the response as a protocol violation rather than as "your token
-        expired".
-
-        This is one assertion rather than a failure per operation because it is
-        one omission: the responses are not declared per-view, so the fix is
-        also one place - a drf-spectacular postprocessing hook, or
-        ``extend_schema(responses=...)`` on the shared base view.
-        """
+        Every authenticated endpoint returns ``401`` to a request without credentials - correctly - and the
+        schema documents only ``200``."""
         missing = sorted(
             f"{method.upper()} {path}"
             for path, operations in document["paths"].items()

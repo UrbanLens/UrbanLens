@@ -229,12 +229,7 @@ class CreatePinAndLogVisitTests(TestCase):
     )
     @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_reuses_existing_pin_instead_of_colliding(self, _mock_enqueue, _mock_resolve_name):
-        # Simulates the staging bug: a second photo at the same coordinate
-        # resolves to the same Location as one that already has a pin (e.g. a
-        # stale "create a pin" card the resuggestion path didn't reach). It
-        # must reuse that pin rather than violate db_pin_unique_location_per_profile.
-        # Created only after the first call completes so it isn't itself swept
-        # up by that call's own resuggestion pass (covered separately above).
+        # It must reuse that pin rather than violate db_pin_unique_location_per_profile.
         first_pin, first_visit = create_pin_and_log_visit(self.profile, self.photo)
 
         second_photo = baker.make(

@@ -1,19 +1,4 @@
-"""An in-memory stand-in for the Redis commands the map caches issue.
-
-Valkey clients here read their connection URL straight from the environment, so
-under test they open a real socket the network guard refuses - which is why the
-cache read paths had no coverage at all while every map load went through them.
-Each cache accepts an injected client, so this fills that hole rather than
-growing a test-only branch.
-
-Deliberately not a Redis emulator. It implements the commands
-`services.map_pins.cache._SyncRedis` declares and no others, with the semantics
-those calls depend on: `rename` carries the source key's TTL, `set(nx=True)`
-returns None when the key exists, `get` returns exactly what `set` stored
-(bytes stay bytes, which is what the gzipped map document needs), and `zrangebyscore` understands ``-inf``,
-``+inf`` and the ``(score`` exclusive form the keyset pager uses. Anything it
-does not implement should fail loudly instead of quietly returning a default.
-"""
+"""An in-memory stand-in for the Redis commands the map caches issue."""
 
 from __future__ import annotations
 

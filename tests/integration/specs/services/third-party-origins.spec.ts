@@ -1,16 +1,6 @@
 /**
- * The third-party origins the application cannot start without.
- *
- * `themes/base.html` loads jQuery, toastr and HTMX from public CDNs, and the
- * pin detail page adds Leaflet and Leaflet.draw. These are not enhancements:
- * every HTMX interaction, every toast, and every map on the site is dead
- * without them. That makes an outage at one of those hosts - or a
- * Content-Security-Policy change that stops permitting them, or a network that
- * cannot reach them - an outage of this application, produced entirely outside
- * it.
- *
- * The origins are discovered from the rendered page rather than listed here, so
- * a dependency added or removed later is covered either way.
+ * The third-party origins the application cannot start without. `themes/base.html` loads jQuery,
+ * toastr and HTMX from public CDNs, and the pin detail page adds Leaflet and Leaflet.draw.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

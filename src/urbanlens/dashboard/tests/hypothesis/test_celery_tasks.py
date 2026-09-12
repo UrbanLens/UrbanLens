@@ -179,9 +179,7 @@ class DatabaseBackupTaskTests(SimpleTestCase):
 
 
 class AdvancePwywUsageLedgersTaskTests(TestCase):
-    """advance_pwyw_usage_ledgers is the daily safety net that keeps a canceled
-    pay-what-you-want subscription's banked balance counting down - invoice.payment_succeeded
-    is the only other trigger, and it stops firing once Stripe considers the subscription gone."""
+    """advance_pwyw_usage_ledgers is the daily safety net that keeps a canceled pay-what-you-want subscription's banked balance counting down - invoice.payment_succeeded is the only other trigger, and it stops firing once Stripe considers the subscription gone."""
 
     def test_ticks_every_pwyw_subscription_and_ignores_fixed_price_roles(self) -> None:
         from django.contrib.auth.models import User

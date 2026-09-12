@@ -1,15 +1,4 @@
-"""Tests for esri_rings_to_polygon, geojson_polygon_to_geos, and RedataBoundaryProvider.
-
-esri_rings_to_polygon converts Esri's raw ring-list geometry into GEOS
-polygons - still needed for sources that hand back that shape natively
-(Census TIGERweb, via geo_boundary.py). geojson_polygon_to_geos converts
-standard GeoJSON Polygon/MultiPolygon dicts the same way, but without any
-winding-order/hole-assignment fixing, since REData's API now converts its own
-parcel_geometry/building_geometry to correct GeoJSON server-side before
-RedataBoundaryProvider (which wraps whichever of the two the current source
-needs behind the BoundaryProvider interface the rest of the boundary-provider
-chain - services.locations.boundaries - already uses) ever sees it.
-"""
+"""Tests for esri_rings_to_polygon, geojson_polygon_to_geos, and RedataBoundaryProvider."""
 
 from __future__ import annotations
 
@@ -152,10 +141,7 @@ class RedataBoundaryProviderNotConfiguredTests(SimpleTestCase):
 
 
 class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
-    """RedataGateway itself is mocked wholesale (not just settings) - its own base_url/api_key
-    fields default from settings.app at *import* time, not per-instantiation, so patching
-    settings alone can't make a real construction pick up a fake key (see redata_gateway.py's
-    dataclass field defaults)."""
+    """RedataGateway itself is mocked wholesale (not just settings) - its own base_url/api_key fields default from settings.app at *import* time, not per-instantiation, so patching settings alone can't make a real construction pick up a fake key (see redata_gateway.py's dataclass field defaults)."""
 
     _GATEWAY_CLASS_PATH = "urbanlens.dashboard.services.apis.locations.boundaries.redata.RedataGateway"
 
@@ -311,12 +297,8 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
 class SuggestedBoundaryTests(SimpleTestCase):
     """REData ranks its own candidates; picking one ourselves picks wrong.
 
-    It routinely finds a county parcel line too small, a CRIS consultation
-    polygon too small and a CRIS archaeological buffer absurdly too large for
-    one parcel at once. Exactly one record carries ``is_suggested``, and the
-    array is not sorted - so taking the first element is a coin toss, and it is
-    what left the reported pin with a ~1,040-acre boundary.
-    """
+    It routinely finds a county parcel line too small, a CRIS consultation polygon too small and a CRIS
+    archaeological buffer absurdly too large for one parcel at once."""
 
     @staticmethod
     def _square(size: float, *, west: float = -73.0, south: float = 42.0) -> dict:

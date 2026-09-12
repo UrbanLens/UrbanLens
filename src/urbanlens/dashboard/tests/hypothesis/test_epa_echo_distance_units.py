@@ -1,18 +1,4 @@
-"""The EPA plugin's mile distances must come from the shared helpers.
-
-``_miles_between`` used to reach into ``models.profile.model._haversine_km`` - a
-*private* helper in a model module, imported from a plugin - and multiply by an
-inline ``0.621371``. Both the distance and the unit conversion already existed as
-shared, tested code (``services.geo.distance`` and ``services.core.units``), so
-this was a third copy of one and a second copy of the other, in a layer that
-should not know about either model internals or conversion constants.
-
-The value was correct, and is asserted here against an independent reference (one
-degree of latitude is ~69.09 miles on a sphere of the radius this codebase uses)
-rather than against the implementation, so re-inlining a constant - or fumbling
-the conversion direction, which would read as plausible until someone checked a
-number - fails this test.
-"""
+"""The EPA plugin's mile distances must come from the shared helpers."""
 
 from __future__ import annotations
 

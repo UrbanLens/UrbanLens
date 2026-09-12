@@ -1,15 +1,4 @@
-"""Tests for the trip source of the Memories feed.
-
-Two things are pinned here. First, the feed must not scale its query count with
-the number of trips: each trip used to re-derive its own start date, end date,
-and representative point with a query apiece, on top of the one query that
-already selected them.
-
-Second, the range filter and the rendered date have to agree on when a trip
-ends. The filter annotates the last activity date; ``Trip.effective_end_date``
-also considers ``scheduled_end``. A trip whose final activity *runs past* the
-last start time falls in the gap between those two definitions.
-"""
+"""Tests for the trip source of the Memories feed."""
 
 from __future__ import annotations
 

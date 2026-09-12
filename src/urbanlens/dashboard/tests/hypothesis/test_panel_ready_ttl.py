@@ -1,24 +1,4 @@
-"""A panel that never got an answer must not be remembered as empty for 12 hours.
-
-``SlidesPanelSource.fetch`` warms every imagery provider and then sets a "ready"
-marker. It used to call ``self.collect(...)``, discard the per-provider outcomes
-it returns, and set that marker for :data:`SLIDES_READY_TTL_SECONDS` (12 hours)
-unconditionally.
-
-Two things made that wrong together. The collectors caught
-``RequestCancelledError`` - the base class of ``RateLimitExceededError`` - logged
-it at debug and appended *no* result at all, so a rate-limited provider registered
-as neither success nor failure. And ``fetch`` threw the results away regardless.
-So a provider refused by its own rate limiter left the panel marked warm and empty
-for twelve hours, which is indistinguishable to every reader from "this location
-genuinely has no imagery".
-
-The distinction now drives the marker's lifetime, mirroring
-``spotguessr.geo_bonus``, which gives a real "nothing found" a 30-day TTL and a
-failed lookup 60 seconds for exactly this reason. A *disabled* service stays
-silent: that is a stable state, not a transient one, and re-warming every few
-minutes because an admin turned a provider off would be worse than the bug.
-"""
+"""A panel that never got an answer must not be remembered as empty for 12 hours."""
 
 from __future__ import annotations
 
@@ -72,10 +52,8 @@ class PanelReadyTtlTests(TestCase):
     def _fetch_with(self, error: Exception | None) -> int:
         """Run a fetch and return the TTL it stamped on the ready marker.
 
-        The marker's lifetime is the thing under test and the test cache backend
-        (LocMemCache) cannot report a key's remaining TTL, so the ``cache.set``
-        call itself is observed rather than its aftermath.
-        """
+        The marker's lifetime is the thing under test and the test cache backend (LocMemCache) cannot report a
+        key's remaining TTL, so the ``cache.set`` call itself is observed rather than its aftermath."""
         return self._fetch_with_gateways([_StubGateway(error)])
 
     def _fetch_with_gateways(self, gateways: list[_StubGateway]) -> int:
@@ -92,8 +70,7 @@ class PanelReadyTtlTests(TestCase):
         return marker_calls[0].args[2]
 
     def test_a_rate_limited_provider_is_recorded_as_a_failure(self) -> None:
-        """It used to be swallowed by the RequestCancelledError arm, appending no
-        result, so nothing downstream could tell it had happened."""
+        """It used to be swallowed by the RequestCancelledError arm, appending no result, so nothing downstream could tell it had happened."""
         with mock.patch(
             "urbanlens.dashboard.services.pins.external_data._satellite_gateways",
             return_value=[_StubGateway(RateLimitExceededError("stub_imagery"))],

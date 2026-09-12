@@ -1,12 +1,4 @@
-"""Tests for UL-52/53: per-call API cost estimates and their reporting.
-
-Covers the full plumbing added for this ticket: ServiceDefaults.cost_per_call,
-ApiCallLog.cost_estimate, _RateLimitedSession._do_request() populating it on
-success only, ApiCallLogQuerySet.summary_by_service()'s total_cost
-aggregation, the site-admin API usage report now covering plugin-declared
-services (not just SERVICE_REGISTRY) plus its new cost column, and the
-public costs page.
-"""
+"""Tests for UL-52/53: per-call API cost estimates and their reporting."""
 
 from __future__ import annotations
 
@@ -107,9 +99,7 @@ class DoRequestCostEstimateTests(TestCase):
 
 
 class SiteAdminApiUsageIncludesPluginsTests(TestCase):
-    """SiteAdminStatsApiUsagePartialView used to only iterate SERVICE_REGISTRY,
-    silently omitting every plugin-declared service (the great majority of
-    this app's integrations)."""
+    """SiteAdminStatsApiUsagePartialView used to only iterate SERVICE_REGISTRY, silently omitting every plugin-declared service (the great majority of this app's integrations)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -156,13 +146,8 @@ class SiteAdminApiUsageIncludesPluginsTests(TestCase):
 class CostsPageTests(TestCase):
     """The public costs page.
 
-    It is gated behind ``SiteSettings.public_costs_page_enabled`` (off by
-    default) and 404s until an admin turns it on - so these enable it
-    explicitly rather than assuming the default. The per-service API spend
-    assertions that used to live here moved with the feature: the public page
-    now shows only the aggregate monthly total, and the breakdown belongs to
-    the site-admin cost page (see ApiSpendSummaryTests below).
-    """
+    It is gated behind ``SiteSettings.public_costs_page_enabled`` (off by default) and 404s until an admin turns
+    it on - so these enable it explicitly rather than assuming the default."""
 
     @staticmethod
     def _enable_public_page() -> None:
@@ -186,12 +171,8 @@ class CostsPageTests(TestCase):
 class ApiSpendSummaryTests(TestCase):
     """``api_spend_summary_30d`` - the trailing-30-day external API spend.
 
-    Asserted against the service directly rather than through a page: it is
-    shared by the site-admin cost page and anything else reporting spend, and
-    these assertions are about the computation, not about rendering. They were
-    previously made against the public costs page's context, which no longer
-    carries either key.
-    """
+    Asserted against the service directly rather than through a page: it is shared by the site-admin cost page
+    and anything else reporting spend, and these assertions are about the computation, not about rendering."""
 
     def test_priced_service_usage_is_reflected_in_the_total(self) -> None:
         from urbanlens.dashboard.services.admin.cost_tracking import api_spend_summary_30d
@@ -223,9 +204,7 @@ class ApiSpendSummaryTests(TestCase):
         self.assertNotIn("Free Svc 1", [row["display_name"] for row in summary["priced_services"]])
 
     def test_a_service_with_no_flat_rate_but_recorded_cost_still_counts_as_priced(self) -> None:
-        """Per-call AI pricing writes ``cost_estimate`` directly with no ``ServiceDefaults.cost_per_call``
-        ever set - the exact regression this function's docstring documents: keying "priced" off the
-        flat rate instead of whether cost was actually recorded silently dropped this spend entirely."""
+        """Per-call AI pricing writes ``cost_estimate`` directly with no ``ServiceDefaults.cost_per_call`` ever set - the exact regression this function's docstring documents: keying "priced" off the flat rate instead of whether cost was actually recorded silently dropped this spend entirely."""
         from urbanlens.dashboard.services.admin.cost_tracking import api_spend_summary_30d
 
         defaults = {"ai_vision": ServiceDefaults(display_name="AI Vision")}  # no cost_per_call configured

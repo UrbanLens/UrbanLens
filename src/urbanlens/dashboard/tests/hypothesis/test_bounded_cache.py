@@ -1,15 +1,4 @@
-"""A proxied body must not be able to evict other people's sessions.
-
-One 512MB Valkey holds the Django cache, sessions, the Channels layer and the
-Celery broker under `volatile-lru`. Four proxy views wrote whatever a provider
-returned into it with no size check, so a large enough body was not merely
-wasteful - it evicted whichever TTL'd keys were least recently used, which
-includes other accounts' sessions.
-
-The load-bearing property is that refusing to *cache* never means refusing to
-*answer*. A ceiling that turned an oversized thumbnail into an error would have
-converted a storage problem into a broken page.
-"""
+"""A proxied body must not be able to evict other people's sessions."""
 
 from __future__ import annotations
 
@@ -45,6 +34,5 @@ class TheCeilingTests(TestCase):
             self.assertFalse(bounded_cache.set_if_small("k", b"x", "image/jpeg", 60, label="probe"))
 
     def test_the_ceiling_is_a_thumbnail_budget_not_a_photo_one(self) -> None:
-        """Guards the constant. Raised past a megabyte it stops bounding anything
-        that matters, because the bodies it exists to refuse are megabytes."""
+        """Guards the constant. Raised past a megabyte it stops bounding anything that matters, because the bodies it exists to refuse are megabytes."""
         self.assertLessEqual(bounded_cache.MAX_CACHED_BODY_BYTES, 1024 * 1024)

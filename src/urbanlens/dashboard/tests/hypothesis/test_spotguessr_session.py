@@ -148,15 +148,7 @@ class SubmitGuessTests(TestCase):
             submit_guess(self.round_, self.profile, guess_point)
 
     def test_a_rejected_duplicate_guess_does_not_record_extra_coordinate_evidence(self) -> None:
-        """Regression: record_guess used to fire before the duplicate-guess
-        check (the transaction.atomic()/IntegrityError guard further down),
-        so a resubmitted/retried guess for a round already answered still
-        wrote a PhotoCoordinateGuess row - and, for a correct guess, also
-        re-ran recompute_estimated_coordinates() - even though the guess
-        itself was then rejected. Reachable via any client retry or resend,
-        no special privilege required, and it silently pollutes the
-        confidence-ranked evidence a real fact-sourcing pipeline reads.
-        """
+        """Reachable via any client retry or resend, no special privilege required, and it silently pollutes the confidence-ranked evidence a real fact-sourcing pipeline reads."""
         from urbanlens.dashboard.models.spotguessr.model import PhotoCoordinateGuess
 
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)

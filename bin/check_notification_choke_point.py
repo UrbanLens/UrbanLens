@@ -1,26 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if production code raises a notification without going through the choke point.
-
-``Friendship``'s mute flag was written faithfully by the profile page and the
-external API, and read by nothing, for months. The reason was structural rather
-than an oversight by any one author: there were ~30 places that create a
-``NotificationLog``, so honouring a delivery preference meant remembering it
-thirty times, and a new notification type could not inherit a rule that lived
-nowhere.
-
-``NotificationLog.objects.notify()`` is now that one place. It applies the mute
-preference and then calls ``create()``. This check is what stops the situation
-re-forming: a production call site that reaches for ``create()``/``bulk_create``
-or constructs ``NotificationLog(...)`` directly bypasses the preference
-silently, and silence is exactly the failure that is invisible in review.
-
-Tests are exempt - a test that wants a row with no preference logic applied is
-being specific on purpose, and several assert precisely that ``notify()``
-skipped a write that ``create()`` would have made.
-
-Exits non-zero listing each offending call. Safe to run by hand from the repo
-root.
-"""
+"""Fail if production code raises a notification without going through the choke point."""
 
 from __future__ import annotations
 

@@ -1,15 +1,4 @@
-"""Tests for the trips list page's `sort`/`dir` query params (TripListView.get).
-
-Invariants verified:
-  - With no query params, trips are ordered by most-recently-updated first (existing
-    default behavior, preserved by the new sort feature).
-  - `?sort=updated&dir=asc` reverses that order.
-  - `?sort=start_date&dir=asc` ("soonest first") groups trips: upcoming/active
-    soonest first, then undated (planning) trips, then past trips most-recent first.
-  - `?sort=start_date&dir=desc` orders by start date, and trips with no
-    start_date always sort to the end regardless of direction.
-  - Unrecognized `sort`/`dir` values fall back to the defaults instead of erroring.
-"""
+"""Tests for the trips list page's `sort`/`dir` query params (TripListView.get)."""
 
 from __future__ import annotations
 
@@ -70,11 +59,7 @@ class TripListSortTests(TestCase):
         self.assertEqual(self._names(resp), ["Older", "Newer"])
 
     def test_start_date_ascending_groups_future_then_planning_then_past(self) -> None:
-        """ "Soonest first" groups trips instead of sorting purely chronologically:
-        upcoming/active trips soonest first, then undated (planning) trips, then
-        past trips most-recent first - so a months-old trip doesn't outrank
-        tomorrow's just because its date is numerically smaller.
-        """
+        """"Soonest first" groups trips instead of sorting purely chronologically: upcoming/active trips soonest first, then undated (planning) trips, then past trips most-recent first - so a months-old trip doesn't outrank tomorrow's just because its date is numerically smaller."""
         today = datetime.date.today()
         _make_trip(self.profile, name="No Date")
         _make_trip(self.profile, name="Future Far", start_date=today + datetime.timedelta(days=30))

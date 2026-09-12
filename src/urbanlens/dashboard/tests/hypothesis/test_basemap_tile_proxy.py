@@ -1,16 +1,4 @@
-"""REData's basemap layers, proxied so its API key stays server-side.
-
-REData publishes a tile catalogue and proxies the vendors behind it, which
-buys layers this application would otherwise register for itself, one
-attribution source of truth, and a cache that spares the vendor a request per
-pan. Nothing consumed either endpoint until now.
-
-The behaviour worth pinning is the caching contract, because getting it wrong
-is invisible: REData distinguishes "the vendor confirms no such tile" (404,
-cacheable) from "the vendor could not be reached" (503, never cacheable), and
-caching the latter turns a passing outage into a permanently blank region of
-the map - the same defect class the outage-cache check exists for.
-"""
+"""REData's basemap layers, proxied so its API key stays server-side."""
 
 from __future__ import annotations
 
@@ -54,10 +42,7 @@ class BasemapTileProxyTests(TestCase):
         self.assertEqual(download.call_count, 1, "a served tile must not be re-fetched on the next pan")
 
     def test_the_vendor_content_type_is_preserved_through_the_cache(self) -> None:
-        """Not every layer is PNG; the cache stores ``(body, content_type)`` as
-        a pair. A cache-hit path that dropped the type (or hardcoded
-        image/png) would only surface once a non-PNG layer was already
-        cached - exactly the failure the controller's own comment warns about."""
+        """Not every layer is PNG; the cache stores ``(body, content_type)`` as a pair. A cache-hit path that dropped the type (or hardcoded image/png) would only surface once a non-PNG layer was already cached - exactly the failure the controller's own comment warns about."""
         with (
             mock.patch(_CONFIGURED, return_value=True),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"WEBPDATA", "image/webp")),
@@ -172,12 +157,8 @@ class BasemapCatalogueTests(TestCase):
 
         self.assertEqual(len(layers), 1)
         self.assertNotIn("redata.example", layers[0]["url_template"])
-        # Filling the template in the way Leaflet would - and comparing against
-        # a URL this view is independently known to serve - pins the sentinel
-        # substitution itself, not just the fixed prefix around it. A broken
-        # replace() (wrong sentinel, or none at all) would still satisfy a
-        # bare substring check on the prefix while handing the browser
-        # "900001" instead of "{z}".
+        # Filling the template in the way Leaflet would - and comparing against a URL this view is independently
+        # known to serve - pins the sentinel substitution itself, not just the fixed prefix around it.
         filled = layers[0]["url_template"].replace("{z}", "12").replace("{x}", "1204").replace("{y}", "1539")
         self.assertEqual(
             filled, reverse("map.basemap_tiles", kwargs={"layer": "usgs-topo", "z": 12, "x": 1204, "y": 1539})
@@ -219,15 +200,7 @@ class BasemapCatalogueTests(TestCase):
 class TileLogPrivacyTests(SimpleTestCase):
     """A tile URL is a coordinate somebody was looking at.
 
-    `ApiCallLog` records the endpoint of every gateway call to track volume and
-    cost per service. For every other service the URL is a point lookup the
-    application already knows about; for tiles it is one request per pan, so
-    logging the path verbatim would accumulate a record of which places this
-    deployment's users panned over - in an application whose premise is that
-    pin locations are private.
-
-    The layer answers everything the log is for. The coordinate does not.
-    """
+    `ApiCallLog` records the endpoint of every gateway call to track volume and cost per service."""
 
     def _normalize(self, url: str) -> str:
         from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway

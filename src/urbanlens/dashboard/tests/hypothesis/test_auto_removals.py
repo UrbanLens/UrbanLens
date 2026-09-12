@@ -1,11 +1,4 @@
-"""Tests for case-insensitive alias uniqueness and the auto-removal tombstone system.
-
-Covers (1) alias uniqueness must be
-case-insensitive for both manual and automatic creation, and (2) a user
-deleting an auto-added alias/link/label/owner must stick - automatic creation
-code (external name-provider syncs, AI extraction, keyword/AI auto-tagging)
-must not silently recreate it.
-"""
+"""Tests for case-insensitive alias uniqueness and the auto-removal tombstone system."""
 
 from __future__ import annotations
 
@@ -188,16 +181,7 @@ class LinkDeletionTombstoneTests(TestCase):
 
 
 class ExternalApiWikiTombstoneTests(TestCase):
-    """The mobile/API-key surface must record the same tombstones as the web UI.
-
-    Found by the round-4 FEATURES.md-vs-code audit: WikiAliasDetailView.delete
-    and WikiLinkDetailView.delete (external_api/views_wiki.py) called
-    ``.delete()`` directly with no WikiAutoRemoval.objects.record() call,
-    unlike their web-UI counterparts (LocationAliasDeleteView/
-    LocationLinkDeleteView) - so a mobile-app deletion of a wiki alias or link
-    was silently undone the next time an external-source sync or a link plugin
-    ran.
-    """
+    """The mobile/API-key surface must record the same tombstones as the web UI."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
@@ -373,14 +357,7 @@ class LabelDeletionTombstoneTests(TestCase):
 
 
 class BulkEditLabelRemovalTombstoneTests(TestCase):
-    """Removing a label via the map's multi-select bulk-edit action must tombstone it too.
-
-    A prior audit found this path (controllers.pin_bulk.PinBulkEditView's
-    remove_label_ids action) removed labels without recording a
-    PinAutoRemoval, unlike the dedicated LabelPinMembershipView - so
-    keyword/AI auto-tagging could silently reattach a label a user had just
-    bulk-removed.
-    """
+    """Removing a label via the map's multi-select bulk-edit action must tombstone it too."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
@@ -431,12 +408,7 @@ class BulkEditLabelRemovalTombstoneTests(TestCase):
 
 
 class QuickEditLabelRemovalTombstoneTests(TestCase):
-    """Removing a label via the map pin's quick-edit dialog must tombstone it too.
-
-    A prior audit found this path (controllers.maps.MapController.patch_pin's
-    label_ids handling) removed labels via .set()/.clear() without recording
-    a PinAutoRemoval.
-    """
+    """Removing a label via the map pin's quick-edit dialog must tombstone it too."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin

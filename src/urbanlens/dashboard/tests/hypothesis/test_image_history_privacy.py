@@ -1,12 +1,4 @@
-"""Tests for photo GPS/location privacy when a profile has visit-history tracking off.
-
-Covers process_image_upload()'s ``strip_location`` behavior:
-- Image.latitude/longitude are never populated from EXIF GPS
-- the stored file's own embedded GPS EXIF tag is stripped, even when no
-  resize/WebP conversion would otherwise be needed
-- exif_data never carries a GPSInfo block
-- no VisitSuggestion is raised from the photo
-"""
+"""Tests for photo GPS/location privacy when a profile has visit-history tracking off."""
 
 from __future__ import annotations
 

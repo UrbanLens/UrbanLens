@@ -1,20 +1,4 @@
-"""Tests for group chats built on the direct message system.
-
-Covers:
-- create_group_chat validation, privacy enforcement, and membership rows
-- rename/add/remove/leave permission rules (creator manages membership; any
-  member renames; anyone leaves)
-- The join-time history boundary: members added later cannot see (or fetch)
-  messages sent before they joined, including via the older-pages endpoint
-- create_group_message validation and read-state behavior
-- share_pin_in_group_message creating one PinShare per connected member
-- Unread counts and the merged conversation list
-- The group HTTP endpoints (thread, send, rename, members, leave, delete)
-- The group E2EE key endpoints (member gating, envelope-coverage checks,
-  version sequencing, and pre-join envelope invisibility)
-- The change-password endpoint (current-password proof, SSO first set,
-  bundle rewrap/stale handling)
-"""
+"""Tests for group chats built on the direct message system."""
 
 from __future__ import annotations
 
@@ -285,11 +269,9 @@ class CreateGroupMessageTests(TestCase):
 class GroupMessageLiveIdentityPrivacyTests(TestCase):
     """serialize_group_message must not leak a masked sender's real identity.
 
-    Regression: the name was already resolved through resolve_visible_identity,
-    but ``sender_slug`` was still copied from the raw sender unconditionally -
-    so a viewer who couldn't see the masked sender's profile could still read
-    their real slug directly off the live WebSocket payload.
-    """
+    Regression: the name was already resolved through resolve_visible_identity, but ``sender_slug`` was still
+    copied from the raw sender unconditionally - so a viewer who couldn't see the masked sender's profile could
+    still read their real slug directly off the live WebSocket payload."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -368,22 +350,11 @@ class GroupPinShareTests(TestCase):
 class GroupMessageReplayScopingTests(TestCase):
     """create_group_message's idempotency guard must never cross groups.
 
-    Regression: GroupMessage.client_uuid is uniquely constrained per *sender*
-    only (db_gmsg_unique_client_uuid_per_sender - by design, since scoping to
-    the group too would let two different senders' uuids collide inside the
-    same conversation), but the replay check that reads it back only compared
-    (sender, client_uuid) - never checking whether the match it found actually
-    belongs to the group the caller asked about. So a sender who belongs to
-    two groups and reused a client_uuid across them got group A's message
-    silently handed back while calling share_pin_in_group_message for group
-    B. share_pin_in_group_message still fanned real PinShares out to group
-    B's real membership, then wired their GroupMessageShare rows to group A's
-    message object - cross-wiring two groups' data through one reused key,
-    exploitable by any ordinary member of two groups with no special
-    privilege required. The DB constraint means the correct fix cannot be
-    "create a new message in group B" (that insert would violate it) -
-    reusing a client_uuid across groups must be rejected outright.
-    """
+    Regression: GroupMessage.client_uuid is uniquely constrained per *sender* only
+    (db_gmsg_unique_client_uuid_per_sender - by design, since scoping to the group too would let two different
+    senders' uuids collide inside the same conversation), but the replay check that reads it back only compared
+    (sender, client_uuid) - never checking whether the match it found actually belongs to the group the caller
+    asked about."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -474,20 +445,10 @@ class ConversationMergeTests(TestCase):
         self.assertEqual(rows[group_b.pk]["member_count"], 3)
 
     def test_group_conversations_for_query_count_is_independent_of_group_count(self) -> None:
-        """The N+1 regression this batch fixed: query count must not grow
-        with the number of groups the profile belongs to.
+        """The N+1 regression this batch fixed: query count must not grow with the number of groups the profile belongs to.
 
-        The invariant is *independence*, not an absolute number, so this
-        measures the same call at two sizes and compares. Pinning a literal
-        count made the test assert something it does not care about: the
-        per-sender identity resolution below it costs several queries of its
-        own, and seeding a message (which the interesting case needs) brings
-        those in.
-
-        Every group is seeded with a message on purpose. With none, the newest-
-        message id list is empty and Django skips the fetch entirely, which
-        measures a path this function is not for.
-        """
+        The invariant is *independence*, not an absolute number, so this measures the same call at two sizes and
+        compares."""
         group = create_group_chat(self.me, "One", [self.friend])
         create_group_message(self.me, group, "first")
         with CaptureQueriesContext(connection) as one_group:
@@ -511,12 +472,8 @@ class ConversationMergeTests(TestCase):
     def test_query_count_is_independent_of_group_count_with_distinct_senders(self) -> None:
         """The blind spot in the test above: every group had the *same* last sender.
 
-        The sidebar resolves each last sender's name through the viewer's own
-        visibility, and that answer was resolved one sender at a time. With one
-        sender across every group the dedup cache hid it, so the existing test
-        passed while the cost still scaled with how many *different* people had
-        spoken last.
-        """
+        The sidebar resolves each last sender's name through the viewer's own visibility, and that answer was
+        resolved one sender at a time."""
         first_speaker = _profile()
         _befriend(self.friend, first_speaker)
         group = create_group_chat(self.me, "One", [self.friend, first_speaker])
@@ -543,12 +500,8 @@ class ConversationMergeTests(TestCase):
     def test_only_the_newest_message_per_group_is_materialised(self) -> None:
         """Rows fetched, not queries run - the cost this function actually had.
 
-        The query count was always flat; the row count was every message in
-        every group the viewer belongs to, each with `sender`/`sender__user`
-        joined on, discarded after the first per group. That is invisible to
-        `assertNumQueries`, which is why it survived a fix that named itself an
-        N+1 fix. Counting instantiations measures the thing that grew.
-        """
+        The query count was always flat; the row count was every message in every group the viewer belongs to,
+        each with `sender`/`sender__user` joined on, discarded after the first per group."""
         group = create_group_chat(self.me, "Busy", [self.friend])
         for index in range(12):
             create_group_message(self.me, group, f"m{index}")
@@ -595,22 +548,9 @@ class ConversationMergeTests(TestCase):
 class GroupMessageNotificationCostTests(TestCase):
     """``_notify_group_message`` must not cost a query per member.
 
-    Its own docstring promises "a small, fixed number of queries regardless of
-    group size", and it goes to some length to keep that: preferences arrive by
-    ``select_related``, unread state by one grouped query, friendship mute by
-    one batched lookup. It runs synchronously inside the sender's request, so a
-    50-member group would otherwise pay a lookup per member for each of them.
-    The invariant is *independence* from member count, not a literal number, so
-    this measures the same call at two sizes.
-
-    Scoped to the notification step deliberately. ``create_group_message`` as a
-    whole is **not** flat: ``broadcast_group_message`` builds one payload per
-    member and resolves the sender's name through each member's own visibility,
-    which is a recorded decision (2026-07-23) rather than an oversight - the
-    alternative leaks a masked name over the live channel. Measuring the whole
-    send would fold that in and this test would be asserting the opposite of
-    what that decision says.
-    """
+    Its own docstring promises "a small, fixed number of queries regardless of group size", and it goes to some
+    length to keep that: preferences arrive by ``select_related``, unread state by one grouped query, friendship
+    mute by one batched lookup."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -628,11 +568,8 @@ class GroupMessageNotificationCostTests(TestCase):
     def _notify_reads(self, group: GroupChat) -> int:
         """How many *reads* notifying a fresh message costs.
 
-        Writes are excluded because one row per notified member is the work
-        itself - it is the lookups feeding those rows that must not scale. The
-        message is created directly so no member has a prior unread one, which
-        is the case ``_already_unread`` skips and the path this is measuring.
-        """
+        Writes are excluded because one row per notified member is the work itself - it is the lookups feeding
+        those rows that must not scale."""
         from urbanlens.dashboard.services.messaging.group_chats import _notify_group_message
 
         message = GroupMessage.objects.create(group=group, sender=self.me, body="hello")
@@ -850,19 +787,8 @@ class GroupKeyEndpointTests(TestCase):
     def test_removing_a_member_flags_rotation(self) -> None:
         """The direction that protects *future* messages from a removed member.
 
-        Removal is already covered on the delivery side - the server stops
-        sending to them (see test_group_removal_stops_delivery). That is a
-        different property from this one: delivery is server-side, and the
-        removed member still holds the envelope for the current key version, so
-        until the group rotates, any message encrypted under it stays readable
-        to whoever holds that key.
-
-        ``needs_rotation`` compares the envelope holders against the current
-        members with ``!=``, which catches removals and additions alike. Only
-        the addition direction was pinned, so narrowing that comparison to a
-        subset check - the obvious way to silence a rotation that looks spurious
-        - would quietly stop rotating on removal and nothing would fail.
-        """
+        Removal is already covered on the delivery side - the server stops sending to them (see
+        test_group_removal_stops_delivery)."""
         _enroll(self.creator)
         _enroll(self.member)
         wrapped = {self._token(self.creator): _blob(), self._token(self.member): _blob()}

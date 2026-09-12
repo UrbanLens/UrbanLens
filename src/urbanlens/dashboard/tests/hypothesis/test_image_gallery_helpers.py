@@ -1,11 +1,4 @@
-"""Tests for image_gallery/services.media.images helper functions.
-
-Covers:
-- _dms_to_decimal() - DMS→decimal conversion with N/S/E/W refs
-- extract_gps_coords() - EXIF GPS extraction with mock PIL
-- extract_taken_at() - EXIF DateTimeOriginal extraction with mock PIL
-- image_to_gallery_json() - dict serialisation of Image instances
-"""
+"""Tests for image_gallery/services.media.images helper functions."""
 
 from __future__ import annotations
 
@@ -465,10 +458,8 @@ class ImageToGalleryJsonTests(SimpleTestCase):
     def test_uploader_name_is_masked_from_a_viewer_who_may_not_see_the_profile(self):
         """Naming somebody is its own disclosure, separate from showing their photo.
 
-        Every other surface that names a profile - the API's owner_slug, wiki edit
-        attribution - resolves it through identity visibility first. This one
-        printed profile.username off the row, which is what this used to assert.
-        """
+        Every other surface that names a profile - the API's owner_slug, wiki edit attribution - resolves it
+        through identity visibility first."""
         profile = self._make_profile(username="alice")
         profile.can_view_profile.return_value = False
         img = self._make_image()

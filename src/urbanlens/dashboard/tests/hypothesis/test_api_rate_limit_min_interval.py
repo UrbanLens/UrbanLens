@@ -1,14 +1,4 @@
-"""Tests for the API rate limiter's minimum-interval (spacing) enforcement.
-
-Covers ApiRateLimit.min_interval_seconds/last_call_at, ServiceDefaults' matching
-field, _reserve_call()'s new spacing check, SiteAdminApiLimitsView's POST
-handling of the new form field, and the Nominatim default that motivated this
-feature - a rolling per-minute *count* doesn't guarantee even spacing between
-calls, which is what these providers actually require. GDELT's own spacing
-requirement moved with it when the GDELT panel was rewired to REData's
-``/search/news/`` - REData is the one calling GDELT directly now, so the
-concern is REData's to pace, not this registry's.
-"""
+"""Tests for the API rate limiter's minimum-interval (spacing) enforcement."""
 
 from __future__ import annotations
 
@@ -100,10 +90,8 @@ class ReserveCallMinIntervalTests(TestCase):
     def test_call_exactly_at_the_interval_boundary_is_allowed(self) -> None:
         """``elapsed < min_interval_seconds`` blocks - equal-to is allowed, not blocked.
 
-        Guards the boundary condition itself: a ``<=`` typo here would reject a
-        call landing exactly on the configured spacing, which is the spacing
-        the admin asked for, not a violation of it.
-        """
+        Guards the boundary condition itself: a ``<=`` typo here would reject a call landing exactly on the
+        configured spacing, which is the spacing the admin asked for, not a violation of it."""
         frozen_now = timezone.now()
         ApiRateLimit.objects.filter(service=self.service).update(last_call_at=frozen_now - timedelta(seconds=5))
         with patch("urbanlens.dashboard.services.core.rate_limiter.timezone.now", return_value=frozen_now):

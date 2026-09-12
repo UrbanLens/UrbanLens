@@ -27,18 +27,14 @@ class ProviderAdapter(ABC):
             The provider's answer, normalized to :class:`InferenceResponse`.
 
         Raises:
-            ProviderError: The provider call failed.
-        """
+            ProviderError: The provider call failed."""
         raise NotImplementedError
 
     def classify(self, request: ClassifyRequest) -> ClassifyResponse:
         """Classify an image, returning scored labels.
 
         Not abstract: most providers have no classifier endpoint at all, and
-        ``policy.validate_classify_request`` already refuses those before an
-        adapter is built. This default is the belt-and-braces answer for a
-        provider that slips past it, so an unimplemented path is a clean
-        error rather than an ``AttributeError``.
+        ``policy.validate_classify_request`` already refuses those before an adapter is built.
 
         Args:
             request: The validated, policy-checked classification request.
@@ -47,6 +43,5 @@ class ProviderAdapter(ABC):
             The provider's labels, normalized and highest-confidence first.
 
         Raises:
-            ProviderError: This provider has no image classifier here.
-        """
+            ProviderError: This provider has no image classifier here."""
         raise ProviderError(f"{type(self).__name__} does not implement image classification")

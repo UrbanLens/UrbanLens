@@ -1,16 +1,4 @@
-"""Only the owner of a photo can put it in front of a community.
-
-Two surfaces let one person publish another person's picture. The wiki cover
-photo accepted any image whose *location* matched, and a pin photo carries the
-location - so a neighbour who could see your photo, which anyone with a pin at
-the same place generally can, could install it on the front of a page everyone
-reads. The wiki's cover is rendered with no visibility gate of its own, so that
-choice was the only gate there was.
-
-The gallery JSON printed `profile.username` straight off the row, while every
-other surface that names somebody - the external API's `owner_slug`, wiki edit
-attribution - resolves it through identity visibility first.
-"""
+"""Only the owner of a photo can put it in front of a community."""
 
 from __future__ import annotations
 

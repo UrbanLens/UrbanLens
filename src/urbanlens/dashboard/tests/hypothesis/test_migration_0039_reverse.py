@@ -1,14 +1,4 @@
-"""Migration 0039's reverse really decrypts - a noop reverse was silent corruption.
-
-``migrate dashboard 0038`` with the old ``RunPython.noop`` reverse succeeded
-while leaving ciphertext in columns the pre-0039 code reads as plaintext.
-The real reverse depends on two properties this module pins:
-
-- Fernet ciphertext always begins ``gAAAA`` (version byte 0x80, base64'd) -
-  the discriminator that lets the reverse skip rows that were still plaintext.
-- ``get_prep_value``/``from_db_value`` round-trip exactly, so decrypt-in-place
-  restores the original bytes.
-"""
+"""Migration 0039's reverse really decrypts - a noop reverse was silent corruption."""
 
 from __future__ import annotations
 
@@ -27,14 +17,9 @@ _migration = importlib.import_module("urbanlens.dashboard.migrations.0030_v0_7_0
 def _encrypted_alter_field_count(migration_module, columns: tuple[tuple[str, str], ...]) -> int:
     """How many of *migration_module*'s ``AlterField`` ops touch one of *columns*.
 
-    0030/0031 are squash migrations bundling unrelated schema changes, so
-    ``Migration.operations`` holds far more ``AlterField`` ops than the
-    encryption pass alone - counting all of them drifts every time an
-    unrelated field elsewhere in the squash gets its own ``AlterField``.
-    Matching by (model, field) against the same table names the encryption
-    functions themselves use keeps the count tied to encryption, not to the
-    squash's unrelated churn.
-    """
+    0030/0031 are squash migrations bundling unrelated schema changes, so ``Migration.operations`` holds far
+    more ``AlterField`` ops than the encryption pass alone - counting all of them drifts every time an unrelated
+    field elsewhere in the squash gets its own ``AlterField``."""
     table_to_model = {
         model._meta.db_table: model.__name__.lower() for model in apps.get_app_config("dashboard").get_models()
     }
@@ -90,13 +75,8 @@ _migration_0048 = importlib.import_module("urbanlens.dashboard.migrations.0031_v
 class Migration0048ReverseTests(SimpleTestCase):
     """0048 is the same in-place encryption, and reversed to noop until 2026-08-19.
 
-    `docs/DATA_ENCRYPTION.md` settled the policy on 2026-08-15 - rollbacks
-    decrypt, and abort rather than write garbage - two days before this
-    migration landed reversing to noop. Rolling back below it then *succeeded*
-    while leaving ciphertext in `photo_taking_preference_other`,
-    `photo_usage_preference_other` and the saved-contact label, which pre-0048
-    code reads as plaintext.
-    """
+    Rolling back below it then *succeeded* while leaving ciphertext in `photo_taking_preference_other`,
+    `photo_usage_preference_other` and the saved-contact label, which pre-0048 code reads as plaintext."""
 
     def test_the_migration_wires_the_real_reverse(self) -> None:
         # See the identical comment on Migration0039ReverseTests' version of this test.
@@ -118,11 +98,8 @@ class Migration0048ReverseTests(SimpleTestCase):
     def test_the_reverse_can_tell_ciphertext_from_plaintext(self) -> None:
         """The `gAAAA%` discriminator is what stops a rollback corrupting real plaintext.
 
-        A row written after the `AlterField` but before the `RunPython`, or one
-        the forward pass skipped, still holds plaintext - decrypting it would
-        raise or garble it. The reverse only touches values that look like
-        Fernet tokens, so this pins that they are distinguishable.
-        """
+        A row written after the `AlterField` but before the `RunPython`, or one the forward pass skipped, still
+        holds plaintext - decrypting it would raise or garble it."""
         field = EncryptedTextField()
 
         self.assertTrue(field.get_prep_value("a note about someone").startswith("gAAAA"))

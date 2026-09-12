@@ -1,15 +1,7 @@
 /**
- * Saved filters: a stored blob of criteria that other features build on.
- *
- * Worth its own file because `criteria` is free-form JSON the API stores and
- * hands back, and two different things then consume it - the map's filter UI
- * and smart lists, which recompute their membership from it. A round trip that
- * loses a key, coerces a number to a string, or drops a nested object is
- * invisible at the point of storage and shows up later as a list that quietly
- * contains the wrong pins.
- *
- * So the assertion is a *deep* comparison of what came back against what went
- * in, rather than "a filter was created".
+ * Saved filters: a stored blob of criteria that other features build on. A round trip that loses a
+ * key, coerces a number to a string, or drops a nested object is invisible at the point of storage
+ * and shows up later as a list that quietly contains the wrong pins.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

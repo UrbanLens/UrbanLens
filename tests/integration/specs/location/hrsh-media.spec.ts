@@ -1,36 +1,6 @@
 /**
- * External media arriving on the pin detail page and on the wiki.
- *
- * ## Nothing is fetched until somebody looks
- *
- * The media gallery is entirely lazy. Creating a pin fetches no imagery at all;
- * the first page view finds no fresh `LocationCache` row, calls
- * `schedule_panel_fetch`, and returns a self-polling placeholder carrying
- * `UL-Panel-Pending: 1`. That placeholder re-polls every 2 s up to 30 times
- * (~60 s) while a `fetch_panel_source` task runs on the **`panel_fetch`** queue.
- *
- * The queue matters more than it looks: the default Celery worker does not
- * consume `panel_fetch`. A deployment running only `celery-worker` and not
- * `celery-worker-panels` will show every gallery pending forever, and nothing
- * in the UI says so. That is worth ruling out before reading a failure here as
- * a data problem.
- *
- * ## Why `waitForHtmxSettled` is wrong here
- *
- * The pending loaders poll with `hx-trigger="load delay:2s"`, so there are ~2 s
- * windows in which no HTMX request is in flight and the gallery is still
- * mid-fetch. A settle-based wait passes straight through them and asserts on an
- * empty grid. The signal that actually means "finished" differs by page:
- *
- * - **Pin page:** each loader removes itself (`el.remove()`), and
- *   `#media-gallery-loading` is removed from the DOM.
- * - **Wiki page:** loaders are never removed; `#wiki-media-loading` is only
- *   hidden. There is also a 15 s timer that reveals `#wiki-media-empty`, which a
- *   provider landing at t+40 s then hides again - so "empty is visible" is not a
- *   stable conclusion until well past the poll budget.
- *
- * Both are handled by counting `.media-provider-loader` down to zero rather than
- * trusting either page's own completion flag.
+ * External media arriving on the pin detail page and on the wiki. The media gallery is entirely
+ * lazy.
  */
 
 import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";

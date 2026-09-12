@@ -1,15 +1,4 @@
-"""The DM thread's Block button must update the thread in place, not navigate away.
-
-The other buttons in the partner menu (Mute, Block images) are hx-post with
-hx-target="#dm-thread-pane" - Block was a bare, non-HTMX `<form>` submit,
-copy-pasted from the profile page's own Block button (where a full-page
-redirect to "the same profile page" is correct because the user is already
-there). Inside the DM thread panel it instead ejected the user from their
-conversation to the just-blocked person's profile page. This pins that the
-button is now HTMX, targets #dm-thread-pane, and the re-rendered thread
-reflects the block (composer locked) instead of returning a placeholder
-string.
-"""
+"""The DM thread's Block button must update the thread in place, not navigate away."""
 
 from __future__ import annotations
 

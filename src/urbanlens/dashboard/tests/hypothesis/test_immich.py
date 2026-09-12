@@ -1,20 +1,4 @@
-"""Tests for the Immich photo-import integration.
-
-Covers:
-- EncryptedTextField - values round-trip through encrypt/decrypt, and the raw
-  DB-stored value is not the plaintext (property-based).
-- ImmichGateway - auth header, map-marker parsing, GatewayRequestError on
-  failure. All HTTP calls are mocked; no real network access occurs.
-- ImmichSettingsView / ImmichDisconnectView - connect only persists a
-  credential that ping() verifies; disconnect removes it.
-- PinImmichSearchView - distance filtering, "during my visits"/"all photos"
-  mode branching, and already-imported flagging.
-- import_immich_photos task - creates Image + PinVisit for a new asset,
-  skips a duplicate checksum, skips an over-quota asset, without failing the
-  rest of the batch, and (when called with visit_id_by_asset, as
-  accept_pin_suggestion does) attaches to that visit instead of creating a
-  redundant one of its own.
-"""
+"""Tests for the Immich photo-import integration."""
 
 from __future__ import annotations
 
@@ -102,15 +86,11 @@ class EncryptedTextFieldTests(TestCase):
     def test_key_is_derived_from_djangos_stable_secret_key_not_appsettings(self) -> None:
         """Regression test: the Fernet key must come from Django's SECRET_KEY.
 
-        AppSettings.secret_key (a separate pydantic field, env var UL_SECRET_KEY)
-        has no wired env var in any deployment of this app and silently falls
-        back to a fresh random value in every process - using it here meant
-        every gunicorn worker/Celery worker/manage.py run derived a *different*
-        key, so anything encrypted by one process was undecryptable by any
-        other (see the ImmichAccountManagerTests below for the user-facing
-        fallout). Django's SECRET_KEY (DJANGO_SECRET_KEY) is the one secret
-        every deployment actually configures consistently.
-        """
+        AppSettings.secret_key (a separate pydantic field, env var UL_SECRET_KEY) has no wired env var in any
+        deployment of this app and silently falls back to a fresh random value in every process - using it here
+        meant every gunicorn worker/Celery worker/manage.py run derived a *different* key, so anything encrypted
+        by one process was undecryptable by any other (see the ImmichAccountManagerTests below for the
+        user-facing fallout)."""
         import base64
         import hashlib
 
@@ -309,12 +289,6 @@ class ImmichSettingsViewTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.client.force_login(self.user)
-        # "photos.example.com" is RFC 2606 non-resolving (unlike bare
-        # example.com, arbitrary subdomains don't resolve), and
-        # ImmichAccountForm.clean_server_url now runs it through the SSRF
-        # guard in services.security.url_safety, which resolves the hostname for
-        # real. Mock DNS to a fixed public IP, matching the convention used
-        # elsewhere for this same guard (see test_pin_suggestions.py).
         self._dns_patch = mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))])
         self._dns_patch.start()
         self.addCleanup(self._dns_patch.stop)
@@ -519,10 +493,6 @@ class PinImmichSearchViewTests(TestCase):
         self.assertEqual(asset_ids, ["near"])
 
     def test_the_library_is_fetched_once_across_every_radius_option(self) -> None:
-        # P69: the radius <select> carries hx-trigger="change", so each of its
-        # six options re-downloaded every geolocated asset in the library -
-        # which for a self-hosted library is 10k-100k assets over the network,
-        # because Immich exposes no coordinate-radius filter to push this into.
         markers = [MapMarker(id="near", lat=40.0001, lon=-74.0), MapMarker(id="far", lat=40.01, lon=-74.0)]
         with mock.patch.object(ImmichGateway, "get_map_markers", return_value=markers) as get_markers:
             for radius in (100, 250, 500, 1000, 2000, 5000):
@@ -717,9 +687,7 @@ class ImportImmichPhotosTaskTests(TestCase):
         self.assertEqual(counts, {"imported": 1, "failed": 1, "skipped": 0})
 
     def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
+        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
         with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
             self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
         acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
@@ -853,10 +821,7 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         self.assertFalse(PinSuggestion.objects.exists())
 
     def test_progress_message_uses_the_real_total_not_the_deprecated_page_total(self) -> None:
-        """Regression test: Immich's per-page 'total' field mirrors the page size (a
-        deprecated field), so a naive "Scanned N of <page total>" message goes stale
-        and nonsensical once scanned outgrows a single page (e.g. "Scanned 194000 of
-        1000"). The real library-wide count must come from library_asset_count()."""
+        """Regression test: Immich's per-page 'total' field mirrors the page size (a deprecated field), so a naive "Scanned N of <page total>" message goes stale and nonsensical once scanned outgrows a single page (e.g. "Scanned 194000 of 1000")."""
         asset = SearchAsset(
             id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0
         )
@@ -887,11 +852,9 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
     def test_undecryptable_account_is_a_noop_not_a_crash(self) -> None:
         """Regression test for the InvalidToken crash seen in production (see tasks.py).
 
-        This is the exact traceback reported: sweep_immich_library_locations
-        raised cryptography.fernet.InvalidToken instead of failing gracefully,
-        because the account had been connected under a since-invalidated
-        per-process encryption key (see EncryptedTextField / _fernet()).
-        """
+        This is the exact traceback reported: sweep_immich_library_locations raised
+        cryptography.fernet.InvalidToken instead of failing gracefully, because the account had been connected
+        under a since-invalidated per-process encryption key (see EncryptedTextField / _fernet())."""
         _corrupt_api_key(self.account)
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             result = tasks.sweep_immich_library_locations(self.profile.pk)

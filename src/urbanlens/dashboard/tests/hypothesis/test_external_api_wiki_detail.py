@@ -233,10 +233,8 @@ class WikiAliasesAndLinksTests(WikiDetailBaseTestCase):
     def test_alias_create_list_delete(self) -> None:
         """Round-trip one alias.
 
-        ``Wiki.save()`` auto-creates an alias matching the wiki's own name, so
-        the list is never empty - assert on the alias under test rather than on
-        the whole collection.
-        """
+        ``Wiki.save()`` auto-creates an alias matching the wiki's own name, so the list is never empty - assert
+        on the alias under test rather than on the whole collection."""
         created = self.client.post(
             self.url("aliases/"), {"name": "The Mill"}, content_type="application/json", **self.headers()
         )

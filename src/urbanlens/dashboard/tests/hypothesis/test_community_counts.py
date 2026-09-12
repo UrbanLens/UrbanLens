@@ -1,10 +1,4 @@
-"""Tests for the privacy-preserving wiki pinned-user count.
-
-Covers:
-- approximate_pin_count - "fewer than 3" below the threshold, fuzz within
-  ±2 (clamped to the threshold) above it (property-based), and one cached
-  value per wiki so refreshes can't average out the noise
-"""
+"""Tests for the privacy-preserving wiki pinned-user count."""
 
 from __future__ import annotations
 
@@ -80,14 +74,7 @@ def _make_pin(location: Location) -> Pin:
 
 
 class WikiCommunitySummaryPlaceAwareTests(TestCase):
-    """``wiki_community_summary`` must count root pins across every Location
-    sharing the wiki's Place, not just the single Location the caller
-    resolved it through - ``resolve_visible_wiki`` deliberately allows a
-    caller's own (possibly non-canonical) Location to differ from
-    ``wiki.location`` so long as they share a Place, so counting only the
-    passed-in Location undercounts "N users have this pinned" whenever more
-    than one Location exists under the Place. See docs/audits/GOALS_CODE_AUDIT.md
-    ("Cross-pin aggregate comparison level")."""
+    """``wiki_community_summary`` must count root pins across every Location sharing the wiki's Place, not just the single Location the caller resolved it through - ``resolve_visible_wiki`` deliberately allows a caller's own (possibly non-canonical) Location to differ from ``wiki.location`` so long as they share a Place, so counting only the passed-in Location undercounts "N users have this pinned" whenever more than one Location exists under the Place."""
 
     def _spy_exact_count(self, wiki: Wiki, location: Location) -> int:
         """Call wiki_community_summary and return the exact_count it computed,

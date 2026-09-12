@@ -1,18 +1,4 @@
-"""Property-based and unit tests for Profile.get_map_center and compute_map_center.
-
-Invariants verified:
-  - GPS mode always returns None regardless of stored coordinates.
-  - CUSTOM mode returns stored coordinates as floats, or None when either is unset.
-  - AUTO mode returns the cached centroid without touching the DB; falls back to
-    compute_map_center() when the cache is empty.
-  - compute_map_center() finds the densest cluster of pins and returns its centroid,
-    rather than a naive average across all pins (which would land in the ocean for
-    users with pins on multiple continents).
-  - When all pins are nearby, the cluster centroid equals their geographic midpoint.
-  - When pins are spread across continents, the largest regional cluster wins.
-  - The result is written to the DB cache and returned as (float, float).
-  - Pins with no usable coordinates produce None from compute_map_center().
-"""
+"""Property-based and unit tests for Profile.get_map_center and compute_map_center."""
 
 from __future__ import annotations
 
@@ -39,10 +25,9 @@ _db_settings = settings(
 def _pin_at(profile: Profile, lat: float, lng: float, **kwargs) -> Pin:
     """Create a Pin whose linked Location sits at the given coordinates.
 
-    A Pin no longer stores its own coordinates; they live on the shared Location
-    it references (see AddressableModel), so tests that care about a pin's map
-    position must create a Location at those coordinates.
-    """
+    A Pin no longer stores its own coordinates; they live on the shared Location it references (see
+    AddressableModel), so tests that care about a pin's map position must create a Location at those
+    coordinates."""
     location = baker.make(Location, latitude=lat, longitude=lng)
     return baker.make(Pin, profile=profile, location=location, **kwargs)
 
@@ -158,15 +143,7 @@ class GetMapCenterCustomModeTests(TestCase):
 
 
 class GetMapCenterRememberModeTests(TestCase):
-    """REMEMBER mode returns the stored remembered_map_lat/lng, or None when unset.
-
-    Server-side confirmation for UL-255 ("remember last map position doesn't
-    work") - the read side (this), the write side (SaveMapPositionView, see
-    test_save_map_position_view.py), MapCenterForm.save(), and the map page's
-    JS are all independently correct; see docs/PROBLEMS.md for the more
-    likely actual cause (a separate, unrelated shareable-map-view-URL feature
-    taking precedence over the server-rendered value on page load).
-    """
+    """REMEMBER mode returns the stored remembered_map_lat/lng, or None when unset."""
 
     def test_remember_mode_returns_tuple_when_both_coords_are_set(self) -> None:
         profile = _profile_with_mode(

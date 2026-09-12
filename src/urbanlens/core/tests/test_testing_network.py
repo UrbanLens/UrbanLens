@@ -100,9 +100,7 @@ class LocalhostOnlyNetworkTests(TestCase):
     def test_blocks_external_connect_ex(self) -> None:
         """`connect_ex` is a separate C-level method - it does not route through `connect`.
 
-        A guard that patches only `connect` reports success here and opens a real
-        outbound socket. Some non-blocking-connect paths in DB drivers use it.
-        """
+        A guard that patches only `connect` reports success here and opens a real outbound socket."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(2)
         try:

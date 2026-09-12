@@ -1,16 +1,4 @@
-"""List endpoints must cost a constant number of queries regardless of row count.
-
-Each of these was a real N+1 found by rendering the same endpoint at two data
-sizes and diffing the query count. They are easy to reintroduce: every one came
-from a model *property* that quietly falls back to a query (``Location.display_name``
-reading its wiki, ``Trip.effective_start_date`` aggregating its activities,
-``Profile.username`` reading its user), so adding an innocuous-looking field to a
-template or payload is enough to bring one back.
-
-Asserting "does not grow" rather than an exact count on purpose: an exact number
-turns every unrelated query change into a failing test, and the thing worth
-protecting is the *slope*, not the intercept.
-"""
+"""List endpoints must cost a constant number of queries regardless of row count."""
 
 from __future__ import annotations
 
@@ -80,13 +68,8 @@ class QueryScalingTests(QueryScalingMixin, TestCase):
     def test_external_photo_list_does_not_scale_with_photo_count(self) -> None:
         self.assert_flat(reverse("external_api:photos"), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
 
-    # The three below were surveyed rather than found broken: each was measured at two
-    # data sizes, came out flat, and is pinned here so it stays that way. The seed
-    # above grows pins, labels, images and trips, which is what these list - an
-    # endpoint whose row type the seed does not grow would render a constant-size
-    # list and pass without measuring anything. (``vault.photos`` was measured flat
-    # too, but needs images with real files rather than the bare rows seeded here, so
-    # pinning it would mean changing the seed under the four tests above.)
+    # The three below were surveyed rather than found broken: each was measured at two data sizes, came out
+    # flat, and is pinned here so it stays that way.
     def test_trips_list_does_not_scale_with_trip_count(self) -> None:
         self.assert_flat(reverse("trips.list"))
 
@@ -97,9 +80,5 @@ class QueryScalingTests(QueryScalingMixin, TestCase):
         self.assert_flat(reverse("organize.index"))
 
     def test_external_friend_list_does_not_scale_with_friend_count(self) -> None:
-        """Each row masks a profile the caller may not identify - that check was per row.
-
-        Surveying the external API's list endpoints found this one alone scaling
-        (7 queries for 2 friends, 17 for 12); the rest were already flat.
-        """
+        """Each row masks a profile the caller may not identify - that check was per row."""
         self.assert_flat(reverse("external_api:friends"), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")

@@ -1,20 +1,4 @@
-"""Labels are unique per (lower(name), profile, kind), and duplicates merge cleanly.
-
-``Label`` previously had no uniqueness at all, so nine `get_or_create` sites
-treating `(profile, name, kind)` as identifying could each race into a duplicate.
-Migration 0042 merges existing duplicates and adds the constraint.
-
-These tests cover the three things that can go wrong with that change:
-
-- the constraint exists and is case-insensitive, since callers already assumed
-  case-insensitive identity (`media_labels.py` pre-filtered with `name__iexact`
-  precisely because `get_or_create(name=...)` is not);
-- global labels (``profile IS NULL``) are constrained against each other, which
-  needs ``nulls_distinct=False`` - Postgres treats NULLs as distinct by default,
-  so the obvious constraint would silently allow duplicate globals;
-- the merge moves everything attached to the losing label rather than deleting
-  it, which is the part a user would notice.
-"""
+"""Labels are unique per (lower(name), profile, kind), and duplicates merge cleanly."""
 
 from __future__ import annotations
 
@@ -87,9 +71,7 @@ class LabelUniqueConstraintTests(TestCase):
             Label.objects.create(profile=None, name="zzaudit bridge", kind=KIND_TAG)
 
     def test_a_profile_may_still_hold_a_name_a_global_label_uses(self) -> None:
-        """The constraint alone permits this - the profile values differ. Migration
-        0042 merges the pre-existing ones, and the UI refuses to create new ones;
-        the database is deliberately not the thing enforcing that."""
+        """The constraint alone permits this - the profile values differ."""
         Label.objects.create(profile=None, name="ZzAudit Bridge", kind=KIND_TAG)
         Label.objects.create(profile=self.profile, name="ZzAudit Bridge", kind=KIND_TAG)
 
@@ -110,28 +92,13 @@ class LabelUniqueConstraintTests(TestCase):
 class LabelDuplicateMergeTests(TestCase):
     """The 0042 data pass, exercised by running its function against real rows.
 
-    The constraint is already applied in the test database, so duplicates cannot
-    be created through the ORM. These call the migration's own merge helper on
-    rows inserted underneath it, which is the only way to reproduce what the
-    beta databases actually contain.
-    """
+    The constraint is already applied in the test database, so duplicates cannot be created through the ORM."""
 
     def setUp(self) -> None:
         """Drop the constraint, then build fixtures under it.
 
-        A duplicate cannot be produced through the ORM once 0042 has run - that
-        is the point of the migration - so reproducing what the beta databases
-        contain means removing the constraint first.
-
-        It is a ``DROP INDEX``, not ``DROP CONSTRAINT``: Django implements an
-        *expression*-based ``UniqueConstraint`` as a unique index, because
-        Postgres cannot express ``lower(name)`` as a table constraint. Asking for
-        a constraint by that name reports it does not exist, while ``\\d`` lists
-        it plainly under Indexes.
-
-        No restore is needed - Postgres DDL is transactional and ``TestCase``
-        rolls the whole test back, so the drop is undone automatically.
-        """
+        A duplicate cannot be produced through the ORM once 0042 has run - that is the point of the migration -
+        so reproducing what the beta databases contain means removing the constraint first."""
         super().setUp()
         from django.db import connection
 
@@ -183,10 +150,8 @@ class LabelDuplicateMergeTests(TestCase):
 class LabelConflictHandlingTests(TestCase):
     """A colliding name must produce a message, not an IntegrityError 500.
 
-    The constraint alone turns a duplicate name into a database error, which
-    reaches the user as a 500 with no indication of what went wrong. Every write
-    path checks first.
-    """
+    The constraint alone turns a duplicate name into a database error, which reaches the user as a 500 with no
+    indication of what went wrong."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -261,10 +226,8 @@ class LabelConflictHandlingTests(TestCase):
     def test_converting_a_kind_into_a_taken_name_is_refused(self) -> None:
         """The least obvious collision: the name is unchanged, the *kind* moves.
 
-        A tag called "Bridge" converted to a category collides with an existing
-        category "Bridge" - so the check has to use the incoming ``new_kind``,
-        not the label's current one.
-        """
+        A tag called "Bridge" converted to a category collides with an existing category "Bridge" - so the check
+        has to use the incoming ``new_kind``, not the label's current one."""
         from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label
 
         tag = Label.objects.create(profile=self.profile, name="ZzAudit Bridge", kind=KIND_TAG)

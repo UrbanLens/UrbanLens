@@ -1,22 +1,4 @@
-"""Emoji reactions on a pin's own comment thread, plus the notification they emit.
-
-Two things are under test here, and they fail in different ways.
-
-**The endpoint.** ``PinCommentReactionView`` is pure configuration over
-``_ReactionMixin`` - ``test_external_api_reaction_mixin`` already pins the
-mixin's own semantics through the wiki route - so what is worth asserting is
-the part that is *not* shared: which row this endpoint addresses, who may reach
-it, and under which scope. A pin comment is private owner content, so the scope
-is ``pins:write`` and a comment on someone else's pin must be indistinguishable
-from one that does not exist.
-
-**The notification.** Reacting to somebody's comment notifies them on the web
-and, until this change, did not over the API: the internal HTMX panel wrote the
-``NotificationLog`` row itself, while both API reaction endpoints went through
-``services.comments.comments.toggle_reaction``, which did not. Moving the notification
-into the service is what makes the two surfaces agree, and the tests below fail
-against the previous implementation.
-"""
+"""Emoji reactions on a pin's own comment thread, plus the notification they emit."""
 
 from __future__ import annotations
 
@@ -61,21 +43,17 @@ class PinCommentReactionApiTests(TestCase):
             raw_key: A raw key to use instead of the fixture's.
 
         Returns:
-            Request kwargs carrying the Authorization header.
-        """
+            Request kwargs carrying the Authorization header."""
         return {"HTTP_AUTHORIZATION": f"Bearer {raw_key or self.raw_key}"}
 
     def _url(self, emoji: str, *, comment_id: int | None = None, pin_slug: str | None = None) -> str:
         """The reaction URL for one emoji on one comment.
 
         Args:
-            emoji: Percent-encoded emoji for the URL's last segment.
-            comment_id: Comment to address; defaults to the fixture comment.
-            pin_slug: Pin to address; defaults to the fixture pin.
+            emoji: Percent-encoded emoji for the URL's last segment. comment_id: Comment to address; defaults to the fixture comment. pin_slug: Pin...
 
         Returns:
-            The fully-built reaction URL.
-        """
+            The fully-built reaction URL."""
         slug = pin_slug or self.pin.slug or str(self.pin.uuid)
         pk = self.comment.pk if comment_id is None else comment_id
         return f"{BASE}/{slug}/comments/{pk}/reactions/{emoji}/"
@@ -87,8 +65,7 @@ class PinCommentReactionApiTests(TestCase):
             scopes: Raw scope values to store on the row.
 
         Returns:
-            The raw key value.
-        """
+            The raw key value."""
         api_key, raw = generate_api_key(self.user, "Scoped")
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         return raw
@@ -171,12 +148,8 @@ class PinCommentReactionApiTests(TestCase):
 class ReactionNotificationTests(TestCase):
     """Reacting to someone's comment must notify them, whichever surface did it.
 
-    The regression these guard: the notification lived in the internal HTMX
-    view, so every API reaction was silent. A user reacting from the mobile app
-    produced no notification at all, while the same reaction from the website
-    produced one - a difference invisible to everyone except the person who
-    never heard about it.
-    """
+    The regression these guard: the notification lived in the internal HTMX view, so every API reaction was
+    silent."""
 
     def setUp(self) -> None:
         """Create an author, a reactor, and a comment on the author's own pin."""
@@ -220,11 +193,9 @@ class ReactionNotificationTests(TestCase):
     def test_the_authors_delivery_preference_is_respected(self) -> None:
         """A user who turned "comment liked" off stays off, service path included.
 
-        The preference row is created explicitly rather than fetched: it is
-        created lazily in production, and the notification helper treats a
-        missing row as "site delivery", so the off case only exists once a row
-        says so.
-        """
+        The preference row is created explicitly rather than fetched: it is created lazily in production, and
+        the notification helper treats a missing row as "site delivery", so the off case only exists once a row
+        says so."""
         NotificationPreference.objects.update_or_create(
             profile=self.author, defaults={"comment_liked": DeliveryPreference.NONE}
         )
@@ -236,18 +207,9 @@ class ReactionNotificationTests(TestCase):
     def test_reacting_through_the_api_notifies_too(self) -> None:
         """End-to-end: the endpoint inherits the notification from the service.
 
-        Reacting to another profile's comment on a pin needs the reactor to own
-        the pin, so the roles here are inverted relative to the rest of this
-        class - the reactor is the pin owner and the author is a guest
-        commenter.
-
-        The guest's ``comment_visibility`` is widened to ANYONE because owning
-        the pin is not the same as being allowed to read every comment on it:
-        under the ``ANYTHING_IN_COMMON`` default this guest's comment is hidden
-        from the owner, and reacting to a comment the thread would not show is
-        now a 404. That gate is the subject of its own test; here it would only
-        obscure the notification behaviour being checked.
-        """
+        Reacting to another profile's comment on a pin needs the reactor to own the pin, so the roles here are
+        inverted relative to the rest of this class - the reactor is the pin owner and the author is a guest
+        commenter."""
         owner_user = baker.make(User, username="pinowner")
         owner = Profile.objects.get(user=owner_user)
         _key, raw_key = generate_api_key(owner_user, "Reaction client")

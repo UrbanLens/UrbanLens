@@ -1,15 +1,8 @@
 /**
- * The three health probes, and the distinctions between them.
- *
- * These are the endpoints an orchestrator acts on: compose marks the `app`
- * container unhealthy on a non-2xx from `/health/`, which blocks Daphne from
- * starting; a load balancer pointed at `/health/primary` decides which site
- * receives writes. A probe that answers the wrong thing therefore does not
- * merely mis-report - it takes a site out, or sends writes to a replica.
- *
- * Their *differences* are what is asserted here. All three returning 200 on a
- * healthy deployment proves nothing about whether liveness would still answer
- * with a sick database, which is the entire reason the set was split.
+ * The three health probes, and the distinctions between them. These are the endpoints an
+ * orchestrator acts on: compose marks the `app` container unhealthy on a non-2xx from `/health/`,
+ * which blocks Daphne from starting; a load balancer pointed at `/health/primary` decides which
+ * site receives writes.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

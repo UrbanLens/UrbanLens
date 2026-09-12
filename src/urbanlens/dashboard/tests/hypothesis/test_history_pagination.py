@@ -1,16 +1,4 @@
-"""Both revision-history lists render one page at a time (P69).
-
-Neither the wiki's field-edit history nor an article's revision history had a
-slice anywhere in its chain, so an actively-edited page rendered every row it
-had ever accumulated on tab-reveal.
-
-Paginating a *numbered* list is not the same edit as paginating a flat one:
-the row number, the "current" marker and the size delta are all defined
-relative to the whole history rather than to the page, so a naive slice
-renumbers every page from 1, marks the top of each page "current" (which also
-hides its Restore button), and reports the oldest row on each page as a delta
-against nothing.
-"""
+"""Both revision-history lists render one page at a time (P69)."""
 
 from __future__ import annotations
 

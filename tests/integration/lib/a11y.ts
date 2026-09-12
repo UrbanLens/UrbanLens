@@ -1,16 +1,5 @@
 /**
- * Accessibility scanning, via axe-core.
- *
- * Two deliberate choices about severity. First, only `serious` and `critical`
- * findings fail a test by default: a suite that goes red on every
- * colour-contrast near-miss gets muted wholesale within a week, and then
- * catches nothing at all. Second, the findings below that threshold are still
- * attached to the report, so the moderate ones are visible to anyone reading a
- * run rather than being discarded.
- *
- * Scans run against the deployed page, so they see the real rendered DOM
- * including anything HTMX has swapped in - which is most of this application's
- * interactive surface, and the part a static template check cannot reach.
+ * Accessibility scanning, via axe-core. Two deliberate choices about severity.
  */
 
 import AxeBuilder from "@axe-core/playwright";

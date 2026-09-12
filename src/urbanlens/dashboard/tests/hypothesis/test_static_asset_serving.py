@@ -1,17 +1,4 @@
-"""`/static/` has to be served by something, and the assets have to be in the image.
-
-Every `/static/` URL 404'd on the k8s deployment, which runs gunicorn with no
-nginx in front of it and no static volume mounted. Two independent causes, and
-fixing either alone leaves the site unstyled:
-
-- nothing in `MIDDLEWARE` served static files, and
-- the published image contained only the fraction of the collected tree that
-  had been committed to git, against a manifest describing all of it.
-
-The tests here pin both, plus the ordering argument that decides *where* the
-middleware goes: WhiteNoise short-circuits in the request phase, so everything
-above it still runs on the way out and everything below it is skipped.
-"""
+"""`/static/` has to be served by something, and the assets have to be in the image."""
 
 from __future__ import annotations
 
@@ -73,14 +60,9 @@ class StaticMiddlewarePositionTests(SimpleTestCase):
     def test_static_storage_backend_still_hashes_outside_tests(self) -> None:
         """The middleware and the storage backend have to agree about hashing.
 
-        The manifest backend is what turns `dashboard/style.css` into a hashed
-        name, and WhiteNoise's `immutable_file_test` asks that same storage
-        whether a requested file is a hashed one before it promises a ten-year
-        `Cache-Control`. Swapping it for a plain backend would serve every asset
-        with `max-age=60` instead, which is the difference between a cached edge
-        and an uncached one - and nothing else in the suite would notice, since
-        TESTING deliberately runs on the plain backend.
-        """
+        The manifest backend is what turns `dashboard/style.css` into a hashed name, and WhiteNoise's
+        `immutable_file_test` asks that same storage whether a requested file is a hashed one before it promises
+        a ten-year `Cache-Control`."""
         self.assertEqual(
             settings.STORAGES["staticfiles"]["BACKEND"], "django.contrib.staticfiles.storage.StaticFilesStorage"
         )
@@ -176,11 +158,9 @@ class StaticManifestVerificationTests(SimpleTestCase):
     def test_a_build_step_that_produced_nothing_is_fatal(self) -> None:
         """The failure mode the existence check cannot see.
 
-        `bun run sass` runs with raise_error=False, so a failed compile leaves no
-        stylesheet, collectstatic collects nothing to replace it, and the
-        resulting manifest is internally consistent with no CSS in it - at which
-        point every page raises on the stylesheet's `{% static %}` call.
-        """
+        `bun run sass` runs with raise_error=False, so a failed compile leaves no stylesheet, collectstatic
+        collects nothing to replace it, and the resulting manifest is internally consistent with no CSS in it -
+        at which point every page raises on the stylesheet's `{% static %}` call."""
         for dropped, remaining in (
             ("dashboard/style.css", "dashboard/js/core.js"),
             ("dashboard/js/core.js", "dashboard/style.css"),
@@ -205,10 +185,7 @@ class StaticManifestVerificationTests(SimpleTestCase):
     def test_backslash_separator_is_fatal_even_though_the_file_exists(self) -> None:
         """A Windows-generated manifest names files that exist and URLs that never match.
 
-        51 of the shipped manifest's 166 entries looked like this. On Linux a
-        backslash is a legal filename character, so an existence check alone
-        passes - which is why the separator is tested separately.
-        """
+        51 of the shipped manifest's 166 entries looked like this."""
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             self._write_manifest(

@@ -150,11 +150,9 @@ class DocumentItemsViewTests(TestCase):
     def test_items_carry_the_server_resolved_document_icon(self) -> None:
         """The grid renders the icon from the payload rather than re-deriving it.
 
-        The client only ever sees the caption, while the server falls back to
-        the stored filename when a document has no caption - a client-side copy
-        of the extension map therefore disagrees with the server-rendered first
-        page for exactly those rows.
-        """
+        The client only ever sees the caption, while the server falls back to the stored filename when a
+        document has no caption - a client-side copy of the extension map therefore disagrees with the
+        server-rendered first page for exactly those rows."""
         baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT, caption="deed.pdf")
         item = self.client.get(reverse("vault.documents.items")).json()["items"][0]
         self.assertEqual(item["media_type"], MediaKind.DOCUMENT)
@@ -169,12 +167,7 @@ class DocumentItemsViewTests(TestCase):
     def test_query_count_does_not_grow_with_the_number_of_documents(self) -> None:
         """The gallery selects ``profile__user``, so listing is flat, not per-row.
 
-        ``image_to_gallery_json`` names the uploader through
-        ``Profile.username`` -> ``self.user.username``. Without that select
-        each row costs a ``dashboard_profiles`` and an ``auth_user`` query, so
-        a page of results scales with the page size - 2x the page size in extra
-        round-trips on every infinite-scroll fetch.
-        """
+        ``image_to_gallery_json`` names the uploader through ``Profile.username`` -> ``self.user.username``."""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
@@ -236,13 +229,7 @@ class DocumentUploadViewTests(TestCase):
 
     @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_posting_an_image_to_the_document_endpoint_is_still_typed_as_a_photo(self, _mock_enqueue) -> None:
-        """DocumentUploadView does no type-restriction of its own - it defers
-        entirely to upload_photo()'s own content-based classification (see
-        photo_upload._resolve_media_type). Posting a real image there
-        correctly creates a PHOTO row (not a DOCUMENT one just because of
-        which endpoint received it) - it just won't show up on this page,
-        since VaultDocumentsView filters to .documents().
-        """
+        """DocumentUploadView does no type-restriction of its own - it defers entirely to upload_photo()'s own content-based classification (see photo_upload._resolve_media_type). Posting a real image there correctly creates a PHOTO row (not a DOCUMENT one just because of which endpoint received it) - it just won't show up on this page, since VaultDocumentsView filters to .documents()."""
         from urbanlens.core.tests.images import JPEG_BYTES
 
         response = self._upload(name="photo.jpg", content=JPEG_BYTES, content_type="image/jpeg")
@@ -252,11 +239,7 @@ class DocumentUploadViewTests(TestCase):
 
 
 class VaultPhotosExcludesDocumentsTests(TestCase):
-    """Regression coverage for the .photos() fix in controllers.vault_photos -
-    before it, a document uploaded via Vault Documents (or anywhere else)
-    would silently appear in the Photos gallery, the organize queue, the home
-    widget, and the external photos API.
-    """
+    """Regression coverage for the .photos() fix in controllers.vault_photos - before it, a document uploaded via Vault Documents (or anywhere else) would silently appear in the Photos gallery, the organize queue, the home widget, and the external photos API."""
 
     def setUp(self) -> None:
         self.user: User = baker.make(User)
@@ -299,14 +282,7 @@ class VaultPhotosExcludesDocumentsTests(TestCase):
         self.assertEqual(photos_stat["value"], 0)
 
     def test_external_photos_api_still_includes_it(self) -> None:
-        """The external "photos" API is a deliberately general media library -
-        PhotoSerializer/build_photo_payload return media_type precisely so a
-        client can tell a document/video apart from a photo, and POST already
-        runs the same media-type-agnostic upload_photo(). Unlike every other
-        surface in this test file, this one must NOT narrow to .photos() -
-        confirming that directly, since it would be an easy, wrong "fix" to
-        make by analogy with the others.
-        """
+        """The external "photos" API is a deliberately general media library - PhotoSerializer/build_photo_payload return media_type precisely so a client can tell a document/video apart from a photo, and POST already runs the same media-type-agnostic upload_photo(). Unlike every other surface in this test file, this one must NOT narrow to .photos() - confirming that directly, since it would be an easy, wrong "fix" to make by analogy with the others."""
         from urbanlens.dashboard.models.account.model import ApiKeyScope
         from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
@@ -320,12 +296,7 @@ class VaultPhotosExcludesDocumentsTests(TestCase):
 
 
 class PhotoActionViewRefusesDocumentsTests(TestCase):
-    """create-pin/log-visit/send-to-wiki are the three PhotoActionView actions
-    that can give an Image a pin/wiki FK - each must refuse a document
-    outright, since nothing downstream (the pin/wiki Photos gallery) can
-    render one. delete/share/accept/reject/dismiss stay unrestricted (see the
-    class docstring on PhotoActionView for why each is safe as-is).
-    """
+    """create-pin/log-visit/send-to-wiki are the three PhotoActionView actions that can give an Image a pin/wiki FK - each must refuse a document outright, since nothing downstream (the pin/wiki Photos gallery) can render one. delete/share/accept/reject/dismiss stay unrestricted (see the class docstring on PhotoActionView for why each is safe as-is)."""
 
     def setUp(self) -> None:
         self.user: User = baker.make(User)
@@ -448,11 +419,9 @@ class MemoriesHeroStatsExcludeDocumentsTests(TestCase):
 class DocumentLightboxActionsTests(TestCase):
     """The lightbox must not offer the actions PhotoActionView refuses.
 
-    File-to-a-pin and send-to-a-wiki are both refused server-side for a
-    document (see PhotoActionViewRefusesDocumentsTests); rendering the buttons
-    anyway leaves a user searching their pins, picking one, and getting an
-    error toast for their trouble.
-    """
+    File-to-a-pin and send-to-a-wiki are both refused server-side for a document (see
+    PhotoActionViewRefusesDocumentsTests); rendering the buttons anyway leaves a user searching their pins,
+    picking one, and getting an error toast for their trouble."""
 
     def setUp(self) -> None:
         self.user: User = baker.make(User)
@@ -487,11 +456,7 @@ class DocumentLightboxActionsTests(TestCase):
 
 
 class AlbumPickerExcludesDocumentsTests(TestCase):
-    """Album tiles are <img> elements throughout, so a document in an album
-    renders as a broken image and can even be chosen as the album cover.
-    eligible_images_for is the chokepoint for both the picker listing and
-    AlbumAddPhotosView, which re-scopes submitted ids through it.
-    """
+    """Album tiles are <img> elements throughout, so a document in an album renders as a broken image and can even be chosen as the album cover. eligible_images_for is the chokepoint for both the picker listing and AlbumAddPhotosView, which re-scopes submitted ids through it."""
 
     def setUp(self) -> None:
         self.user: User = baker.make(User)

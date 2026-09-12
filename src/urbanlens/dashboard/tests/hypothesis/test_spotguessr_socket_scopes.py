@@ -1,21 +1,4 @@
-"""Scope enforcement on the game-session WebSockets (SpotGuessr / Trivia / Consensus).
-
-``_ParticipantSessionConsumer`` originally gated only on ``user.is_authenticated``
-plus participant membership. Once ``ApiKeyAuthMiddleware`` let an external
-credential open a socket, that meant a credential holding nothing but
-``pins:read`` could open ``ws/spotguessr/session/<id>/`` and both read the live
-round/reveal broadcasts and post into the session chat - routing straight around
-the ``games:read``/``games:write`` boundary every HTTP game endpoint enforces.
-
-These tests pin the fix down from both directions: a credential without the
-scope must be refused, and a *session* connection (the web client, which has no
-credential at all) must be completely unaffected - the whole point of
-``CredentialScopeMixin`` short-circuiting on ``credential is None``.
-
-Uses TransactionTestCase for the same reason ``test_spotguessr_consumer`` does:
-Channels consumers reach the database from a background thread via
-``database_sync_to_async``.
-"""
+"""Scope enforcement on the game-session WebSockets (SpotGuessr / Trivia / Consensus)."""
 
 from __future__ import annotations
 

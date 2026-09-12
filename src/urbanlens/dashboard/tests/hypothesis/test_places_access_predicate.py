@@ -1,20 +1,4 @@
-"""Property tests for the place access predicate.
-
-The predicate is small but its consequences are not, so these assert the
-properties rather than a handful of examples:
-
-- **Symmetry within a domain.** A parcel and everything ``PART_OF`` it is one
-  access domain; a pin anywhere in it reaches every wiki in it, in either
-  direction. Splitting a property into buildings must never change who can see
-  what.
-- **All members, for aggregates.** A ``MEMBER_OF`` parent is reachable only by
-  holding every one of its members, and holding all-but-one is not enough.
-- **Earning is recursive.** Completing one tier can complete the tier above it.
-- **Nothing user-drawn ever counts.** The ``Boundary`` table is where every
-  community drawing lives, and the predicate must not read it.
-- **Superseded geometry never grants.** The old campus outline still contains
-  every post-split pin; containment against it must resolve to nothing.
-"""
+"""Property tests for the place access predicate."""
 
 from __future__ import annotations
 

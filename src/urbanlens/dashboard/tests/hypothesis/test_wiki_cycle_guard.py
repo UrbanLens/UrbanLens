@@ -1,17 +1,4 @@
-"""Property-based tests for Wiki.would_create_cycle.
-
-Wiki.parent_wiki allows wikis to be nested to arbitrary depth (a child wiki
-may itself have child wikis), mirroring Pin.parent_pin. The only thing that
-must never happen is a loop in that chain (A -> B -> C -> A), since future
-code walks the chain assuming it terminates. Key invariants:
-
-1. A None parent never creates a cycle.
-2. A wiki can never become its own parent.
-3. Making a wiki the parent of its own ancestor closes a loop and is rejected.
-4. This holds at arbitrary chain depth, not just directly adjacent wikis.
-5. Unrelated wikis never register as a cycle.
-6. The check terminates even against data that already contains a corrupted cycle.
-"""
+"""Property-based tests for Wiki.would_create_cycle."""
 
 from __future__ import annotations
 

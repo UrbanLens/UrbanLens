@@ -1,12 +1,4 @@
-"""LabelEditView and the external API's LabelDetailView.patch must not clobber
-concurrent edits to fields they don't themselves touch.
-
-Both ended with a bare label.save(), writing every column from that request's
-in-memory snapshot - reverting any field a concurrent request (another tab, or
-the other of these two independent implementations of "edit this label")
-changed in the window between this request's load and its own save. Same bug
-class fixed for PinList's equivalent pair of views; see PROBLEMS.md.
-"""
+"""LabelEditView and the external API's LabelDetailView.patch must not clobber concurrent edits to fields they don't themselves touch."""
 
 from __future__ import annotations
 

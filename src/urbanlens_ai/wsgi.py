@@ -1,18 +1,4 @@
-"""The whole HTTP surface of the inference service: no framework dependency.
-
-Flask/FastAPI/Django would each pull in more than two routes need - staying
-stdlib-only is part of keeping this package Django-free and small enough to
-audit in one sitting. Deployed as ``urbanlens_ai.wsgi:application`` behind
-gunicorn's ``gthread`` worker (see the plan's architecture note for why
-threads, not gevent: the provider SDKs' blocking HTTP calls need a worker
-model that actually parks on I/O).
-
-Logs request ids, provider, model, token counts, and latency - never prompt
-or response text, and never a request body verbatim in an error response
-(see ``_handle_messages``): this process sees the same content the model
-does, and a log line is a much less carefully reviewed place for it to leak
-into than the response itself.
-"""
+"""The whole HTTP surface of the inference service: no framework dependency."""
 
 from __future__ import annotations
 

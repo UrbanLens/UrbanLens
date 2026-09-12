@@ -1,12 +1,4 @@
-"""Tests for services.ai.tasks.run_assistant_turn_task (batch 2c).
-
-Calls the task directly (not via ``.delay()``/``.apply_async()``) - a bound
-Celery task is a plain callable that runs synchronously and supplies
-``self``, so this exercises the real function body, including its
-``update_state`` calls, without needing a broker. Enqueue-time behavior
-(``apply_async`` args, ``queue=``, ``expires=``) is covered generically by
-``test_celery_helpers.py``'s ``SafelyEnqueueTaskTests``.
-"""
+"""Tests for services.ai.tasks.run_assistant_turn_task (batch 2c)."""
 
 from __future__ import annotations
 

@@ -49,8 +49,7 @@ def _encryption_key_weakness(key: str) -> str | None:
             f"(got {len(key)}). Generate one with: "
             'python -c "import secrets; print(secrets.token_urlsafe(64))"'
         )
-    # A crude stand-in for entropy, calibrated against random output rather
-    # than against any specific bad key - see the constant.
+    # Crude entropy stand-in calibrated against random output.
     if len(set(key)) < MIN_FIELD_ENCRYPTION_KEY_ALPHABET:
         return (
             f"field_encryption_key uses only {len(set(key))} distinct characters, which is too "
@@ -61,20 +60,12 @@ def _encryption_key_weakness(key: str) -> str | None:
 
 
 def _default_allowed_hosts() -> list[str]:
-    """Return the default ``ALLOWED_HOSTS`` list for the current environment.
-
-    ``localhost`` and ``127.0.0.1`` are always included so Docker's internal
-    ``curl http://localhost:8000/health/`` healthchecks (see docker-compose.yml)
-    succeed without opening the app to arbitrary public Host headers. Override
-    the full list via ``UL_ALLOWED_HOSTS`` when deploying to a custom domain.
-    """
+    """Default ALLOWED_HOSTS, including localhost for container healthchecks."""
     return ["urbanlens.org", "localhost", "127.0.0.1"]
 
 
 class AppSettingsMeta(ModelMetaclass):
-    """
-    Metaclass to ensure only one instance of the class is created
-    """
+    """Singleton metaclass."""
 
     _instances: dict[type, Any] = {}
 
@@ -86,23 +77,14 @@ class AppSettingsMeta(ModelMetaclass):
 
 
 class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
-    """
-    Class to hold settings for the application.
-    """
+    """Application settings."""
 
     project_root: Path = Field(default=DEFAULT_ROOT, description="The root directory of the project")
     project_name: str = Field(default="URBANLENS", description="The name of the project")
     app_version: str = Field(default="", description="Semantic application version from pyproject.toml")
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
     debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
-    # default_factory, not default=get_random_secret_key() - a plain `default=` value is
-    # computed once at class-definition time rather than per instantiation, which is
-    # the standard pydantic mutable/computed-default footgun even though it's harmless
-    # here specifically (AppSettingsMeta makes this class a process-wide singleton).
-    # NOTE: this field has no wired env var in any deployment (UL_SECRET_KEY is never
-    # set) - nothing outside this file should ever read it as if it were stable across
-    # processes. dashboard/models/fields.py used to and that was a real bug; see its
-    # comment for the fix (falls back to Django's actual SECRET_KEY instead).
+    # default_factory so each instantiation gets a fresh key; never read as stable across processes.
     secret_key: str = Field(default_factory=get_random_secret_key, description="The secret key")
     field_encryption_key: str | None = Field(
         default=None,
@@ -565,20 +547,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     @property
     def debug(self) -> bool:
-        """
-        Whether or not debugging is enabled
-        """
+        """Whether debugging is enabled."""
         if self._environment:
             return self._environment.debug
-        # This is only used prior to the environment being set.
-        # -- after that, it is propogated to the environment
+        # Only before the environment is set; afterwards it propagates there.
         return self.debug_override or False
 
     @debug.setter
     def debug(self, value: bool) -> None:
-        """
-        Set the debug value
-        """
+        """Set the debug value."""
         self.debug_override = value
 
         if self._environment:
@@ -586,23 +563,17 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     @property
     def environment(self) -> BaseEnvironment | None:
-        """
-        The environment
-        """
+        """The environment."""
         return self._environment
 
     @property
     def secrets(self) -> dict:
-        """
-        The secrets dictionary
-        """
+        """The secrets."""
         return self._secrets or {}
 
     @property
     def paths(self) -> dict[str, Path]:
-        """
-        Returns a dictionary of directories
-        """
+        """Directories."""
         return {
             "project_root": self.project_root,
             "base_dir": self.base_dir,
@@ -637,30 +608,16 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("field_encryption_key", mode="after")
     @classmethod
     def _reject_weak_encryption_keys(cls, value: str | None) -> str | None:
-        """Refuse an active field-encryption key weak enough to brute-force offline.
-
-        The derivation is a single unsalted SHA256 (``models.fields._derive_fernet``),
-        so key strength *is* input strength - there is no stretching to hide behind.
-        Fernet tokens carry their own HMAC, so one stolen ciphertext row lets an
-        attacker verify guesses offline at hashing speed. Rejecting at configuration
-        time is the only point where this is still cheap to fix, and the operator
-        setting this variable is by definition trying to harden the install.
-
-        This is a floor, not an entropy oracle: it reliably catches short and
-        degenerate keys, but a sufficiently long hand-written passphrase will pass
-        while still being far weaker than generated output. Use the documented
-        ``secrets.token_urlsafe(64)`` command rather than treating acceptance here
-        as an endorsement.
+        """Refuse an active key weak enough for offline brute force.
 
         Args:
             value: The configured active key, if any.
 
         Returns:
-            The value unchanged when it is acceptable.
+            The value unchanged when acceptable.
 
         Raises:
-            ValueError: When the key is too short or too repetitive to be a
-                machine-generated secret.
+            ValueError: When the key is too short or too repetitive.
         """
         weakness = _encryption_key_weakness(value) if value else None
         if weakness:
@@ -670,15 +627,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("field_encryption_key_fallbacks", mode="after")
     @classmethod
     def _warn_about_weak_fallback_keys(cls, value: list[str]) -> list[str]:
-        """Accept retired keys that would be refused as the active key, and say so.
-
-        Applying the floor here too would strand exactly the installs that need
-        to move off a weak key: the documented rotation is to list the old key
-        as a fallback, run ``manage.py rotate_field_encryption``, then drop it -
-        and a validator that refuses the old key stops the settings module from
-        loading at all, so the command that fixes it cannot start either. A
-        fallback only ever decrypts, and only until the rotation finishes, so
-        the useful action is a loud warning rather than a locked door.
+        """Warn (not fail) on weak retired keys so rotation can still run.
 
         Args:
             value: The configured retired keys.
@@ -717,10 +666,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                     logger.warning("Found .env file but it is empty: %s", env_path)
                 return
         checked = ", ".join(str(p) for p in _ENV_FILE_PATHS)
-        # self.environment_name isn't wired to UL_ENVIRONMENT (select_environment(),
-        # which would set it, is never called in the runtime app - see the module-level
-        # ENVIRONMENT_NAME in settings/base.py for the value Django itself branches on).
-        # Read the same env var the same way base.py does, rather than trust this field.
+        # Read UL_ENVIRONMENT directly; this field isn't wired to it.
         environment_name = os.getenv("UL_ENVIRONMENT", "local").strip().lower()
         if environment_name not in _ENV_FILE_ENVIRONMENTS:
             logger.info(
@@ -732,9 +678,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         logger.warning(".env file not found; API keys and secrets will be missing. Checked: %s", checked)
 
     def ensure_paths(self) -> None:
-        """
-        Ensure the directories are absolute and exist.
-        """
+        """Ensure directories are absolute and exist."""
         for key, value in self.paths.items():
             try:
                 if not isinstance(value, Path):
@@ -747,20 +691,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                     setattr(self, key, value)
 
                 if not value.exists():
-                    # A path containing a period is inferred to be a file, so only its
-                    # parent is ensured; anything else is a directory and is created
-                    # itself. Getting this backwards silently leaves directory-valued
-                    # settings (backups_dir, downloads_dir, exports_dir, static_root)
-                    # uncreated while their parents exist, which fails far from here.
+                    # Dotted names are files (ensure parent); else directories.
                     if "." not in value.name:
                         value.mkdir(parents=True, exist_ok=True)
                     else:
                         value.parent.mkdir(parents=True, exist_ok=True)
             except OSError:
-                # OSError, not FileNotFoundError: a read-only or wrong-owner app
-                # directory raises PermissionError, and letting that escape takes
-                # down settings import - and therefore every process - without
-                # reporting which path was at fault.
+                # Report the path; a bare raise would hide which one failed.
                 logger.warning("Could not ensure path %s (%s); continuing without it.", key, value, exc_info=True)
 
         # Ensure app.log, debugging.log, and test.log exist in log dir
@@ -772,16 +709,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                 if not filepath.exists():
                     filepath.write_text("")
             except OSError:
-                # Pre-creating these is a convenience for the file handlers, not a
-                # requirement. Django's own logging config reports an unwritable log
-                # directory far more usefully than an unhandled error at import time,
-                # which surfaces as a silent container that never binds a port.
+                # Convenience only; Django reports an unwritable log dir itself.
                 logger.warning("Could not pre-create %s in %s; continuing.", filename, self.log_root, exc_info=True)
 
     def refresh_django(self):
-        """
-        Refresh django.conf.settings with the current settings
-        """
+        """Refresh django.conf.settings with current values."""
         for key, value in self.__dict__.items():
             # Filter out settings we don't want to propogate back to django
             if key.startswith("_") or key in ["model_config", "paths", "secrets", "databases", "logging", "django"]:
@@ -802,15 +734,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         """
 
     def select_environment(self, new_environment_name: EnvironmentTypes | None = None) -> BaseEnvironment:
-        """
-        Select the environment
+        """Select the environment.
 
         Args:
-            new_environment_name (EnvironmentTypes | None, optional):
-                The name of the environment to switch to. Defaults to None.
+            new_environment_name: Environment to switch to, if any.
 
         Returns:
-            BaseEnvironment: The environment to use
+            The environment in use.
         """
         if self._environment is not None and self.environment_name == new_environment_name:
             return self._environment
@@ -828,9 +758,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         return self._environment
 
     def __getattr__(self, name: str):
-        """
-        Get an attribute that is fully uppercase (from django settings) as a parameter here (as lowercase)
-        """
+        """Resolve lowercase names from uppercase Django settings."""
         key = name.lower()
         if key in self.__dict__:
             return self.__dict__[key]

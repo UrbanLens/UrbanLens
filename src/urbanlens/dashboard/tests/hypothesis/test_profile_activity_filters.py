@@ -1,15 +1,4 @@
-"""Tests for the own-profile "private activity" filters.
-
-Covers two bugs found in the private activity panel's strips (now rendered
-on the Home overview page):
-
-- "High-priority places to visit" only excluded pins by ``last_visited``,
-  missing pins that have a dated ``PinVisit`` but whose ``last_visited``
-  never got synced (e.g. bulk-import paths that create ``PinVisit`` rows
-  without calling ``sync_last_visited``).
-- "Recent trips" showed any trip ordered by ``Trip.updated`` instead of only
-  past trips with a comment posted in the last 7 days.
-"""
+"""Tests for the own-profile "private activity" filters."""
 
 from __future__ import annotations
 

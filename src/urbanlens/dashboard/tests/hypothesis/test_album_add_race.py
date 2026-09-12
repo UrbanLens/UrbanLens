@@ -1,15 +1,4 @@
-"""Adding a photo to an album must survive a concurrent add of the same photo.
-
-``add_images_to_album`` reads which images are already in the album, then inserts the
-rest - a check-then-act with no lock. ``uq_album_item`` correctly stops the duplicate
-row, but an unguarded insert turns the loser of that race into an ``IntegrityError``
-rather than a no-op.
-
-The race is not hypothetical: there are two callers, and one of them is the Celery task
-``cache_media_item_into_album``. Celery delivers at least once, so a redelivered task
-races both a retry of itself and the user adding the same photo from the picker once it
-materialises.
-"""
+"""Adding a photo to an album must survive a concurrent add of the same photo."""
 
 from __future__ import annotations
 

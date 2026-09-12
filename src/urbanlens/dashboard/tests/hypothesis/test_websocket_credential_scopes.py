@@ -1,29 +1,4 @@
-"""Scope enforcement for credential-authenticated WebSocket connections.
-
-``ApiKeyAuthMiddleware`` lets a PAT-style ``ApiKey`` or an OAuth2 access token
-authenticate a Channels socket the same way it authenticates an HTTP request to
-``external_api``. HTTP additionally runs
-``external_api.permissions.HasApiKeyScope`` on every view, so a credential can
-only reach the domains its grant names; the sockets originally ran no such
-check, which meant one bearer credential unlocked *every* socket regardless of
-its scopes. These tests pin the three holes that opened up:
-
-- a ``pins:read``-only key could join someone's safety check-in chat;
-- a PAT could open ``ws/messages/`` and receive live direct messages, even
-  though ``messages:read``/``messages:write`` are in ``OAUTH2_ONLY_SCOPES``
-  and are refused for PAT-kind credentials on every HTTP route;
-- revoking a key left its already-open socket delivering indefinitely.
-
-They also pin the two things that must *not* change: a browser-session
-connection carries no credential and is unaffected, and the tokenized safety
-contact portal is authorized by its magic-link token rather than by a
-credential, so a stray ``?key=`` on that route changes nothing.
-
-Uses ``TransactionTestCase`` (not the project's default ``TestCase``) for the
-same reason ``test_safety_chat.py`` does: consumers reach the database from a
-background thread via ``database_sync_to_async``, and the revocation tests rely
-on a committed write becoming visible to that thread.
-"""
+"""Scope enforcement for credential-authenticated WebSocket connections."""
 
 from __future__ import annotations
 
@@ -53,17 +28,15 @@ AccessToken = get_access_token_model()
 def _run(coro):
     """Drive *coro* through ``async_to_sync`` rather than ``asyncio.run``.
 
-    ``database_sync_to_async``'s thread-sensitive mode needs the
-    ``CurrentThreadExecutor`` that only ``async_to_sync``'s sync->async->sync
-    bridge installs; under a bare ``asyncio.run`` nothing pumps that queue and
-    the first consumer DB access hangs forever instead of completing.
+    ``database_sync_to_async``'s thread-sensitive mode needs the ``CurrentThreadExecutor`` that only
+    ``async_to_sync``'s sync->async->sync bridge installs; under a bare ``asyncio.run`` nothing pumps that queue
+    and the first consumer DB access hangs forever instead of completing.
 
     Args:
         coro: The coroutine to run to completion.
 
     Returns:
-        Whatever *coro* returns.
-    """
+        Whatever *coro* returns."""
 
     async def _wrap():
         return await coro
@@ -74,17 +47,14 @@ def _run(coro):
 def _issue_key(user, *scopes: ApiKeyScope) -> str:
     """Issue a PAT-style key for *user* granting exactly *scopes*.
 
-    ``ApiKey.scopes`` is ``editable=False`` and defaults to the fixed
-    starter grant, so the scope list is rewritten with a queryset ``update``
-    - the same way a future scope-picker UI would.
+    ``ApiKey.scopes`` is ``editable=False`` and defaults to the fixed starter grant, so the scope list is
+    rewritten with a queryset ``update``
 
     Args:
-        user: Owner of the new key.
-        *scopes: The scope values the key should grant.
+        user: Owner of the new key. *scopes: The scope values the key should grant.
 
     Returns:
-        The one-time plaintext key string, ready to put in a ``?key=`` param.
-    """
+        The one-time plaintext key string, ready to put in a ``?key=`` param."""
     api_key, raw_key = generate_api_key(user, "Mobile app")
     ApiKey.objects.filter(pk=api_key.pk).update(scopes=[scope.value for scope in scopes])
     return raw_key
@@ -99,8 +69,7 @@ def _issue_oauth2_token(user, scope: str, *, token: str) -> str:
         token: The literal token value (tests use readable constants).
 
     Returns:
-        The token string.
-    """
+        The token string."""
     application = Application.objects.create(
         name=f"UrbanLens Mobile {token}",
         user=user,

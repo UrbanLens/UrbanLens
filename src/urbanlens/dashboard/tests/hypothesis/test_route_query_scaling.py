@@ -1,28 +1,4 @@
-"""No GET route may issue more queries as the user's data grows.
-
-A companion to ``test_page_query_budgets.py``, which measures four pages
-precisely. This trades precision for breadth: it walks the URL conf, requests
-every GET route it can build arguments for, and asserts the query count does not
-grow when the dataset does. It deliberately asserts nothing about absolute
-counts - a route legitimately costing 40 queries is not this file's business,
-while a route costing 40 at 4 pins and 400 at 24 is.
-
-The instrument was validated against a known bug before being trusted. Two
-earlier versions of this sweep reported "all routes flat" while being structurally
-incapable of seeing the one N+1 known to exist at the time:
-
-1. the first only measured routes reversible with **no arguments**, and the bug
-   was on ``label.rows``, which takes a label kind;
-2. the second read parameter names from each **leaf** pattern, so every route
-   nested under ``path("<str:label_kind>/", include(...))`` - which is where most
-   parameterised routes live - appeared to take no arguments and was skipped.
-
-Both produced a confident green. Only after parameters were accumulated down the
-resolver tree did reverting the fix light up ``label.rows`` at +80 queries. That
-history is the reason ``test_the_sweep_can_see_a_parameterised_route`` exists: a
-scaling sweep that has never been shown to catch anything is indistinguishable
-from one that cannot.
-"""
+"""No GET route may issue more queries as the user's data grows."""
 
 from __future__ import annotations
 
@@ -55,11 +31,9 @@ def _params_of(pattern) -> list[str]:
 def _walk(patterns, inherited: tuple[str, ...] = (), namespace: str = ""):
     """Yield ``(route_name, params)``, accumulating params *and* namespaces.
 
-    The namespace prefix is as load-bearing as the parameters: routes under an
-    included urlconf reverse as ``ns:name``, so yielding the bare local name
-    makes every namespaced route - the entire external API - unreversible and
-    therefore invisible to the sweep.
-    """
+    The namespace prefix is as load-bearing as the parameters: routes under an included urlconf reverse as
+    ``ns:name``, so yielding the bare local name makes every namespaced route - the entire external API -
+    unreversible and therefore invisible to the sweep."""
     for entry in patterns:
         own = tuple(_params_of(entry.pattern))
         nested = getattr(entry, "url_patterns", None)
@@ -142,11 +116,9 @@ class RouteQueryScalingTests(TestCase):
     def _measure(self, url: str) -> tuple[int, int]:
         """Request *url* inside a savepoint, returning (status, query count).
 
-        The savepoint matters: a route that raises a database error would
-        otherwise poison the surrounding test transaction and take every
-        subsequent route down with it, turning one broken route into a sweep-wide
-        failure that names the wrong culprit.
-        """
+        The savepoint matters: a route that raises a database error would otherwise poison the surrounding test
+        transaction and take every subsequent route down with it, turning one broken route into a sweep-wide
+        failure that names the wrong culprit."""
         with transaction.atomic(), CaptureQueriesContext(connection) as ctx:
             response = self.client.get(url, **self._headers)
             return response.status_code, len(ctx.captured_queries)

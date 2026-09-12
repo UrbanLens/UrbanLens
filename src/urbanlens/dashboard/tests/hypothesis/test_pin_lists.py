@@ -1,25 +1,4 @@
-"""Tests for pin list regressions found while polishing the pin list feature.
-
-Invariants verified:
-  - serialize_form_criteria preserves the "name" (pin-name-contains) field -
-    it was previously dropped silently, so a saved filter or smart list built
-    from a name search lost that criterion the moment it was saved.
-  - PinListMarkupMapView's "no pins with coordinates" error is valid JSON (the
-    client always calls response.json() on it), not a plain-text body that
-    throws a SyntaxError in the browser.
-  - Picking a saved filter (or drawing a boundary) on the list-detail page
-    populates matching pins immediately, even before "keep this list in sync
-    automatically" (is_smart) is turned on - it used to silently do nothing
-    until that separate toggle was flipped, which read as "the smart filter
-    doesn't work".
-  - A smart list's membership re-syncs when a pin's labels change (add/remove/
-    clear), not just when the pin itself is saved - label add/remove is a
-    pure M2M operation that never calls Pin.save(), so this used to leave
-    smart lists stale after a badge was added to (or removed from) a pin.
-  - SavedFilterSuggestNameView returns a name summarizing the current form
-    criteria (for the create/edit dialog's auto-suggested "Filter name"), or
-    None when there's nothing active yet to summarize.
-"""
+"""Tests for pin list regressions found while polishing the pin list feature."""
 
 from __future__ import annotations
 
@@ -97,10 +76,7 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         self.assertIn("error", data)
 
     def test_detail_page_has_a_create_markup_map_button(self) -> None:
-        """The list-detail page overhaul dropped this button's trigger from the
-        more-actions menu entirely - the backend endpoint above was reachable
-        but nothing in the UI called it. Regression guard for the button/JS
-        handler wiring, not just the endpoint's own behavior."""
+        """The list-detail page overhaul dropped this button's trigger from the more-actions menu entirely - the backend endpoint above was reachable but nothing in the UI called it. Regression guard for the button/JS handler wiring, not just the endpoint's own behavior."""
         pin_list = baker.make(PinList, profile=self.profile, name="Has pins")
         PinListItem.objects.create(pin_list=pin_list, pin=_make_pin(self.profile), added_via=PinListItem.ADDED_MANUAL)
         response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
@@ -125,11 +101,8 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
 class PinListDetailPaginationTests(TestCase):
     """The list-detail page's item rows are paginated; the overview map is not.
 
-    Regression: the page rendered every item on the list with no pagination
-    at all, so a large list cost an unbounded amount of HTML/DOM. Patches
-    ``_ITEMS_PAGE_SIZE`` down to a small number rather than seeding 50+ real
-    pins, since the pagination logic itself is what's under test.
-    """
+    Regression: the page rendered every item on the list with no pagination at all, so a large list cost an
+    unbounded amount of HTML/DOM."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -269,11 +242,9 @@ class PinListExportViewTests(TestCase):
 class PinListDetailInlineEditableTests(TestCase):
     """Click-to-edit-in-place title/description on the list detail hero.
 
-    Reuses the pre-existing PinListEditView (lists.edit) endpoint - only the
-    template/JS wiring is new. name/description via that endpoint were
-    exercised only incidentally by the smart-filter tests above, never with
-    a dedicated "just rename it" test, so this batch adds that too.
-    """
+    Reuses the pre-existing PinListEditView (lists.edit) endpoint - only the template/JS wiring is new.
+    name/description via that endpoint were exercised only incidentally by the smart-filter tests above, never
+    with a dedicated "just rename it" test, so this batch adds that too."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -334,10 +305,7 @@ class PinListDetailInlineEditableTests(TestCase):
         self.assertEqual(pin_list.name, "Keep Me")
 
     def test_renaming_to_another_owned_lists_name_is_rejected_not_a_500(self) -> None:
-        """Regression: this used to fall straight through to .save(), hitting
-        the model's UniqueConstraint(profile, name) as an unhandled
-        IntegrityError (500) instead of the same 409 the create endpoint
-        already returns for a duplicate name."""
+        """Regression: this used to fall straight through to .save(), hitting the model's UniqueConstraint(profile, name) as an unhandled IntegrityError (500) instead of the same 409 the create endpoint already returns for a duplicate name."""
         baker.make(PinList, profile=self.profile, name="Taken Name")
         pin_list = baker.make(PinList, profile=self.profile, name="Original Name")
         response = self.client.post(
@@ -360,13 +328,7 @@ class PinListDetailInlineEditableTests(TestCase):
 
 
 class PinListEditConcurrentWriteTests(TestCase):
-    """PinListEditView.post must not clobber fields it never touched.
-
-    It used to end with a bare pin_list.save(), writing every column from
-    this request's in-memory snapshot - reverting any field a concurrent
-    request (another tab, or the external API's PinListDetailView.patch)
-    changed in the window between this request's load and its own save.
-    """
+    """PinListEditView.post must not clobber fields it never touched."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -511,9 +473,7 @@ class SmartListLabelChangeResyncTests(TestCase):
 
 
 class EditingSourceSavedFilterResyncsDerivedListsTests(TestCase):
-    """Editing a SavedFilter must refresh and resync any PinList still pointing at it -
-    otherwise a smart list silently drifts out of sync with a filter it was built from
-    the moment the user tweaks that filter from the Filters tab instead of the list page."""
+    """Editing a SavedFilter must refresh and resync any PinList still pointing at it - otherwise a smart list silently drifts out of sync with a filter it was built from the moment the user tweaks that filter from the Filters tab instead of the list page."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -624,10 +584,8 @@ class SavedFilterSuggestNameViewTests(TestCase):
 class PinListSlugTests(TestCase):
     """PinList URLs use a human-readable slug, unique per-profile (not globally).
 
-    See PublicDashboardModel / Pin._slugify_qs for the pattern this mirrors -
-    Pin is scoped the same way, since a slug only needs to be unique within
-    one user's own lists, not across every user's.
-    """
+    See PublicDashboardModel / Pin._slugify_qs for the pattern this mirrors - Pin is scoped the same way, since
+    a slug only needs to be unique within one user's own lists, not across every user's."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -674,9 +632,7 @@ class PinListSlugTests(TestCase):
 
 
 class PinListQuerySetTests(TestCase):
-    """PinListQuerySet.for_profile()/active_smart_lists() - previously six
-    call sites across the codebase each re-wrote `.filter(profile=profile)`
-    (or `profile_id=`) directly."""
+    """PinListQuerySet.for_profile()/active_smart_lists() - previously six call sites across the codebase each re-wrote `.filter(profile=profile)` (or `profile_id=`) directly."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -731,9 +687,7 @@ class PinListQuerySetTests(TestCase):
 
 
 class PinListItemQuerySetTests(TestCase):
-    """PinListItemQuerySet.for_list()/membership() - previously four call
-    sites across controllers/pin_lists.py and services/pin_list_membership.py
-    each re-wrote `.filter(pin_list=pin_list, ...)` directly."""
+    """PinListItemQuerySet.for_list()/membership() - previously four call sites across controllers/pin_lists.py and services/pin_list_membership.py each re-wrote `.filter(pin_list=pin_list, ...)` directly."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -774,17 +728,9 @@ class PinListItemQuerySetTests(TestCase):
 class PinListCreateRefusalContractTests(TestCase):
     """What `lists.create` says when it refuses, which two pages now depend on.
 
-    The map and location pages' "create a list and add these pins" button used
-    to call `r.json()` on every response, in a chain with no `.catch`. This
-    endpoint answers a duplicate name with **409 and a plain-text sentence**,
-    not JSON - so `r.json()` threw into an unhandled rejection and the button
-    did nothing at all: no toast, no closed dialog, name still in the box. That
-    is the likeliest failure this feature has.
-
-    Both callers now go through `ulSendJson`, which surfaces a short plain-text
-    body as the error message (see `fetch-json.ts`). These tests pin the half
-    of that contract the server owns: the status, and a body worth showing.
-    """
+    This endpoint answers a duplicate name with **409 and a plain-text sentence**, not JSON - so `r.json()`
+    threw into an unhandled rejection and the button did nothing at all: no toast, no closed dialog, name still
+    in the box."""
 
     def setUp(self) -> None:
         super().setUp()

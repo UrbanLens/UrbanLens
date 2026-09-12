@@ -135,10 +135,8 @@ class PinTypeTests(SimpleTestCase):
     def test_icon_matches_the_declared_mapping(self, member: PinType) -> None:
         """icon must return the glyph declared in PIN_TYPE_ICONS, not the push_pin fallback.
 
-        Guards the shared mapping used by the pin/wiki lists, the type badge, and the
-        ``pin_type_icon`` template filter - a member missing its entry would silently
-        fall back to "push_pin" instead of failing loudly.
-        """
+        Guards the shared mapping used by the pin/wiki lists, the type badge, and the ``pin_type_icon`` template
+        filter - a member missing its entry would silently fall back to "push_pin" instead of failing loudly."""
         self.assertEqual(member.icon, PIN_TYPE_ICONS[member.value])
 
     def test_location_marker_is_default_value(self) -> None:

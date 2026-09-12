@@ -1,11 +1,4 @@
-"""Tests for full-account single-file pin downloads (UL-382) and emailed exports (UL-373).
-
-Covers the ``tools.export.format`` endpoint (auth, per-format responses,
-ownership scoping, unknown-format 404) and ``services.import_export.export.send_export_email``
-(attach-vs-link decision around ``EMAIL_ATTACHMENT_MAX_BYTES``, and the
-no-email-address skip), plus the ExportStartView -> Celery threading of the
-``email_export`` form flag.
-"""
+"""Tests for full-account single-file pin downloads (UL-382) and emailed exports (UL-373)."""
 
 from __future__ import annotations
 

@@ -1,10 +1,4 @@
-"""Tests for services.device_scan.clustering.
-
-Pure-function properties (weighting, confidence, weighted geometry) are
-covered with Hypothesis per CLAUDE.md's property-based testing requirement;
-``recompute_wiki_device_markers``/``record_absence_report`` are covered with
-real DB fixtures since they're inherently a database read/write pipeline.
-"""
+"""Tests for services.device_scan.clustering."""
 
 from __future__ import annotations
 
@@ -354,13 +348,8 @@ class AbsenceReportTests(_ClusteringDbTestCase):
 class AbsenceReportConcurrencyTests(_ClusteringDbTestCase):
     """Two users' absence reports for one marker must both count.
 
-    `process_device_scan_upload` claims each *upload* atomically, so the same
-    physical report can never be applied twice. What that does not cover is two
-    *different* uploads naming the same marker, processed by different workers:
-    the old `marker.absence_streak += 1` read both from the same stored value
-    and wrote the same result, losing one report and delaying the escalation
-    the counter exists to trigger.
-    """
+    `process_device_scan_upload` claims each *upload* atomically, so the same physical report can never be
+    applied twice."""
 
     def _make_marker(self) -> WikiDeviceMarker:
         return WikiDeviceMarker.objects.create(

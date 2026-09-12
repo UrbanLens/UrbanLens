@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if a tracked TypeScript file belongs to no ``tsconfig.json``.
-
-``bun run typecheck`` checks the *projects*, not the repository. A file outside
-every project's ``include`` is not reported as unchecked - it is simply never
-read, and the command still exits 0. The pre-commit ``tsc`` hook makes that
-worse: it fires on every ``.ts``/``.tsx`` path, so editing an uncovered file
-runs a typecheck that does not look at the file that triggered it, and passing
-means nothing about the change.
-
-That was the state on 2026-09-04: 87 tracked ``.ts`` files sat outside the root
-project, 84 of them covered by ``tests/integration/tsconfig.json`` that nothing
-ran, and three covered by nothing at all.
-
-Coverage here means *listed in a project*, which is weaker than *checked*: a
-project nobody runs still covers its files. `package.json`'s ``typecheck``
-script is what closes that half, and it names every config this walks.
-
-Any deliberate exception goes in `_UNCOVERED` with the reason it is there, so
-the gap is a line someone chose rather than an absence nobody can see.
-
-Exits non-zero listing each uncovered file. Safe to run by hand from the repo
-root.
-"""
+"""Fail if a tracked TypeScript file belongs to no ``tsconfig.json``."""
 
 from __future__ import annotations
 
@@ -31,13 +9,8 @@ import re
 import subprocess
 import sys
 
-#: Files deliberately in no project, and why. Each is still a gap - this is a
-#: record of a decision, not an approval.
-#:
-#: Empty as of 2026-09-06: the two browser test files that lived here were
-#: excluded only because `bun-types` was pinned at 1.1.6, whose `expect` predates
-#: the second message argument they pass. With the pin bumped they typecheck, so
-#: they are in the root project now (see P73).
+#: Files deliberately in no project, and why.
+#: Each is still a gap - this is a record of a decision, not an approval.
 _UNCOVERED: dict[str, str] = {}
 
 #: What TypeScript excludes when a config says nothing. `outDir` is not among
@@ -52,16 +25,14 @@ _DIRECTORY_SUFFIXES = (".ts", ".tsx", ".d.ts")
 def glob_to_regex(pattern: str) -> re.Pattern[str]:
     """Translate one tsconfig include/exclude glob into a whole-path regex.
 
-    Handles the three wildcards TypeScript documents: ``**`` for any number of
-    path segments, ``*`` for any run of characters within one segment, and ``?``
-    for one such character.
+    Handles the three wildcards TypeScript documents: ``**`` for any number of path segments, ``*`` for any run
+    of characters within one segment, and ``?`` for one such character.
 
     Args:
         pattern: A glob, relative to the config that declared it.
 
     Returns:
-        A compiled pattern matching a whole relative path.
-    """
+        A compiled pattern matching a whole relative path."""
     out: list[str] = []
     index = 0
     while index < len(pattern):
@@ -92,9 +63,7 @@ def covered_paths(config_path: str, config: dict, candidates: list[str]) -> set[
         candidates: Repo-relative paths to test.
 
     Returns:
-        The subset the project includes and does not exclude, plus anything the
-        config names outright in ``files``.
-    """
+        The subset the project includes and does not exclude, plus anything the config names outright in ``files``."""
     directory = pathlib.PurePosixPath(config_path).parent
     prefix = "" if str(directory) == "." else f"{directory}/"
 
@@ -128,17 +97,13 @@ def _projects_not_typechecked(root: pathlib.Path, configs: list[str]) -> list[st
     """Which tracked projects `package.json`'s `typecheck` script never reads.
 
     Coverage by a project only means anything if something runs that project.
-    `tests/integration/tsconfig.json` existed - and covered 84 files - while no
-    command in the repository invoked it, which is the state this check was
-    written for; a third config added tomorrow would recreate it silently.
 
     Args:
         root: Repository root.
         configs: Repo-relative paths of every tracked ``tsconfig.json``.
 
     Returns:
-        The configs the script does not name, sorted.
-    """
+        The configs the script does not name, sorted."""
     try:
         script = json.loads((root / "package.json").read_text(encoding="utf-8")).get("scripts", {}).get("typecheck", "")
     except (OSError, json.JSONDecodeError):

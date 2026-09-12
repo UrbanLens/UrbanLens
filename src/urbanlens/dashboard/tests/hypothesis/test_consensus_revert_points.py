@@ -1,19 +1,4 @@
-"""Consensus points around reverts: who gets paid, who gets it taken back, and once.
-
-The defect these pin down: every ``WikiEdit`` with an editor and no
-``consensus_round`` earned a flat 3 points, and a revert is itself a
-``WikiEdit``. So undoing somebody's work paid the reverter, an edit war paid
-both sides on every pass, and a contribution later reverted kept its award -
-there was no retraction path anywhere.
-
-The shape of the fix is what most of these tests are really about. Retraction is
-a compare-and-swap on a flag stored on the row, not a compensating negative
-ledger entry, because several independent paths can reach it for one edit - the
-revert itself, an admin toggling ``reverted`` on the change form, deleting an
-already-reverted edit - and only the first may move the total. Reverting a
-revert has to put the award back, which is why it is a reversible flag rather
-than a deletion.
-"""
+"""Consensus points around reverts: who gets paid, who gets it taken back, and once."""
 
 from __future__ import annotations
 
@@ -122,10 +107,8 @@ class ConsensusRevertPointsTests(TestCase):
     def test_an_edit_war_pays_neither_side(self) -> None:
         """The behaviour the whole change is for.
 
-        Alternating reverts used to pay 3 to whoever moved last, every pass,
-        forever. Now each pass only moves the one award the original edit
-        earned, back and forth, so neither total can grow.
-        """
+        Now each pass only moves the one award the original edit earned, back and forth, so neither total can
+        grow."""
         target = self._edit(self.author)
         earned = self._total(self.author)
 

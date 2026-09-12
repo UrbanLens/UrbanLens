@@ -1,9 +1,4 @@
-"""Tests for social_links service - URL parsing and profile link rendering.
-
-Covers all nine platforms, the _clean_handle validator, handle security contract
-(no HTML/path-traversal payloads survive), website length cap, fragment stripping,
-and the get_profile_links() rendering helper.
-"""
+"""Tests for social_links service - URL parsing and profile link rendering."""
 
 from __future__ import annotations
 

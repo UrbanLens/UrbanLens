@@ -1,14 +1,4 @@
-"""A photo belongs to everything that cites it, and outlives any one of them.
-
-`Image` carries a single `pin` and a single `wiki` column, which says a photo
-belongs to at most one of each. Child pins make that false in ordinary use: a
-photo of a building is a photo of the building's pin and of the parcel pin above
-it. `ImageAttachment` is a row per attachment instead.
-
-The durability half matters more. A floorplan cites a photo, and deleting that
-photo from somebody's media used to delete the citation with it - the reference
-row cascaded away, taking the caption and the thing it was attached to.
-"""
+"""A photo belongs to everything that cites it, and outlives any one of them."""
 
 from __future__ import annotations
 

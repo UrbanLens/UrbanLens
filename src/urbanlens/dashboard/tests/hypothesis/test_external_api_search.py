@@ -1,31 +1,4 @@
-"""Tests for the external API's global-search surface.
-
-Search is the highest-risk read in this API. Every other endpoint answers "give
-me the thing I named"; this one answers "give me everything that matches", which
-means a single provider whose access scoping is wrong leaks rows the caller
-never had a handle on, and does it inside a 200 that looks perfectly healthy.
-
-Three properties get the most attention here, because each of them fails
-*silently* when it fails:
-
-1. **Per-provider scoping.** ``search:read`` is a floor, not a master key. A
-   credential that holds it and nothing else must get pins-free, photo-free,
-   DM-free results, with the dropped sections named in ``omitted_types``. The
-   direct-message case is the sharp one and has its own class: the provider
-   returns plaintext excerpts of message bodies, and ``messages:read`` lives in
-   ``OAUTH2_ONLY_SCOPES`` so that a leaked PAT can never reach them. A search
-   endpoint that ran the default provider chain would walk straight around that.
-2. **No ``url`` on the wire.** ``SearchResult.url`` is a web path. Shipping it
-   to a JSON client produces links that 404 or return an HTML login page, so the
-   response carries ``object_slug``/``object_uuid`` instead, and the assertion
-   that ``url`` is absent is made against every result of every type.
-3. **A short query is a 200.** A search box fires per keystroke; the first
-   character must not be an error.
-
-The engine-level tests at the bottom cover the ``types=``/``limit=`` overrides
-this endpoint needed, including the fail-closed reading of an empty restriction -
-the one place where "no types" could plausibly have been read as "all types".
-"""
+"""Tests for the external API's global-search surface."""
 
 from __future__ import annotations
 
@@ -70,8 +43,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The raw API key or OAuth2 access token.
 
     Returns:
-        Extra kwargs for the Django test client.
-    """
+        Extra kwargs for the Django test client."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -99,8 +71,7 @@ class _SearchApiTestCase(TestCase):
             scopes: Raw scope strings to write onto the key row.
 
         Returns:
-            The raw bearer key.
-        """
+            The raw bearer key."""
         api_key, raw = generate_api_key(self.user, "Scoped")
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         return raw
@@ -112,8 +83,7 @@ class _SearchApiTestCase(TestCase):
             scope: Space-separated scope string.
 
         Returns:
-            The raw token value.
-        """
+            The raw token value."""
         token = AccessToken.objects.create(
             user=self.user,
             application=first_party_application(),
@@ -127,12 +97,10 @@ class _SearchApiTestCase(TestCase):
         """GET the search endpoint with *params* as the query string.
 
         Args:
-            raw_key: Credential to authenticate with; defaults to the fixture's.
-            **params: Query parameters (``q``, ``types``, ``limit``).
+            raw_key: Credential to authenticate with; defaults to the fixture's. **params: Query parameters (``q``, ``types``, ``limit``).
 
         Returns:
-            The test client response.
-        """
+            The test client response."""
         return self.client.get(reverse("external_api:search"), params, **_bearer(raw_key or self.raw_key))
 
     def _location(self, **kwargs):
@@ -142,8 +110,7 @@ class _SearchApiTestCase(TestCase):
             **kwargs: Overrides passed to the Location bake.
 
         Returns:
-            The created location.
-        """
+            The created location."""
         self._location_seq += 1
         kwargs.setdefault("latitude", f"39.{100 + self._location_seq}")
         kwargs.setdefault("longitude", "-84.51")
@@ -154,12 +121,10 @@ class _SearchApiTestCase(TestCase):
         """Create a pin with a real Location behind it.
 
         Args:
-            profile: Owner; defaults to the fixture's key owner.
-            **kwargs: Overrides passed to the Pin bake.
+            profile: Owner; defaults to the fixture's key owner. **kwargs: Overrides passed to the Pin bake.
 
         Returns:
-            The created pin.
-        """
+            The created pin."""
         location = kwargs.pop("location", None) or self._location()
         return baker.make("dashboard.Pin", profile=profile or self.profile, location=location, **kwargs)
 
@@ -167,12 +132,10 @@ class _SearchApiTestCase(TestCase):
         """Find one group in a response body by result-type slug.
 
         Args:
-            body: The parsed response JSON.
-            slug: A ``RESULT_TYPES`` slug.
+            body: The parsed response JSON. slug: A ``RESULT_TYPES`` slug.
 
         Returns:
-            The group dict, or None when the section is absent.
-        """
+            The group dict, or None when the section is absent."""
         return next((group for group in body["groups"] if group["type"] == slug), None)
 
 
@@ -266,10 +229,8 @@ class GlobalSearchEnvelopeTests(_SearchApiTestCase):
     def test_wholly_unknown_types_search_nothing_rather_than_everything(self) -> None:
         """A typo'd filter must not silently widen into an unfiltered search.
 
-        The fail-open shape of this bug is the reason it has a test: reading
-        "restricted to nothing recognized" as "no restriction" would answer
-        ``?types=pinz`` with results from all ten domains.
-        """
+        The fail-open shape of this bug is the reason it has a test: reading "restricted to nothing recognized"
+        as "no restriction" would answer ``?types=pinz`` with results from all ten domains."""
         body = self._search(q="willow grove", types="pinz").json()
         self.assertEqual(body["total"], 0)
         self.assertEqual(body["groups"], [])
@@ -285,17 +246,14 @@ class GlobalSearchIdentifierTests(_SearchApiTestCase):
             body: The parsed response JSON.
 
         Returns:
-            All result dicts in the payload.
-        """
+            All result dicts in the payload."""
         return [result for group in body["groups"] for result in group["results"]]
 
     def test_no_result_of_any_type_carries_a_url(self) -> None:
         """``SearchResult.url`` is a web path; a JSON client cannot follow it.
 
-        Asserted across every populated section at once rather than per
-        provider, so a provider added later is covered without anyone
-        remembering to extend this test.
-        """
+        Asserted across every populated section at once rather than per provider, so a provider added later is
+        covered without anyone remembering to extend this test."""
         pin = self._make_pin(name="Anchor Mill")
         baker.make("dashboard.Trip", creator=self.profile, name="Anchor Mill weekend")
         baker.make("dashboard.PinVisit", pin=pin, visited_at=timezone.now(), notes="Anchor Mill service tunnel")
@@ -322,10 +280,8 @@ class GlobalSearchIdentifierTests(_SearchApiTestCase):
     def test_pin_detail_accepts_the_slug_the_search_handed_back(self) -> None:
         """The identifier is not decorative - it addresses the pin detail route.
 
-        This is the assertion that would have caught shipping ``url``: a value
-        that merely *looks* like an identifier passes every shape test and then
-        404s the first time a client tries to open a result.
-        """
+        This is the assertion that would have caught shipping ``url``: a value that merely *looks* like an
+        identifier passes every shape test and then 404s the first time a client tries to open a result."""
         pin = self._make_pin(name="Anchor Mill")
         raw = self._key_with_scopes([*_ALL_PAT_SEARCH_SCOPES])
         group = self._group(self._search(q="anchor mill", types="pins").json(), "pins")
@@ -403,11 +359,9 @@ class GlobalSearchScopeTests(_SearchApiTestCase):
     def test_bare_search_read_reaches_no_domain_at_all(self) -> None:
         """``search:read`` alone is not a master key over every provider.
 
-        The permissive failure here is total: a view that checked only its own
-        ``required_scopes`` and then ran ``default_providers()`` would answer
-        this request with pins, photos, trips, visits, check-ins *and* direct
-        messages, for a credential its owner granted none of those to.
-        """
+        The permissive failure here is total: a view that checked only its own ``required_scopes`` and then ran
+        ``default_providers()`` would answer this request with pins, photos, trips, visits, check-ins *and*
+        direct messages, for a credential its owner granted none of those to."""
         raw = self._key_with_scopes([ApiKeyScope.SEARCH_READ.value])
         body = self._search(raw_key=raw, q="anchor mill").json()
         self.assertEqual(body["total"], 0)
@@ -458,13 +412,8 @@ class GlobalSearchScopeTests(_SearchApiTestCase):
 class GlobalSearchCrossDomainScopeTests(_SearchApiTestCase):
     """``articles`` and ``comments`` are each one provider spanning more than one domain.
 
-    ``ArticleSearchProvider`` returns the caller's own private pin articles
-    *and* community wiki articles from a single queryset; ``CommentSearchProvider``
-    does the same across pin, wiki and trip comment threads. Gating either
-    section on just one of the domains it touches would let that one scope
-    reach content from the others - these tests are the regression coverage
-    for that gap.
-    """
+    ``ArticleSearchProvider`` returns the caller's own private pin articles does the same across pin, wiki and
+    trip comment threads."""
 
     def setUp(self) -> None:
         """Bake one pin article, one wiki (with its own article and comment), and one trip comment - all sharing a findable word."""
@@ -531,14 +480,9 @@ class GlobalSearchCrossDomainScopeTests(_SearchApiTestCase):
 class GlobalSearchDirectMessageScopeTests(_SearchApiTestCase):
     """Direct messages: the boundary a bearer key must never cross.
 
-    ``DirectMessageSearchProvider`` returns plaintext excerpts of message
-    bodies, and ``messages:read`` is in ``OAUTH2_ONLY_SCOPES`` for exactly that
-    reason - an API key is a long-lived bearer secret that ends up in CI configs
-    and screenshots, and a leaked one must not become a DM reader. These tests
-    exist because a search endpoint is the least obvious way to breach that: its
-    author is thinking about relevance ranking, and ``search:read`` sounds like
-    it already covers "search".
-    """
+    ``DirectMessageSearchProvider`` returns plaintext excerpts of message bodies, and ``messages:read`` is in
+    ``OAUTH2_ONLY_SCOPES`` for exactly that reason - an API key is a long-lived bearer secret that ends up in CI
+    configs and screenshots, and a leaked one must not become a DM reader."""
 
     def setUp(self) -> None:
         """Create a plaintext DM between the key owner and the bystander."""
@@ -567,11 +511,8 @@ class GlobalSearchDirectMessageScopeTests(_SearchApiTestCase):
     def test_pat_with_messages_read_written_onto_the_row_is_still_refused(self) -> None:
         """The rule is about the credential *kind*, not about what the row says.
 
-        A hand-edited row, a bad migration, or a future scope picker with a bug
-        could all put ``messages:read`` on an ApiKey. ``credential_grants``
-        refuses it anyway, and this asserts the search endpoint inherits that
-        rather than re-deriving membership from the stored list.
-        """
+        A hand-edited row, a bad migration, or a future scope picker with a bug could all put ``messages:read``
+        on an ApiKey."""
         raw = self._key_with_scopes([ApiKeyScope.SEARCH_READ.value, ApiKeyScope.MESSAGES_READ.value])
         body = self._search(raw_key=raw, q="loading dock").json()
         self.assertIsNone(self._group(body, "messages"))
@@ -645,12 +586,10 @@ class GlobalSearchThrottleWiringTests(_SearchApiTestCase):
     def test_every_result_type_declares_a_scope_requirement(self) -> None:
         """A provider with no entry would be omitted forever - or, worse, ungated.
 
-        ``filter_sources_by_grants`` only knows about the sections it is handed,
-        so a result type added to ``RESULT_TYPES`` without a matching entry here
-        would never appear in the mapping at all, and the view's chain filter
-        (``provider.slug in grants``) would silently drop it with no explanation
-        in ``omitted_types``.
-        """
+        ``filter_sources_by_grants`` only knows about the sections it is handed, so a result type added to
+        ``RESULT_TYPES`` without a matching entry here would never appear in the mapping at all, and the view's
+        chain filter (``provider.slug in grants``) would silently drop it with no explanation in
+        ``omitted_types``."""
         from urbanlens.dashboard.external_api.views_search import SEARCH_SECTION_SCOPES
 
         self.assertEqual(list(SEARCH_SECTION_SCOPES), list(RESULT_TYPES))
@@ -684,10 +623,9 @@ class ResultTypeParsingTests(TestCase):
     def test_result_is_always_a_subset_of_the_known_types(self, parts: list[str]) -> None:
         """No input can conjure a section that has no provider behind it.
 
-        The view maps this straight onto the provider chain, so a slug that
-        escaped the intersection would either be inert or - if it ever collided
-        with a future key - select a provider the caller never asked for.
-        """
+        The view maps this straight onto the provider chain, so a slug that escaped the intersection would
+        either be inert or - if it ever collided with a future key - select a provider the caller never asked
+        for."""
         parsed = parse_result_types(",".join(parts))
         if parsed is not None:
             self.assertLessEqual(parsed, frozenset(RESULT_TYPES))
@@ -714,8 +652,7 @@ class EngineTypeRestrictionTests(TestCase):
             name: The pin's name.
 
         Returns:
-            The created pin.
-        """
+            The created pin."""
         self._location_seq += 1
         location = baker.make(
             "dashboard.Location", latitude=f"39.{100 + self._location_seq}", longitude="-84.51", locality="Cincinnati"
@@ -729,8 +666,7 @@ class EngineTypeRestrictionTests(TestCase):
             response: A ``SearchResponse``.
 
         Returns:
-            The set of populated section slugs.
-        """
+            The set of populated section slugs."""
         return {group.meta.slug for group in response.groups}
 
     def test_no_types_searches_every_provider(self) -> None:
@@ -746,11 +682,8 @@ class EngineTypeRestrictionTests(TestCase):
     def test_empty_types_searches_nothing_rather_than_everything(self) -> None:
         """The fail-open trap: empty must not be read as ``parsed.types``'s "all".
 
-        ``ParsedQuery.types`` uses empty-means-all, which is right for an
-        inference and disastrous for an explicit restriction. Assigning the
-        caller's empty set into ``parsed.types`` would turn a fully-denied
-        credential's search into an unrestricted one.
-        """
+        ``ParsedQuery.types`` uses empty-means-all, which is right for an inference and disastrous for an
+        explicit restriction."""
         response = GlobalSearchEngine().search(self.profile, "anchor mill", types=set())
         self.assertEqual(response.total, 0)
         self.assertEqual(response.groups, [])

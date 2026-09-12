@@ -106,10 +106,7 @@ class SpotGuessrStartViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_no_eligible_locations_reports_error_code_without_creating_a_session(self) -> None:
-        """A profile with no pins used to get a fake 'finished' summary (0 rounds
-        played, GameSession created and immediately COMPLETED) indistinguishable
-        from a real completed game - see the SpotGuessr UX
-        rewrite notes. It must now get a distinct error_code and no session at all."""
+        """It must now get a distinct error_code and no session at all."""
         other_profile = _make_profile()
         self.client.force_login(other_profile.user)
         response = self.client.post(self.start_url, {})
@@ -121,13 +118,7 @@ class SpotGuessrStartViewTests(TestCase):
         self.assertFalse(GameSession.objects.filter(host_profile=other_profile).exists())
 
     def test_a_pinned_location_with_no_usable_photo_reports_no_eligible_locations_too(self) -> None:
-        """Regression guard: a profile can have pins (passing the cheap
-        pre-check) but every pinned location's photo pool turns out
-        unusable once round generation actually runs (e.g. filtered out by
-        relevance) - this used to silently complete the freshly-created
-        session and report a fake 'Game over! Your score: 0 pts', which
-        reads as a real (if confusing) finished game rather than nothing
-        having been playable at all."""
+        """Your score: 0 pts', which reads as a real (if confusing) finished game rather than nothing having been playable at all."""
         bare_profile = _make_profile()
         bare_location = _make_location()
         baker.make(Pin, profile=bare_profile, location=bare_location)
@@ -408,11 +399,8 @@ class SpotGuessrSettingsViewTests(TestCase):
 class SpotGuessrMultiplayerGuessRevealTests(TestCase):
     """The answer must stay hidden from an early guesser until every joined participant has guessed.
 
-    Per "Real-time sync" in docs/designs/drafts/spotguessr.md: guess.submitted carries
-    no coordinates or score, and the answer only goes out with round.revealed.
-    Without this, the first guesser could read it off their own HTTP response
-    and relay it to teammates over session chat before they'd guessed too.
-    """
+    Per "Real-time sync" in docs/designs/drafts/spotguessr.md: guess.submitted carries no coordinates or score,
+    and the answer only goes out with round.revealed."""
 
     def setUp(self) -> None:
         self.host = _make_profile()
@@ -471,12 +459,7 @@ class SpotGuessrMultiplayerGuessRevealTests(TestCase):
 
 
 class SpotGuessrNoEligibleLocationsMidGameTests(TestCase):
-    """Unlike solo play, a multiplayer lobby can't be eligibility-checked at
-    start - the invitees haven't joined (and so haven't contributed their
-    pins to the eligible set) yet. The host only discovers there's nothing
-    to play once they begin the game. That must be reported distinctly from
-    a real finish, and must not mark the session COMPLETED - see
-    SpotGuessrBeginView's docstring."""
+    """Unlike solo play, a multiplayer lobby can't be eligibility-checked at start - the invitees haven't joined (and so haven't contributed their pins to the eligible set) yet. The host only discovers there's nothing to play once they begin the game."""
 
     def setUp(self) -> None:
         self.host = _make_profile()

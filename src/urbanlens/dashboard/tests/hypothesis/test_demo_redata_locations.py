@@ -1,11 +1,4 @@
-"""REData's /public-locations/ catalog as a demo location source, and the merged manifest.
-
-REData's endpoint is real (documented, tested code on its own repo) but not yet
-deployed anywhere UrbanLens can reach - every test here pins the "degrades to
-empty, never raises" contract that fact requires, plus the merge semantics that
-let two independent importers (this site's own public pins, REData's catalog)
-both write into one manifest safely.
-"""
+"""REData's /public-locations/ catalog as a demo location source, and the merged manifest."""
 
 from __future__ import annotations
 
@@ -80,10 +73,7 @@ class RedataDemoLocationsTests(SimpleTestCase):
             self.assertEqual(redata_demo_locations(), [])
 
     def test_a_configured_but_unreachable_redata_yields_nothing_not_an_exception(self) -> None:
-        """A failure is caught inside list_public_locations itself (see the
-        gateway tests above), so by the time redata_demo_locations calls it, an
-        unreachable REData has already become an empty list, not something to
-        catch again here - this just confirms that empty list passes through."""
+        """A failure is caught inside list_public_locations itself (see the gateway tests above), so by the time redata_demo_locations calls it, an unreachable REData has already become an empty list, not something to catch again here - this just confirms that empty list passes through."""
         with mock.patch(_CONFIGURED_PATH, return_value=True), mock.patch(_GATEWAY_PATH) as gateway_cls:
             gateway_cls.return_value.list_public_locations.return_value = []
             self.assertEqual(redata_demo_locations(), [])

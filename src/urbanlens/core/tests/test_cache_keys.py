@@ -31,10 +31,8 @@ class MakeCacheKeyTests(SimpleTestCase):
     def test_all_parts_contribute_to_the_key(self):
         """A change to any part - not just the first - must change the key.
 
-        Real callers rely on this: pin.py and locations/base.py both key on a
-        (lat, lng) pair passed as two separate parts, so two pins that share a
-        latitude but differ in longitude must not collide.
-        """
+        Real callers rely on this: pin.py and locations/base.py both key on a (lat, lng) pair passed as two
+        separate parts, so two pins that share a latitude but differ in longitude must not collide."""
         self.assertNotEqual(
             make_cache_key("smithsonian", "a", "x"),
             make_cache_key("smithsonian", "a", "y"),
@@ -59,10 +57,8 @@ class MakeCacheKeyTests(SimpleTestCase):
     def test_a_part_containing_the_separator_does_not_collide_with_two_parts(self):
         """Joining on a bare separator makes the part boundaries unrecoverable.
 
-        ``('a:b',)`` and ``('a', 'b')`` are different logical arguments; if both
-        flatten to the raw string ``"a:b"`` they hash to the same key and one
-        caller reads the other's cached value.
-        """
+        ``('a:b',)`` and ``('a', 'b')`` are different logical arguments; if both flatten to the raw string
+        ``"a:b"`` they hash to the same key and one caller reads the other's cached value."""
         self.assertNotEqual(
             make_cache_key("smithsonian", "a:b"),
             make_cache_key("smithsonian", "a", "b"),
@@ -98,14 +94,7 @@ class MakeCacheKeyPropertyTests(SimpleTestCase):
     def test_a_tuple_never_shares_a_key_with_its_own_flattening(self, parts: list[str]) -> None:
         """The encoding must be injective, not merely deterministic.
 
-        Constructed rather than searched for. An earlier version of this drew two
-        independent tuples and asserted they differed, which passed against the
-        colon-joined implementation it was written to catch: hypothesis has no
-        reason to draw ``["a:b"]`` and ``["a", "b"]`` in the same example, so the
-        collision was never generated. Here the colliding partner is *built* from
-        the draw - joining the parts on each candidate separator - so any encoding
-        that loses the part boundaries fails on the first example.
-        """
+        Constructed rather than searched for."""
         for separator in (":", "|", ",", "-"):
             joined = separator.join(parts)
             self.assertNotEqual(

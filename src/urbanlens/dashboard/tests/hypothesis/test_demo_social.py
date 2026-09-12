@@ -1,10 +1,4 @@
-"""The fabricated content of a demo account: friends, DMs, group chat, visits, trips, lists.
-
-Runs the whole seeder with a real location pool, so every code path here -
-comments on a shared wiki, trip activities on a pooled location, visits on a
-real pin - actually executes, rather than short-circuiting on empty input the
-way the plain smoke tests do.
-"""
+"""The fabricated content of a demo account: friends, DMs, group chat, visits, trips, lists."""
 
 from __future__ import annotations
 

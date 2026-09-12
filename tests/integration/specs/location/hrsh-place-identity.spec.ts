@@ -1,31 +1,6 @@
 /**
- * Five coordinates on one property have to mean one property.
- *
- * This is the foundational claim the rest of `specs/location/` rests on. A user
- * who drops a pin anywhere on the Hudson River State Hospital campus has pinned
- * *the campus*, and two users who drop pins 400 m apart on it are looking at the
- * same place - which is what makes a shared wiki, a shared boundary and shared
- * building data coherent rather than a coincidence of proximity.
- *
- * The app's own answer to "is this the same property" is not a field; it is a
- * refusal. `services.pins.pin_creation` enforces one root pin per property, and
- * says so in words that distinguish the two cases:
- *
- * - `"You already have a pin on this property."` - place-based, and the thing
- *   these tests are about.
- * - `"You already have a pin at this location."` - the exact-coordinate unique
- *   constraint, which is a different and much weaker statement.
- *
- * Asserting on *which* refusal comes back is the sharpest available evidence,
- * and better than inferring identity from a shared wiki slug: two pins can share
- * a wiki for reasons that have nothing to do with the parcel.
- *
- * **The refusal is conditional on geometry already existing.** The rule fires
- * only `if new_parent is None and location.place_id`, and `place_id` is set only
- * once a provider has actually supplied a parcel polygon. On virgin ground every
- * pin is created happily and nothing is refused - so these tests skip rather
- * than fail when the parcel never arrived, and `hrsh-boundary.spec.ts` reports
- * that absence as the finding it is.
+ * Five coordinates on one property have to mean one property. This is the foundational claim the
+ * rest of `specs/location/` rests on.
  */
 
 import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";

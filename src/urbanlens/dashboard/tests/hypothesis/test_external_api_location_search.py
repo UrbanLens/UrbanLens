@@ -1,10 +1,4 @@
-"""Tests for the external API's ``locations/search/`` and ``locations/resolve/``.
-
-The external places provider is always mocked here: these tests assert the
-*gating* around it - that a profile which turned external lookups off never
-reaches the provider at all, and that a client is told why (``places_disabled``)
-rather than being handed a silently shorter result list.
-"""
+"""Tests for the external API's ``locations/search/`` and ``locations/resolve/``."""
 
 from __future__ import annotations
 

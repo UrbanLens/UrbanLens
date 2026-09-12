@@ -1,16 +1,4 @@
-"""A validated url is fetched at the address it validated to, not a re-resolution.
-
-``ensure_public_http_url`` used to return only the url string. Callers then
-handed that string to ``requests``, which resolved the hostname a second time,
-independently - so a host answering with a short TTL could return a public
-address for the check and a loopback address for the connection. Re-validating
-before every redirect hop made this worse rather than better: each hop is
-another independent resolution the attacker gets to answer.
-
-These tests pin the behaviour that closes it: resolve once, connect to *that*
-address, and refuse the response if the socket turns out to be talking to
-somewhere else.
-"""
+"""A validated url is fetched at the address it validated to, not a re-resolution."""
 
 from __future__ import annotations
 
@@ -121,13 +109,7 @@ class PinnedResolverTests(SimpleTestCase):
 class PeerAddressTests(SimpleTestCase):
     """The backstop, exercised against a real socket rather than a double.
 
-    This is deliberately not mocked. ``_peer_address`` reads private urllib3
-    attributes, so a double proves only that the double has the attribute the
-    double was given: the check read ``raw._connection.sock``, which is
-    ``None`` on urllib3 2.x for both http and https, and so silently returned
-    ``None`` on every real response - the backstop never once fired, and no
-    mock-based test could tell.
-    """
+    This is deliberately not mocked."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -151,14 +133,8 @@ class PeerAddressTests(SimpleTestCase):
     def test_a_real_connection_to_an_unvalidated_peer_is_refused(self) -> None:
         """End-to-end, with the pin disabled - the condition the backstop exists for.
 
-        While the pin holds, the connection goes to the validated address by
-        construction and this check can never fire. It matters only once the
-        pin stops applying: the resolver wrapper is installed by assigning
-        ``socket.getaddrinfo`` at import, so anything that reassigns it later
-        (``gevent.monkey.patch_all`` under a preloading worker, another
-        library, a stray patch) removes the pin silently. Restoring the real
-        resolver here reproduces that, and the fetch must still refuse.
-        """
+        While the pin holds, the connection goes to the validated address by construction and this check can
+        never fire."""
         url = f"http://127.0.0.1:{self.port}/"
         with (
             mock.patch("socket.getaddrinfo", _real_getaddrinfo),
@@ -192,11 +168,8 @@ class FetchPublicUrlTests(SimpleTestCase):
     def test_without_a_session_it_goes_through_requests_get(self) -> None:
         """The default path is ``requests.get``, which every caller's tests mock.
 
-        Routing the default through a Session instead moves the seam out from
-        under those mocks: the fetch stops being intercepted and starts making
-        real connections. It also shares cookies across redirect hops, so one
-        host's cookie is replayed to the next.
-        """
+        Routing the default through a Session instead moves the seam out from under those mocks: the fetch stops
+        being intercepted and starts making real connections."""
         with (
             mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")),
             mock.patch("requests.get", return_value=self._response()) as get,
@@ -210,12 +183,9 @@ class FetchPublicUrlTests(SimpleTestCase):
         self.assertEqual(get.call_args.kwargs["stream"], True, "the body must not be read before the peer is checked")
 
     def test_a_response_without_a_socket_is_not_rejected(self) -> None:
-        """ "Peer unknown" leaves the pin as the control; it must not fail the fetch.
+        """"Peer unknown" leaves the pin as the control; it must not fail the fetch.
 
-        A cached response, a non-``requests`` adapter, or a test double exposes
-        no socket. Reading through to ``.getpeername()`` unguarded raises
-        mid-fetch instead.
-        """
+        A cached response, a non-``requests`` adapter, or a test double exposes no socket."""
 
         class _NoRaw:
             status_code = 200

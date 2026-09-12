@@ -1,21 +1,4 @@
-"""Regression tests for UL-239: localStorage search-history keys must be per-user.
-
-Three of window.LocationSearchEngine.attach()'s historyKey values were
-hardcoded, unscoped literals ('ul_addr_history_v1', 'ul_composer_search_history_v1',
-'ul_safety_dest_history_v1') - on a shared browser, logging out and back in as a
-different user reused the SAME localStorage entry, so one user's typed search
-queries (which for this app routinely are place names, addresses, or - on the
-safety check-in destination search - the exact place someone is about to
-explore) leaked to whoever logged in next. recentPinsKey right next to
-'ul_addr_history_v1' was already correctly profile-scoped, which is what made
-the inconsistency obvious.
-
-Each fixed site must render its key with the current profile's identifier
-baked in, so two different users never resolve to the same key, and must also
-emit a one-time cleanup of the old unscoped key so already-leaked history
-sitting in a shared browser's localStorage doesn't persist forever after the
-fix ships.
-"""
+"""Regression tests for UL-239: localStorage search-history keys must be per-user."""
 
 from __future__ import annotations
 

@@ -47,18 +47,12 @@ class MemoriesViewEmptyStateTests(TestCase):
 
 
 class MemoriesViewLabelOnlyVisitTests(TestCase):
-    """A pin marked "Visited" via the label alone (no PinVisit, no last_visited
-    record) must count as memory data and produce visible content on the
-    Memories page - not a blank page and not the "No memory data yet" empty
-    state, since Pin.objects.visited_without_record() already says there is
-    something here worth showing (a place to log a date for).
+    """A pin marked "Visited" via the label alone (no PinVisit, no last_visited record) must count as memory data and produce visible content on the Memories page - not a blank page and not the "No memory data yet" empty state, since Pin.objects.visited_without_record() already says there is something here worth showing (a place to log a date for).
 
-    Regression test: has_memory_data was computed strictly from
-    PinVisit/Route/Image/Trip counts, so this exact profile shape (nothing but
-    a label-only-visited pin) got has_memory_data=False *and* a non-empty
-    unlogged_visits - a combination index.html's old if/inner-if/else never
-    actually rendered anything for (see the broken empty-state block).
-    """
+    Regression test: has_memory_data was computed strictly from PinVisit/Route/Image/Trip counts, so this exact
+    profile shape (nothing but a label-only-visited pin) got has_memory_data=False *and* a non-empty
+    unlogged_visits - a combination index.html's old if/inner-if/else never actually rendered anything for (see
+    the broken empty-state block)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -91,11 +85,7 @@ class MemoriesViewLabelOnlyVisitTests(TestCase):
 
 
 class MemoriesMapDefaultLayerTests(TestCase):
-    """The Memories map must start on the same base layer/dark-mode the user has
-    configured for the main map, instead of always falling back to whatever
-    window.MapLayers.create() defaults to when no options are passed - see
-    map/index.html's own defaultBase/darkMode/storageKey wiring, which this
-    page's map init now mirrors exactly."""
+    """The Memories map must start on the same base layer/dark-mode the user has configured for the main map, instead of always falling back to whatever window.MapLayers.create() defaults to when no options are passed - see map/index.html's own defaultBase/darkMode/storageKey wiring, which this page's map init now mirrors exactly."""
 
     def setUp(self) -> None:
         super().setUp()

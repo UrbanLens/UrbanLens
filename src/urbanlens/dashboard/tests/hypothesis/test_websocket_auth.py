@@ -1,15 +1,4 @@
-"""Tests for ApiKeyAuthMiddleware - PAT/OAuth2 fallback auth for Channels sockets.
-
-Covers *authentication* only - whether a ``?key=`` credential resolves to a
-user at all. What that credential is then allowed to reach is a separate
-concern, tested in ``test_websocket_credential_scopes.py``; the credentials
-minted here are given ``notifications:read`` purely so the consumer used as a
-test harness (``UserNotificationConsumer``) lets a successfully authenticated
-connection through to the assertion being made.
-
-Uses TransactionTestCase, same as test_safety_chat.py, since consumers touch
-the database from a background thread via ``database_sync_to_async``.
-"""
+"""Tests for ApiKeyAuthMiddleware - PAT/OAuth2 fallback auth for Channels sockets."""
 
 from __future__ import annotations
 
@@ -46,8 +35,7 @@ def _notification_key(user) -> tuple[ApiKey, str]:
         user: The account the key belongs to.
 
     Returns:
-        Tuple of (the ``ApiKey`` row, its one-time plaintext).
-    """
+        Tuple of (the ``ApiKey`` row, its one-time plaintext)."""
     api_key, raw_key = generate_api_key(user, "Mobile app")
     ApiKey.objects.filter(pk=api_key.pk).update(scopes=[ApiKeyScope.NOTIFICATIONS_READ.value])
     return api_key, raw_key

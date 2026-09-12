@@ -1,17 +1,4 @@
-"""A bulk request must name a bounded number of things.
-
-`pin_bulk.py` caps its uuid list at 500 and explains why: `Pin` carries eight
-live `post_save` receivers, so a bulk edit cannot be one `UPDATE` and an
-unbounded selection turns one click into tens of thousands of queries inside one
-request. Three sibling endpoints parse the same kind of list with no cap at all.
-
-`PinBulkMergeView` is the sharpest of them: every source is re-saved
-individually, and each save re-fits the target's child boundary by convex-hulling
-the target's whole child set, so the per-source cost *grows* as the merge runs.
-
-The cap is checked before any database work on purpose. Refusing after loading
-the rows would mean the request that is too large still pays for being too large.
-"""
+"""A bulk request must name a bounded number of things."""
 
 from __future__ import annotations
 

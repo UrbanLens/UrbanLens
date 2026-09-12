@@ -1,12 +1,4 @@
-"""Does `Pin.to_json()` honour a `prefetch_related("labels")`, or defeat it?
-
-`to_json()` builds its payload with `self.labels.filter(kind=...)` twice. `.filter()` on a
-prefetched many-to-many constructs a *new* queryset rather than reading the prefetch cache,
-so a caller that prefetches and then serialises N pins can still pay 2N queries.
-
-This is a measurement, not an assertion of a bug: the test records the actual query count
-for 1 pin and for 5. If the count scales with the number of pins, the cache is bypassed.
-"""
+"""Does `Pin.to_json()` honour a `prefetch_related("labels")`, or defeat it?"""
 
 from __future__ import annotations
 
@@ -56,15 +48,9 @@ class PinToJsonPrefetchTests(TestCase):
     def test_labels_are_read_from_the_prefetch_cache(self) -> None:
         """Guards the fix: `to_json()` must not re-query labels per pin.
 
-        Measured before the fix: 1 pin -> 6 queries, 5 pins -> 22, i.e. **4 per pin**
-        despite `prefetch_related("labels")`, because `.filter()` on a prefetched m2m
-        builds a fresh queryset and ignores the cache. After: 4 and 12, i.e. 2 per pin.
-
-        The remaining 2 per pin are *not* labels - they come from other per-pin lookups
-        in the same payload (a rating fetch among them) and are filed separately. This
-        asserts the label half only, so it fails if anyone reintroduces `.filter()` here
-        and keeps passing when the rest is addressed.
-        """
+        Measured before the fix: 1 pin -> 6 queries, 5 pins -> 22, i.e. **4 per pin** despite
+        `prefetch_related("labels")`, because `.filter()` on a prefetched m2m builds a fresh queryset and
+        ignores the cache."""
         self._make_pins(1)
         one = self._count_for(1)
         self._make_pins(4, start=1)

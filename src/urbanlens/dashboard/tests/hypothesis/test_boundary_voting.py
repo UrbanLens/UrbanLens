@@ -112,10 +112,8 @@ class VoteWeightTests(SimpleTestCase):
     def test_same_age_votes_tie_exactly(self) -> None:
         """Weight is a function of *age*, not absolute calendar time.
 
-        Calling the function twice with identical arguments is tautological
-        and proves nothing; the real claim is that shifting both timestamps
-        by the same amount leaves the weight unchanged.
-        """
+        Calling the function twice with identical arguments is tautological and proves nothing; the real claim
+        is that shifting both timestamps by the same amount leaves the weight unchanged."""
         age = timedelta(days=33)
         recent_now = timezone.now()
         shifted_now = recent_now - timedelta(days=500)
@@ -124,10 +122,8 @@ class VoteWeightTests(SimpleTestCase):
     def test_weight_quarters_at_two_half_lives(self) -> None:
         """Pins the exponential curve itself, not just its one named point.
 
-        A linear decay reaching 0.5 at HALF_LIFE_DAYS would also pass
-        ``test_weight_halves_at_half_life`` (0.5 is 0.5 either way) but would
-        hit 0.0, not 0.25, here.
-        """
+        A linear decay reaching 0.5 at HALF_LIFE_DAYS would also pass ``test_weight_halves_at_half_life`` (0.5
+        is 0.5 either way) but would hit 0.0, not 0.25, here."""
         now = timezone.now()
         self.assertAlmostEqual(vote_weight(now - timedelta(days=2 * HALF_LIFE_DAYS), now), 0.25)
 
@@ -267,13 +263,10 @@ class WinningBoundaryTests(TestCase):
         self.assertTrue(has_consensus(self.place))
 
     def test_consensus_boundary_is_inclusive_at_exact_ratio(self) -> None:
-        """A leader-to-runner-up ratio of exactly CONSENSUS_RATIO (1.5) must
-        already count as consensus - the check is ``>=``, not ``>``.
+        """A leader-to-runner-up ratio of exactly CONSENSUS_RATIO (1.5) must already count as consensus - the check is ``>=``, not ``>``.
 
-        Three same-age votes vs. two same-age votes gives a ratio of exactly
-        3/2 regardless of how much real time has elapsed by the time this
-        assertion runs, since every vote's individual weight cancels out.
-        """
+        Three same-age votes vs. two same-age votes gives a ratio of exactly 3/2 regardless of how much real
+        time has elapsed by the time this assertion runs, since every vote's individual weight cancels out."""
         stamp = timezone.now()
         for profile in _make_profiles(3):
             baker.make(BoundaryVote, place=self.place, boundary=self.overpass, profile=profile)
@@ -328,11 +321,9 @@ class WinnerMatchingIntegrationTests(TestCase):
     def test_reaffirming_the_same_choice_refreshes_recency(self) -> None:
         """Recasting an unchanged vote still counts as a fresh vote.
 
-        ``update_or_create`` saves unconditionally on a match, but a plausible
-        "skip the write if the choice didn't change" refactor would silently
-        stop refreshing recency - which is the entire point of letting
-        someone re-affirm a stale vote per the function's own docstring.
-        """
+        ``update_or_create`` saves unconditionally on a match, but a plausible "skip the write if the choice
+        didn't change" refactor would silently stop refreshing recency - which is the entire point of letting
+        someone re-affirm a stale vote per the function's own docstring."""
         vote = cast_boundary_vote(self.place, self.voter, self.overpass.pk)
         stale = timezone.now() - timedelta(days=200)
         BoundaryVote.objects.filter(pk=vote.pk).update(updated=stale)

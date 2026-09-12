@@ -1,17 +1,4 @@
-"""A UnifiedPush endpoint is a user-supplied URL the server later POSTs to.
-
-`register_device` stores the address and `dispatch` POSTs notification payloads
-to it, so anything a user can register becomes a server-side request primitive.
-The validation was right in shape but was a *copy* of the checks in
-`services.security.url_safety`, and had drifted: it missed the RFC 6598 CGNAT
-range (100.64.0.0/10), which the shared helper blocks precisely because Python's
-`ipaddress` does not classify it as private and cloud providers route
-internal-only infrastructure through it. Registration now uses the shared
-`is_blocked_address`, so the two cannot diverge again.
-
-Addresses are resolved with `getaddrinfo`, so these patch it rather than relying
-on any particular hostname resolving a particular way in CI.
-"""
+"""A UnifiedPush endpoint is a user-supplied URL the server later POSTs to."""
 
 from __future__ import annotations
 

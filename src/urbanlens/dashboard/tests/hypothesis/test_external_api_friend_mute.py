@@ -1,15 +1,4 @@
-"""Tests for the external API's friend mute surface.
-
-Mute was previously written *over* ``Friendship.status``, which meant muting an
-accepted friend un-friended them for every visibility gate reading
-``Profile.are_friends``, and left no way back - the pre-mute status was gone and
-``FriendshipStatus.can_request`` refuses ``Muted``, so the website's own Unmute
-button answered 400. It is now a separate boolean.
-
-These tests pin the API half of that fix: ``is_muted`` is on the wire, the write
-is an explicit target rather than a toggle, and - the assertion that matters
-most - muting does not disturb ``status``.
-"""
+"""Tests for the external API's friend mute surface."""
 
 from __future__ import annotations
 
@@ -78,8 +67,6 @@ class FriendMuteApiTests(TestCase):
         self.friendship.refresh_from_db()
         self.assertTrue(self.friendship.is_muted_by(self.profile))
         self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
-        # A staticmethod taking both profiles, not a bound instance method -
-        # this is the gate that mute-as-a-status used to silently break.
         self.assertTrue(Profile.are_friends(self.profile, self.friend))
 
     def test_unmuting_is_reachable_and_restores_nothing_else(self) -> None:

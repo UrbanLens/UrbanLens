@@ -1,16 +1,4 @@
-"""The scaling harness must fail the tests it exists to fail.
-
-A measuring instrument that cannot be shown to move is worth as little as the
-measurement it produces. These check the two ways ``QueryScalingMixin`` earns
-its place: it refuses a seed that doesn't exercise the endpoint, and it names
-the statement that multiplied instead of leaving that to a separate
-investigation.
-
-The first is the important one. Before this guard existed, a survey during the
-2026-08-17 audit reported the conversation list as flat while seeding pins and
-labels; the list it rendered never changed size, so the "pass" measured nothing.
-Seeding conversations properly showed about eleven queries per row.
-"""
+"""The scaling harness must fail the tests it exists to fail."""
 
 from __future__ import annotations
 

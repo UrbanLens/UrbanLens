@@ -1,9 +1,4 @@
-"""Tests for the location-wiki photo gallery views in image_gallery.py.
-
-Covers the regression where a Location without a Wiki (wikis are opt-in -
-see Wiki.objects.get_for_location) caused ``Image.objects.filter(wiki=None)``
-to match every wiki-less image site-wide instead of scoping to the location.
-"""
+"""Tests for the location-wiki photo gallery views in image_gallery.py."""
 
 from __future__ import annotations
 

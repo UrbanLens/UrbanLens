@@ -1,9 +1,4 @@
-"""Tests for services.apis.locations.places_resolution's provider dispatch.
-
-Covers the REData-vs-Google-Places choice for each of the seven call sites
-this module centralizes, mirroring test_cid_resolution.py's structure for the
-analogous CID-resolution chokepoint.
-"""
+"""Tests for services.apis.locations.places_resolution's provider dispatch."""
 
 from __future__ import annotations
 

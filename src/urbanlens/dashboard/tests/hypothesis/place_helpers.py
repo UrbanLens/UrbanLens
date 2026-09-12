@@ -1,15 +1,4 @@
-"""Shared helpers for tests that need a location to have official geometry.
-
-Before the Place model, "this location has an official boundary" was written as
-a location-default ``Boundary`` row. Official geometry now lives on ``Place``,
-and a location *resolves onto* one - so the equivalent setup is "make a place
-with this outline, and put this location on it", which is what
-:func:`official_geometry` does.
-
-Kept in one place because a dozen test modules need it, and because getting it
-subtly wrong (forgetting to re-resolve the locations already inside the new
-outline) produces tests that pass for the wrong reason.
-"""
+"""Shared helpers for tests that need a location to have official geometry."""
 
 from __future__ import annotations
 
@@ -60,11 +49,7 @@ def official_geometry(
         relation: How it attaches to ``parent``.
 
     Returns:
-        The new place. Every location already standing inside the outline is
-        re-resolved onto it, and ``location`` is attached even if the outline
-        doesn't strictly contain its point - the chain was asked about that
-        coordinate, so its answer applies to it.
-    """
+        The new place."""
     place = make_place(kind, polygon, parent=parent, relation=relation)
     resolution.resolve_locations_in(polygon)
     location.refresh_from_db()
@@ -76,19 +61,14 @@ def official_geometry(
 def nest_by_containment(place: Place) -> Place:
     """Attach a place to whichever existing place geometrically encloses it.
 
-    Only a test convenience: it reproduces the lineage the provider chain
-    builds for real (a footprint ``PART_OF`` the parcel around it) without
-    having to spell it out at every call site. The application deliberately
-    does *not* infer lineage from geometry - see
-    ``services.places.provisioning``.
+    Only a test convenience: it reproduces the lineage the provider chain builds for real (a footprint
+    ``PART_OF`` the parcel around it) without having to spell it out at every call site.
 
     Args:
         place: The newly-created place to slot into the hierarchy.
 
     Returns:
-        The same place, re-parented and with any places it encloses pulled
-        underneath it.
-    """
+        The same place, re-parented and with any places it encloses pulled underneath it."""
     if place.geometry is None:
         return place
 

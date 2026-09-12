@@ -1,9 +1,4 @@
-"""Tests for services.spotguessr.street_view - Street View mode's imagery selection.
-
-The Google Maps gateway itself is mocked throughout - these tests are about
-this module's own contract (graceful None on any failure), not about
-exercising the real Street View Static API.
-"""
+"""Tests for services.spotguessr.street_view - Street View mode's imagery selection."""
 
 from __future__ import annotations
 
@@ -74,12 +69,7 @@ class CandidateStreetViewForLocationTests(TestCase):
 
     @patch("urbanlens.dashboard.services.spotguessr.street_view.call_with_deadline")
     def test_the_lookup_is_bounded_by_the_shared_external_call_deadline(self, mock_deadline) -> None:
-        """Regression guard for the SpotGuessr /start/ 504s: this is called up to
-        _MAX_LOCATION_ATTEMPTS times synchronously inside the request handler (see
-        services.spotguessr.session.get_or_create_round), same as pin.py's Street View
-        carousel fetch - it must go through the same call_with_deadline bound that
-        fetch already uses, or one slow/degraded provider call can hold the whole
-        request open well past nginx's timeout."""
+        """Regression guard for the SpotGuessr /start/ 504s: this is called up to _MAX_LOCATION_ATTEMPTS times synchronously inside the request handler (see services.spotguessr.session.get_or_create_round), same as pin.py's Street View carousel fetch - it must go through the same call_with_deadline bound that fetch already uses, or one slow/degraded provider call can hold the whole request open well past nginx's timeout."""
         from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE
 
         mock_deadline.return_value = (

@@ -1,38 +1,4 @@
-"""Assert an endpoint does not build a model instance per row it renders.
-
-`QueryScalingMixin` counts statements and `RenderTimeScalingMixin` times the
-render. Neither can see the defect this exists for: the map payload ran a flat
-21 queries and spent 88% of a 5.79-second build inside `Model.__init__`,
-constructing 63,240 objects to emit 10,000 flat dicts. Query count was constant
-the whole time, and a timing budget reads the same 6x-too-expensive row as
-"slow machine" on a contended host.
-
-**What separates the classes is how many model instances one row costs.**
-Django sends `post_init` from `Model.__init__` unconditionally, so a receiver
-sees every instantiation - the fetched row, each `select_related` companion, and
-one fresh object per `prefetch_related` through-row. Taking
-``(objects(large) - objects(small)) / (large - small)`` cancels whatever the
-page builds regardless of its rows, and what is left is an integer that does not
-move with machine speed, load, or the number of samples: *this endpoint builds N
-model objects for every row it shows.*
-
-Two properties worth not re-deriving:
-
-- **It is exact, so it needs no tolerance and no repeats.** A timing mixin needs
-  best-of-five and a fraction-of-baseline denominator to survive a shared host.
-  This measures a count, so one request per size is the whole measurement, and a
-  failure reports the same number on any machine.
-- **It sees through the prefetch that a query counter is blind to.** A
-  `prefetch_related` over a small shared vocabulary is one extra query however
-  many parents it fans out over, but Django rebuilds the related object per
-  through-row - 128 distinct labels became ~36,000 instances on the map. The
-  query counter reads that as flat; this reads it as +3.6 objects per row.
-
-The counter is deliberately not a substitute for its siblings. Objects per row
-says nothing about a page that queries per row without instantiating (`.exists()`
-in a loop) or one that is slow for reasons unrelated to the ORM, so the three are
-interpretable together and a failure here reports the query count alongside.
-"""
+"""Assert an endpoint does not build a model instance per row it renders."""
 
 from __future__ import annotations
 
@@ -66,20 +32,14 @@ class InstantiationSample:
     body_bytes: int
 
 
-class count_instantiations:  # noqa: N801 # a context manager, named as one reads at the call site
+class count_instantiations:  # noqa: N801  # a context manager, named as one reads at the call
     """Count every Django model instantiated inside the block, by model.
 
-    Usable on its own around any callable, not just a request, so a service can
-    be measured without going through a URL::
-
-        with count_instantiations() as counted:
-            MapPinPayloadService(profile).all(query)
-        self.assertLess(counted.total, 100)
-
-    Counts instantiations, which is not the same as rows fetched: a
-    `select_related` companion, a `prefetch_related` through-row and a deferred
-    reload each construct an object and each is counted, which is the point.
-    """
+    Usable on its own around any callable, not just a request, so a service can be measured without going
+    through a URL:: with count_instantiations() as counted: MapPinPayloadService(profile).all(query)
+    self.assertLess(counted.total, 100) Counts instantiations, which is not the same as rows fetched: a
+    `select_related` companion, a `prefetch_related` through-row and a deferred reload each construct an object
+    and each is counted, which is the point."""
 
     def __init__(self) -> None:
         self._counts: Counter[str] = Counter()
@@ -119,12 +79,10 @@ class InstantiationScalingMixin(SeedScalingMixin):
         """Fetch *url*, returning the model instances its render constructed.
 
         Args:
-            url: The URL to fetch.
-            **extra: Passed to the test client (headers, auth).
+            url: The URL to fetch. **extra: Passed to the test client (headers, auth).
 
         Returns:
-            The instantiation count, its per-model breakdown, and the body size.
-        """
+            The instantiation count, its per-model breakdown, and the body size."""
         with count_instantiations() as counted:
             response = self.client.get(url, **extra)
         self.assertEqual(response.status_code, 200, f"{url} returned {response.status_code}")
@@ -142,19 +100,10 @@ class InstantiationScalingMixin(SeedScalingMixin):
         """Assert one more row costs at most *max_objects_per_row* model instances.
 
         Args:
-            url: The URL to measure.
-            max_objects_per_row: Model instances one row may cost. Raise it only
-                with a comment saying why the objects are necessary.
-            expect_growth: Require the response body to grow between the two
-                sizes. Turn this off only for endpoints that cap what they
-                render, and say why in *growth_waiver*.
-            growth_waiver: Why this endpoint's response cannot grow.
-            **extra: Passed to the test client.
+            url: The URL to measure. max_objects_per_row: Model instances one row may cost.
 
         Raises:
-            AssertionError: A row costs more than *max_objects_per_row*
-                instances, or the seed did not exercise the endpoint.
-        """
+            AssertionError: A row costs more than *max_objects_per_row* instances, or the seed did not exercise the endpoint."""
         if not expect_growth and not growth_waiver:
             raise AssertionError("expect_growth=False needs growth_waiver= explaining why the response cannot grow")
 

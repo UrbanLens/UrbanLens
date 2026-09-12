@@ -1,14 +1,4 @@
-"""Round generation must not re-run the eligibility query per retry.
-
-``generate_round_content`` retries up to ``_MAX_LOCATION_ATTEMPTS`` (25) times,
-skipping any location the mode can't build a round from. Each attempt re-ran
-``eligibility.eligible_locations`` - a multi-join across every participant's pins,
-and optionally their visits, a label filter and a geo bound - even though nothing
-it depends on changes between attempts. Only the caller's own exclusion list
-grows, and that can be applied to a cheap primary-key filter instead.
-
-This is the hottest path in the game: it runs for every round of every session.
-"""
+"""Round generation must not re-run the eligibility query per retry."""
 
 from __future__ import annotations
 

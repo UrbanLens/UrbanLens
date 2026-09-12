@@ -1,28 +1,4 @@
-"""Blocking, unblocking, and the one thing neither may ever do: be reversible by the wrong person.
-
-A block is a safety feature on a site whose users meet strangers at derelict
-buildings. Every test here exists because the block was, in one way or another,
-clearable by the person it was placed on:
-
-* ``services.social.friendship._existing_friendship`` resolves the row with
-  ``Friendship.objects.between(...)``, which matches **either direction**, and
-  ``remove_friend`` applied ``Friendship.remove()`` to whatever came back. So
-  ``DELETE /friends/{blocker_uuid}/`` with ``social:write`` let the blocked
-  party set the row to ``Removed`` and then re-contact the person who blocked
-  them. The site's own ``friend.remove`` button had the same hole.
-* There was no unblock path at all - ``block_profile`` had no inverse - so the
-  profile page's "Unblock" button posted to ``friend.remove``, i.e. straight
-  into the defect above.
-* ``Friendship`` stores no "who blocked whom" column, and ``block_profile``
-  reused whichever row already joined the pair. A block placed on an inbound
-  friend request therefore left ``from_profile`` pointing at the *blocked*
-  party, so direction could not be trusted to identify the blocker until
-  ``block_profile`` started normalizing it.
-
-Every refusal here asserts the stored row as well as the status code. A 404
-that still mutated the row would be strictly worse than the original bug: the
-attacker gets what they wanted *and* the audit trail says they were refused.
-"""
+"""Blocking, unblocking, and the one thing neither may ever do: be reversible by the wrong person."""
 
 from __future__ import annotations
 
@@ -47,8 +23,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Kwargs to splat into a test-client call.
-    """
+        Kwargs to splat into a test-client call."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -60,8 +35,7 @@ def _key_with_scopes(user: User, *scopes: ApiKeyScope) -> str:
         scopes: The scopes to grant.
 
     Returns:
-        The plaintext key.
-    """
+        The plaintext key."""
     api_key, raw_key = generate_api_key(user, "Test")
     api_key.scopes = [scope.value for scope in scopes]
     api_key.save(update_fields=["scopes"])
@@ -85,13 +59,11 @@ class _BlockTestCase(TestCase):
     def _block(self) -> Friendship:
         """Have ``blocker`` block ``blocked`` through the real endpoint.
 
-        Going through the endpoint rather than ``Friendship.objects.create``
-        is deliberate: the row's *direction* is what identifies the blocker,
-        and only the service normalizes it.
+        Going through the endpoint rather than ``Friendship.objects.create`` is deliberate: the row's
+        *direction* is what identifies the blocker, and only the service normalizes it.
 
         Returns:
-            The stored relationship row.
-        """
+            The stored relationship row."""
         response = self.client.post(
             reverse("external_api:friends.block", kwargs={"profile_uuid": self.blocked.uuid}),
             **_bearer(self.blocker_key),
@@ -143,11 +115,8 @@ class BlockedPartyCannotClearTheBlockTests(_BlockTestCase):
     def test_block_placed_on_an_inbound_request_still_belongs_to_the_blocker(self) -> None:
         """Blocking a pending requester must not leave the requester owning the row.
 
-        ``block_profile`` reuses the existing relationship row, and the row
-        created by a friend request has ``from_profile`` = the *requester*. If
-        that direction survived the block, the blocked party would read as the
-        blocker and could clear their own block.
-        """
+        ``block_profile`` reuses the existing relationship row, and the row created by a friend request has
+        ``from_profile`` = the *requester*."""
         Friendship.objects.create(
             from_profile=self.blocked,
             to_profile=self.blocker,
@@ -239,8 +208,7 @@ class UnblockRefusalsAreIndistinguishableTests(_BlockTestCase):
             profile_uuid: The uuid named in the path.
 
         Returns:
-            The test-client response.
-        """
+            The test-client response."""
         return self.client.post(
             reverse("external_api:friends.unblock", kwargs={"profile_uuid": profile_uuid}),
             **_bearer(self.blocker_key),

@@ -1,9 +1,4 @@
-"""Tests for plugin-driven place-name resolution.
-
-Covers the address-derived quality gate, the rule-based resolver (agreement >
-priority > arrival order), the plugin-fed candidate pipeline, and the
-"current name always has an alias row" invariant on Pin and Wiki saves.
-"""
+"""Tests for plugin-driven place-name resolution."""
 
 from __future__ import annotations
 
@@ -171,10 +166,7 @@ class IsAddressDerivedNameFuzzyVariantsTests(SimpleTestCase):
         self.assertTrue(is_address_derived_name("Miller Road", loc))
 
     def test_kenwood_still_kept_even_with_a_ranged_or_fuzzy_number(self) -> None:
-        """Regression guard: the new house-number tolerance path must not
-        accidentally reopen the "place the street was named after" exception -
-        Kenwood carries no street-type word, so it's rejected before house
-        numbers are even considered."""
+        """Regression guard: the new house-number tolerance path must not accidentally reopen the "place the street was named after" exception - Kenwood carries no street-type word, so it's rejected before house numbers are even considered."""
         loc = _location(street_number="1", route="Kenwood Road", locality="Albany", administrative_area_level_1="NY")
         self.assertFalse(is_address_derived_name("1 Kenwood", loc))
 
@@ -391,9 +383,7 @@ class UpdateLocationNameResolutionTests(TestCase):
         self.assertEqual(alias.source, "wikipedia")
 
     def test_pin_at_the_location_also_receives_an_official_alias(self) -> None:
-        """Regression guard: name providers used to populate WikiAlias only,
-        never PinAlias, despite update_location_name_from_external_sources'
-        own docstring claiming otherwise for both."""
+        """Regression guard: name providers used to populate WikiAlias only, never PinAlias, despite update_location_name_from_external_sources' own docstring claiming otherwise for both."""
         loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.201000", lng="-73.201000")
         pin: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
         with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):

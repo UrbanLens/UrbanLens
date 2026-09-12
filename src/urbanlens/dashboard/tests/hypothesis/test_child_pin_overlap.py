@@ -1,23 +1,4 @@
-"""Tests for the child-pin exact-coordinate overlap rule.
-
-Two pins belonging to one profile must never sit at precisely the same
-coordinates. Root pins have always been protected by the
-``db_pin_unique_location_per_profile`` constraint, but child (detail) pins are
-deliberately exempt from it - they need to be able to share a *parcel* with
-their parent and siblings. That exemption was total, so nothing stopped two
-child pins (or a child pin and its own parent) from stacking exactly on top of
-each other, which is unrenderable: the markers overlap perfectly, so there is
-no way to click the one underneath or to tell the two apart on the map.
-
-The rule is exact-coordinate only. Child pins placed *near* each other stay
-legal - marking a door, a window, and a sign on one small building is the
-feature child pins exist for.
-
-Also covers ``resolve_child_pin_location``'s coordinate quantization: Location
-identity is (latitude, longitude) rounded to the field's 6 decimal places, so
-resolution matches on those rounded values rather than on a zero-distance
-PostGIS comparison against a point built from the raw unrounded float.
-"""
+"""Tests for the child-pin exact-coordinate overlap rule."""
 
 from __future__ import annotations
 
@@ -196,10 +177,8 @@ class ChildPinExactOverlapServiceTests(TestCase):
 class ChildPinLocationResolutionPropertyTests(TestCase):
     """Property-based generalization of the rule above.
 
-    Calls ``resolve_child_pin_location`` directly rather than through
-    self.client, per this repo's documented @given + self.client
-    incompatibility.
-    """
+    Calls ``resolve_child_pin_location`` directly rather than through self.client, per this repo's documented
+    @given + self.client incompatibility."""
 
     @given(
         lat=st.floats(min_value=-80.0, max_value=80.0, allow_nan=False, allow_infinity=False),

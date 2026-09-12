@@ -1,10 +1,4 @@
-"""Tests for services.device_scan.mac_address.normalize_mac_address.
-
-Every device-scan write path funnels through this function so the same
-physical device is never split across two ``ScannedDevice`` rows over a
-casing or separator difference between two uploads - these tests are what
-would catch a regression there.
-"""
+"""Tests for services.device_scan.mac_address.normalize_mac_address."""
 
 from __future__ import annotations
 

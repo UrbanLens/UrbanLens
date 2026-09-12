@@ -1,10 +1,4 @@
-"""Tests for native push: device registration endpoints, dispatch, and the notification hook.
-
-The registration surface is part of the external API (a native client holding
-an API key or OAuth2 token registers its UnifiedPush endpoint); dispatch is a
-Celery task fed by the ``NotificationLog`` post_save signal. External HTTP
-(the push server) is always mocked.
-"""
+"""Tests for native push: device registration endpoints, dispatch, and the notification hook."""
 
 from __future__ import annotations
 

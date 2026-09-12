@@ -1,16 +1,4 @@
-"""Tests for the subscriber gate on officially-sourced property owner data.
-
-An owner record names a private individual and often carries their mailing
-address. Where it came from decides who may see it: records UrbanLens looked
-up *for* the user from county assessor data (``OwnerSource.OFFICIAL``, via
-REData's paid property-records feed) need
-``SiteFeature.PROPERTY_OWNERS``; a user's own ``PinOwner`` notes and
-community-typed ``WikiOwner`` rows do not.
-
-The filtering is asserted at the service layer *and* through the rendered
-panels, because "withheld" has to mean the name never reaches the response -
-not that it is present in the HTML and hidden.
-"""
+"""Tests for the subscriber gate on officially-sourced property owner data."""
 
 from __future__ import annotations
 
@@ -38,11 +26,9 @@ _USER_NAME = "Community Contributed Owner"
 def _plain_user() -> User:
     """A user with no subscription and no feature grants.
 
-    The very first user created in a fresh test database is auto-promoted to
-    bootstrap site admin, and ``user_has_feature`` grants a site admin every
-    feature - so a throwaway user absorbs that promotion and the user under
-    test is an ordinary one. Same precedent as ``test_panel_feature_gate.py``.
-    """
+    The very first user created in a fresh test database is auto-promoted to bootstrap site admin, and
+    ``user_has_feature`` grants a site admin every feature - so a throwaway user absorbs that promotion and the
+    user under test is an ordinary one."""
     baker.make(User)
     return baker.make(User)
 

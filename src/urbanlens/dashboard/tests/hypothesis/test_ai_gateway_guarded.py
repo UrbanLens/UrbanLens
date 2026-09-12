@@ -1,20 +1,4 @@
-"""No test run can reach a real LLM provider, under either runner.
-
-The patching used to live only in ``TestRunner.setup_test_environment``. Django
-calls that; **pytest never does** - pytest-django ignores ``TEST_RUNNER``
-entirely - so the guard protected `manage.py test` and nothing else, which is
-the runner nobody uses. It went unnoticed because it was never the only defense:
-``settings/test.py`` pins every provider credential to a placeholder and the
-localhost-only network guard blocks the socket, so a slip failed rather than
-succeeded.
-
-It stopped being merely untidy when CI moved from `manage.py test` to pytest,
-because that moved CI from the path with the guard to the path without it.
-
-Written against ``AI_CHOKEPOINTS`` rather than a hardcoded pair, so adding a
-chokepoint to that tuple extends this test with it - and adding one *without*
-touching the tuple is what the test is for.
-"""
+"""No test run can reach a real LLM provider, under either runner."""
 
 from __future__ import annotations
 

@@ -1,18 +1,4 @@
-"""A deferred cid batch keeps trying for two days, at widening intervals.
-
-A large import routinely leaves hundreds of cids needing a live REData/Places
-lookup. The task used to give up after five consecutive no-progress rounds -
-about ten minutes - and convert every unresolved cid into a `PinImportFailure`,
-so a single import produced 600+ rows for the user to fix by hand even though
-most of those cids resolve on their own within the hour.
-
-The counters now only choose how far apart the retries are; the batch ends when
-it is older than ``_DEFERRED_LOOKUP_DEADLINE``. The spacing widens sharply after
-the first few attempts, because REData will not re-queue a cid it has already
-checked for weeks - asking every two minutes for two days is load with no new
-answer - while the first few stay short so a batch waiting on a rate limit
-clears quickly.
-"""
+"""A deferred cid batch keeps trying for two days, at widening intervals."""
 
 from __future__ import annotations
 
@@ -109,10 +95,7 @@ class DeferredLookupRetryWindowTests(TestCase):
         self.assertGreater(attempts, 8, "too few attempts to give a slow batch several chances")
 
     def test_a_naive_start_stamp_does_not_kill_the_task(self) -> None:
-        """The only producer stamps an aware timestamp, but a replayed or
-        hand-enqueued message can carry a naive one. Subtracting it raises
-        TypeError - not the ValueError the parse guard catches - which would kill
-        the task rather than retire the batch."""
+        """The only producer stamps an aware timestamp, but a replayed or hand-enqueued message can carry a naive one. Subtracting it raises TypeError - not the ValueError the parse guard catches - which would kill the task rather than retire the batch."""
         from urbanlens.dashboard.tasks import _deferred_deadline_passed
 
         self.assertFalse(_deferred_deadline_passed(timezone.now().replace(tzinfo=None).isoformat()))

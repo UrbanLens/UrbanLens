@@ -1,10 +1,4 @@
-"""Tests for PinController.panel_info(), the generic dispatch for InfoPanelSource panels.
-
-Covers the shared plumbing (404/204/pending/render paths) that every
-InfoPanelSource-based plugin panel (Photon, US Census Geography, EPA
-Regulated Facilities, iNaturalist, News, Building Characteristics, Recent
-Seismic Activity) now relies on instead of hand-written controller methods.
-"""
+"""Tests for PinController.panel_info(), the generic dispatch for InfoPanelSource panels."""
 
 from __future__ import annotations
 
@@ -50,9 +44,7 @@ class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_coordinate_gated_panel_returns_204_at_null_island(self) -> None:
-        """(0, 0) is the "never geocoded" sentinel - effective_latitude/longitude are never
-        actually None (Location.latitude/longitude are non-nullable, and immutable once
-        set), so the gate checks falsiness, which only (0, 0) coordinates satisfy."""
+        """(0, 0) is the "never geocoded" sentinel - effective_latitude/longitude are never actually None (Location.latitude/longitude are non-nullable, and immutable once set), so the gate checks falsiness, which only (0, 0) coordinates satisfy."""
         location: Location = baker.make("dashboard.Location", latitude=0, longitude=0)
         pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
         response = self.client.get(reverse("pin.panel", args=[pin.slug, "photon"]))
@@ -270,10 +262,7 @@ class PinDetailHeroSubnavTests(TestCase):
         self.assertLess(hero_pos, overview_panel_pos)
 
     def test_condensed_panels_are_excluded_from_the_autoloading_list(self) -> None:
-        """Census/iNaturalist/Seismic/EPA's nearby-list all move into the single "Regional Data"
-        tab strip (panel_tabs), and Photon/Overture/Elevation into the "Location Data" tab
-        strip, instead of auto-loading as their own standalone cards. EPA's exact-site detail
-        card is a different key (epa_echo_detail) and still auto-loads unconditionally."""
+        """Census/iNaturalist/Seismic/EPA's nearby-list all move into the single "Regional Data" tab strip (panel_tabs), and Photon/Overture/Elevation into the "Location Data" tab strip, instead of auto-loading as their own standalone cards. EPA's exact-site detail card is a different key (epa_echo_detail) and still auto-loads unconditionally."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         keys = [panel.key for panel in response.context["simple_info_panels"]]
         for tabbed_key in (
@@ -308,12 +297,9 @@ class PinDetailHeroSubnavTests(TestCase):
         # route used everywhere else - just triggered by a click, not page load.
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "census_tigerweb"]))
 
-    #: The autoload trigger as rendered. Guarded against the global being absent
-    #: - htmx can evaluate a `load` filter before core.js has run, and an
-    #: unguarded call threw and left the section permanently blank. Built here
-    #: rather than spelled out twice so the two assertions below cannot end up
-    #: testing different strings, and so a change to the guard fails loudly
-    #: instead of turning the negative one into a vacuous pass.
+    #: The autoload trigger as rendered.
+    #: Guarded against the global being absent - htmx can evaluate a `load` filter before core.js has run, and
+    #: an unguarded call threw and left the section permanently blank.
     @staticmethod
     def _autoload_trigger(key: str) -> str:
         return f"hx-trigger=\"load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','{key}'))]"
@@ -327,20 +313,14 @@ class PinDetailHeroSubnavTests(TestCase):
     def test_epa_exact_site_detail_panel_still_has_an_autoload_trigger(self) -> None:
         """Unlike epa_echo (nearby list), epa_echo_detail is not tab-gated - it's a normal auto-loading card.
 
-        Also what keeps the negative test above honest: if the trigger's spelling
-        changes and this helper is not updated, this fails rather than letting
-        that one pass by matching nothing.
-        """
+        Also what keeps the negative test above honest: if the trigger's spelling changes and this helper is not
+        updated, this fails rather than letting that one pass by matching nothing."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         content = response.content.decode()
         self.assertIn(self._autoload_trigger("epa_echo_detail"), content)
 
     def test_tab_body_carries_the_chrome_stripping_class(self) -> None:
-        """Regression guard: the nested-card-chrome-stripping CSS rule
-        (_pin-detail.scss's .pin-plugin-tab-body) is a class selector, but the
-        tab body div used to only ever carry that string as its id - a class
-        selector never matches an id, so it silently never applied to any
-        panel rendered inside a tab."""
+        """Regression guard: the nested-card-chrome-stripping CSS rule (_pin-detail.scss's .pin-plugin-tab-body) is a class selector, but the tab body div used to only ever carry that string as its id - a class selector never matches an id, so it silently never applied to any panel rendered inside a tab."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         self.assertContains(response, 'id="pin-plugin-tab-body" class="card__body pin-plugin-tab-body"')
 
@@ -390,9 +370,7 @@ class NearbyResearchTabGatingTests(TestCase):
         self.assertEqual(tabs[-1]["label"], "EPA")
 
     def test_only_one_tab_strip_card_renders_on_the_page(self) -> None:
-        """Regression guard: Regional Data and Nearby Research used to be two
-        separate cards - now there's exactly one, so the old second section id
-        must never appear."""
+        """Regression guard: Regional Data and Nearby Research used to be two separate cards - now there's exactly one, so the old second section id must never appear."""
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 
         role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)

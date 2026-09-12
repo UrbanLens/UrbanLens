@@ -33,10 +33,8 @@ class DemoSeedSmokeTests(TestCase):
     def test_an_empty_pool_seeds_no_pins_rather_than_inventing_any(self) -> None:
         """No manifest is the state of a demo instance before anything is imported.
 
-        A pin at an invented coordinate has no real place behind it, so its
-        detail page resolves no boundary, no parcel and no wiki - the product
-        looking broken. Seeding nothing is the honest outcome.
-        """
+        A pin at an invented coordinate has no real place behind it, so its detail page resolves no boundary, no
+        parcel and no wiki - the product looking broken."""
         user = seed_demo_account()
 
         self.assertEqual(Pin.objects.filter(profile=user.profile).count(), 0)
@@ -49,10 +47,8 @@ class DemoSeedSmokeTests(TestCase):
     def test_a_demo_account_never_becomes_site_admin(self) -> None:
         """On a fresh demo database the first visitor is the first user.
 
-        The bootstrap-admin slot is single-claim and permanent, so letting a
-        throwaway account take it hands it the admin panel and leaves the real
-        operator unable to ever be promoted.
-        """
+        The bootstrap-admin slot is single-claim and permanent, so letting a throwaway account take it hands it
+        the admin panel and leaves the real operator unable to ever be promoted."""
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
         user = seed_demo_account()
@@ -67,31 +63,11 @@ class DemoSeedSmokeTests(TestCase):
 class SeedingCommitOrderingTests(django_test.TransactionTestCase):
     """The Celery patch has to survive past the actual transaction commit.
 
-    `TransactionTestCase`, not `TestCase`, and deliberately: `TestCase` wraps
-    every test in a savepoint that is rolled back, so Django's real commit
-    machinery (`connection.run_and_clear_commit_hooks`) never runs and
-    `transaction.on_commit` callbacks never fire on their own -
-    `captureOnCommitCallbacks(execute=True)` papers over that by deferring
-    every captured callback to when the *test's own* `with` block exits, which
-    is after `seed_demo_account()` has already returned either way. That
-    cannot tell a patch that outlives the real commit from one that merely
-    outlives the function call, which is exactly the distinction this test
-    exists to make - so it needs a real commit, which only
-    `TransactionTestCase` gives it.
-
-    Pin creation fires `ensure_wiki_for_pin_location` on post_save, which
-    defers to `transaction.on_commit` rather than calling `safely_enqueue_task`
-    immediately - unconditionally (just `created` and a `community_enabled`
-    profile, both true for every demo pin), so unlike an achievement-evaluation
-    trigger it needs no Achievement fixture data to actually fire.
-
-    The tripwire patches `apply_async` on the real task, one layer below the
-    `safely_enqueue_task` seam that `seed_demo_account` itself patches - if the
-    ordering bug were reintroduced, seeding's own patch would already have
-    exited by the time the real commit fires the callback, and the callback's
-    *fresh* import of `safely_enqueue_task` would resolve to the real
-    function, which calls exactly this.
-    """
+    `TransactionTestCase`, not `TestCase`, and deliberately: `TestCase` wraps every test in a savepoint that is
+    rolled back, so Django's real commit machinery (`connection.run_and_clear_commit_hooks`) never runs and
+    `transaction.on_commit` callbacks never fire on their own - `captureOnCommitCallbacks(execute=True)` papers
+    over that by deferring every captured callback to when the *test's own* `with` block exits, which is after
+    `seed_demo_account()` has already returned either way."""
 
     def test_a_deferred_pin_wiki_enqueue_never_reaches_the_real_dispatcher(self) -> None:
         from model_bakery import baker

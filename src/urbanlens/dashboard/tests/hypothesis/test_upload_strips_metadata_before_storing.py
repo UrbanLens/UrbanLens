@@ -1,27 +1,4 @@
-"""An accepted upload is stored raw, then stripped by the task that reads it.
-
-Storing the raw upload and reading/stripping it in ``tasks.process_image_upload``
-(rather than in the request, as this used to work) is what keeps the request
-from ever running a Pillow decode over attacker-supplied bytes - see
-``services.sandbox.guard`` for why that decode has to happen somewhere else
-entirely. The window this reopens - the stored file is the uploader's raw
-bytes, GPS block intact, until the task gets to it - is closed by
-``Image.pending_scan`` instead of by scrubbing the bytes before anyone can look:
-a pending row is invisible to everyone but its uploader
-(``services.media.access.authorize_image``, ``ImageQuerySet.visible_to``), so
-nobody is ever served the raw file. ``test_photo_pending_scan.py`` covers that
-half; this file covers what the task itself produces once it runs.
-
-What each half must hold:
-
-- immediately after upload: the stored file is exactly the uploaded bytes
-  (metadata and all), the row carries none of it yet, and ``pending_scan`` is
-  True;
-- after ``process_image_upload`` runs: the stored file carries no metadata, the
-  row carries what was in it, and ``pending_scan`` is False;
-- the uploader's visit-tracking opt-out suppresses the *row* copy of
-  coordinates only - the file is scrubbed either way, which is not a setting.
-"""
+"""An accepted upload is stored raw, then stripped by the task that reads it."""
 
 from __future__ import annotations
 
@@ -84,10 +61,8 @@ def _stored_exif(image: Image) -> dict:
 def _process(image: Image) -> Image:
     """Run the sandboxed task that reads and strips *image*, then refresh it.
 
-    Neither ``upload_photo`` nor ``upload_photo_for_owner`` runs this
-    synchronously any more - see the module docstring - so every test below
-    that wants the *processed* result calls this after uploading.
-    """
+    Neither ``upload_photo`` nor ``upload_photo_for_owner`` runs this synchronously any more - see the module
+    docstring - so every test below that wants the *processed* result calls this after uploading."""
     from urbanlens.dashboard.tasks import process_image_upload
 
     process_image_upload(image.pk)

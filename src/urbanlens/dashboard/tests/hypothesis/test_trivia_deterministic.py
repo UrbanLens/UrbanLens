@@ -1,9 +1,4 @@
-"""Tests for services.trivia.deterministic - question generation from cached parcel-buildings data.
-
-Mocks LocationCache directly rather than the REData gateway - these
-generators must never trigger a live fetch, only read what's already cached
-(see services.locations.site_scope.parcel_buildings's docstring).
-"""
+"""Tests for services.trivia.deterministic - question generation from cached parcel-buildings data."""
 
 from __future__ import annotations
 

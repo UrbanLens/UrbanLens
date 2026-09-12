@@ -1,15 +1,4 @@
-"""Tests for the six admin-configurable site limits added to SiteSettings.
-
-Covers:
-- max_friends_per_user - Friendship.accept() refuses once either side is at the cap.
-- max_pins_per_list - PinListAddPinsView truncates a batch add to fit.
-- max_upcoming_trips_per_user - TripCreateView refuses a new trip past the cap.
-- max_trip_activities - TripActivitiesView refuses a new activity past the cap.
-- max_safety_checkin_contacts - validate_notifiable_contacts rejects past the cap.
-
-Every setting is 0 = unlimited; each test suite verifies both the enforced
-case and that 0 disables enforcement entirely.
-"""
+"""Tests for the six admin-configurable site limits added to SiteSettings."""
 
 from __future__ import annotations
 

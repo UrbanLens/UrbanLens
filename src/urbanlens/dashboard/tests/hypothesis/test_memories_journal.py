@@ -1,9 +1,4 @@
-"""Tests for the Memories "Journal" subpage.
-
-Covers ``get_journal_entries`` (the service that merges a profile's own
-visit notes, pin ratings, comments, and article edits into one newest-first
-feed) and ``MemoriesJournalView`` (the page that renders it).
-"""
+"""Tests for the Memories "Journal" subpage."""
 
 from __future__ import annotations
 
@@ -65,10 +60,7 @@ class GetJournalEntriesTests(TestCase):
         self.assertEqual(entries[0].body, "Rusty catwalks everywhere.")
 
     def test_visit_links_to_the_visit_history_tab(self) -> None:
-        """Visit History moved from the (always-visible) Overview tab to its own
-        subnav tab, which starts `hidden` - a bare #visit-history-panel anchor
-        would silently do nothing now, so this must use the #tab-visits hash
-        page-tabs.js recognizes to actually switch to and reveal that tab."""
+        """Visit History moved from the (always-visible) Overview tab to its own subnav tab, which starts `hidden` - a bare #visit-history-panel anchor would silently do nothing now, so this must use the #tab-visits hash page-tabs.js recognizes to actually switch to and reveal that tab."""
         pin = _make_pin(self.profile, name="Old Factory")
         PinVisit.objects.create(pin=pin, visited_at=_aware(2024, 6, 1), notes="Rusty catwalks everywhere.")
 
@@ -261,11 +253,8 @@ class MemoriesJournalViewTests(TestCase):
 class JournalLimitTests(TestCase):
     """The limit that lets a page of the journal cost a page's worth of rows.
 
-    P69: the Journal merged four unsliced querysets in Python. A limit is only
-    safe here because it is *exact* - the newest N of a union can only contain
-    entries that are in some source's own newest N - so these check the seam
-    rather than just the count.
-    """
+    A limit is only safe here because it is *exact* - the newest N of a union can only contain entries that are
+    in some source's own newest N - so these check the seam rather than just the count."""
 
     def setUp(self) -> None:
         super().setUp()

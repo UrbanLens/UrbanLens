@@ -1,10 +1,4 @@
-"""External API: notification inbox, acknowledgement, and delivery preferences.
-
-The acknowledgement endpoint is the security-sensitive one. It answers 204
-whether or not a row matched, so a caller cannot use it to discover whether a
-given uuid belongs to *somebody* - the same reasoning behind
-``services.notifications.push.unregister_device`` returning a bare bool.
-"""
+"""External API: notification inbox, acknowledgement, and delivery preferences."""
 
 from __future__ import annotations
 
@@ -30,8 +24,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Kwargs to splat into a test-client call.
-    """
+        Kwargs to splat into a test-client call."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -71,10 +64,8 @@ class NotificationPreferenceCoverageTests(TestCase):
     def test_preferences_cover_only_a_subset_of_notification_types(self) -> None:
         """Documents the real gap rather than inventing defaults for the rest.
 
-        Most ``NotificationType`` members have no preference column at all, so
-        they have no per-type delivery control. The API exposes exactly the
-        stems that exist; it must not fabricate entries for the others.
-        """
+        Most ``NotificationType`` members have no preference column at all, so they have no per-type delivery
+        control."""
         stems = set(preference_field_names())
         all_types = {value for value, _label in NotificationType.choices}
         self.assertEqual(len(stems), 13)
@@ -83,19 +74,8 @@ class NotificationPreferenceCoverageTests(TestCase):
     def test_one_preference_stem_does_not_match_its_notification_type(self) -> None:
         """Pins a real naming mismatch between the two enums.
 
-        ``NotificationType.SAFETY_CHECKIN_PARTNER_INVITE`` has the value
-        ``safety_ci_partner_invite``, but its preference columns are named
-        ``safety_checkin_partner_invite*``. Anything deriving a field name from
-        a notification's type therefore misses it -
-        ``services.notifications.notification_text_alerts._wants_text_alerts`` does exactly
-        that and falls back to ``False``, so WhatsApp/SMS alerts for that type
-        never fire even when the user enabled them. Recorded in
-        ``docs/PROBLEMS.md``.
-
-        This test asserts the mismatch so that fixing it (renaming either side,
-        with a migration) fails here and prompts a deliberate update rather
-        than silently changing the external API's field names.
-        """
+        ``NotificationType.SAFETY_CHECKIN_PARTNER_INVITE`` has the value ``safety_ci_partner_invite``, but its
+        preference columns are named ``safety_checkin_partner_invite*``."""
         stems = set(preference_field_names())
         all_types = {value for value, _label in NotificationType.choices}
         self.assertEqual(stems - all_types, {"safety_checkin_partner_invite"})
@@ -119,12 +99,10 @@ class NotificationInboxTests(TestCase):
         """Create one notification for ``profile``.
 
         Args:
-            profile: The recipient.
-            status: The notification's status.
+            profile: The recipient. status: The notification's status.
 
         Returns:
-            The created row.
-        """
+            The created row."""
         return NotificationLog.objects.create(
             profile=profile,
             status=status,
@@ -201,15 +179,8 @@ class NotificationInboxTests(TestCase):
     def test_a_matched_row_answers_exactly_like_an_unmatched_one(self) -> None:
         """The third leg, and the one that makes this an anti-oracle test.
 
-        The companion above compares two *non*-matches with each other, which
-        shows only that a foreign uuid looks like a nonexistent one. The
-        property the endpoint actually claims is stronger - 204 whether or not a
-        row matched - and it is not held unless the *matched* response is
-        indistinguishable too. Without this, a serializer added to the success
-        path, or a `Location` header, or a body of `{"status": "read"}`, would
-        turn every uuid into a membership test and the pair of tests above would
-        both still pass.
-        """
+        The companion above compares two *non*-matches with each other, which shows only that a foreign uuid
+        looks like a nonexistent one."""
         mine = self._notify(self.profile)
 
         matched = self.client.post(

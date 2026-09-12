@@ -1,19 +1,4 @@
-"""A task whose child dies must fail once, not be redelivered forever.
-
-With ``task_acks_late`` on, Celery's failure handler has a branch that rejects
-the message *with requeue* rather than acknowledging it. Two settings reach it,
-and both turn a deterministic failure into an unbounded loop: the same message
-goes straight back to a worker that fails the same way, and neither
-``max_retries`` (which counts ``task.retry()`` calls, not broker deliveries) nor
-the Redis/Valkey transport (which has no delivery limit) stops it.
-
-The tests here drive the real :class:`celery.worker.request.Request` rather than
-asserting on our own settings alone, because the behaviour that matters belongs
-to Celery and kombu. That makes them a version pin: if a future Celery bounds
-the redelivery itself - it already receives the ``redelivered`` flag kombu
-stamps on restore, and currently ignores it - these fail and the settings can be
-reconsidered rather than carried forever on stale reasoning.
-"""
+"""A task whose child dies must fail once, not be redelivered forever."""
 
 from __future__ import annotations
 
@@ -60,8 +45,7 @@ def _exception_info(exc: BaseException) -> ExceptionInfo:
         exc: The exception to raise and capture.
 
     Returns:
-        The captured :class:`~billiard.einfo.ExceptionInfo`.
-    """
+        The captured: class:`~billiard.einfo.ExceptionInfo`."""
     try:
         raise exc
     except type(exc):
@@ -73,11 +57,9 @@ def _build_request(*, redelivered: bool = False) -> tuple[Request, Mock, Mock, M
 
     Args:
         redelivered: Whether the broker has already redelivered this message.
-            Celery is handed the flag and is expected to ignore it.
 
     Returns:
-        Tuple of (request, on_ack, on_reject, eventer).
-    """
+        Tuple of (request, on_ack, on_reject, eventer)."""
     message = TaskMessage(worker_lost_probe.name, args=(), kwargs={})
     # TaskMessage builds the message as a Mock, so delivery_info is assigned
     # outright rather than merged - a Mock attribute is not a mapping.
@@ -99,17 +81,14 @@ def _build_request(*, redelivered: bool = False) -> tuple[Request, Mock, Mock, M
 def _use_recording_backend(test: SimpleTestCase) -> Mock:
     """Swap the probe task's result backend for one that records calls.
 
-    Assigned through ``Task.backend``'s own setter rather than ``patch.object``:
-    the attribute is a property, so a patch would restore itself with a
-    ``delattr`` the property cannot service. Setting it back to None restores
-    the documented default of deferring to ``app.backend``.
+    Assigned through ``Task.backend``'s own setter rather than ``patch.object``: the attribute is a property, so
+    a patch would restore itself with a ``delattr`` the property cannot service.
 
     Args:
         test: The test case to register the cleanup on.
 
     Returns:
-        The recording backend.
-    """
+        The recording backend."""
     backend = Mock(name="backend")
     worker_lost_probe.backend = backend
     test.addCleanup(setattr, worker_lost_probe, "backend", None)
@@ -123,8 +102,7 @@ def _event_types(eventer: Mock) -> list[str]:
         eventer: The mock event dispatcher.
 
     Returns:
-        Event type strings in the order they were sent.
-    """
+        Event type strings in the order they were sent."""
     return [call.args[0] for call in eventer.send.call_args_list if call.args]
 
 
@@ -233,11 +211,8 @@ class RedeliveryIsImmediateTests(SimpleTestCase):
 class CeleryConfigurationReachesTasksTests(SimpleTestCase):
     """The Django settings have to actually bind onto the task classes.
 
-    Celery copies ``task_*`` conf onto each task class once, at bind time, and
-    only where the task has not set the attribute itself. Asserting on the
-    settings alone would not notice a renamed setting, a namespace change, or a
-    single task opting back in.
-    """
+    Celery copies ``task_*`` conf onto each task class once, at bind time, and only where the task has not set
+    the attribute itself."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -274,11 +249,8 @@ class CeleryConfigurationReachesTasksTests(SimpleTestCase):
     def test_acks_late_is_off_only_where_that_is_deliberate(self) -> None:
         """The fix must not have been achieved by giving up at-least-once delivery.
 
-        Dropping ``acks_late`` would also end the loop - by acknowledging every
-        message before running it, so any lost worker loses the task outright.
-        That is a much larger change than the one this module is about, and it
-        would be easy to arrive at accidentally.
-        """
+        Dropping ``acks_late`` would also end the loop - by acknowledging every message before running it, so
+        any lost worker loses the task outright."""
         offenders = sorted(name for name, task in self._app_tasks().items() if not getattr(task, "acks_late", False))
         self.assertEqual(
             sorted(set(offenders) - ACKS_LATE_EXEMPT),
@@ -297,8 +269,7 @@ class RequeueSystemCheckTests(SimpleTestCase):
             errors: Messages returned by the check.
 
         Returns:
-            The id of each message.
-        """
+            The id of each message."""
         return [error.id for error in errors]
 
     def test_current_settings_pass(self) -> None:

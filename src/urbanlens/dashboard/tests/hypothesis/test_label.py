@@ -1,14 +1,4 @@
-"""Property-based tests for Label hierarchy.
-
-Label.get_label_and_descendants performs a BFS over the self-referential
-parents M2M.  Key invariants:
-
-1. The seed label ID is always in the result.
-2. A leaf label (no children) returns a singleton set.
-3. All direct children of the seed appear in the result.
-4. The algorithm terminates even when cycles are present.
-5. The result is monotonically non-decreasing as more descendants are added.
-"""
+"""Property-based tests for Label hierarchy."""
 
 from __future__ import annotations
 
@@ -34,11 +24,7 @@ _counter = itertools.count()
 def _make_tag(name: str | None = None, **kwargs) -> Label:
     """A fresh global tag with a name nothing else uses.
 
-    Names are unique per (lower(name), profile, kind) since migration 0042, and
-    these are all global (profile=None) - so a fixed default name meant every
-    call after the first collided. The hierarchy properties under test do not
-    care what the labels are called.
-    """
+    The hierarchy properties under test do not care what the labels are called."""
     return baker.make(Label, name=name or f"tag-{next(_counter)}", kind=KIND_TAG, profile=None, **kwargs)
 
 

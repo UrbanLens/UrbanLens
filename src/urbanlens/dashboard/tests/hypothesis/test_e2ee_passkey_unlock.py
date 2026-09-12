@@ -1,17 +1,4 @@
-"""Tests for the passkey-PRF unlock layer (docs/designs/e2ee-passkey-unlock.md).
-
-Three properties carry the design and each gets direct cover here:
-
-1. **Unlock-only passkeys never change how the account signs in** - every 2FA
-   gate filters on ``is_login_factor``, so enrolling a key to decrypt messages
-   must not conscript the user into a login challenge (and an assertion from
-   such a key must not *complete* a login either).
-2. **The wrap endpoints demand the password proof** on password-backed
-   accounts - adding or destroying an unlock path must cost more than a bearer
-   token or a bare session.
-3. **Wraps die with the keypair** - a reset purges them atomically, and the
-   keys endpoint never serves a wrap whose ``bundle_version`` lags the bundle.
-"""
+"""Tests for the passkey-PRF unlock layer (docs/designs/e2ee-passkey-unlock.md)."""
 
 from __future__ import annotations
 
@@ -325,16 +312,9 @@ class PasskeyWrapEndpointTests(TestCase):
     def test_delete_without_a_credential_id_is_refused_not_a_crash(self) -> None:
         """``DELETE`` on the collection URL must answer 405, not 500.
 
-        Both routes used to resolve to one view. ``post`` took
-        ``credential_id=None`` precisely so a POST to the item URL could answer
-        405 instead of raising TypeError out of the dispatcher; ``delete`` never
-        got the same treatment, so a DELETE to the *collection* URL called a
-        handler missing a required positional argument and returned a 500.
-
-        Found by reading, while fixing the two operationId collisions these
-        double-routed methods produced in the published schema (see
-        docs/PROBLEMS.md, 2026-08-24).
-        """
+        ``post`` took ``credential_id=None`` precisely so a POST to the item URL could answer 405 instead of
+        raising TypeError out of the dispatcher; ``delete`` never got the same treatment, so a DELETE to the
+        *collection* URL called a handler missing a required positional argument and returned a 500."""
         profile = _profile()
         _enroll(profile)
 
@@ -489,11 +469,7 @@ class CredentialPromptTests(TestCase):
     def test_a_passkey_that_unwraps_nothing_still_prompts(self) -> None:
         """Owning a credential is not the same as owning a way back in.
 
-        An authenticator without PRF support - or one enrolled before unlock
-        wraps existed - leaves the account with encrypted messages it cannot
-        reach on a new device. Counting it as "handled" silenced the prompt for
-        exactly the accounts it exists to reach.
-        """
+        Counting it as "handled" silenced the prompt for exactly the accounts it exists to reach."""
         profile = _profile()
         _enroll(profile)
         _credential(profile, login_factor=True)

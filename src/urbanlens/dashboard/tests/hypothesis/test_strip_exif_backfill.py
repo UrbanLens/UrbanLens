@@ -1,10 +1,4 @@
-"""The backfill that scrubs photos stored before EXIF was stripped on upload.
-
-Uploads stopped carrying EXIF, but the files already in storage are the ones that
-have had time to reach a wiki. This covers the two things the command has to get
-right: the block leaves the file, and the values survive on the row for any photo
-that never recorded them.
-"""
+"""The backfill that scrubs photos stored before EXIF was stripped on upload."""
 
 from __future__ import annotations
 

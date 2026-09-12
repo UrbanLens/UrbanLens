@@ -1,15 +1,4 @@
-"""A notification must not name someone the thread it points at would mask.
-
-The comment list resolves authors through ``resolve_visible_identities`` and the
-template renders ``display_name`` when ``is_masked`` is set. The reply and reaction
-notifications built their title and message from ``actor.username`` directly, so the
-same person was "Member 2" in the thread and their real username in the notification.
-
-That matters more here than on a page: a ``NotificationLog`` insert is picked up by
-``enqueue_native_push`` and delivered to registered devices, and
-``notification_text_alerts`` builds an SMS body from ``notification.title``. The name
-leaves the app - onto a lock screen, into a text message.
-"""
+"""A notification must not name someone the thread it points at would mask."""
 
 from __future__ import annotations
 

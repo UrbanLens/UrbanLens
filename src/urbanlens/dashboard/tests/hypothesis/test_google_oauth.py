@@ -1,10 +1,4 @@
-"""Tests for the provider-agnostic Google OAuth helpers.
-
-Pure-function and mocked-HTTP coverage for services/google_oauth.py - the
-token exchange/refresh error contracts (callers rely on GatewayRequestError
-to trigger their reconnect flows) and the display-only id_token email
-extraction's tolerance of malformed input.
-"""
+"""Tests for the provider-agnostic Google OAuth helpers."""
 
 from __future__ import annotations
 

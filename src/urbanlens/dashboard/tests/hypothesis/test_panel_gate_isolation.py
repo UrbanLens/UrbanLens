@@ -1,12 +1,4 @@
-"""One plugin's broken gate must not empty the whole panel list.
-
-The internal pin page loads panels one HTMX request each, so a raising
-``gate()`` costs exactly that panel. The external API's list endpoint
-evaluates *every* source in one comprehension - so before ``gate_allows``,
-a single misbehaving plugin (a missing related row, a provider config change,
-a third-party bug) answered a native client with zero panels rather than one
-fewer. Suppression here matches ``run_panel_fetch``'s existing stance.
-"""
+"""One plugin's broken gate must not empty the whole panel list."""
 
 from __future__ import annotations
 

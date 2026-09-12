@@ -160,10 +160,8 @@ def _stub(key: str) -> InfrastructureServiceStat:
 class CollectInfrastructureServiceStatsTests(SimpleTestCase):
     """collect_infrastructure_service_stats returns all expected services.
 
-    The collectors are stubbed rather than run: this function's job is aggregation,
-    and each collector has its own tests above. Running them for real would make
-    these assertions depend on live postgres/valkey/celery/nginx.
-    """
+    The collectors are stubbed rather than run: this function's job is aggregation, and each collector has its
+    own tests above."""
 
     def _patched(self, **overrides):
         """Patch all four collectors, overriding individual ones by key."""

@@ -1,26 +1,4 @@
-"""A contribution that no longer exists must stop counting toward reputation.
-
-P55 records one half of this: withdrawing a photo from a wiki takes the quota
-bonus back but leaves the scored `ReputationEvent` standing. Writing it down
-turned up two more ways the same thing happens, because `ReputationEvent.target_id`
-is a plain `IntegerField` rather than a foreign key and the ledger subscribes to
-`post_save` only - there is no `post_delete` handler anywhere:
-
-1. the contributor withdraws the photo from its wiki (P55's item);
-2. the contributor deletes the whole wiki, which the quota bonus already handles
-   via `revoke_community_bonuses_on_wiki_delete`;
-3. the photo row is deleted outright - nothing observes that at all.
-
-(1) is what this file covers. (3) is real - reproduced while writing these - but
-it is **not** fixed here and is filed as P86, because `post_delete` cannot tell a
-contributor withdrawing their own photo from a moderator removing it, and the
-one-way rule says those must not end the same way. That is a product question,
-not a refactor.
-
-`score_event`'s `target_deleted` retraction covers none of them: it fires only
-when the target is already gone by the time the deferred scoring task runs, which
-is a race window, not a lifecycle hook.
-"""
+"""A contribution that no longer exists must stop counting toward reputation."""
 
 from __future__ import annotations
 
@@ -96,10 +74,8 @@ class WithdrawnContributionTests(TestCase):
     def test_someone_elses_removal_does_not_retract(self) -> None:
         """The one-way rule: only the contributor ending their own contribution counts.
 
-        The same rule the quota bonus follows - votes withdrawn, a moderator
-        removing the photo, or the low-engagement sweep must all leave the
-        contributor's standing alone.
-        """
+        The same rule the quota bonus follows - votes withdrawn, a moderator removing the photo, or the
+        low-engagement sweep must all leave the contributor's standing alone."""
         from urbanlens.dashboard.services.media.images import detach_image_from_wiki
 
         image = self._contribute()
@@ -113,10 +89,8 @@ class WithdrawnContributionTests(TestCase):
     def test_lifetime_earned_is_not_reduced_by_a_retraction(self) -> None:
         """Retraction lowers standing, never history.
 
-        `recompute_total`'s docstring is explicit that `lifetime_earned` ignores
-        retraction, so that reverting somebody's contributions cannot take away
-        access they already had. Whatever retracts must not undo that.
-        """
+        `recompute_total`'s docstring is explicit that `lifetime_earned` ignores retraction, so that reverting
+        somebody's contributions cannot take away access they already had."""
         from urbanlens.dashboard.services.media.images import detach_image_from_wiki
         from urbanlens.dashboard.services.reputation.scoring import recompute_total
 
@@ -134,11 +108,7 @@ class WithdrawnContributionTests(TestCase):
 class RemovalWeightTests(TestCase):
     """A weight reduces standing without erasing the contribution (D9).
 
-    The middle ground `retract_event` cannot express: it is a boolean, so it
-    takes the whole value. D9 asked for an ending somebody else caused to cost
-    "only very slightly", reversibly and re-weightably - which is a multiplier
-    applied where the total is summed, not a re-score.
-    """
+    The middle ground `retract_event` cannot express: it is a boolean, so it takes the whole value."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -188,10 +158,8 @@ class RemovalWeightTests(TestCase):
     def test_a_weight_does_not_reduce_lifetime_earned(self) -> None:
         """Standing moves; access already earned does not.
 
-        `recompute_total` ignores retraction for `lifetime_earned` so reverting
-        contributions cannot take away access someone already had. A weight has
-        to be excluded for the same reason.
-        """
+        `recompute_total` ignores retraction for `lifetime_earned` so reverting contributions cannot take away
+        access someone already had."""
         from urbanlens.dashboard.services.reputation.scoring import (
             MODERATED_REMOVAL_WEIGHT,
             recompute_total,
@@ -219,12 +187,7 @@ class RemovalWeightTests(TestCase):
 class CascadeKeepsBenefitsTests(TestCase):
     """A cascade must not strip a contributor who did nothing.
 
-    Jess, 2026-09-07: "I'd rather err on the side of keeping positive benefits
-    awarded to users who contributed rather than stripping them." Deleting a
-    detail pin deletes a child `Wiki`, and `Comment.wiki` is CASCADE - so
-    somebody else's comments go with it, through no act of theirs. This is the
-    test that stops a future blanket `post_delete` quietly reversing that ruling.
-    """
+    This is the test that stops a future blanket `post_delete` quietly reversing that ruling."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -257,13 +220,8 @@ class CascadeKeepsBenefitsTests(TestCase):
 class WikiCommentDeleteRetractionTests(TestCase):
     """Deleting your own wiki comment retracts its points, like withdrawing a photo.
 
-    `WikiCommentDeleteView` is author-only - it 403s when `comment.profile` is
-    not the caller - so every deletion through it is the contributor ending
-    their own contribution. That is the same act as
-    `detach_image_from_wiki(..., withdrawn_by_contributor=True)`, and until
-    2026-09-07 the two ended differently: the photo retracted and the comment
-    kept its points.
-    """
+    `WikiCommentDeleteView` is author-only - it 403s when `comment.profile` is not the caller - so every
+    deletion through it is the contributor ending their own contribution."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -304,16 +262,8 @@ class WikiCommentDeleteRetractionTests(TestCase):
     def test_somebody_elses_comment_cannot_be_deleted_here_at_all(self) -> None:
         """Why this view retracts outright rather than weighting.
 
-        There is no moderator path through it, so every deletion it performs is
-        a withdrawal and D9's weighted case has no site here to hook.
-
-        Asserted on the outcome rather than the status: the refusal is a **404**,
-        not the 403 the author check would give, because
-        `_wiki_comment_addressable_by` refuses first and deliberately does not
-        distinguish "not yours" from "no such comment" - its docstring calls the
-        alternative an existence oracle. Which of the two gates fired is not the
-        point; that nothing was deleted and no points moved is.
-        """
+        There is no moderator path through it, so every deletion it performs is a withdrawal and D9's weighted
+        case has no site here to hook."""
         from urbanlens.dashboard.models.comments.model import Comment
 
         other = baker.make(User).profile
@@ -332,15 +282,9 @@ class WikiCommentDeleteRetractionTests(TestCase):
 class WikiEditRevertReputationTests(TestCase):
     """Reverting a wiki edit is not author-only, unlike deleting a comment.
 
-    `LocationWikiRevertView` shows its Revert button to any viewer with wiki
-    access (the sibling Expunge button beside it is the author-only one), so
-    a non-author reverting somebody else's edit is a real, live path - not a
-    hypothetical D9 was written to cover in advance. Before this test existed,
-    `on_wiki_edit_reverted` retracted in full regardless of who reverted,
-    which let any wiki-access viewer erase another editor's standing outright
-    - exactly the removal-costs-only-slightly case `MODERATED_REMOVAL_WEIGHT`
-    exists for, left unwired at this, its first real call site.
-    """
+    `LocationWikiRevertView` shows its Revert button to any viewer with wiki access (the sibling Expunge button
+    beside it is the author-only one), so a non-author reverting somebody else's edit is a real, live path - not
+    a hypothetical D9 was written to cover in advance."""
 
     def setUp(self) -> None:
         super().setUp()

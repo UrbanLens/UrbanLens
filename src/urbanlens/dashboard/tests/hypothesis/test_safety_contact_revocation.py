@@ -1,23 +1,4 @@
-"""Removing an emergency contact must cut off their already-open chat socket.
-
-``SafetyCheckinChatConsumer`` resolves authority once, at ``connect()``. For
-partners that has always been paired with a revocation path - an immediate
-``partner_access_revoked`` broadcast, plus periodic re-validation as a backstop
-for a broadcast lost in transit (see ``test_safety_partners``). The contact
-route had neither, on the stated reasoning that a magic-link token "is either
-valid or it isn't".
-
-A contact token is in fact revoked by *deleting the row*, and
-``set_checkin_contacts`` deletes every contact missing from a resubmitted list.
-So a contact removed while their portal was open kept receiving the check-in's
-chat indefinitely - while the HTTP fallback serving the same data correctly
-refused them, since it re-resolves the token on every request.
-
-These mirror the partner tests one-for-one, including their two delivery
-concerns: the broadcast is enqueued rather than performed (hence
-``broadcasts_delivered_inline``), and it is best-effort (hence a separate test
-that the periodic backstop closes the socket with no broadcast at all).
-"""
+"""Removing an emergency contact must cut off their already-open chat socket."""
 
 from __future__ import annotations
 

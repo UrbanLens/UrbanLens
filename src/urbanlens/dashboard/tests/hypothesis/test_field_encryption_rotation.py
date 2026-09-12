@@ -1,13 +1,4 @@
-"""Tests for ``EncryptedTextField`` key handling and ``rotate_field_encryption``.
-
-The behaviour under test is what makes a key change survivable rather than
-destructive: values are written under the active key but readable under any
-retired key still listed, and the management command rewrites everything so the
-retired key can finally be dropped. Regression cover for the incident class
-already visible in this codebase - see the five separate ``InvalidToken``
-self-heals (Immich/Flickr/Google Photos/Google Calendar/TOTP), each added after
-a production 500 caused by exactly this.
-"""
+"""Tests for ``EncryptedTextField`` key handling and ``rotate_field_encryption``."""
 
 from __future__ import annotations
 
@@ -54,8 +45,7 @@ def using_keys(active: str | None, fallbacks: list[str] | None = None) -> Iterat
         fallbacks: Retired keys that should still decrypt.
 
     Yields:
-        None, with the key cache reset on both entry and exit.
-    """
+        None, with the key cache reset on both entry and exit."""
     original_active = app_settings.field_encryption_key
     original_fallbacks = app_settings.field_encryption_key_fallbacks
     app_settings.field_encryption_key = active
@@ -170,11 +160,7 @@ class FailSoftTests(SimpleTestCase):
     def test_a_degraded_value_survives_pickling_and_copying(self) -> None:
         """A cached or copied model holding one must not explode.
 
-        ``str``'s default reduction would call the one-argument constructor this
-        class does not have. ``SiteSettings.notify_gotify_token`` is a fail_soft
-        field on a cached singleton, so a crash here would turn the graceful
-        degradation into the site-wide outage it exists to prevent.
-        """
+        ``str``'s default reduction would call the one-argument constructor this class does not have."""
         ciphertext = self._undecryptable()
         with using_keys(NEW_KEY):
             field = EncryptedTextField(blank=True, default="", fail_soft=True)
@@ -210,16 +196,8 @@ class FailSoftTests(SimpleTestCase):
 class FailSoftSaveRoundTripTests(TestCase):
     """A real model save during a key-mismatch window must leave the row recoverable.
 
-    The unit-level guarantee above is only worth anything if it survives Django's
-    actual write path, which serialises *every* field on a default ``save()`` -
-    that is what previously turned an unreadable-but-recoverable row into a
-    permanently empty one as soon as anything touched the model for an unrelated
-    reason.
-
-    ``phone_number`` rather than ``bio`` because preservation covers only
-    string-defaulted fields; see ``UndecryptableValue`` and
-    ``test_nullable_fail_soft_field_is_still_destroyed_by_a_save`` below.
-    """
+    ``phone_number`` rather than ``bio`` because preservation covers only string-defaulted fields; see
+    ``UndecryptableValue`` and ``test_nullable_fail_soft_field_is_still_destroyed_by_a_save`` below."""
 
     def test_unrelated_save_does_not_destroy_an_unreadable_value(self) -> None:
         with using_keys(OLD_KEY):
@@ -258,10 +236,8 @@ class FailSoftSaveRoundTripTests(TestCase):
 class EncryptionKeyStrengthValidatorTests(SimpleTestCase):
     """Configuration-time floor on ``field_encryption_key``.
 
-    The derivation is one unsalted SHA256, so key strength is input strength, and
-    a Fernet token's HMAC lets an attacker verify guesses offline against a single
-    stolen row. Configuration time is the only cheap moment to refuse a weak key.
-    """
+    The derivation is one unsalted SHA256, so key strength is input strength, and a Fernet token's HMAC lets an
+    attacker verify guesses offline against a single stolen row."""
 
     def test_a_generated_key_is_accepted(self) -> None:
         # The floor must never reject real output of the documented generator;
@@ -288,13 +264,9 @@ class EncryptionKeyStrengthValidatorTests(SimpleTestCase):
     def test_a_weak_retired_key_is_allowed_so_the_rotation_can_finish(self) -> None:
         """The floor cannot apply to fallbacks, or it strands the installs that need it.
 
-        An install already running a weak key follows the documented rotation by
-        listing that key as a fallback - and if the validator refuses it there,
-        the settings module never loads, so `rotate_field_encryption` cannot run
-        either. The install is then stuck between an unbootable app and
-        abandoning its encrypted rows. A fallback only decrypts, and only until
-        the rotation finishes, so this accepts and warns.
-        """
+        An install already running a weak key follows the documented rotation by listing that key as a fallback
+        - and if the validator refuses it there, the settings module never loads, so `rotate_field_encryption`
+        cannot run either."""
         weak = ["b" * 40]
         self.assertEqual(AppSettings._warn_about_weak_fallback_keys(weak), weak)
 
@@ -352,15 +324,8 @@ class RotateFieldEncryptionCommandTests(TestCase):
     def test_skip_undecryptable_finishes_the_rotation(self) -> None:
         """One unreadable row must not be able to block a rotation forever.
 
-        A value no configured key can decrypt is already lost, so retiring a key
-        takes nothing further from it - while refusing to finish leaves every
-        other value still depending on the key being retired. The codebase has
-        five separate InvalidToken self-heals, so such rows demonstrably occur.
-
-        The healthy row is deliberately written under the key being *retired*,
-        and afterwards read back with that key no longer configured. It can only
-        pass if the rotation actually rewrote it, rather than merely not raising.
-        """
+        A value no configured key can decrypt is already lost, so retiring a key takes nothing further from it -
+        while refusing to finish leaves every other value still depending on the key being retired."""
         with using_keys(LOST_KEY):
             orphan: Profile = baker.make(User).profile
             Profile.objects.filter(pk=orphan.pk).update(bio="orphaned")

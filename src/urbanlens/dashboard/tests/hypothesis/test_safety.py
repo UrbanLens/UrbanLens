@@ -128,11 +128,7 @@ class SafetyCheckinLifecycleTests(TestCase):
         self.assertEqual(SafetyCheckinMessage.objects.filter(checkin=checkin).count(), 0)
 
     def test_two_contacts_racing_to_mark_safe_only_resolve_once(self):
-        """Regression guard: the resolution guard is a conditional UPDATE, not an
-        in-memory `is_resolved` read-then-write - two contacts (or a contact and a
-        partner) reporting the same check-in safe at nearly the same moment must not
-        both pass, which would double-notify everyone and double-schedule archival.
-        """
+        """Regression guard: the resolution guard is a conditional UPDATE, not an in-memory `is_resolved` read-then-write - two contacts (or a contact and a partner) reporting the same check-in safe at nearly the same moment must not both pass, which would double-notify everyone and double-schedule archival."""
         checkin = _checkin(self.profile, status=SafetyCheckinStatus.OVERDUE)
         first = baker.make(
             "dashboard.SafetyCheckinContact",
@@ -288,9 +284,7 @@ class SafetyCheckinQuerySetTests(TestCase):
 
 
 class SafetyCheckinContactByTokenTests(TestCase):
-    """SafetyCheckinContact.objects.by_token() - previously six call sites
-    across controllers/markup.py and controllers/safety.py each re-wrote
-    `get_object_or_404(SafetyCheckinContact[.objects...], token=token)` directly."""
+    """SafetyCheckinContact.objects.by_token() - previously six call sites across controllers/markup.py and controllers/safety.py each re-wrote `get_object_or_404(SafetyCheckinContact[.objects...], token=token)` directly."""
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
@@ -319,11 +313,7 @@ class SafetyCheckinContactByTokenTests(TestCase):
 
 
 class SafetyContactPortalEscalationGateTests(TestCase):
-    """The token contact portal (and its markup JSON) must not disclose the plan, message,
-    route, or photos before the check-in has actually escalated - the token is only ever
-    emailed at escalation, but nothing previously stopped a leaked/guessed/forwarded token
-    from returning the full plan regardless of check-in state. See docs/audits/GOALS_CODE_AUDIT.md
-    ("Safety check-ins")."""
+    """The token contact portal (and its markup JSON) must not disclose the plan, message, route, or photos before the check-in has actually escalated - the token is only ever emailed at escalation, but nothing previously stopped a leaked/guessed/forwarded token from returning the full plan regardless of check-in state."""
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
@@ -613,9 +603,7 @@ class EmergencyContactDefaultQuerySetTests(TestCase):
 
 
 class SafetyContactOptOutBlocksNotificationTests(TestCase):
-    """SafetyContactOptOut.objects.blocks_notification()/is_contact_opted_out() - the only
-    call site previously built the identity/scope Q-object query inline in services/safety.py;
-    is_contact_opted_out() now delegates to the manager method."""
+    """SafetyContactOptOut.objects.blocks_notification()/is_contact_opted_out() - the only call site previously built the identity/scope Q-object query inline in services/safety.py; is_contact_opted_out() now delegates to the manager method."""
 
     def setUp(self):
         self.owner = baker.make("auth.User").profile
@@ -690,9 +678,7 @@ class SafetyContactOptOutBlocksNotificationTests(TestCase):
 
 
 class RecordContactOptOutDedupTests(TestCase):
-    """record_contact_opt_out's docstring promises repeat clicks (or an email client's
-    link-scanner prefetching the confirm GET) don't create duplicate rows - previously
-    unenforced at the DB level, so a get_or_create race could insert two."""
+    """record_contact_opt_out's docstring promises repeat clicks (or an email client's link-scanner prefetching the confirm GET) don't create duplicate rows - previously unenforced at the DB level, so a get_or_create race could insert two."""
 
     def setUp(self):
         self.owner = baker.make("auth.User").profile

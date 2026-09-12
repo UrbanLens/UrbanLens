@@ -1,11 +1,4 @@
-"""Tests for services.ai.tools.trips - list/create/add_trip_activity.
-
-create_trip/add_trip_activity are writes: registry.execute() refuses to run
-them at all under ProcessRole.AI (see test_ai_tools_registry.py's
-WriteRefusalUnderAiRoleTests) - the tests below call execute() under the
-default (non-AI) role, matching where they'll actually run once the confirm
-flow (batch 2d) executes a stored proposal.
-"""
+"""Tests for services.ai.tools.trips - list/create/add_trip_activity."""
 
 from __future__ import annotations
 
@@ -185,18 +178,8 @@ class AddTripActivityTests(TestCase):
 class AddTripActivityPermissionTests(TestCase):
     """The AI tool must enforce the same permissions the trip views do.
 
-    `_add_trip_activity` gated on `Trip.objects.filter(slug=..., profiles=profile)`
-    - bare membership - while `services.trips.trip_activities.add_activity`, the
-    path every other caller uses, gates on
-    `require_perform(actor, trip, trip.allow_add_activities, ...)`. That is two
-    separate rules the AI path did not apply:
-
-    - `allow_add_activities`, which a trip's creator sets to "Organizers" or
-      "No one" precisely to stop ordinary members adding to the itinerary;
-    - and joined-ness, since `Trip.profiles` goes through `TripMembership` with
-      no status filter, so it includes members who were *invited* and have not
-      accepted. `has_joined` exists to say those may not contribute at all.
-    """
+    `_add_trip_activity` gated on `Trip.objects.filter(slug=..., profiles=profile)` path every other caller
+    uses, gates on `require_perform(actor, trip, trip.allow_add_activities, ...)`."""
 
     def setUp(self) -> None:
         self.creator = _plain_profile()

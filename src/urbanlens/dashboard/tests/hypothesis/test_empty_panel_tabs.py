@@ -1,22 +1,4 @@
-"""A panel tab appears only when it has something to show.
-
-Reported from staging: the Photon (address) and Elevation tabs rendered as
-empty panels. Both `render_context` implementations already returned None for
-those payloads - the tab appeared anyway, because `panel_readiness` answers
-"does a fresh cache row exist", not "is there anything in it". A successful
-lookup that legitimately finds nothing (a coordinate with no reverse-geocodable
-address, or one outside every elevation model's coverage) still writes a row.
-
-The check is opt-in per panel (`inspects_content`) rather than universal: the
-batched readiness query fetches only source names, and pulling every payload -
-boundary geometry, image lists - on each pin render to answer a question that
-is "yes" for almost every panel would be a poor trade.
-
-The distinction this must preserve, and the reason it is not simply "hide empty
-tabs": an *outage* is not an empty result. A failed fetch writes no row at all
-(see test_outage_not_cached_as_empty.py), so it is already absent here rather
-than being silently hidden.
-"""
+"""A panel tab appears only when it has something to show."""
 
 from __future__ import annotations
 
@@ -74,12 +56,8 @@ class EmptyPanelTabTests(TestCase):
 class ReadinessFormsAgreeTests(TestCase):
     """The single and bulk forms of "is this panel ready" must not disagree.
 
-    `panel_readiness` is documented as the batched form of `is_ready`, and both
-    are consulted in different places - the tab strip uses the batched one, the
-    Location Data overview loops over the single one. A content check applied to
-    only one of them makes a tab vanish while the overview still tries to
-    summarise it (and gets nothing).
-    """
+    `panel_readiness` is documented as the batched form of `is_ready`, and both are consulted in different
+    places - the tab strip uses the batched one, the Location Data overview loops over the single one."""
 
     def setUp(self) -> None:
         super().setUp()

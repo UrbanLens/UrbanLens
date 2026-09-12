@@ -1,16 +1,4 @@
-"""Render the wiki as a concealed viewer and assert what is *absent*.
-
-Every other concealment test exercises a function in isolation. That is why a
-self-review missed the thing that matters most: the two functions that actually
-conceal anything - ``concealed_field_values`` and ``conceal_rows`` - can be
-correct, tested, and wired to nothing.
-
-This test drives the real view and the real API payload with the predicate
-forced on, and asserts the *absence* of a stranger's contributions. Absence is
-the whole contract: a concealed wiki has to read as one nobody has been to, and
-a test that asserts presence of the right things cannot see the wrong things
-that are still there beside them.
-"""
+"""Render the wiki as a concealed viewer and assert what is *absent*."""
 
 from __future__ import annotations
 
@@ -31,12 +19,8 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 #: only assertion in this file that fails if field resolution regresses.
 AUTOMATIC_BLURB = "AUTOMATIC-BLURB-relayed-from-a-provider"
 
-#: Planted in every field a stranger can write. Any of these reaching the page
-#: is a leak, and naming them individually is what makes the failure readable.
-#: `name`, `description` and the WikiLink's `url` all render in the initial
-#: page response (the link row is not lazy-loaded like aliases/comments,
-#: which load over HTMX from their own endpoints and are asserted in
-#: ConcealedPanelTests instead, not here - V7).
+#: Planted in every field a stranger can write.
+#: Any of these reaching the page is a leak, and naming them individually is what makes the failure readable.
 CANARIES = {
     "description": "CANARY-DESCRIPTION-entry through the north fence",
     "name": "CANARY-NAME",
@@ -110,26 +94,16 @@ class ConcealedRenderTests(TestCase):
     def test_provider_content_still_reaches_the_page(self) -> None:
         """The one assertion here that fails if resolve_fields regresses.
 
-        Rule 2 is "show automatically fetched content", and until this existed
-        nothing tested it: every other assertion in this file is negative, so
-        stubbing resolve_fields to return {} left them all green while
-        concealing everything including the provider data a brand-new wiki
-        carries.
-        """
+        Rule 2 is "show automatically fetched content", and until this existed nothing tested it: every other
+        assertion in this file is negative, so stubbing resolve_fields to return {} left them all green while
+        concealing everything including the provider data a brand-new wiki carries."""
         self.assertIn(AUTOMATIC_BLURB, self._render_concealed())
 
     def test_the_page_still_renders_the_automatic_name(self) -> None:
         """Positive control, and a tell in its own right.
 
-        A concealed wiki showing *no* name is not what a brand-new wiki looks
-        like - every creation path names it from the location - so a blank
-        title would announce the concealment as loudly as the leak would.
-
-        Note what this does *not* assert: that the wiki's own stored name
-        survives. It does not, and should not - a name a person chose is a
-        contribution. What the viewer sees is the location's official name,
-        which is the same thing a wiki created a moment ago would show.
-        """
+        A concealed wiki showing *no* name is not what a brand-new wiki looks like - every creation path names
+        it from the location - so a blank title would announce the concealment as loudly as the leak would."""
         body = self._render_concealed()
 
         self.assertIn("Provider Name", body)
@@ -137,14 +111,8 @@ class ConcealedRenderTests(TestCase):
     def test_security_indicators_resolve_to_unknown(self) -> None:
         """Rule 3, asserted on the values rather than on the rendered page.
 
-        The About card suppresses itself entirely when a concealed wiki has no
-        description, dates or links, so the chips are unreachable from the
-        rendered HTML and an assertion there proves nothing. The checkable
-        claim is that every one of the eight resolves to exactly UNKNOWN -
-        `assertNotEqual(..., SOME)` would be satisfied by None, which renders a
-        chip, because the template shows anything that is not the literal
-        "unknown".
-        """
+        The About card suppresses itself entirely when a concealed wiki has no description, dates or links, so
+        the chips are unreachable from the rendered HTML and an assertion there proves nothing."""
         from urbanlens.dashboard.services.wiki.concealment import ALWAYS_UNSET, concealed_field_values
 
         values = concealed_field_values(Wiki.objects.get(pk=self.wiki.pk), self.viewer_user.profile)
@@ -190,11 +158,8 @@ class ConcealedHistoryTests(TestCase):
     def test_your_own_edit_does_not_carry_the_hidden_prior_value(self) -> None:
         """The leak a read gate cannot close.
 
-        Your own edit row is content the rules promise always to show you - and
-        its "from" side holds whatever the stranger had written there. Type one
-        character into a description that looks empty, open your own history,
-        read the concealed value back.
-        """
+        Your own edit row is content the rules promise always to show you - and its "from" side holds whatever
+        the stranger had written there."""
         baker.make(
             "dashboard.WikiEdit",
             wiki=self.wiki,
@@ -211,10 +176,8 @@ class ConcealedHistoryTests(TestCase):
 class ConcealedPanelTests(TestCase):
     """The HTMX panels, which the page-level test never touches.
 
-    Aliases, comments and links load from their own endpoints after the page
-    renders, so a canary planted for the main view is never in that response.
-    Those assertions were decorative until these tests existed.
-    """
+    Aliases, comments and links load from their own endpoints after the page renders, so a canary planted for
+    the main view is never in that response."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -243,13 +206,7 @@ class ConcealedPanelTests(TestCase):
     def test_the_comment_panel_omits_a_strangers_comment(self) -> None:
         """Comments are where people write down how they got in.
 
-        The stranger needs a pin here, and that is not incidental. Their
-        ``comment_visibility`` defaults to ANYTHING_IN_COMMON, so without a
-        shared pin the *settings* gate hides the comment and concealment is
-        never reached - the assertion passes while proving nothing. Verified by
-        disabling concealment: with no pin the test still passed, with a pin it
-        fails as it should.
-        """
+        The stranger needs a pin here, and that is not incidental."""
         baker.make(Pin, profile=self.stranger, location=self.location, parent_pin=None)
         baker.make("dashboard.Comment", wiki=self.wiki, pin=None, profile=self.stranger, text="CANARY-COMMENT")
 
@@ -316,17 +273,8 @@ class ConcealedMediaTests(TestCase):
     def test_concealment_keeps_provider_media_the_viewer_can_already_see(self) -> None:
         """Positive control, scoped to what this layer is actually responsible for.
 
-        An earlier version attributed the provider row to a stranger and
-        expected it through, which the app does not do - and the reason is
-        worth keeping. ``Image.profile`` on a materialised provider row is the
-        *up-voter*, not the photographer, so ``visible_to`` applies that
-        voter's photo settings and drops the row before concealment is reached.
-
-        Widening ``visible_to`` to admit those rows is a privacy-model decision
-        affecting every viewer, and the concealment spec says explicitly not to
-        make it as part of this work. So this asserts the thing concealment
-        owns: a non-UPLOAD row the viewer can already see survives the filter.
-        """
+        An earlier version attributed the provider row to a stranger and expected it through, which the app does
+        not do - and the reason is worth keeping."""
         from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
 
         baker.make(
@@ -356,14 +304,8 @@ class ConcealedMediaTests(TestCase):
 class FriendVisibilityTests(TestCase):
     """Rule 5 at render level: a friend's contribution must still arrive.
 
-    Every other assertion in this file is negative, so a bug that concealed too
-    much would be invisible to the whole suite. That is not hypothetical - both
-    the alias and link panels re-derive the viewer as
-    ``getattr(request.user, "profile", None)`` rather than using the profile
-    ``resolve_visible_wiki`` already returned, and if that ever yields None the
-    viewer silently loses their own and their friends' rows with every test
-    still green.
-    """
+    Every other assertion in this file is negative, so a bug that concealed too much would be invisible to the
+    whole suite."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -1,13 +1,4 @@
-"""Regression test: resolve_deferred_pin_locations forwards each pin's source
-Google Maps URL to cid_resolution.resolve_cids.
-
-REData's ``POST /places/resolve-cids/`` resolves via a place's own URL faster
-and more reliably than the bare cid alone (see ``RedataCidGateway``'s
-``CidLookupEntry``). A deferred pin queued from a Takeout CSV import carries
-that URL in its dict under ``maps_url`` (see
-``GoogleMapsGateway._csv_row_iter``) - this task must build ``urls_by_cid``
-from it and pass it through, not just the bare list of cids.
-"""
+"""Regression test: resolve_deferred_pin_locations forwards each pin's source Google Maps URL to cid_resolution.resolve_cids."""
 
 from __future__ import annotations
 

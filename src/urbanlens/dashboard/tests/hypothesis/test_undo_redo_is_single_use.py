@@ -1,11 +1,4 @@
-"""A redo entry must reapply once, however many times it is submitted.
-
-Sibling of ``test_undo_restore_is_single_use.py``: ``redo_undo_action`` claims the row under the
-same lock ``restore_undo_action`` uses and stamps ``undone_at`` back to ``None`` so a second submit
-finds it already consumed. The restore-side property is covered there and proven with a real
-double-submit; this file proves the identical guarantee holds for redo, which shares the locking
-helper but was previously untested on its own.
-"""
+"""A redo entry must reapply once, however many times it is submitted."""
 
 from __future__ import annotations
 

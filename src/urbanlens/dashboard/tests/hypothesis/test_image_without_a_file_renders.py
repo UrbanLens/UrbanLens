@@ -1,14 +1,4 @@
-"""A photo row whose stored file is missing must not take a page down with it.
-
-``Image.display_url`` exists for this and says so: "A row can exist without a
-stored file - an external gallery item whose download failed still carries its
-``source_url`` - and reading ``image.url`` on one of those raises. Templates and
-serializers use this instead so a single such row can't break a whole grid."
-
-Eleven template sites read ``image.url`` directly anyway, so one such row
-returned a 500 for the whole panel rather than one missing thumbnail. Found
-2026-09-06 when the Private Pin page's visit history 500'd in a browser.
-"""
+"""A photo row whose stored file is missing must not take a page down with it."""
 
 from __future__ import annotations
 

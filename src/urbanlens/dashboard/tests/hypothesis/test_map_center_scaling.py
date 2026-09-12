@@ -1,30 +1,4 @@
-"""The map page's centre calculation stays linear in the size of the account.
-
-`Profile.compute_map_center` picks the densest cluster of pins, and the obvious
-way to do that compares every point with every other one. That is what it did,
-on the critical path of `view_map`:
-
-| pins | haversine calls | measured on chiron |
-|---|---|---|
-| 1,000 | 1,001,000 | ~1s |
-| 10,000 | 100,010,000 | ~1.7 min |
-| 20,000 | 400,020,000 | ~7 min |
-
-Found by a 20,000-pin load fixture, where a single `GET /dashboard/map/` pinned
-one core and served nothing for nine minutes; every other request to that
-process waited behind it, which is the availability invariant failing on one
-account's ordinary page load (P108). `services.geo.clustering` replaced the
-pairwise scan with a spatial histogram plus a fixed number of refinement passes,
-so the work per pin is now a constant.
-
-**Counted, not timed.** A wall-clock assertion on a shared host is a flaky test
-that gets deleted; the number of pairwise comparisons is exact, machine
-independent, and is the actual property worth holding.
-
-The guards below are what distinguish "the calculation is cheap" from "the test
-stopped reaching the calculation" - a reproduction that silently stopped calling
-the code under test would look exactly like a fix.
-"""
+"""The map page's centre calculation stays linear in the size of the account."""
 
 from __future__ import annotations
 
@@ -63,16 +37,14 @@ MAX_GROWTH_RATIO = 3.0
 def count_haversine_calls(profile: Profile) -> int:
     """Run the centre calculation and report how many pairwise distances it took.
 
-    Patches the function `Profile._haversine_km` imports rather than the wrapper
-    itself: the import happens inside the function body, so the module attribute
-    is what is resolved on each call.
+    Patches the function `Profile._haversine_km` imports rather than the wrapper itself: the import happens
+    inside the function body, so the module attribute is what is resolved on each call.
 
     Args:
         profile: The account whose centre to compute.
 
     Returns:
-        Number of great-circle calculations performed.
-    """
+        Number of great-circle calculations performed."""
     from urbanlens.dashboard.services.geo import distance
 
     calls = 0
@@ -124,10 +96,8 @@ class TheMapCentreDoesNotComparePairsTests(TestCase):
 class TheMeasurementIsRealTests(TestCase):
     """Guards.
 
-    Each of these would pass just as happily against a test that had stopped
-    calling the code under test, which is the way a scaling assertion goes
-    quietly wrong.
-    """
+    Each of these would pass just as happily against a test that had stopped calling the code under test, which
+    is the way a scaling assertion goes quietly wrong."""
 
     def setUp(self) -> None:
         super().setUp()

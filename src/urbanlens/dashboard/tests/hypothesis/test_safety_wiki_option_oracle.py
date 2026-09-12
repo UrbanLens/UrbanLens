@@ -1,22 +1,4 @@
-"""The safety check-in's wiki-notify toggle must not enumerate wikis.
-
-``SafetyCheckinWikiOptionView`` renders "also notify the <name> community wiki"
-for whatever coordinate the create form's destination marker currently sits on.
-The lookup behind it (``find_community_wiki``) filters on
-the wiki's existence and nothing else - no viewer, no domain check - so the
-fragment answered "is there a community wiki at this coordinate?" for any
-logged-in caller, naming the wiki, linking to it, and reporting its last edit
-and editor count.
-
-That is the exact inference the access model exists to prevent, reachable
-without even creating a pin: sweep coordinates, read the names back. Wiki
-access is a place-domain rule (``services.wiki.wiki_access``), and a 404 rather
-than a 403 is deliberate precisely so the *absence* of a page cannot be told
-apart from the absence of permission to see it.
-
-So the toggle must render for the destination only when the caller can already
-reach that wiki, and must be byte-identical to "no wiki here" otherwise.
-"""
+"""The safety check-in's wiki-notify toggle must not enumerate wikis."""
 
 from __future__ import annotations
 
@@ -66,10 +48,8 @@ class SafetyWikiOptionOracleTests(TestCase):
     def test_a_stranger_gets_the_same_answer_as_for_empty_space(self) -> None:
         """The gated response is indistinguishable from "no wiki covers this point".
 
-        Asserting only "the name is absent" would still pass if the fragment
-        said "a wiki here is hidden from you", which is the same disclosure in
-        different words.
-        """
+        Asserting only "the name is absent" would still pass if the fragment said "a wiki here is hidden from
+        you", which is the same disclosure in different words."""
         stranger = baker.make(User)
 
         gated = self._get(stranger)

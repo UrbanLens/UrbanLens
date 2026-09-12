@@ -1,21 +1,4 @@
-"""Detaching a pin from its shared Location is not an action the app offers.
-
-Two things are asserted here, and the second is what keeps the first honest.
-
-``pin.link`` accepts GET only - it renders the relink picker. A POST to it once
-meant "detach", and detaching cannot be satisfied: ``Pin.effective_latitude``
-*is* ``location.latitude``, and a database trigger
-(``dashboard_locations_freeze_identity``) makes a Location's coordinates
-immutable, so a pin's point is always exactly its location's. Giving a pin its
-own Location at the same point therefore collides with Location's uniqueness on
-(latitude, longitude), and the only way around it is to silently move somebody's
-pin. A pin that should not share a place's record wants a *different* place,
-which is what relinking already does.
-
-``LocationIdentityTests`` asserts the two properties that make that true, since
-both are the kind of thing a future change could quietly relax - and relaxing
-either would reopen the question without anyone noticing.
-"""
+"""Detaching a pin from its shared Location is not an action the app offers."""
 
 from __future__ import annotations
 

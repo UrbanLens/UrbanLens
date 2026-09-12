@@ -1,28 +1,4 @@
-"""Regression guard: the API surface never exposes per-scan or per-uploader
-device-scan data - only the cumulative, unattributed :class:`WikiDeviceMarker`.
-
-Raw scans (``DeviceScanUpload``/``DeviceScanEntry``/``DeviceSignalReading``)
-carry a ``profile`` (directly or via their upload) precisely because
-attribution is needed for the privacy-preference plumbing described in
-``Profile.track_device_scans``'s docstring. That is exactly why they must
-never be individually readable back through any API: a client with
-``device_scans:read`` could otherwise reconstruct who walked where. The
-guarantee is layered, and each layer gets its own test class below so a
-regression in any one of them fails loudly with a reason attached:
-
-1. **No route reads them.** The external API registers exactly two
-   device-scan routes - a write-only upload and a read-only aggregate query -
-   and neither the upload view nor any internal ``/rest/`` viewset exposes a
-   GET over the raw models.
-2. **The one read serializer can't carry an identity.** ``WikiDeviceMarker``
-   itself has no ``profile``/uploader field to leak, and
-   ``NearbyDeviceMarkerSerializer``'s field set is pinned to an explicit
-   allowlist.
-3. **End to end, two different uploaders collapse into one silent marker.**
-   The clustering pipeline is what actually anonymizes contributions -
-   this proves the merge really happens, not just that the serializer omits
-   a field that still exists on the object underneath.
-"""
+"""Regression guard: the API surface never exposes per-scan or per-uploader device-scan data - only the cumulative, unattributed :class:`WikiDeviceMarker`."""
 
 from __future__ import annotations
 

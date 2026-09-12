@@ -1,36 +1,7 @@
 /**
- * Owner, sale history and EPA data reaching the campus - and who may read it.
- *
- * ## The sale-date problem, and how it is avoided
- *
- * The requirement asks that the last sale date propagate "in a way that doesn't
- * cause the test to begin failing if another sale happens in the future". The
- * good news is structural: there is no `last_sale_date` field anywhere in the
- * application - `grep -rn "last_sale" src/urbanlens/` finds nothing. "The last
- * sale" is whatever sorts first under `WikiPropertySale.Meta.ordering`, which is
- * `["-sale_date", "-created"]`.
- *
- * So the testable claim is the *ordering contract*, not a date: the first row
- * the API returns is the newest one on file, and it is not in the future. A new
- * deed recorded tomorrow satisfies both, and a parser that mangles dates or an
- * ordering that silently changes fails both. No date is hardcoded anywhere in
- * this file, deliberately.
- *
- * ## The subscription gate
- *
- * `services.property.owner_access` draws a line the requirement also draws, and
- * it is a finer line than it first appears:
- *
- * - Sale **facts** - date, price, notes - are shown to everyone.
- * - Sale **parties** and current **owner identity** need
- *   `SiteFeature.PROPERTY_OWNERS`. A non-subscriber sees the literal string
- *   "Subscribers only" where a name would be.
- *
- * That module's docstring says every surface rendering owner identity goes
- * through `visible_owners` "so the two can't drift". The external API's
- * `WikiOwnershipView` and `WikiPropertySalesView` do not import it. Whether that
- * is a real hole is exactly the sort of thing to settle with a request rather
- * than an argument, which is what the last two tests here do.
+ * Owner, sale history and EPA data reaching the campus - and who may read it. The requirement asks
+ * that the last sale date propagate "in a way that doesn't cause the test to begin failing if
+ * another sale happens in the future".
  */
 
 import { ensureCampusWiki, expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";

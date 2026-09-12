@@ -1,12 +1,4 @@
-"""Tests for the location-conflict dialog's backend: slug/uuid resolution and the merge flow.
-
-Regression coverage for a reported bug bundle: (1) a candidate Location whose
-`slug` is null gets a uuid-fallback wiki/link URL that 404s because the
-lookup only ever filtered by `slug=`; (2) since Pin has a unique-per-profile
-constraint on `location` (root pins only), "switching" the just-created pin
-to a Location the profile already has a root pin at can never succeed as a
-plain reassignment - it must merge into the existing pin instead.
-"""
+"""Tests for the location-conflict dialog's backend: slug/uuid resolution and the merge flow."""
 
 from __future__ import annotations
 
@@ -48,14 +40,7 @@ class SlugOrUuidQuerySetTests(TestCase):
 class PinRelinkViewTests(TestCase):
     """PinRelinkView's merge-vs-relink behaviour.
 
-    Every ``target`` here sits within ~50 m of ``self.origin`` on purpose. Relinking
-    is what confers wiki access (``location_visible_to`` grants on an exact Location
-    match), so the view only accepts a target the profile can already reach or one
-    covering the pin's own coordinate - the 50 m proximity fallback for place-less
-    coordinates is what puts these inside the pin's own access domain. These
-    coordinates used to be kilometres apart, which quietly asserted that relinking to
-    an arbitrary Location was allowed; that is the hole, not the contract.
-    """
+    Every ``target`` here sits within ~50 m of ``self.origin`` on purpose."""
 
     def setUp(self) -> None:
         baker.make(User)  # first user is auto-promoted to bootstrap site admin
@@ -131,11 +116,8 @@ class PinRelinkViewTests(TestCase):
 class ConflictingLocationsPayloadTests(TestCase):
     """MapController.post_add_pin's conflicting_locations payload.
 
-    Two *unrelated* parcels whose recorded outlines overlap - the only case
-    that still produces a choice now that everything inside one property
-    resolves to one place. The smaller wins resolution; the larger is offered
-    as the alternative the user may have meant.
-    """
+    Two *unrelated* parcels whose recorded outlines overlap - the only case that still produces a choice now
+    that everything inside one property resolves to one place."""
 
     def setUp(self) -> None:
         baker.make(User)  # bootstrap site admin
@@ -188,11 +170,7 @@ class ConflictingLocationsPayloadTests(TestCase):
 
 
 class BlankNamePinCreationTests(TestCase):
-    """A pin added without a typed name must stay blank (not get a placeholder
-    string like 'Unnamed Location' written to it) so `Pin.effective_name`'s
-    fallback to the location's own display name keeps working, and so the
-    pin isn't incorrectly locked out of future name upgrades via
-    `name_is_user_provided`."""
+    """A pin added without a typed name must stay blank (not get a placeholder string like 'Unnamed Location' written to it) so `Pin.effective_name`'s fallback to the location's own display name keeps working, and so the pin isn't incorrectly locked out of future name upgrades via `name_is_user_provided`."""
 
     def setUp(self) -> None:
         baker.make(User)  # bootstrap site admin

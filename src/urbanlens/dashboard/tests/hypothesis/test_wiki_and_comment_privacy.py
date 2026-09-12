@@ -1,17 +1,4 @@
-"""Access-control tests for wiki-scoped controllers and comment-author privacy.
-
-Covers two regressions:
-
-- Wiki-scoped views (page, gallery, boundary, aliases, label membership,
-  markup, detail pins, comments) resolved the Location/Wiki from the URL
-  slug alone, so any logged-in user could view or edit the wiki for a place
-  they had never pinned. Every one of them must instead resolve through
-  ``resolve_visible_wiki``/``location_visible_to``, which requires the
-  requester to have a pin at that Location.
-- Comment visibility (and reactions) must also respect the comment author's
-  own ``comment_visibility`` privacy setting, independent of whether the
-  viewer can see the page the comment is on.
-"""
+"""Access-control tests for wiki-scoped controllers and comment-author privacy."""
 
 from __future__ import annotations
 

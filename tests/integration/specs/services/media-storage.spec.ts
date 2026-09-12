@@ -1,17 +1,6 @@
 /**
- * Uploaded media has to survive the round trip out of the process.
- *
- * This is the check with the least overlap with anything else in the repo. Every
- * other test of photo handling runs inside one process against a temporary
- * directory; a deployment stores files somewhere else entirely - an object store
- * over the network, on a host with its own credentials, behind a URL that may be
- * signed, proxied, or served by a different container than the one that wrote
- * it. None of that exists in a unit test, and all of it can be misconfigured in
- * a way that leaves the API answering 201 while the bytes go nowhere.
- *
- * So the assertion is deliberately the whole loop: upload, read the URL the API
- * hands back, fetch it, and check the bytes come back. An upload that "succeeds"
- * and a URL that 404s is the exact failure this exists to catch.
+ * Uploaded media has to survive the round trip out of the process. This is the check with the least
+ * overlap with anything else in the repo.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

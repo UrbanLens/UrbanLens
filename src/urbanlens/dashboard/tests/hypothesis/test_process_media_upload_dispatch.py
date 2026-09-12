@@ -1,20 +1,4 @@
-"""Tests for process_image_upload's media-type dispatch and shared tail.
-
-Verifies that photo/video/document uploads each get their own type-specific
-extraction/downscaling step, but all funnel into the SAME shared tail:
-resolving `location`, raising a visit suggestion, and recording file_size -
-this is the "reuse the exact same code, no duplication" requirement for
-PinSuggestion/VisitSuggestion creation. The type-specific service calls
-(ffmpeg/soffice/tesseract) are mocked; only the dispatch/reuse logic is
-under test here (see test_video_processing.py / test_document_processing.py
-for the service-level logic itself).
-
-Every call to process_image_upload() also mocks update_task_progress, same
-as test_image_attribution.py - calling a bound task directly (rather than via
-.delay()/.apply()) leaves self.request.id unset, and update_task_progress's
-task.update_state() would otherwise hit the real (Redis) result backend with
-an empty task_id.
-"""
+"""Tests for process_image_upload's media-type dispatch and shared tail."""
 
 from __future__ import annotations
 

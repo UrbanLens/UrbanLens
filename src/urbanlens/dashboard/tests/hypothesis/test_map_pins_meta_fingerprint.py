@@ -1,19 +1,4 @@
-"""Deleting a pin has to be visible to a client that is only polling.
-
-`map.pins.meta` is the one thing the map page asks between full fetches, and it
-reported `Max(Pin.updated)`. A maximum cannot see a deletion: remove any pin
-except the most recently updated one and the answer is byte-for-byte what it was
-before, so the pin stays drawn on every other tab until the browser's own cache
-lapses six hours later.
-
-Pairing the maximum with the row count closes it - a delete either removes the
-maximum or lowers the count - which is what `services.map_pins.fingerprint`
-returns and what the page now compares.
-
-`last_updated` is still reported, and still a timestamp, because it is one and
-callers may want it. What these pin is that it is no longer the thing being
-compared.
-"""
+"""Deleting a pin has to be visible to a client that is only polling."""
 
 from __future__ import annotations
 
@@ -61,10 +46,8 @@ class DeletingAPinChangesWhatTheClientPollsTests(TestCase):
     def test_the_timestamp_alone_could_not_have_seen_it(self) -> None:
         """The reason the fingerprint exists, asserted rather than assumed.
 
-        If this ever fails, deleting a pin *does* move `Max(updated)` on its own
-        and the pairing above is redundant - which would be worth knowing before
-        anyone simplifies it away.
-        """
+        If this ever fails, deleting a pin *does* move `Max(updated)` on its own and the pairing above is
+        redundant - which would be worth knowing before anyone simplifies it away."""
         before = self._meta()
 
         self.pins[0].delete()

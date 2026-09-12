@@ -1,11 +1,4 @@
-"""Tests for services.import_formats.gpx_tracks.gpx_tracks_to_routes().
-
-gpx.py deliberately ignores <trk>/<rte> content when producing pins (see its
-module docstring); this module is the counterpart that turns that same
-content into Route candidates instead. All tests require the database, since
-gpx_tracks_to_routes() builds real (unsaved) Route model instances whose
-`profile` FK is validated against a real Profile row.
-"""
+"""Tests for services.import_formats.gpx_tracks.gpx_tracks_to_routes()."""
 
 from __future__ import annotations
 
@@ -157,11 +150,8 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
     def test_visit_logging_off_saves_the_route_but_logs_no_visit(self):
         """track_routes and track_pin_visits are separate consents.
 
-        The route is the user's own track; a dwell writes a PinVisit, which is
-        what track_pin_visits governs - and its help text already promises it
-        covers imports. An otherwise-qualifying dwell must therefore produce
-        nothing while that setting is off.
-        """
+        The route is the user's own track; a dwell writes a PinVisit, which is what track_pin_visits governs -
+        and its help text already promises it covers imports."""
         self.profile.track_pin_visits = False
         self.profile.save(update_fields=["track_pin_visits", "updated"])
 
@@ -204,10 +194,7 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         self.assertEqual(created, 0)
 
     def test_candidate_pin_is_row_locked_while_creating_the_visit(self):
-        """Regression test: two concurrent imports of the same track (e.g. the same
-        GPX file uploaded twice) previously raced get_or_create's own SELECT with no
-        locking at all - closed by locking the candidate pin around the
-        check-then-create, same idiom as apply_pin_share_response."""
+        """Regression test: two concurrent imports of the same track (e.g. the same GPX file uploaded twice) previously raced get_or_create's own SELECT with no locking at all - closed by locking the candidate pin around the check-then-create, same idiom as apply_pin_share_response."""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
@@ -228,14 +215,8 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
 class DwellVisitProvenanceTests(DetectDwellsAndCreateVisitsTests):
     """A dwell detected in an uploaded track file is an *import*, not a live device ping.
 
-    ``VisitSource.GEOLOCATION`` is documented as "added when the user's device
-    provided a geolocation" and is what ``record_geolocation_visits`` writes,
-    gated by ``track_geolocation``. Dwell detection is reached from a route
-    *import* and gated by ``track_routes``, so stamping its rows GEOLOCATION both
-    labelled them "Geolocation" in the UI and claimed a provenance whose own
-    setting had no say over them. ``HISTORY`` ("Imported") is the value the
-    sibling Google Takeout importer already uses for the same kind of row.
-    """
+    ``VisitSource.GEOLOCATION`` is documented as "added when the user's device provided a geolocation" and is
+    what ``record_geolocation_visits`` writes, gated by ``track_geolocation``."""
 
     def test_dwell_visits_are_recorded_as_imported(self):
         base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))

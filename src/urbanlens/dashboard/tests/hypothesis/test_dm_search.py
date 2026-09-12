@@ -1,14 +1,4 @@
-"""Tests for the Messages page's own search - "search this conversation" and
-"search all conversations".
-
-Both features are thin wrappers around ``services.messaging.direct_messages.search_direct_messages``,
-which reuses global search's natural-language parser
-(``services.global_search.parser.parse_query``) and shares its DirectMessage
-queryset builder (``services.messaging.direct_messages.message_search_queryset``) with
-``services.global_search.providers.DirectMessageSearchProvider`` - so this
-covers the scoping/encryption/deletion rules once here rather than duplicating
-global search's own ``DirectMessageSearchTests``.
-"""
+"""Tests for the Messages page's own search - "search this conversation" and "search all conversations"."""
 
 from __future__ import annotations
 

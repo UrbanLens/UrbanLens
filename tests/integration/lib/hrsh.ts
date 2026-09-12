@@ -1,39 +1,8 @@
 /**
- * Hudson River State Hospital, as a test subject.
- *
- * This one place has been the development reference for the whole application,
- * so the specs under `specs/location/` ask of it the questions that are hard to
- * ask of a synthetic fixture: does a coordinate resolve to the right *property*,
- * does the parcel line look like a parcel, do buildings become child pins, does
- * the wiki fill itself in. None of that can be answered by a pin dropped in a
- * field - the answers come from county assessor data, NY SHPO's CRIS inventory,
- * EPA ECHO and Wikipedia, and those only exist for somewhere real.
- *
- * ## What is asserted, and what is deliberately not
- *
- * These tests run against live third-party data, which moves. A test that
- * hardcodes what the data said on the day it was written starts failing for the
- * wrong reason, and the person who sees it fail has no way to tell "the app
- * broke" from "the county recorded a sale". So the rule here is:
- *
- * - **Assert the invariant, not the value.** "Every one of these coordinates
- *   resolves to the same property" is a property of the app. "The parcel is
- *   4.2 hectares" is a property of the county's GIS file this week.
- * - **Bound, don't equal.** Where a number has to be checked, check that it is
- *   in a range wide enough to survive a data revision and narrow enough to catch
- *   the failure that actually happens - see {@link EXPECTED_PARCEL_AREA_SQM}.
- * - **Order, don't pin.** For the sale history, assert that the most recent sale
- *   is the newest one on file and is not in the future, never that it is a
- *   particular date. A new sale must not turn this suite red.
- *
- * ## The values below are expectations, not measurements
- *
- * Everything here that is not a coordinate came from either the requirements
- * this suite was written to or from public reporting, **not** from reading it
- * out of a running instance. That is deliberate: reading the expected value out
- * of the system under test is how a suite ends up certifying whatever it
- * happens to do. Each one carries where it came from, so a failure can be
- * argued with rather than just re-pointed at the app.
+ * Hudson River State Hospital, as a test subject. This one place has been the development reference
+ * for the whole application, so the specs under `specs/location/` ask of it the questions that are
+ * hard to ask of a synthetic fixture: does a coordinate resolve to the right *property*, does the
+ * parcel line look like a parcel, do buildings become child pins, does the wiki fill itself in.
  */
 
 /** A coordinate, as the API takes it. */

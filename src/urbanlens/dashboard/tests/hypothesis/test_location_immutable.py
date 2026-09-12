@@ -1,9 +1,4 @@
-"""Tests for Location identity immutability (the save() guard in Location.save()).
-
-The DB-trigger layer (migration 0009) is enforced by PostgreSQL and exercised
-implicitly by any code path that bypasses save(); these tests cover the
-application-level guard, which raises a clean ValueError before the write.
-"""
+"""Tests for Location identity immutability (the save() guard in Location.save())."""
 
 from __future__ import annotations
 

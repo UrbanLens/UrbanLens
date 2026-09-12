@@ -1,12 +1,4 @@
-"""Tests for the external API's profile social-links endpoint.
-
-Mirrors ``controllers.userprofile.ViewProfileView``'s own rule: a social link
-carries no separate ``contact_visibility`` gate the way phone numbers and
-Discord handles do - anyone who can see the profile at all sees its links.
-Only the owner may ever write them, and PUT is a full replace (matching
-``SafetyContactDefaultsSerializer``'s own precedent), so submitting a smaller
-set than what's saved is how a platform gets removed.
-"""
+"""Tests for the external API's profile social-links endpoint."""
 
 from __future__ import annotations
 
@@ -177,11 +169,9 @@ class SocialLinksPutTests(_SocialLinksTestCase):
     def test_put_rejects_a_javascript_scheme_even_once_scheme_defaulting_is_applied(self) -> None:
         """A scheme-less submission defaults to https - that must not let a dangerous raw scheme sneak through first.
 
-        Naively prepending "https://" to any scheme-less handle would turn
-        this into "https://javascript:alert(1)", whose netloc parses to the
-        deceptively harmless-looking hostname "javascript" - the raw scheme
-        has to be checked before that prefixing happens.
-        """
+        Naively prepending "https://" to any scheme-less handle would turn this into
+        "https://javascript:alert(1)", whose netloc parses to the deceptively harmless-looking hostname
+        "javascript" - the raw scheme has to be checked before that prefixing happens."""
         response = self.client.put(
             self.url,
             {"links": [{"platform": "website", "handle": "data:text/html,<script>alert(1)</script>"}]},

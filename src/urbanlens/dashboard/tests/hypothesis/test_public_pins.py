@@ -356,13 +356,11 @@ class SuggestionSyncTests(TestCase):
     def test_evaluate_backfills_suggestions_even_when_nothing_passes_this_run(self) -> None:
         """A profile created after a location already passed must still be caught up.
 
-        ``evaluate_public_pin_candidates`` used to call ``sync_public_pin_suggestions``
-        only when ``counters["passed"]`` was nonzero for *this* run - so a location
-        that passed in an earlier beat tick never got backfilled for accounts
-        created (or opted back in) afterward, contradicting
-        ``sync_public_pin_suggestions``'s own documented "idempotent backfill ...
-        new accounts are picked up on the next beat run" contract.
-        """
+        ``evaluate_public_pin_candidates`` used to call ``sync_public_pin_suggestions`` only when
+        ``counters["passed"]`` was nonzero for *this* run - so a location that passed in an earlier beat tick
+        never got backfilled for accounts created (or opted back in) afterward, contradicting
+        ``sync_public_pin_suggestions``'s own documented "idempotent backfill ... new accounts are picked up on
+        the next beat run" contract."""
         late_joiner = Profile.objects.get(user=baker.make("auth.User"))
         counters = evaluate_public_pin_candidates()
         self.assertEqual(

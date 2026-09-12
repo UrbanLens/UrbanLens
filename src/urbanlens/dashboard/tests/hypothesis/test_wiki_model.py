@@ -1,11 +1,4 @@
-"""Tests for the Wiki model and the Location/Wiki split.
-
-Covers the core invariants of the community-wiki extraction:
-- Wiki holds the community name; Location keeps only address/official_name.
-- ``Location.display_name`` / ``Pin.effective_name`` resolve through the wiki.
-- ``Wiki.objects.get_or_create_for_location`` is lazy and idempotent.
-- Comments are pin-XOR-wiki; community aliases/edits/detail-pins live on Wiki.
-"""
+"""Tests for the Wiki model and the Location/Wiki split."""
 
 from __future__ import annotations
 
@@ -64,12 +57,9 @@ class WikiLocationRelationTests(TestCase):
 class WikiLookupTests(TestCase):
     """``get_for_location`` and ``get_or_create_for_location``.
 
-    These used to cover a draft/official split: a wiki was born invisible and a
-    user's "Create wiki" click promoted it. Wikis are published on creation now,
-    so what is left is the ordinary get-or-create contract - which is still
-    worth pinning, because ``get_or_create_for_location`` is the only path that
-    may create one and every other caller must not.
-    """
+    Wikis are published on creation now, so what is left is the ordinary get-or-create contract - which is still
+    worth pinning, because ``get_or_create_for_location`` is the only path that may create one and every other
+    caller must not."""
 
     def _location(self, **kwargs) -> Location:
         defaults = {"official_name": "", "latitude": "40.0", "longitude": "-74.0"}
@@ -117,13 +107,10 @@ class WikiLookupTests(TestCase):
 class EnrichWikiLocationNameTests(TestCase):
     """tasks.enrich_wiki_location's placeholder-name replacement.
 
-    Previously verified by code review only (noted as a test gap when the
-    area-suffixed placeholder shipped) - these lock in the three behaviors
-    that matter: any non-meaningful seeded name gets replaced, a placeholder
-    seeded from an OLDER area_label (address backfill may have changed the
-    location's city/state since the wiki was created) still gets replaced,
-    and a real community name is never touched.
-    """
+    Previously verified by code review only (noted as a test gap when the area-suffixed placeholder shipped) -
+    these lock in the three behaviors that matter: any non-meaningful seeded name gets replaced, a placeholder
+    seeded from an OLDER area_label (address backfill may have changed the location's city/state since the wiki
+    was created) still gets replaced, and a real community name is never touched."""
 
     def _run(self, wiki: Wiki, resolved_name: str | None = "Resolved Factory") -> None:
         from urbanlens.dashboard import tasks
@@ -150,10 +137,7 @@ class EnrichWikiLocationNameTests(TestCase):
         self.assertEqual(wiki.name, "Resolved Factory")
 
     def test_area_suffixed_placeholder_from_a_stale_area_label_is_still_replaced(self) -> None:
-        """The wiki was seeded "Unnamed Location in Albany, NY" but the
-        location's address data has since changed, so that exact string can no
-        longer be reconstructed from the CURRENT area_label - the update must
-        key on the name actually read, not a rebuilt placeholder set."""
+        """The wiki was seeded "Unnamed Location in Albany, NY" but the location's address data has since changed, so that exact string can no longer be reconstructed from the CURRENT area_label - the update must key on the name actually read, not a rebuilt placeholder set."""
         location = self._location(city="Troy", state="NY", country="USA")
         wiki = baker.make(Wiki, location=location, name="Unnamed Location in Albany, NY")
         self._run(wiki)

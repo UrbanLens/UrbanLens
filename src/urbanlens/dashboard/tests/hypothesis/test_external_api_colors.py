@@ -1,24 +1,4 @@
-"""A colour the external API cannot store is refused, not quietly replaced.
-
-`clean_color` substitutes the default for anything it does not recognise. That
-is right for a form post, where the user sees the swatch that resulted, and
-wrong for an API: the client is told 200, the value it sent is gone, and the
-only way to find out is to read the record back and compare.
-
-The endpoints did not agree about this. The single-label and saved-filter
-writes were already strict, through a serializer restricted to the shared
-`COLOR_CHOICES` palette. Pin create, the label bulk edit and the label
-customization override all took any string and dropped what they could not use.
-These cover both kinds, so the strict ones stay strict and the rest cannot go
-back.
-
-Two ways to send a colour that is not stored, and the second is the surprising
-one: `red` is not hex at all, and `#f00` is - it is just the 3-digit form,
-which this application does not accept.
-
-Missing and blank are not covered by any of this: they mean "leave it alone" or
-"clear it" at every one of these endpoints, and must keep doing so.
-"""
+"""A colour the external API cannot store is refused, not quietly replaced."""
 
 from __future__ import annotations
 
@@ -118,10 +98,8 @@ class PinColorRejectionTests(ColorApiTestCase):
 class PinColorUpdateRejectionTests(ColorApiTestCase):
     """PATCH ``pins/{slug}/`` - the sibling POST hardened, and this did not.
 
-    `Pin.color` is served as `effective_color` and interpolated into a Leaflet
-    `divIcon`'s `html`, so a string that is not a colour is a stored injection
-    into the owner's own map, not a cosmetic problem.
-    """
+    `Pin.color` is served as `effective_color` and interpolated into a Leaflet `divIcon`'s `html`, so a string
+    that is not a colour is a stored injection into the owner's own map, not a cosmetic problem."""
 
     def _pin(self):
         created = self._post(_PINS, {"name": "Cx patch pin", "latitude": 41.0, "longitude": -73.0})
@@ -161,10 +139,8 @@ class PinColorUpdateRejectionTests(ColorApiTestCase):
 class PinModelColorCoercionTests(ColorApiTestCase):
     """The column itself, for the write paths no serializer stands in front of.
 
-    The floorplan editor's save assigns `linked.color` straight from its JSON
-    body, and the archive importer assigns three pin colour columns from an
-    uploaded file. Neither goes near the external API's validation.
-    """
+    The floorplan editor's save assigns `linked.color` straight from its JSON body, and the archive importer
+    assigns three pin colour columns from an uploaded file."""
 
     def test_save_drops_a_value_that_is_not_a_colour(self) -> None:
         pin = self._pin_direct(color=BREAKOUT)

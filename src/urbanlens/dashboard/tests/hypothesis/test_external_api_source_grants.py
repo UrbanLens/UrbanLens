@@ -1,25 +1,4 @@
-"""Guards on ``filter_sources_by_grants``, the per-section scope filter.
-
-Global search, the memories timeline, the undo feed and the export bundle each
-answer with several domains' data in one response, and each must drop the
-sections the calling credential is not scoped for instead of refusing the whole
-request. This helper is the single implementation of that split, so the tests
-here are written against the ways a *re*-implementation would go wrong rather
-than against the happy path:
-
-1. **The OAuth2-only rule survives the indirection.** ``messages:read`` exists
-   as an OAuth2-only scope so a leaked PAT cannot be turned into a DM reader,
-   and the global-search DM provider returns plaintext excerpts. A PAT-style
-   key must not reach that section no matter what else it holds - including
-   when its ``scopes`` column has been hand-edited to claim it.
-2. **Partial fulfilment, not all-or-nothing.** A credential scoped for one
-   section keeps that section and loses only the others.
-3. **Fail-closed on an empty declaration.** A section that declares no scopes
-   is dropped, not granted - an endpoint computing its requirements
-   dynamically must not open up when the computation comes back empty.
-4. **Order is the declaration's order**, because these keys drive response
-   construction and a set would reorder per process.
-"""
+"""Guards on ``filter_sources_by_grants``, the per-section scope filter."""
 
 from __future__ import annotations
 
@@ -53,11 +32,8 @@ _PAT_SAFE_SCOPES = sorted({scope.value for scope in ApiKeyScope} - {scope.value 
 class _FakeApiKey:
     """A PAT-style credential stand-in: a plain ``scopes`` list, no DB row.
 
-    ``credential_grants`` discriminates on the presence of ``allow_scopes``, so
-    an object without it is treated exactly as an ``ApiKey`` row is. Using a
-    stub keeps these tests on ``SimpleTestCase`` - the filter is pure logic and
-    should not need a database to prove it.
-    """
+    ``credential_grants`` discriminates on the presence of ``allow_scopes``, so an object without it is treated
+    exactly as an ``ApiKey`` row is."""
 
     def __init__(self, scopes: Iterable[str]) -> None:
         """Store the scopes this fake credential claims.
@@ -71,10 +47,8 @@ class _FakeApiKey:
 class _FakeAccessToken:
     """An OAuth2 credential stand-in, discriminated by ``allow_scopes``.
 
-    Mirrors django-oauth-toolkit's ``AccessToken.allow_scopes`` contract: the
-    token is already known to be unexpired and unrevoked by the time a
-    permission asks it anything, so only the scope subset test remains.
-    """
+    Mirrors django-oauth-toolkit's ``AccessToken.allow_scopes`` contract: the token is already known to be
+    unexpired and unrevoked by the time a permission asks it anything, so only the scope subset test remains."""
 
     def __init__(self, scopes: Iterable[str]) -> None:
         """Store the scopes this fake token was issued with.
@@ -91,8 +65,7 @@ class _FakeAccessToken:
             scopes: The scopes being demanded.
 
         Returns:
-            True when the token's grant is a superset.
-        """
+            True when the token's grant is a superset."""
         return set(scopes).issubset(self.scopes)
 
 
@@ -117,10 +90,8 @@ class SourceGrantsDmLeakTests(SimpleTestCase):
     def test_pat_claiming_messages_read_is_still_refused(self) -> None:
         """A hand-edited ``scopes`` column cannot buy a PAT into DM excerpts.
 
-        ``OAUTH2_ONLY_SCOPES`` is a restriction on the credential *kind*, so it
-        has to hold even when the row itself claims otherwise - a scope-picker
-        bug or a direct UPDATE must not become a DM reader.
-        """
+        ``OAUTH2_ONLY_SCOPES`` is a restriction on the credential *kind*, so it has to hold even when the row
+        itself claims otherwise - a scope-picker bug or a direct UPDATE must not become a DM reader."""
         credential = _FakeApiKey(
             [ApiKeyScope.SEARCH_READ.value, ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.WIKI_READ.value]
         )
@@ -176,11 +147,9 @@ class SourceGrantsShapeTests(SimpleTestCase):
     def test_empty_scope_declaration_fails_closed(self) -> None:
         """A section declaring nothing is dropped, not waved through.
 
-        An endpoint that derives its per-section requirements at runtime and
-        produces an empty set has a bug; granting the section would turn that
-        bug into a silent disclosure, so it is omitted instead - matching
-        ``credential_grants``, which refuses an empty requirement outright.
-        """
+        An endpoint that derives its per-section requirements at runtime and produces an empty set has a bug;
+        granting the section would turn that bug into a silent disclosure, so it is omitted instead - matching
+        ``credential_grants``, which refuses an empty requirement outright."""
         credential = _FakeApiKey(list(_PAT_SAFE_SCOPES))
         result = filter_sources_by_grants(credential, {"mystery": set(), "pins": {ApiKeyScope.PINS_READ}})
         self.assertEqual(result.granted, ("pins",))
@@ -195,11 +164,9 @@ class SourceGrantsShapeTests(SimpleTestCase):
     def test_generator_values_are_not_silently_consumed(self) -> None:
         """A one-shot iterable value must still be evaluated correctly.
 
-        ``credential_grants`` iterates the scopes it is handed; if the filter
-        forwarded a generator unmaterialized and anything read it twice, the
-        second read would see an empty set and fail closed on a section the
-        caller was entitled to. Cheap to get wrong, invisible in review.
-        """
+        ``credential_grants`` iterates the scopes it is handed; if the filter forwarded a generator
+        unmaterialized and anything read it twice, the second read would see an empty set and fail closed on a
+        section the caller was entitled to."""
         mapping: dict[str, Any] = {"pins": (scope for scope in [ApiKeyScope.PINS_READ])}
         result = filter_sources_by_grants(_FakeApiKey([ApiKeyScope.PINS_READ.value]), mapping)
         self.assertEqual(result.granted, ("pins",))
@@ -244,10 +211,8 @@ class SourceGrantsPropertyTests(SimpleTestCase):
     ) -> None:
         """The filter must never be more permissive than the shared scope check.
 
-        This is the whole point of building on ``credential_grants``: if the
-        two ever disagree, the disagreement is a section reaching a credential
-        that the DRF permission layer would have refused.
-        """
+        This is the whole point of building on ``credential_grants``: if the two ever disagree, the disagreement
+        is a section reaching a credential that the DRF permission layer would have refused."""
         credential = _FakeApiKey(held)
         result = filter_sources_by_grants(credential, sections)
         for key in result.granted:
@@ -260,10 +225,8 @@ class SourceGrantsPropertyTests(SimpleTestCase):
     def test_no_pat_scope_combination_unlocks_the_messages_section(self, extra: list[str]) -> None:
         """Whatever else a bearer key holds, DMs stay out of reach.
 
-        The property form matters here: it is not enough that the one scope
-        combination someone thought to test is refused - ``messages:read`` must
-        be unreachable across the whole PAT scope space.
-        """
+        The property form matters here: it is not enough that the one scope combination someone thought to test
+        is refused - ``messages:read`` must be unreachable across the whole PAT scope space."""
         credential = _FakeApiKey([*extra, ApiKeyScope.MESSAGES_READ.value])
         result = filter_sources_by_grants(credential, _SEARCH_SECTIONS)
         self.assertNotIn("messages", result.granted)
@@ -272,10 +235,8 @@ class SourceGrantsPropertyTests(SimpleTestCase):
 class SourceGrantsRealCredentialTests(TestCase):
     """The same rules against real ``ApiKey`` rows, not stand-ins.
 
-    The stubs above encode an assumption about what an ``ApiKey`` looks like to
-    ``credential_grants``; this class is what notices if the model ever stops
-    matching that assumption (e.g. ``scopes`` becoming a related manager).
-    """
+    The stubs above encode an assumption about what an ``ApiKey`` looks like to ``credential_grants``; this
+    class is what notices if the model ever stops matching that assumption (e.g."""
 
     def setUp(self) -> None:
         """Create a user and a key whose scopes each test rewrites."""
@@ -289,8 +250,7 @@ class SourceGrantsRealCredentialTests(TestCase):
             scopes: Raw scope values to store on the row.
 
         Returns:
-            The refreshed ``ApiKey`` row.
-        """
+            The refreshed ``ApiKey`` row."""
         api_key, _raw = generate_api_key(self.user, "Mobile")
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         api_key.refresh_from_db()

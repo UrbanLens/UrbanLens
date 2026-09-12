@@ -1,21 +1,4 @@
-"""A pin's own private article over the external API.
-
-The wiki article endpoints already existed; these mirror them for a *pin*, and
-the whole reason the mirror is worth testing separately is that the two look
-identical and must not be treated identically:
-
-1. **Scopes.** A pin article is the owner's private write-up - route notes,
-   access details, things deliberately not published to the community page. It
-   is reachable with ``pins:read``/``pins:write`` and must be unreachable with
-   ``wiki:read``/``wiki:write``, which a user grants to a wiki-editing client
-   with no expectation that it can read their private notes.
-2. **Ownership is a lookup, not a check.** Another user's pin, and a revision
-   id belonging to another article, are both "not found" - never 403, which
-   would confirm they exist.
-3. **Optimistic concurrency really is wired.** ``base_revision_id`` is required
-   and enforced, so two clients (or the same key on two devices) cannot
-   silently overwrite each other.
-"""
+"""A pin's own private article over the external API."""
 
 from __future__ import annotations
 
@@ -53,20 +36,17 @@ class PinArticleApiTests(TestCase):
             raw_key: A raw key to use instead of the fixture's.
 
         Returns:
-            Request kwargs carrying the Authorization header.
-        """
+            Request kwargs carrying the Authorization header."""
         return {"HTTP_AUTHORIZATION": f"Bearer {raw_key or self.raw_key}"}
 
     def _url(self, suffix: str = "", *, pin_slug: str | None = None) -> str:
         """Build a pin-article URL.
 
         Args:
-            suffix: Path fragment appended after ``article/``.
-            pin_slug: Pin to address; defaults to the fixture pin.
+            suffix: Path fragment appended after ``article/``. pin_slug: Pin to address; defaults to the fixture pin.
 
         Returns:
-            The fully-built URL.
-        """
+            The fully-built URL."""
         slug = pin_slug or self.pin.slug or str(self.pin.uuid)
         return f"{BASE}/{slug}/article/{suffix}"
 
@@ -77,8 +57,7 @@ class PinArticleApiTests(TestCase):
             scopes: Raw scope values to store on the row.
 
         Returns:
-            The raw key value.
-        """
+            The raw key value."""
         api_key, raw = generate_api_key(self.user, "Scoped")
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         return raw
@@ -87,12 +66,10 @@ class PinArticleApiTests(TestCase):
         """PUT one version of the fixture pin's article.
 
         Args:
-            content: The Markdown source to save.
-            base_revision_id: The revision the client believes it started from.
+            content: The Markdown source to save. base_revision_id: The revision the client believes it started from.
 
         Returns:
-            The parsed response body.
-        """
+            The parsed response body."""
         response = self.client.put(
             self._url(),
             {"content": content, "base_revision_id": base_revision_id},
@@ -240,10 +217,8 @@ class PinArticleApiTests(TestCase):
     def test_wiki_scopes_cannot_reach_a_pin_article(self) -> None:
         """The privacy decision this module exists for, asserted directly.
 
-        A key granted only "read/edit community wikis" must not be able to read
-        or write a pin's private article; if this ever passes with 200 the
-        consent screen has started lying.
-        """
+        A key granted only "read/edit community wikis" must not be able to read or write a pin's private
+        article; if this ever passes with 200 the consent screen has started lying."""
         self._save("private")
         raw = self._key_with_scopes([ApiKeyScope.WIKI_READ.value, ApiKeyScope.WIKI_WRITE.value])
 

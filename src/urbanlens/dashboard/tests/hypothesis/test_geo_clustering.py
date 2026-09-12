@@ -1,19 +1,4 @@
-"""The densest-cluster search must agree with the pairwise scan it replaced.
-
-`densest_cluster_centroid` answers "where is this account's largest
-concentration of pins" with a spatial histogram instead of comparing every point
-with every other one, which is what made opening the map O(n^2) (P108). The
-speed-up is only worth having if the answer is the same, so the reference
-implementation is kept here and the two are held to each other.
-
-They agree exactly wherever the points have a densest region at all. Where they
-do not - two concentrations of identical size, or points spread so evenly that
-every one has the same number of neighbours - there is no single right answer,
-and the reference resolved it by returning whichever point came first in the
-list. Those cases are pinned for *determinism* rather than for a value: the same
-points in a different order must give the same centre, which the reference did
-not manage.
-"""
+"""The densest-cluster search must agree with the pairwise scan it replaced."""
 
 from __future__ import annotations
 
@@ -43,8 +28,7 @@ def reference_centroid(points: list[tuple[float, float]], radius_km: float = RAD
         radius_km: Cluster radius.
 
     Returns:
-        The densest cluster's centroid.
-    """
+        The densest cluster's centroid."""
     seed = max(
         points,
         key=lambda point: sum(
@@ -66,8 +50,7 @@ def blob(rng: random.Random, count: int, latitude: float, longitude: float, spre
         spread: Half-width of the scatter in degrees.
 
     Returns:
-        The generated points.
-    """
+        The generated points."""
     return [(latitude + rng.uniform(-spread, spread), longitude + rng.uniform(-spread, spread)) for _ in range(count)]
 
 

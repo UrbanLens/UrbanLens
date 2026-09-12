@@ -1,11 +1,4 @@
-"""End-to-end tests for Consensus round resolution (services.consensus.session).
-
-Builds a wiki that's missing exactly one piece of data (a description) so
-round selection is deterministic - see ``_make_wiki_missing_description``.
-Competitive sessions are constructed directly (bypassing the friend-only
-invite flow, which is exercised separately in the controller tests) so
-these can focus purely on answer/vote resolution.
-"""
+"""End-to-end tests for Consensus round resolution (services.consensus.session)."""
 
 from __future__ import annotations
 
@@ -69,13 +62,6 @@ def _start_competitive_session_directly(host: Profile, invitees: list[Profile]) 
 
 class SoloRoundFlowTests(TestCase):
     def setUp(self) -> None:
-        # These tests are about answer/vote *resolution*, not trust-check
-        # injection (covered separately in test_consensus_trust.py) - the
-        # test wiki deliberately confirms every field except description so
-        # round selection is deterministic, but that same "confirmed" state
-        # also makes it a valid *check*-round candidate, which would
-        # otherwise flakily hijack the round at random (see
-        # services.consensus.trust.CHECK_PROBABILITY_MIN/MAX).
         self.enterContext(
             mock.patch("urbanlens.dashboard.services.consensus.selection.should_inject_check", return_value=False)
         )

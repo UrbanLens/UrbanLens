@@ -1,9 +1,4 @@
-"""Wire-up tests: the Nominatim/Overture panel+enrichment sources actually sync PlaceExternalTag.
-
-Mocks the gateway HTTP calls (no real network) and asserts on the database
-side effect - both the pre-existing LocationCache write (unchanged behavior)
-and the new PlaceExternalTag sync.
-"""
+"""Wire-up tests: the Nominatim/Overture panel+enrichment sources actually sync PlaceExternalTag."""
 
 from __future__ import annotations
 

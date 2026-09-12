@@ -1,16 +1,4 @@
-"""Tests for the max-length limits added to previously-unbounded free-text fields
-(``services/text_limits.py``): Pin.description, Wiki.description, Comment.text,
-Trip.description, TripActivity.notes, TripComment.text, PinMarkup.label, Profile.bio.
-
-Two layers are verified:
-  - Model-level: ``full_clean()`` raises ``ValidationError`` for text longer than
-    the field's ``max_length`` (these are ``TextField``s, so Postgres itself
-    enforces nothing - the limit only exists via Django's validators).
-  - Controller-level: the write paths that build/mutate these models directly
-    (bypassing a Form/Serializer's automatic ``full_clean()``) explicitly check
-    length via ``text_length_error()`` and return 400 rather than silently
-    persisting oversized input.
-"""
+"""Tests for the max-length limits added to previously-unbounded free-text fields (``services/text_limits.py``): Pin.description, Wiki.description, Comment.text, Trip.description, TripActivity.notes, TripComment.text, PinMarkup.label, Profile.bio."""
 
 from __future__ import annotations
 
@@ -63,14 +51,9 @@ def _location_with_wiki(name: str = "Old Mill") -> tuple[Location, Wiki]:
 class ModelFullCleanLengthTests(TestCase):
     """`full_clean()` must reject text past each field's `max_length`.
 
-    Each case starts from a fully-valid, already-saved instance (via
-    ``baker.make``, so every other required field - FKs included - is
-    already populated) and mutates only the field under test, then asserts
-    the raised ``ValidationError`` names *that* field specifically. Plain
-    Django ``TextField``s do **not** get this for free from `max_length=N`
-    alone (unlike ``CharField``) - `full_clean()` only enforces it because
-    the model fields also carry an explicit `validators=[MaxLengthValidator(N)]`.
-    """
+    Each case starts from a fully-valid, already-saved instance (via ``baker.make``, so every other required
+    field - FKs included - is already populated) and mutates only the field under test, then asserts the raised
+    ``ValidationError`` names *that* field specifically."""
 
     def test_pin_description_too_long(self) -> None:
         pin = baker.make(Pin)
@@ -233,10 +216,8 @@ class WikiEditDescriptionLengthTests(TestCase):
     def test_an_invalid_security_value_is_rejected_rather_than_dropped(self) -> None:
         """This view used to skip the field and answer `{"ok": true}`.
 
-        The dialog already renders `resp.error` on a non-ok response and keeps
-        the user's values in place, so there was never a UI cost to telling
-        them - only a report of a write that had not happened.
-        """
+        The dialog already renders `resp.error` on a non-ok response and keeps the user's values in place, so
+        there was never a UI cost to telling them - only a report of a write that had not happened."""
         before = self.wiki.cameras
 
         resp = self.client.post(

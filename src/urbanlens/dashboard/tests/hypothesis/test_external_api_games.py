@@ -1,19 +1,4 @@
-"""Tests for the external API's SpotGuessr surface.
-
-SpotGuessr is the first *game* this API exposes, and games have a failure mode
-the CRUD domains do not: a wrong answer is silently playable. So alongside the
-usual scope and enumeration checks, these tests pin down the four things that
-would each quietly ruin the game rather than error:
-
-1. the pre-guess payload must never carry anything naming the answer - not in
-   the JSON, and not in the image bytes either;
-2. a session this API cannot finish (multiplayer, or a lobby) must be refused
-   loudly, because the alternative is a client polling forever for a reveal
-   that only ever arrives over a WebSocket it isn't on;
-3. ``Point`` takes longitude first, and getting it backwards produces a
-   perfectly valid point somewhere else on Earth rather than an error;
-4. the current-round GET creates rounds, so it must be throttled as a write.
-"""
+"""Tests for the external API's SpotGuessr surface."""
 
 from __future__ import annotations
 
@@ -70,10 +55,8 @@ def _bearer(raw_key: str) -> dict:
 def _gps_jpeg_bytes() -> bytes:
     """A JPEG carrying GPS coordinates and a place-naming description in its EXIF.
 
-    This is what a phone actually stores, and every one of these tags points at
-    the round's answer - which is why the round-image endpoint re-encodes rather
-    than deleting known-bad tags one at a time.
-    """
+    This is what a phone actually stores, and every one of these tags points at the round's answer - which is
+    why the round-image endpoint re-encodes rather than deleting known-bad tags one at a time."""
     img = PILImage.new("RGB", (16, 16), color=(120, 60, 30))
     exif = PILImage.Exif()
     exif[0x010E] = _ANSWER_NAMING_CAPTION  # ImageDescription
@@ -326,10 +309,8 @@ class SpotGuessrGuessTests(_SpotGuessrApiTestCase):
     def test_guessing_the_exact_coordinates_scores_a_zero_distance(self) -> None:
         """Proves the Point argument order: swapping lat/lng yields a valid point ~5000km away.
 
-        Nothing raises on a swap - the guess simply scores as a total miss - so
-        this assertion is the only thing standing between the game and a
-        silently unwinnable one.
-        """
+        Nothing raises on a swap - the guess simply scores as a total miss - so this assertion is the only thing
+        standing between the game and a silently unwinnable one."""
         response = self._post(
             "external_api:games.spotguessr.sessions.rounds.guess",
             self.session_id,

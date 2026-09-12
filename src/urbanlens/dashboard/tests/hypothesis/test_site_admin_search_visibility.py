@@ -1,26 +1,4 @@
-"""The admin directory's search box must not be a stronger oracle than the row it returns.
-
-``SiteAdminUsersView`` masks three fields per row - the username and first name
-behind ``profile_visibility``, the email behind ``contact_visibility`` - and its
-class docstring promises that "even a site admin does not get a backdoor around
-a user's ``contact_visibility`` setting here".
-
-Masking what a row *renders* does not keep that promise while the same fields
-still decide which rows come *back*. A search for a hidden address returns
-exactly one row reading "Hidden"; a wrong guess renders the empty state. One
-request per guess confirms or denies any address, and the same works against a
-hidden username or first name.
-
-So these tests assert on the *set of rows returned*, never on the response body:
-an assertion that the hidden address is absent from the HTML passes both before
-and after the fix, which is how this survived a review that thought it was
-covered (P80).
-
-Each hidden-field test is paired with a visible-field control. A search that
-matches nothing is indistinguishable from a search that is simply broken, so
-without the controls every test here would pass against a view whose search box
-was disconnected entirely.
-"""
+"""The admin directory's search box must not be a stronger oracle than the row it returns."""
 
 from __future__ import annotations
 

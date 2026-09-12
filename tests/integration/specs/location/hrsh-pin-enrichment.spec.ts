@@ -1,19 +1,6 @@
 /**
- * What a pin on the campus learns about itself, without being told.
- *
- * The wiki has its own file; this one is about the *pin*. The requirements ask
- * for an article on both, and they are genuinely separate objects with separate
- * routes (`pins/{slug}/article/` and `wikis/{location_slug}/article/`) and
- * separate scopes - `views_pin_article`'s docstring is explicit that using
- * `wiki:*` scopes for the pin routes would be a privacy bug, because a pin is
- * one person's private record and a wiki is community content.
- *
- * Everything here is enrichment that follows pin creation, so everything here
- * needs waiting. What it does *not* need is the parcel: address geocoding and
- * Wikipedia seeding key off the coordinate, not off the place. So these tests
- * deliberately do not call `requireBoundary()` - they are among the few in this
- * directory that should still run, and still mean something, when the parcel
- * never arrives.
+ * What a pin on the campus learns about itself, without being told. The wiki has its own file; this
+ * one is about the *pin*.
  */
 
 import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";

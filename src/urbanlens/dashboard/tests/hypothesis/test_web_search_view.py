@@ -1,9 +1,4 @@
-"""Tests for the web_search controller action and domain-extraction logic.
-
-The controller is tested via request-response cycles using Django's test client
-so we exercise the full view path without a real search API call.
-The domain extraction helper is tested directly with Hypothesis.
-"""
+"""Tests for the web_search controller action and domain-extraction logic."""
 
 from __future__ import annotations
 
@@ -146,10 +141,7 @@ class LocationHasPlaceNameTests(TestCase):
 
 
 class UniqueSearchNameQuoteLocalityTests(TestCase):
-    """Pin.get_unique_search_name's quote_locality option: wraps "city state" as
-    one exact-phrase term instead of two loose keywords, so a generic street
-    address doesn't match the same address in an unrelated city - see the
-    web_search view, which is the one caller that opts into this."""
+    """Pin.get_unique_search_name's quote_locality option: wraps "city state" as one exact-phrase term instead of two loose keywords, so a generic street address doesn't match the same address in an unrelated city - see the web_search view, which is the one caller that opts into this."""
 
     def _make_pin(
         self, *, city: str | None = "Cincinnati", state: str | None = "Ohio", county: str | None = None
@@ -226,10 +218,7 @@ class UniqueSearchNameQuoteLocalityTests(TestCase):
 
 
 class UniqueSearchNameAncestorTests(TestCase):
-    """Pin.get_unique_search_name includes the nearest ancestor's name for a
-    child pin - a building's own name ("Superintendent's Cottage", "Staff
-    House") is often a generic label shared by unrelated properties
-    nationwide, with no identifying power on its own."""
+    """Pin.get_unique_search_name includes the nearest ancestor's name for a child pin - a building's own name ("Superintendent's Cottage", "Staff House") is often a generic label shared by unrelated properties nationwide, with no identifying power on its own."""
 
     def _make_pin(self, *, name: str, parent_name: str | None = None) -> Pin:
         from urbanlens.dashboard.models.location.model import Location

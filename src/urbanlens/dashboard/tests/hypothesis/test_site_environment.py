@@ -191,9 +191,7 @@ class ShowDevAdminFeaturesTests(TestCase):
             self.assertTrue(self.site.show_dev_admin_features(self.non_admin))
 
     def test_non_admin_sees_it_when_enabled_in_staging(self) -> None:
-        """Staging was deliberately added to the allowed set (commit 74930ea9)
-        so QA accounts can use the toolbar there - still gated behind the
-        explicit UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS opt-in."""
+        """Staging was deliberately added to the allowed set (commit 74930ea9) so QA accounts can use the toolbar there - still gated behind the explicit UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS opt-in."""
         self._set_override(EnvironmentOverrideChoice.STAGING)
         with patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=True):
             self.assertTrue(self.site.show_dev_admin_features(self.non_admin))

@@ -214,10 +214,9 @@ class SignupPasswordValidationIntegrationTests(TestCase):
 class ValidatePasswordPolicyViewTests(TestCase):
     """POST /accounts/validate-password/ - the E2EE flows' pre-derive policy check.
 
-    The client derives the login credential before submit, so this endpoint is
-    the only place the configured AUTH_PASSWORD_VALIDATORS ever see the real
-    password (docs/NOTES.md, "Decisions from the 2026-07-23 session").
-    """
+    The client derives the login credential before submit, so this endpoint is the only place the configured
+    AUTH_PASSWORD_VALIDATORS ever see the real password (docs/NOTES.md, "Decisions from the 2026-07-23
+    session")."""
 
     def setUp(self) -> None:
         super().setUp()

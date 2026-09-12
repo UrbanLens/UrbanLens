@@ -1,11 +1,4 @@
-"""Tests for self-service account deletion.
-
-Covers:
-- ProfileQuerySet.due_for_deletion_reminder / due_for_hard_delete boundary conditions.
-- services.profile.account_deletion: request/cancel/reminder/hard-delete, notifications, emails, idempotency.
-- RequestAccountDeletionView / CancelAccountDeletionView controllers.
-- The site-wide deletion banner rendering.
-"""
+"""Tests for self-service account deletion."""
 
 from __future__ import annotations
 
@@ -481,17 +474,9 @@ class AccountDeletionBannerTests(TestCase):
 class DeletionReminderOverlapLockTests(TestCase):
     """Two overlapping sweeps must not both email the same account.
 
-    `due_for_deletion_reminder` filters on `deletion_reminder_sent_at__isnull=True`,
-    which guards at *selection* time, and `send_deletion_reminder` emails first
-    and stamps the marker afterwards - so without the overlap lock two runs both
-    select the same profile and both send. Celery delivers at least once, and a
-    slow sweep can outlast its own beat interval, so "two runs at once" is
-    ordinary rather than exotic.
-
-    The three sibling reminder sweeps (`send_due_checkin_reminders`,
-    `send_final_checkin_warnings`, `escalate_overdue_checkins`) already take this
-    lock; this one did not.
-    """
+    `due_for_deletion_reminder` filters on `deletion_reminder_sent_at__isnull=True`, which guards at *selection*
+    time, and `send_deletion_reminder` emails first and stamps the marker afterwards - so without the overlap
+    lock two runs both select the same profile and both send."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -524,10 +509,8 @@ class DeletionReminderOverlapLockTests(TestCase):
     def test_the_blocked_profile_is_still_sent_on_the_next_tick(self) -> None:
         """The lock must not lose a reminder - only defer it.
 
-        This is why a lock is right here and a claim-before-send is not: a
-        duplicate notice is noise, a missing one means no warning at all before
-        a permanent deletion.
-        """
+        This is why a lock is right here and a claim-before-send is not: a duplicate notice is noise, a missing
+        one means no warning at all before a permanent deletion."""
         from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
         from urbanlens.dashboard.tasks import (
             _DELETION_REMINDER_LOCK_CACHE_KEY,
@@ -561,16 +544,9 @@ class DeletionReminderOverlapLockTests(TestCase):
 class HardDeleteOverlapLockTests(TestCase):
     """The hard-delete sweep needs the same overlap lock as its reminder sibling.
 
-    `due_for_hard_delete` selects on `deletion_requested_at`, which
-    `hard_delete_profile` does not clear until it has already sent the final
-    "your account has been deleted" email - so two overlapping runs both select
-    the same profile and both send it. The second `User.delete()` affects zero
-    rows and does not raise, which is exactly why this is invisible without a
-    test: the only evidence is a duplicate email.
-
-    Celery delivers at least once and both sweeps sit on the same hourly beat,
-    so "two runs at once" is ordinary rather than exotic.
-    """
+    `due_for_hard_delete` selects on `deletion_requested_at`, which `hard_delete_profile` does not clear until
+    it has already sent the final "your account has been deleted" email - so two overlapping runs both select
+    the same profile and both send it."""
 
     def setUp(self) -> None:
         super().setUp()

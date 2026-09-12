@@ -1,15 +1,4 @@
-"""A data export must not disclose identities the app masks on screen.
-
-The direct-message export states this rule in its own docstring: it passes each
-partner through ``display_identity_for`` "so an export never reveals a partner's
-name/avatar beyond what the user could currently see on screen (e.g. after being
-blocked or a privacy change)".
-
-The trips export writes ``p.user.username`` for every member straight into
-``trips.json``, while the trip page itself resolves those same members through
-``resolve_visible_identities`` and masks the ones the viewer may not see. So the
-export hands over names the page withholds.
-"""
+"""A data export must not disclose identities the app masks on screen."""
 
 from __future__ import annotations
 

@@ -1,18 +1,4 @@
-"""The site-admin view onto REData's two suggestion models.
-
-Two questions this deployment could not answer about itself: whether a trained
-model or the hand-weighted heuristic is answering, and how well the thing that
-is answering scored against the alternatives it was promoted over. Both matter
-now that auto-tagging applies suggestions above a fixed confidence floor
-without distinguishing which ranker produced the number.
-
-The constraint that shapes the tests: **nothing here may be about a person.**
-REData's per-contributor reputation endpoint is not consumed anywhere, and the
-view scrubs personal keys out of the model payload before rendering rather than
-trusting the upstream shape to stay aggregate. That guard exists precisely
-because "this response is aggregate" is a property of today's contract, not
-something this codebase controls.
-"""
+"""The site-admin view onto REData's two suggestion models."""
 
 from __future__ import annotations
 
@@ -209,13 +195,8 @@ class SiteAdminModelsViewTests(TestCase):
 class ReputationIsNotConsumedTests(SimpleTestCase):
     """The per-contributor endpoint must stay unused, not merely unwired today.
 
-    The first version of this guard could not fail: it globbed a directory that
-    does not exist, so it reported success with a real consumer present. It now
-    proves it is looking at the right tree before drawing any conclusion, and
-    matches *executable* references rather than the substring - two docstrings
-    document the deliberate non-use, and a guard that trips on its own
-    explanation gets deleted rather than heeded.
-    """
+    The first version of this guard could not fail: it globbed a directory that does not exist, so it reported
+    success with a real consumer present."""
 
     def _source_root(self) -> Path:
 

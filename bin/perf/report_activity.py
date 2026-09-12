@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Summarise a `pg_activity_sampler.sh` CSV into the four things worth reading.
-
-The CSV is a row per (role, application_name, state) per second, which is the
-right thing to keep and the wrong thing to read. This reduces it to the shape
-P104 had: how close the pool came to full, which tier was holding it, how much
-of that was idle rather than working, and when the peak happened - so it can be
-lined up against the k6 phase table printed beside it.
-
-The idle share is the part worth naming separately, but only once the pool is
-actually under pressure. A pool full of *working* backends is a busy database; a
-pool full of *idle* ones is connections held open by processes that are not
-using them, which is a different fault with a different fix, and it is the one
-the outage actually had. Half of four backends idle is just a quiet afternoon.
-"""
+"""Summarise a `pg_activity_sampler.sh` CSV into the four things worth reading."""
 
 from __future__ import annotations
 
@@ -24,15 +11,7 @@ from pathlib import Path
 import sys
 
 #: Fraction of ``max_connections`` above which the pool is reported as pressured.
-#: The same figure the readiness endpoint uses, so the two agree about what
-#: "close to full" means.
-#:
-#: Probably too lax, on one run's evidence: X15 peaked at 75/100 with 74 of them
-#: from a single tier, and this reported "never close to full". Left aligned with
-#: the readiness endpoint rather than tuned here, because two different answers
-#: to "is the pool in trouble" is worse than one imperfect answer - but the
-#: composition matters as much as the total, and neither this nor the endpoint
-#: looks at it yet.
+#: The same figure the readiness endpoint uses, so the two agree about what "close to full" means.
 PRESSURE_FRACTION = 0.8
 
 #: What Postgres says when the pool refuses a client. Both spellings, because
@@ -74,8 +53,7 @@ def load(path: Path) -> list[dict[str, str]]:
         path: The CSV written by ``pg_activity_sampler.sh``.
 
     Returns:
-        Its rows, or an empty list when the file holds only a header.
-    """
+        Its rows, or an empty list when the file holds only a header."""
     with path.open(encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
 
@@ -87,8 +65,7 @@ def summarise(rows: list[dict[str, str]]) -> ActivitySummary:
         rows: Parsed CSV rows.
 
     Returns:
-        The summary. An empty one when the CSV held no samples.
-    """
+        The summary."""
     per_second: dict[str, int] = collections.defaultdict(int)
     idle_per_second: dict[str, int] = collections.defaultdict(int)
     breakdown: dict[str, collections.Counter[str]] = collections.defaultdict(collections.Counter)
@@ -125,8 +102,7 @@ def render(summary: ActivitySummary) -> str:
         summary: What :func:`summarise` produced.
 
     Returns:
-        The text to print.
-    """
+        The text to print."""
     if not summary.peak:
         return "pg_stat_activity: no samples (the sampler ran but the database answered nothing)."
 
@@ -155,8 +131,7 @@ def count_refusals(path: Path) -> int:
         path: A file holding the database container's log.
 
     Returns:
-        Matching lines.
-    """
+        Matching lines."""
     text = path.read_text(encoding="utf-8", errors="replace")
     return sum(1 for line in text.splitlines() if any(marker in line for marker in REFUSAL_MARKERS))
 
@@ -169,8 +144,7 @@ def failures(summary: ActivitySummary, refusals: int) -> list[str]:
         refusals: Connection refusals counted in the database log.
 
     Returns:
-        One line per reason. Empty means the pool held.
-    """
+        One line per reason."""
     reasons = []
     if not summary.peak:
         reasons.append("the sampler produced no samples, so this run is not evidence that the pool held")
@@ -190,12 +164,10 @@ def main(argv: list[str] | None = None) -> int:
         argv: Command-line arguments, for testing.
 
     Returns:
-        Process exit status. Without ``--fail-on-pressure`` this only reports,
-        which is how it was first used and how a one-off inspection still uses it.
+        Process exit status.
 
     Raises:
-        SystemExit: The arguments did not parse.
-    """
+        SystemExit: The arguments did not parse."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv", type=Path, help="CSV written by pg_activity_sampler.sh.")
     parser.add_argument(

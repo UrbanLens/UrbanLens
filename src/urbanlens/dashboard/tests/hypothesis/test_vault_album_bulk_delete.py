@@ -1,20 +1,4 @@
-"""A vault album had no bulk delete, and no comment saying why (P61).
-
-`_attach_owner_action_urls` set `gallery_bulk_url` only for a `Pin` owner, so
-inside a Vault album the Delete and Send-to-wiki buttons rendered `hidden`
-forever - you had to leave the album and use the per-tile trash button one
-photo at a time.
-
-The three actions do not resolve the same way, which is why this is not one
-change:
-
-- **Delete** applies. A vault photo already has a per-photo delete
-  (`PhotoActionView.delete`); only the bulk form was missing.
-- **Send to wiki** cannot. The pin endpoint derives the wiki from
-  `pin.location`; a vault album has no location, and the vault's own per-photo
-  version takes a `location_slug` from a picker the bulk bar does not have.
-- **Bulk share** cannot. It opens the *pin* share dialog.
-"""
+"""A vault album had no bulk delete, and no comment saying why (P61)."""
 
 from __future__ import annotations
 

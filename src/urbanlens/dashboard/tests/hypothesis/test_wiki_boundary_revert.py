@@ -1,16 +1,4 @@
-"""``revert_edit_fields``'s boundary-restore branch.
-
-A wiki's community-drawn Boundary polygon is edited through a separate path
-from ``apply_wiki_edit`` (see ``external_api/views_wiki.py``'s
-``WikiBoundaryUpdateView.post``), which records the change as a ``WikiEdit``
-keyed ``"boundary_<type>"`` (or the legacy ``"bounding_box"``) holding WKT
-strings rather than plain field values. ``revert_edit_fields`` has a whole
-separate code path for these keys - parsing WKT, creating/updating/deleting
-the ``Boundary`` row, and its own version of the conflict check - that had no
-test coverage before this file. Mutation testing
-(``bin/run_mutation_tests.sh --results``) shows nearly every mutant in
-``revert_edit_fields`` surviving, concentrated in exactly this branch.
-"""
+"""``revert_edit_fields``'s boundary-restore branch."""
 
 from __future__ import annotations
 

@@ -1,23 +1,4 @@
-"""Tests for the external API's messaging surface.
-
-The guards that matter most here, in rough order of how bad the failure would
-be if they regressed:
-
-- **Share provenance.** A pin shared through the API must record a
-  ``LocationExposure``, because the API layer routes through the same
-  ``create_pin_share`` the web composer uses. Constructing the share row
-  directly would still "work" from the outside while silently leaving a hole in
-  the re-share chain, so this is asserted on the database, not the response.
-- **Identity masking.** A partner whose profile visibility masks them must not
-  have their real username surface over the mobile API, where it would go
-  unnoticed far longer than on the web.
-- **Credential kind.** A PAT-style ``ApiKey`` can never reach messaging, even
-  holding the scopes.
-- **Idempotency.** A retried send returns the existing message rather than
-  delivering it twice - and, for a share, without creating a second share.
-- **Tombstones.** An expired/deleted message's content must not be served to
-  the recipient just because a different surface asked for it.
-"""
+"""Tests for the external API's messaging surface."""
 
 from __future__ import annotations
 
@@ -90,10 +71,8 @@ def _open_dms(*profiles: Profile) -> None:
 def _befriend(a: Profile, b: Profile) -> None:
     """Connect two profiles.
 
-    Exactly one row, never one per direction: ``Friendship.objects.between()``
-    resolves the pair with ``.get()``, so a second reciprocal row makes every
-    connection check raise ``MultipleObjectsReturned``.
-    """
+    Exactly one row, never one per direction: ``Friendship.objects.between()`` resolves the pair with
+    ``.get()``, so a second reciprocal row makes every connection check raise ``MultipleObjectsReturned``."""
     Friendship.objects.create(
         from_profile=a,
         to_profile=b,
@@ -127,15 +106,8 @@ class MessagingBaseTestCase(TestCase):
 class ReactionEmojiLengthTests(MessagingBaseTestCase):
     """A long emoji must be refused, not 500.
 
-    ``is_safe_reaction_emoji``'s docstring states the contract: the value is
-    "already length-capped by the caller". The internal HTML path honours it with
-    ``[:10]``, exactly ``Reaction.emoji``'s column width. ``ReactionSerializer``
-    declares ``max_length=32``, so this path accepted three times the column and
-    reached the insert.
-
-    Not adversarial input: a family sequence with skin-tone modifiers is eleven
-    code points, and any emoji picker offering those can send one.
-    """
+    ``is_safe_reaction_emoji``'s docstring states the contract: the value is "already length-capped by the
+    caller"."""
 
     def _react_url(self, message_id: int) -> str:
         return reverse(
@@ -337,13 +309,9 @@ class PinShareProvenanceTests(MessagingBaseTestCase):
     def test_cannot_share_someone_elses_pin(self) -> None:
         """Pin resolution is scoped to the sender's own pins.
 
-        Addressed by uuid rather than slug on purpose: pin slugs are unique
-        only *per profile* (``db_pin_unique_slug_per_profile``), so a slug is
-        not a global identifier and resolving one already cannot escape the
-        sender's own pins. The uuid is global, which makes this the real test
-        of the ownership filter - naming another profile's pin unambiguously
-        must still find nothing.
-        """
+        Addressed by uuid rather than slug on purpose: pin slugs are unique only *per profile*
+        (``db_pin_unique_slug_per_profile``), so a slug is not a global identifier and resolving one already
+        cannot escape the sender's own pins."""
         other_pin = baker.make(Pin, profile=self.partner, location=baker.make(Location, latitude=1.0, longitude=1.0))
         response = self._post_json(self._thread_url(), {"body": "x", "shared_pin_id": str(other_pin.uuid)})
         self.assertEqual(response.status_code, 404)

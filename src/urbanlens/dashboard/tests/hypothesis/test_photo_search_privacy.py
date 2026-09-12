@@ -1,16 +1,4 @@
-"""Search must not return photos their uploader has not agreed to show you.
-
-`PhotoSearchProvider` reaches other people's photos on purpose: its third
-disjunct is ``Q(location__pins__profile=profile)``, "any image at a location I
-have a pin at", which is how you find pictures of a place you follow. It did that
-without consulting `ImageQuerySet.visible_to`, so a photo whose uploader had set
-`photo_upload_visibility=NO_ONE` came back anyway - and a photo result carries
-the caption, the *owning pin's name*, and a link to that pin, so what leaked was
-not only the picture.
-
-Every other search provider scopes to the searcher's own rows. This is the one
-that does not, which is why it is the one that needed the filter.
-"""
+"""Search must not return photos their uploader has not agreed to show you."""
 
 from __future__ import annotations
 
@@ -92,10 +80,7 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
     def test_a_photo_shared_widely_is_still_found_by_a_neighbour(self) -> None:
         """The positive control: this suite must not pass by breaking search.
 
-        Both gates open - contributed to the wiki, and a setting that admits
-        anyone. Setting the visibility alone is not enough and should not be:
-        a photo nobody shared is nobody else's to find.
-        """
+        Both gates open - contributed to the wiki, and a setting that admits anyone."""
         from urbanlens.dashboard.models.images.model import Image as ImageModel
         from urbanlens.dashboard.models.wiki.model import Wiki
 

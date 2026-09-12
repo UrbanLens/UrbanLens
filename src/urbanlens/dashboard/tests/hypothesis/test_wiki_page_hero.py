@@ -50,10 +50,7 @@ class WikiPageHeroTests(TestCase):
         self.assertIn("123 Main St", content)
 
     def test_notice_and_action_buttons_render_inside_the_hero(self) -> None:
-        """The suggest-edits/delete/back-to-pin actions and the community-wiki
-        notice used to render as their own row directly below the hero,
-        spending extra page height on them - both now render inside the hero
-        itself (see _wiki_detail_hero_body.html) instead."""
+        """The suggest-edits/delete/back-to-pin actions and the community-wiki notice used to render as their own row directly below the hero, spending extra page height on them - both now render inside the hero itself (see _wiki_detail_hero_body.html) instead."""
         content = self._get().content.decode()
         hero_start = content.index('id="wiki-hero"')
         content_block_start = content.index('id="wiki-onboarding"')
@@ -105,9 +102,7 @@ class WikiActionsFabVisibilityTests(TestCase):
 
 
 class WikiAboutCardLinkStylingTests(TestCase):
-    """The About card's links row (_pin_links_row.html, shared with the pin
-    details page) used to rely on CSS scoped to body.page-location-details
-    only - it rendered on the wiki page with no chip/spacing styling at all."""
+    """The About card's links row (_pin_links_row.html, shared with the pin details page) used to rely on CSS scoped to body.page-location-details only - it rendered on the wiki page with no chip/spacing styling at all."""
 
     def setUp(self) -> None:
         baker.make("auth.User")

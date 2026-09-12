@@ -1,16 +1,4 @@
-"""The pre-reveal round payload must not carry anything that names the answer.
-
-``serialize_round`` is the one payload a player receives *before* they guess -
-it is sent over HTTP by every round endpoint and broadcast over the session
-socket as ``round.started``. Photos mode used to add ``image_caption`` to it,
-sourced from the photo's EXIF/IPTC metadata, which routinely reads
-"Old Mill House, Troy NY". The web client never rendered the field, so the leak
-was invisible from the UI - but it was always in the JSON, and a JSON API makes
-it a one-line script that turns the whole game into a lookup.
-
-These tests pin the rule directly on the serializer rather than on any one
-endpoint, because every endpoint and the WebSocket all share this function.
-"""
+"""The pre-reveal round payload must not carry anything that names the answer."""
 
 from __future__ import annotations
 

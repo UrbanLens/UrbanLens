@@ -1,15 +1,6 @@
 /**
- * User-controlled strings must stay data.
- *
- * Names, descriptions, notes, comments and search queries are the fields an
- * application that stores other people's words has to treat as hostile. The
- * assertions here are about what the deployment *did* with those strings:
- * they round-trip as text, they do not become DOM nodes, they do not dump
- * other people's rows, they do not 500. The control in each case is that a
- * boring value still works, so a refusal is not "the field is broken".
- *
- * Markup in these tests is a canary, not a payload: an element with that id
- * existing in the DOM is the failure.
+ * User-controlled strings must stay data. Names, descriptions, notes, comments and search queries
+ * are the fields an application that stores other people's words has to treat as hostile.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

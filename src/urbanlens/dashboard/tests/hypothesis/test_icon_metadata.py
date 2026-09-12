@@ -1,10 +1,4 @@
-"""Consistency tests for the icon picker's emoji metadata.
-
-``ICON_KEYWORDS`` supplies the extra search terms rendered into each icon
-button's ``data-keywords`` attribute; a keyword entry whose emoji key is not
-actually offered by ``ICON_CATEGORIES`` can never match anything, so these
-tests keep the two structures in sync.
-"""
+"""Consistency tests for the icon picker's emoji metadata."""
 
 from __future__ import annotations
 

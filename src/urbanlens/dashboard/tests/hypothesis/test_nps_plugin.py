@@ -1,9 +1,4 @@
-"""Tests for the NPS plugin's REData-backed panel and enrichment source.
-
-``NpsPanelSource``/``NpsEnrichmentSource`` now call ``RedataNationalParksGateway``
-instead of the direct NPS Developer API - these tests mock that gateway and
-check the LocationCache row it produces, rather than any HTTP call.
-"""
+"""Tests for the NPS plugin's REData-backed panel and enrichment source."""
 
 from __future__ import annotations
 
@@ -53,11 +48,9 @@ def _gateway_returning(
 ) -> None:
     """Configure a mocked ``RedataNationalParksGateway`` class's instance methods.
 
-    Every facet defaults to ``[]`` (rather than leaving a bare ``Mock`` in
-    place) since the cache write is real ``JSONField`` storage in these
-    tests' ``TestCase`` - an unconfigured facet call would otherwise fail
-    to serialize instead of failing the assertion that matters.
-    """
+    Every facet defaults to ``[]`` (rather than leaving a bare ``Mock`` in place) since the cache write is real
+    ``JSONField`` storage in these tests' ``TestCase`` - an unconfigured facet call would otherwise fail to
+    serialize instead of failing the assertion that matters."""
     instance = mock_gateway_cls.return_value
     instance.find_nearest_park.return_value = park
     instance.get_alerts.return_value = alerts if alerts is not None else []
@@ -307,12 +300,10 @@ class NpsEnrichmentSourceTests(TestCase):
 class NpsInfoViewTests(TestCase):
     """``PinController.nps_info`` - the web HTMX partial, not the JSON API.
 
-    Alerts reach the JSON API through ``api_payload``'s ``facts``, but the web
-    panel is bespoke markup (``pin_nps.html``) rather than the generic
-    ``_simple_info_panel.html`` renderer, so it needs its own explicit wiring -
-    this pins that a closure/hazard alert actually reaches the rendered page,
-    not just the API.
-    """
+    Alerts reach the JSON API through ``api_payload``'s ``facts``, but the web panel is bespoke markup
+    (``pin_nps.html``) rather than the generic ``_simple_info_panel.html`` renderer, so it needs its own
+    explicit wiring - this pins that a closure/hazard alert actually reaches the rendered page, not just the
+    API."""
 
     def setUp(self) -> None:
         super().setUp()

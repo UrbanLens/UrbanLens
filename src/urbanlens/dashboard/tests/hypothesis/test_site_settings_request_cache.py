@@ -1,10 +1,4 @@
-"""Tests for the request-scoped memoisation of the SiteSettings singleton.
-
-The memo has to satisfy two opposing requirements, so both are pinned here: it
-must collapse the several identical singleton fetches a single page render does,
-*and* it must not survive the request - long-lived Celery workers and the test
-suite's own ``queryset.update()`` edits would both read a stale row otherwise.
-"""
+"""Tests for the request-scoped memoisation of the SiteSettings singleton."""
 
 from __future__ import annotations
 
@@ -34,9 +28,8 @@ def simulated_request():
     """Fire the request lifecycle signals exactly as Django's handlers do.
 
     ``close_old_connections`` is disconnected around the signals the same way
-    ``django.test.client.ClientHandler`` disconnects it - left connected, it would
-    tear down the connection holding this test's transaction.
-    """
+    ``django.test.client.ClientHandler`` disconnects it - left connected, it would tear down the connection
+    holding this test's transaction."""
     request_started.disconnect(close_old_connections)
     request_finished.disconnect(close_old_connections)
     try:

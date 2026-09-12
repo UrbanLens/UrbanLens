@@ -1,13 +1,4 @@
-"""Reverting a revert un-marks the original edit.
-
-A revert is recorded as a new WikiEdit carrying the inverted diff, with the
-target flagged ``reverted``. Reverting that revert puts the original content
-back in force - so the original's flag (which the history display and the
-wiki-edits achievement metric both read) must clear, or the log says an edit
-is dead while its content stands live. Cleared only on a full revert; a
-partial one (conflicting later edits skipped fields) leaves the conservative
-flag in place.
-"""
+"""Reverting a revert un-marks the original edit."""
 
 from __future__ import annotations
 

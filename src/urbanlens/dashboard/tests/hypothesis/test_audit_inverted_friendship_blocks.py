@@ -1,13 +1,4 @@
-"""Tests for the audit_inverted_friendship_blocks management command.
-
-docs/PROBLEMS.md: legacy BLOCKED Friendship rows created before block_profile
-started normalizing direction may have from_profile/to_profile backwards, and
-there is no stored signal that can prove which ones - so the fix here is a
-read-only report of candidates for a human to review, not a data migration.
-These tests pin the command's two jobs: reporting the right rows (created
-before the cutoff, showing a sign of having been reused rather than freshly
-created as a block) and never writing anything.
-"""
+"""Tests for the audit_inverted_friendship_blocks management command."""
 
 from __future__ import annotations
 
@@ -125,9 +116,7 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         self.assertIn("Nothing to review", output)
 
     def test_the_cutoff_date_itself_is_excluded_the_day_before_is_included(self) -> None:
-        """`--before` is documented exclusive on the DATE: `created__date__lt=cutoff_date`.
-        An off-by-one to `__date__lte` would silently start including the cutoff day itself -
-        this pins both sides of that exact boundary against the same cutoff."""
+        """`--before` is documented exclusive on the DATE: `created__date__lt=cutoff_date`. An off-by-one to `__date__lte` would silently start including the cutoff day itself - this pins both sides of that exact boundary against the same cutoff."""
         on_cutoff = Friendship.objects.create(
             from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED
         )

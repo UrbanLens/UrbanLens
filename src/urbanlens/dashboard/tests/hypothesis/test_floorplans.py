@@ -1,25 +1,4 @@
-"""Floorplans: versioned interior structure, absent by default, walls-first.
-
-The load-bearing properties:
-
-- **Walls are the only geometry.** Rooms are seed points that bind to whichever
-  enclosed region contains them, so editing walls can never delete a room's
-  name, labels or references. Openings are intervals along a wall and cannot
-  outlive it, escape it, or be inside out.
-- **Coordinates are plan-local metres** about one per-plan origin shared by
-  every floor, not WGS-84. ``services.floorplans.features`` is the only place
-  they become degrees, and it must agree with the editor's own projection.
-- **Version resolution by date**: the undated baseline is in force until the
-  first dated version; no date means the newest; a building with no plan
-  answers None from one indexed query (the common case must stay free).
-- **A save never destroys a plan it was not editing** - another user's plan,
-  or a baseline being re-dated, forks into a new version instead.
-- **Publishing copies rather than hands over**, and a personal plan is never
-  served to anyone else.
-- **A lock belongs to its door.** Which door is locked and what opens it is
-  field data worth keeping; a lock outliving the opening it was fitted to
-  would not be.
-"""
+"""Floorplans: versioned interior structure, absent by default, walls-first."""
 
 from __future__ import annotations
 
@@ -110,10 +89,8 @@ class FloorplanVersioningTests(TestCase):
     def test_a_plan_needs_no_place_at_all(self) -> None:
         """Most of what gets explored has no footprint any provider knows.
 
-        A plan tied to nothing is still a plan; requiring a Place would mean
-        the only drawable buildings are the ones a data provider already
-        catalogued.
-        """
+        A plan tied to nothing is still a plan; requiring a Place would mean the only drawable buildings are the
+        ones a data provider already catalogued."""
         plan = Floorplan.objects.create(place=None, name="sketch from memory")
 
         self.assertIsNone(plan.place_id)
@@ -284,10 +261,8 @@ class FloorplanDocumentTests(TestCase):
     def test_a_doors_swing_survives_the_round_trip(self) -> None:
         """It is drawn from this value, so losing it silently loses the symbol.
 
-        The field had a column, choices and a serializer long before anything
-        set it, which is exactly the situation where nobody would notice it
-        failing to come back.
-        """
+        The field had a column, choices and a serializer long before anything set it, which is exactly the
+        situation where nobody would notice it failing to come back."""
         walls = _square_walls()
         walls[0] = {**walls[0], "openings": [{"kind": "door", "t_start": 0.4, "t_end": 0.6, "swing": "double"}]}
         save_document(
@@ -300,10 +275,8 @@ class FloorplanDocumentTests(TestCase):
     def test_an_unknown_swing_is_refused_without_writing_half_a_plan(self) -> None:
         """A whole plan is one document: a bad field late in it must lose none of it.
 
-        The value is rejected rather than coerced, which is the same thing every
-        other choice field here does - but the save is a wholesale replacement,
-        so the interesting question is what survives the refusal.
-        """
+        The value is rejected rather than coerced, which is the same thing every other choice field here does -
+        but the save is a wholesale replacement, so the interesting question is what survives the refusal."""
         walls = _square_walls()
         walls[0] = {**walls[0], "name": "the original south wall"}
         save_document(
@@ -450,11 +423,8 @@ class FloorplanOpeningConstraintTests(TestCase):
 class FloorplanLockTests(TestCase):
     """A lock belongs to the door it is fitted to.
 
-    "Which door is locked, and what opens it" is the field note this table
-    exists for, so it has to survive a save/reload untouched - including the
-    part of it nobody agreed a schema for. And a lock whose door is gone is a
-    fact about nothing, so it goes with it.
-    """
+    "Which door is locked, and what opens it" is the field note this table exists for, so it has to survive a
+    save/reload untouched - including the part of it nobody agreed a schema for."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -722,12 +692,7 @@ class FloorplanResolutionTests(TestCase):
 
 
 class ResolveFloorplanRowTests(TestCase):
-    """``resolve_floorplan_row`` - the row-returning counterpart to ``resolve_document``,
-    for callers (the GeoJSON features endpoint) that need the actual row rather than a
-    serialized document. Found missing by the round-4 FEATURES.md-vs-code audit: the
-    features endpoint only ever resolved the caller's own personal plan, so a published
-    plan was invisible there even to a viewer who could see it fine through the JSON
-    document endpoint."""
+    """``resolve_floorplan_row`` - the row-returning counterpart to ``resolve_document``, for callers (the GeoJSON features endpoint) that need the actual row rather than a serialized document."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -903,11 +868,7 @@ class FloorplanEndpointTests(TestCase):
     def test_a_markers_icon_and_colour_use_the_shared_pickers(self) -> None:
         """Not controls of this editor's own, so the two cannot drift apart.
 
-        A marker is a pin by another name, and picking its icon or colour should
-        be the same act in both places. The colour swatches here were this
-        editor's own until they were replaced by the partial the label and pin
-        dialogs use.
-        """
+        A marker is a pin by another name, and picking its icon or colour should be the same act in both places."""
         response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
 
         self.assertContains(response, 'id="color-picker-floorplan-marker"')
@@ -919,12 +880,7 @@ class FloorplanEndpointTests(TestCase):
 class FloorplanVersionSafetyTests(TestCase):
     """A save must never destroy a plan it was not editing.
 
-    Floorplans are expensive hand work: hours of tracing. Two ways that work
-    could have been lost - re-dating a loaded plan silently rewrote the
-    version in force at the new date, and any user could write over any other
-    user's plan for the same building, since resolution is place-scoped.
-    Both fork into a new version instead.
-    """
+    Floorplans are expensive hand work: hours of tracing."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -1339,11 +1295,9 @@ class FloorplanCommunityTests(TestCase):
 class FloorplanCommunityOverwriteTests(TestCase):
     """A save that carries a community plan's uuid must not rewrite that plan.
 
-    ``floorplan_for_editing`` deliberately lets anyone who can edit the wiki
-    write the shared row - but the editor reaches it from a debounced autosave
-    that fires seconds after the page opens, while the banner on screen says
-    "Saving creates your own version". These pin the promise the UI makes.
-    """
+    ``floorplan_for_editing`` deliberately lets anyone who can edit the wiki write the shared row - but the
+    editor reaches it from a debounced autosave that fires seconds after the page opens, while the banner on
+    screen says "Saving creates your own version"."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -1565,16 +1519,11 @@ class FloorplanOpeningRehostTests(TestCase):
         )
 
     def test_a_floor_payload_with_no_uuid_updates_that_storey_rather_than_replacing_it(self) -> None:
-        """Everything on a storey hangs off its row, so building a second floor and
-        sweeping the first away as an orphan takes its walls, openings, locks and
-        rooms with it by cascade. Levels are unique within a plan, so a payload that
-        names a level and no uuid names the storey already at that level.
+        """Everything on a storey hangs off its row, so building a second floor and sweeping the first away as an orphan takes its walls, openings, locks and rooms with it by cascade. Levels are unique within a plan, so a payload that names a level and no uuid names the storey already at that level.
 
-        This was invisible for a long time because `_apply_item` re-saved every row
-        unconditionally, and a save on a row still carrying its pk re-inserts it -
-        so cascade-deleted rows came back and only a row that needed no save (a
-        lock nobody had touched) stayed gone.
-        """
+        This was invisible for a long time because `_apply_item` re-saved every row unconditionally, and a save
+        on a row still carrying its pk re-inserts it - so cascade-deleted rows came back and only a row that
+        needed no save (a lock nobody had touched) stayed gone."""
         save_document(
             self.floorplan,
             {
@@ -1859,8 +1808,7 @@ class FloorplanDocumentLimitsTests(TestCase):
         self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile)
 
     def test_an_over_long_name_is_refused_rather_than_reaching_postgres(self) -> None:
-        """Django does not enforce max_length on save, so this used to surface
-        as a DataError - a 500 saying nothing about which field was wrong."""
+        """Django does not enforce max_length on save, so this used to surface as a DataError - a 500 saying nothing about which field was wrong."""
         with self.assertRaises(ValueError):
             save_document(
                 self.floorplan, {"plan_origin": _ORIGIN, "name": "x" * 300, "floors": []}, profile=self.profile
@@ -1903,10 +1851,7 @@ class FloorplanDocumentLimitsTests(TestCase):
 class FloorplanAutosaveCostTests(TestCase):
     """An autosave that changes nothing should cost almost nothing.
 
-    The editor saves on a debounce after every edit, so this runs constantly.
-    A whole-document save that rewrites every row regardless turns a
-    one-character rename into a write across the entire plan.
-    """
+    The editor saves on a debounce after every edit, so this runs constantly."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -1938,12 +1883,8 @@ class FloorplanAutosaveCostTests(TestCase):
     def _as_the_client_sends_it(self) -> dict:
         """`document_for` as the editor would post it back.
 
-        The server never emits a marker's lat/lng - only the client knows the
-        projection from plan-local metres (see `_sync_linked_pin`). So a document
-        round-tripped through `document_for` alone skips the twin-pin path
-        entirely at its `lat is None` guard, and any measurement or assertion
-        made on it is blind to the most expensive thing an autosave does.
-        """
+        The server never emits a marker's lat/lng - only the client knows the projection from plan-local metres
+        (see `_sync_linked_pin`)."""
         document = document_for(self.floorplan)
         for marker in document["floors"][0]["markers"]:
             marker["lat"] = 41.7361
@@ -1963,19 +1904,14 @@ class FloorplanAutosaveCostTests(TestCase):
     def test_an_unchanged_resave_stays_within_its_current_cost(self) -> None:
         """A save that changes nothing writes nothing, and this is the ceiling.
 
-        `_apply_item` skips a row whose stored columns are unchanged, so a
-        four-wall plan resaved as-is costs about 27 queries rather than the 33 it
-        cost when every row was rewritten regardless. The headroom here is for
-        ordinary variation, not for the old behaviour to creep back.
-        """
+        `_apply_item` skips a row whose stored columns are unchanged, so a four-wall plan resaved as-is costs
+        about 27 queries rather than the 33 it cost when every row was rewritten regardless."""
         cost = self._resave_unchanged()
 
         self.assertLess(cost, 32, f"an unchanged resave took {cost} queries")
 
     def test_the_document_the_client_actually_posts_costs_no_more(self) -> None:
-        """The ceiling above is measured on `document_for` output, which carries no
-        marker lat/lng and so never reaches the twin-pin path at all. What the editor
-        posts does carry them, and that is the document whose cost matters."""
+        """What the editor posts does carry them, and that is the document whose cost matters."""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
@@ -2332,10 +2268,7 @@ class FloorplanMarkerLinkedPinTests(TestCase):
         self.assertFalse(FloorplanMarker.objects.filter(pk=marker.pk).exists())
 
     def test_deleting_a_whole_floor_takes_its_markers_linked_pins_with_it(self) -> None:
-        """A floor going away (torn down and redrawn, or the whole plan
-        deleted) cascades to its markers through Django's own FK collector,
-        never through serialization.py's per-marker sync - the linked-pin
-        cleanup has to catch that path too, not just an in-place marker edit."""
+        """A floor going away (torn down and redrawn, or the whole plan deleted) cascades to its markers through Django's own FK collector, never through serialization.py's per-marker sync - the linked-pin cleanup has to catch that path too, not just an in-place marker edit."""
         from urbanlens.dashboard.models.pin.model import Pin
 
         save_document(
@@ -2478,17 +2411,8 @@ class FloorplanMarkerLinkedPinTests(TestCase):
 class FloorplanSessionItemIdentityTests(TestCase):
     """A session-created item's row must survive a second save.
 
-    ``_sync()`` matches a payload item to an existing row purely by uuid and
-    deletes anything left unmatched as an orphan - so the *client* is the one
-    responsible for round-tripping the real uuid a save just assigned. This
-    reproduces exactly what the editor's fixed ``save()`` sends on its second
-    autosave: the same document, with every item's uuid replaced by whatever
-    the first save's response returned for the item at that position (see
-    ``applyServerIds()`` in ``frontend/ts/entries/floorplan-editor.ts``).
-    Before that merge existed, a second save reused nothing - it deleted and
-    recreated every floor/wall/room/marker under a new pk (and, for a marker,
-    a new linked ``Pin``) on every autosave after the first.
-    """
+    ``_sync()`` matches a payload item to an existing row purely by uuid and deletes anything left unmatched as
+    an orphan - so the *client* is the one responsible for round-tripping the real uuid a save just assigned."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -2555,10 +2479,7 @@ class FloorplanSessionItemIdentityTests(TestCase):
         self.assertEqual(second_marker.linked_pin_id, linked_pin_pk, "the marker's linked pin churned to a new row")
 
     def test_without_the_uuid_merge_a_second_save_does_churn(self) -> None:
-        """Documents the failure mode the fix above closes: the same second
-        save, but built the way the *old*, unfixed save() built it - carrying
-        forward only the top-level document uuid, leaving every nested item's
-        client-only local id untouched."""
+        """Documents the failure mode the fix above closes: the same second save, but built the way the *old*, unfixed save() built it - carrying forward only the top-level document uuid, leaving every nested item's client-only local id untouched."""
         document = {
             "plan_origin": _ORIGIN,
             "floors": [
@@ -2693,11 +2614,9 @@ class FloorplanMultiBuildingPickerTests(TestCase):
 class PlacelessFloorplanTests(TestCase):
     """A plan need not belong to a known building outline.
 
-    Most pins on a hand-mapped site resolve to no building place at all (no
-    provider has an outline for a derelict structure), and refusing to save
-    those made the editor a dead end for exactly the buildings most worth
-    drawing. The pin is the plan's identity in that case.
-    """
+    Most pins on a hand-mapped site resolve to no building place at all (no provider has an outline for a
+    derelict structure), and refusing to save those made the editor a dead end for exactly the buildings most
+    worth drawing."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -2792,11 +2711,8 @@ class PlacelessFloorplanTests(TestCase):
 class FloorplanResponseOrderTests(TestCase):
     """The order a saved document comes back in, which the editor relies on.
 
-    After a save the editor copies the returned uuids back onto the objects it
-    sent, so that a newly drawn wall keeps its identity instead of being created
-    again on the next save. Floors are matched by level and items within a floor
-    by position, and both of those are claims about this ordering.
-    """
+    After a save the editor copies the returned uuids back onto the objects it sent, so that a newly drawn wall
+    keeps its identity instead of being created again on the next save."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -2841,10 +2757,9 @@ class FloorplanResponseOrderTests(TestCase):
     def test_a_locks_own_notes_survive_the_round_trip(self) -> None:
         """A lock is a floorplan item, so it carries the same fields as one.
 
-        The editor writes "broken, seized, rusted shut" into a lock's condition
-        rather than into its state, which asks only whether the door is
-        presently secured - so losing the condition would lose the distinction.
-        """
+        The editor writes "broken, seized, rusted shut" into a lock's condition rather than into its state,
+        which asks only whether the door is presently secured - so losing the condition would lose the
+        distinction."""
         walls = _square_walls()
         walls[0] = {
             **walls[0],
@@ -2881,10 +2796,8 @@ class FloorplanResponseOrderTests(TestCase):
     def test_a_photo_attached_to_two_items_is_pooled_once(self) -> None:
         """The pool holds each photo once however many things cite it.
 
-        The editor sends a pool entry carrying a client-side uuid and the same
-        uuid in each item's references; the server has to create one row and
-        resolve both citations to it within the one save.
-        """
+        The editor sends a pool entry carrying a client-side uuid and the same uuid in each item's references;
+        the server has to create one row and resolve both citations to it within the one save."""
         from urbanlens.dashboard.models.images.model import Image
 
         image = baker.make(Image, profile=self.profile)
@@ -2912,12 +2825,8 @@ class FloorplanResponseOrderTests(TestCase):
     def test_resending_a_client_side_pool_id_recreates_the_row(self) -> None:
         """Which is why the editor has to take the real uuid back.
 
-        _Pools keys the existing pool by its real uuids, so a second save still
-        carrying "local-ref-1" matches nothing, creates a second row and deletes
-        the first as stale. The citation follows, so nothing visible breaks -
-        the row's identity churns on every autosave, which is the part that
-        does.
-        """
+        _Pools keys the existing pool by its real uuids, so a second save still carrying "local-ref-1" matches
+        nothing, creates a second row and deletes the first as stale."""
         from urbanlens.dashboard.models.floorplans.model import FloorplanReference
         from urbanlens.dashboard.models.images.model import Image
 
@@ -2963,10 +2872,9 @@ class FloorplanResponseOrderTests(TestCase):
     def test_the_pool_comes_back_in_the_order_it_was_sent(self) -> None:
         """Which is what lets the editor match its rows to the server's by position.
 
-        Both pool models order by sort_order, written from the payload index, so
-        a save carrying new rows and existing ones together still answers in the
-        order it was given rather than in whatever order the rows were created.
-        """
+        Both pool models order by sort_order, written from the payload index, so a save carrying new rows and
+        existing ones together still answers in the order it was given rather than in whatever order the rows
+        were created."""
         from urbanlens.dashboard.models.images.model import Image
 
         first = baker.make(Image, profile=self.profile)
@@ -3069,10 +2977,7 @@ class FloorplanResponseOrderTests(TestCase):
 class FloorplanFeatureScalingTests(QueryScalingMixin, TestCase):
     """More doors on a plan must not mean more queries to draw it.
 
-    Every opening carries a one-word answer to "does this door open", derived
-    from its locks. Asking that per opening is a query per opening, and the
-    endpoint exists to hand a renderer a viewport's worth at a time.
-    """
+    Every opening carries a one-word answer to "does this door open", derived from its locks."""
 
     def setUp(self) -> None:
         super().setUp()

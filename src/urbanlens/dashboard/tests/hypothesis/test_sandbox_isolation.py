@@ -1,16 +1,4 @@
-"""The sandbox boundary: untrusted parsing runs in media-worker and nowhere else.
-
-Three separable claims, tested separately because each fails differently:
-
-1. The guard refuses an out-of-sandbox parse (:class:`UntrustedParseGuardTests`).
-2. The decorators are actually on the parsers, so the guard is reached at all
-   (:class:`DecoratedParserTests`) - a guard nothing calls protects nothing.
-3. Celery really routes a task declaring ``queue=`` to that queue
-   (:class:`SandboxQueueRoutingTests`). This one exists because the whole design
-   rests on ``@shared_task(queue=...)`` reaching ``apply_async``'s options, which
-   is Celery behaviour rather than ours, and a silent change there would move
-   every decode back onto the unrestricted worker with nothing to notice.
-"""
+"""The sandbox boundary: untrusted parsing runs in media-worker and nowhere else."""
 
 from __future__ import annotations
 
@@ -33,21 +21,15 @@ from urbanlens.dashboard.services.sandbox import (
     untrusted_parse,
 )
 
-#: Every task routed to a sandbox queue, keyed by the module constant it must
-#: name - a set so adding or removing one is a deliberate line in a diff rather
-#: than a silent change of blast radius. A task belongs here when it reaches a
-#: parser over bytes a user supplied; it belongs under SANDBOX_BATCH_QUEUE when
-#: that parse runs for minutes rather than for a moment, so it cannot occupy the
-#: pool the interactive upload path shares.
+#: Every task routed to a sandbox queue, keyed by the module constant it must name - a set so adding or removing
+#: one is a deliberate line in a diff rather than a silent change of blast radius.
 EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
     "SANDBOX_QUEUE": {
         "process_image_upload",
         "generate_image_thumbnails",
         "generate_image_marker_thumbnails",
-        # The 512px JPEG vision models and the classifier read. Here, not on
-        # the default queue with the keywording task that consumes it: that
-        # task holds REData/OAuth/DB credentials and has full egress, so the
-        # decode must not happen in it. See test_photo_keyword_sandboxing.py.
+        # Here, not on the default queue with the keywording task that consumes it: that task holds
+        # REData/OAuth/DB credentials and has full egress, so the decode must not happen in it.
         "generate_image_analysis_thumbnails",
         "render_media_preview",
         "scan_comment_image",
@@ -66,14 +48,12 @@ EXPECTED_SANDBOX_TASKS = {
 def _declared_queue_constants() -> dict[str, set[str]]:
     """Which module constant each ``@shared_task(queue=...)`` in tasks.py names.
 
-    Read from the source rather than from the task objects because under test
-    settings ``UL_SANDBOX_ENABLED`` is False, so both constants resolve to the
-    same string - the *routing* is indistinguishable at runtime here, while the
-    declaration is exactly what has to be right.
+    Read from the source rather than from the task objects because under test settings ``UL_SANDBOX_ENABLED`` is
+    False, so both constants resolve to the same string - the *routing* is indistinguishable at runtime here,
+    while the declaration is exactly what has to be right.
 
     Returns:
-        Constant name -> the set of task function names declaring it.
-    """
+        Constant name -> the set of task function names declaring it."""
     import ast
     import inspect
 
@@ -177,10 +157,8 @@ class UntrustedParseGuardTests(SimpleTestCase):
 class DecoratedParserTests(SimpleTestCase):
     """The parsers themselves refuse to run outside the sandbox.
 
-    Calling through the real functions rather than asserting on a decorator
-    attribute: the thing worth knowing is that a view calling
-    ``extract_exif_data`` fails, not that a marker is present.
-    """
+    Calling through the real functions rather than asserting on a decorator attribute: the thing worth knowing
+    is that a view calling ``extract_exif_data`` fails, not that a marker is present."""
 
     def test_image_metadata_extraction_is_guarded(self) -> None:
         from urbanlens.dashboard.services.media.images import extract_exif_data, extract_gps_coords, extract_taken_at
@@ -292,11 +270,7 @@ class SandboxQueueRoutingTests(SimpleTestCase):
     def test_declared_queue_reaches_apply_async(self) -> None:
         """``@shared_task(queue=...)`` puts the queue in the dispatched options.
 
-        The load-bearing Celery behaviour. ``Task.apply_async`` merges
-        ``_get_exec_options()`` (which reads ``Task.queue``) into the options it
-        hands ``app.send_task``, so patching that boundary shows exactly what a
-        real dispatch would carry - without needing a broker.
-        """
+        The load-bearing Celery behaviour."""
         from celery import Celery, shared_task
 
         @shared_task(name="urbanlens.tests.sandbox_probe", queue=Queue.SANDBOX)
@@ -349,12 +323,9 @@ class SandboxQueueRoutingTests(SimpleTestCase):
 class AiQueueRoutingTests(SimpleTestCase):
     """``ai_queue()`` always resolves to :attr:`Queue.AI` - no DEFAULT fallback.
 
-    Unlike ``sandbox_queue()``, whether the assistant is reachable at all is
-    decided earlier by ``assistant_available()`` (which checks
-    ``UL_AI_WORKER_ENABLED``); a task should never be enqueued in the first
-    place if nothing drains this queue, so the resolver itself has nothing to
-    degrade.
-    """
+    Unlike ``sandbox_queue()``, whether the assistant is reachable at all is decided earlier by
+    ``assistant_available()`` (which checks ``UL_AI_WORKER_ENABLED``); a task should never be enqueued in the
+    first place if nothing drains this queue, so the resolver itself has nothing to degrade."""
 
     @override_settings(UL_AI_WORKER_ENABLED=True)
     def test_resolves_to_ai_when_a_worker_is_deployed(self) -> None:

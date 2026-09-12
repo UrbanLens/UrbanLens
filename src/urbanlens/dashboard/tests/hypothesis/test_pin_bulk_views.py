@@ -183,10 +183,7 @@ class PinBulkMergeViewTests(TestCase):
         self.assertEqual(self.grandchild.parent_pin_id, self.source_a.pk)
 
     def test_re_merging_a_pins_own_existing_child_is_a_harmless_no_op(self) -> None:
-        """target is already source's parent here - would_create_cycle can never
-        reject this merge endpoint's own loop because the target is always root
-        (promoted first if needed) by the time each source is checked, so it has
-        no ancestor chain left to find a cycle in. Confirms that's genuinely safe."""
+        """target is already source's parent here - would_create_cycle can never reject this merge endpoint's own loop because the target is always root (promoted first if needed) by the time each source is checked, so it has no ancestor chain left to find a cycle in. Confirms that's genuinely safe."""
         self.target.parent_pin = self.source_a
         self.target.save(update_fields=["parent_pin"])
         response = self._merge(str(self.source_a.uuid), [str(self.target.uuid)])
@@ -538,18 +535,7 @@ class PinBulkExportViewTests(TestCase):
 class BulkSelectionSizeLimitTests(TestCase):
     """The website's bulk write endpoints bound the selection, like the API's do.
 
-    Every external-API bulk endpoint already declares `max_length=500` on its
-    uuid list. The endpoints the map's select tool drives had no bound at all,
-    and these edits cannot collapse to one UPDATE: `Pin` carries eight live
-    `post_save` receivers, so each selected pin needs a real `save()` -
-    measured at ~2 queries per pin for a style edit and ~7 for a rating. An
-    unbounded selection therefore turns one click into tens of thousands of
-    queries in a single request.
-
-    Read paths are deliberately left unbounded - export's own docstring says it
-    uses a form POST specifically so the pin count is not limited, and it costs
-    one query regardless of selection size.
-    """
+    Every external-API bulk endpoint already declares `max_length=500` on its uuid list."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

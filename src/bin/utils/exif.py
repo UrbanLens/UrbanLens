@@ -1,8 +1,4 @@
-"""
-Print all discoverable metadata for an image file.
-
-This isn't explicitly needed for anything, but is helpful for debugging and creating new code for different kinds of photos.
-"""
+"""Print all discoverable metadata for an image file (debugging aid)."""
 
 from __future__ import annotations
 

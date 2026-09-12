@@ -1,13 +1,4 @@
-"""The endpoint mixin must fail each of the endpoints it exists to fail.
-
-An instrument nobody has watched move is worth as little as its readings, and
-this one adds two axes that no existing mixin covers - so each has to be shown
-failing a view that really is broken that way, and passing one that is not.
-
-The negative half matters as much as the positive: a `bounded/` view that trips
-any axis would mean the budgets are set below normal behaviour, and every gate
-built on this would be noise.
-"""
+"""The endpoint mixin must fail each of the endpoints it exists to fail."""
 
 from __future__ import annotations
 
@@ -59,9 +50,7 @@ class _AchievementSeedMixin(EndpointScalingMixin):
             response: The response to read.
 
         Returns:
-            How many records it carries, or None when the body is not the
-            expected shape.
-        """
+            How many records it carries, or None when the body is not the expected shape."""
         payload: Any = json.loads(response.content)
         rows = payload.get("rows")
         return len(rows) if isinstance(rows, list) else None
@@ -93,11 +82,7 @@ class ObjectsPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
 class RowsFetchedPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
     """The new axis: one statement, every row of the table, constant body.
 
-    The budget that catches this is the *capped* one. A view reading one row per
-    row is healthy when it renders them and pathological when it does not, and
-    the number alone cannot tell those apart - which is why the budget is chosen
-    from `expect_growth` rather than being a single constant.
-    """
+    The budget that catches this is the *capped* one."""
 
     def test_materialising_every_row_fails(self) -> None:
         with pytest.raises(AssertionError, match="rows fetched/row"):
@@ -110,11 +95,7 @@ class RowsFetchedPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
     def test_the_same_reading_is_fine_when_the_rows_are_rendered(self) -> None:
         """The negative control for the axis, not just for the fixture.
 
-        `/bounded/` reads exactly the same one row per row and is not a defect,
-        because it renders them. If this ever fails, the capped budget has been
-        applied where the growing one belongs and every list endpoint is about to
-        start failing.
-        """
+        `/bounded/` reads exactly the same one row per row and is not a defect, because it renders them."""
         self.assert_endpoint_scaling("/bounded/")
 
     def test_the_query_count_really_is_flat_for_it(self) -> None:
@@ -148,14 +129,8 @@ class BytesPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
 class AStreamedResponseIsMeasurableTests(_AchievementSeedMixin, TestCase):
     """The transport `map.document` uses must not be a hole in the instrument.
 
-    `StreamingHttpResponse` has no `.content`. An instrument that reads the body
-    the obvious way raises rather than measuring, which means the largest
-    endpoint in the application is outside the reach of the most complete gate in
-    the repo - and silently, because nobody points a gate at it and sees it fail.
-    """
+    `StreamingHttpResponse` has no `.content`."""
 
-    #: Bigger than the classes above: an honest NDJSON row is ~40 bytes, and the
-    #: mixin refuses a seed whose growth is inside its own noise floor.
     first_batch = 4
     second_batch = 8
 
@@ -205,10 +180,8 @@ class ThePayloadCeilingIsCheckedTests(_AchievementSeedMixin, TestCase):
     def test_asking_for_a_ceiling_without_a_counter_is_an_error_not_a_pass(self) -> None:
         """A silently-skipped assertion is the failure mode this guards.
 
-        `count_payload_rows` returns None by default, so a case that asks for a
-        ceiling and forgets to implement it would otherwise pass while checking
-        nothing at all.
-        """
+        `count_payload_rows` returns None by default, so a case that asks for a ceiling and forgets to implement
+        it would otherwise pass while checking nothing at all."""
 
         class _NoCounter(ABoundedEndpointPassesTests):
             def count_payload_rows(self, response: HttpResponse) -> int | None:

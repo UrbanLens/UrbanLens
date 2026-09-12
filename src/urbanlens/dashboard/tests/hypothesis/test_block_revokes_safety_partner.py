@@ -1,23 +1,4 @@
-"""Blocking someone must end any safety-partner access between the two profiles.
-
-An accepted `SafetyCheckinPartner` sees the owner's live location, their check-in
-chat, and their escalation status. Blocking is the strongest "stop" this app
-offers, and it left those rows - and any open WebSocket - untouched: the blocked
-partner kept watching.
-
-`remove_checkin_partner` is already the right mechanism. It deletes the row and
-calls `_broadcast_partner_access_revoked`, which closes live connections whose
-permission was only checked at connect() time. Nothing called it from the
-blocking flow.
-
-Both directions are revoked, which is what the filed entry asked for. Blocking is
-a mutual disengagement: the blocker plainly does not want the blocked profile
-watching them, and continuing to watch someone you have blocked is the same
-relationship viewed from the other side.
-
-Invited-but-not-yet-accepted rows go too - an outstanding invitation is an offer
-of exactly the access being revoked.
-"""
+"""Blocking someone must end any safety-partner access between the two profiles."""
 
 from __future__ import annotations
 
@@ -129,11 +110,9 @@ class BlockRevokesSafetyPartnerTests(TestCase):
     def test_a_partnership_on_someone_elses_checkin_is_untouched(self) -> None:
         """The scoping is by *pair*, not by "either profile appears somewhere".
 
-        Both rows below involve one of the two blocking profiles, but paired
-        with a third party rather than each other - a filter that matched on
-        either profile alone (instead of the specific actor/target pair) would
-        wrongly sweep these up too.
-        """
+        Both rows below involve one of the two blocking profiles, but paired with a third party rather than each
+        other - a filter that matched on either profile alone (instead of the specific actor/target pair) would
+        wrongly sweep these up too."""
         third_party = _profile()
         blocked_elsewhere = SafetyCheckinPartner.objects.create(
             checkin=_checkin(third_party),
@@ -163,18 +142,9 @@ class BlockRevokesSafetyPartnerTests(TestCase):
 class BlockWithdrawsPendingPinShareTests(TestCase):
     """A pending share is an offer; blocking withdraws it.
 
-    This codebase already draws the line: ``DirectMessageShare.revoke`` undoes a
-    share "only if the recipient hasn't acted on it yet", and leaves accepted
-    ones "completely alone - there is nothing to revoke once the recipient has
-    acted". Accepting a pin share runs ``create_pin_from_share``, so the
-    recipient ends up owning their own Pin - taking the share row back would
-    give nothing back.
-
-    A *pending* share is the other case, and the accept path does not re-check
-    blocking: without this, a profile could block someone and have them accept
-    the standing offer afterwards, ending up with a copy of a place the blocker
-    had just withdrawn from them.
-    """
+    This codebase already draws the line: ``DirectMessageShare.revoke`` undoes a share "only if the recipient
+    hasn't acted on it yet", and leaves accepted ones "completely alone - there is nothing to revoke once the
+    recipient has acted"."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -221,10 +191,8 @@ class BlockWithdrawsPendingPinShareTests(TestCase):
     def test_a_pending_share_between_the_blocked_profile_and_a_bystander_is_untouched(self) -> None:
         """Same scoping concern from the other profile's side of the pair.
 
-        A filter matching on either party alone (rather than the specific
-        actor/target pair) would wrongly withdraw this - it never involves
-        the blocker at all.
-        """
+        A filter matching on either party alone (rather than the specific actor/target pair) would wrongly
+        withdraw this - it never involves the blocker at all."""
         bystander = _profile()
         share = self._share(self.blocked, bystander, PinShareStatus.PENDING)
 

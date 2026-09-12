@@ -1,18 +1,6 @@
 /**
- * Safety check-ins: the feature where a bug is not an inconvenience.
- *
- * A check-in is a promise that somebody will be told if the user does not come
- * back. That makes it the one domain here where the *scheduling* matters as
- * much as the data - the row is written now and read by a Celery worker later,
- * against a deadline, on a different machine. This suite cannot wait out a real
- * deadline, so it does not pretend to; what it can prove is that every state a
- * check-in passes through is reachable and consistent through the deployed API,
- * which is the precondition for the worker half meaning anything.
- *
- * Deliberately not exercised: overdue escalation and partner notification
- * delivery. Both need either a fabricated clock or a wait measured in the
- * check-in's grace period, and a test that sleeps for minutes on a shared box
- * is a test people delete.
+ * Safety check-ins: the feature where a bug is not an inconvenience. A check-in is a promise that
+ * somebody will be told if the user does not come back.
  */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";

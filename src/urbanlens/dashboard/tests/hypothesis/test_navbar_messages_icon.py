@@ -1,12 +1,4 @@
-"""Tests for the navbar messages icon visibility rule.
-
-Regression coverage: the icon used to appear only once a user had sent or
-received a direct message, hiding it permanently for users who only ever use
-friend connections. It should also appear as soon as a user has ever had an
-accepted friend - even if that friend was later removed - since Friendship
-rows are never deleted, only moved to a REMOVED status (see
-models/friendship/model.py's remove()).
-"""
+"""Tests for the navbar messages icon visibility rule."""
 
 from __future__ import annotations
 

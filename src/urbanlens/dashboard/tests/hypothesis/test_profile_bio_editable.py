@@ -1,12 +1,4 @@
-"""Tests for the profile page's click-to-edit-in-place bio.
-
-Covers:
-- Own-profile view renders the bio as an editable element (even with no bio
-  yet, so there's something to click to add one) - other viewers see plain text.
-- ProfileFieldUpdateView's field="bio" POST path, previously untested despite
-  already existing (used by the full Edit Profile page) - now exercised more,
-  via the profile view page's inline editor.
-"""
+"""Tests for the profile page's click-to-edit-in-place bio."""
 
 from __future__ import annotations
 

@@ -1,19 +1,4 @@
-"""Tests for the Boundary model, its resolution chain, and the BoundaryController.
-
-Boundary now holds only *drawn* geometry - community drawings keyed by Wiki and
-personal ones keyed by Pin, plus per-provider voting candidates keyed by Place.
-Official outlines live on ``Place``, which is why nothing in this table can
-influence matching or access any more.
-
-Resolution rules under test:
-
-- Scope gate first: a marker that isn't about this kind of boundary answers
-  nothing, rather than falling through to somebody else's shape.
-- Then whose version of it: pin row -> wiki row -> place outline -> circle
-  fallback (property only; a missing building means "no known building").
-- Parent inheritance applies only to placeless detail pins, and only when the
-  pin actually stands inside the parent's polygon.
-"""
+"""Tests for the Boundary model, its resolution chain, and the BoundaryController."""
 
 from __future__ import annotations
 
@@ -333,9 +318,7 @@ class ChildGeneratedPropertyBoundaryTests(TestCase):
         self.assertFalse(Boundary.objects.filter(pin=self.pin, boundary_type=BoundaryType.PROPERTY).exists())
 
     def test_place_outline_wins_over_the_child_generated_fallback(self) -> None:
-        """Regression: the child-fitted hull is a stand-in only until a real place answer
-        exists. Ranked ahead of it, a freshly-fetched place outline stayed invisible on the
-        very page that had just asked for it (see ``resolve_for_pin``'s docstring)."""
+        """Regression: the child-fitted hull is a stand-in only until a real place answer exists. Ranked ahead of it, a freshly-fetched place outline stayed invisible on the very page that had just asked for it (see ``resolve_for_pin``'s docstring)."""
         self._child("40.000000", "-73.999000")
         row = Boundary.objects.get(pin=self.pin, boundary_type=BoundaryType.PROPERTY)
         self.assertTrue(row.generated_from_children)
@@ -411,12 +394,10 @@ class PinBuildingResolutionTests(TestCase):
 class ScopeGateResolutionTests(TestCase):
     """The scope gate stops a mismatched request from falling through to a shape.
 
-    A marker whose place says nothing about the requested boundary type (here: a
-    specific building on a multi-building campus, asked for the *property*
-    boundary - see ``services.places.scope.place_polygon``) must answer
-    (None, None), never fall through to the circle/wiki fallback further down
-    the chain - that fallback would silently hand back somebody else's shape.
-    """
+    A marker whose place says nothing about the requested boundary type (here: a specific building on a
+    multi-building campus, asked for the *property* boundary - see ``services.places.scope.place_polygon``) must
+    answer (None, None), never fall through to the circle/wiki fallback further down the chain - that fallback
+    would silently hand back somebody else's shape."""
 
     def setUp(self):
         self.parcel = make_place(PlaceKind.PARCEL, _square(-74.0, 40.0, 0.01))

@@ -87,13 +87,8 @@ class LoginViewEmailTests(TestCase):
 class LoginLockoutIdentifierNormalizationTests(TestCase):
     """The lockout counter must key on the resolved account, not the raw string.
 
-    ``EmailOrUsernameModelBackend`` resolves Gmail dot/plus variants and
-    verified secondary emails to the same account before authenticating (see
-    ``EmailOrUsernameModelBackendTests`` above). If the lockout counter keyed
-    on the raw submitted string instead, an attacker could brute-force one
-    account forever by rotating through equivalent-but-textually-distinct
-    identifiers, each getting its own untripped counter.
-    """
+    ``EmailOrUsernameModelBackend`` resolves Gmail dot/plus variants and verified secondary emails to the same
+    account before authenticating (see ``EmailOrUsernameModelBackendTests`` above)."""
 
     def setUp(self) -> None:
         cache.clear()

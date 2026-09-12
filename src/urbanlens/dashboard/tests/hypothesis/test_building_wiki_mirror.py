@@ -1,26 +1,4 @@
-"""Importing buildings on a *pin* page must not fail on the wiki side.
-
-Reported from staging: adding several buildings from the Private Pin page
-500'd with `ChildWikiLocationError: There is already a wiki marker at these
-exact coordinates`, **after** the child pins had already been created. Three
-separate defects behind one traceback:
-
-- A building whose coordinate coincides with an existing wiki marker - very
-  commonly the parent wiki itself, since a parcel's coordinate is often a
-  building centroid - raised instead of being skipped. One such building
-  aborted the whole mirror.
-- The mirror ran inline in the request, so a wiki-side failure took down a
-  pin-side action that had already succeeded. The user saw a 500 for work
-  that was done.
-- The mirror did nothing at all when the place had no wiki yet, so the
-  community side simply never gained the buildings.
-
-The rule that stands: community pages are *promoted* explicitly, never
-created official behind a user's back. A draft is different - drafts are
-already auto-created for every pinned location by
-`ensure_wiki_for_location`, are invisible until claimed, and are what
-this mirrors into.
-"""
+"""Importing buildings on a *pin* page must not fail on the wiki side."""
 
 from __future__ import annotations
 
@@ -104,10 +82,7 @@ class BuildingWikiMirrorTests(TestCase):
         )
 
     def test_a_building_already_mirrored_is_not_duplicated(self) -> None:
-        """A building the wiki already has a child marker for - e.g. from an
-        earlier import - must be matched by ``match_marker`` and skipped, not
-        mirrored a second time. None of the tests above exercise this path:
-        they all start from a wiki with no children yet."""
+        """A building the wiki already has a child marker for - e.g. from an earlier import - must be matched by ``match_marker`` and skipped, not mirrored a second time. None of the tests above exercise this path: they all start from a wiki with no children yet."""
         wiki = baker.make(Wiki, location=self.location, place=self.place)
         existing_location = baker.make(Location, latitude=_LAT + 0.0005, longitude=_LNG)
         baker.make(Wiki, parent_wiki=wiki, location=existing_location, name="Building 1")
@@ -123,10 +98,7 @@ class BuildingWikiMirrorTests(TestCase):
         self.assertTrue(wiki.child_wikis.filter(name="Building 2").exists())
 
     def test_when_every_building_collides_no_wiki_edit_is_recorded(self) -> None:
-        """The WikiEdit audit entry is gated on ``created`` (see the ``if created:``
-        guard) - a batch that skips everything must leave the wiki's edit
-        history untouched, not log a "0 building markers" entry. The positive
-        side of this gate is covered in test_a_place_with_no_wiki_gains_one_rather_than_nothing."""
+        """The positive side of this gate is covered in test_a_place_with_no_wiki_gains_one_rather_than_nothing."""
         wiki = baker.make(Wiki, location=self.location, place=self.place)
 
         created = pin_restructure.mirror_buildings_to_wiki(self.pin, [_building(1, lat=_LAT, lng=_LNG)], self.profile)
@@ -152,18 +124,8 @@ class BuildingImportRequestTests(TestCase):
     def test_a_wiki_side_failure_does_not_fail_the_import(self) -> None:
         """Pins are already created by then; a 500 reports failure for work that was done.
 
-        The guarantee is structural: the view hands the mirror to
-        ``safely_enqueue_task`` rather than calling it in-request, so a real
-        worker (a separate process) runs it and nothing it does can reach this
-        response. Assert that dispatch directly, rather than relying on the
-        mocked RuntimeError actually firing - ``UL_CELERY_TASK_ALWAYS_EAGER``
-        is opt-in and False by default (see settings/base.py and the Celery
-        note in dashboard/tests/CLAUDE.md). Under a plain container pytest run
-        with that unset, ``apply_async`` only enqueues to the in-memory test
-        broker and never calls the task body at all, so the exception below
-        would silently never fire and this test would pass unconditionally
-        even if the view called the wiki mirror synchronously.
-        """
+        The guarantee is structural: the view hands the mirror to ``safely_enqueue_task`` rather than calling it
+        in-request, so a real worker (a separate process) runs it and nothing it does can reach this response."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 

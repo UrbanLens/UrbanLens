@@ -1,16 +1,4 @@
-"""A photo on a wiki is visible only to viewers who can reach *that* wiki.
-
-``visible_to`` enforces two gates - the photo must have been shared into a
-container, and the uploader's settings must admit this viewer. The container
-half asked only whether the photo was on *a* wiki, never whether the viewer
-could reach *that* one. Since the permissive end of the upload setting admits
-anyone with a pin in common, a photo contributed to a wiki at one place was
-readable by somebody whose only pin is somewhere else.
-
-The uploader's setting is opened to ANYONE throughout, so gate two cannot be
-what excludes anything - only reachability of the wiki can. Each negative
-carries a positive control, or the file could pass by breaking the feature.
-"""
+"""A photo on a wiki is visible only to viewers who can reach *that* wiki."""
 
 from __future__ import annotations
 
@@ -74,16 +62,6 @@ class WikiReachabilityTestCase(TestCase):
         )
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         attach_to_wiki(result, wiki, added_by=self.owner)
-        # pending_scan=False alongside the wiki link: a fresh upload is now
-        # stored raw and gated to its uploader until tasks.process_image_upload
-        # runs (see Image.pending_scan), and this file is about the *wiki
-        # reachability* gate, not the processing one. Leaving it True would make
-        # every negative assertion below pass for the wrong reason - a photo
-        # invisible because it is unprocessed, not because the wiki is out of
-        # reach - which is exactly the vacuous-test shape these fixtures exist
-        # to avoid. Set directly rather than by running the task: this helper
-        # already stamps `wiki` with update() rather than going through the real
-        # send-to-wiki flow, and a real Pillow decode per test buys nothing here.
         Image.objects.filter(pk=result.pk).update(wiki=wiki, pending_scan=False)
         result.refresh_from_db()
         return result
@@ -146,12 +124,8 @@ class AnonymousViewersTests(WikiReachabilityTestCase):
 class TripActivityPhotosTests(WikiReachabilityTestCase):
     """A pin on a trip activity does *not* share its photos with the trip.
 
-    It used to. Adding a place to an itinerary says where the group is going;
-    it is not a per-photo decision, and ``docs/GOALS.md`` requires one before
-    a pin's contents reach anybody else. The grant was also live - a photo
-    uploaded to that pin months later joined the exposure by itself - which is
-    the shape GOALS rules out outright.
-    """
+    Adding a place to an itinerary says where the group is going; it is not a per-photo decision, and
+    ``docs/GOALS.md`` requires one before a pin's contents reach anybody else."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -179,10 +153,8 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
     def test_a_trip_member_cannot_see_a_photo_on_an_activity_pin(self) -> None:
         """Even with both visibility settings wide open.
 
-        The member's ``viewer_photo_filter`` is ANYONE and the uploader's
-        ``photo_upload_visibility`` is left at its permissive default, so
-        membership is the only thing that could admit them - and it must not.
-        """
+        The member's ``viewer_photo_filter`` is ANYONE and the uploader's ``photo_upload_visibility`` is left at
+        its permissive default, so membership is the only thing that could admit them - and it must not."""
         self.assertFalse(
             self._visible(self.photo, self.member), "a trip member reached the whole gallery of a pin on the itinerary"
         )
@@ -200,10 +172,8 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
     def test_a_later_upload_does_not_join_the_trip_either(self) -> None:
         """The live half of the old grant: photos added after the fact.
 
-        A photo uploaded long after the pin went on the itinerary was swept in
-        by the same query, so the exposure kept growing with no further act by
-        anyone.
-        """
+        A photo uploaded long after the pin went on the itinerary was swept in by the same query, so the
+        exposure kept growing with no further act by anyone."""
         later = self._pin_photo(self.owner_far_pin, "uploaded-later", colour=(200, 40, 90))
 
         self.assertFalse(self._visible(later, self.member))

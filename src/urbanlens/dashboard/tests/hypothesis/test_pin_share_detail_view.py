@@ -1,9 +1,4 @@
-"""Tests for PinShareDetailView - the page a share recipient lands on from a notification.
-
-Covers: the page renders for the recipient, 404s for anyone else, and its map
-initializes (assigns window.map) unconditionally so the shared top-right
-toolbar's screenshot tool never falls back to its own hardcoded default.
-"""
+"""Tests for PinShareDetailView - the page a share recipient lands on from a notification."""
 
 from __future__ import annotations
 
@@ -42,9 +37,7 @@ class PinShareDetailViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_map_initializes_unconditionally(self) -> None:
-        """window.map must be assigned even when there's no early-return path
-        skipped - regression guard for the screenshot-tool-defaults-to-Manhattan
-        bug class (the map used to only initialize when coordinates existed)."""
+        """window.map must be assigned even when there's no early-return path skipped - regression guard for the screenshot-tool-defaults-to-Manhattan bug class (the map used to only initialize when coordinates existed)."""
         self.client.force_login(self.recipient.user)
         response = self.client.get(reverse("pin.share.detail", kwargs={"share_id": self.share.pk}))
         self.assertContains(response, "window.map = map;")
@@ -52,14 +45,7 @@ class PinShareDetailViewTests(TestCase):
 
 
 class PinShareDetailViewPrivateNotesLeakTests(TestCase):
-    """The sender's ``pin.description`` (private personal notes, per Pin.description's own
-    docstring - distinct from the public Location.description) was rendered unconditionally
-    on this page for ANY share the recipient could reach, including a DETECTED share the
-    recipient never consented to and a share long since ACCEPTED/REJECTED. Nothing about
-    consenting to share a *pin* implies consenting to share its owner's private notes about
-    it - that's a live reference into the sender's pin, exactly what
-    docs/GOALS.md's sharing model forbids. See docs/audits/GOALS_CODE_AUDIT.md ("Pin-to-pin sharing").
-    """
+    """The sender's ``pin.description`` (private personal notes, per Pin.description's own docstring - distinct from the public Location.description) was rendered unconditionally on this page for ANY share the recipient could reach, including a DETECTED share the recipient never consented to and a share long since ACCEPTED/REJECTED. Nothing about consenting to share a *pin* implies consenting to share its owner's private notes about it - that's a live reference into the sender's pin, exactly what docs/GOALS.md's sharing model forbids."""
 
     def setUp(self) -> None:
         self.sender: Profile = baker.make("auth.User").profile
@@ -71,12 +57,7 @@ class PinShareDetailViewPrivateNotesLeakTests(TestCase):
         return self.client.get(reverse("pin.share.detail", kwargs={"share_id": share.pk}))
 
     def test_description_is_never_shown_regardless_of_status_or_origin(self) -> None:
-        """Loops every (status, origin) combination the row can actually hold - a
-        status-only or origin-only check would miss the other axis leaking. Each
-        combo gets its own recipient: PinShare enforces at most one pending share,
-        and at most one map_detected share, per (pin, to_profile) pair, so reusing
-        self.recipient across combos would trip those constraints, not the code
-        under test."""
+        """Loops every (status, origin) combination the row can actually hold - a status-only or origin-only check would miss the other axis leaking. Each combo gets its own recipient: PinShare enforces at most one pending share, and at most one map_detected share, per (pin, to_profile) pair, so reusing self.recipient across combos would trip those constraints, not the code under test."""
         for status in PinShareStatus.values:
             for origin in PinShareOrigin.values:
                 with self.subTest(status=status, origin=origin):

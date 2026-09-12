@@ -1,11 +1,4 @@
-"""Integration tests for the Facts evidence write path and its call-site hooks.
-
-Every test patches ``tasks.recompute_fact_confidence.delay`` so evidence
-creation never touches a real Celery broker - confidence recomputation
-itself is exercised directly via ``services.facts.confidence.recompute``
-(see ``RecomputeIntegrationTests``), the same "call the task function
-directly instead of via .delay()" pattern used elsewhere in this test suite.
-"""
+"""Integration tests for the Facts evidence write path and its call-site hooks."""
 
 from __future__ import annotations
 

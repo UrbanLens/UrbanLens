@@ -1,25 +1,4 @@
-"""The map's quick-edit must write only the pin fields it was given.
-
-``MapController.patch_pin`` applies whichever of name/coordinates/icon/color/
-custom_icon were posted and then bare-saves the pin - every column, from the
-instance loaded at the start of the request.
-
-``Pin`` is the most heavily written model in the app: around forty writers scope
-their updates to the columns they own, and several of them are background work
-that can land at any moment - visit logging setting ``last_visited``, the
-placeholder-name sweep clearing ``name``, pin suggestions, and
-``share_provenance`` setting ``inferred_source_share``. That last one is part of
-the ``LocationExposure`` provenance chain the project treats as an invariant, so
-silently reverting it is worse than losing a preference.
-
-The window is a single request, but this request is not a short one: it accepts
-a ``custom_icon`` upload (validated before the save) and can repoint the pin to
-a find-or-created ``Location``.
-
-The concurrent write is injected through a real seam - ``get_nearby_or_create``,
-which patch_pin calls between loading the pin and saving it - so the interleaving
-is exactly the one that happens in production, and deterministic.
-"""
+"""The map's quick-edit must write only the pin fields it was given."""
 
 from __future__ import annotations
 

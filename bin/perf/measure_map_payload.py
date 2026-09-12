@@ -1,22 +1,5 @@
 #!/usr/bin/env python
-"""What one account's map data costs to build and to ship.
-
-The figures D12 rests on - the projection path's cost per 1,000 pins, and what a
-whole account weighs as one document - decide whether the cache is worth its
-shape, so they need to be reproducible rather than quoted.
-
-``--labels-per-pin`` matters more than it looks: a pin payload names its labels
-by id and the response defines each label once, so the saving over copying every
-label's name, colour and icon into every pin grows with how many labels a pin
-carries. Seeding one label per pin measures the case where there is nothing to
-save.
-
-Runs against a throwaway test database it creates and destroys, so it is safe on
-a machine with real data.
-
-    docker exec -e UL_TEST_DB_NAME=payload_cost <app> \
-        /app/.venv/bin/python bin/perf/measure_map_payload.py --pins 10000 --labels-per-pin 4
-"""
+"""What one account's map data costs to build and to ship."""
 
 from __future__ import annotations
 
@@ -51,8 +34,7 @@ def measure(pins: int, batch: int, labels_per_pin: int) -> dict[str, object]:
         labels_per_pin: How many labels each seeded pin carries.
 
     Returns:
-        A report, keyed by measurement name.
-    """
+        A report, keyed by measurement name."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.integration_testing.perf_seed import seed_heavy_account
@@ -116,8 +98,7 @@ def _measure_label_dictionary(service: object, pin_count: int) -> dict[str, obje
         pin_count: How many pins the response would carry.
 
     Returns:
-        Its size, and what it works out to per pin.
-    """
+        Its size, and what it works out to per pin."""
     started, started_cpu = time.perf_counter(), time.process_time()
     dictionary = service.label_dictionary()  # type: ignore[attr-defined]
     wall = time.perf_counter() - started
@@ -135,8 +116,8 @@ def _measure_label_dictionary(service: object, pin_count: int) -> dict[str, obje
 def _measure_denormalised(service: object, payloads: list, pin_count: int) -> dict[str, object]:
     """What the same document would weigh with each label copied into every pin.
 
-    The shape the payload had before the labels were normalised out of it, built
-    from the same rows in the same run so the two are comparable.
+    The shape the payload had before the labels were normalised out of it, built from the same rows in the same
+    run so the two are comparable.
 
     Args:
         service: The payload service for the profile.
@@ -144,8 +125,7 @@ def _measure_denormalised(service: object, payloads: list, pin_count: int) -> di
         pin_count: How many pins those cover.
 
     Returns:
-        Byte counts for the denormalised form.
-    """
+        Byte counts for the denormalised form."""
     dictionary = service.label_dictionary()  # type: ignore[attr-defined]
     inflated = []
     for payload in payloads:
@@ -169,18 +149,14 @@ def _measure_denormalised(service: object, payloads: list, pin_count: int) -> di
 def _measure_filter_post(user: object, pin_count: int) -> dict[str, object]:
     """What one press of the map's filter button sends over the wire.
 
-    The filter form posts to `map.search`, which renders the whole matching set
-    into an HTML document. That is the response a user produces by typing in the
-    filter box, so its size is the per-keystroke cost one account can impose on
-    the worker serving it.
+    The filter form posts to `map.search`, which renders the whole matching set into an HTML document.
 
     Args:
         user: The account to post as.
         pin_count: How many pins matched, for the per-pin figures.
 
     Returns:
-        Status, byte counts and timings, or a note if the endpoint refused.
-    """
+        Status, byte counts and timings, or a note if the endpoint refused."""
     from django.test import Client
     from django.urls import reverse
 
@@ -220,8 +196,7 @@ def _per_thousand(rows: int, wall: float, cpu: float, *, extra: dict[str, object
         extra: Measurement-specific fields to merge in.
 
     Returns:
-        The normalised report.
-    """
+        The normalised report."""
     scale = 1000.0 / rows if rows else 0.0
     report: dict[str, object] = {
         "rows": rows,

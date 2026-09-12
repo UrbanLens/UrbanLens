@@ -1,9 +1,4 @@
-"""Tests for the safety defaults form: chip-based contact parsing and autosave.
-
-- _contact_display_label: pure function, tested without DB.
-- SafetySettingsView.post: chip parsing (repeated contact_emails) and the XHR
-  autosave JSON response, tested with RequestFactory + model_bakery.
-"""
+"""Tests for the safety defaults form: chip-based contact parsing and autosave."""
 
 from __future__ import annotations
 
@@ -123,12 +118,7 @@ class SafetySettingsViewDefaultsPostTests(TestCase):
 
 
 class SafetySettingsAlwaysEditableTests(TestCase):
-    """The Defaults card used to show a read-only summary behind an Edit
-    toggle (first a two-button edit/close pair, later consolidated into one
-    toggle button - see the now-removed SafetySettingsSingleToggleButtonTests).
-    Per the "edit in place without having to open edit mode" request, the
-    toggle/summary are gone entirely now - the already-autosaving form (see
-    SafetySettingsViewDefaultsPostTests above) is simply always what's shown."""
+    """Per the "edit in place without having to open edit mode" request, the toggle/summary are gone entirely now - the already-autosaving form (see SafetySettingsViewDefaultsPostTests above) is simply always what's shown."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

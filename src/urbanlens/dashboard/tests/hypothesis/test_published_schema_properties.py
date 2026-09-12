@@ -1,18 +1,4 @@
-"""Properties the published OpenAPI document must hold as a whole.
-
-The schema tests that already existed assert that *particular* paths are present
-or absent - the e2ee mount is published, `/dashboard/rest/` is not. Nothing
-asserted anything about the document globally, and that is the gap two findings
-came through on 2026-08-24: two pairs of operations shared an `operationId`, and
-no authenticated operation documented the 401 it returns. Both are properties of
-every operation at once, so no per-endpoint test was ever going to notice.
-
-Mirrored from `tests/contract/test_openapi_conformance.py` on purpose. That
-suite is outside `testpaths` and needs an explicit invocation, so a check living
-only there does not run on a normal `pytest`. These are the cheap half - pure
-introspection, no database, no HTTP - and they are the half worth having on
-every commit. See `docs/audits/TEST_COVERAGE_GAPS.md`.
-"""
+"""Properties the published OpenAPI document must hold as a whole."""
 
 from __future__ import annotations
 
@@ -28,13 +14,11 @@ _OPERATION_KEYS = frozenset({"get", "put", "post", "delete", "options", "head", 
 def _document() -> dict:
     """Generate the published schema without issuing a request.
 
-    Imported inside the function rather than at module scope: drf-spectacular
-    pulls in the urlconf, and that should happen when a test runs rather than
-    when this module is collected.
+    Imported inside the function rather than at module scope: drf-spectacular pulls in the urlconf, and that
+    should happen when a test runs rather than when this module is collected.
 
     Returns:
-        The same document ``external_api:schema`` serves.
-    """
+        The same document ``external_api:schema`` serves."""
     from drf_spectacular.generators import SchemaGenerator
 
     return SchemaGenerator().get_schema(request=None, public=True)
@@ -54,12 +38,8 @@ class OperationIdTests(SimpleTestCase):
     def test_no_two_operations_share_an_operation_id(self) -> None:
         """A collision renames somebody's method without anybody deciding to.
 
-        drf-spectacular does not fail on a duplicate - it appends ``_2`` to
-        whichever operation it reaches second and logs a warning nobody reads.
-        Which one loses depends on the order the urlconf is walked, so adding an
-        unrelated route can move the suffix to the other operation and silently
-        rename a method downstream code calls.
-        """
+        drf-spectacular does not fail on a duplicate - it appends ``_2`` to whichever operation it reaches
+        second and logs a warning nobody reads."""
         document = _document()
         seen: dict[str, list[str]] = defaultdict(list)
         for path, method, operation in _operations(document):
@@ -85,11 +65,8 @@ class DocumentedRefusalTests(SimpleTestCase):
     def test_authenticated_operations_document_401_and_403(self) -> None:
         """A client needs a branch for the failure it will meet most often.
 
-        Every authenticated endpoint answers 401 without credentials and 403
-        when the credential's scopes do not cover the call. A document that
-        mentions neither leaves a generated client treating both as protocol
-        violations rather than as "your token expired" and "you cannot do that".
-        """
+        Every authenticated endpoint answers 401 without credentials and 403 when the credential's scopes do not
+        cover the call."""
         document = _document()
         missing: list[str] = []
         for path, method, operation in _operations(document):
@@ -139,11 +116,9 @@ class PublishedSurfaceTests(SimpleTestCase):
     def test_the_internal_rest_surface_is_never_published(self) -> None:
         """`/dashboard/rest/` has no public contract and must not appear.
 
-        Asserted here as well as in the existing e2ee-prefix tests because this
-        one is about the *whole* document: a preprocessing hook that stopped
-        filtering would leak the internal API without any single path test
-        noticing.
-        """
+        Asserted here as well as in the existing e2ee-prefix tests because this one is about the *whole*
+        document: a preprocessing hook that stopped filtering would leak the internal API without any single
+        path test noticing."""
         document = _document()
         leaked = [path for path in document.get("paths", {}) if path.startswith("/dashboard/rest/")]
 
@@ -152,11 +127,8 @@ class PublishedSurfaceTests(SimpleTestCase):
     def test_the_document_declares_a_security_scheme(self) -> None:
         """Losing the authentication extension makes the whole API read as public.
 
-        It happened once: drf-spectacular could not resolve
-        ``ApiKeyAuthentication`` and emitted a schema documenting no
-        authentication at all, so a client generated from it had no idea a
-        bearer token existed.
-        """
+        It happened once: drf-spectacular could not resolve ``ApiKeyAuthentication`` and emitted a schema
+        documenting no authentication at all, so a client generated from it had no idea a bearer token existed."""
         document = _document()
         schemes = document.get("components", {}).get("securitySchemes", {})
 

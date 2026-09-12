@@ -1,12 +1,4 @@
-"""Tests for the AI assistant (UL-293): the native-tool-calling loop and the chat views.
-
-Per-tool scoping (search_pins/find_unvisited_pins/list_trips/create_trip/
-add_trip_activity, each checked against another profile's data) lives in
-``test_ai_tools_pins.py``/``test_ai_tools_trips.py`` - those exercise the
-same handlers this loop calls, through ``registry.execute()`` directly. What
-belongs here is the loop itself: budgets, the unknown-tool path, and the
-gateway-unavailable/no-response paths.
-"""
+"""Tests for the AI assistant (UL-293): the native-tool-calling loop and the chat views."""
 
 from __future__ import annotations
 
@@ -49,14 +41,9 @@ def _plain_profile():
 class _StubGateway:
     """Feeds a scripted sequence of native-tool-calling responses to the loop.
 
-    Each step is either ``{"reply": "..."}`` (a plain end-of-turn text
-    response) or ``{"tool": name, "args": {...}}``/``{"tools": [...]}`` (one
-    or several parallel ``ToolUseBlock``s in a single round - the latter is
-    what lets a test drive the tool-call budget independently of the round
-    budget). Carries ``model``/``cost`` because ``run_assistant_turn`` reads
-    both, once, in its ``finally`` block to log the turn's cost - same shape
-    a real ``LLMGateway`` always provides.
-    """
+    Each step is either ``{"reply": "..."}`` (a plain end-of-turn text response) or ``{"tool": name, "args":
+    {...}}``/``{"tools": [...]}`` (one or several parallel ``ToolUseBlock``s in a single round - the latter is
+    what lets a test drive the tool-call budget independently of the round budget)."""
 
     def __init__(self, steps: list[dict]) -> None:
         self.steps = list(steps)
@@ -330,12 +317,7 @@ class AssistantViewTests(TestCase):
         self.assertNotContains(response, "Found 3 pins.")
 
     def test_a_second_poller_still_gets_the_reply_after_the_first_consumed_it(self) -> None:
-        # Two browser tabs poll the same turn. The first to see SUCCESS clears
-        # the Celery result (AsyncResult.forget), so the second finds the task
-        # id unknown - which Celery reports as PENDING, indistinguishable from
-        # "still running". Without the turn-result cache the second tab would
-        # spin until MAX_POLL_ATTEMPTS and show the gave-up message for a turn
-        # that actually succeeded.
+        # Two browser tabs poll the same turn.
         with (
             patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
             self._enqueued(),
@@ -686,11 +668,9 @@ class AssistantProposalConfirmViewTests(TestCase):
     def test_confirm_racing_a_still_executing_claim_does_not_500(self) -> None:
         """A loser arriving between another request's claim and its session write-back gets a safe reply, not a crash.
 
-        Simulated by claiming the proposal directly (as the winner would)
-        without ever calling ``_update_session_proposal`` - the session's
-        copy is left at ``status: "pending"``, exactly the window this view
-        must not trust when rendering the loser's response.
-        """
+        Simulated by claiming the proposal directly (as the winner would) without ever calling
+        ``_update_session_proposal`` - the session's copy is left at ``status: "pending"``, exactly the window
+        this view must not trust when rendering the loser's response."""
         from urbanlens.dashboard.services.ai.turns import claim_turn_proposal
 
         turn_id = self._resolve_with_proposal(

@@ -358,11 +358,9 @@ class FetchCulturalResourceDetailTests(SimpleTestCase):
     def test_unwraps_the_resource_from_redatas_envelope(self) -> None:
         """REData answers ``{"detail_status": ..., "resource": {...}}``.
 
-        Handing the envelope on made every caller's ``attributes``/``attachments``
-        read come back empty, which is indistinguishable from a resource that
-        genuinely has neither - so no CRIS record ever produced an info card or
-        a single photo.
-        """
+        Handing the envelope on made every caller's ``attributes``/``attachments`` read come back empty, which
+        is indistinguishable from a resource that genuinely has neither - so no CRIS record ever produced an
+        info card or a single photo."""
         session = MagicMock()
         session.post.return_value = _response(
             200,

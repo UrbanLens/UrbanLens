@@ -1,20 +1,4 @@
-"""Every setting the exporter writes must survive a re-import.
-
-`ImportSettingsCompletenessTests` already round-trips settings, but it names three
-fields by hand. A field added to ``_export_settings`` and forgotten in the
-importer therefore passes: the user's export contains it, the restore silently
-drops it, and the setting reverts to the model default. For a privacy setting
-that default is the *more* permissive value.
-
-This is the completeness arm, in the same spirit as
-``test_beat_lock_intervals``'s "the scan still finds the known locks": rather than
-listing fields, it exports a profile, imports that export into a fresh profile,
-and re-exports. Anything the importer ignores shows up as a difference between the
-two exports, whatever it is called and whenever it was added.
-
-``_EXPECTED_DIVERGENCES`` records the keys that legitimately do not round-trip, so
-that each one is a deliberate, reviewed entry rather than a silent omission.
-"""
+"""Every setting the exporter writes must survive a re-import."""
 
 from __future__ import annotations
 

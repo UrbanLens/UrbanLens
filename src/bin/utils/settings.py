@@ -1,4 +1,3 @@
-# Generic imports
 from __future__ import annotations
 
 import logging
@@ -9,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from yaml.loader import SafeLoader
 
-# App imports
 from .exceptions import FileEmptyError
 
 if TYPE_CHECKING:
@@ -25,18 +23,13 @@ GOOGLE_LENS_URL = "your-google-lens-url-placeholder"
 
 
 class Settings:
-    """
-    Settings for our application (used in /bin files only).
-
-    These are loaded from the file at SETTINGS_PATH (currently bin/conf/settings.yaml).
-    """
+    """Settings for /bin scripts, loaded from bin/conf/settings.yaml."""
 
     _settings: SettingsFile | None = None
     _logging_setup: bool = False
 
     @classmethod
     def settings(cls) -> SettingsFile:
-        # If settings has never been loaded, then load it.
         return cls._settings or cls.load_config()
 
     @classmethod
@@ -45,30 +38,22 @@ class Settings:
 
     @classmethod
     def get_logger(cls, namespace: str):
-        """
-        Sets up the logger once (and only once), then returns a logger for the module requested.
-        """
-        # Setup logging if it isn't already
+        """Return the module logger, setting up logging once."""
         if cls._logging_setup is not True:
             # dictConfig allows TypedDicts, but mypy doesn't know that.
             logging.config.dictConfig(Settings.logging())  # type: ignore[arg-type]
             cls._logging_setup = True
 
-        # Create a new logger
         return logging.getLogger(namespace)
 
     @classmethod
     def load_config(cls) -> SettingsFile:
-        # Read our default sensitivity settings (if available)
         filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), SETTINGS_PATH)
 
         if os.path.exists(filepath):
-            # If it exists, then open it
             with open(filepath, encoding="utf-8") as file:
-                # Load the contents into a variable
                 cls._settings = yaml.load(file, Loader=SafeLoader)
         else:
-            # Let everyone know we couldn't find the settings. This likely exits.
             raise FileNotFoundError(f"Could not load bin settings from {filepath}")
 
         # Validate contents of settings file.
@@ -79,26 +64,22 @@ class Settings:
 
     @classmethod
     def all(cls) -> SettingsFile:
-        """
-        Makes the syntax for getting the settings dict a little less clunky (i.e. Settings.all() instead of Settings.settings())
+        """Return the settings dict.
 
         Returns:
             SettingsFile: A dictionary of settings.
-
         """
         return cls.settings()
 
     @classmethod
     def get(cls, key: str) -> Any:
-        """
-        Retrieves the value at the provided key.
+        """Return the value at key.
 
         Args:
-                key (str): A key to retrieve
+            key: A key to retrieve.
 
         Returns:
-                Any: The value stored at the provided key
-
+            The value stored at the provided key.
         """
         return cls.settings().get(key)
 

@@ -1,17 +1,4 @@
-"""Every registered service must carry a rate limit of some kind.
-
-The limiter enforces whatever `ApiRateLimit` says, and those rows are seeded from
-each plugin's declared defaults. A plugin that declares none therefore does not
-get a lenient limit - it gets *no* limit, and its gateway calls out as fast as the
-code asks, with nothing between a retry loop and someone else's API.
-
-All 46 services currently declare at least one of per-minute, per-day or
-per-30-day. This pins that, because the failure is invisible: an unthrottled
-service works perfectly until it is throttled or billed by the provider instead.
-
-Deliberately weak on purpose - it asserts *a* limit exists, not that the numbers
-are right. Those are per-provider judgements that belong with each plugin.
-"""
+"""Every registered service must carry a rate limit of some kind."""
 
 from __future__ import annotations
 

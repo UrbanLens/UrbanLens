@@ -1,11 +1,4 @@
-"""Tests for RedataSearchGateway against REData's ``/search/web/``/``/search/news/``
-contract (``../REData/docs/api-reference.md``, "GET /search/web/" and "GET
-/search/news/").
-
-Constructs the gateway with a mock ``session`` (Gateway.__post_init__ leaves a
-non-default session untouched, skipping the DB-backed rate-limiting wrapper -
-see gateway.py) so these stay pure unit tests with no database access.
-"""
+"""Tests for RedataSearchGateway against REData's ``/search/web/``/``/search/news/`` contract (``../REData/docs/api-reference.md``, "GET /search/web/" and "GET /search/news/")."""
 
 from __future__ import annotations
 

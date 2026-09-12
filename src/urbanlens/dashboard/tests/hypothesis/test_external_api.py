@@ -1,13 +1,4 @@
-"""Tests for the external API: auth, scope enforcement, and the pin-create endpoint.
-
-This surface is reachable by anyone holding a user's API key - unlike the
-internal /rest/ API (test_rest_api_security.py), it is *designed* to be used
-by something other than the site's own frontend, so these tests focus on:
-a session alone must never work here, a revoked/malformed key must never
-work, each endpoint must only honor the scope it declares, and pin creation
-must validate its input before anything reaches the shared
-services.pins.pin_creation.create_pin_for_profile call.
-"""
+"""Tests for the external API: auth, scope enforcement, and the pin-create endpoint."""
 
 from __future__ import annotations
 
@@ -65,13 +56,7 @@ class WhoAmIAuthTests(TestCase):
     def test_valid_key_returns_exactly_the_profile_uuid_and_slug(self) -> None:
         """whoami serves the caller's uuid and slug - and nothing else, ever.
 
-        Asserted as an exact dict rather than field-by-field on purpose. This
-        is the narrowest profile read in the API, and the failure mode worth
-        guarding is not a missing field (a client notices that immediately) but
-        a *third* field arriving unnoticed because someone widened
-        ``WhoAmISerializer`` for convenience. An exact comparison fails the
-        moment that happens, forcing the addition to be a deliberate decision.
-        """
+        Asserted as an exact dict rather than field-by-field on purpose."""
         _api_key, raw_key = generate_api_key(self.user, "Zapier")
         response = self.client.get(self.url, **_bearer(raw_key))
         self.assertEqual(response.status_code, 200)
@@ -134,11 +119,8 @@ class PinCreateViewTests(TestCase):
     def test_client_can_declare_a_name_as_deliberately_typed(self) -> None:
         """An interactive client (the mobile app's pin form) opts in explicitly.
 
-        Without this the name a user typed stayed unprotected until they
-        happened to edit it, leaving it eligible for the placeholder-name
-        upgrade sweep. The default stays False so importers and offline
-        outboxes keep the behavior the two tests above pin down.
-        """
+        Without this the name a user typed stayed unprotected until they happened to edit it, leaving it
+        eligible for the placeholder-name upgrade sweep."""
         response = self._post({"name": "Old Mill", "latitude": 42.5, "longitude": -73.5, "name_is_user_provided": True})
         self.assertEqual(response.status_code, 201, response.content)
         pin = Pin.objects.get(uuid=response.json()["uuid"])

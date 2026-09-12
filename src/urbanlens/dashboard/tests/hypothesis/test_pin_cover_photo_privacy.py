@@ -1,15 +1,4 @@
-"""Eligibility rules for the pin hero-banner cover photo.
-
-``PinCoverPhotoView`` accepts any image "tied to this pin, or already associated
-with its Location". The Location half of that rule is what makes another user's
-photo reachable: every pin upload stamps ``Image.location``, so two users pinning
-the same place share a Location id. Without a visibility filter the rule lets one
-of them mount the other's private upload as their own hero banner - and the
-response body hands back the file URL directly.
-
-The wiki twin (``WikiCoverPhotoView``) already filters through
-``Image.objects.visible_to``; these tests pin the pin-side to the same rule.
-"""
+"""Eligibility rules for the pin hero-banner cover photo."""
 
 from __future__ import annotations
 
@@ -83,11 +72,8 @@ class PinCoverPhotoEligibilityTests(TestCase):
     def test_visible_photo_from_the_same_location_is_still_accepted(self) -> None:
         """The Location half of the rule keeps working for photos the viewer may see.
 
-        "May see" is two gates, not one: the owner has to have shared the photo,
-        and their setting has to admit this viewer. This test used to open the
-        second only, which passed while a photo nobody had shared was reachable
-        by anyone the setting happened to admit.
-        """
+        "May see" is two gates, not one: the owner has to have shared the photo, and their setting has to admit
+        this viewer."""
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         Image.objects.filter(pk=self.other_image.pk).update(wiki=baker.make(Wiki, location=self.location))

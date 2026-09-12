@@ -1,11 +1,4 @@
-"""The backfill that relabels connected-account imports filed as manual uploads.
-
-What makes this worth testing rather than eyeballing: it matches on
-``source_url`` prefixes, one of which is the user's own Immich server address.
-Matching too widely would relabel a genuine upload; matching too narrowly leaves
-a photo in the wrong Media gallery tab, which is the cost of being careful and
-is the trade this takes.
-"""
+"""The backfill that relabels connected-account imports filed as manual uploads."""
 
 from __future__ import annotations
 
@@ -99,8 +92,5 @@ class BackfillPersonalLibraryImageSourceTests(TestCase):
     def test_the_url_shape_comes_from_the_code_that_writes_it(self) -> None:
         """Guard against the prefix being restated and drifting.
 
-        The backfill recognises a row by the prefix of the URL its importer
-        wrote. Two spellings of one format drift, and the copy is what drifts -
-        so both sides come from the same function.
-        """
+        The backfill recognises a row by the prefix of the URL its importer wrote."""
         self.assertTrue(self.account.asset_web_url("asset-3").startswith(self.account.asset_url_prefix()))

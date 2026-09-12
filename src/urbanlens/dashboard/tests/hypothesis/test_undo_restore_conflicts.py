@@ -1,17 +1,4 @@
-"""The other undo handlers must refuse an impossible restore, not crash on it.
-
-``PinUndoHandler`` establishes the contract: pre-check whatever would make the recreate
-fail and raise ``UndoExpiredError``, "since recreating the row would otherwise fail with
-an uncaught IntegrityError". The remaining handlers restore rows that carry unique
-constraints of their own:
-
-    SavedFilter   unique(profile, name)
-    Wiki          location is unique - one wiki per location
-    Trip          slug is unique
-
-In each case the same ordinary sequence applies: delete the thing, make another one like
-it, then change your mind.
-"""
+"""The other undo handlers must refuse an impossible restore, not crash on it."""
 
 from __future__ import annotations
 

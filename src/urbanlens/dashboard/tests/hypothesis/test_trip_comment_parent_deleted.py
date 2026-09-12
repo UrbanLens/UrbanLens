@@ -1,13 +1,4 @@
-"""UL-219, ported to trips: a reply must survive its parent comment's
-deletion with its thread context preserved, not silently become an
-unexplained top-level comment.
-
-TripComment.parent is on_delete=SET_NULL, identical in shape to
-dashboard.Comment.parent - but until this fix, nothing flagged a trip
-reply when its parent was deleted, so it re-rendered as an ordinary
-top-level comment, textually and structurally indistinguishable from one
-that was always top-level. Mirrors test_comment_parent_deleted.py.
-"""
+"""UL-219, ported to trips: a reply must survive its parent comment's deletion with its thread context preserved, not silently become an unexplained top-level comment."""
 
 from __future__ import annotations
 

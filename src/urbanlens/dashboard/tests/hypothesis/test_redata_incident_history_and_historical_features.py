@@ -1,14 +1,4 @@
-"""Tests for the two REData panels added 2026-09-08: Incident History and Historical Features.
-
-**Incident History** (``IncidentHistoryPanelSource``) is a subscriber-gated
-sibling of the free ``PoliceIncidentsPanelSource``: same endpoint, a much
-wider ``years`` window, and its own ``SiteFeature.INCIDENT_HISTORY`` gate -
-see ``test_panel_feature_gate.py`` for the general gating mechanism this
-exercises concretely, and ``docs/PROBLEMS.md`` P9 for why the free panel
-stays free. **Historical Features** (``HistoricalFeaturesPanelSource``) wires
-up REData's ``/historical-features/`` endpoint for the first time - the
-newest domain in REData's API at the time this was written.
-"""
+"""Tests for the two REData panels added 2026-09-08: Incident History and Historical Features."""
 
 from __future__ import annotations
 
@@ -70,11 +60,7 @@ class IncidentHistoryPanelRenderTests(TestCase):
         self.assertIsNone(self.source.render_context(self.pin, data))
 
     def test_real_iso8601_datetime_is_bucketed_by_year_not_marked_undated(self) -> None:
-        """REData's occurred_at is a full ISO-8601 datetime with an offset (e.g.
-        "2026-08-03T17:03:00-05:00", 25 chars), never a bare "YYYY-MM-DD" - a
-        check requiring an exact 10-character value would misclassify every
-        real incident as undated.
-        """
+        """REData's occurred_at is a full ISO-8601 datetime with an offset (e.g. "2026-08-03T17:03:00-05:00", 25 chars), never a bare "YYYY-MM-DD" - a check requiring an exact 10-character value would misclassify every real incident as undated."""
         data = {"incidents": [{"category": "burglary", "occurred_at": "2026-08-03T17:03:00-05:00"}]}
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
@@ -99,12 +85,7 @@ class IncidentHistoryPanelRenderTests(TestCase):
         )
 
     def test_forces_a_live_refresh_so_the_free_panels_cache_cannot_truncate_the_window(self) -> None:
-        """P94: REData's incident cache has no ``years`` dimension - it keys purely on
-        coordinate + a radius pinned the same for every provider. If the free 3-year
-        panel populates that cache first (the common case, since it is the default
-        panel), an unforced fetch here would silently be served those same narrow
-        3-year rows for a full cache window with no error and no way to tell.
-        """
+        """If the free 3-year panel populates that cache first (the common case, since it is the default panel), an unforced fetch here would silently be served those same narrow 3-year rows for a full cache window with no error and no way to tell."""
         with mock.patch(
             "urbanlens.dashboard.services.apis.locations.redata_incidents_gateway.RedataIncidentsGateway"
         ) as gateway_cls:
@@ -278,10 +259,7 @@ class HistoricalFeaturesRateLimitTests(TestCase):
         self.assertIn("redata_historical_features", HistoricalFeaturesPlugin().get_service_defaults())
 
     def test_get_limit_config_uses_the_declared_defaults_not_the_generic_fallback(self) -> None:
-        """Without a get_service_defaults() override, get_limit_config() falls through to the
-        generic 20/min-500/day default with no notes - indistinguishable from a service nobody
-        ever configured. calls_per_day=None here is what tells the two cases apart.
-        """
+        """Without a get_service_defaults() override, get_limit_config() falls through to the generic 20/min-500/day default with no notes - indistinguishable from a service nobody ever configured. calls_per_day=None here is what tells the two cases apart."""
         config = rate_limiter.get_limit_config("redata_historical_features")
 
         self.assertEqual(config.display_name, "REData Historical Features")

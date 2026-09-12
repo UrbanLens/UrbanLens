@@ -1,13 +1,4 @@
-"""Deleting a comment removes its stored photo, not just its row.
-
-Django stopped deleting ``FileField`` files on row deletion in 1.3, so every
-deleted comment-with-photo used to strand its file under ``comment_images/``
-- where the media gate's orphan branch serves it to any authenticated user
-who knows the name (PROBLEMS.md, "Authenticated media gate - residual
-per-family risk"). Each comment owns its file outright:
-``attach_existing_comment_image`` copies rather than sharing storage, which is
-what makes deleting the file safe.
-"""
+"""Deleting a comment removes its stored photo, not just its row."""
 
 from __future__ import annotations
 
@@ -96,8 +87,7 @@ class CommentImageCleanupTests(TestCase):
 
 
 class WikiCommentImageCleanupTests(TestCase):
-    """Same _discard_comment_image helper, exercised via WikiCommentDeleteView - a
-    separate call site from PinCommentDeleteView that was previously untested."""
+    """Same _discard_comment_image helper, exercised via WikiCommentDeleteView - a separate call site from PinCommentDeleteView that was previously untested."""
 
     def setUp(self) -> None:
         super().setUp()

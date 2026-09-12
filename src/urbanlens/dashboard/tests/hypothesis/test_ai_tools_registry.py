@@ -1,11 +1,4 @@
-"""Tests for services.ai.tools.registry - the generic rules every tool obeys.
-
-Per-tool correctness (pins.py, trips.py) lives in their own test files; this
-one only exercises what :func:`execute` enforces regardless of which tool
-ran: unknown-tool/bad-args handling, URL rejection, the
-:attr:`~services.sandbox.guard.ProcessRole.AI` write refusal,
-``user_content_fields`` wrapping, and the result byte cap.
-"""
+"""Tests for services.ai.tools.registry - the generic rules every tool obeys."""
 
 from __future__ import annotations
 
@@ -31,22 +24,8 @@ from urbanlens.dashboard.services.ai.tools.registry import (
     register,
 )
 
-#: Every tool whose :class:`DataScope` is not ``NONE``, mapped to the tests
-#: proving another profile's data never reaches it - as
-#: ``"<test module>::<class>::<test>"``.
-#:
-#: This is the registry-driven guard the design asked for, and it is here for
-#: one reason: a tool that reads user data and ships without a negative-access
-#: test should fail CI, not depend on a reviewer noticing. Adding a tool with
-#: ``scope != NONE`` breaks :meth:`RegistrationTests.test_negative_access_coverage_is_complete`
-#: until its negative case is written and named here, and renaming or deleting
-#: one of those tests breaks
-#: :meth:`RegistrationTests.test_every_named_negative_access_test_exists`.
-#:
-#: The per-tool tests stay hand-written rather than generated: each tool takes
-#: different arguments and reaches different models, so "what would a leak
-#: even look like" is a per-tool question. What is mechanized is that the
-#: question got asked.
+#: Every tool whose :class:`DataScope` is not ``NONE``, mapped to the tests proving another profile's data never
+#: reaches it - as ``"<test module>::<class>::<test>"``.
 NEGATIVE_CASES: dict[str, tuple[str, ...]] = {
     "search_pins": ("test_ai_tools_pins::SearchPinsTests::test_another_profiles_pin_never_leaks_through",),
     "find_unvisited_pins": ("test_ai_tools_pins::FindUnvisitedPinsTests::test_only_sees_own_pins",),
@@ -81,13 +60,7 @@ NEGATIVE_CASES: dict[str, tuple[str, ...]] = {
 def _plain_profile():
     """A profile with SiteFeature.AI granted - the gate these tests exercise past, not around.
 
-    The first user in a fresh DB is auto-promoted to site admin, so a
-    throwaway user absorbs that first. Every tool below declares
-    ``features=frozenset({SiteFeature.AI})``, so a profile with no grant at
-    all would be refused before ever reaching the tool logic these tests are
-    actually about - see test_ai_access.py's own ``_grant_ai_to_everyone``
-    for the same pattern.
-    """
+    The first user in a fresh DB is auto-promoted to site admin, so a throwaway user absorbs that first."""
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
     from urbanlens.dashboard.models.subscriptions import SiteFeature
 
@@ -311,9 +284,8 @@ class RegistrationTests(TestCase):
         self.assertEqual(stale, set(), f"NEGATIVE_CASES names tools that are no longer registered: {sorted(stale)}")
 
     def test_every_named_negative_access_test_exists(self) -> None:
-        # Without this, NEGATIVE_CASES decays into a list of names that used
-        # to mean something - a renamed or deleted test would leave the
-        # completeness check above passing while the coverage it claims is gone.
+        # Without this, NEGATIVE_CASES decays into a list of names that used to mean something - a renamed or
+        # deleted test would leave the completeness check above passing while the coverage it claims is gone.
         import importlib
 
         for tool, cases in sorted(NEGATIVE_CASES.items()):

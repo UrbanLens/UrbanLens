@@ -1,17 +1,4 @@
-"""One failing memory source must not take the whole Memories feed down.
-
-``get_memory_events`` merges four independent sources - recorded routes, trips,
-visits and photos - and is explicitly an extensibility seam: its module docstring
-says adding a memory type is one new function appended to ``_EVENT_SOURCES`` and
-nothing else changes. That is exactly what makes unguarded fan-out costly here:
-any one source raising (a corrupt row, a missing relation, a geometry error, or a
-bug in a newly added source) discarded the other three and returned a 500 for the
-page, on both the HTML feed and the external API.
-
-Same shape as the site-admin status page, which 500'd whenever one infrastructure
-service was unreachable - and the same fix: isolate each contributor, so a feed
-that is missing one kind of memory still shows the rest.
-"""
+"""One failing memory source must not take the whole Memories feed down."""
 
 from __future__ import annotations
 

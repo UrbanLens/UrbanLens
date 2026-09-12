@@ -1,11 +1,4 @@
-"""The notification-dropdown respond endpoint answers only a real incoming request.
-
-``friend.respond`` resolved the pair's Friendship with ``between()``, which
-matches in either direction and reports nothing about status, then called
-``accept()``/``decline()``, which overwrite status unconditionally. Two things
-follow from that pair, and both are checked here: a requester could accept
-their own outgoing request, and a blocked party could decline the block away.
-"""
+"""The notification-dropdown respond endpoint answers only a real incoming request."""
 
 from __future__ import annotations
 

@@ -1,21 +1,4 @@
-"""Every great-circle distance in the codebase must give the same answer.
-
-Five modules had grown their own haversine - profile map centring, public-pin
-clustering, consensus answer scoring, Overture boundary matching, and markup
-geometry. All five agreed exactly when measured, so nothing was broken; they now
-delegate to ``services.geo.distance`` so they cannot stop agreeing.
-
-That consolidation is worth its churn because duplicated geometry primitives in
-this codebase have already drifted twice: four independent longitude averages,
-one of which put a user's map centre in the Atlantic, and a "nearest pin" lookup
-that ordered by a geometry column while a correct distance-ordered helper sat a
-few lines away in the same file. Nothing was wrong with these five - the point is
-that the sixth copy is where the next bug goes.
-
-The comparison is asserted rather than assumed, including across the
-antimeridian, where the formula is naturally correct (it works on the
-*difference* between longitudes) but where this codebase has repeatedly not been.
-"""
+"""Every great-circle distance in the codebase must give the same answer."""
 
 from __future__ import annotations
 

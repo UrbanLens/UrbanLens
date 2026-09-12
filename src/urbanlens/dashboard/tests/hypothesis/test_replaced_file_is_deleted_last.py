@@ -1,20 +1,4 @@
-"""Processing replaces an upload's stored file; the row must name the successor first.
-
-``downscale_stored_image`` (and the video and document equivalents) write the
-processed bytes under a new name - a ``.jpg`` becomes a ``.webp`` - and the row
-that names the old one is updated by their caller, at the end of the task, after
-three more thumbnail passes. Deleting the old file at replacement time therefore
-opens a window of seconds in which the database still names a file that is gone.
-
-That window is not harmless, because ``services.media.access.authorize_media``
-answers from the row: a request for the old path is *authorized* and then fails
-to open, which is a 500 rather than a 404, and it is the uploader's own
-just-uploaded tile that lands in it. Once the row does name the new file the old
-path is refused by authorization, so nothing is gained by keeping the file any
-longer than that - the ordering is the whole fix, not the lifetime.
-
-See P58 in docs/PROBLEMS.md.
-"""
+"""Processing replaces an upload's stored file; the row must name the successor first."""
 
 from __future__ import annotations
 

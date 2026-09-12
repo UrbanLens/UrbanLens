@@ -1,18 +1,4 @@
-"""Tests for MapController.view_map and MapController.map_pins_meta.
-
-Invariants verified:
-  - view_map requires authentication; unauthenticated requests are redirected.
-  - view_map populates key context variables: pin_count, use_pin_cache,
-    map_center_mode, and map_default_zoom from the user's profile.
-  - pin_count in context equals the real number of root pins for the profile.
-  - GPS mode sets map_center_lat/lng to None in the context, but populates
-    gps_fallback_lat/lng with the pin-cluster centroid when pins exist.
-  - GPS mode sets gps_fallback_lat/lng to None when the profile has no pins.
-  - CUSTOM mode with stored coordinates sets map_center_lat/lng correctly.
-  - CUSTOM / AUTO modes always set gps_fallback_lat/lng to None.
-  - map_pins_meta returns null when the profile has no pins, and an ISO
-    timestamp equal to the most-recently-updated pin's timestamp otherwise.
-"""
+"""Tests for MapController.view_map and MapController.map_pins_meta."""
 
 from __future__ import annotations
 
@@ -199,20 +185,11 @@ class ViewMapContextTests(TestCase):
 
 
 class RootPinCountQueryTests(TestCase):
-    """MapController.view_map's ``pin_count`` is computed as
-    ``Pin.objects.filter(profile=profile).root_pins().count()`` - verify that
-    query returns exactly the number of root pins created, for arbitrary N.
+    """MapController.view_map's ``pin_count`` is computed as ``Pin.objects.filter(profile=profile).root_pins().count()`` - verify that query returns exactly the number of root pins created, for arbitrary N.
 
-    Kept in its own class, entirely separate from any Django test-client
-    usage: per this repo's CLAUDE.md, hypothesis's per-example DB flush (via
-    hypothesis.extra.django's _pre_setup/_post_teardown) doesn't interact
-    safely with self.client's session state. See test_safety_partners.py's
-    IsOwnerOrAcceptedPartnerHypothesisTests (and its sibling
-    IsOwnerOrAcceptedPartnerTests) for the same split applied there: a
-    @given-decorated pure-logic test in its own class, with any view-level
-    smoke test living as a plain (non-@given) method elsewhere - here, that's
-    ViewMapContextTests.test_pin_count_reflects_actual_root_pin_count above.
-    """
+    Kept in its own class, entirely separate from any Django test-client usage: per this repo's CLAUDE.md,
+    hypothesis's per-example DB flush (via hypothesis.extra.django's _pre_setup/_post_teardown) doesn't interact
+    safely with self.client's session state."""
 
     @given(n=st.integers(min_value=0, max_value=6))
     @_db_settings

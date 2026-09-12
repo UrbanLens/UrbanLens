@@ -1,14 +1,4 @@
-"""Reacting to a DM must respect a block, the same way sending a new one does.
-
-Profile.are_blocked is documented as "an absolute veto on contact regardless
-of who blocked whom" - but toggle_reaction only checked that the acting
-profile was the message's sender or recipient, not whether the pair had
-blocked each other. Since a reaction is a live, real-time broadcast to both
-participants' open sockets (see _broadcast_reaction), two profiles that have
-blocked each other could still exchange interactions on their prior message
-history after the block. Covers the service function directly and both HTTP
-surfaces that call it (the internal panel and the external API).
-"""
+"""Reacting to a DM must respect a block, the same way sending a new one does."""
 
 from __future__ import annotations
 

@@ -1,15 +1,6 @@
 /**
- * Preflight, run once before anything else.
- *
- * Its whole job is to turn "forty tests timed out" into one sentence saying
- * why. A deployment that is down, a URL with a typo in it, a manifest that was
- * never written, a proxy presenting a certificate the runner does not trust -
- * each of those produces an identical wall of timeouts thirty seconds in, and
- * each is diagnosable in under a second up front.
- *
- * It also prints what the run is pointed at. On a suite whose target is an
- * environment variable, "which deployment did that report come from" is a
- * question somebody always ends up asking.
+ * Preflight, run once before anything else. Its whole job is to turn "forty tests timed out" into
+ * one sentence saying why.
  */
 
 import { request, type FullConfig } from "@playwright/test";

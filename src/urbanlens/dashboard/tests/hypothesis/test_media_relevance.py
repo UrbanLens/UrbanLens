@@ -116,11 +116,8 @@ class EffectiveRelevanceTests(TestCase):
     def test_a_long_ago_report_stops_excluding_the_photo(self) -> None:
         """The ratchet fix: an excluded photo must be able to return to the pool.
 
-        A reported photo scores below the >= 0 eligibility floor SpotGuessr
-        applies, so it stops being shown - and therefore can never earn the
-        "shown, no reaction" impressions that would otherwise rehabilitate it.
-        Decay is what breaks that loop; without it this is permanent.
-        """
+        A reported photo scores below the >= 0 eligibility floor SpotGuessr applies, so it stops being shown -
+        and therefore can never earn the "shown, no reaction" impressions that would otherwise rehabilitate it."""
         image = _make_external_image(_make_location(), "d3" + "0" * 38)
         feedback = _feedback(image, _make_profile(), GamePhotoFeedbackKind.REPORTED)
 

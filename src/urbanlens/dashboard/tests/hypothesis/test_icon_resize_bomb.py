@@ -1,15 +1,4 @@
-"""`_resize_custom_icon` promises to return the original when the file is unreadable.
-
-Its docstring says "Resized file, or the original if already small enough **or
-unreadable**", and it catches `(OSError, ValueError)` to deliver that. But
-`Image.open()` raises `DecompressionBombError` on the *header* - before any
-decode - and that inherits from `Exception`, not `OSError`, so an oversized icon
-escaped the handler and 500'd the request instead of falling back to the
-original.
-
-This is the same exception-hierarchy gap found in the photo pipeline; this one
-sits on a synchronous request path, so the user saw the failure directly.
-"""
+"""`_resize_custom_icon` promises to return the original when the file is unreadable."""
 
 from __future__ import annotations
 

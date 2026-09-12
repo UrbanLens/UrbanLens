@@ -1,9 +1,4 @@
-"""Tests for virustotal_scan.verdict_for_checksum - the VirusTotal verdict policy.
-
-Pure function tests against a mocked VirusTotalGateway; no real network, no
-DB. settings/test.py forces AppSettings.virustotal_api_key=None for the whole
-suite, so each test that needs the "configured" path patches it back.
-"""
+"""Tests for virustotal_scan.verdict_for_checksum - the VirusTotal verdict policy."""
 
 from __future__ import annotations
 

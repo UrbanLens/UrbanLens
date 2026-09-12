@@ -1,22 +1,4 @@
-"""A group message's `key_version` has to name a key this group actually has.
-
-`create_group_message` validated `key_version < 1` and nothing else, so the
-value a client sent was stored verbatim on all four send paths - the WebSocket
-consumer, the external API, the web controller, and share-a-pin-in-a-group.
-Any positive integer was accepted: a version this group has never had, or one
-belonging to a *different* group.
-
-`models/e2ee/group_key.py` states the design claim it breaks: "Versioning is what
-enforces membership boundaries **cryptographically**". A version field nothing
-checks is a claim about a number the server never looks at.
-
-This is the half of P26/P46 that can be fixed without deciding a product
-question. Rejecting a *stale but real* version is the other half and is
-deliberately not done here: rotation needs every member enrolled and returns 409
-when one is not, so refusing stale sends would let one un-enrolled member stop
-the whole group from sending - trading a confidentiality gap for an availability
-one. The last test below pins that boundary so the distinction stays deliberate.
-"""
+"""A group message's `key_version` has to name a key this group actually has."""
 
 from __future__ import annotations
 
@@ -82,10 +64,7 @@ class GroupKeyVersionIsRealTests(TestCase):
     def test_a_stale_but_real_version_is_still_accepted(self) -> None:
         """Pinned, not endorsed - see the module docstring.
 
-        Rotating leaves earlier versions real. Refusing them is the product
-        decision this change deliberately does not make, so the behaviour is
-        recorded here rather than left to be discovered.
-        """
+        Rotating leaves earlier versions real."""
         GroupKey.objects.create(group=self.group, version=2)
 
         message = self._send(1)

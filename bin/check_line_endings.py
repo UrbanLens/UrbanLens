@@ -1,25 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when a tracked text file would be stored with CRLF line endings.
-
-``.gitattributes`` already normalizes on the way into the index, so this is a
-backstop rather than the mechanism - it catches the case where somebody adds an
-attributes exception, or commits from a checkout whose attributes are stale.
-
-Why a separate check rather than leaning on ``mixed-line-ending``: that hook
-only sees paths matching the global ``files:`` pattern in
-``.pre-commit-config.yaml``, and the whole reason this exists is that the
-pattern listed ``yaml`` but not ``yml``, so ``docker-compose.yml`` was never
-checked by anything. Widening that hook to cover *everything* is not the answer
-either, because it rewrites what it is given and would corrupt a binary it was
-handed by mistake. This one reads and reports.
-
-The source of truth is ``git ls-files --eol``, which reports the ending as it
-sits in the index and applies git's own text/binary classification - so a PNG
-containing CRLF bytes is correctly ignored without maintaining a list of binary
-extensions here.
-
-Exit code 0 when clean, 1 with a per-file report otherwise.
-"""
+"""Fail when a tracked text file would be stored with CRLF line endings."""
 
 from __future__ import annotations
 
@@ -39,9 +19,7 @@ def offending_files() -> list[tuple[str, str]]:
         ``(path, index_ending)`` pairs, empty when the tree is clean.
 
     Raises:
-        subprocess.CalledProcessError: If git itself fails, which should stop
-            the commit rather than be reported as a clean tree.
-    """
+        subprocess.CalledProcessError: If git itself fails, which should stop the commit rather than be reported as a clean tree."""
     result = subprocess.run(
         ["git", "ls-files", "--eol", "-z"],
         capture_output=True,

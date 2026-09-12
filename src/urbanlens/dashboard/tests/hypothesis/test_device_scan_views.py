@@ -1,15 +1,4 @@
-"""Tests for the external-API device-scan endpoints.
-
-Two invariants matter most here, mirroring how the rest of this API's tests
-are framed (see test_external_api_photos.py's module docstring):
-
-1. **The new scopes are opt-in only.** A key issued before this feature
-   existed (the "default" grant) must be refused on both endpoints.
-2. **``nearby/`` never leaks an undiscovered wiki's markers.** It must reuse
-   the exact same visibility gate every other wiki-scoped read in this app
-   uses - a marker on a wiki the caller hasn't found is indistinguishable
-   from a marker that doesn't exist.
-"""
+"""Tests for the external-API device-scan endpoints."""
 
 from __future__ import annotations
 

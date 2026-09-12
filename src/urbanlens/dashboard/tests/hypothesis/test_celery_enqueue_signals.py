@@ -15,12 +15,9 @@ class _Wiki:
 class PinCreationExternalWorkTests(SimpleTestCase):
     """The old per-pin ``enqueue_location_creation`` signal must stay removed.
 
-    It used to run Location enrichment synchronously off Pin creation. That
-    enrichment is lazy now (default boundaries generate on first pin-detail-page
-    view), and background Wiki creation is queued by a separate, narrower signal
-    (``ensure_wiki_for_pin_location``, covered by ``PinEnsuresWikiSignalTests``
-    below) - bulk imports rely on Pin creation itself staying cheap.
-    """
+    That enrichment is lazy now (default boundaries generate on first pin-detail-page view), and background Wiki
+    creation is queued by a separate, narrower signal (``ensure_wiki_for_pin_location``, covered by
+    ``PinEnsuresWikiSignalTests`` below) - bulk imports rely on Pin creation itself staying cheap."""
 
     def test_location_creation_signal_removed(self) -> None:
         from urbanlens.dashboard.models.pin import signals as pin_signals
@@ -42,11 +39,9 @@ class _Pin:
 class PinEnsuresWikiSignalTests(SimpleTestCase):
     """New pins with a Location queue background Wiki creation.
 
-    ``models.pin.signals.ensure_wiki_for_pin_location`` gates on three
-    independent conditions - newly created, has a Location, and the pinning
-    profile has community features enabled - any one of which alone must block
-    the enqueue.
-    """
+    ``models.pin.signals.ensure_wiki_for_pin_location`` gates on three independent conditions - newly created,
+    has a Location, and the pinning profile has community features enabled - any one of which alone must block
+    the enqueue."""
 
     def test_enqueues_wiki_creation_after_commit(self) -> None:
         from urbanlens.dashboard.models.pin.signals import ensure_wiki_for_pin_location
@@ -88,9 +83,7 @@ class WikiCategorySignalTests(SimpleTestCase):
     """New Wikis enqueue category suggestion after commit.
 
     Category auto-tagging moved from Location to Wiki in the wiki split (see
-    urbanlens.dashboard.models.wiki.signals); location.signals is now an
-    intentionally-empty stub.
-    """
+    urbanlens.dashboard.models.wiki.signals); location.signals is now an intentionally-empty stub."""
 
     def test_enqueues_wiki_category_suggestion_after_commit(self) -> None:
         from urbanlens.dashboard.tasks import suggest_wiki_category

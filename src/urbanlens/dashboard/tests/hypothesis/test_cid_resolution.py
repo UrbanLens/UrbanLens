@@ -1,9 +1,4 @@
-"""Tests for services.apis.locations.cid_resolution.resolve_cids's provider dispatch.
-
-Covers the REData-vs-Google-Places choice and how each provider's failure
-modes map onto CidResolutionResult's resolved/unresolvable/pending buckets -
-see cid_resolution.py's module docstring for why each bucket exists.
-"""
+"""Tests for services.apis.locations.cid_resolution.resolve_cids's provider dispatch."""
 
 from __future__ import annotations
 

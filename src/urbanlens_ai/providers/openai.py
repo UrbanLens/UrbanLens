@@ -40,13 +40,9 @@ class OpenAIAdapter(ProviderAdapter):
     def _user_content(message: Message) -> Any:
         """OpenAI content for one user message: a bare string, or content parts when it carries an image.
 
-        Images go as a ``data:`` URL, which is how the Chat Completions API
-        takes inline bytes - not a fetchable URL, so this stays consistent
-        with the "the inference tier fetches nothing" rule (see
-        :class:`~urbanlens_ai.schema.ImagePart`). ``detail: "low"`` matches
-        what the caller's 512px downscale can actually support and keeps the
-        image's token cost flat.
-        """
+        Images go as a ``data:`` URL, which is how the Chat Completions API takes inline bytes - not a fetchable
+        URL, so this stays consistent with the "the inference tier fetches nothing" rule (see
+        :class:`~urbanlens_ai.schema.ImagePart`)."""
         if isinstance(message.content, str):
             return message.content
         parts: list[dict[str, Any]] = []

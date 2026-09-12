@@ -129,12 +129,10 @@ class PageObjectSerializationTests(TestCase):
 class RegistryConsistencyTests(SimpleTestCase):
     """Guards a drift a new resolver could ship without anyone noticing.
 
-    verify_page_object fails closed for an unknown kind (returns False) -
-    safe, but silent: a resolver whose object_kind has no matching
-    _EXISTENCE_CHECKS entry would resolve its page fine and then have that
-    page dropped on every single turn, with nothing visibly wrong until
-    someone asks why a page-aware tool never sees it.
-    """
+    verify_page_object fails closed for an unknown kind (returns False) - safe, but silent: a resolver whose
+    object_kind has no matching _EXISTENCE_CHECKS entry would resolve its page fine and then have that page
+    dropped on every single turn, with nothing visibly wrong until someone asks why a page-aware tool never sees
+    it."""
 
     def test_every_resolver_with_an_object_kind_has_a_verification_check(self) -> None:
         for url_name, resolver in _RESOLVERS.items():

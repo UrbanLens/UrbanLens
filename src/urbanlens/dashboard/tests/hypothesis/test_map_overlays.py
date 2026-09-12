@@ -1,12 +1,4 @@
-"""Tests for georeferenced map image overlays.
-
-Covers the model's corner handling, the three ways an image reaches an overlay
-(upload / Media-gallery pick / external URL), the pin-vs-wiki permission split
-those routes inherit from ``custom_layers``, and the corner-drag endpoint that
-fires on every alignment nudge.
-
-No real network access occurs - the gallery-pick path's download is mocked.
-"""
+"""Tests for georeferenced map image overlays."""
 
 from __future__ import annotations
 
@@ -91,10 +83,8 @@ class OverlayOwnerTests(TestCase):
     def _create(self, **extra):
         """POST a pasted-external-URL overlay with DNS and the download stubbed.
 
-        A pasted URL is resolved (the SSRF guard) and then downloaded, so
-        without both stubs the request does a real lookup and reaches out to
-        the real host.
-        """
+        A pasted URL is resolved (the SSRF guard) and then downloaded, so without both stubs the request does a
+        real lookup and reaches out to the real host."""
         from urbanlens.dashboard.models.images.model import Image
 
         materialized = baker.make(Image, profile=self.user.profile, pin=self.pin)
@@ -120,11 +110,7 @@ class OverlayOwnerTests(TestCase):
     def test_a_pasted_external_url_is_downloaded_not_referenced(self) -> None:
         """The stored column must never hold the foreign URL.
 
-        An overlay's URL is handed to every viewer's browser as an ``<img
-        src>``. On a wiki, anyone who can see the place can add an overlay, so
-        a referenced URL would report each viewer's IP, User-Agent and timing
-        back to whoever planted it.
-        """
+        An overlay's URL is handed to every viewer's browser as an ``<img src>``."""
         from urbanlens.dashboard.models.images.model import Image
 
         materialized = baker.make(Image, profile=self.user.profile, pin=self.pin)

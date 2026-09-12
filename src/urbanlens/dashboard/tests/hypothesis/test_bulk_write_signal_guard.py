@@ -1,19 +1,4 @@
-"""Fail the build when a bulk write silently skips a model's ``post_save`` receivers.
-
-``bulk_create``/``bulk_update`` issue raw SQL and never call ``save()``, so no
-``post_save``/``post_delete`` fires. When a model has receivers that maintain derived
-state - a cache, a denormalised counter, a queued sync - a bulk write leaves that state
-stale with no error and no log line. Four such sites were found by hand in 8ed25a93; the
-map pin cache had been serving stale icons after every label reorder.
-
-Whether a bulk write is dangerous is a property of the *model*, not of the call site, so
-a site that is safe today becomes a bug the moment somebody adds a receiver to the model
-it writes. Nothing about that change would look wrong in review. This test is the thing
-that notices.
-
-Adding a bulk write on a model with receivers is not forbidden - it is often right. It
-just has to be a decision somebody made on purpose, recorded in ``REVIEWED`` below.
-"""
+"""Fail the build when a bulk write silently skips a model's ``post_save`` receivers."""
 
 from __future__ import annotations
 
@@ -109,13 +94,11 @@ WATCHED_SIGNALS = (
 def _bulk_write_sites() -> list[tuple[str, int, str, str]]:
     """Every ``bulk_create``/``bulk_update`` call in application code.
 
-    Migrations are excluded: they run against historical schema, deliberately do not
-    fire current receivers, and rewriting them is not an option anyway. Tests are
-    excluded because a test setting up fixtures in bulk is not a production code path.
+    Migrations are excluded: they run against historical schema, deliberately do not fire current receivers, and
+    rewriting them is not an option anyway.
 
     Returns:
-        Tuples of (relative path, line number, model name, operation).
-    """
+        Tuples of (relative path, line number, model name, operation)."""
     sites: list[tuple[str, int, str, str]] = []
     for path in sorted(PACKAGE_ROOT.rglob("*.py")):
         relative = path.relative_to(PACKAGE_ROOT).as_posix()
@@ -140,11 +123,7 @@ def _bulk_write_sites() -> list[tuple[str, int, str, str]]:
 def _receiver_root(node: ast.expr) -> str | None:
     """The leftmost name of an attribute chain, when it looks like a model.
 
-    ``Label.objects.bulk_update(...)`` and ``Label.bulk_update(...)`` both give
-    ``"Label"``. Anything not starting with a capitalised bare name - a local queryset
-    variable, or a chain rooted in a call such as ``super()`` - returns None, and the
-    call site is simply excluded from the scan; there is no separate report for it.
-    """
+    ``Label.objects.bulk_update(...)`` and ``Label.bulk_update(...)`` both give ``"Label"``."""
     while isinstance(node, ast.Attribute):
         node = node.value
     if isinstance(node, ast.Name) and node.id[:1].isupper():
@@ -219,11 +198,7 @@ class BulkWriteSignalGuardTests(SimpleTestCase):
         self.assertNotEqual(_receivers_by_model_name(), {})
 
     def test_receiver_root_extracts_the_model_from_a_manager_chain(self):
-        """The one thing this whole scan hinges on: telling ``Model.objects.bulk_x()``
-        apart from a local variable's ``.bulk_x()``. This discriminator is only
-        exercised indirectly by the whole-codebase tests above - a broken uppercase
-        check wouldn't reliably fail them, since a fabricated non-model "name" almost
-        never collides with a real model's ``__name__`` in the receiver registry."""
+        """The one thing this whole scan hinges on: telling ``Model.objects.bulk_x()`` apart from a local variable's ``.bulk_x()``. This discriminator is only exercised indirectly by the whole-codebase tests above - a broken uppercase check wouldn't reliably fail them, since a fabricated non-model "name" almost never collides with a real model's ``__name__`` in the receiver registry."""
         call = ast.parse("Label.objects.bulk_update(rows)").body[0].value
         assert isinstance(call, ast.Call)
         assert isinstance(call.func, ast.Attribute)
@@ -242,11 +217,7 @@ class BulkWriteSignalGuardTests(SimpleTestCase):
         self.assertIsNone(_receiver_root(call.func.value))
 
     def test_receiver_root_returns_none_for_a_super_call(self):
-        """``super().bulk_create(...)`` inside a QuerySet override (real examples:
-        ``VersionedQuerySet``, ``PinMarkupQuerySet``) can't be resolved to a model name
-        from the AST alone. That's safe only because the guard instead catches the
-        *caller's* ``Model.objects.bulk_create(...)`` line, which is what actually
-        decided to do the write - not this internal delegation."""
+        """``super().bulk_create(...)`` inside a QuerySet override (real examples: ``VersionedQuerySet``, ``PinMarkupQuerySet``) can't be resolved to a model name from the AST alone. That's safe only because the guard instead catches the *caller's* ``Model.objects.bulk_create(...)`` line, which is what actually decided to do the write - not this internal delegation."""
         call = ast.parse("super().bulk_create(objs)").body[0].value
         assert isinstance(call, ast.Call)
         assert isinstance(call.func, ast.Attribute)

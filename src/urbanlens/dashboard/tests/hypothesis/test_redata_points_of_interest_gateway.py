@@ -1,10 +1,4 @@
-"""Tests for RedataPointsOfInterestGateway - REData's shared ``/points-of-interest/lookup/``
-near-a-coordinate search backing both the Yelp and EPA ECHO plugins.
-
-Mirrors ``test_redata_context_gateway.py``'s conventions: a mock ``session``
-(``Gateway.__post_init__`` leaves a non-default session untouched, skipping
-the DB-backed rate-limiting wrapper), no database access.
-"""
+"""Tests for RedataPointsOfInterestGateway - REData's shared ``/points-of-interest/lookup/`` near-a-coordinate search backing both the Yelp and EPA ECHO plugins."""
 
 from __future__ import annotations
 

@@ -1,14 +1,4 @@
-"""Tests for the external API's label priority-reorder and bulk delete/edit/convert endpoints.
-
-Unlike the internal ``LabelBulk*View`` family (route-scoped to one kind at a
-time via a ``label_kind`` URL segment), these endpoints resolve a uuid batch
-that may span kinds - see ``serializers_labels_bulk``'s docstring. The
-behavior most worth pinning down: a global or protected label named in the
-request is silently dropped rather than refused, matching the pin-bulk
-endpoints' "not yours, not fatal" philosophy, while an unresolvable
-parent/child uuid is a 400 - the caller asked for something specific and
-impossible.
-"""
+"""Tests for the external API's label priority-reorder and bulk delete/edit/convert endpoints."""
 
 from __future__ import annotations
 
@@ -120,15 +110,10 @@ class LabelBulkEditTests(LabelBulkTestCase):
         self.assertEqual(self.label_b.color, "#F44336")
 
     def test_a_named_css_colour_is_refused(self) -> None:
-        """This test posted "red" and asserted it round-tripped, then that it was
-        silently dropped. It is now refused.
+        """This test posted "red" and asserted it round-tripped, then that it was silently dropped. It is now refused.
 
-        It never was a valid label colour: `Label.color` declares `choices` that are
-        all hex, and the renderers append an alpha suffix ("red33"), which is not a
-        colour and paints nothing. Dropping it answered 200 to a client whose value
-        had been discarded; the single-label endpoint had rejected the same input
-        all along.
-        """
+        It never was a valid label colour: `Label.color` declares `choices` that are all hex, and the renderers
+        append an alpha suffix ("red33"), which is not a colour and paints nothing."""
         original = self.label_b.color
         response = self._post("bulk/edit/", {"uuids": [str(self.label_b.uuid)], "color": "red"})
 

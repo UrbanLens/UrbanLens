@@ -1,10 +1,4 @@
-"""Accepting a share must copy the pin faithfully, not rebuild it from defaults.
-
-``create_pin_from_share`` lists ~28 fields by hand and promises, in its own docstring,
-to carry over "every user-visible property (name, icon, labels, notes, scores, security
-indicators, photos)". Anything it forgets takes the model default instead, and nothing
-about adding a new field to ``Pin`` updates this list.
-"""
+"""Accepting a share must copy the pin faithfully, not rebuild it from defaults."""
 
 from __future__ import annotations
 
@@ -75,10 +69,7 @@ class SharedPinCopyFidelityTests(TestCase):
     def test_a_custom_uploaded_icon_does_not_survive_the_share(self):
         """An icon is how one person marked a place for themselves.
 
-        This used to assert the opposite, on the reasoning that losing it "changes
-        what the pin looks like". It does, and that is the intent: the recipient
-        gets the place, not the sender's presentation of it.
-        """
+        It does, and that is the intent: the recipient gets the place, not the sender's presentation of it."""
         pin = Pin.objects.create(
             profile=self.sender, location=self.location, name="Custom icon", custom_icon="icons/skull.png", icon="place"
         )
@@ -185,11 +176,8 @@ def _copied_field_names() -> set[str]:
 class SharedPinCopyCoversEveryFieldTests(TestCase):
     """Adding a field to ``Pin`` must not silently skip the share copy.
 
-    Every bug in the class above came from the same place: the copy names its fields
-    by hand, so a field added later is simply absent and takes the model default.
-    Nothing in review connects "add a column to Pin" with "update a function in the
-    sharing service". This is what connects them.
-    """
+    Every bug in the class above came from the same place: the copy names its fields by hand, so a field added
+    later is simply absent and takes the model default."""
 
     #: Fields the copy deliberately leaves off, and why. A new Pin field must be
     #: added here (with a reason) or to the copy itself - the test names it either way.
@@ -207,9 +195,7 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         "wiki": "a cache of an explicit link; the new pin resolves its own",
         "inferred_source_share": "provenance is recorded via source_share on the new pin",
         "cover_photo": "set afterwards by _carry_cover_photo, pointing at the recipient's copy",
-        # The owner's side of the line. A share carries what is true about the
-        # *site*; how one person recorded, rated or decorated it stays with them.
-        # Ruled by Jess 2026-08-23, field by field, after each was found travelling.
+        # The owner's side of the line.
         "description": "the owner's personal notes - and nothing in the product lets somebody consent to passing them on",
         "vulnerability": "the owner's rating of the place, not a property of it",
         "danger": "the owner's rating of the place, not a property of it",

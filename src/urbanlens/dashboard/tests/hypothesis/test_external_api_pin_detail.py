@@ -1,13 +1,4 @@
-"""Tests for GET/PATCH/DELETE ``/pins/{slug}/`` - the external API's pin-detail surface.
-
-Covers the full detail payload's extra fields (dates, security, notes,
-aliases, links, custom fields, boundary, cover photo, wiki slug), the PATCH
-fields mirroring internal ``PinViewSet`` semantics (name/icon/last_visited/
-coordinate move) plus the new ``parent_id`` detach/reparent capability, and
-DELETE's child-pin decision handshake - the same behavior
-``test_pin_delete_view.py`` already covers for the internal endpoint, since
-both now share ``services.pins.pin_edit``.
-"""
+"""Tests for GET/PATCH/DELETE ``/pins/{slug}/`` - the external API's pin-detail surface."""
 
 from __future__ import annotations
 

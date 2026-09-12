@@ -1,10 +1,4 @@
-"""The public-location export/import pair, and the boundary it must not cross.
-
-The export exists to move *public* places onto a demo instance. The costly
-mistake would be treating "has a wiki" as public: wiki visibility is earned per
-viewer, and exporting on that basis would publish every location any user has
-pinned. These tests pin the definition.
-"""
+"""The public-location export/import pair, and the boundary it must not cross."""
 
 from __future__ import annotations
 

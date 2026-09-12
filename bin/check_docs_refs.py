@@ -1,29 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if code cites a ``docs/`` path that does not exist.
-
-Documents get moved into subdirectories and the pointers to them do not follow.
-A 2026-09-04 sweep found 39 such citations across 33 files naming 8 documents -
-``docs/GOALS_CODE_AUDIT.md`` (16 citations) and ``docs/TEST_COVERAGE_GAPS.md``
-(7) had both moved under ``docs/audits/`` a week earlier, and
-``docs/PROBLEMS-ARCHIVE.md`` pointed at a file that had been deleted from git
-without its replacement being added, so a fresh checkout had neither path.
-
-Only citations from **code and configuration** fail the check. A citation from
-one document to another is reported and does not fail, because several
-historical reports deliberately name planning documents that were never written
-- that absence is itself recorded, in ``docs/PROBLEMS.md``. Making those fail
-would leave this permanently red, which is the same as switching it off.
-
-Paths into a sibling checkout (``../REData/docs/...``) are verified when that
-checkout is present and skipped when it is not, so this still works in CI.
-A gitignored target fails like a missing one. It resolves for whoever wrote
-the citation and for nobody else, which is the same outcome as a broken path
-for every other reader - and it is how seven citations of
-``docs/notes/ai/completed.md``, a file never committed, stayed green.
-
-Exits non-zero listing each unresolvable citation. Safe to run by hand from the
-repo root.
-"""
+"""Fail if code cites a ``docs/`` path that does not exist."""
 
 from __future__ import annotations
 
@@ -83,16 +59,9 @@ def _is_ignored(path: str, root: pathlib.Path) -> bool:
 def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
     """Whether `citation` names something that exists.
 
-    Tried against the repo root and against the citing file's own directory,
-    because both spellings are in use: prose cites `docs/NOTES.md` from the
-    root, while code passes a path relative to itself
-    (`join(import.meta.dir, "../../../../../../docs/...")`).
-
-    A path into a sibling checkout counts as resolved when that checkout is
-    absent: this repository cannot vouch for what it does not have, and failing
-    on it would make the check depend on how a developer laid out their
-    workspace.
-    """
+    Tried against the repo root and against the citing file's own directory, because both spellings are in use:
+    prose cites `docs/NOTES.md` from the root, while code passes a path relative to itself
+    (`join(import.meta.dir, "../../../../../../docs/...")`)."""
     if (root / citation).exists():
         return True
     if "/" not in citation and (root / "docs" / citation).exists():
@@ -115,9 +84,7 @@ def broken_citations(root: pathlib.Path) -> tuple[dict[str, list[str]], dict[str
         root: Repository root to scan.
 
     Returns:
-        ``(from code, from documents)``, each mapping a citation to the files
-        that make it. Only the first is fatal - see the module docstring.
-    """
+        ``(from code, from documents)``, each mapping a citation to the files that make it."""
     broken_code: dict[str, list[str]] = {}
     broken_docs: dict[str, list[str]] = {}
     checked: dict[tuple[str, str], bool] = {}

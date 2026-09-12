@@ -1,13 +1,4 @@
-"""An over-long name must not reach the database as a 500.
-
-`EditProfileView._save_profile` assigns `first_name`/`last_name` directly from
-`request.POST` *after* the form has saved, so the form's validation never sees them.
-Both columns are `max_length=150`, and `save()` on a longer value raises DataError.
-
-Found by the filter derived from the coverage work: a never-executed handler that
-assigns model fields directly from request data instead of delegating to something
-that owns the constraint.
-"""
+"""An over-long name must not reach the database as a 500."""
 
 from __future__ import annotations
 

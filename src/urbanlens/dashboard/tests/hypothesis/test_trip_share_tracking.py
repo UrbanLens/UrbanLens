@@ -1,12 +1,4 @@
-"""Tests for trip-activity share tracking (services.trips.trip_share_tracking).
-
-Putting a place on a trip's itinerary reveals it to every joined member, and
-that must count in the sharer's reshare chain like any other pin share -
-these tests cover both directions (new activity → existing members, new
-member → existing activities) and the dedup rules (the adder themselves,
-members who already have the place pinned, members already exposed, and
-hidden-location activities never produce shares).
-"""
+"""Tests for trip-activity share tracking (services.trips.trip_share_tracking)."""
 
 from __future__ import annotations
 

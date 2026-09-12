@@ -1,13 +1,4 @@
-"""Tests for the profile hero's click-to-edit-in-place email/username/name.
-
-Covers:
-- Own-profile view renders the hero's email, username, and full-name as
-  click-to-edit elements; other viewers and the Edit Profile page (which
-  already has real form fields for all three) see plain text.
-- ProfileFieldUpdateView's email/username/first_name/last_name POST paths -
-  including the email format + uniqueness validation and the username
-  format + availability validation those branches perform.
-"""
+"""Tests for the profile hero's click-to-edit-in-place email/username/name."""
 
 from __future__ import annotations
 

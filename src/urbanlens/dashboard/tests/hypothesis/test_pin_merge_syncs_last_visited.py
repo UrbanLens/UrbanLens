@@ -1,16 +1,4 @@
-"""Merging pins recomputes the survivor's last_visited from the visits it absorbed.
-
-``merge_pins`` repoints the loser's ``PinVisit`` rows to the survivor with
-``queryset.update()``. ``Pin.last_visited`` is a denormalized copy of the newest
-such row, maintained by ``sync_last_visited`` - so absorbing a more recently
-visited pin left the survivor advertising an older date than its own visit history
-supports, on both the map popup and the Private Pin page.
-
-Fixing it also settles a second staleness: ``sync_last_visited`` saves the pin,
-which fires the ``post_save`` receiver that refreshes the cached map payload. The
-merge previously issued no cache invalidation for the survivor at all, despite the
-survivor gaining visits, images and labels.
-"""
+"""Merging pins recomputes the survivor's last_visited from the visits it absorbed."""
 
 from __future__ import annotations
 

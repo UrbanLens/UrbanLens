@@ -1,11 +1,4 @@
-"""Export -> import -> seed, end to end.
-
-The point of the round trip is the last step: a demo account must end up holding
-a pin on a *real* imported location, because holding that pin is what earns it
-access to the place's wiki. Coordinates are never invented - a pin at an
-unsurveyed point resolves no boundary, no parcel and no wiki, which reads as the
-product being broken.
-"""
+"""Export -> import -> seed, end to end."""
 
 from __future__ import annotations
 

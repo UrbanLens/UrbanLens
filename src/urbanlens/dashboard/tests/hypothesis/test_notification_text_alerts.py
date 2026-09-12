@@ -1,11 +1,4 @@
-"""Tests for the generic per-type WhatsApp/SMS notification alerts.
-
-Every ``NotificationPreference`` ``<type>_whatsapp``/``<type>_sms`` toggle
-must actually deliver (docs/NOTES.md, "Decisions from the 2026-07-23 session") - these cover
-the central scheduling signal, the delayed re-checking task, and the
-per-(recipient, type) debounce. The DM pipeline keeps its own tests in
-``test_direct_messages.py``.
-"""
+"""Tests for the generic per-type WhatsApp/SMS notification alerts."""
 
 from __future__ import annotations
 
@@ -105,13 +98,10 @@ class ScheduleNotificationTextAlertsTests(_AlertTestBase):
     def test_every_alertable_type_has_both_preference_fields(self) -> None:
         """Resolved by enum *member name*, which is how production reads them.
 
-        This used to derive the column from the type's value. That held only
-        because the one type whose value and column stem disagree
+        That held only because the one type whose value and column stem disagree
         (``SAFETY_CHECKIN_PARTNER_INVITE`` -> ``safety_ci_partner_invite`` vs
-        ``safety_checkin_partner_invite*``) was missing from the set - the very
-        omission that made its toggles unfirable. Keeping the value-based
-        derivation here would have re-asserted the bug.
-        """
+        ``safety_checkin_partner_invite*``) was missing from the set - the very omission that made its toggles
+        unfirable."""
         from urbanlens.dashboard.models.notifications.meta.type import NotificationType
 
         prefs = self._prefs()

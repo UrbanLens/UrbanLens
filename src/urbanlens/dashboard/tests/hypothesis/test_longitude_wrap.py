@@ -1,19 +1,4 @@
-"""Longitude arithmetic must survive the antimeridian, everywhere it is done.
-
-Three places computed with longitude as if it were an ordinary number, and each
-was written independently:
-
-- fact POINT evidence averaged to a centroid;
-- the profile's saved map centre;
-- the import-failure location guess, comparing a candidate against a hint.
-
-Averaging 179.99 and -179.99 gives 0.0 - the Atlantic, 20,000km from either - and
-``abs(179.99 - -179.99)`` is 359.98, so two points a kilometre apart read as
-being on opposite sides of the planet. The shared helpers fix both, and return
-identical answers to the naive arithmetic everywhere else, which is what the
-"ordinary longitudes" tests here pin: a fix that shifted the rest of the planet
-would be far worse than the bug.
-"""
+"""Longitude arithmetic must survive the antimeridian, everywhere it is done."""
 
 from __future__ import annotations
 

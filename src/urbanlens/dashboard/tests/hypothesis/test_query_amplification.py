@@ -1,15 +1,4 @@
-"""Query-count regression guards for the highest-traffic pages.
-
-Amplification has been found three times in this codebase - the notification
-dropdown's reverse-OneToOne reads, the Memories trip source re-deriving each
-trip's dates, SpotGuessr re-running eligibility per retry attempt - and every
-one was invisible to inspection and obvious to a counter. So these assert the
-shape rather than a magic number: build N items, count, add one more, count
-again, and require the delta to be zero.
-
-A page costing a fixed 40 queries is not an N+1 and is not what these catch;
-they only fail when cost scales with content.
-"""
+"""Query-count regression guards for the highest-traffic pages."""
 
 from __future__ import annotations
 
@@ -52,12 +41,9 @@ class _AmplificationTestCase(TestCase):
     def assert_flat(self, build_one, measure, *, baseline: int = 3, extra: int = 3) -> None:
         """Assert the query count does not grow when ``extra`` more items are added.
 
-        A warm-up call is measured and discarded first: the first request of a test
-        populates per-process caches (the SiteSettings memo, session and permission
-        lookups), so comparing against it reports a *decrease* and tells you nothing
-        about scaling. Growth is what matters, so the assertion is one-sided - a page
-        getting cheaper is never the bug being hunted here.
-        """
+        A warm-up call is measured and discarded first: the first request of a test populates per-process caches
+        (the SiteSettings memo, session and permission lookups), so comparing against it reports a *decrease*
+        and tells you nothing about scaling."""
         for _ in range(baseline):
             build_one()
         measure()  # warm-up, deliberately not counted
@@ -140,10 +126,8 @@ class PinDetailPageAmplificationTests(_AmplificationTestCase):
 class WikiPageAmplificationTests(_AmplificationTestCase):
     """The community wiki page against its own content.
 
-    The viewer needs a pin at the location: wiki visibility is gated on discovery
-    (``location_visible_to``), so without one every request here would 404 and the
-    measurement would be of an error page.
-    """
+    The viewer needs a pin at the location: wiki visibility is gated on discovery (``location_visible_to``), so
+    without one every request here would 404 and the measurement would be of an error page."""
 
     def setUp(self) -> None:
         super().setUp()

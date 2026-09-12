@@ -1,11 +1,4 @@
-"""Tests for the map's pin-list sidebar being scoped to the current viewport.
-
-MapController.pin_list_panel (GET map.pins.list) now accepts an optional
-"bounds" "south,west,north,east" query param - when present, both the
-rendered pin list and its total count are restricted to that box (on top of
-whatever SearchForm/toolbar filters already apply); when absent, behavior is
-unchanged (the full filtered set, as before this feature).
-"""
+"""Tests for the map's pin-list sidebar being scoped to the current viewport."""
 
 from __future__ import annotations
 

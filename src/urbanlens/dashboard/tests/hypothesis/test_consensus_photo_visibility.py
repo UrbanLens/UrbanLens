@@ -1,20 +1,4 @@
-"""A Consensus round must not show you a photo you are not allowed to see.
-
-Being eligible for a wiki satisfies only the first of the two visibility gates.
-Eligibility means "you have a visited pin at this place", which grants you the
-wiki - the container. It says nothing about the second gate: whether the
-uploader's ``photo_upload_visibility`` admits *you* to the photos on it.
-
-The photo strategy read ``wiki.images`` with neither gate applied, so a photo
-contributed under a FRIENDS-only setting could be put in front of any player who
-had been to the place. It reached them as a full-size image to drop a pin on,
-which is about as complete an exposure as the app has.
-
-Two bugs sat on top of each other here: ``_photo_build_round`` used
-``wiki.images.filter(...)``, which both skipped visibility *and* defeated the
-prefetch that ``eligibility`` builds - the exact misuse its comment warns about
-("only .all() reads the cache").
-"""
+"""A Consensus round must not show you a photo you are not allowed to see."""
 
 from __future__ import annotations
 

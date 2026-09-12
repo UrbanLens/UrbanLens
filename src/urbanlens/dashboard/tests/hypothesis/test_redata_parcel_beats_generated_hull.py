@@ -1,37 +1,4 @@
-"""A parcel outline a provider offered must beat one we invented.
-
-Reported from the e2e deployment, on the HRSH pin: the boundary drawn on the
-Private Pin page is not REData's parcel at all. REData offers six scored
-candidates for that parcel and flags one of them ``is_suggested``; the app drew
-a convex hull fitted around the pin and its three child pins instead.
-
-Three separate defects compound to produce that, and each is pinned down below
-because fixing any one alone still leaves the wrong shape on the map.
-
-**The chain is never asked.** ``resolve_location_place`` answers "what is this
-coordinate standing on?" from places already on record - its own docstring says
-it "never calls a provider" - but it stamped ``Location.place_resolved_at``
-anyway, including on virgin ground where it resolved nothing. That field is
-what ``generation_status`` reads as "the provider chain ran", so a pin dropped
-somewhere brand new was marked as already-enriched the instant it was created:
-``schedule_location_boundary_generation`` returned False, the boundary panel
-reported itself ready, and REData was never called. Not slowly, not once -
-never, until ``boundary_cache_days`` (60) elapsed.
-
-**A hull we fitted outranks a parcel we were given.** ``resolve_for_pin``
-checked the pin's own ``generated_polygon`` second, ahead of the place. A
-child-fitted hull is a stand-in for an outline we did not have, so it has to
-yield the moment a real one exists - otherwise arriving geometry is invisible
-on the very page that asked for it.
-
-**Nothing supersedes the stand-in.** Once real geometry lands, the hull row is
-inert but still stored, and ``refit_child_pin_boundary`` kept updating it.
-
-The distinction that matters throughout: a *provider's* outline is evidence
-about the world, and a hull around the markers we happen to know about is a
-drawing of our own ignorance. The second is a legitimate fallback and a
-terrible answer to prefer.
-"""
+"""A parcel outline a provider offered must beat one we invented."""
 
 from __future__ import annotations
 
@@ -112,10 +79,8 @@ class CheapResolutionMustNotClaimTheChainRanTests(TestCase):
     def test_a_genuine_provider_miss_is_still_recorded_once(self) -> None:
         """The behaviour the stamp exists for, which must survive the fix.
 
-        A coordinate the providers genuinely know nothing about is asked about
-        once and then left alone - otherwise every page view re-runs the whole
-        chain against an answer that will not change.
-        """
+        A coordinate the providers genuinely know nothing about is asked about once and then left alone -
+        otherwise every page view re-runs the whole chain against an answer that will not change."""
         location = self._location()
 
         # Patched where the class is defined, not where it is used: provisioning
@@ -203,10 +168,8 @@ class ProviderGeometryOutranksOurOwnHullTests(TestCase):
     def test_geometry_we_did_not_fit_ourselves_keeps_its_precedence(self) -> None:
         """Only ``generated_from_children`` rows are stand-ins.
 
-        A generated row that is not a hull around our own markers - the
-        pre-places location default among them - is not this defect and keeps
-        the precedence it had.
-        """
+        A generated row that is not a hull around our own markers - the pre-places location default among them -
+        is not this defect and keeps the precedence it had."""
         Boundary.objects.create(
             pin=self.pin,
             profile=self.profile,

@@ -1,26 +1,4 @@
-"""Regression tests for the "switch" picker's candidate list, not just its access gate.
-
-Reported 2026-08-30: a private pin for one building on Hudson River State
-Hospital offered roughly thirty "switch" targets, including its own parent
-parcel and buildings hundreds of metres away on the same campus. Four separate
-causes in ``services.places.ambiguity.competing_wiki_locations``, one test
-each:
-
-1. No guard against the pin's own coordinate having no resolved place -
-   ``competing_for_point`` treats "no place to exclude" as "nothing is
-   excluded", so every place at all becomes a rival.
-2. No check that a "rival" isn't a ``PART_OF`` ancestor or descendant of the
-   pin's own place - domain-root exclusion normally catches this, but not when
-   the two disagree due to a lineage/backfill defect.
-3. One row per Location that happens to resolve onto a rival place, rather
-   than one row per rival place.
-4. No guard against a wiki-bearing Location with no routing slug, which
-   rendered as a "None" wiki URL and posted to ``…/link/None/``.
-
-Access filtering itself (only domains the viewer already holds) is covered by
-``test_pin_relink_access.py``; this file is about what gets offered to someone
-who has already earned it.
-"""
+"""Regression tests for the "switch" picker's candidate list, not just its access gate."""
 
 from __future__ import annotations
 
@@ -95,8 +73,6 @@ class SwitchCandidateTests(TestCase):
         """A ``PART_OF`` ancestor must never be offered, even if domain_root drifted."""
         parcel = make_place(PlaceKind.PARCEL, square(-73.93, 41.73, 0.01), name="Campus Parcel")
         building = make_place(PlaceKind.BUILDING, square(-73.935, 41.73, 0.0002), parent=parcel, name="One Building")
-        # The edge itself (parent FK) is intact; simulate the backfill defect
-        # the audit found, where domain-root propagation did not reach a row.
         Place.objects.filter(pk=building.pk).update(domain_root=building.pk)
         building.refresh_from_db()
 
@@ -114,18 +90,9 @@ class SwitchCandidateTests(TestCase):
     def test_only_one_location_is_offered_per_competing_place(self) -> None:
         """One row per rival place, not one per Location that resolves onto it.
 
-        Guards against the 124-Locations/one-parcel explosion the Place model
-        was built to end (see the module docstring in ``ambiguity.py``) - two
-        Locations here independently carry their own wiki while resolving
-        onto the same rival, and only one may be offered.
-
-        The rival must genuinely overlap the pin's own coordinate - a place
-        elsewhere on the map is not a competitor, however much access the
-        viewer holds to it - so this nests a small "own" parcel inside a
-        larger, unrelated rival parcel that happens to cover the same point
-        (two county records disagreeing about the same ground, the case this
-        module exists for).
-        """
+        Guards against the 124-Locations/one-parcel explosion the Place model was built to end (see the module
+        docstring in ``ambiguity.py``) - two Locations here independently carry their own wiki while resolving
+        onto the same rival, and only one may be offered."""
         own_place = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.001), name="Own Parcel")
         own_location = Location.objects.create(latitude=40.0, longitude=-74.0)
         self.assertEqual(own_location.place_id, own_place.pk)

@@ -1,14 +1,4 @@
-"""Google Takeout location-history import: matching, idempotency, and cost.
-
-This importer had no test coverage at all, which matters more than usual because a
-Takeout export is a bulk input - tens of thousands of `placeVisit` entries is ordinary -
-and the loop originally ran a PostGIS nearest-neighbour query, a duplicate-check query
-and an SSE frame *per entry*.
-
-The behavioural contract (match within the radius, never double-import a visit, respect
-the visit-logging setting) is asserted here alongside the cost properties, so the
-optimisations cannot be undone silently and cannot quietly change what gets imported.
-"""
+"""Google Takeout location-history import: matching, idempotency, and cost."""
 
 from __future__ import annotations
 
@@ -88,8 +78,7 @@ class LocationHistoryImportTests(TestCase):
         self.assertEqual(PinVisit.objects.filter(pin=self.pin, source=VisitSource.HISTORY).count(), 1)
 
     def test_a_duplicate_within_one_file_is_imported_once(self) -> None:
-        """Previously guaranteed by re-querying the database each iteration. The
-        prefetched set has to be updated as rows are created to keep it true."""
+        """The prefetched set has to be updated as rows are created to keep it true."""
         stamp = "2026-01-01T10:00:00+00:00"
         self._run([(LAT, LNG, stamp), (LAT, LNG, stamp)])
 
@@ -103,8 +92,7 @@ class LocationHistoryImportTests(TestCase):
         self.assertEqual(PinVisit.objects.filter(pin=self.pin, source=VisitSource.HISTORY).count(), 2)
 
     def test_repeated_coordinates_cost_one_spatial_query(self) -> None:
-        """The expensive part of a Takeout import: an export is mostly the same
-        few everyday coordinates, each of which used to cost its own PostGIS query."""
+        """The expensive part of a Takeout import: an export is mostly the same few everyday coordinates, each of which used to cost its own PostGIS query."""
         entries = [(LAT, LNG, f"2026-01-{day:02d}T10:00:00+00:00") for day in range(1, 21)]
 
         # The importer does `from ...visits.visits import find_nearest_pin` *inside* the
@@ -119,13 +107,10 @@ class LocationHistoryImportTests(TestCase):
         self.assertEqual(PinVisit.objects.filter(pin=self.pin, source=VisitSource.HISTORY).count(), 20)
 
     def test_progress_frames_are_throttled(self) -> None:
-        """A bar can render 100 states; a large export used to push one frame per
-        entry, making the stream itself a bottleneck.
+        """A bar can render 100 states; a large export used to push one frame per entry, making the stream itself a bottleneck.
 
-        Needs well over 100 entries to show anything - below that every entry
-        advances the whole-percent counter, so throttling is a no-op by definition.
-        Coordinates are far from any pin so this measures frames, not writes.
-        """
+        Needs well over 100 entries to show anything - below that every entry advances the whole-percent
+        counter, so throttling is a no-op by definition."""
         entries = [(0.0, float(i) / 1000.0, "2026-01-01T10:00:00+00:00") for i in range(500)]
 
         progress = [e for e in self._run(entries) if e["type"] == "progress"]

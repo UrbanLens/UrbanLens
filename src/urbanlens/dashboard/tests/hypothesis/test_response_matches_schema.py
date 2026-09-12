@@ -1,28 +1,4 @@
-"""Responses have to match the schema the API publishes for them.
-
-This is the gap that no amount of ordinary endpoint testing closes, and it is
-worth being precise about why. The existing tests assert responses against
-hand-written expectations - and the same person writes the serializer and the
-expectation. The two agree with each other by construction, and can both
-disagree with the published document without anything failing. That is not a
-missing test; it is a property of the *style*, so the fix has to come from
-somewhere else.
-
-`tests/contract/` does exactly this against the generated schema, in-process,
-and does it far more thoroughly than this file - it generates inputs, walks every
-operation, and checks status codes and content types too. But it lives outside
-`testpaths` and needs an explicit invocation, so on a normal `pytest` run it
-contributes nothing. This is the cheap subset that runs every time: a handful of
-endpoints whose responses are validated against the schema's own declaration of
-them.
-
-It caught two real mismatches when it was written by hand: `undo/` declared a
-bare array and returned `{entries, omitted}`, and `labels/` declared
-`location_count` required and omitted it. Both are fixed; this is the guard.
-
-Adding an endpoint here is cheap and worth doing whenever one grows a response
-shape somebody could get wrong.
-"""
+"""Responses have to match the schema the API publishes for them."""
 
 from __future__ import annotations
 
@@ -61,24 +37,13 @@ def _bearer(raw_key: str) -> dict[str, str]:
 def openapi_to_json_schema(node: Any) -> Any:
     """Translate OpenAPI 3.0's ``nullable`` into something JSON Schema understands.
 
-    Necessary, and a trap worth knowing about. The document is OpenAPI **3.0**,
-    where a nullable field is spelled ``{"type": "string", "nullable": true}``.
-    ``nullable`` is an OpenAPI keyword, not a JSON Schema one, so a plain
-    validator ignores it and rejects every null - which means validating an
-    OpenAPI 3.0 document directly reports a mismatch on *every* nullable field
-    in the API. The first version of this test did exactly that and produced a
-    page of confident, entirely false findings: `next` and `previous` are null
-    on any single-page response, which is most of them.
-
-    (3.1 dropped ``nullable`` in favour of ``"type": ["string", "null"]``, which
-    is why this is only needed while the document is 3.0.)
+    Necessary, and a trap worth knowing about.
 
     Args:
         node: Any fragment of the OpenAPI document.
 
     Returns:
-        The same fragment with ``nullable`` folded into ``type``, recursively.
-    """
+        The same fragment with ``nullable`` folded into ``type``, recursively."""
     if isinstance(node, list):
         return [openapi_to_json_schema(item) for item in node]
     if not isinstance(node, dict):
@@ -101,11 +66,8 @@ def openapi_to_json_schema(node: Any) -> Any:
 class NullableTranslationTests(TestCase):
     """The translation must loosen exactly one thing and nothing else.
 
-    Folding `nullable` into `type` makes the schema more permissive, and a
-    conversion that overshot - dropping types, making everything optional -
-    would leave a test that passes against any response at all. These are the
-    guards on the guard.
-    """
+    Folding `nullable` into `type` makes the schema more permissive, and a conversion that overshot - dropping
+    types, making everything optional - would leave a test that passes against any response at all."""
 
     databases: set[str] = set()
 
@@ -185,13 +147,10 @@ class ResponseSchemaConformanceTests(TestCase):
         """The schema declared for `path`'s 200 response, ready to validate against.
 
         Args:
-            document: The generated OpenAPI document.
-            path: The URL path to look up.
+            document: The generated OpenAPI document. path: The URL path to look up.
 
         Returns:
-            A JSON Schema with the document's components attached so ``$ref``
-            resolves, or None when the operation declares no JSON 200 body.
-        """
+            A JSON Schema with the document's components attached so ``$ref`` resolves, or None when the operation declares no JSON 200 body."""
         operation = (document.get("paths", {}).get(path) or {}).get("get")
         if not operation:
             return None

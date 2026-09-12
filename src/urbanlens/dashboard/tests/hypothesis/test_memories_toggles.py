@@ -1,9 +1,4 @@
-"""Tests for the History toggles (track_pin_visits/track_routes/track_geolocation).
-
-Covers the guard functions in services.visits.visits and the call sites that must
-create zero rows when disabled - including the "no exceptions, even for
-explicit imports" requirement for GPX route import.
-"""
+"""Tests for the History toggles (track_pin_visits/track_routes/track_geolocation)."""
 
 from __future__ import annotations
 

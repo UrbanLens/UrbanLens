@@ -1,12 +1,4 @@
-"""Tests for PinController._photos_media_preview's tile data attributes.
-
-The combined Media section's "photos" tab (the pin owner's own uploads,
-previewed inline in the "All" grid - see pin_media_items.html) needs each
-tile's real Image id and coordinates so the shared photo lightbox
-(_photo_lightbox.html) can draw its small "where was this taken" map and,
-for coordinates, let the marker be dragged to update them via the existing
-gallery reposition endpoint.
-"""
+"""Tests for PinController._photos_media_preview's tile data attributes."""
 
 from __future__ import annotations
 
@@ -91,12 +83,7 @@ class PhotosMediaPreviewTests(TestCase):
         )
 
     def test_photo_materialized_from_a_provider_is_excluded(self) -> None:
-        """A photo materialized from an external Media-gallery provider (e.g.
-        via "Mark relevant" or "Send to wiki") already renders as its own live
-        tile in that provider's panel - see
-        services.media.media_relevance.local_images_for_gallery_items, which
-        swaps that tile's thumbnail for this same cached copy. Including it
-        here too would show the same photo twice in the combined grid."""
+        """A photo materialized from an external Media-gallery provider (e.g. via "Mark relevant" or "Send to wiki") already renders as its own live tile in that provider's panel - see services.media.media_relevance.local_images_for_gallery_items, which swaps that tile's thumbnail for this same cached copy. Including it here too would show the same photo twice in the combined grid."""
         baker.make(
             Image,
             pin=self.pin,

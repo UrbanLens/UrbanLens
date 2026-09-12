@@ -1,32 +1,4 @@
-"""Tests for the *widened* ``PATCH /pins/{slug}/`` payload.
-
-``PinUpdateSerializer`` originally accepted only name/icon/last_visited/
-coordinates/parent_id and **silently dropped** everything else while still
-answering 200 - so a user who edited a pin's description in the mobile app saw
-a success and lost the edit. Widening it to cover the whole of what the
-website's own pin-detail dialog can change is what these tests cover.
-``test_external_api_pin_detail.py`` still owns the original narrow surface
-(rename, re-icon, coordinate move, parent detach/reparent, DELETE); this module
-picks up where that one stops.
-
-Four things here are not "just another field" and get their own class:
-
-* **Partial semantics.** Absent means untouched, an explicit null clears. That
-  distinction is the entire point of the serializer, and getting it wrong in
-  either direction destroys data the client never mentioned.
-* **``label_uuids`` is a full replacement, and each removal is tombstoned.**
-  Without the ``PinAutoRemoval`` row the removal does not stick: keyword and AI
-  auto-tagging re-derive labels from the pin's own text and would put the label
-  straight back, so the user would watch a label they just deleted reappear.
-* **``priority``/``danger``/``vulnerability`` are not private edits.** Writing
-  one publishes the owner's community ``WikiStatVote`` on the attached wiki,
-  where everyone with access to that wiki sees it feed the composite score.
-  A surprising consequence of a seemingly private edit deserves a test that
-  says so out loud.
-* **The nested ``security`` object collides with a ``Pin`` column of the same
-  name**, which used to turn ``{"security": {"locked": "everywhere"}}`` into a
-  500. See :class:`PinUpdateEditMappingTests`.
-"""
+"""Tests for the *widened* ``PATCH /pins/{slug}/`` payload."""
 
 from __future__ import annotations
 
@@ -84,8 +56,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Kwargs to splat into a test-client call.
-    """
+        Kwargs to splat into a test-client call."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -109,8 +80,7 @@ class _PinPatchTestCase(TestCase):
             pin: The pin to address.
 
         Returns:
-            The fully-built URL.
-        """
+            The fully-built URL."""
         pin = pin or self.pin
         return f"{BASE}/{pin.slug or pin.uuid}/"
 
@@ -118,13 +88,10 @@ class _PinPatchTestCase(TestCase):
         """PATCH a pin with a JSON body.
 
         Args:
-            payload: The JSON body to send.
-            pin: The pin to address; defaults to the fixture pin.
-            raw_key: A raw key to use instead of the fixture's.
+            payload: The JSON body to send. pin: The pin to address; defaults to the fixture pin. raw_key: A raw key to use instead of the fixture's.
 
         Returns:
-            The Django test-client response.
-        """
+            The Django test-client response."""
         return self.client.patch(
             self._url(pin), payload, content_type="application/json", **_bearer(raw_key or self.raw_key)
         )
@@ -136,8 +103,7 @@ class _PinPatchTestCase(TestCase):
             pin: The pin to address; defaults to the fixture pin.
 
         Returns:
-            The Django test-client response.
-        """
+            The Django test-client response."""
         return self.client.get(self._url(pin), **_bearer(self.raw_key))
 
     def _key_with_scopes(self, scopes: list[str]) -> str:
@@ -147,8 +113,7 @@ class _PinPatchTestCase(TestCase):
             scopes: Raw scope values to store on the row.
 
         Returns:
-            The raw key value.
-        """
+            The raw key value."""
         api_key, raw = generate_api_key(self.user, "Scoped")
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         return raw
@@ -157,24 +122,18 @@ class _PinPatchTestCase(TestCase):
         """Create one label, owned by the key holder unless told otherwise.
 
         Args:
-            name: The label's name.
-            kind: One of the ``KIND_*`` constants.
-            profile: The owning profile; ``None`` means a *global* label.
+            name: The label's name. kind: One of the ``KIND_*`` constants. profile: The owning profile; ``None`` means a *global* label.
 
         Returns:
-            The created label.
-        """
+            The created label."""
         return ensure_label(name=name, kind=kind, profile=profile if profile is not None else self.profile)
 
 
 class PinPatchRoundTripTests(_PinPatchTestCase):
     """Every newly-writable field is readable back on the next GET.
 
-    The failure this guards is the exact one the widening exists to fix: a
-    field the endpoint accepts, answers 200 for, and then quietly does not
-    store. Asserting through GET rather than the ORM is deliberate - the pin's
-    owner reads it back through the API, so that is where it has to be true.
-    """
+    The failure this guards is the exact one the widening exists to fix: a field the endpoint accepts, answers
+    200 for, and then quietly does not store."""
 
     def test_description_round_trips(self) -> None:
         response = self._patch({"description": "Rusted catwalks - watch the floor."})
@@ -201,10 +160,8 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
     def test_pin_type_round_trips_and_marks_the_type_user_provided(self) -> None:
         """The companion flag matters as much as the value.
 
-        Without it, automatic building/parcel classification
-        (``services.locations.site_scope``) would go on overruling the type the
-        user deliberately chose, and the choice would appear to "not stick".
-        """
+        Without it, automatic building/parcel classification (``services.locations.site_scope``) would go on
+        overruling the type the user deliberately chose, and the choice would appear to "not stick"."""
         response = self._patch({"pin_type": PinType.BUILDING.value})
 
         self.assertEqual(response.status_code, 200, response.content)
@@ -240,12 +197,7 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
         self.assertIn("2024-06-01", self._get().json()["last_visited"])
 
     def test_all_eight_security_indicators_round_trip(self) -> None:
-        """Includes the indicator literally named ``security``.
-
-        That one shares its name with the wire key carrying the whole nested
-        object, which used to make this payload a 500 - see
-        :class:`PinUpdateEditMappingTests`.
-        """
+        """Includes the indicator literally named ``security``."""
         submitted = dict.fromkeys(sorted(SECURITY_EDIT_FIELDS), SecurityLevel.EVERYWHERE.value)
 
         response = self._patch({"security": submitted})
@@ -274,19 +226,9 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
     def test_danger_and_vulnerability_are_stored_but_not_yet_served_back(self) -> None:
         """KNOWN GAP, asserted so it cannot be mistaken for working.
 
-        ``PATCH`` accepts both, and both are persisted - but neither appears in
-        the pin-detail payload, because ``services.map_pins.payload`` (which
-        ``services.pins.pin_detail.build_pin_detail`` builds on) never emitted them
-        and the schema serializers honestly reflect that. The result is two
-        write-only fields: a client cannot read back what it just wrote, so it
-        has no way to detect a lost write or reconcile after an offline edit.
-
-        Fixing it means teaching ``build_pin_detail`` to emit them (and
-        widening ``PinDetailSerializer`` to match, or
-        ``test_external_api_schema.PinDetailContractTests`` will fail) - files
-        outside this change's ownership. When that lands, this test should be
-        flipped into an ordinary round-trip assertion.
-        """
+        ``PATCH`` accepts both, and both are persisted - but neither appears in the pin-detail payload, because
+        ``services.map_pins.payload`` (which ``services.pins.pin_detail.build_pin_detail`` builds on) never
+        emitted them and the schema serializers honestly reflect that."""
         response = self._patch({"danger": 3, "vulnerability": 2})
         self.assertEqual(response.status_code, 200, response.content)
 
@@ -315,11 +257,9 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
 class PinPatchPartialSemanticsTests(_PinPatchTestCase):
     """Absent means untouched; an explicit null clears.
 
-    Both halves have to hold or a client destroys data it never mentioned: a
-    single-control quick edit that rewrites every field silently reverts
-    whatever another device changed since, and a "clear this note" that no-ops
-    leaves the user staring at text they deleted.
-    """
+    Both halves have to hold or a client destroys data it never mentioned: a single-control quick edit that
+    rewrites every field silently reverts whatever another device changed since, and a "clear this note" that
+    no-ops leaves the user staring at text they deleted."""
 
     def _populate(self) -> None:
         """Give the fixture pin a value in every nullable field."""
@@ -366,12 +306,10 @@ class PinPatchPartialSemanticsTests(_PinPatchTestCase):
         self.assertIsNone(self.pin.icon)
 
     def test_a_blank_string_clears_a_free_text_field_exactly_like_null(self) -> None:
-        """ "Cleared in the UI" and "explicit JSON null" must land on one stored value.
+        """"Cleared in the UI" and "explicit JSON null" must land on one stored value.
 
-        Otherwise a pin edited on the website holds ``""`` where the same edit
-        from the mobile app holds ``NULL``, and every ``field__isnull`` filter
-        disagrees about which pins have a description.
-        """
+        Otherwise a pin edited on the website holds ``""`` where the same edit from the mobile app holds
+        ``NULL``, and every ``field__isnull`` filter disagrees about which pins have a description."""
         self._populate()
 
         response = self._patch({"description": "   "})
@@ -395,10 +333,7 @@ class PinPatchPartialSemanticsTests(_PinPatchTestCase):
         self.assertIsNone(self.pin.last_visited)
 
     def test_null_is_refused_for_the_fields_that_have_no_null_state(self) -> None:
-        """``priority``/``danger``/``vulnerability`` use 0 for "unset" and
-        ``pin_type``/the security indicators have their own "unknown" member,
-        so the columns are non-nullable. Refusing null is better than inventing
-        a mapping the client did not ask for."""
+        """``priority``/``danger``/``vulnerability`` use 0 for "unset" and ``pin_type``/the security indicators have their own "unknown" member, so the columns are non-nullable. Refusing null is better than inventing a mapping the client did not ask for."""
         self._populate()
 
         for payload in (
@@ -637,14 +572,7 @@ class PinPatchVisitedTests(_PinPatchTestCase):
 class PinPatchWikiStatVoteTests(_PinPatchTestCase):
     """Writing priority/danger/vulnerability publishes a *community* wiki vote.
 
-    This is the surprising one. A client's user believes they are adjusting a
-    private star rating on their own pin; when that pin is attached to a
-    community wiki and the matching ``sync_*_to_wiki`` setting is on, the value
-    becomes their ``WikiStatVote`` and feeds the composite score every other
-    person with access to that wiki sees. If that ever stops being true - or
-    starts happening for fields it should not - a client's privacy copy is
-    wrong, so it is asserted rather than left to the signal's own tests.
-    """
+    This is the surprising one."""
 
     def setUp(self) -> None:
         """Attach the fixture pin to a community wiki at its own Location."""
@@ -660,16 +588,14 @@ class PinPatchWikiStatVoteTests(_PinPatchTestCase):
     def _patch_committed(self, payload: dict):
         """PATCH with ``transaction.on_commit`` hooks actually run.
 
-        The vote is published from an ``on_commit`` callback, which a Django
-        ``TestCase``'s wrapping transaction never reaches - without this the
-        assertion would pass vacuously against an empty table.
+        The vote is published from an ``on_commit`` callback, which a Django ``TestCase``'s wrapping transaction
+        never reaches - without this the assertion would pass vacuously against an empty table.
 
         Args:
             payload: The JSON body to send.
 
         Returns:
-            The Django test-client response.
-        """
+            The Django test-client response."""
         with self.captureOnCommitCallbacks(execute=True):
             return self._patch(payload)
 
@@ -724,10 +650,8 @@ class PinPatchWikiStatVoteTests(_PinPatchTestCase):
 class PinPatchWikiLossConfirmationTests(_PinPatchTestCase):
     """A move that costs the owner wiki access needs an explicit acknowledgement.
 
-    Wiki visibility follows where a person's pins are, so dragging a pin off a
-    site quietly revokes their access to that site's community wiki. The 409
-    handshake is what turns that into a decision instead of a surprise.
-    """
+    Wiki visibility follows where a person's pins are, so dragging a pin off a site quietly revokes their access
+    to that site's community wiki."""
 
     def setUp(self) -> None:
         """Give the fixture pin's Location a community wiki."""
@@ -793,10 +717,7 @@ class PinPatchNotWritableHereTests(_PinPatchTestCase):
         self.assertEqual(self._get().json()["rating"], 0)
 
     def test_address_is_not_writable_through_this_endpoint(self) -> None:
-        """``address``/``city``/``state``/``country`` are not stored on the pin
-        at all: they are derived from the shared ``Location`` it points at, and
-        several people's pins can share one Location. A pin is moved by sending
-        coordinates, never by rewriting an address."""
+        """``address``/``city``/``state``/``country`` are not stored on the pin at all: they are derived from the shared ``Location`` it points at, and several people's pins can share one Location. A pin is moved by sending coordinates, never by rewriting an address."""
         for field in ("address", "city", "state", "country", "official_name"):
             with self.subTest(field=field):
                 self.assertNotIn(field, PinUpdateSerializer().fields)
@@ -867,17 +788,8 @@ class PinPatchAuthorizationTests(_PinPatchTestCase):
 class PinUpdateEditMappingTests(SimpleTestCase):
     """``PinUpdateSerializer.pin_field_edits`` - the wire-to-column flattening.
 
-    Unit-level because this is pure parsing and the property below would be
-    unbearably slow against the database. The regression it pins down is real:
-    the wire key ``security`` carries the nested indicator object, but
-    ``security`` is *also* the name of one of the eight indicator columns
-    (``models.abstract.security.SECURITY_FIELDS``). It therefore passes the
-    ``EDITABLE_PIN_FIELDS`` membership test, and a naive flat copy carried the
-    whole nested dict through to ``setattr(pin, "security", {...})`` - a
-    ``varchar(20)`` - so an entirely ordinary
-    ``{"security": {"locked": "everywhere"}}`` died with a database
-    ``DataError`` and the caller got a 500.
-    """
+    Unit-level because this is pure parsing and the property below would be unbearably slow against the
+    database."""
 
     def _edits(self, payload: dict) -> dict[str, Any]:
         """Validate *payload* and return the flattened edit mapping.
@@ -889,8 +801,7 @@ class PinUpdateEditMappingTests(SimpleTestCase):
             The ``Pin`` column -> value mapping the view would apply.
 
         Raises:
-            AssertionError: The payload did not validate.
-        """
+            AssertionError: The payload did not validate."""
         serializer = PinUpdateSerializer(data=payload)
         self.assertTrue(serializer.is_valid(), serializer.errors)
         return serializer.pin_field_edits()
@@ -938,11 +849,9 @@ class PinUpdateEditMappingTests(SimpleTestCase):
     ) -> None:
         """The property behind "absent means untouched".
 
-        ``apply_pin_edits`` writes precisely the columns it is handed, so a key
-        appearing here that the client never sent is a silent overwrite of a
-        field the user was not looking at - and one going missing is the lost
-        edit this whole widening exists to end.
-        """
+        ``apply_pin_edits`` writes precisely the columns it is handed, so a key appearing here that the client
+        never sent is a silent overwrite of a field the user was not looking at - and one going missing is the
+        lost edit this whole widening exists to end."""
         payload: dict[str, Any] = {name: _SAMPLE_FIELD_VALUES[name] for name in fields}
         if security_fields:
             payload["security"] = dict.fromkeys(sorted(security_fields), SecurityLevel.EVERYWHERE.value)

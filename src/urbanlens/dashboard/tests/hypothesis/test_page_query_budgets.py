@@ -1,18 +1,4 @@
-"""Query counts for the main pages, measured against a non-trivial dataset.
-
-Written as a measurement harness first and a regression guard second. An N+1 is
-invisible on a fixture with one pin: the page issues one extra query, the test
-passes, and the same code issues four hundred for a real account. Every check
-here therefore builds a *second* dataset roughly twice the size and asserts the
-count did not grow with it - which is the property that actually matters and the
-one a fixed budget number cannot express.
-
-The absolute budgets sit at roughly 1.7x each page's measured cost, so a genuine
-regression trips them while a legitimate extra `select_related` does not. Measured
-2026-08-13 at 4 and 24 pins: map 17/17, organize 28/28, profile 15/15, pin detail
-26/24. Every one is flat, which is the point - `organize.index` in particular was
-244 queries earlier in this audit.
-"""
+"""Query counts for the main pages, measured against a non-trivial dataset."""
 
 from __future__ import annotations
 
@@ -43,11 +29,9 @@ class PageQueryBudgetTests(TestCase):
     def _seed(self, count: int) -> list[Pin]:
         """Add *count* pins, each with its own location and a couple of labels.
 
-        Coordinates advance from a running offset rather than restarting at zero:
-        ``Location`` is unique on (latitude, longitude), so a second seeding pass
-        that reused the first pass's grid would collide instead of growing the
-        dataset.
-        """
+        Coordinates advance from a running offset rather than restarting at zero: ``Location`` is unique on
+        (latitude, longitude), so a second seeding pass that reused the first pass's grid would collide instead
+        of growing the dataset."""
         pins = []
         start = getattr(self, "_seeded", 0)
         self._seeded = start + count

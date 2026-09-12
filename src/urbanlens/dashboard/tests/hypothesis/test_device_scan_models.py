@@ -1,9 +1,4 @@
-"""Tests for the device_scan model/queryset layer itself.
-
-Behavioral coverage of the custom managers/querysets - not the clustering
-pipeline (see test_device_scan_clustering.py) or the external API (see
-test_device_scan_views.py).
-"""
+"""Tests for the device_scan model/queryset layer itself."""
 
 from __future__ import annotations
 

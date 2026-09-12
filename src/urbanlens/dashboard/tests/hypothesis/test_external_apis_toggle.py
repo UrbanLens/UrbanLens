@@ -1,9 +1,4 @@
-"""Tests for the External APIs toggle (Profile.external_apis_enabled).
-
-Covers the panel-fetch chokepoint (schedule_panel_fetch), the AI gateway
-factory's centralized per-profile check, and the weather endpoint - the three
-representative call sites for the master switch.
-"""
+"""Tests for the External APIs toggle (Profile.external_apis_enabled)."""
 
 from __future__ import annotations
 
@@ -58,13 +53,10 @@ def test_get_gateway_allows_when_profile_fully_enabled() -> None:
 
 @pytest.mark.django_db
 def test_get_gateway_returns_none_when_profile_lacks_ai_feature() -> None:
-    """A profile with both preferences on, but no ``SiteFeature.AI`` grant (the
-    default for a fresh account with no subscription), gets no gateway.
+    """A profile with both preferences on, but no ``SiteFeature.AI`` grant (the default for a fresh account with no subscription), gets no gateway.
 
-    A throwaway user is created first to absorb the "first user in a fresh
-    test database becomes bootstrap site admin" promotion (which would
-    otherwise grant every ``SiteFeature`` to the profile under test).
-    """
+    A throwaway user is created first to absorb the "first user in a fresh test database becomes bootstrap site
+    admin" promotion (which would otherwise grant every ``SiteFeature`` to the profile under test)."""
     from model_bakery import baker
 
     baker.make("auth.User")
@@ -166,10 +158,7 @@ def test_schedule_panel_fetch_releases_flight_marker_on_broker_failure() -> None
 
 @pytest.mark.django_db
 def test_cpu_heavy_panels_stay_on_the_default_queue() -> None:
-    """BoundaryPanelSource and OvertureBuildingAttributesPanelSource do real CPU-bound
-    work (gunzipping/parsing GeoParquet, shapely geometry) - several of those running
-    concurrently on the thread-pool queue would cause enough GIL contention to slow
-    down every other panel sharing it, so they opt out via PanelSource.queue."""
+    """BoundaryPanelSource and OvertureBuildingAttributesPanelSource do real CPU-bound work (gunzipping/parsing GeoParquet, shapely geometry) - several of those running concurrently on the thread-pool queue would cause enough GIL contention to slow down every other panel sharing it, so they opt out via PanelSource.queue."""
     from urbanlens.dashboard.services.pins.external_data import BoundaryPanelSource, get_panel_source
 
     assert BoundaryPanelSource().queue == "celery"

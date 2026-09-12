@@ -1,15 +1,4 @@
-"""Every notification category with a real producer now supports Email delivery.
-
-Eight categories (friend_request, friend_accepted, added_to_trip,
-comment_reply, comment_liked, pin_shared, visit_suggested) used to treat
-"Email" and "Notification" as indistinguishable - both just showed the
-in-app row, since none of them had any email-sending code at all. Each now
-gates the in-app row on SITE/BOTH and a real email (via
-services.notifications.notification_delivery.send_notification_email) on
-EMAIL/BOTH, matching the two categories (message, the safety check-in types)
-that already worked this way. achievement_earned's own coverage lives in
-test_achievements.py, next to its other notification tests.
-"""
+"""Every notification category with a real producer now supports Email delivery."""
 
 from __future__ import annotations
 
@@ -110,10 +99,8 @@ class FriendAcceptedEmailTests(TestCase):
     def test_the_auto_accept_branch_also_emails(self) -> None:
         """request_or_accept_friendship's crossed-request path shares the same helper now.
 
-        self.acceptor sent the original request; self.requester "requesting"
-        them back crosses it and auto-accepts - so self.acceptor (the
-        original sender) is who gets told it was accepted.
-        """
+        self.acceptor sent the original request; self.requester "requesting" them back crosses it and
+        auto-accepts - so self.acceptor (the original sender) is who gets told it was accepted."""
         _set_pref(self.acceptor, "friend_accepted", DeliveryPreference.EMAIL)
         Friendship.request(from_profile=self.acceptor, to_profile=self.requester.pk)
         mail.outbox.clear()
@@ -160,14 +147,6 @@ class CommentReplyAndReactionEmailTests(TestCase):
         self.comment = baker.make(Comment, pin=self.pin, wiki=None, profile=self.author, text="original")
         _set_pref(self.author, "comment_reply", DeliveryPreference.EMAIL)
         _set_pref(self.author, "comment_liked", DeliveryPreference.EMAIL)
-        # get_or_create's create path (the first _set_pref call, no row yet)
-        # caches the new NotificationPreference on self.author's reverse O2O
-        # descriptor; its get path (the second call, row already exists)
-        # returns a separate instance that never touches that cache - so
-        # self.author.notification_preferences (and self.comment.profile,
-        # the same object) would still show comment_liked at its pre-edit
-        # default without this refresh, even though both fields are already
-        # correctly persisted in the database by this point.
         self.author.refresh_from_db()
         mail.outbox.clear()
 

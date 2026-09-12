@@ -1,18 +1,7 @@
 /**
- * Exercising the Channels/Daphne half of the deployment.
- *
- * WebSockets are served by a different container than the HTTP surface
- * (`app-ws` running Daphne, behind the same proxy), talk to the channel layer
- * in Valkey, and are the one part of the stack a page-load assertion cannot
- * reach. They are also the part most likely to be broken by infrastructure
- * rather than by code - a proxy that does not upgrade, a channel layer that is
- * unreachable, a tunnel that times an idle connection out - which is precisely
- * what an integration run against a real deployment is for.
- *
- * Sockets are opened from inside the page rather than from Node. That keeps the
- * suite free of a WebSocket client dependency, and more importantly means the
- * connection carries the browser's real session cookie and Origin header, so
- * what is tested is what a user's browser would actually do.
+ * Exercising the Channels/Daphne half of the deployment. WebSockets are served by a different
+ * container than the HTTP surface (`app-ws` running Daphne, behind the same proxy), talk to the
+ * channel layer in Valkey, and are the one part of the stack a page-load assertion cannot reach.
  */
 
 import type { Page } from "@playwright/test";

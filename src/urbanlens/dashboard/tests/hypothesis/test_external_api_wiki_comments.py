@@ -1,12 +1,4 @@
-"""Comment visibility on the external API's wiki surface.
-
-The gate that matters most here is the ``@[Display](loc:<uuid>)`` mention
-check. A comment naming a location the viewer has not pinned must vanish
-*entirely* - not be returned with the mention redacted, and certainly not with
-the raw token intact. Even revealing that "a comment here mentions somewhere
-you can't see" tells the viewer that place exists and that someone connected it
-to this one.
-"""
+"""Comment visibility on the external API's wiki surface."""
 
 from __future__ import annotations
 

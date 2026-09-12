@@ -1,26 +1,4 @@
-"""``POST /wikis/{location_slug}/aliases/{alias_id}/use/`` - adopting a community name.
-
-Pins have had "use this name" since the alias list existed; wikis had the same
-button in the HTMX UI and nothing at all in the external API, so a native client
-could add and delete a place's names but never choose between them.
-
-Three properties are worth stating up front, because each one is a bug that was
-either present in a sibling implementation or easy to reintroduce:
-
-1. **The response is built after the save.** ``Wiki.save()`` runs the name
-   through ``sanitize_name``, so a payload assembled from ``alias.name``
-   beforehand can report a name the database does not hold - and a client that
-   caches it disagrees with every later read.
-2. **Promoting the name that is already the name is a 200 no-op.** Idempotency
-   is what makes a retry after a lost response safe.
-3. **The alias id is scoped to the resolved wiki.** A bare lookup would make
-   alias ids - which carry actual place names, not just handles - enumerable
-   across every wiki in the database.
-
-Everything here also inherits the surface-wide anti-enumeration guarantee from
-``services.wiki.wiki_access.resolve_visible_wiki``; see
-``test_external_api_wiki_oracle.py`` for the exhaustive version of that.
-"""
+"""``POST /wikis/{location_slug}/aliases/{alias_id}/use/`` - adopting a community name."""
 
 from __future__ import annotations
 
@@ -109,10 +87,8 @@ class WikiAliasUseTests(_WikiAliasUseTestCase):
     def test_the_rename_lands_in_the_wiki_edit_history(self) -> None:
         """It is an audited community edit, indistinguishable from one typed in the form.
 
-        This is the whole reason the operation goes through ``apply_wiki_edit``
-        instead of assigning ``wiki.name``: a rename nobody can see in history
-        is a rename nobody can revert.
-        """
+        This is the whole reason the operation goes through ``apply_wiki_edit`` instead of assigning
+        ``wiki.name``: a rename nobody can see in history is a rename nobody can revert."""
         alias = self.add_alias("The Grist Mill")
         self.use(alias.pk)
 
@@ -153,13 +129,8 @@ class WikiAliasUseTests(_WikiAliasUseTestCase):
     def test_promoting_an_alias_that_differs_only_in_case_is_a_real_rename(self) -> None:
         """The one case where ``is_current`` and the no-op rule deliberately disagree.
 
-        ``is_current`` compares loosely, because it has to agree with the
-        case-insensitive alias uniqueness constraint - two aliases differing only
-        in case cannot both exist. But the *wiki's* name can drift out of case
-        with its alias (renamed through PATCH, which touches no alias row), and
-        recasing it back is a real change to how the place is displayed. So the
-        alias reads as current and promoting it still writes history.
-        """
+        ``is_current`` compares loosely, because it has to agree with the case-insensitive alias uniqueness
+        constraint - two aliases differing only in case cannot both exist."""
         self.client.patch(self.url(), {"name": "old mill"}, content_type="application/json", **self.headers())
         alias = self.wiki.aliases.get(name="Old Mill")
         self.assertTrue(self.client.get(self.url("aliases/"), **self.headers()).json()[0]["is_current"])
@@ -209,12 +180,8 @@ class WikiAliasUseSanitizationTests(_WikiAliasUseTestCase):
     def test_the_payload_matches_the_stored_name_not_the_submitted_one(self) -> None:
         """Regression guard for serializing before the save.
 
-        ``_AliasBase.save()`` normally sanitizes alias names on the way in, so
-        this writes the unsanitized value with ``update()`` to reproduce the row
-        an older write path (or a data import) could have left behind. Whatever
-        the row holds, the response must agree with the wiki as re-read from the
-        database - not with the string that was on the alias.
-        """
+        ``_AliasBase.save()`` normally sanitizes alias names on the way in, so this writes the unsanitized value
+        with ``update()`` to reproduce the row an older write path (or a data import) could have left behind."""
         alias = self.add_alias("placeholder")
         WikiAlias.objects.filter(pk=alias.pk).update(name="Mill <b>House</b> ✨")
 
@@ -263,16 +230,8 @@ class WikiAliasIsCurrentFlagTests(_WikiAliasUseTestCase):
     def test_promoting_any_alias_leaves_exactly_one_current(self, name: str) -> None:
         """The invariant a client's list rendering depends on, over arbitrary names.
 
-        The alphabet is letters so the generated name survives ``sanitize_name``
-        intact - the property under test is "exactly one", not "the sanitizer is
-        a no-op". It is further restricted to ASCII because
-        ``normalize_name_for_comparison`` strips every non-ASCII character, so a
-        wholly non-Latin name normalizes to the empty string and *no* alias is
-        reported current. That is a real defect in shared naming code rather
-        than in this endpoint (it equally breaks the "you can't delete the
-        current name" guard for such places); it is reported separately, and
-        this test deliberately does not encode the broken behavior as expected.
-        """
+        The alphabet is letters so the generated name survives ``sanitize_name`` intact - the property under
+        test is "exactly one", not "the sanitizer is a no-op"."""
         alias, _created = WikiAlias.objects.get_or_create(wiki=self.wiki, name__iexact=name, defaults={"name": name})
         self.use(alias.pk)
 
@@ -328,10 +287,8 @@ class WikiAliasUseNotFoundTests(_WikiAliasUseTestCase):
     def test_an_alias_from_a_wiki_the_caller_cannot_see_is_not_found(self) -> None:
         """The id is real; the answer must still be the uniform 404.
 
-        A 403 - or any distinguishable body - would confirm that an alias with
-        that id exists somewhere, which is enough to walk the table and harvest
-        the names of places other people have pinned.
-        """
+        A 403 - or any distinguishable body - would confirm that an alias with that id exists somewhere, which
+        is enough to walk the table and harvest the names of places other people have pinned."""
         response = self.use(self.foreign_alias.pk)
 
         self.assertEqual(response.status_code, 404)

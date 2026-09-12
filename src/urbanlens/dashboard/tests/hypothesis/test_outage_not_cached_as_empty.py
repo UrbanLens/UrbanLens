@@ -1,18 +1,4 @@
-"""An outage must not be cached as "there is nothing here".
-
-The existence of a ``LocationCache`` row is what marks a source as having run
-(see ``LocationCacheEnrichmentSource.missing_filter``), so writing an empty
-result after a failed fetch turns a transient outage into a permanent gap that
-nothing retries.
-
-This is not hypothetical. The SearXNG instance behind image search returned
-403s for a period; every pin whose media was fetched in that window cached an
-empty list, and stayed empty afterwards - the emptiness outlived the outage.
-The same shape existed in the site-conditions panel.
-
-The distinction the code has to keep: *asked and told nothing* is a result
-worth caching; *could not ask* is not.
-"""
+"""An outage must not be cached as "there is nothing here"."""
 
 from __future__ import annotations
 
@@ -110,13 +96,7 @@ class SiteConditionsOutageTests(TestCase):
 class RedataPartialProviderOutageTests(TestCase):
     """A provider outage *inside* a successful request is still an outage.
 
-    The tests above guard a failed request. REData's near-point endpoints answer
-    `200` with `complete: false` when some - not all - of the sources covering a
-    coordinate could not be reached, and its own contract says such a response
-    must never be cached as emptiness. Every panel parsed `complete` and threw
-    it away, so a five-minute outage at one city's permit feed blanked the
-    Permits panel for the whole cache window.
-    """
+    The tests above guard a failed request."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -1,11 +1,4 @@
-"""Tests for extract_nominatim_tags/extract_overture_tags - pure functions, no DB.
-
-Fixture dicts mirror the shapes NominatimGateway._normalise() and
-OvertureMapsGateway.get_building_attributes() actually return (the former is
-also exactly what LocationCache(source="nominatim").data holds), not
-generated fake data - the fallback/exclusion rules under test are about
-specific field-name relationships in those real shapes, not arbitrary dicts.
-"""
+"""Tests for extract_nominatim_tags/extract_overture_tags - pure functions, no DB."""
 
 from __future__ import annotations
 
