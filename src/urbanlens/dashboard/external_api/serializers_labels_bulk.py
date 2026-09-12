@@ -64,7 +64,7 @@ class LabelBulkEditSerializer(serializers.Serializer):
     cleared".
     """
 
-    uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=500)
+    uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
     icon = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=50)
     #: The same palette LabelWriteSerializer enforces on the single-label
     #: endpoints. Bulk edit writes the same column on the same model, and used
@@ -76,6 +76,38 @@ class LabelBulkEditSerializer(serializers.Serializer):
     #: child removal path there either.
     add_parent_uuids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_empty=True)
     add_child_uuids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_empty=True)
+
+    def validate(self, attrs: dict) -> dict:
+        """Bound every list against the same ceiling the internal door uses.
+
+        `uuids` carried a literal ceiling and the two hierarchy lists carried
+        none, which left the real cost - for every label, for every proposed
+        parent, a `would_create_cycle` walk of the label graph in the database -
+        as one capped number multiplied by an uncapped one.
+
+        Read from settings at validation time rather than bound as a field
+        `max_length`, which is fixed at import and so could be neither
+        configured nor overridden in a test.
+
+        Args:
+            attrs: The validated field values.
+
+        Returns:
+            ``attrs`` unchanged.
+
+        Raises:
+            ValidationError: When any list is over the ceiling. Refused rather
+                than trimmed, matching the internal door: a bulk edit that
+                silently applied to part of what was selected is worse than one
+                that says no.
+        """
+        from django.conf import settings
+
+        ceiling = settings.LABEL_BULK_EDIT_MAX_IDS
+        for field in ("uuids", "add_parent_uuids", "add_child_uuids"):
+            if len(attrs.get(field) or []) > ceiling:
+                raise serializers.ValidationError({field: f"Select at most {ceiling} items at a time."})
+        return attrs
 
 
 class LabelBulkEditResponseSerializer(serializers.Serializer):

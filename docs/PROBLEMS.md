@@ -4423,6 +4423,22 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**H33 is fixed** (2026-09-12) - the external twin of H26, which was capped at the internal door in
+an earlier batch and left this one open. `LabelBulkEditSerializer` gave `uuids` a literal
+`max_length=500` and gave `add_parent_uuids`/`add_child_uuids` no ceiling at all, so the real cost -
+for every label, for every proposed parent, a `would_create_cycle` walk of the label graph in the
+database - was one capped number multiplied by an uncapped one, inside a single `transaction.atomic()`.
+
+All three lists now read `LABEL_BULK_EDIT_MAX_IDS` at validation time rather than binding a field
+`max_length` at import, which could be neither configured nor overridden in a test.
+
+**The first version of the test was worthless and passed 6/6 against unfixed code.** It built the
+parent list from `baker.prepare` uuids, which do not exist - and the view already refuses a uuid it
+cannot resolve, so the 400 it asserted came from that pre-existing check rather than from any
+ceiling. The rewrite uses real, resolvable labels, and adds a test asserting the unresolvable-uuid
+400 *separately*, so the two refusal paths cannot be confused for one another again. Worth recording
+as a pattern: when a ceiling test asserts a status code, check what else can produce that code.
+
 **H46 is fixed, and it had a second door** (2026-09-12). Both revision-history endpoints - the pin
 article's and the wiki article's - ran `list(article.revisions...)` and built a row dict per revision
 *before* handing the result to `paginated_response`, so the page size bounded the response body and
