@@ -29,7 +29,7 @@ _CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
 MAX_CACHED_BODY_BYTES = 512 * 1024
 
 
-def set_if_small(key: str, content: bytes, content_type: str, timeout: int, *, label: str, max_bytes: int = MAX_CACHED_BODY_BYTES) -> bool:
+def set_if_small(key: str, content: bytes, content_type: str, timeout: int, *, label: str, max_bytes: int | None = None) -> bool:
     """Store ``(content, content_type)`` under *key* unless it is too large.
 
     Args:
@@ -38,14 +38,19 @@ def set_if_small(key: str, content: bytes, content_type: str, timeout: int, *, l
         content_type: Its content type, stored alongside.
         timeout: Seconds to keep it.
         label: What is being cached, for the log line when it is refused.
-        max_bytes: Largest body to store.
+        max_bytes: Largest body to store. Defaults to
+            :data:`MAX_CACHED_BODY_BYTES`, read at call time rather than bound
+            as the parameter's default - a module constant used as a default is
+            fixed when the function is defined, which makes it impossible to
+            configure or to override in a test.
 
     Returns:
         Whether it was stored. Callers serve the body either way - refusing to
         cache must never mean refusing to answer.
     """
-    if len(content) > max_bytes:
-        logger.warning("%s was %d bytes, over the %d cache ceiling; serving it uncached.", label, len(content), max_bytes)
+    ceiling = MAX_CACHED_BODY_BYTES if max_bytes is None else max_bytes
+    if len(content) > ceiling:
+        logger.warning("%s was %d bytes, over the %d cache ceiling; serving it uncached.", label, len(content), ceiling)
         return False
     try:
         cache.set(key, (content, content_type), timeout)

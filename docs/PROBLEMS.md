@@ -4423,6 +4423,34 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**H35/H22/H13 are fixed** (2026-09-12) - three audit lines about one `cache.set`. The basemap tile
+proxy stored raw vendor bytes with no size check, into the same 512MB Valkey that holds sessions,
+the Channels layer and the Celery broker. One oversized tile, or a vendor answering a tile request
+with something that is not a tile, evicts other people's sessions to make room for itself.
+
+`bounded_cache.set_if_small` already existed for this and the Immich thumbnail proxy already used
+it, so the fix was to stop having two answers to the same question rather than to invent a third.
+
+It also closed an unhandled failure path that has nothing to do with size. A bare `cache.set`
+against a full or unreachable Valkey **raises**, and here nothing caught it - so a cache problem
+became a 500 on a map tile. The helper catches it and serves the tile uncached, which is the right
+answer: refusing to cache must never mean refusing to answer. There is a test for it, and it was red
+before the change.
+
+**The same default-binding trap as H33, in the helper itself.** `set_if_small` took
+`max_bytes: int = MAX_CACHED_BODY_BYTES`, and a module constant used as a parameter default is fixed
+when the function is *defined* - so the ceiling could be neither configured nor overridden in a
+test, and the first attempt at the size test failed for that reason rather than for the defect. It
+now resolves at call time. Worth noticing that this is the second place in one session where a
+ceiling was written as a default argument and was therefore inert.
+
+**H21 is verified but deliberately not started.** `resolve_deferred_pin_locations` re-serialises the
+still-pending payload into the broker on every retry, and retries continue for up to two days. It is
+*bounded* - `MAX_PREVIEW_PINS` caps an import at 20,000 pins - so the exposure is a few megabytes per
+retry rather than unbounded, but into the shared instance. The two real fixes are persisting the
+payload behind an id (a schema change) or the Valkey split already planned as PL7 phase 4; choosing
+one here would pre-empt that plan, so it is recorded rather than done.
+
 **H58 is fixed** (2026-09-12). Undoing a bulk pin delete validated the batch one row at a time:
 for every pin, a separate `.exists()` for its profile, its location, its wiki, a `.count()` for its
 labels, and another `.exists()` for the root-pin collision - with `_resolved_parent_pk` adding a

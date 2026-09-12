@@ -25,6 +25,7 @@ from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views import View
 
+from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
 logger = logging.getLogger(__name__)
@@ -169,7 +170,12 @@ class BasemapTileView(LoginRequiredMixin, View):
 
         if status == 200:
             resolved_type = content_type or "image/png"
-            cache.set(cache_key, (body, resolved_type), _TILE_CACHE_TTL)
+            # Bounded like the Immich thumbnail proxy: these bytes come from a
+            # vendor and land in the same instance as sessions, the Channels
+            # layer and the broker, so one surprise must not evict the rest.
+            # The helper also swallows a cache failure - a full or unreachable
+            # Valkey is a degraded cache, not a broken map.
+            bounded_cache.set_if_small(cache_key, body, resolved_type, _TILE_CACHE_TTL, label=f"Basemap tile {layer} {z}/{x}/{y}")
             return HttpResponse(body, content_type=resolved_type)
         if status in (400, 404):
             # A definitive answer about the request: no such tile, unknown
