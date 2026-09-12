@@ -127,7 +127,7 @@ Lesson worth keeping: for a one-time cost, `cumulative` tells you which caller w
 tells you what actually burned the CPU. The first answer sent this entry to the wrong conclusion
 and nearly to an invasive fix for a one-line problem.
 
-## H64 — a permanently unreadable file is retried hourly, forever (open)
+## H64 — a permanently unreadable file is retried hourly, forever (fixed 2026-09-12)
 
 `generate_image_thumbnails` (`tasks.py:1432`) logged 50 tracebacks on staging for files the
 database references and the disk does not have (2,444 `Image` rows against 25 files — a restored
@@ -140,10 +140,20 @@ The design around both is sound: the backfill walks by primary key, the cursor a
 failures, and an exhausted cursor resets. But that means a file that can *never* be read is
 retried on every wrap, logging a full traceback each time, with no way to stop.
 
-The codebase already has the concept — `write_image_preview` caches `UNPREVIEWABLE` against a
-failure TTL so a bad file is not re-examined. The thumbnail path has no equivalent. Low severity
-(the batch is bounded and it is off the request path), recorded because the fix is a known shape
-already used a few lines away.
+The codebase already had the concept — `write_image_preview` caches `UNPREVIEWABLE` against a
+failure TTL so a bad file is not re-examined — but not a usable one here, and the difference is
+the point. A cache sentinel answers about one document on a request path; this has to exclude rows
+from a *queryset*, and consulting N cache keys after the query filters in Python after the batch
+was already cut, which is the defect that made comment pages come back short (H47).
+
+Fixed with `Image.media_unreadable_at`, a timestamp both sweeps exclude on for seven days.
+Deliberately not a boolean: a "this file is broken" flag set during a storage outage would mark
+the entire library, silently and irreversibly, in one sweep. A timestamp makes it a backoff rather
+than a verdict — a genuinely dead row costs one retry a week instead of 168, a transient fault
+heals on its own, and a restored file clears its own mark on the next pass.
+
+Verified on staging: a sweep that previously returned the same 50 dead rows every wrap now returns
+50 *different* rows, with zero overlap against the previous batch.
 
 ## Not defects
 
