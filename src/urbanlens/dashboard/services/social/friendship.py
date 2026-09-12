@@ -27,34 +27,19 @@ logger = logging.getLogger(__name__)
 
 
 class FriendshipActionError(ValueError):
-    """Raised when a friendship transition could not be applied.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """Raised when a friendship transition could not be applied."""
 
 
 class FriendshipNotFoundError(FriendshipActionError):
-    """No friendship row exists between the two profiles.
-
-    Deliberately also raised when a row exists but the actor has no standing
-    to act on it, so "not yours" and "not there" are indistinguishable.
-    Callers map this to HTTP 404.
-    """
+    """No friendship row exists between the two profiles."""
 
 
 class FriendLimitExceededError(FriendshipActionError):
-    """Accepting would push one of the two profiles past ``max_friends_per_user``.
-
-    Kept distinct from the base error so the caller can answer 403 (the
-    request was understood and refused) rather than 400 (malformed).
-    """
+    """Accepting would push one of the two profiles past ``max_friends_per_user``."""
 
 
 class CommunityDisabledError(FriendshipActionError):
-    """``Friendship.accept()`` refused because Community is off for one side.
-
-    ``accept()`` returns a bare ``False`` for two unrelated reasons; this is
-    raised for whichever one isn't :class:`FriendLimitExceededError` - see
-    :func:`accept_friend_request`, which checks the friend-limit case first.
-    """
+    """``Friendship.accept()`` refused because Community is off for one side."""
 
 
 class MalformedCursorError(FriendshipActionError):
@@ -62,8 +47,7 @@ class MalformedCursorError(FriendshipActionError):
 
 
 class InviteValidationError(FriendshipActionError):
-    """The invite payload itself was rejected - see the subclasses below.
-    Every condition here depends solely on what the caller submitted and reveals nothing about who is registered - unlike most of :class:`FriendshipActionError`'s hierarchy, a catch site is free to vary its user-facing text per subclass without weakening the anti-enumeration guarantee documented on :func:`invite_by_email`."""
+    """The invite payload itself was rejected - see the subclasses below."""
 
 
 class MalformedEmailAddressError(InviteValidationError):
@@ -80,11 +64,7 @@ class InviteMessageTooLongError(InviteValidationError):
 
 class InviteRateLimitedError(FriendshipActionError):
     """The inviter has exhausted their outbound-email budget.
-
-    Raised before the registered/unregistered branch is ever taken, so a
-    capped caller cannot use the 429-vs-200 difference to probe membership.
-    Callers map this to HTTP 429.
-    """
+    Raised before the registered/unregistered branch is ever taken, so a capped caller cannot use the 429-vs-200 difference to probe membership."""
 
 
 #: Default page size for :func:`list_friendships`.
@@ -182,13 +162,10 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, mes
     Args:
         from_profile: Profile initiating this request.
         to_profile: Profile being requested.
-        message: Optional note from the requester. Ignored when this call
-            resolves to an auto-accept (both profiles already wanted to be
-            friends, so there's no pending request left to attach a note to).
+        message: Optional note from the requester.
 
     Returns:
-        The resulting Friendship (pending or newly accepted), or None if the request
-        could not be created."""
+        The resulting Friendship (pending or newly accepted), or None if the request could not be created."""
     existing = Friendship.objects.all().between(from_profile, to_profile)
     if existing and existing.status == FriendshipStatus.REQUESTED and existing.from_profile_id == to_profile.pk:
         if not existing.accept():
@@ -236,8 +213,7 @@ def _existing_friendship(actor: Profile, target: Profile) -> Friendship:
         The single Friendship row joining the pair, in either direction.
 
     Raises:
-        FriendshipNotFoundError: No row joins the pair.
-    """
+        FriendshipNotFoundError: No row joins the pair."""
     friendship = Friendship.objects.all().between(target, actor)
     if not friendship:
         raise FriendshipNotFoundError(f"no Friendship row joins profiles {actor.pk} and {target.pk}")
@@ -246,7 +222,6 @@ def _existing_friendship(actor: Profile, target: Profile) -> Friendship:
 
 def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
     """The pending request ``target`` sent ``actor``, or raise.
-    Every answer to a friend request - accept, decline, ignore - is a response to *someone else's* pending offer, and this is the only function that establishes that premise. :func:`_existing_friendship` cannot: it resolves the pair's single row in either direction and reports nothing about its status, while ``Friendship.accept``/``decline``/``ignore`` overwrite ``status`` unconditionally.
 
     Args:
         actor: The profile answering the request (the recipient).
@@ -256,11 +231,7 @@ def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
         The pending Friendship directed from ``target`` to ``actor``.
 
     Raises:
-        FriendshipNotFoundError: No row joins the pair, the row is not pending,
-            or it is pending in the other direction. Deliberately one
-            indistinguishable error - a caller must not be able to tell "you
-            are blocked" from "there is nothing here", which is the whole point
-            of that exception's docstring."""
+        FriendshipNotFoundError: No row joins the pair, the row is not pending, or it is pending in the other direction."""
     friendship = _existing_friendship(actor, target)
     if friendship.status != FriendshipStatus.REQUESTED or friendship.from_profile_id != target.pk:
         raise FriendshipNotFoundError(
@@ -280,10 +251,8 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
         The now-accepted Friendship.
 
     Raises:
-        FriendshipNotFoundError: ``target`` has no pending request to ``actor``
-            - see :func:`_incoming_pending_request`.
-        FriendLimitExceededError: Either profile is already at the site's
-            ``max_friends_per_user`` limit.
+        FriendshipNotFoundError: ``target`` has no pending request to ``actor`` - see :func:`_incoming_pending_request`.
+        FriendLimitExceededError: Either profile is already at the site's ``max_friends_per_user`` limit.
         CommunityDisabledError: Either profile has Community disabled."""
     friendship = _incoming_pending_request(actor, target)
 
@@ -349,9 +318,7 @@ def reject_friend_request(actor: Profile, target: Profile) -> Friendship:
         The declined Friendship.
 
     Raises:
-        FriendshipNotFoundError: ``target`` has no pending request to ``actor``
-            - see :func:`_incoming_pending_request`.
-    """
+        FriendshipNotFoundError: ``target`` has no pending request to ``actor`` - see :func:`_incoming_pending_request`."""
     friendship = _incoming_pending_request(actor, target)
     friendship.decline()
     _dismiss_friend_request_notifications(actor, target.pk)
@@ -370,8 +337,7 @@ def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
         The ignored Friendship.
 
     Raises:
-        FriendshipNotFoundError: ``target`` has no pending request to ``actor``
-            - see :func:`_incoming_pending_request`."""
+        FriendshipNotFoundError: ``target`` has no pending request to ``actor`` - see :func:`_incoming_pending_request`."""
     friendship = _incoming_pending_request(actor, target)
     friendship.ignore()
     _dismiss_friend_request_notifications(actor, target.pk)
@@ -403,8 +369,7 @@ def remove_friend(actor: Profile, target: Profile) -> Friendship:
         The removed Friendship.
 
     Raises:
-        FriendshipNotFoundError: No friendship exists between the pair, or the
-            pair is blocked and ``actor`` is not the one who blocked."""
+        FriendshipNotFoundError: No friendship exists between the pair, or the pair is blocked and ``actor`` is not the one who blocked."""
     friendship = _existing_friendship(actor, target)
     if friendship.status == FriendshipStatus.BLOCKED and not _placed_the_block(actor, friendship):
         raise FriendshipNotFoundError(f"friendship {friendship.pk} is BLOCKED and actor {actor.pk} did not place the block")
@@ -518,7 +483,8 @@ def _withdraw_pending_pin_shares(actor: Profile, target: Profile) -> None:
 
 
 def unblock_profile(actor: Profile, target: Profile) -> Friendship:
-    """Lift a block ``actor`` placed on ``target``. The inverse :func:`block_profile` never had.
+    """Lift a block ``actor`` placed on ``target``.
+    The inverse :func:`block_profile` never had.
 
     Args:
         actor: The profile lifting its own block.
@@ -528,8 +494,7 @@ def unblock_profile(actor: Profile, target: Profile) -> Friendship:
         The now-``Removed`` Friendship.
 
     Raises:
-        FriendshipNotFoundError: No row joins the pair, the row is not
-            blocked, or the block belongs to ``target`` rather than ``actor``."""
+        FriendshipNotFoundError: No row joins the pair, the row is not blocked, or the block belongs to ``target`` rather than ``actor``."""
     friendship = Friendship.objects.all().between(target, actor)
     if friendship is None or friendship.status != FriendshipStatus.BLOCKED or not _placed_the_block(actor, friendship):
         raise FriendshipNotFoundError(f"no block placed by {actor.pk} on {target.pk} to lift")
@@ -566,9 +531,7 @@ def unmute_profile(actor: Profile, target: Profile) -> Friendship:
         The unmuted Friendship.
 
     Raises:
-        FriendshipNotFoundError: No relationship exists between the pair -
-            deliberately the same failure as muting a stranger, so the two
-            halves of the toggle answer identically."""
+        FriendshipNotFoundError: No relationship exists between the pair - deliberately the same failure as muting a stranger, so the two halves of the toggle answer identically."""
     friendship = _existing_friendship(actor, target)
     friendship.unmute(actor)
     return friendship
@@ -576,22 +539,16 @@ def unmute_profile(actor: Profile, target: Profile) -> Friendship:
 
 def notifications_muted(recipient: Profile | int | None, source: Profile | int | None) -> bool:
     """Whether ``recipient`` has muted the relationship notifications from ``source`` travel on.
-    Called from ``NotificationManager.notify``, which every notification producer goes through, so a new notification type honours the preference without its author having to know the preference exists - the reason mute silenced nothing for as long as it did is that each producer would have had to remember.
 
     Args:
         recipient: The profile the notification is addressed to, or its pk.
-        source: The profile the notification is *about* - a sharer, a
-            commenter, a requester - or its pk. A notification with no source
-            is nobody's to mute.
+        source: The profile the notification is *about* - a sharer, a commenter, a requester - or its pk.
 
     Returns:
-        True when a relationship joins the two and the recipient muted their
-        own side of it. False when either end is missing, when the two are the
-        same profile, or when no relationship exists - muting a stranger is not
-        possible (see :func:`mute_profile`), so there is nothing to consult.
+        True when a relationship joins the two and the recipient muted their own side of it.
 
     Note:
-        Asks the same predicate as :func:`profiles_muting` rather than reading the row through ``between()``. Two rows can join one pair (see that method), and the two forms have to reach the same answer - a mute honoured in one-to-one paths and dropped in group ones would be invisible until someone compared them."""
+        Asks the same predicate as :func:`profiles_muting` rather than reading the row through ``between()``."""
     if recipient is None or source is None:
         return False
     recipient_id = recipient if isinstance(recipient, int) else recipient.pk
@@ -607,7 +564,6 @@ def notifications_muted(recipient: Profile | int | None, source: Profile | int |
 @dataclass(frozen=True, slots=True)
 class MutedRecipients:
     """A batched mute answer, carrying the source it was computed for.
-    A bare set of profile ids passed into ``NotificationLog.objects.notify`` would be applied to whatever source that notification names, so a set computed for one person and reused for another would silence the wrong notifications - silently, and only in the paths that batch.
 
     Attributes:
         source_id: The profile the mutes were resolved against.
@@ -619,16 +575,13 @@ class MutedRecipients:
 
 def profiles_muting(source: Profile | int, recipient_ids: Iterable[int]) -> MutedRecipients:
     """Which of ``recipient_ids`` have muted notifications from ``source``, in one query.
-    ``_notify_group_message`` is the one that needs it: it deliberately resolves every per-member fact up front (preferences by ``select_related``, unread state by a single grouped query) because a 50-member group otherwise costs a hundred queries on the synchronous send path, and a per-member mute lookup would put them straight back.
 
     Args:
         source: The profile the notifications are about, or its pk.
         recipient_ids: The pks of the profiles being notified.
 
     Returns:
-        The subset of ``recipient_ids`` that muted their side of a
-        relationship with ``source``, tagged with that source. Empty when there
-        is nothing to check."""
+        The subset of ``recipient_ids`` that muted their side of a relationship with ``source``, tagged with that source."""
     source_id = source if isinstance(source, int) else source.pk
     ids = {pk for pk in recipient_ids if pk is not None and pk != source_id}
     if source_id is None or not ids:
@@ -655,22 +608,15 @@ def invite_by_email(
     Args:
         inviter: The profile sending the invitation.
         email: The raw address submitted by the caller.
-        message: Optional note to include, bounded by
-            ``MAX_FRIEND_REQUEST_MESSAGE_LENGTH``.
-        signup_url_builder: Builds the absolute signup URL from an invitation
-            token. Injected because the service has no request to call
-            ``build_absolute_uri`` on.
-        subscription_role: Optional ``SubscriptionRole`` to grant on
-            acceptance. Site-admin-only; callers on untrusted surfaces must
-            not accept this from user input.
-        subscription_duration: Raw duration string paired with
-            ``subscription_role``; ignored without one.
+        message: Optional note to include, bounded by ``MAX_FRIEND_REQUEST_MESSAGE_LENGTH``.
+        signup_url_builder: Builds the absolute signup URL from an invitation token.
+        subscription_role: Optional ``SubscriptionRole`` to grant on acceptance.
+        subscription_duration: Raw duration string paired with ``subscription_role``; ignored without one.
 
     Raises:
         MalformedEmailAddressError: The address failed validation.
         SelfInviteError: The address is the inviter's own.
-        InviteMessageTooLongError: The optional message exceeds
-            ``MAX_FRIEND_REQUEST_MESSAGE_LENGTH``.
+        InviteMessageTooLongError: The optional message exceeds ``MAX_FRIEND_REQUEST_MESSAGE_LENGTH``.
         InviteRateLimitedError: The inviter is over their email budget."""
     # Imported inside the function, exactly as the controller version did.
     # Not a style quirk: the mail classes must be looked up on their own module at call time so that

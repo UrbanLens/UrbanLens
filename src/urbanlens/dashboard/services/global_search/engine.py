@@ -40,12 +40,9 @@ class SearchResponse:
     Attributes:
         parsed: The structured interpretation of the query.
         groups: Non-empty result sections, in RESULT_TYPES order.
-        errors: Human-readable notices for sections that failed; searching
-            stays useful even when one provider errors.
+        errors: Human-readable notices for sections that failed; searching stays useful even when one provider errors.
         total: Total result count across groups.
-        used_fallback: True when the structured interpretation found nothing
-            and the plain-text retry produced these results instead.
-    """
+        used_fallback: True when the structured interpretation found nothing and the plain-text retry produced these results instead."""
 
     parsed: ParsedQuery
     groups: list[SearchGroup] = field(default_factory=list)
@@ -59,9 +56,7 @@ class GlobalSearchEngine:
     Callers that may not read everything - notably the external API, where a credential's scopes decide which domains it can touch at all - are expected to pass a narrowed chain rather than to filter the response afterwards.
 
     Args:
-        providers: Provider chain override; defaults to
-            :func:`default_providers`. An empty list is honoured as "search
-            nothing", not corrected to the default - see above."""
+        providers: Provider chain override; defaults to :func:`default_providers`."""
 
     def __init__(self, providers: list[SearchProvider] | None = None) -> None:
         self.providers = providers if providers is not None else default_providers()
@@ -70,22 +65,8 @@ class GlobalSearchEngine:
         """Search everything the profile has access to.
         A failing provider contributes an error notice instead of failing the whole search.
 
-        Args:
-                profile: The requesting user's profile.
-                raw_query: The query exactly as typed.
-                types: ``RESULT_TYPES`` slugs to restrict the search to, overriding
-                anything the parser inferred from the query text. Meant for a
-                caller with a real type picker (the API's ``types=`` parameter),
-                where the restriction is the user's stated intent rather than a
-                guess - which is why, unlike the parser's inference, it is *not*
-                dropped by the plain-text fallback below. None leaves the
-                parser's interpretation in charge; an empty collection is a
-                deliberate "no types", and searches nothing.
-                limit: Results per section, overriding the query-shape-derived
-                default. Bounds checking belongs to the caller.
-
         Returns:
-                The grouped, ordered results."""
+            The grouped, ordered results."""
         parsed = parse_query(raw_query)
         # Kept separate from `parsed.types` on purpose.
         # `parsed.types` uses the parser's convention where *empty means every type*, which is right
@@ -132,19 +113,8 @@ class GlobalSearchEngine:
     def _run(self, profile: Profile, parsed: ParsedQuery, *, restrict: frozenset[str] | None = None, limit: int | None = None) -> SearchResponse:
         """Fan one parsed query out to the applicable providers.
 
-        Args:
-            profile: The requesting user's profile.
-            parsed: The query interpretation to run.
-            restrict: An explicit type restriction from the caller, where empty
-                means "no types" rather than "all types" - see :meth:`search`.
-                None defers to ``parsed.types``.
-            limit: Results per section, or None to derive it from the query's
-                shape (a single-type query gets a deeper section, since it is the
-                whole answer rather than one of ten).
-
         Returns:
-            The grouped, ordered results for this one interpretation.
-        """
+            The grouped, ordered results for this one interpretation."""
         response = SearchResponse(parsed=parsed)
         if restrict is not None:
             active = [provider for provider in self.providers if provider.slug in restrict]

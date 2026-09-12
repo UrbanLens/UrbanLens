@@ -1,5 +1,4 @@
-"""Public Flickr photo search for the pin/wiki Media gallery.
-Both are required because a plain landmark-name query against Flickr's global pool returns a lot of photos that merely share a common word with the name - the state qualifier keeps a name that also belongs to a same-named place elsewhere from matching, and the urbex terms keep results on-topic for this site's subject matter."""
+"""Public Flickr photo search for the pin/wiki Media gallery."""
 
 from __future__ import annotations
 
@@ -41,12 +40,10 @@ def _quoted_or_group(terms: list[str]) -> str:
     """Build a parenthesized, quoted OR clause from ``terms`` (deduped, order preserved).
 
     Args:
-        terms: Candidate phrases; blank entries are skipped and duplicates
-            (case-insensitive) are collapsed to their first occurrence.
+        terms: Candidate phrases; blank entries are skipped and duplicates (case-insensitive) are collapsed to their first occurrence.
 
     Returns:
-        ``'("a" OR "b")'``, or ``""`` when no term survives.
-    """
+        ``'("a" OR "b")'``, or ``""`` when no term survives."""
     seen: set[str] = set()
     quoted: list[str] = []
     for raw in terms:
@@ -80,10 +77,7 @@ def _search_components(pin: Pin) -> _QueryComponents | None:
         pin: The pin to gather query components for.
 
     Returns:
-        The raw (undeduped, unquoted) names, ancestor names, and state, or
-        None when the pin has no known state at all - both renderers require
-        one.
-    """
+        The raw (undeduped, unquoted) names, ancestor names, and state, or None when the pin has no known state at all - both renderers require one."""
     from django.core.exceptions import ObjectDoesNotExist
 
     from urbanlens.dashboard.services.locations.naming import is_address_derived_name, is_meaningful_name
@@ -129,8 +123,7 @@ def build_search_query(pin: Pin) -> str | None:
         pin: The pin to build a search query for.
 
     Returns:
-        The query string, or None when the pin has no usable name or no
-        known state."""
+        The query string, or None when the pin has no usable name or no known state."""
     components = _search_components(pin)
     if components is None:
         return None
@@ -149,17 +142,12 @@ def build_search_query(pin: Pin) -> str | None:
 
 def build_feed_tag_queries(pin: Pin) -> list[str]:
     """Decompose a pin's required-operator query into public-feed tag-AND queries.
-    The public syndication feed only supports ANDing/ORing literal, normalized tags - not free-text boolean search - so the same "(names) state (urbex terms)" requirement is instead expressed as several 3-tag AND queries (one name x one urbex term, both ANDed with the state).
 
     Args:
         pin: The pin to build tag queries for.
 
     Returns:
-        Comma-joined tag strings (name, [ancestor,] state, urbex term; each
-        normalized the same way Flickr normalizes tags for matching), or
-        ``[]`` when the pin has no usable name or state. Capped at
-        :data:`_FEED_MAX_NAMES` distinct names to bound how many feed
-        requests one fetch issues."""
+        Comma-joined tag strings (name, [ancestor,] state, urbex term; each normalized the same way Flickr normalizes tags for matching), or ``[]`` when the pin has no usable name or state."""
     from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 
     components = _search_components(pin)
@@ -205,13 +193,9 @@ class FlickrSearchGateway(MediaProvider):
 
     def _search(self, text: str) -> list[dict[str, Any]]:
         """Run one ``flickr.photos.search`` call and return raw photo dicts.
-        Failures (including a site with no Flickr API key configured) are swallowed and logged rather than raised, matching the other Media gallery providers - a per-term search failure should degrade to "no results from this term", not suppress the whole panel.
-
-        Args:
-                text: The full boolean query text, from :func:`build_search_query`.
 
         Returns:
-                Raw photo dicts from Flickr's response, or ``[]`` on any failure."""
+            Raw photo dicts from Flickr's response, or ``[]`` on any failure."""
         try:
             api_key, _secret = _consumer_credentials()
         except FlickrNotConfiguredError:
@@ -271,13 +255,8 @@ class FlickrFeedSearchGateway(MediaProvider):
     def _fetch_tagged(self, tags_csv: str) -> list[dict[str, Any]]:
         """Run one public-feed request for a comma-joined, ANDed tag set.
 
-        Args:
-            tags_csv: A ``"tag1,tag2,tag3"`` string from
-                :func:`build_feed_tag_queries`.
-
         Returns:
-            The feed's raw item dicts, or ``[]`` on any failure.
-        """
+            The feed's raw item dicts, or ``[]`` on any failure."""
         params = {"tags": tags_csv, "tagmode": "all", "format": "json", "nojsoncallback": "1"}
         try:
             response = self.session.get(FEED_ENDPOINT, params=params, timeout=_FEED_TIMEOUT)
@@ -321,14 +300,8 @@ class FlickrMediaPanelSource(MediaPanelSource):
     def search_terms(pin: Pin, gateway: MediaProvider) -> list[str]:
         """This pin's Flickr query terms, shaped for whichever gateway is active.
 
-        Args:
-            pin: The pin to build search queries for.
-            gateway: The active gateway - determines which query shape to build.
-
         Returns:
-            The query terms for ``gateway``, or ``[]`` when the pin has no
-            usable name or state.
-        """
+            The query terms for ``gateway``, or ``[]`` when the pin has no usable name or state."""
         if isinstance(gateway, FlickrFeedSearchGateway):
             return build_feed_tag_queries(pin)
         query = build_search_query(pin)

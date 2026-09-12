@@ -1,22 +1,4 @@
-{% comment %}
-"Import a Flickr Album" dialog - given the public URL of any Flickr user's
-public album/photoset (no OAuth involved, unlike _flickr_picker_dialog.html's
-per-user "Import from Flickr"), preview its photos and import selected ones
-onto a pin or a wiki. Shared between both via context, not a separate
-template per target - see controllers/flickr.py's _album_* helpers.
-
-Context:
-  target_kind      - "pin" or "wiki" (display only; behavior is driven by
-                      lookup_url/import_url already pointing at the right target).
-  lookup_url       - POST target that resolves an album URL into a preview.
-  import_url       - POST target that enqueues the import of selected photos.
-  flickr_configured - whether the site has a Flickr API key at all.
-  max_photos       - cap on photos imported per album (see services.apis.flickr.public).
-  album_url        - the URL last submitted (re-shown so the user can adjust it).
-  album            - a FlickrAlbum (title, owner_username, total), once resolved.
-  assets           - [{id, thumbnail_url, already_imported}], once resolved.
-  error            - a message to show instead of results, if lookup failed.
-{% endcomment %}
+{% comment %}"Import a Flickr Album" dialog - given the public URL of any Flickr user's public album/photoset.{% endcomment %}
 {% include "dashboard/partials/ui/_dialog_header.html" with title="Import a Flickr Album" %}
 <div class="ul-dialog-body" id="flickr-album-body">
     {% if not flickr_configured %}

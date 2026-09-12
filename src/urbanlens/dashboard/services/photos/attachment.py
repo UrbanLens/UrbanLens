@@ -1,5 +1,4 @@
-"""Attaching a photo to the pins and wikis it belongs to, and collecting it when nothing does.
-A picture of a building belongs to the building's pin and, because child pins are a feature, to the parcel pin above it; a photo contributed to a community wiki belongs to that wiki and to the contributor's own pin. :class:`~urbanlens.dashboard.models.images.attachment.ImageAttachment` holds those as rows so there can be any number of them, and so removing one removes exactly one."""
+"""Attaching a photo to the pins and wikis it belongs to, and collecting it when nothing does."""
 
 from __future__ import annotations
 
@@ -30,12 +29,10 @@ def attach_to_pin(image: Image, pin: Pin, *, added_by: Profile | None = None) ->
     Args:
         image: The photo.
         pin: The pin it belongs to.
-        added_by: Who attached it, for wikis and shared plans where that is not
-            inferable from the pin.
+        added_by: Who attached it, for wikis and shared plans where that is not inferable from the pin.
 
     Returns:
-        The attachment row, existing or new.
-    """
+        The attachment row, existing or new."""
     attachment, created = ImageAttachment.objects.get_or_create(image=image, pin=pin, defaults={"added_by": added_by})
     if created:
         logger.debug("Attached image %s to pin %s", image.pk, pin.pk)
@@ -51,8 +48,7 @@ def attach_to_wiki(image: Image, wiki: Wiki, *, added_by: Profile | None = None)
         added_by: The contributing profile.
 
     Returns:
-        The attachment row, existing or new.
-    """
+        The attachment row, existing or new."""
     attachment, created = ImageAttachment.objects.get_or_create(image=image, wiki=wiki, defaults={"added_by": added_by})
     if created:
         logger.debug("Attached image %s to wiki %s", image.pk, wiki.pk)
@@ -67,7 +63,7 @@ def reference_count(image: Image) -> int:
         image: The photo.
 
     Returns:
-        The number of references. Zero means nothing would notice it going."""
+        The number of references."""
     return (
         ImageAttachment.objects.filter(image=image).count()
         + image.floorplan_references.count()

@@ -1,5 +1,4 @@
-"""Question eligibility for a Trivia session.
-This module adds the Trivia-specific second filter: an approved, in-rotation question about one of those locations, with deterministic questions materialized on demand for each candidate location as it's considered (see ``services.trivia.deterministic``), so a freshly-pinned location with no question rows yet still becomes eligible the first time it's checked."""
+"""Question eligibility for a Trivia session."""
 
 from __future__ import annotations
 
@@ -29,14 +28,11 @@ def eligible_questions(
 
     Args:
         profiles: Every participant in the session.
-        geo_bounds: Optional polygon/bbox restricting candidates to a
-            player-chosen region.
-        exclude_question_ids: Questions to exclude outright - already asked
-            earlier in this session (no repeats within one playthrough).
+        geo_bounds: Optional polygon/bbox restricting candidates to a player-chosen region.
+        exclude_question_ids: Questions to exclude outright - already asked earlier in this session (no repeats within one playthrough).
 
     Returns:
-        A TriviaQuestion queryset, unevaluated. Empty (``.none()``) when
-        ``profiles`` is empty, mirroring ``eligible_locations``."""
+        A TriviaQuestion queryset, unevaluated."""
     candidate_locations = _pinned_by_all(profiles, geo_bounds=geo_bounds)
     for location in candidate_locations:
         deterministic.generate_deterministic_questions(location)
@@ -51,11 +47,7 @@ def eligible_questions(
 
 
 def has_eligible_questions(profiles: Iterable[Profile], *, geo_bounds: GEOSGeometry | None = None) -> bool:
-    """Whether ``eligible_questions`` would return anything at all, without materializing it.
-
-    Used as a cheap pre-check before creating a solo session - mirrors
-    ``services.spotguessr.eligibility.has_eligible_locations``.
-    """
+    """Whether ``eligible_questions`` would return anything at all, without materializing it."""
     return eligible_questions(profiles, geo_bounds=geo_bounds).exists()
 
 
@@ -77,8 +69,7 @@ def solo_own_pending_questions(
 
     Args:
         profile: The solo player.
-        geo_bounds: Optional polygon/bbox restricting candidates, matching
-            whatever was passed to eligible_questions for the same round.
+        geo_bounds: Optional polygon/bbox restricting candidates, matching whatever was passed to eligible_questions for the same round.
         exclude_question_ids: Questions already asked earlier this session.
 
     Returns:

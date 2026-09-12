@@ -1,14 +1,5 @@
 /**
  * Guards the contract between this reader and its only writer.
- *
- * The map page's inline script writes the localStorage pin cache; pin-cache.ts
- * reads it. The cache key and payload version are spelled out independently on
- * each side, in different languages, so nothing but agreement-by-convention kept
- * them together - and that already failed once: the reader sat on v6 while the
- * writer moved on, so every read returned [] and the features built on it went
- * quiet without erroring.
- *
- * These tests parse the template and fail the build on the next such drift.
  */
 
 import { describe, expect, test } from "bun:test";

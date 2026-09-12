@@ -47,11 +47,9 @@ def create_uploaded_photo(
 ) -> tuple[Image | None, JsonResponse]:
     """Store the request's uploaded photo against *owner*.
 
-    Shared by the pin gallery, the wiki gallery, and an album's upload button
-    (pin, wiki, or Vault) so all of them answer with the same body and the
-    same status codes - the client code that renders an uploaded tile is
-    shared too, and would otherwise have to special-case whichever surface
-    drifted.
+    Shared by the pin gallery, the wiki gallery, and an album's upload button (pin, wiki, or Vault) so
+    all of them answer with the same body and the same status codes - the client code that renders an
+    uploaded tile is shared too, and would otherwise have to special-case whichever surface drifted.
 
     Args:
         request: The upload request; reads the ``image`` file and ``caption``.
@@ -59,9 +57,7 @@ def create_uploaded_photo(
         profile: The uploading profile.
 
     Returns:
-        Tuple of (the created Image or None, the response to return). Callers
-        that need the row - to file it somewhere else - take the first element
-        rather than re-parsing the response body.
+        Tuple of (the created Image or None, the response to return).
     """
     image_file = request.FILES.get("image")
     if not image_file:
@@ -79,9 +75,8 @@ def create_uploaded_photo(
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import process_image_upload
 
-    # Deduplicated copies reuse a file that is already (or will be) processed
-    # on the original row. Re-running the pipeline would rewrite the shared
-    # bytes and double-charge work; skip it.
+    # Deduplicated copies reuse a file that is already (or will be) processed on the original row. Re-running
+    # the pipeline would rewrite the shared bytes and double-charge work; skip it.
     if result.quota_exempt_reason != QuotaExemption.DEDUPLICATED:
         safely_enqueue_task(process_image_upload, result.pk)
     return result, JsonResponse(image_to_gallery_json(result, request, profile), status=201)
@@ -96,8 +91,8 @@ def store_uploaded_photo(request: HttpRequest, owner: Pin | Wiki | Profile, prof
         profile: The uploading profile.
 
     Returns:
-        201 with ``image_to_gallery_json`` on success, or the rejection's own
-        status with an ``error`` message.
+        201 with ``image_to_gallery_json`` on success, or the rejection's own status with an ``error``
+        message.
     """
     _image, response = create_uploaded_photo(request, owner, profile)
     return response
@@ -109,9 +104,8 @@ def store_uploaded_photo(request: HttpRequest, owner: Pin | Wiki | Profile, prof
 def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
     """Images for a pin's gallery, optionally including child-pin photos.
 
-    With ``?children=1`` (the pin page's "show child pin details" toggle) photos
-    uploaded to any descendant child pin are included too, so the parent's
-    gallery shows the whole place.
+    With ``?children=1`` (the pin page's "show child pin details" toggle) photos uploaded to any
+    descendant child pin are included too, so the parent's gallery shows the whole place.
 
     Args:
         request: Current request (read for the ``children`` flag).
@@ -129,19 +123,18 @@ def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
         images = Image.objects.filter(pin__in=subtree).select_related("profile", "pin", "pin__location", "pin__location__wiki")
     else:
         images = Image.objects.filter(pin=pin).select_related("profile")
-    # .photos() is defense-in-depth, not the primary guard: PhotoActionView's
-    # create-pin/log-visit refuse a document outright, so nothing should ever
-    # actually set Image.pin on one - but this gallery has no document
-    # rendering (see partials/pins/_photo_gallery.html), so a row that
-    # somehow got here anyway should still not show as a broken tile.
+    # .photos() is defense-in-depth, not the primary guard: PhotoActionView's create-pin/log-visit refuse a
+    # document outright, so nothing should ever actually set Image.pin on one - but this gallery has no document
+    # rendering (see partials/pins/_photo_gallery.html), so a row that somehow got here anyway should still not
+    # show as a broken tile.
     return images.photos().visible_to(profile), include_children
 
 
 def _wiki_gallery_images(request: HttpRequest, wiki: Wiki, profile: Profile):
     """Images for a wiki's gallery, optionally including child-wiki photos.
 
-    With ``?children=1`` (the wiki page's "show child pin details" toggle)
-    photos uploaded to any descendant child wiki are included too.
+    With ``?children=1`` (the wiki page's "show child pin details" toggle) photos uploaded to any
+    descendant child wiki are included too.
 
     Args:
         request: Current request (read for the ``children`` flag).
@@ -212,9 +205,9 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
         return JsonResponse({"images": data})
 
 
-#: Most photos one bulk request may name. The same number `pin_bulk.py` uses for
-#: pins, for the same reason: `_delete_owned_images` does bounded work per batch
-#: but the batch itself was unbounded, so one request could name a whole library.
+#: Most photos one bulk request may name. The same number `pin_bulk.py` uses for pins, for the same reason:
+#: `_delete_owned_images` does bounded work per batch but the batch itself was unbounded, so one request could
+#: name a whole library.
 MAX_BULK_IMAGES = 500
 
 #: Shared wording so both gallery endpoints refuse identically.
@@ -224,11 +217,10 @@ _TOO_MANY_IMAGES = f"Select at most {MAX_BULK_IMAGES} photos at a time."
 class PinGalleryBulkView(LoginRequiredMixin, View):
     """Bulk actions over a pin's own gallery photos: delete, or send to wiki.
 
-    Backs the Photo gallery's multi-select floating toolbar. Only the
-    profile's own uploads on this pin are eligible - selecting someone
-    else's (child-pin, in the ``?children=1`` view) photo id is silently
-    ignored rather than erroring, since the toolbar only ever offers these
-    actions on the viewer's own tiles.
+    Backs the Photo gallery's multi-select floating toolbar.
+    Only the profile's own uploads on this pin are eligible - selecting someone else's (child-pin, in
+    the ``?children=1`` view) photo id is silently ignored rather than erroring, since the toolbar only
+    ever offers these actions on the viewer's own tiles.
     """
 
     def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
@@ -253,10 +245,7 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
             wiki = _wiki_for_location(pin.location)
             if wiki is None:
                 return JsonResponse({"error": "Create a community wiki for this location first."}, status=400)
-            # The deliberate act. Uploading to a pin no longer puts a photo on the
-            # location's wiki, so this is the only way one gets there - and it is
-            # recorded as an attachment as well as an FK, because the attachment is
-            # what says a person chose to contribute this.
+            # The deliberate act.
             from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
             from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
 
@@ -265,10 +254,8 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
                 attach_to_wiki(image, wiki, added_by=profile)
             sent_ids = [image.pk for image in sending]
             count = images.filter(pk__in=sent_ids).update(wiki=wiki)
-            # Re-read: the bonus is judged on the FK the bulk update just wrote,
-            # which the in-memory rows do not have. A photo whose earlier
-            # contribution was withdrawn keeps its votes, so re-contributing it
-            # earns the bonus back here rather than needing fresh ones.
+            # Re-read: the bonus is judged on the FK the bulk update just wrote, which the in-memory rows do not
+            # have.
             for image in Image.objects.filter(pk__in=sent_ids):
                 refresh_community_quota_bonus(image)
             return JsonResponse({"updated": count})
@@ -279,41 +266,24 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
 def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wiki: bool) -> JsonResponse:
     """Delete a batch of photos, and say how many were unlinked instead.
 
-    The batch mechanics are shared: storage files go first, because Django has
-    no bulk API for them, and the DB rows go in one delete rather than one per
-    row.
-
-    What is **not** shared is what a wiki-linked row means, which is why this
-    is a parameter rather than a rule. Deleting from a *pin* gallery unlinks
-    such a row from the pin instead of destroying it - the contribution belongs
-    to the wiki too, and taking it off the wiki is a separate act. Deleting
-    from the *Vault* is a different question with a different answer: the vault
-    is the account's own library, its per-photo delete
-    (``PhotoActionView.delete_photo``) destroys unconditionally, and the same
-    button one photo at a time must not mean something else in bulk. Reusing
-    the pin's rule there set ``pin=None`` on a photo the request never
-    mentioned, detaching it from a gallery the user was not looking at.
+    The batch mechanics are shared: storage files go first, because Django has no bulk API for them, and
+    the DB rows go in one delete rather than one per row.
 
     Args:
         images: The queryset to delete, already scoped to the requester.
-        unlink_from_pin_when_on_wiki: Whether a row that is also on a wiki
-            should be detached from its pin rather than destroyed. True for a
-            pin gallery, false for the Vault.
+        unlink_from_pin_when_on_wiki: Whether a row that is also on a wiki should be detached from its
+        pin rather than destroyed.
 
     Returns:
-        ``{"deleted": n, "unlinked": m}`` - row counts, not file counts. A row
-        with no stored file (still processing, say) is still deleted and still
-        counted, or the response undercounts what the client asked for.
+        ``{"deleted": n, "unlinked": m}`` - row counts, not file counts.
     """
     batch = list(images)
     to_unlink_ids = [image.pk for image in batch if unlink_from_pin_when_on_wiki and image.wiki_id is not None]
     to_destroy = [image for image in batch if image.pk not in set(to_unlink_ids)]
-    # No explicit per-row file cleanup here: Image's post_delete receiver
-    # (models/images/signals.py) does it for every delete path, and it runs
-    # after the rows are gone - so it asks the shared-file question with the
-    # single row's own pk rather than carrying the whole batch as an
-    # exclude(pk__in=...), which is what made deleting N photos cost N queries
-    # of N parameters each against a client-supplied, uncapped batch.
+    # No explicit per-row file cleanup here: Image's post_delete receiver (models/images/signals.py) does it for
+    # every delete path, and it runs after the rows are gone - so it asks the shared-file question with the
+    # single row's own pk rather than carrying the whole batch as an exclude(pk__in=...), which is what made
+    # deleting N photos cost N queries of N parameters each against a client-supplied, uncapped batch.
     Image.objects.filter(pk__in=[image.pk for image in to_destroy]).delete()
     if to_unlink_ids:
         Image.objects.filter(pk__in=to_unlink_ids).update(pin=None)
@@ -323,19 +293,15 @@ def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wik
 class VaultGalleryBulkView(LoginRequiredMixin, View):
     """Bulk actions over the profile's own Vault photos. Delete only.
 
-    P61: a Vault album had no bulk delete at all - the Delete and Send-to-wiki
-    buttons rendered ``hidden`` forever, because the album panel handed the
-    client a bulk URL only when the album's owner was a ``Pin``. You had to
-    leave the album and use the per-tile trash button one photo at a time.
-
-    Delete is the only one of the three that transfers. **Send to wiki** cannot:
-    the pin endpoint derives the wiki from ``pin.location``, and a vault album
-    has no location - the vault's own per-photo version takes a
-    ``location_slug`` from a picker the bulk bar has nowhere to put. **Bulk
-    share** cannot either: it opens the *pin* share dialog. Single-photo share
-    from the lightbox is unaffected, and is how a vault photo gets shared.
-
     POST /vault/photos/bulk/
+
+    P61: a Vault album had no bulk delete at all - the Delete and Send-to-wiki buttons rendered
+    ``hidden`` forever, because the album panel handed the client a bulk URL only when the album's owner
+    was a ``Pin``.
+    Delete is the only one of the three that transfers. **Send to wiki** cannot: the pin endpoint
+    derives the wiki from ``pin.location``, and a vault album has no location - the vault's own
+    per-photo version takes a ``location_slug`` from a picker the bulk bar has nowhere to put. **Bulk
+    share** cannot either: it opens the *pin* share dialog.
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
@@ -363,9 +329,8 @@ class VaultGalleryBulkView(LoginRequiredMixin, View):
         if action != "delete":
             return JsonResponse({"error": "Unknown action."}, status=400)
 
-        # Scoped by profile, which is what makes an id from someone else's
-        # library a no-op rather than an error - the toolbar only ever offers
-        # this on the viewer's own tiles.
+        # Scoped by profile, which is what makes an id from someone else's library a no-op rather than an error
+        # - the toolbar only ever offers this on the viewer's own tiles.
         return _delete_owned_images(Image.objects.filter(pk__in=image_ids, profile=profile), unlink_from_pin_when_on_wiki=False)
 
 
@@ -376,19 +341,16 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
         """Set (or, given a null ``image_id``, clear) the pin's cover photo.
 
         Args:
-            request: Incoming HTTP request. Reads JSON body ``image_id`` -
-                an int to set the cover photo, or null/absent to clear it.
+            request: Incoming HTTP request.
             pin_slug: Slug of the pin to update; must belong to the requester.
 
         Returns:
-            JSON ``{"cover_photo": null}`` when cleared, or
-            ``{"cover_photo": <url>}`` with the new cover's image URL (the
-            lightbox uses this to update the page live without a reload).
+            JSON ``{"cover_photo": null}`` when cleared, or ``{"cover_photo": <url>}`` with the new cover's
+            image URL (the lightbox uses this to...
 
         Raises:
-            Http404: The pin doesn't exist/belong to the requester, or the
-                given image isn't eligible (not tied to this pin or its
-                Location).
+            Http404: The pin doesn't exist/belong to the requester, or the given image isn't eligible (not
+            tied to this pin or its Location).
         """
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -403,13 +365,10 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
             pin.save(update_fields=["cover_photo", "updated"])
             return JsonResponse({"cover_photo": None})
 
-        # Any image tied to this pin's own gallery, or already associated
-        # with its Location (e.g. a Media-gallery item materialized via
-        # "send to wiki" or a prior cover-photo pick), is eligible - but only
-        # among photos this viewer may see, since every pin upload stamps
-        # Image.location and two users pinning the same place therefore share
-        # a location id. `visible_to` is applied to the single-row queryset so
-        # its per-uploader visibility pass stays scoped to that one uploader.
+        # Any image tied to this pin's own gallery, or already associated with its Location (e.g. a
+        # Media-gallery item materialized via "send to wiki" or a prior cover-photo pick), is eligible - but
+        # only among photos this viewer may see, since every pin upload stamps Image.location and two users
+        # pinning the same place therefore share a location id.
         image = get_object_or_404(Image.objects.filter(pk=image_id).visible_to(profile))
         if image.pin_id != pin.pk and image.location_id != pin.location_id:
             raise Http404
@@ -448,16 +407,7 @@ class PinImageView(LoginRequiredMixin, View):
     def delete(self, request: HttpRequest, pin_slug: str, image_id: int) -> HttpResponse:
         """Take a photo off this pin, and off the wiki only if asked.
 
-        Contributing a photo to a community wiki is a deliberate act, so undoing
-        it has to be one too. This screen never mentions the wiki, and it used to
-        drop the ``Image`` row outright - which withdrew the contribution
-        silently. Now the wiki keeps the photo unless the owner says otherwise;
-        silence means no.
-
-        ``?from_wiki=1`` is that explicit answer, and it is honoured only for a
-        photo the owner uploaded. One fetched from a URL was a public resource
-        online before this app saw it, so there is no consent here to withdraw -
-        removing it is something you do on the wiki itself.
+        Now the wiki keeps the photo unless the owner says otherwise; silence means no.
 
         Args:
             request: Incoming request; ``from_wiki=1`` also withdraws it.
@@ -496,11 +446,8 @@ class WikiGalleryView(LoginRequiredMixin, View):
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images, include_children = _wiki_gallery_images(request, wiki, profile)
-        # A third gate, on top of the container and settings gates visible_to
-        # already applies. Provider media stays - a fresh wiki carries it - and
-        # uploads survive only from the viewer or a friend. Paginated *after*
-        # filtering, or the page count reports the photos it is standing in
-        # front of.
+        # A third gate, on top of the container and settings gates visible_to already applies. Provider media
+        # stays - a fresh wiki carries it - and uploads survive only from the viewer or a friend.
         if concealment_active(wiki, profile):
             images = conceal_rows(images, profile)
         page_obj = get_page(request, images.order_by("-created"), _GALLERY_PAGE_SIZE)
@@ -513,9 +460,8 @@ class WikiGalleryView(LoginRequiredMixin, View):
             "context_type": "wiki",
             "include_children": include_children,
             "extra_query": "children=1" if include_children else "",
-            # Copy-to-pin target for the lightbox's "Copy to my Private Pin"
-            # action - same expression as the wiki page's own "Back to my pin"
-            # link (location_wiki.py), so the two agree on which pin that is.
+            # Copy-to-pin target for the lightbox's "Copy to my Private Pin" action - same expression as the
+            # wiki page's own "Back to my pin" link (location_wiki.py), so the two agree on which pin that is.
             "user_pin": location.pins.filter(profile=profile).first(),
         }
 
@@ -538,9 +484,8 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images, include_children = _wiki_gallery_images(request, wiki, profile)
         images = images.with_coords()
-        # This layer plots photos at their capture coordinates, so an unfiltered
-        # payload does not merely list other people's contributions - it maps
-        # where they stood.
+        # This layer plots photos at their capture coordinates, so an unfiltered payload does not merely list
+        # other people's contributions - it maps where they stood.
         if concealment_active(wiki, profile):
             images = conceal_rows(images, profile)
         data = []
@@ -555,11 +500,11 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
 class WikiCoverPhotoView(LoginRequiredMixin, View):
     """Set or clear a wiki's hero-banner cover photo.
 
-    Any profile with a pin at the wiki's location may set it - the wiki is
-    community content editable by everyone who can see it (comments, markup,
-    aliases share the same access rule; see ``resolve_visible_wiki``). Each
-    viewer's own ``show_wiki_cover_photos`` preference (see the pin detail
-    template) independently controls whether they see it.
+    Any profile with a pin at the wiki's location may set it - the wiki is community content editable by
+    everyone who can see it (comments, markup, aliases share the same access rule; see
+    ``resolve_visible_wiki``).
+    Each viewer's own ``show_wiki_cover_photos`` preference (see the pin detail template) independently
+    controls whether they see it.
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
@@ -584,15 +529,7 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
         # Scoped to the one row before `visible_to`, whose per-uploader pass
         # would otherwise walk every uploader on the site to answer about one image.
         image = get_object_or_404(Image.objects.filter(pk=image_id).visible_to(profile))
-        # On the wiki, not merely at the place. Accepting any photo whose location
-        # matched let one person publish another's: a pin photo carries the
-        # location but no wiki, and being able to *see* somebody's photo - which a
-        # neighbour with a pin at the same place generally can - is not permission
-        # to put it on the front of a page everyone reads. The wiki cover is
-        # rendered with no visibility gate of its own, so this is the gate.
-        #
-        # The pin twin (PinCoverPhotoView) keeps the wider rule deliberately: its
-        # consequence is confined to the setter's own page.
+        # On the wiki, not merely at the place.
         on_this_wiki = image.wiki_id == wiki.pk or ImageAttachment.objects.filter(image=image, wiki=wiki).exists()
         if not on_this_wiki:
             raise Http404

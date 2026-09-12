@@ -33,20 +33,11 @@ class VirusTotalGateway(Gateway):
     def get_file_report(self, sha256: str) -> dict[str, Any] | None:
         """Look up an existing VirusTotal report for a file by its SHA-256 hash.
 
-        Args:
-                sha256: The file's SHA-256 hex digest.
-
         Returns:
-                The report's ``data.attributes`` dict (includes
-                ``last_analysis_stats``) when VirusTotal has already analyzed a
-                file with this hash, or ``None`` on HTTP 404 - not an error, just
-                "VirusTotal has never seen this exact file".
+            The report's ``data.attributes`` dict (includes ``last_analysis_stats``) when VirusTotal has already analyzed a file with this hash, or ``None`` on HTTP 404 - not an error, just "VirusTotal has never seen this exact file".
 
         Raises:
-                GatewayRequestError: The request could not be made, VirusTotal
-                returned a non-2xx status other than 404 (401 bad key, 429
-                rate limited, 5xx, ...), or the response body was not the
-                expected JSON shape."""
+            GatewayRequestError: The request could not be made, VirusTotal returned a non-2xx status other than 404 (401 bad key, 429 rate limited, 5xx, ...), or the response body was not the expected JSON shape."""
         try:
             response = self.session.get(f"{_BASE_URL}/files/{sha256}", timeout=_REQUEST_TIMEOUT)
         except OSError as exc:

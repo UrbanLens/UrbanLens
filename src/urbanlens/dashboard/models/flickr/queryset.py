@@ -18,15 +18,7 @@ logger = logging.getLogger(__name__)
 
 class FlickrAccountManager(abstract.DashboardManager):
     """Adds lookups that self-heal when a stored token can't be decrypted.
-
-    Mirrors ``ImmichAccountManager``/``GoogleCalendarAccountManager``/
-    ``GooglePhotosAccountManager``'s ``get_for_profile()`` - a
-    field-encryption-key change (see ``models.fields.EncryptedTextField``)
-    leaves any previously-saved ``oauth_token``/``oauth_token_secret``
-    permanently unreadable. Unlike those three, nothing here ever caught
-    ``InvalidToken`` at all - every page or task that touched a Flickr
-    connection after a key rotation would 500 outright rather than treating
-    it as "never connected" and offering reconnection.
+    Unlike those three, nothing here ever caught ``InvalidToken`` at all - every page or task that touched a Flickr connection after a key rotation would 500 outright rather than treating it as "never connected" and offering reconnection.
     """
 
     def get_for_profile(self, profile: Profile) -> FlickrAccount | None:

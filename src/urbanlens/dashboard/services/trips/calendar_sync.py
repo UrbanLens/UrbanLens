@@ -42,20 +42,15 @@ def trip_to_event_body(trip: Trip, *, trip_url: str | None = None, hidden_activi
     Trips carry dates (not times), so they map to all-day events.
 
     Args:
-        trip: The trip to export. Must have an effective start date.
-        trip_url: Optional absolute URL of the trip page to append to the
-            event description.
-        hidden_activity_ids: Ids of activities whose location the *exporting*
-            viewer may not see, from
-            :func:`~urbanlens.dashboard.services.trips.trip_visibility.viewer_hidden_activity_ids`.
-            See :func:`_activity_location_string` for why passing this matters.
+        trip: The trip to export.
+        trip_url: Optional absolute URL of the trip page to append to the event description.
+        hidden_activity_ids: Ids of activities whose location the *exporting* viewer may not see, from :func:`~urbanlens.dashboard.services.trips.trip_visibility.viewer_hidden_activity_ids`.
 
     Returns:
         Event resource payload for the Calendar API.
 
     Raises:
-        ValueError: When the trip has no start date (no dates and no
-            scheduled activities)."""
+        ValueError: When the trip has no start date (no dates and no scheduled activities)."""
     start = trip.effective_start_date
     if start is None:
         raise ValueError("Trip has no start date or scheduled activities - set dates before exporting.")
@@ -84,10 +79,7 @@ def _activity_location_string(activity: TripActivity, *, hidden_activity_ids: Co
 
     Args:
         activity: The TripActivity to describe.
-        hidden_activity_ids: Ids of activities whose location the exporting
-            viewer may not see. None disables the per-viewer gate, which is
-            correct only for the pure-mapping callers that have no viewer at
-            all (the property tests over this module's conversion helpers).
+        hidden_activity_ids: Ids of activities whose location the exporting viewer may not see.
 
     Returns:
         A location string for the event, or None when nothing shareable exists."""
@@ -111,8 +103,7 @@ def _trip_location_string(trip: Trip, *, hidden_activity_ids: Collection[int] | 
 
     Args:
         trip: The trip being exported.
-        hidden_activity_ids: Ids of activities whose location the exporting
-            viewer may not see - see :func:`_activity_location_string`.
+        hidden_activity_ids: Ids of activities whose location the exporting viewer may not see - see :func:`_activity_location_string`.
 
     Returns:
         A location string for the event, or None when no activity has one."""
@@ -132,10 +123,8 @@ def activity_to_event_body(activity: TripActivity, *, trip_url: str | None = Non
 
     Args:
         activity: The TripActivity to export (with ``trip`` loaded).
-        trip_url: Optional absolute URL of the trip page to append to the
-            event description.
-        hidden_activity_ids: Ids of activities whose location the exporting
-            viewer may not see - see :func:`_activity_location_string`.
+        trip_url: Optional absolute URL of the trip page to append to the event description.
+        hidden_activity_ids: Ids of activities whose location the exporting viewer may not see - see :func:`_activity_location_string`.
 
     Returns:
         Event resource payload, or None when the activity is unscheduled."""
@@ -172,12 +161,10 @@ def _parse_event_date(part: dict[str, Any] | None) -> tuple[datetime.date | None
     """Parse the date from one side of an event's start/end structure.
 
     Args:
-        part: The event's ``start`` or ``end`` dict (``{"date": ...}`` for
-            all-day events, ``{"dateTime": ...}`` for timed ones).
+        part: The event's ``start`` or ``end`` dict (``{"date": ...}`` for all-day events, ``{"dateTime": ...}`` for timed ones).
 
     Returns:
-        Tuple of (parsed date or None, whether it was an all-day ``date``).
-    """
+        Tuple of (parsed date or None, whether it was an all-day ``date``)."""
     if not part:
         return None, False
     raw_date = part.get("date")
@@ -203,8 +190,7 @@ def event_to_trip_kwargs(event: dict[str, Any]) -> dict[str, Any] | None:
         event: Event resource dict from the Calendar API.
 
     Returns:
-        Kwargs for creating a Trip (name, description, start_date, end_date),
-        or None when the event cannot become a trip."""
+        Kwargs for creating a Trip (name, description, start_date, end_date), or None when the event cannot become a trip."""
     if event.get("status") == "cancelled":
         return None
 
@@ -256,8 +242,7 @@ def match_event_attendees(profile: Profile, event: dict[str, Any]) -> tuple[list
         event: Event resource dict from the Calendar API.
 
     Returns:
-        Tuple of (friend profiles that can be invited, display labels for the
-        remaining attendees)."""
+        Tuple of (friend profiles that can be invited, display labels for the remaining attendees)."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email, normalize_email
 
@@ -299,9 +284,7 @@ def build_import_preview(account: GoogleCalendarAccount, event_ids: list[str]) -
         event_ids: Google event ids selected on page one.
 
     Returns:
-        List of preview dicts with ``event_id``, ``summary``, ``trip_kwargs``,
-        ``location``, ``scheduled_at``/``scheduled_end`` (for timed events),
-        ``friends``, ``other_attendees``, and ``skip_reason`` keys.
+        List of preview dicts with ``event_id``, ``summary``, ``trip_kwargs``, ``location``, ``scheduled_at``/``scheduled_end`` (for timed events), ``friends``, ``other_attendees``, and ``skip_reason`` keys.
 
     Raises:
         GatewayRequestError: When the calendar cannot be read."""
@@ -439,8 +422,7 @@ def list_importable_events(account: GoogleCalendarAccount) -> list[dict[str, Any
         account: The user's connected calendar account.
 
     Returns:
-        List of ``{"event", "trip_kwargs", "already_linked", "from_urbanlens"}``
-        dicts in calendar order.
+        List of ``{"event", "trip_kwargs", "already_linked", "from_urbanlens"}`` dicts in calendar order.
 
     Raises:
         GatewayRequestError: When the calendar cannot be read."""
@@ -478,14 +460,10 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: Sequence[
 
     Args:
         account: The user's connected calendar account.
-        selections: Either bare Google event ids, or dicts with ``event_id``,
-            ``create_activity`` (bool, default True), ``invite_profile_ids``
-            (list of ints, default empty), and ``auto_sync`` (bool, default
-            False) keys.
+        selections: Either bare Google event ids, or dicts with ``event_id``, ``create_activity`` (bool, default True), ``invite_profile_ids`` (list of ints, default empty), and ``auto_sync`` (bool, default False) keys.
 
     Returns:
-        Tuple of (created trips, human-readable skip reasons, number of
-        participants invited)."""
+        Tuple of (created trips, human-readable skip reasons, number of participants invited)."""
     gateway = GoogleCalendarGateway(account=account)
     profile = account.profile
     created: list[Trip] = []
@@ -618,8 +596,7 @@ def _upsert_event_link(
         body: Event resource payload to write.
         link: Existing link row for this trip/activity+profile, if any.
         trip: The trip the event belongs to.
-        activity: The activity mirrored by this event, or None for the
-            trip-level all-day event.
+        activity: The activity mirrored by this event, or None for the trip-level all-day event.
 
     Returns:
         The up-to-date TripCalendarLink row.
@@ -654,15 +631,13 @@ def _sync_activity_events(
     hidden_activity_ids: Collection[int] | None = None,
 ) -> int:
     """Mirror every scheduled activity of a trip as a timed event on the user's calendar.
-    Creates/updates one event per activity with a start time, and deletes events for activities that were unscheduled since the last export (activities deleted outright cascade their link rows away, so their events are cleaned up by the caller's full-removal path or simply left to the user - Google shows them as normal events).
 
     Args:
         gateway: Authenticated calendar gateway.
         account: The user's connected calendar account.
         trip: The trip whose activities to mirror.
         trip_url: Optional absolute trip URL for event descriptions.
-        hidden_activity_ids: Ids of activities whose location this account's
-            owner may not see - see :func:`_activity_location_string`.
+        hidden_activity_ids: Ids of activities whose location this account's owner may not see - see :func:`_activity_location_string`.
 
     Returns:
         The number of activity events created or updated.
@@ -709,7 +684,6 @@ def _hidden_activity_ids_for(trip: Trip, profile: Profile) -> set[int]:
 
 def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_url: str | None = None) -> tuple[TripCalendarLink, int]:
     """Mirror a trip (all-day event) and its scheduled activities (timed events) to the user's calendar.
-    This function deliberately runs **outside** any database transaction, and callers must not wrap it in one: it makes one upstream request per event, so an enclosing ``atomic`` block would pin a connection for the length of an unbounded third-party fan-out.
 
     Args:
         account: The user's connected calendar account.
@@ -717,13 +691,11 @@ def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_
         trip_url: Optional absolute trip URL for the event descriptions.
 
     Returns:
-        Tuple of (the trip-level TripCalendarLink row, number of activity
-        events created or updated).
+        Tuple of (the trip-level TripCalendarLink row, number of activity events created or updated).
 
     Raises:
         ValueError: When the trip has no dates to export.
-        GoogleAuthExpiredError: When Google has rejected the stored grant and
-            the connection must be re-established.
+        GoogleAuthExpiredError: When Google has rejected the stored grant and the connection must be re-established.
         GatewayRequestError: When a calendar write fails."""
     gateway = GoogleCalendarGateway(account=account)
     profile = account.profile
@@ -745,9 +717,7 @@ def trip_calendar_status(trip: Trip, profile: Profile) -> dict[str, Any]:
         profile: The profile whose calendar is being described.
 
     Returns:
-        Dict with ``connected``, ``linked``, ``auto_sync``, ``last_synced`` and
-        ``account_email`` keys. Two queries at most, and one when the profile
-        has no connected calendar."""
+        Dict with ``connected``, ``linked``, ``auto_sync``, ``last_synced`` and ``account_email`` keys."""
     account = GoogleCalendarAccount.objects.get_for_profile(profile)
     link = TripCalendarLink.objects.trip_level_link(trip, profile) if account else None
     return {
@@ -787,7 +757,6 @@ def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> boo
 
 def disconnect_member_calendar_sync(trip: Trip, profile: Profile) -> None:
     """Stop syncing a trip to one profile's calendar when they leave or are removed.
-    Trip access control lives on ``TripMembership``, but a live calendar export is a second, independent channel to the same data - without this, a removed (or departed) member's Google Calendar would keep silently receiving the trip's evolving name, dates, and activity locations/notes via ``push_auto_synced_trip_changes`` forever, even though they've lost every other form of access.
 
     Args:
         trip: The trip the profile is leaving/being removed from.

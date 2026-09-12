@@ -1,5 +1,4 @@
-"""What a client needs to render "the SpotGuessr screen you land on".
-Before this module the answers were computed inline in the view, so the API would have had to restate each of them; two restatements of "which rating counts as *your* rating" is exactly how the homepage chip came to read the wrong row in the first place (it was hardcoded to Photos mode, so a Named Place-only player saw nothing at all)."""
+"""What a client needs to render "the SpotGuessr screen you land on"."""
 
 from __future__ import annotations
 
@@ -64,13 +63,10 @@ def most_recent_rating(profile: Profile) -> PlayerModeRating | None:
 
 def participated_sessions(profile: Profile, *, status: str | None = None) -> QuerySet[GameSession]:
     """Every session ``profile`` takes part in, annotated for list/detail display.
-    Scoped through ``GameSessionParticipant`` rather than ``host_profile`` so a guest's own history includes games somebody else hosted.
 
     Args:
         profile: The player whose sessions to list.
-        status: Optional ``GameSessionStatus`` value to restrict to. An
-            unrecognized value simply matches nothing, which is the honest
-            answer for a filter naming a status that doesn't exist.
+        status: Optional ``GameSessionStatus`` value to restrict to.
 
     Returns:
         An unevaluated queryset ordered newest-first."""
@@ -86,7 +82,6 @@ def participated_sessions(profile: Profile, *, status: str | None = None) -> Que
 
 def active_solo_session_id(profile: Profile) -> int | None:
     """The id of the profile's most recent still-playable *solo* session, if any.
-    Solo specifically, because that is the only kind of session a resuming client can carry on with on its own: a multiplayer round's reveal is withheld until every joined participant has guessed and then arrives over the WebSocket, so pointing a client at one would leave it polling a round that never resolves.
 
     Args:
         profile: The player.

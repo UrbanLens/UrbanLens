@@ -3,13 +3,9 @@
 Two groups of views:
 
 - Settings ("Connect Google Photos"): ``GooglePhotosSettingsView``,
-  ``GooglePhotosConnectView``/``GooglePhotosCallbackView`` (OAuth2, mirrors
-  Calendar's flow but a separate account/scope), ``GooglePhotosDisconnectView``.
-- Pin detail ("Import from Google Photos"): create a picker session, poll it
-  until the user finishes picking in Google's own UI, then the same
-  thumbnail-proxy / Celery-import / progress-polling shape as the other
-  providers. Every picked item is a candidate - there is no coordinate filter
-  to apply here.
+  ``GooglePhotosConnectView``/``GooglePhotosCallbackView`` (OAuth2, mirrors Calendar's flow b...
+- Pin detail ("Import from Google Photos"): create a picker session, poll it until the user finishes
+  picking in Google's own UI, then the same thumbnail-proxy ...
 """
 
 from __future__ import annotations
@@ -152,9 +148,8 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
                 "token_expiry": timezone.now() + datetime.timedelta(seconds=expires_in),
             },
         )
-        # A refresh token is only issued on fresh consent; keep the old one
-        # when Google omits it on a re-connect (see calendar_sync.py's
-        # GoogleCalendarAccount callback for the same pattern).
+        # A refresh token is only issued on fresh consent; keep the old one when Google omits it on a re-connect
+        # (see calendar_sync.py's GoogleCalendarAccount callback for the same pattern).
         if tokens.get("refresh_token"):
             account.refresh_token = tokens["refresh_token"]
             account.save(update_fields=["refresh_token", "updated"])
@@ -261,9 +256,8 @@ class PinGooglePhotosSessionStatusView(LoginRequiredMixin, View):
 class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
     """GET pin/<slug>/google-photos/thumbnail/<session_id>/<item_id>/ - proxies one picked item's preview.
 
-    The Bearer token must never reach the browser, and Google's ``baseUrl``
-    requires it - this view fetches the preview server-side, same reasoning
-    as the Immich thumbnail proxy.
+    The Bearer token must never reach the browser, and Google's ``baseUrl`` requires it - this view
+    fetches the preview server-side, same reasoning as the Immich thumbnail proxy.
     """
 
     def get(self, request: HttpRequest, pin_slug: str, session_id: str, item_id: str) -> HttpResponse:
@@ -288,10 +282,8 @@ class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
         except GatewayRequestError:
             return HttpResponse(status=502)
         content_type = item.get("mime_type", "image/jpeg")
-        # A backstop, not the mechanism: the gateway now asks Google for a
-        # thumbnail, so an oversized body here means the provider ignored the
-        # size hint. Serve it, do not store it - one 512MB Valkey holds sessions,
-        # the Channels layer and the Celery broker alongside this.
+        # A backstop, not the mechanism: the gateway now asks Google for a thumbnail, so an oversized body here
+        # means the provider ignored the size hint.
         bounded_cache.set_if_small(cache_key, content, content_type, _SESSION_ITEMS_CACHE_TTL, label=f"Google Photos preview {item_id}")
         return mark_private_media(HttpResponse(content, content_type=content_type))
 

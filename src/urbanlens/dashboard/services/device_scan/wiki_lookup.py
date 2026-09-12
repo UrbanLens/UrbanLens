@@ -18,8 +18,7 @@ def wikis_containing_point(point: Point) -> list[Wiki]:
         point: The device's estimated location (SRID 4326).
 
     Returns:
-        Matching wikis, each with its ``location`` pre-selected. Empty when
-        the point falls inside no known place at all."""
+        Matching wikis, each with its ``location`` pre-selected."""
     from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.wiki.model import Wiki
 

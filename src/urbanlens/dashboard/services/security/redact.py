@@ -107,11 +107,7 @@ def redact_secret(value: str | None) -> str:
         value: The raw secret value, or ``None``/empty if unset.
 
     Returns:
-        ``"<missing>"`` when unset, otherwise ``"<redacted:XXXXXXXX>"``.
-        Identical secrets produce identical tokens within one process, so
-        repeated log lines can be correlated without exposing any part of the
-        actual value.
-    """
+        ``"<missing>"`` when unset, otherwise ``"<redacted:XXXXXXXX>"``."""
     if not value:
         return "<missing>"
     return f"<redacted:{_tag(value)}>"

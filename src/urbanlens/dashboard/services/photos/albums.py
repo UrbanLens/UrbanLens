@@ -32,12 +32,7 @@ ALBUM_GRID_PAGE_SIZE = 48
 
 @dataclass(frozen=True, slots=True)
 class AlbumListEntry:
-    """One album on the Photos tab, without hydrating every member photo.
-
-    The list only needs a cover, a count, and a date range. Loading every
-    ``Image`` row (and its file field) just to derive those is what made the
-    tab expensive on a pin with a large library.
-    """
+    """One album on the Photos tab, without hydrating every member photo."""
 
     album: Album
     photo_count: int
@@ -87,9 +82,7 @@ def album_owner(album: Album) -> Pin | Wiki | Profile:
         The owning Pin, Wiki, or Profile.
 
     Raises:
-        ValueError: The album has no parent set, which the create paths
-            never produce.
-    """
+        ValueError: The album has no parent set, which the create paths never produce."""
     owner = album.parent_pin or album.parent_wiki or album.parent_profile
     if owner is None:
         raise ValueError(f"Album {album.pk} has no parent pin, wiki, or profile.")
@@ -152,10 +145,7 @@ def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None, *, co
     Args:
         image_ids: Candidate image primary keys.
         viewer: The browsing profile, or None for anonymous.
-        conceal: Whether to additionally narrow to what a concealed viewer of
-            the owning wiki may see (own/friends' uploads, provider photos) -
-            the Photos tab used to bypass this and hand back the gallery's
-            full upload set through the album path.
+        conceal: Whether to additionally narrow to what a concealed viewer of the owning wiki may see (own/friends' uploads, provider photos) - the Photos tab used to bypass this and hand back the gallery's full upload set through the album path.
 
     Returns:
         The subset the viewer is allowed to see."""
@@ -179,8 +169,7 @@ def albums_with_images(owner: Pin | Wiki | Profile, viewer: Profile | None) -> l
         viewer: The browsing profile, for the photo-visibility gate.
 
     Returns:
-        ``(album, images)`` pairs in album order, each image carrying an
-        ``album_item_id`` attribute for the membership row."""
+        ``(album, images)`` pairs in album order, each image carrying an ``album_item_id`` attribute for the membership row."""
     conceal = _owner_conceal(owner, viewer)
     albums_qs = albums_for_owner(owner)
     if conceal:
@@ -237,11 +226,7 @@ def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal:
     Args:
         albums: The albums to describe, in the order they should be rendered.
         viewer: The browsing profile, for the photo-visibility gate.
-        conceal: Whether wiki concealment applies to *viewer*. Callers that
-            went through :func:`albums_listing` have this decided for them;
-            anyone narrowing albums themselves must decide it the same way
-            :func:`_owner_conceal` does, since it also gates which *photos*
-            count towards each album.
+        conceal: Whether wiki concealment applies to *viewer*.
 
     Returns:
         One :class:`AlbumListEntry` per album, in the given order."""
@@ -301,15 +286,10 @@ def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | Profi
     Args:
         album: The album to read.
         viewer: The profile browsing, for the standard photo-visibility gate.
-        owner: The album's owner, if the caller already resolved it (every
-            controller call site does, via ``_resolve_album_owner``) - saves
-            re-deriving it through ``album.parent_pin``/``parent_wiki``,
-            which isn't select_related on any queryset this is called from.
+        owner: The album's owner, if the caller already resolved it (every controller call site does, via ``_resolve_album_owner``) - saves re-deriving it through ``album.parent_pin``/``parent_wiki``, which isn't select_related on any queryset this is called from.
 
     Returns:
-        The album's viewer-visible photos, ordered for display. Each carries
-        an ``album_item_id`` attribute so templates can address the membership
-        row (for removal/reordering) without a second lookup."""
+        The album's viewer-visible photos, ordered for display."""
     pairs = visible_album_item_pairs(album, viewer, owner)
     return _hydrate_album_items(pairs)
 
@@ -441,8 +421,7 @@ def add_images_to_album(album: Album, images: Sequence[Image], added_by: Profile
     Args:
         album: The album to add to.
         images: The photos to add.
-        added_by: The profile performing the add, recorded per item so
-            community wiki albums keep per-photo attribution.
+        added_by: The profile performing the add, recorded per item so community wiki albums keep per-photo attribution.
 
     Returns:
         How many photos were actually added."""
@@ -466,7 +445,7 @@ def add_images_to_album(album: Album, images: Sequence[Image], added_by: Profile
 
 
 def remove_images_from_album(album: Album, image_ids: Sequence[int]) -> int:
-    """Remove photos from *album*. Photos not in it are ignored.
+    """Remove photos from *album*.
 
     Args:
         album: The album to remove from.
@@ -616,8 +595,7 @@ def move_album_to_pin(album: Album, target: Pin) -> Album:
         The saved album (slug may have changed).
 
     Raises:
-        ValueError: The album is a wiki album, *target* is the current parent,
-            or *target* is not in the same tree / same profile."""
+        ValueError: The album is a wiki album, *target* is the current parent, or *target* is not in the same tree / same profile."""
     source = album.parent_pin
     if source is None:
         raise ValueError("Community albums stay on their wiki.")

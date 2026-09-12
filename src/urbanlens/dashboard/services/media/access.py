@@ -30,12 +30,10 @@ def declares_media_family(prefix: str) -> Callable[[_F], _F]:
     """Mark a callable ``upload_to`` as writing into the *prefix* family.
 
     Args:
-        prefix: The leading path segment the callable's return value starts
-            with (e.g. ``"pin_images"``).
+        prefix: The leading path segment the callable's return value starts with (e.g. ``"pin_images"``).
 
     Returns:
-        A decorator that annotates the callable and returns it unchanged.
-    """
+        A decorator that annotates the callable and returns it unchanged."""
 
     def annotate(func: _F) -> _F:
         setattr(func, MEDIA_FAMILY_ATTR, prefix)
@@ -48,17 +46,13 @@ def media_authorizer(prefix: str) -> Callable[[MediaAuthorizer], MediaAuthorizer
     """Register the decorated function as the authorizer for one path family.
 
     Args:
-        prefix: The ``upload_to`` prefix this authorizer answers for, without
-            slashes (e.g. ``"comment_images"``).
+        prefix: The ``upload_to`` prefix this authorizer answers for, without slashes (e.g. ``"comment_images"``).
 
     Returns:
         A decorator that registers the function and returns it unchanged.
 
     Raises:
-        RuntimeError: A different authorizer is already registered for
-            *prefix*. Two policies for one family means one of them is dead
-            code, and which one wins would depend on import order.
-    """
+        RuntimeError: A different authorizer is already registered for *prefix*."""
 
     def register(func: MediaAuthorizer) -> MediaAuthorizer:
         existing = _AUTHORIZERS.get(prefix)
@@ -85,13 +79,10 @@ def authorize_media(profile: Profile, rel_path: str) -> bool:
 
     Args:
         profile: The authenticated requester's profile.
-        rel_path: Normalized path relative to ``MEDIA_ROOT``, already
-            traversal-checked (e.g. ``"pin_images/a7/Kd3xq.../IMG_4821.jpg"``).
+        rel_path: Normalized path relative to ``MEDIA_ROOT``, already traversal-checked (e.g. ``"pin_images/a7/Kd3xq.../IMG_4821.jpg"``).
 
     Returns:
-        True when the requester may see the file. False for any family without
-        a registered authorizer.
-    """
+        True when the requester may see the file."""
     family = rel_path.split("/", 1)[0]
     authorizer = _AUTHORIZERS.get(family)
     if authorizer is None:
@@ -149,7 +140,6 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
 @media_authorizer("comment_images")
 def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
     """Authorize a ``comment_images/`` file via its Comment/TripComment row.
-    Everyone else is gated by the author's ``comment_visibility`` setting on top of host membership, mirroring the gates ``services.comments.comments.visible_comment_tree`` and ``services.trips.trip_comments.build_comment_tree`` apply to the comment's text - so tightening the setting after a viewer already has the image URL revokes access to the file too.
 
     Args:
         profile: The authenticated requester's profile.
@@ -215,10 +205,7 @@ def authorize_avatar(profile: Profile, rel_path: str) -> bool:
 
     Args:
         profile: The authenticated requester's profile (unused).
-        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
-
-    Returns:
-        True."""
+        rel_path: Path relative to ``MEDIA_ROOT`` (unused)."""
     return True
 
 
@@ -231,8 +218,5 @@ def authorize_icon(profile: Profile, rel_path: str) -> bool:
 
     Args:
         profile: The authenticated requester's profile (unused).
-        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
-
-    Returns:
-        True."""
+        rel_path: Path relative to ``MEDIA_ROOT`` (unused)."""
     return True

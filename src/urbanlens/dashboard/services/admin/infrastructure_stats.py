@@ -185,9 +185,7 @@ def collect_valkey_stats() -> InfrastructureServiceStat:
     """Collect Valkey/Redis cache statistics.
 
     Returns:
-        InfrastructureServiceStat for the configured Valkey instance, or a
-        disabled stat when ``UL_VALKEY_URL``/``UL_REDIS_URL`` is unset.
-    """
+        InfrastructureServiceStat for the configured Valkey instance, or a disabled stat when ``UL_VALKEY_URL``/``UL_REDIS_URL`` is unset."""
     url = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
     if not url:
         return InfrastructureServiceStat(
@@ -321,13 +319,10 @@ def _redact_url(url: str) -> str:
     """Hide credentials in service URLs displayed to admins.
 
     Args:
-        url: The service URL, which may embed a username and password (the Celery
-            broker URL does).
+        url: The service URL, which may embed a username and password (the Celery broker URL does).
 
     Returns:
-        The URL with any password replaced by ``***``, or a placeholder when it
-        cannot be parsed.
-    """
+        The URL with any password replaced by ``***``, or a placeholder when it cannot be parsed."""
     try:
         parsed = urlparse(url)
     except ValueError:
@@ -348,9 +343,7 @@ def collect_nginx_stats() -> InfrastructureServiceStat:
     """Collect nginx reverse-proxy health statistics.
 
     Returns:
-        InfrastructureServiceStat for the nginx health endpoint configured by
-        ``UL_NGINX_HEALTH_URL`` (default ``http://urbanlens_nginx/nginx-health``).
-    """
+        InfrastructureServiceStat for the nginx health endpoint configured by ``UL_NGINX_HEALTH_URL`` (default ``http://urbanlens_nginx/nginx-health``)."""
     health_url = os.getenv("UL_NGINX_HEALTH_URL", "http://urbanlens_nginx:8080/nginx-health")
     try:
         started = time.monotonic()
@@ -422,8 +415,7 @@ def collect_infrastructure_service_stats() -> tuple[InfrastructureServiceStat, .
     """Collect health statistics for all UrbanLens infrastructure services.
 
     Returns:
-        Tuple of service stats in display order: PostgreSQL, Valkey, Celery, nginx.
-        Always four entries, in that order, however badly the services are behaving."""
+        Tuple of service stats in display order: PostgreSQL, Valkey, Celery, nginx."""
     # Each collector is named here rather than held in a module-level table, so the
     # reference resolves at call time and stays patchable by tests.
     return (

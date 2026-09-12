@@ -1,11 +1,4 @@
-"""Air quality plugin: modelled and sensor readings near a pin, via REData.
-
-The modelled row (Copernicus CAMS, worldwide) is the panel's primary answer;
-nearby crowdsourced sensors are summarized separately and never averaged
-into it - the two kinds are not comparable, and sensors of unknown
-calibration disagree wildly (see the endpoint doc's 2.4 vs 83.2 ug/m3
-example).
-"""
+"""Air quality plugin: modelled and sensor readings near a pin, via REData."""
 
 from __future__ import annotations
 

@@ -24,12 +24,7 @@ from urbanlens.dashboard.services.sharing.pin_sharing import apply_pin_share_res
 from urbanlens.dashboard.services.sharing.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
 from urbanlens.dashboard.services.social.connections import are_connections, get_connections
 
-#: Compatibility alias for the name this helper had while it lived here. Two
-#: provenance test modules and ``services.profile.profile_photos``'s docstring still
-#: refer to ``controllers.pin_sharing._create_pin_from_share``; keeping the name
-#: bound means the move is a pure relocation rather than a rename that ripples
-#: through unrelated files. New callers should import from
-#: ``services.sharing.pin_sharing`` directly.
+#: Compatibility alias for the name this helper had while it lived here.
 _create_pin_from_share = create_pin_from_share
 
 
@@ -44,11 +39,9 @@ def _recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
 def _bundle_children(sender: Profile, recipient: Profile, root_share: PinShare, children) -> int:
     """Create one bundled child share per pin in ``children``, tied to ``root_share``.
 
-    Shared by both bundling paths on :class:`PinShareCreateView` - "share every
-    descendant" (``include_children``) and "share exactly these" (``child_pin_uuids``,
-    from the detail page's multi-select toolbar). A child that already has a
-    pending share to this recipient is skipped so the one-pending-share-per-
-    pin-and-recipient constraint holds.
+    Shared by both bundling paths on :class:`PinShareCreateView` - "share every descendant"
+    (``include_children``) and "share exactly these" (``child_pin_uuids``, from the detail page's
+    multi-select toolbar).
 
     Args:
         sender: The profile sharing the pins.
@@ -83,10 +76,7 @@ class PinShareDialogView(LoginRequiredMixin, View):
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile=request.user.profile)
 
-        # ?children=<uuid>,<uuid>,... - the detail-page multi-select bulk
-        # toolbar's "Share" action opens this same dialog with a specific
-        # subset of child pins pre-chosen, rather than the plain "share
-        # everything nested under this pin" checkbox shown otherwise.
+        # ?children=<uuid>,<uuid>,...
         selected_child_pins: list[Pin] = []
         if raw_uuids := request.GET.get("children"):
             uuids = [u for u in raw_uuids.split(",") if u]
@@ -109,11 +99,10 @@ class PinShareDialogView(LoginRequiredMixin, View):
 class PinShareMapGridView(LoginRequiredMixin, View):
     """Just the pin-share dialog's map-picker tiles (see ``_pin_share_map_grid.html``).
 
-    Refetched by the dialog's "New map" flow after a map is created, so the
-    picker gains the new (auto-selected) tile without reloading the rest of
-    the already-filled-in share form.
-
     GET /map/pin/<slug:pin_slug>/share/maps/
+
+    Refetched by the dialog's "New map" flow after a map is created, so the picker gains the new
+    (auto-selected) tile without reloading the rest of the already-filled-in share form.
     """
 
     def get(self, request, pin_slug):
@@ -145,12 +134,9 @@ class PinShareCreateView(LoginRequiredMixin, View):
             if length_error:
                 return HttpResponse(length_error, status=400)
             shared_name = custom_name
-            # A typed name becomes a permanent alias on the sharer's own pin
-            # too, same as any other place the pin's name is set (see
-            # Pin.save's alias-sync, which this mirrors for a name that never
-            # touches pin.name itself). Case-insensitive lookup matches the
-            # alias uniqueness rule, so re-sharing under a different casing of
-            # an existing alias reuses that row instead of raising IntegrityError.
+            # A typed name becomes a permanent alias on the sharer's own pin too, same as any other place the
+            # pin's name is set (see Pin.save's alias-sync, which this mirrors for a name that never touches
+            # pin.name itself).
             PinAlias.objects.get_or_create(pin=pin, name__iexact=custom_name, defaults={"name": custom_name})
         # else: blank input keeps shared_name None - "use the pin's current name".
 
@@ -161,10 +147,9 @@ class PinShareCreateView(LoginRequiredMixin, View):
         if map_uuid := request.POST.get("markup_map_uuid"):
             attached_map = MarkupMap.objects.filter(uuid=map_uuid, profile=sender).first()
 
-        # If this place arrived via an earlier share - the pin was accepted
-        # from one, or its location carries an exposure - record the lineage
-        # so reshare chains can be counted (see PinShare.chain_share_count
-        # and services.sharing.share_provenance for the full resolution rule).
+        # If this place arrived via an earlier share - the pin was accepted from one, or its location carries an
+        # exposure - record the lineage so reshare chains can be counted (see PinShare.chain_share_count and
+        # services.sharing.share_provenance for the full resolution rule).
         parent_share = resolve_and_stamp_origin_share(pin)
 
         already_pinned = _recipient_existing_pin(recipient, pin) is not None
@@ -185,11 +170,8 @@ class PinShareCreateView(LoginRequiredMixin, View):
         if attached_map is not None:
             share_markup_map_with_profile(sender, recipient, attached_map)
 
-        # Bundle child pins: each gets its own share row (counting as a share
-        # of that pin), tied to the root share. A specific selection - from
-        # the detail page's multi-select toolbar - takes precedence over the
-        # dialog's own "share everything nested under this pin" checkbox; a
-        # pin can only ever come from one of the two paths in a single submit.
+        # Bundle child pins: each gets its own share row (counting as a share of that pin), tied to the root
+        # share.
         selected_uuids = [u for u in request.POST.getlist("child_pin_uuids") if u]
         if selected_uuids:
             bundled_count = _bundle_children(sender, recipient, share, pin.descendants().filter(uuid__in=selected_uuids).select_related("location"))
@@ -232,13 +214,8 @@ class PinShareDetailView(LoginRequiredMixin, View):
             pk=share_id,
             to_profile=request.user.profile,
         )
-        # share.safe_pin, not share.pin: a DETECTED share is a provenance
-        # record for a place the recipient learned about indirectly, not an
-        # offer of the sender's pin. Handing the live row to the template put
-        # its current name and address in front of somebody who never accepted
-        # anything - and kept doing so as the sender edited it. The map below
-        # reads share.shared_location, which is the snapshot taken when the
-        # share happened, so it is unaffected either way.
+        # share.safe_pin, not share.pin: a DETECTED share is a provenance record for a place the recipient
+        # learned about indirectly, not an offer of the sender's pin.
         return render(
             request,
             "dashboard/pages/pin_share/detail.html",

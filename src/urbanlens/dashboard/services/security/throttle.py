@@ -99,8 +99,7 @@ def retry_after(scope: str, identity: str, rate: Rate) -> int:
         rate: The limit and its window.
 
     Returns:
-        Whole seconds, never less than one.
-    """
+        Whole seconds, never less than one."""
     del scope, identity
     elapsed = time.time() % rate.window_seconds
     return max(1, math.ceil(rate.window_seconds - elapsed)) if elapsed else rate.window_seconds
@@ -115,9 +114,7 @@ def refusal(scope: str, identity: str, rate: Rate) -> HttpResponse:
         rate: The limit and its window.
 
     Returns:
-        A 429 carrying `Retry-After`, which is the only thing that tells a
-        well-behaved client to back off rather than retry immediately.
-    """
+        A 429 carrying `Retry-After`, which is the only thing that tells a well-behaved client to back off rather than retry immediately."""
     wait = retry_after(scope, identity, rate)
     response = HttpResponse("Too many requests. Try again shortly.", status=429, content_type="text/plain")
     response.headers["Retry-After"] = str(wait)

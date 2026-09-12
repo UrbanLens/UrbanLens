@@ -35,7 +35,6 @@ TURN_DEADLINE_SECONDS = 75
 MAX_MESSAGE_CHARS = 2_000
 #: Conversation entries kept in the session (user + assistant turns).
 MAX_HISTORY_ENTRIES = 20
-#: Characters of serialized history included in each prompt (oldest dropped).
 MAX_HISTORY_CHARS = 6_000
 
 _INSTRUCTIONS = (
@@ -96,24 +95,16 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
 
     Args:
         profile: The requesting profile; every tool is scoped to it.
-        history: Prior conversation entries (``{"role", "content"}``), already
-            capped by the caller.
+        history: Prior conversation entries (``{"role", "content"}``), already capped by the caller.
         user_message: The new message (truncated to ``MAX_MESSAGE_CHARS``).
-        page: The caller's already-verified page context (see
-            ``services.ai.page_context``), or ``None`` when no page was sent
-            or resolved. Carried straight onto ``ToolContext.page`` - no
-            shipped tool reads it yet (``needs_page=True`` starts in batch 4).
-        dismissals: The client's own dismissal-ring payload for this turn
-            (``services.ai.dismissals``), already re-verified by the caller.
-            Carried onto ``ToolContext.dismissals`` for ``recent_dismissals``/
-            ``reopen_explainer``.
+        page: The caller's already-verified page context (see ``services.ai.page_context``), or ``None`` when no page was sent or resolved.
+        dismissals: The client's own dismissal-ring payload for this turn (``services.ai.dismissals``), already re-verified by the caller.
 
     Returns:
         The assistant's reply plus human-readable labels of any actions taken.
 
     Raises:
-        AssistantUnavailableError: When AI is off for the site or this profile.
-    """
+        AssistantUnavailableError: When AI is off for the site or this profile."""
     # Pinned to Anthropic regardless of the site-wide AI provider: only its adapter is exercised for
     # native tool calling so far, and small/free models (e.g. the Cloudflare default) are unreliable
     # tool callers. formatting="" - send_with_tools ignores it regardless (see its own docstring),

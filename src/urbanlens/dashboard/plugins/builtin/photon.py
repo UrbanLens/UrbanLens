@@ -1,15 +1,4 @@
-"""Photon plugin: alternate OSM-backed reverse-geocoding panel and place names.
-
-Photon (https://photon.komoot.io) is Komoot's free, keyless, open-source
-geocoder over OpenStreetMap data - a redundant cross-check alongside the
-existing Nominatim integration, using different indexing/ranking software
-over the same underlying OSM dataset. Sourced entirely from REData's
-``GET /geocode/reverse/?provider=photon`` (see
-``services.apis.locations.redata_geocode_gateway``) - REData now owns this
-integration, so an install without REData configured simply doesn't show
-this panel (see :meth:`PhotonPanelSource.gate`) rather than falling back to
-a direct Photon call.
-"""
+"""Photon plugin: alternate OSM-backed reverse-geocoding panel and place names."""
 
 from __future__ import annotations
 
@@ -55,25 +44,12 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
     def has_content(self, data: dict | None) -> bool:
         """Mirror of :meth:`render_context`'s own emptiness test.
 
-        Args:
-            data: The cached payload.
-
         Returns:
-            True when there is an address to show.
-        """
+            True when there is an address to show."""
         return bool(data and (data.get("locality") or data.get("region") or data.get("country")))
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Build the address card from REData's normalized address components.
-
-        Reads only the cross-provider-normalized fields REData's own
-        ``../REData/docs/api-reference.md`` documents for this endpoint
-        (``house_number``/``street``/``locality``/``region``/``postal_code``/
-        ``country``) - Photon's own raw OSM extras (``osm_key``/``osm_value``,
-        a deep link to the raw OSM entry) aren't part of that documented
-        contract, so this card is deliberately leaner than the old
-        direct-Photon one.
-        """
+        """Build the address card from REData's normalized address components."""
         if not data or not (data.get("locality") or data.get("region") or data.get("country")):
             return None
 
@@ -90,16 +66,7 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
 
 class PhotonPlugin(UrbanLensPlugin):
     """Photon geocoder: an alternate reverse-geocoded address panel, via REData.
-
-    No longer calls Photon directly (see the module docstring) - REData's own
-    ``redata_geocode`` service-rate-limit row (``rate_limiter.SERVICE_REGISTRY``)
-    covers this, so there is no per-plugin rate limit to register here anymore.
-    REData's cross-provider address normalization has no equivalent of
-    Photon's own distinctive place ``name`` (only address components), so this
-    plugin no longer contributes a name-provider candidate either - a
-    locality/region string would just be rejected by the naming system's own
-    address-derived-fragment filter (see docs/designs/plugins.md).
-    """
+    No longer calls Photon directly (see the module docstring) - REData's own ``redata_geocode`` service-rate-limit row (``rate_limiter.SERVICE_REGISTRY``) covers this, so there is no per-plugin rate limit to register here anymore."""
 
     name: ClassVar[str] = "photon"
     verbose_name: ClassVar[str] = "Photon"

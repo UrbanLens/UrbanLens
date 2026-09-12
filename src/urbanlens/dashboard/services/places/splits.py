@@ -1,5 +1,4 @@
-"""Parcels that get subdivided, and the access that has to survive it.
-The old outline still geometrically contains every pin anyone ever dropped inside it, so leaving it in play would let containment against historical geometry grant access to a campus that no longer exists - hence :class:`~urbanlens.dashboard.models.place.model.PlaceStatus`, and hence ``PlaceQuerySet.resolvable`` excluding superseded rows."""
+"""Parcels that get subdivided, and the access that has to survive it."""
 
 from __future__ import annotations
 
@@ -50,12 +49,10 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
 
     Args:
         place: The parcel being superseded.
-        successors: Official outlines for the new parcels. Fewer than two is a
-            correction, not a split, and is rejected by the caller.
+        successors: Official outlines for the new parcels.
 
     Returns:
-        The superseded place.
-    """
+        The superseded place."""
     from urbanlens.dashboard.services.places.provisioning import upsert_place
 
     holders = set(

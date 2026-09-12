@@ -118,25 +118,17 @@ def _expand_state_codes(states_str: str) -> str:
 def _apply_toolbar_filters(query: PinQuerySet, profile: Profile, raw_ids: str) -> PinQuerySet:
     """AND-narrow ``query`` by the bottom-right toolbar's active saved filters.
 
-    Each active filter is resolved and cached independently (see
-    ``services.search.saved_filter_cache``), then chained onto ``query`` as a
-    ``uuid__in`` restriction - equivalent to (and just as strict as) calling
-    ``filter_by_criteria`` once per filter, but reuses a warm cache when one
-    exists instead of re-running each filter's full query.
-
-    Security: ``uuid__in=ids`` is scoped to ``profile=profile``, so a uuid
-    that doesn't belong to (or doesn't exist for) this profile simply isn't
-    in ``saved_filters`` below and is silently ignored - fuzzing another
-    user's saved-filter uuid can never pull their pins into this profile's
-    results, and there is no separate error path that would reveal whether
-    a given uuid exists at all.
+    Security: ``uuid__in=ids`` is scoped to ``profile=profile``, so a uuid that doesn't belong to (or
+    doesn't exist for) this profile simply isn't in ``saved_filters`` below and is silently ignored -
+    fuzzing another user's saved-filter uuid can never pull their pins into this profile's results, and
+    there is no separate error path that would reveal whether a given uuid exists at all.
 
     Args:
         query: Already profile-scoped pin queryset to further restrict.
-        profile: The requesting user's own profile - both the filter lookup
-            and every pin query stay scoped to this profile.
-        raw_ids: Comma-separated ``SavedFilter`` uuids from the client
-            (``toolbar_filter_ids`` form/query field), or "".
+        profile: The requesting user's own profile - both the filter lookup and every pin query stay
+        scoped to this profile.
+        raw_ids: Comma-separated ``SavedFilter`` uuids from the client (``toolbar_filter_ids``
+        form/query field), or "".
 
     Returns:
         ``query`` further restricted by every resolvable active filter.
@@ -203,11 +195,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         show_filtered_pin_count = user_has_feature(request.user, SiteFeature.AI)
         show_places_layer = user_has_feature(request.user, SiteFeature.PLACES)
 
-        # New-user onboarding: offer a one-time dialog pointing at any pending
-        # pin suggestions (most commonly community/public-location ones, since
-        # a brand-new profile has no photos to scan yet). Marked seen the
-        # moment it's shown - regardless of which button the user clicks - so
-        # it never appears again; see Profile.map_pin_suggestions_intro_seen.
+        # New-user onboarding: offer a one-time dialog pointing at any pending pin suggestions (most commonly
+        # community/public-location ones, since a brand-new profile has no photos to scan yet).
         show_pin_suggestions_intro = False
         if not profile.map_pin_suggestions_intro_seen:
             from urbanlens.dashboard.services.pins.pin_suggestions import pending_suggestions_for_profile
@@ -303,9 +292,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
             google_place_id = request.POST.get("google_place_id") or None
-            # Canonical name supplied by the client when adding from a Google Places or
-            # Wikipedia/NPS marker - avoids a synchronous geocoding API round-trip when
-            # creating a new Location.
+            # Canonical name supplied by the client when adding from a Google Places or Wikipedia/NPS marker -
+            # avoids a synchronous geocoding API round-trip when creating a new Location.
             place_canonical_name = request.POST.get("place_canonical_name") or None
 
             try:
@@ -323,10 +311,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     category_ids=category_ids,
                     google_place_id=google_place_id,
                     place_canonical_name=place_canonical_name,
-                    # Typed into the add-pin dialog by hand, so it is a
-                    # deliberate name and must outrank later automatic
-                    # discovery - unlike an importer's parser fallback, which
-                    # is why create_pin_for_profile defaults this to False.
+                    # Typed into the add-pin dialog by hand, so it is a deliberate name and must outrank later
+                    # automatic discovery - unlike an importer's parser fallback, which is why
+                    # create_pin_for_profile defaults this to False.
                     name_is_user_provided=bool((name or "").strip()),
                 )
             except PinCreationForbiddenError as e:
@@ -368,9 +355,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                         "wiki_url": reverse("location.wiki", kwargs={"location_slug": loc.slug or str(loc.uuid)}),
                     }
                     if not is_current:
-                        # A profile can only ever have one root pin per location - if this
-                        # candidate already has one, "Use this" can't relink the new pin
-                        # there (it would collide); the client offers to merge instead.
+                        # A profile can only ever have one root pin per location - if this candidate already has
+                        # one, "Use this" can't relink the new pin there (it would collide); the client offers
+                        # to merge instead.
                         existing_pin = Pin.objects.filter(profile=request.user.profile, location=loc, parent_pin__isnull=True).exclude(pk=pin.pk).first()
                         if existing_pin is not None:
                             entry["existing_pin_url"] = reverse("pin.details", kwargs={"pin_slug": existing_pin.slug or str(existing_pin.uuid)})
@@ -386,9 +373,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def autocomplete_local(self, request, *args, **kwargs):
         """Fast autocomplete from local DB: pins, locations, aliases, labels, wiki.
 
-        Returns JSON with pin/location suggestions ranked by relevance.  This is
-        always the first source shown to the user because it requires no external
-        API calls and typically responds within 50-100 ms.
+        This is always the first source shown to the user because it requires no external API calls and
+        typically responds within 50-100 ms.
         """
         from urbanlens.dashboard.services.map_pins.autocomplete import search_local
 
@@ -440,9 +426,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def resolve_place(self, request, *args, **kwargs):
         """Resolve a Google place_id to latitude/longitude coordinates.
 
-        Called when the user selects a Google Places suggestion.  Coordinates
-        are intentionally omitted from the autocomplete response to avoid a
-        Places Details API call for every suggestion shown.
+        Coordinates are intentionally omitted from the autocomplete response to avoid a Places Details API
+        call for every suggestion shown.
         """
         from urbanlens.dashboard.services.map_pins.autocomplete import (
             resolve_google_place,
@@ -467,29 +452,19 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"lat": lat, "lng": lng, "name": name or ""})
 
     def streetview_check(self, request, *args, **kwargs):
-        """Check whether Google Street View imagery exists at a given lat/lng.
-
-        Uses the Street View Static API metadata endpoint - a lightweight call
-        that returns JSON without downloading any imagery.
-
-        Returns JSON {"available": true/false}.  Falls back to {"available": false}
-        on any configuration or network error so the client can degrade gracefully.
-        """
+        """Check whether Google Street View imagery exists at a given lat/lng."""
         try:
             lat = float(request.GET.get("lat", ""))
             lng = float(request.GET.get("lng", ""))
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid coordinates"}, status=400)
 
-        # Same opt-out gate as autocomplete_places: this fires on every map
-        # right-click, sending the clicked coordinates to Google - a user who
-        # turned off External Services must not trigger that call.
+        # Same opt-out gate as autocomplete_places: this fires on every map right-click, sending the clicked
+        # coordinates to Google - a user who turned off External Services must not trigger that call.
         if not request.user.profile.external_apis_enabled:
             return JsonResponse({"available": False, "reason": "disabled"})
 
-        # Server-to-server call - must use the unrestricted key. The domain-restricted
-        # key is HTTP-referrer-locked to urbanlens.org and 403s on every backend request,
-        # since Google only honors that restriction when a browser sends a Referer header.
+        # Server-to-server call - must use the unrestricted key.
         api_key = settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"available": False, "reason": "no_key"})
@@ -497,7 +472,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         params = urllib.parse.urlencode({"location": f"{lat},{lng}", "key": api_key, "source": "outdoor"})
         url = f"https://maps.googleapis.com/maps/api/streetview/metadata?{params}"
         try:
-            with urllib.request.urlopen(url, timeout=4) as resp:  # noqa: S310 # nosec B310
+            with urllib.request.urlopen(url, timeout=4) as resp:  # noqa: S310  # nosec B310
                 import json as _json
 
                 data = _json.loads(resp.read())
@@ -535,27 +510,16 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def pin_list_panel(self, request, *args, **kwargs):
         """Render the paginated pin-list sidebar for the current filter criteria and map viewport.
 
-        Reads the same fields as ``SearchForm`` from the query string (sent via
-        ``hx-include="#filter-form"`` on the client) so the list panel always
-        mirrors whatever the filter panel currently shows on the map. Invalid
-        or absent filter criteria fall back to the full unfiltered pin list
-        rather than erroring out, since this is a convenience view rather than
-        a form submission.
+        Invalid or absent filter criteria fall back to the full unfiltered pin list rather than erroring
+        out, since this is a convenience view rather than a form submission.
 
         Args:
-            request: GET request, optionally carrying ``SearchForm`` fields, a
-                ``bounds`` "south,west,north,east" viewport box, a ``page``
-                parameter for pagination, and a ``page_size`` override - the
-                client measures how many rows actually fit in the sidebar's
-                scrollable container without a scrollbar and sends that back,
-                so pagination adapts to the container size instead of a fixed
-                count (see _refreshPinList/_pinListAdjustPageSize in
-                map/index.html).
+            request: GET request, optionally carrying ``SearchForm`` fields, a ``bounds``
+            "south,west,north,east" viewport box, a ``page`` parameter for...
 
         Returns:
-            Rendered ``_pin_list_panel.html`` partial with the matching pins
-            for the requested page, plus the total match count - both scoped
-            to the current map viewport when ``bounds`` is present.
+            Rendered ``_pin_list_panel.html`` partial with the matching pins for the requested page, plus
+            the total match count - both scoped to the...
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         # location__wiki is what Location.display_name reads for every unnamed pin
@@ -564,10 +528,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             Pin.objects.filter(profile=profile)
             .root_pins()
             .select_related("location", "location__wiki")
-            # with_customizations_for matches services.map_pins.payload: without it
-            # Label._get_customization silently finds no override (it reads a prefetch
-            # attr, it does not query), so a customized label rendered the user's icon
-            # on the map marker and the global one in this sidebar for the same pin.
+            # with_customizations_for matches services.map_pins.payload: without it Label._get_customization
+            # silently finds no override (it reads a prefetch attr, it does not query), so a customized label
+            # rendered the user's icon on the map marker and the global one in this sidebar for the same pin.
             .prefetch_related(
                 Prefetch(
                     "labels",
@@ -622,9 +585,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin_slug: Slug of the target pin.
 
         Returns:
-            An empty 200 response, 400 if no file was given, 409 if the
-            uploader already has this exact file on the pin, or 413 if the
-            upload would exceed the uploader's storage quota.
+            An empty 200 response, 400 if no file was given, 409 if the uploader already has this exact file
+            on the pin, or 413 if the upload would...
         """
         from urbanlens.dashboard.models.images.model import MediaKind
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
@@ -686,10 +648,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def map_document(self, request, *args, **kwargs):
         """Stream every one of the profile's root pins as one NDJSON document.
 
-        Replaces the twenty sequential paged fetches the map page used to make.
-        `map.pins` is unchanged and still serves anyone who wants pages - and is
-        what the client falls back to for an account above the document ceiling,
-        which this endpoint says so rather than trying to answer.
+        `map.pins` is unchanged and still serves anyone who wants pages - and is what the client falls back
+        to for an account above the document ceiling, which this endpoint says so rather than trying to
+        answer.
 
         Returns:
             StreamingHttpResponse of NDJSON, a cached gzipped body, or 304.
@@ -720,9 +681,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             content_type=map_document.CONTENT_TYPE,
         )
         streamed["X-Map-Document"] = "miss"
-        # nginx buffering is deliberately left on: a streamed response holds its
-        # database connection to the last byte, so unbuffered a slow client would
-        # decide how long a worker and a backend are occupied. See D12.
+        # nginx buffering is deliberately left on: a streamed response holds its database connection to the last
+        # byte, so unbuffered a slow client would decide how long a worker and a backend are occupied. See D12.
         if map_document.MapDocumentCache.ttl() > 0 and documents.claim_build():
             # Claimed, so several tabs missing at once schedule one build rather
             # than one each; and skipped entirely when there is no cache to fill.
@@ -732,17 +692,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def map_child_pins_json(self, request, *args, **kwargs):
         """Return the profile's child pins (all nesting depths) for the Child pins layer.
 
-        Child pins are pins nested under another pin via ``parent_pin`` (created
-        by merging pins or by adding detail pins on a pin's page). The main map
-        hides them by default; the "Child pins" layer renders this payload.
-
-        The same ``SearchForm`` criteria the filter panel posts are honoured
-        when present in the query string, so an active map filter narrows the
-        layer to matching child pins too.
-
         Returns:
-            JsonResponse: ``{"pins": [{...to_detail_json(), child_count,
-            parent_slug, parent_name, parent_url}, ...]}``
+            JsonResponse: ``{"pins": [{...to_detail_json(), child_count, parent_slug, parent_name,
+            parent_url}, ...]}``
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         query = (
@@ -781,19 +733,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def map_pins_meta(self, request, *args, **kwargs):
         """Report whether the profile's pins have changed, for client-side cache invalidation.
 
-        The client polls this endpoint and refetches when the answer moves.
-        ``app_uuid`` lets it detect a DB wipe or fresh deployment (new UUID →
-        stale cache).
-
-        ``fingerprint`` is the value to compare; ``last_updated`` is kept
-        because it is the timestamp it claims to be and callers may want it, but
-        it cannot answer the question on its own - deleting any pin other than
-        the most recently updated one leaves it unchanged, so a pin deleted in
-        another tab stayed on the map (P106's sibling). See
-        ``services.map_pins.fingerprint``.
+        ``fingerprint`` is the value to compare; ``last_updated`` is kept because it is the timestamp it
+        claims to be and callers may want it, but it cannot answer the question on its own - deleting any
+        pin other than the most recently updated one leaves it unchanged, so a pin deleted in another tab
+        stayed on the map (P106's sibling).
 
         Returns:
-            JsonResponse: ``{"fingerprint": "<opaque>", "last_updated": "<ISO timestamp>" | null, "app_uuid": "<uuid>"}``
+            JsonResponse: ``{"fingerprint": "<opaque>", "last_updated": "<ISO timestamp>" | null,
+            "app_uuid": "<uuid>"}``
         """
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
         from urbanlens.dashboard.services.map_pins.fingerprint import pin_collection_state
@@ -837,9 +784,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def patch_pin(self, request, pin_slug, *args, **kwargs):
         """Quick-edit a pin from the map popup dialog.
 
-        Accepts the same FormData fields as ``post_add_pin`` and applies them to
-        an existing pin looked up by slug or UUID.  Labels are replaced (not merged)
-        when ``label_ids`` is provided.
+        Accepts the same FormData fields as ``post_add_pin`` and applies them to an existing pin looked up
+        by slug or UUID.
 
         Args:
             pin_slug: Slug or UUID string of the pin to update.
@@ -874,10 +820,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         import contextlib
 
-        # Only the posted fields are written. Pin has around forty other writers
-        # scoping their updates to what they own - visit logging, the placeholder-name
-        # sweep, pin suggestions, share provenance - and a whole-row save from this
-        # request's instance reverted whatever landed while it was in flight.
+        # Only the posted fields are written.
         touched: list[str] = []
         if name is not None:
             pin.name = name or None
@@ -929,13 +872,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def nearby_places(self, request, *args, **kwargs):
         """Return Places layer results near a given coordinate, aggregated from enabled sources.
 
-        VIP-only endpoint.  Sources (Google, NPS, Wikipedia) are toggled per user
-        profile.  Results are cached per coordinate tile + source set.
-
-        Query params:
-            lat: Centre latitude (float).
-            lng: Centre longitude (float).
-            radius: Search radius in metres for Google Places (default 2000, max 5000).
+        VIP-only endpoint.
 
         Returns:
             JsonResponse: ``{"places": [...], "cached": bool}``
@@ -1036,12 +973,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         elif profile.places_google_enabled:
             logger.debug("Google Places skipped: zoom %d < minimum %d", zoom, GOOGLE_MIN_ZOOM)
 
-        # -- National Park Service --------------------------------------------
-        # REData's /parks/nearby/ is a pure local-catalog read, already
-        # distance-sorted and limited server-side - unlike the direct NPS API
-        # this replaced, there's no "cache all ~475 parks for 24h and filter
-        # locally" trick needed (the outer django_cache_key above already
-        # caches this whole combined places result).
+        # -- National Park Service -------------------------------------------- REData's /parks/nearby/ is a
+        # pure local-catalog read, already distance-sorted and limited server-side - unlike the direct NPS API
+        # this replaced, there's no "cache all ~475 parks for 24h and filter locally" trick needed (the outer
+        # django_cache_key above already caches this whole combined places result).
         redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
         if use_nps and redata_configured:
             try:
@@ -1050,8 +985,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 )
 
                 # Omits radius_meters - REData's own 100km default for this endpoint
-                # (RedataNationalParksGateway.DEFAULT_RADIUS_METERS) is exactly what this
-                # layer wants too.
+                # (RedataNationalParksGateway.DEFAULT_RADIUS_METERS) is exactly what this layer wants too.
                 nearby_parks = RedataNationalParksGateway().find_parks_near(lat, lng, limit=20)
                 for park in nearby_parks:
                     places.append(
@@ -1091,11 +1025,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def place_details(self, request, *args, **kwargs):
         """Return Google Place details for a single place_id.
 
-        VIP-only endpoint.  Fetches editorial summary, formatted address, and
-        opening hours.  Results are cached for the same duration as nearby results.
-
-        Query params:
-            place_id: Google Place ID.
+        VIP-only endpoint.
 
         Returns:
             JsonResponse: ``{"place": {...}}``
@@ -1143,26 +1073,16 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def map_data_context(self, request, query: PinQuerySet | None = None) -> dict[str, Any]:
         """The map payload for *query*, in the one shape every map endpoint returns.
 
-        Deliberately no reshaping. This used to rewrite each payload for
-        `map/data.html`'s per-pin template loop - tags joined into a string with
-        the objects moved to a `tags_data` key, categories joined, dates
-        reformatted, status capitalized - which gave the filter panel and the
-        single-pin refresh a different shape from the bulk fetch. All three feed
-        the same client store and the same versioned cache, so the difference
-        surfaced as a pin whose labels read as empty depending on which endpoint
-        last loaded it.
-
-        The dictionary travels with the payloads because a pin names its labels
-        by id, and a response the client cannot resolve those against draws a pin
-        with no chips.
+        The dictionary travels with the payloads because a pin names its labels by id, and a response the
+        client cannot resolve those against draws a pin with no chips.
 
         Args:
             request: The current request, for the requesting profile.
-            query: Pins to serialize. Defaults to the profile's root pins.
+            query: Pins to serialize.
 
         Returns:
-            Template context for `map/data.html`: one payload per pin, each
-            carrying its own detail-page URL, and the labels they name.
+            Template context for `map/data.html`: one payload per pin, each carrying its own detail-page
+            URL, and the labels they name.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if query is None:
@@ -1222,22 +1142,16 @@ def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
 def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: str | None = None, fetch_if_missing: bool = True) -> Location:
     """Create a new Location using its canonical Google place name.
 
-    The user's custom pin name must never be used as a Location's official_name
-    because it is shared across all users and seeds the community wiki title.
-    We ask Google for the real place name and fall back to "Unnamed Location"
-    when geocoding is unavailable or returns nothing useful.
+    The user's custom pin name must never be used as a Location's official_name because it is shared
+    across all users and seeds the community wiki title.
 
     Args:
         lat: Latitude of the new location.
         lon: Longitude of the new location.
-        place_name: Optional canonical name already known by the caller (e.g. from
-            a Google Places marker).  When provided and meaningful, this skips an
-            outbound geocoding API call.
-        fetch_if_missing: When False, never make a live geocoding call for the
-            name - the Location is created with ``official_name=None`` and the
-            caller is responsible for backfilling it via
-            ``tasks.resolve_location_place_name``. Pass False from bulk paths
-            that would otherwise issue one outbound call per row.
+        place_name: Optional canonical name already known by the caller (e.g. from a Google Places
+        marker).
+        fetch_if_missing: When False, never make a live geocoding call for the name - the Location is
+        created with ``official_name=None`` and the caller is...
 
     Returns:
         The newly created Location instance.

@@ -37,17 +37,7 @@ if TYPE_CHECKING:
 
 class Label(abstract.FrontendDashboardModel):
     """A named label that can be applied to pins.
-
-    Labels are either global (profile=None, visible to all users) or user-specific
-    (profile set, only visible to that user and alongside global labels).
-
-    Labels form an arbitrary-depth hierarchy via the parents M2M. Filtering by a label
-    also matches any descendant labels (use get_label_and_descendants for the full set).
-
-    The `kind` field distinguishes between tag-type labels (personal labels) and
-    category-type labels (global shared classification). Labels absorb the functionality
-    of the former PinList model: they carry an icon, custom icon, color, description,
-    and ordering weight that feeds into Pin.effective_icon's priority chain.
+    Labels are either global (profile=None, visible to all users) or user-specific (profile set, only visible to that user and alongside global labels).
     """
 
     name = CharField(max_length=255)
@@ -98,21 +88,13 @@ class Label(abstract.FrontendDashboardModel):
 
     def coerce_colors(self) -> None:
         """Drop `color` to NULL unless it is a colour this application stores.
-
-        `choices` is a form-layer constraint, not a database one, so it holds
-        only for the paths that go through a form. Import does not:
-        `services/import_export/import_data.py` builds labels straight from an
-        uploaded file's rows.
+        `choices` is a form-layer constraint, not a database one, so it holds only for the paths that go through a form.
         """
         self.color = clean_color(self.color, default=None)
 
     def save(self, *args, **kwargs) -> None:
         """Persist the label, coercing its colour first.
-
-        Enforced here rather than at each write because the colour is
-        interpolated into a `style="..."` attribute in several templates, so an
-        arbitrary string reaching the column is a stored injection vector - and
-        the writers are spread across forms, the external API and import.
+        Enforced here rather than at each write because the colour is interpolated into a `style="..."` attribute in several templates, so an arbitrary string reaching the column is a stored injection vector - and the writers are spread across forms, the external API and import.
         """
         self.coerce_colors()
         super().save(*args, **kwargs)
@@ -159,26 +141,7 @@ class Label(abstract.FrontendDashboardModel):
     @classmethod
     def prime_total_pin_counts(cls, labels: Sequence[Label]) -> None:
         """Precompute :meth:`total_pin_count` for a whole page of labels at once.
-
-        ``total_pin_count`` is correct but per-instance: each call runs its own
-        BFS - which issues one query *per node visited* - plus a `Count`
-        aggregate, and memoizes only on that instance. Rendering N labels
-        therefore costs O(N x subtree) queries. Measured on the Organize page's
-        deferred rows endpoint: 143 labels cost 113-146 queries, growing exactly
-        one-per-label.
-
-        This resolves the same numbers in a fixed three queries by loading the
-        edge list once and doing the traversal in Python, then seeding each
-        instance's memo so the template filter and every later call read it
-        without touching the database. The edge list is scoped to labels
-        owned by *labels*' own profile(s), plus global labels, rather than
-        the whole site's - nothing lets one profile's label parent/child
-        another's, so a rendered label's subtree can never reach an edge
-        outside that set, and this never has to load every other profile's
-        unrelated hierarchy to answer it.
-
-        Safe to skip: any label not primed still computes itself on demand, so
-        callers that render a single label need not change.
+        ``total_pin_count`` is correct but per-instance: each call runs its own BFS - which issues one query *per node visited* - plus a `Count` aggregate, and memoizes only on that instance.
 
         Args:
             labels: The label instances about to be rendered. Must be the same
@@ -189,12 +152,10 @@ class Label(abstract.FrontendDashboardModel):
         if not labels:
             return
 
-        # One query for the edge list, scoped to the profile(s) that own the
-        # rendered labels (plus global labels) instead of every profile's
-        # private hierarchy site-wide. The subtree of a rendered label can
-        # reach labels outside the rendered set (a tag's child that this
-        # kind's filter excluded), so this still spans every label owned by
-        # the relevant profile(s), not only the ones on screen.
+        # One query for the edge list, scoped to the profile(s) that own the rendered labels (plus
+        # global labels) instead of every profile's private hierarchy site-wide.
+        # The subtree of a rendered label can reach labels outside the rendered set (a tag's child
+        # that this kind's filter excluded), so this still spans every label owned by the relevant
         owning_profile_ids = {label.profile_id for label in labels if label.profile_id is not None}
         visible_edges = Q(from_label__profile_id__isnull=True) | Q(to_label__profile_id__isnull=True)
         if owning_profile_ids:
@@ -235,21 +196,7 @@ class Label(abstract.FrontendDashboardModel):
 
     def total_pin_count(self) -> int:
         """Return this label's pin count plus every descendant's pin count (full subtree).
-
-        Walks the full multi-level hierarchy via ``get_label_and_descendants``
-        (BFS, cycle-safe) rather than only direct children, matching how map/pin
-        filtering actually expands a parent label to its whole subtree.
-
-        Uses the annotated ``pin_count`` for this label when the queryset
-        supplied one (``LabelQuerySet.with_pin_counts()``); falls back to a DB
-        query otherwise. Descendant counts beyond the prefetched direct children
-        are always summed via a single aggregate query, since only the
-        direct-children prefetch carries its own annotation.
-
-        The result is memoized on the instance: an Organize label card reads it
-        up to three times (the compact badge, the stats column, and the "View on
-        map" button's empty check), and the BFS plus aggregate behind it is the
-        expensive part of that page.
+        Walks the full multi-level hierarchy via ``get_label_and_descendants`` (BFS, cycle-safe) rather than only direct children, matching how map/pin filtering actually expands a parent label to its whole subtree.
 
         Returns:
             Total pins carried by this label or any label beneath it.
@@ -275,12 +222,8 @@ class Label(abstract.FrontendDashboardModel):
         parent_ids: list[str] | list[int],
     ) -> int | None:
         """Return ``order`` for a new label placed just above its highest-priority parent.
-
-        When parents are chosen at creation time, the new label is placed immediately
-        above the highest-priority parent among them. When multiple parents are
-        selected, the parent with the smallest ``order`` value is used (e.g.
-        Hospital at order 20 rather than Pennsylvania at order 35). The new label
-        receives that parent's ``order`` minus one (20 → 19).
+        When parents are chosen at creation time, the new label is placed immediately above the highest-priority parent among them.
+        Hospital at order 20 rather than Pennsylvania at order 35).
 
         Args:
             profile: Owner profile used to resolve visible parent labels.
@@ -319,11 +262,7 @@ class Label(abstract.FrontendDashboardModel):
     @property
     def is_global(self) -> bool:
         """Whether this is a site-wide label rather than one a user owns.
-
-        Reads ``profile_id`` rather than ``profile`` so templates can ask this
-        per row without fetching the owning profile: ``{% if not label.profile %}``
-        issued one query per label per occurrence, and the Organize page asks it
-        several times for each card.
+        Reads ``profile_id`` rather than ``profile`` so templates can ask this per row without fetching the owning profile: ``{% if not label.profile %}`` issued one query per label per occurrence, and the Organize page asks it several times for each card.
 
         Returns:
             True when no profile owns this label.
@@ -344,17 +283,10 @@ class Label(abstract.FrontendDashboardModel):
             Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
         ]
         constraints = [
-            # Case-insensitive, matching how PinAlias/WikiAlias already model the
-            # same "name identifies a row within its parent" relationship, and
-            # matching what callers assume: several sites treat
-            # (profile, name, kind) as identifying, and media_labels.py had to
-            # pre-filter with ``name__iexact`` because ``get_or_create(name=...)``
-            # alone is case-sensitive while the intended identity is not.
-            #
-            # ``nulls_distinct=False`` so global labels (profile IS NULL) are
-            # constrained against each other too - Postgres treats NULLs as
-            # distinct by default, which would leave duplicate globals possible.
-            # Requires Postgres 15+; this project runs 17.
+            # Case-insensitive, matching how PinAlias/WikiAlias already model the same "name
+            # identifies a row within its parent" relationship, and matching what callers assume:
+            # several sites treat (profile, name, kind) as identifying, and media_labels.py had to
+            # pre-filter with ``name__iexact`` because ``get_or_create(name=...)`` alone is
             UniqueConstraint(
                 Lower("name"),
                 "profile",

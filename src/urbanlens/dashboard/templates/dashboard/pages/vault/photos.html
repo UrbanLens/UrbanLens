@@ -37,8 +37,7 @@
         <input type="file" id="photos-file-input" accept="image/*" multiple hidden
                onchange="photosHandleFiles(this.files); this.value='';">
 
-        {# -- Upload dropzone (compact - the whole page is still a drop target, #}
-        {# see the page-wide dragenter/drop listeners below) ------------------ #}
+        {# Upload dropzone (compact - the whole page is still a drop target, see the page-wide dragenter/drop listeners below) #}
         <label for="photos-file-input" class="photos-dropzone" id="photos-dropzone"
                title="Drag &amp; drop anywhere on this page, or click to upload. We'll sort photos by where and when they were taken.">
             <i class="material-symbols-outlined">cloud_upload</i>
@@ -57,13 +56,11 @@
         </div>
 
         {# -- Albums (this Vault's own, plus a toggle for albums across your pins) -- #}
-        {# ?album= is carried through so a deep link (or a Back navigation) loads #}
-        {# that album directly instead of the list. See controllers.albums.       #}
+        {# ?album= is carried through so a deep link (or a Back navigation) loads that album directly instead of the list. #}
         <section id="albums" class="photos-albums-section" aria-label="Albums">
             <div class="photos-gallery-head">
                 <h2><i class="material-symbols-outlined">photo_album</i> Albums</h2>
-                {# Overflow menu for secondary options - reuses the same #}
-                {# overflow-menu component/classes as pin_lists/detail.html. #}
+                {# Overflow menu for secondary options - reuses the same overflow-menu component/classes as pin_lists/detail.html. #}
                 <div class="pin-list-more-menu">
                     <button type="button" class="btn btn--icon pin-list-more-btn" id="vault-albums-more-btn"
                             aria-haspopup="true" aria-expanded="false" aria-label="More album options" title="More options"
@@ -154,8 +151,7 @@
 </div>
 
 {# -- Confirm-pin dialog: preview/move/name a pin before creating it from a photo -- #}
-{# Closes itself on any successful POST inside it (create-pin, or filing onto an     #}
-{# existing pin); GET searches (place + your-pins autocomplete) leave it open.       #}
+{# Closes itself on any successful POST inside it (create-pin, or filing onto an existing pin). #}
 <dialog id="photo-pin-confirm-dialog" class="ul-dialog photo-pin-confirm-dialog"
         hx-on:htmx:after-request="if(event.detail.successful && event.detail.requestConfig && event.detail.requestConfig.verb === 'post'){this.close()}" aria-labelledby="dialog-title-create-a-pin">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a pin" %}

@@ -52,17 +52,11 @@ def rate(rating: Rating, opponents: Sequence[Opponent], *, tau: float = DEFAULT_
 
     Args:
         rating: The rating entering the period.
-        opponents: Every game result within the period. Empty means "sat out
-            this rating period" - per the paper, only ``phi`` grows (rating
-            uncertainty increases with inactivity); ``mu``/``sigma`` are
-            unchanged. SpotGuessr never actually calls this with an empty
-            list (a round only rates parties who played it), but the branch
-            exists for correctness/testability against the paper.
+        opponents: Every game result within the period.
         tau: System volatility constant.
 
     Returns:
-        The updated rating.
-    """
+        The updated rating."""
     if not opponents:
         return Rating(mu=rating.mu, phi=math.sqrt(rating.phi**2 + rating.sigma**2), sigma=rating.sigma)
 

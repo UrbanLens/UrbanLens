@@ -1,10 +1,4 @@
-"""The signed-in homepage's customizable widget dashboard.
-
-Defines the fixed catalog of widgets the homepage can show (``HOME_WIDGETS``),
-resolves a profile's effective widget layout (enabled widgets, in their
-chosen order, plus disabled ones available to re-enable), and builds the data
-context each widget's partial template needs.
-"""
+"""The signed-in homepage's customizable widget dashboard."""
 
 from __future__ import annotations
 
@@ -30,8 +24,8 @@ class HomeWidget:
 
 
 #: The full catalog of homepage widgets, in default display order.
-#: Adding a new widget here makes it available to every profile automatically (shown, enabled, at
-#: the end of the default order) - no backfill needed since ``effective_widget_layout`` treats a
+#: Adding a new widget here makes it available to every profile automatically (shown, enabled, at the
+#: end of the default order) - no backfill needed since ``effective_widget_layout`` treats a
 #: profile's saved layout as an ordered subset, not an exhaustive list.
 HOME_WIDGETS: tuple[HomeWidget, ...] = (
     HomeWidget("stats", "Your Stats", "bar_chart", "dashboard/partials/home/_widget_stats.html"),
@@ -57,11 +51,7 @@ def effective_widget_layout(profile: Profile) -> list[dict[str, Any]]:
         profile: The signed-in profile whose homepage is being rendered/customized.
 
     Returns:
-        A list of ``{"widget": HomeWidget, "enabled": bool}`` covering every
-        widget in ``HOME_WIDGETS`` exactly once - enabled widgets first, in
-        the profile's saved order, followed by disabled widgets in their
-        registry default order.
-    """
+        A list of ``{"widget": HomeWidget, "enabled": bool}`` covering every widget in ``HOME_WIDGETS`` exactly once - enabled widgets first, in the profile's saved order, followed by disabled widgets in their registry default order."""
     saved_keys = [key for key in (profile.home_widget_layout or []) if key in _WIDGETS_BY_KEY]
     if not saved_keys:
         # Never customized (or customized to nothing, which we treat the same
@@ -81,13 +71,10 @@ def save_widget_layout(profile: Profile, enabled_keys: list[str]) -> list[str]:
 
     Args:
         profile: The profile customizing their homepage.
-        enabled_keys: Widget keys the user wants shown, in their chosen order
-            (as submitted by the customize dialog - unrecognized keys and
-            duplicates are dropped).
+        enabled_keys: Widget keys the user wants shown, in their chosen order (as submitted by the customize dialog - unrecognized keys and duplicates are dropped).
 
     Returns:
-        The validated, de-duplicated key list that was actually saved.
-    """
+        The validated, de-duplicated key list that was actually saved."""
     from urbanlens.dashboard.models.profile.model import Profile
 
     valid_keys = list(dict.fromkeys(key for key in enabled_keys if key in _WIDGETS_BY_KEY))

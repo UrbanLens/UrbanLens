@@ -1,5 +1,4 @@
-"""Gateway for REData's ``/street-view/`` endpoints.
-``download_url`` on a capture is REData's permanently archived copy - what still resolves after a contributor deletes the sequence - but it requires REData API auth, so browser-facing consumers use ``image_url``/ ``thumbnail_url`` (the network's own copy, which attribution links to)."""
+"""Gateway for REData's ``/street-view/`` endpoints."""
 
 from __future__ import annotations
 
@@ -30,24 +29,11 @@ class RedataStreetViewGateway(RedataLocationContextGateway):
         """Fetch the capture-date timeline for a point.
         One entry per capture *date* rather than per frame (a vehicle records dozens of frames in seconds); each entry's ``representative`` is the frame taken nearest the query point, preferring a panorama on a tie.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                provider: Restrict to one network (``mapillary``/``panoramax``/
-                ``kartaview``).
-                since: Only dates on or after this. Filters the response, not the
-                fetch.
-                until: Only dates on or before this.
-
         Returns:
-                The raw timeline body: ``dates`` (each with ``captured_on``,
-                ``count``, ``is_panoramic`` and a full ``representative`` capture
-                row), ``years``, ``earliest``, ``latest``,
-                ``providers_timeline``, and the standard ``providers`` block.
+            The raw timeline body: ``dates`` (each with ``captured_on``, ``count``, ``is_panoramic`` and a full ``representative`` capture row), ``years``, ``earliest``, ``latest``, ``providers_timeline``, and the standard ``providers`` block.
 
         Raises:
-                LocationContextUnavailableError: The request failed or REData
-                rejected a parameter."""
+            LocationContextUnavailableError: The request failed or REData rejected a parameter."""
         params: dict[str, Any] = {"lat": latitude, "lng": longitude}
         if provider:
             params["provider"] = provider

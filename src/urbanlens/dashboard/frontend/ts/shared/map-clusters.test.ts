@@ -81,11 +81,7 @@ describe("AdditiveSelectMemory", () => {
 });
 
 /**
- * leaflet.markercluster's onAdd does `throw "Map has no maxZoom specified"` -
- * a bare string, not an Error - when the map's maxZoom is Infinity. That is
- * what a map built without an explicit `maxZoom` reports until its first tile
- * layer is added, and the throw escapes `.addTo(map)` to abort the whole entry
- * script: blank map container, and every binding after that line never runs.
+ * leaflet.markercluster's onAdd does `throw "Map has no maxZoom specified"` - a bare string, not an Error.
  */
 describe("canCluster", () => {
     const realL = (globalThis as Record<string, unknown>).L;

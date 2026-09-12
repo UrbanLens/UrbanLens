@@ -1,20 +1,5 @@
 /**
  * The Organize page speaks two vocabularies for the same three things.
- *
- * `Label.kind` - what `data-kind` carries in rendered markup - is
- * `"tag" | "category" | "status"` (see `models/labels/meta.py`). `OrgNamespace`,
- * which every per-namespace registry on `window` is keyed by, abbreviates the
- * middle one to `"cat"`.
- *
- * Two of three values coincide, which is what made this expensive: the Display
- * Order tab looked up `window._orgBulkEditByIds[kind]` (and, once added, the
- * merge and delete registries) straight from `data-kind`, so tags and statuses
- * worked and categories alone fell through to "not available for this type".
- * A bug that only affects the middle of three sibling cases reads as a backend
- * permissions problem, not a string mismatch.
- *
- * These tests pin the translation and, more importantly, pin that every kind
- * the priority list can render has one.
  */
 
 import { describe, expect, test } from "bun:test";

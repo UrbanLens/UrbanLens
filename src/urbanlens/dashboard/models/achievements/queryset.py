@@ -12,7 +12,7 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     import datetime
 
-    from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, ProfileStreak, UserAchievement  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
+    from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, ProfileStreak, UserAchievement  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile import Profile
 
 
@@ -35,9 +35,7 @@ class AchievementQuerySet(abstract.PublicDashboardQuerySet["Achievement"]):
 
     def listable_for(self, profile: Profile | int | None) -> Self:
         """Return awards a given viewer should see in a catalogue listing.
-
-        Secret awards stay hidden until earned, so they are included only when
-        *profile* already holds them.
+        Secret awards stay hidden until earned, so they are included only when *profile* already holds them.
 
         Args:
             profile: The profile whose earned set unlocks secret awards, or

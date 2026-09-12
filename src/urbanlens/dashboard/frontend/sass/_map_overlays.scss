@@ -4,9 +4,7 @@
 
 @use 'variables' as *;
 
-// Everything inside is positioned in Leaflet's layer-point space, so the
-// container itself must not offset or clip its children - the matrix3d on each
-// image already carries the full placement.
+// Everything inside is positioned in Leaflet's layer-point space, so the container itself must not offset or clip its children.
 .ul-map-overlay-container {
   height: 0;
   left: 0;
@@ -16,9 +14,7 @@
 }
 
 .ul-map-overlay-image {
-  // transform-origin must stay at the element's own top-left: the homography
-  // is solved against the image's natural pixel rectangle starting at (0,0),
-  // so any other origin silently shifts every corner.
+  // transform-origin must stay at the element's own top-left.
   transform-origin: 0 0;
   left: 0;
   max-width: none;
@@ -44,10 +40,7 @@
   width: 14px;
   z-index: 650;
 
-  // The drag itself is already Pointer Events (map-image-overlays.ts), so touch
-  // reaches it - but a 14px dot is under half a finger, and `touch-action: none`
-  // means a near-miss pans the map instead of nudging the corner. Grow the hit
-  // area, and the dot itself slightly, without moving the coordinate it marks.
+  // The drag itself is already Pointer Events (map-image-overlays.ts), so touch reaches it.
   @include touch-target($position: null);
 
   @media (pointer: coarse) {
@@ -149,10 +142,7 @@
   gap: .2rem;
 }
 
-// Matches the pin-detail gallery's own drop-to-upload affordance (cloud_upload
-// icon, "drag files here" wording - see _photo_gallery.html's #gallery-drop-overlay)
-// but scoped to this one form field rather than the whole page, since a modal
-// dialog is already open and a page-wide drop target would be the wrong target.
+// Matches the pin-detail gallery's own drop-to-upload affordance.
 .map-overlay-dropzone {
   align-items: center;
   background: var(--ul-grey-1);
@@ -252,10 +242,7 @@
   justify-content: center;
 }
 
-// A sibling of #map-overlays-dialog-body now (see _map_annotations_panels.html/
-// editor.html), not part of the form it used to sit inside - .ul-dialog-body
-// on this element already supplies matching padding, so only the separator
-// itself is added here.
+// A sibling of #map-overlays-dialog-body now, not part of the form it used to sit inside.
 .map-overlay-historical {
   border-top: 1px solid var(--ul-grey-2);
   display: flex;
@@ -291,9 +278,7 @@
   justify-content: space-between;
 }
 
-// Fixed box so a row's height does not depend on whichever institution's
-// thumbnail proportions it happens to carry - the list scrolls inside a 14rem
-// window, and a tall scan would push the rest of the sheets out of view.
+// Fixed box so a row's height does not depend on whichever institution's thumbnail proportions it happens to carry.
 .map-overlay-historical-thumb {
   border: 1px solid var(--ul-border-color, rgba(0, 0, 0, .12));
   border-radius: 3px;

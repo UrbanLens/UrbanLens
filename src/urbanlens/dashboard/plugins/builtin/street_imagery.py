@@ -1,10 +1,4 @@
-"""Street-level imagery plugins: providers for the pin detail street carousel.
-
-Plugin ``order`` values control carousel slide order (Google Street View,
-defined in the ``google_maps`` module, is 10). Mapillary and KartaView are both
-now REData-backed (``services.apis.locations.redata_media_gateway`` - see that
-module's docstring); neither calls its upstream network directly any more.
-"""
+"""Street-level imagery plugins: providers for the pin detail street carousel."""
 
 from __future__ import annotations
 

@@ -122,9 +122,8 @@ class SiteAdminExternalTagsGroupView(_ExternalTagsAdminMixin, View):
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        # safe_int defaults to 0 for anything unparseable, which is never a
-        # real pk here - filtering falsy values discards those the same way
-        # an explicit "was this present" check would.
+        # safe_int defaults to 0 for anything unparseable, which is never a real pk here - filtering falsy
+        # values discards those the same way an explicit "was this present" check would.
         entry_ids = [entry_id for raw in request.POST.getlist("entry_id") if (entry_id := safe_int(raw))]
         raw_preferred = request.POST.get("preferred_id", "").strip()
         preferred_id = safe_int(raw_preferred) if raw_preferred else None
@@ -153,10 +152,9 @@ class SiteAdminExternalTagsMoveView(_ExternalTagsAdminMixin, View):
 
     POST /site-admin/external-tags/move/
 
-    Unlike the other actions here, this returns plain JSON rather than a
-    re-rendered partial - the drop has already moved the chip in the DOM
-    client-side (see ``external-tag-mapping.ts``), so only success/failure
-    and which now-empty group card (if any) to remove need to come back.
+    Unlike the other actions here, this returns plain JSON rather than a re-rendered partial - the drop
+    has already moved the chip in the DOM client-side (see ``external-tag-mapping.ts``), so only
+    success/failure and which now-empty group card (if any) to remove need to come back.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:

@@ -1,5 +1,4 @@
-"""Full pin-detail payload for the external API's ``GET /pins/{slug}/``.
-Builds on top of ``services.pins.pin_sync.serialize_sync_pin`` (the map payload plus sync-only fields) rather than duplicating it, then layers on everything a sync client already has but a detail view still needs: description-adjacent dates, security indicators, personal notes/aliases/links, custom fields, the property boundary, the cover photo, and the discovered wiki slug."""
+"""Full pin-detail payload for the external API's ``GET /pins/{slug}/``."""
 
 from __future__ import annotations
 
@@ -45,16 +44,11 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
     """Assemble the full detail payload for one pin, owned by *profile*.
 
     Args:
-        pin: The pin to serialize. Caller is responsible for ownership
-            checks - this never filters by profile itself.
-        profile: The requesting profile, needed for the same
-            label-customization-aware serialization the sync feed uses.
+        pin: The pin to serialize.
+        profile: The requesting profile, needed for the same label-customization-aware serialization the sync feed uses.
 
     Returns:
-        A JSON-serializable dict: every sync-feed field plus detail-only
-        fields (dates, security, notes, aliases, links, custom fields,
-        boundary, cover photo, wiki slug, counts).
-    """
+        A JSON-serializable dict: every sync-feed field plus detail-only fields (dates, security, notes, aliases, links, custom fields, boundary, cover photo, wiki slug, counts)."""
     service = MapPinPayloadService(profile)
     pin = service.prepare_queryset(Pin.objects.filter(pk=pin.pk)).select_related("parent_pin", "wiki", "cover_photo", "location").get()
     payload = serialize_sync_pin(service, pin)

@@ -1,4 +1,4 @@
-"""The assistant's visit-history tool - "have I been here?" Three tiers of confidence, never collapsed into one another: a logged ``PinVisit`` or the "Visited" status label is a *confirmed* visit; a pending ``VisitSuggestion`` or a recorded ``Route`` passing within 150m is evidence the user was *nearby*, not proof they went in."""
+"""The assistant's visit-history tool - "have I been here?" Three tiers of confidence, never collapsed into one another: a logged ``PinVisit`` or the "Visited" status label is a *confirmed* visit; a pending ``VisitSuggestion`` or a recorded..."""
 
 from __future__ import annotations
 
@@ -20,11 +20,7 @@ _NEARBY_ROUTE_METERS = 150
 
 def _resolve_own_pin(context: ToolContext, pin_slug: str) -> Pin | None:
     """One of the requesting profile's own pins.
-
-    Never resolves any other profile's pin - see ``Pin.objects.by_profile``.
-    PinVisit has no profile FK of its own, so every visit lookup below is
-    only ever safe because it starts from a pin already scoped this way.
-    """
+    Never resolves any other profile's pin - see ``Pin.objects.by_profile``."""
     from urbanlens.dashboard.models.pin.model import Pin
 
     return Pin.objects.by_profile(context.profile).filter(slug=pin_slug.strip()).select_related("location").first()

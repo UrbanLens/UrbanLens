@@ -1,10 +1,5 @@
 """OSRM plugin: free, open-source routing gateway registration.
-
-No pin-detail UI of its own - a routing engine is a utility other features
-(trip planning, "distance to nearest pin") call into, not a per-location info
-card. Registers rate-limit defaults so admins can see/throttle it like any
-other external call; see ``services.apis.routing.osrm`` for the gateway.
-"""
+Registers rate-limit defaults so admins can see/throttle it like any other external call; see ``services.apis.routing.osrm`` for the gateway."""
 
 from __future__ import annotations
 

@@ -3,15 +3,7 @@ export type OrgNamespace = "tag" | "cat" | "status" | "people";
 export const ORG_FILTER_NAMESPACES: OrgNamespace[] = ["tag", "cat", "status", "people"];
 
 /**
- * Maps a `Label.kind` (what `data-kind` carries in rendered markup) to the
- * namespace this module keys everything else on.
- *
- * These are two different vocabularies that happen to agree on two of three
- * values: `Label.kind` is `"tag" | "category" | "status"` (see
- * `models/labels/meta.py`), while `OrgNamespace` abbreviates the middle one to
- * `"cat"`. Anything looking up a per-namespace registry from a `data-kind`
- * attribute has to translate, or it silently misses categories only - which
- * reads as "this feature is broken for categories" rather than as a typo.
+ * Maps a `Label.kind` (what `data-kind` carries in rendered markup) to the namespace this module keys everything else on.
  */
 export const ORG_NS_BY_LABEL_KIND: Record<string, OrgNamespace> = { tag: "tag", category: "cat", status: "status", people: "people" };
 
@@ -187,10 +179,7 @@ function hasAnyOrgFilter(): boolean {
 
 function countVisibleCards(ns: OrgNamespace): number {
     const cfg = NS_CONFIG[ns];
-    // In tree view, applyFilterForNs() hides a filtered-out card's ancestor
-    // .tag-tree-item, not the card itself - getOrgVisibleCards() already
-    // knows that (it's what filters the cross-tab search results), so this
-    // reuses it rather than re-deriving the same visibility check.
+    // In tree view, applyFilterForNs() hides a filtered-out card's ancestor.tag-tree-item, not the card itself.
     return getOrgVisibleCards(document.getElementById(cfg.rowsId), cfg.cardSel).length;
 }
 

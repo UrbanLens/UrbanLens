@@ -41,8 +41,7 @@ MAX_CREDENTIALS_PER_USER = 10
 
 
 class WebAuthnError(Exception):
-    """Raised when a registration or authentication ceremony can't be completed.
-    The message is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """Raised when a registration or authentication ceremony can't be completed."""
 
 
 class MaxCredentialsReachedError(WebAuthnError):
@@ -112,10 +111,7 @@ def has_passkeys(user: User) -> bool:
 
 def list_credentials(user: User):
     """Return this user's registered passkeys, newest first - both kinds.
-
-    Settings lists everything (with a badge distinguishing sign-in factors
-    from unlock-only keys); only the 2FA gates filter on ``is_login_factor``.
-    """
+    Settings lists everything (with a badge distinguishing sign-in factors from unlock-only keys); only the 2FA gates filter on ``is_login_factor``."""
     return WebAuthnCredential.objects.for_user(user)
 
 
@@ -124,11 +120,7 @@ def _with_prf_extension(options_json: str, *, eval_by_credential: dict[str, str]
 
     Args:
         options_json: The JSON produced by ``options_to_json()``.
-        eval_by_credential: Mapping of base64url credential id to base64
-            32-byte PRF input, for authentication ceremonies. When None or
-            empty, the extension is requested with no inputs (registration:
-            asks the authenticator to *enable* PRF so a later assertion can
-            evaluate it, and prompts capability detection client-side).
+        eval_by_credential: Mapping of base64url credential id to base64 32-byte PRF input, for authentication ceremonies.
 
     Returns:
         The options JSON with the ``prf`` extension attached."""
@@ -151,8 +143,7 @@ def build_registration_options(request: HttpRequest, user: User) -> str:
         JSON string suitable for ``navigator.credentials.create()`` on the client.
 
     Raises:
-        MaxCredentialsReachedError: If the account has already reached the per-user credential cap.
-    """
+        MaxCredentialsReachedError: If the account has already reached the per-user credential cap."""
     existing = list(WebAuthnCredential.objects.for_user(user))
     if len(existing) >= MAX_CREDENTIALS_PER_USER:
         raise MaxCredentialsReachedError(f"user {user.pk} already has {len(existing)} credentials (max {MAX_CREDENTIALS_PER_USER})")
@@ -185,14 +176,8 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
         request: The incoming request (holds the challenge stashed by ``build_registration_options``).
         user: The account enrolling the passkey.
         credential_json: The raw JSON produced by ``navigator.credentials.create()``'s response.
-        name: A user-supplied label for the new passkey (e.g. "Bitwarden"). Registration no
-            longer prompts for one up front, so this is normally
-            empty - in that case, an auto-generated "Passkey N" name is used instead, numbered
-            after the user's current passkey count. The user can still rename it afterward via
-            the existing inline rename field.
-        login_factor: False for keys enrolled only to unlock E2EE data - they
-            are excluded from every 2FA gate (see ``has_passkeys``), so
-            enrolling one never changes how the account signs in.
+        name: A user-supplied label for the new passkey (e.g. "Bitwarden").
+        login_factor: False for keys enrolled only to unlock E2EE data - they are excluded from every 2FA gate (see ``has_passkeys``), so enrolling one never changes how the account signs in.
 
     Returns:
         The newly created WebAuthnCredential.
@@ -200,9 +185,7 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
     Raises:
         RegistrationNotPendingError: If no registration is pending.
         RegistrationVerificationError: If the payload is malformed or verification fails.
-        CredentialAlreadyRegisteredError: If the verified credential id already belongs to a
-            saved credential.
-    """
+        CredentialAlreadyRegisteredError: If the verified credential id already belongs to a saved credential."""
     challenge = request.session.pop(SESSION_REGISTRATION_CHALLENGE, None)
     if not challenge:
         raise RegistrationNotPendingError(f"no registration challenge in session for user {user.pk}")
@@ -291,10 +274,8 @@ def verify_authentication(request: HttpRequest, user: User, credential_json: str
     Raises:
         AuthenticationNotPendingError: If no authentication is pending.
         MalformedCredentialResponseError: If the payload is malformed.
-        CredentialNotRegisteredError: If the credential isn't registered as a login factor for
-            this user.
-        AuthenticationVerificationError: If verification fails.
-    """
+        CredentialNotRegisteredError: If the credential isn't registered as a login factor for this user.
+        AuthenticationVerificationError: If verification fails."""
     challenge = request.session.pop(SESSION_AUTHENTICATION_CHALLENGE, None)
     if not challenge:
         raise AuthenticationNotPendingError(f"no authentication challenge in session for user {user.pk}")

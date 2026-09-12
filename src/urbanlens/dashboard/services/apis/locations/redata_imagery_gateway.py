@@ -1,5 +1,4 @@
-"""Gateway for REData's ``/imagery/`` endpoint - pictures of a place.
-Backs :class:`~urbanlens.dashboard.plugins.builtin.satellite_imagery.RedataSatelliteProvider`, which requests only the providers not already covered - more richly - by UrbanLens's own direct Esri integration (current + historical Wayback releases) and its separate USGS Historical Topo Maps panel; see that module for exactly which REData imagery providers are requested and why."""
+"""Gateway for REData's ``/imagery/`` endpoint - pictures of a place."""
 
 from __future__ import annotations
 
@@ -37,22 +36,11 @@ class RedataImageryGateway(RedataLocationContextGateway):
     def get_imagery(self, latitude: float, longitude: float, *, providers: list[str] | None = None) -> list[dict[str, Any]]:
         """Return REData's normalized imagery results for a coordinate.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                providers: Restrict to these REData provider tags; omit for
-                every provider REData has configured.
-
         Returns:
-                Provider-tagged imagery result dicts (``provider``, ``kind``,
-                ``url``, ``delivery``, ``captured_on``, ``captured_label``,
-                ``attribution``, and an ``attributes`` blob that carries
-                ``subdomains`` for a ``tile_template`` delivery) - empty when
-                nothing answered.
+            Provider-tagged imagery result dicts (``provider``, ``kind``, ``url``, ``delivery``, ``captured_on``, ``captured_label``, ``attribution``, and an ``attributes`` blob that carries ``subdomains`` for a ``tile_template`` delivery) - empty when nothing answered.
 
         Raises:
-                LocationContextUnavailableError: Every requested provider failed
-                to answer, or the request to REData failed outright."""
+            LocationContextUnavailableError: Every requested provider failed to answer, or the request to REData failed outright."""
         envelope = self.near_point(_IMAGERY_PATH, latitude, longitude, provider=providers)
         return envelope.results
 
@@ -60,22 +48,11 @@ class RedataImageryGateway(RedataLocationContextGateway):
         """Return which dates imagery exists for at a coordinate.
         Two shapes come back and both matter, because sources answer differently and neither can be expressed as the other:
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                trigger_archive: Use ``POST``, which re-queries every source live
-                and queues permanent archiving of what it finds. REData
-                documents this as the call to make when about to show a time
-                slider; the ``GET`` never archives. Costs a live fetch, so it
-                is off by default.
-
         Returns:
-                The timeline envelope (``earliest``, ``latest``, ``years``,
-                ``captures``, ``providers_timeline``, ``providers``), or an empty
-                dict when nothing answered.
+            The timeline envelope (``earliest``, ``latest``, ``years``, ``captures``, ``providers_timeline``, ``providers``), or an empty dict when nothing answered.
 
         Raises:
-                LocationContextUnavailableError: The request to REData failed."""
+            LocationContextUnavailableError: The request to REData failed."""
         params = {"lat": latitude, "lng": longitude}
         if trigger_archive:
             return self.post_json(_TIMELINE_PATH, params) or {}
@@ -84,17 +61,11 @@ class RedataImageryGateway(RedataLocationContextGateway):
     def download_bytes(self, url: str) -> bytes:
         """Fetch a credentialed imagery source's bytes through REData's authenticated proxy.
 
-        Args:
-                url: The ``url`` field from an imagery result whose ``delivery``
-                needs REData's own auth (the three keyed providers - see the
-                module docstring) - either absolute or relative to ``base_url``.
-
         Returns:
-                The raw image bytes.
+            The raw image bytes.
 
         Raises:
-                LocationContextUnavailableError: The request failed, or REData
-                answered with a non-200 status."""
+            LocationContextUnavailableError: The request failed, or REData answered with a non-200 status."""
         base_url = self.base_url
         if base_url is None:
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
@@ -111,23 +82,11 @@ class RedataImageryGateway(RedataLocationContextGateway):
         """Fetch REData's own composed, permanently archived copy of an imagery asset.
         Rendered on first request and served from disk on every later one, so ``width``/``height`` only take effect the first time a given asset is downloaded.
 
-        Args:
-                asset_uuid: The imagery result's own ``uuid`` field (not its
-                ``provider`` tag).
-                width: Composed image width in pixels, applied only on the first
-                download of this asset.
-                height: Composed image height in pixels, applied only on the
-                first download of this asset.
-
         Returns:
-                The raw image bytes.
+            The raw image bytes.
 
         Raises:
-                LocationContextUnavailableError: The request failed, or REData
-                answered with a non-200 status - including a ``time_series``
-                row with no date materialized yet (``400 date_required``;
-                see :meth:`capture_time_series`) or no image for this asset
-                (``404 no_imagery``)."""
+            LocationContextUnavailableError: The request failed, or REData answered with a non-200 status - including a ``time_series`` row with no date materialized yet (``400 date_required``; see :meth:`capture_time_series`) or no image for this asset (``404 no_imagery``)."""
         base_url = self.base_url
         if base_url is None:
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
@@ -150,28 +109,11 @@ class RedataImageryGateway(RedataLocationContextGateway):
         """Materialize one date from a continuous (``time_series``) imagery source.
         Only meaningful for a result whose ``delivery`` is ``time_series`` (today, only ``nasa_gibs``) - its ``url`` is a range, not a picture, and this is what turns one date in that range into a real, permanently stored image.
 
-        Args:
-                asset_uuid: The ``time_series`` result's own ``uuid`` - the layer
-                to materialize a date from.
-                date: The date to materialize. Must fall inside one of the
-                layer's own published intervals.
-                width: Rendered image width in pixels.
-                height: Rendered image height in pixels.
-
         Returns:
-                The materialized result row (same shape as a ``GET /imagery/``
-                result - pass its ``uuid`` to :meth:`download_archived_copy` to
-                fetch the bytes), or ``None`` when REData reports there is no
-                image for this exact date - either because it falls outside the
-                layer's published intervals (``date_unavailable``) or because the
-                source answered and had nothing that day (``no_imagery``,
-                permanent - do not retry). Both are documented, expected
-                outcomes, not failures.
+            The materialized result row (same shape as a ``GET /imagery/`` result - pass its ``uuid`` to :meth:`download_archived_copy` to fetch the bytes), or ``None`` when REData reports there is no image for this exact date - either because it falls...
 
         Raises:
-                LocationContextUnavailableError: The request failed outright, or
-                REData reports a transient outage (``imagery_unavailable``/
-                ``rate_limited``) - retryable, but not by this call."""
+            LocationContextUnavailableError: The request failed outright, or REData reports a transient outage (``imagery_unavailable``/ ``rate_limited``) - retryable, but not by this call."""
         base_url = self.base_url
         if base_url is None:
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")

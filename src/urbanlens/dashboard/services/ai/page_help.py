@@ -124,7 +124,5 @@ def get_page_help(url_name: str) -> PageHelp | None:
         url_name: A Django URL name, e.g. ``"map.view"``.
 
     Returns:
-        The page's :class:`PageHelp`, or ``None`` - never raises for an
-        unknown or malformed ``url_name``.
-    """
+        The page's :class:`PageHelp`, or ``None`` - never raises for an unknown or malformed ``url_name``."""
     return PAGE_HELP.get(url_name)

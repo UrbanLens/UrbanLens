@@ -1,21 +1,5 @@
 /**
  * Every value interpolated into an `innerHTML` template literal must be escaped.
- *
- * The modules that build markup as strings all define an `escHtml` and use it -
- * `map-annotations.ts` in six places, `organize-tab-manager.ts` in two - but
- * "usually escaped" is not a property, and two sites had quietly skipped it:
- * both interpolated a URL straight into an `src="..."` attribute, where a quote
- * would close the attribute rather than sit inside it. Neither was shown to be
- * exploitable (the values come from Django-generated media paths, and filename
- * sanitisation strips quotes), which is exactly why nothing had noticed them.
- *
- * This encodes the audit rather than the two fixes: every interpolation is
- * either escaped, or listed below with the reason it is safe. A new unescaped
- * one fails here instead of waiting for a value that finally contains a quote.
- *
- * The allowlist is deliberately expression-text, not file-scoped. Renaming a
- * variable drops it out of the list and forces it to be looked at again, which
- * is the intended cost.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -26,9 +10,6 @@ const TS_ROOT = join(import.meta.dir, "..");
 
 /**
  * Interpolations reviewed and found safe, with why.
- *
- * Keep this short. An entry here is a claim that the value cannot carry markup,
- * and each one was checked against its source, not assumed.
  */
 const REVIEWED_SAFE = new Map<string, string>([
     // Developer-authored constants: BUBBLE_BUTTONS / SLASH_ITEMS in article-wysiwyg.ts.
@@ -46,10 +27,7 @@ const REVIEWED_SAFE = new Map<string, string>([
     ['hasCoords ? "Move on map" : "Place on map"', "string literals"],
     ['hasCoords ? "has-gps" : "no-gps"', "string literals"],
     ['hasCoords ? "place" : "location_off"', "string literals"],
-    // Was an inline ternary of the same literals; upstream hoisted it to `intro`
-    // and split the passkey markup into `passkeyBlock`. Both are ternaries over
-    // developer-authored strings - `passkeyBlock` between a fixed HTML literal and
-    // "" - so no external value reaches the markup either way.
+    // Was an inline ternary of the same literals; upstream hoisted it to `intro` and split the passkey markup into `passkeyBlock`.
     ["intro", "ternary over string literals"],
     ["passkeyBlock", "ternary between a static HTML literal and empty string"],
     // Escaped inline rather than via escHtml.
@@ -70,9 +48,7 @@ const REVIEWED_SAFE = new Map<string, string>([
     ["faqLink", "pre-built markup"],
     ["subtitle", "pre-built markup"],
     ["prefix", "static namespace label"],
-    // photo-tile.ts fragments, each a literal or "" chosen by a boolean. The
-    // only value any of them interpolates is `tile.id`, which both tile parsers
-    // coerce with Number()/parseInt before it can reach markup.
+    // photo-tile.ts fragments, each a literal or "" chosen by a boolean.
     ["check", "static markup or empty string"],
     ["remove", "static markup around a numeric id"],
     ["caption", "empty <p> or empty string; its text is set via textContent"],

@@ -1,5 +1,4 @@
-"""The reputation rule registry.
-The whole point of this system, and the reason Consensus points could not host it, is that *a contribution's value is a function of how badly the target needed it at the moment it arrived* - so a rule receives the target and works its own value out, rather than looking a number up in a table."""
+"""The reputation rule registry."""
 
 from __future__ import annotations
 
@@ -25,12 +24,8 @@ class ScoreResult:
     """What a rule decided a contribution was worth.
 
     Attributes:
-        value: The raw worth, before decay and caps - those are applied
-            centrally by the scorer so every rule obeys them.
-        inputs: The snapshot the rule worked from, stored on the row. Must be
-            JSON-serialisable, and must not carry anything that would be a
-            privacy problem to keep - it is read by the admin dashboard.
-    """
+        value: The raw worth, before decay and caps - those are applied centrally by the scorer so every rule obeys them.
+        inputs: The snapshot the rule worked from, stored on the row."""
 
     value: Decimal
     inputs: dict[str, Any] = field(default_factory=dict)
@@ -41,20 +36,13 @@ class Rule:
     """One way of earning reputation.
 
     Attributes:
-        key: Stable identifier, stored on every row it produces. Renaming one
-            orphans its history, so treat it as permanent.
+        key: Stable identifier, stored on every row it produces.
         label: Human-readable name, for the admin breakdown.
         description: What earns it, in a sentence.
         target_kind: What sort of object this rule scores.
         score: Given the target, return its worth and the inputs behind it.
-            Returns None when the contribution does not qualify at all - a
-            materialised external photo attributed to whoever voted for it, for
-            instance, which is not a contribution by that profile.
-        decays: Whether repeated use within a period is subject to diminishing
-            returns. Off for rules the database already bounds (a stat vote is
-            unique per wiki, per field, per profile - it cannot be farmed).
-        capped: Whether the per-rule and per-wiki period ceilings apply.
-    """
+        decays: Whether repeated use within a period is subject to diminishing returns.
+        capped: Whether the per-rule and per-wiki period ceilings apply."""
 
     key: str
     label: str

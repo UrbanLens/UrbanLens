@@ -53,9 +53,7 @@ def pick_next_round_content(profiles: Iterable[Profile], *, exclude_wiki_ids: It
         exclude_wiki_ids: Wikis already used earlier in this session.
 
     Returns:
-        The resolved selection, or None if nothing eligible/usable remains
-        (the caller should treat this as "no more rounds possible").
-    """
+        The resolved selection, or None if nothing eligible/usable remains (the caller should treat this as "no more rounds possible")."""
     profiles = list(profiles)
     if not profiles:
         return None
@@ -106,8 +104,7 @@ def _pick_normal_round(pool: list[Wiki]) -> RoundSelection | None:
 
 
 def _pick_recheck_round(pool: list[Wiki]) -> RoundSelection | None:
-    """Pick a round re-asking about a wiki field Facts has flagged as TENTATIVE/CONTESTED.
-    Additive to ordinary round selection - reuses the same ``ConsensusFieldStrategy.build_round``/``apply_answer`` machinery as a normal round for these four kinds, so a recheck round is indistinguishable from an ordinary one to the client (unlike a trust-check round, it's never disguised - it's a genuine round whose answer really does get applied)."""
+    """Pick a round re-asking about a wiki field Facts has flagged as TENTATIVE/CONTESTED."""
     from urbanlens.dashboard.models.facts.model import Fact, FactStatus
 
     wiki_ids = [wiki.pk for wiki in pool]

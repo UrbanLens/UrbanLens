@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 #: How many times the recovery sweep re-enqueues one row before recording it as failed.
 #: Two, because the sweep only ever sees rows that have already been pending for
-#: ``STALLED_UPLOAD_AGE`` - a row reaching it once is already the unusual case, and a third pass
-#: buys little against a file that has now killed two workers.
+#: ``STALLED_UPLOAD_AGE`` - a row reaching it once is already the unusual case, and a third pass buys
+#: little against a file that has now killed two workers.
 MAX_SWEEP_ATTEMPTS: Final[int] = 2
 
 #: How many times the owner may ask for a re-run from the UI.
@@ -63,8 +63,7 @@ def record_upload_processing_failure(image_id: int, reason: str) -> PhotoUploadF
         reason: User-facing explanation.
 
     Returns:
-        The reviewable row, or None when there is nobody to offer it to - a
-        profile-less row is enrichment imagery belonging to no one."""
+        The reviewable row, or None when there is nobody to offer it to - a profile-less row is enrichment imagery belonging to no one."""
     from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoUploadFailure, PhotoUploadFailureKind
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.notifications.meta.type import NotificationType
@@ -126,12 +125,10 @@ def retry_upload_processing(failure: PhotoUploadFailure, profile: Profile) -> bo
 
     Args:
         failure: The reviewable row.
-        profile: Who is asking. Checked against the row's owner.
+        profile: Who is asking.
 
     Returns:
-        Whether a re-run was queued. False when the asker is not the owner,
-        the photo is gone, or this failure has used up its retries.
-    """
+        Whether a re-run was queued."""
     from urbanlens.dashboard.models.images.model import Image
 
     if failure.profile_id != profile.pk:

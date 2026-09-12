@@ -3,12 +3,7 @@
 @use "mixins" as *;
 
 [data-theme="dark"] {
-    // Native <select> popups (and other browser/OS chrome - scrollbars,
-    // autofill, etc.) render outside our CSS box, and some engines decide
-    // their palette from the document root's own color-scheme rather than
-    // the individual control's - the per-element `select` rule below alone
-    // left the actual option list's browser-native background unchanged in
-    // some engines, still light behind our (light-on-dark) text color.
+    // Native <select> popups.
     color-scheme: dark;
 
     @include input-selectors {
@@ -984,7 +979,7 @@
                 color: #{$color-indigo-100};
             }
         }
-    
+
         &:hover:not(.active) {
             border-color: #{$color-indigo-300};
             background: #{$color-indigo-1100};
@@ -1045,10 +1040,7 @@
         }
     }
 
-    // .ul-card/.ul-panel/.ul-surface/.dialog/.ul-dialog/.confirm-dialog all
-    // resolve their background/border through the surface mixins now, which
-    // are already theme-adaptive - only .ul-section has no border in light
-    // mode, so this stays to add one for contrast against the dark page.
+    // .ul-card/.ul-panel/.ul-surface/.dialog/.ul-dialog/.confirm-dialog all resolve their background/border through the surface mixins now,.
     .ul-section {
         border-color: var(--ul-grey-1a);
     }
@@ -1070,10 +1062,7 @@
         border-color: var(--ul-grey-1a);
     }
 
-    // Static blue-accent chips (_pin-detail.scss) had no dark variant at all,
-    // so they rendered as a frozen light-blue chip regardless of theme.
-    // Follows the same tinted-accent-on-dark pattern already used by
-    // .trip-card-status--upcoming and friends.
+    // Static blue-accent chips (_pin-detail.scss) had no dark variant at all, so they rendered as a frozen light-blue chip regardless.
     .wiki-cta-link {
         background: rgba($color-blue-500, .12);
         border-color: rgba($color-blue-500, .3);
@@ -1097,15 +1086,11 @@
         }
     }
 
-    // .notif-prefs__saved had no dark variant, so the settings-saved confirmation
-    // banner rendered as a light-green patch on the dark settings page. Mirrors
-    // the .notif-item--unread friend_request/friend_accepted treatment above.
+    // .notif-prefs__saved had no dark variant, so the settings-saved confirmation banner rendered as a light-green patch on the dark.
     .notif-prefs__saved {
         background: rgba($color-green-600, .15);
         color: $color-green-400;
     }
 
-    // .role-pill's dark override now lives in _admin.scss, colocated with the
-    // component - this file's copy was a dead duplicate (identical selector,
-    // _admin.scss's @use comes later in style.scss so its rule always won).
+    // .role-pill's dark override now lives in _admin.scss, colocated with the component.
 }

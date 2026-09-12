@@ -1,5 +1,4 @@
-"""Question selection: difficulty slider weighting against TriviaQuestionRating.
-Mirrors ``services.spotguessr.selection``'s difficulty-weighting pattern (Gaussian kernel against a rating, neutral default for content without enough game history) but applied per-question rather than per-location: the same location can host questions of very different difficulty (a building's year built vs. a parcel's building count), so difficulty is a question-level knob here, not a location-level one."""
+"""Question selection: difficulty slider weighting against TriviaQuestionRating."""
 
 from __future__ import annotations
 
@@ -40,15 +39,10 @@ def pick_next_question(
     Args:
         candidates: Eligible questions for this round.
         difficulty: 0.0 (easiest) - 1.0 (hardest) slider value.
-        weight_overrides: Optional per-question-id multiplier applied on top
-            of the difficulty weight - used by services.trivia.session to
-            make a solo player's own not-yet-approved question appear only
-            very rarely (see eligibility.OWN_UNAPPROVED_WEIGHT), without
-            excluding it from the pool outright.
+        weight_overrides: Optional per-question-id multiplier applied on top of the difficulty weight - used by services.trivia.session to make a solo player's own not-yet-approved question appear only very rarely (see eligibility.OWN_UNAPPROVED_WEIGHT), without excluding...
 
     Returns:
-        The chosen TriviaQuestion, or None if ``candidates`` is empty.
-    """
+        The chosen TriviaQuestion, or None if ``candidates`` is empty."""
     pool = list(candidates)
     if not pool:
         return None
@@ -59,7 +53,7 @@ def pick_next_question(
     weights = [_difficulty_weight(ratings_by_question_id.get(question.pk), target_rating) * overrides.get(question.pk, 1.0) for question in pool]
     if sum(weights) <= 0:
         return random.choice(pool)  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive
-    return random.choices(pool, weights=weights, k=1)[0]  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive
+    return random.choices(pool, weights=weights, k=1)[0]  # noqa: S311 # nosec: B311 - game content selection, not...
 
 
 def _difficulty_weight(rating: TriviaQuestionRating | None, target_rating: float) -> float:

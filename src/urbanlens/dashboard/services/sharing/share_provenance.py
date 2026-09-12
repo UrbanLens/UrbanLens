@@ -34,9 +34,7 @@ def find_profile_pin_near_location(profile_id: int, location: Location | None, *
         radius_meters: Match radius; defaults to :data:`EXPOSURE_RADIUS_METERS`.
 
     Returns:
-        The nearest-created matching Pin, or None. An exact same-Location pin
-        is preferred over a proximity match.
-    """
+        The nearest-created matching Pin, or None."""
     if location is None:
         return None
     from urbanlens.dashboard.models.pin.model import Pin
@@ -53,15 +51,13 @@ def find_profile_pin_near_location(profile_id: int, location: Location | None, *
 
 def record_share_exposure(share: PinShare, *, source: ExposureSource = ExposureSource.SHARE_RECEIVED) -> LocationExposure | None:
     """Record that ``share.to_profile`` learned about the shared place via ``share``.
-    Skipped when the recipient already has their own pin at the place - the share then wasn't their *initial* information, so their future shares of it must not chain under this one.
 
     Args:
         share: The just-created share to record.
         source: Why this exposure exists (see ``ExposureSource``).
 
     Returns:
-        The (created or pre-existing) exposure row, or None when the share has
-        no location or the recipient already knew the place first-hand."""
+        The (created or pre-existing) exposure row, or None when the share has no location or the recipient already knew the place first-hand."""
     location = share.shared_location
     if location is None:
         return None
@@ -108,8 +104,7 @@ def resolve_origin_share(profile_id: int, *, pin: Pin | None = None, location: L
         location: The place being shared; defaults to ``pin.location``.
 
     Returns:
-        The originating PinShare to use as ``parent_share``, or None when the
-        profile discovered the place independently."""
+        The originating PinShare to use as ``parent_share``, or None when the profile discovered the place independently."""
     if pin is not None:
         if pin.source_share_id is not None:
             return pin.source_share
@@ -132,7 +127,6 @@ def resolve_origin_share(profile_id: int, *, pin: Pin | None = None, location: L
 
 def resolve_and_stamp_origin_share(pin: Pin) -> PinShare | None:
     """Resolve a pin's origin share and persist it on the pin when it was heuristic.
-    Same as :func:`resolve_origin_share`, but when the pin carried no lineage of its own (``source_share`` / ``inferred_source_share`` both unset) and a parent was found via exposures or the map heuristic, the result is stored as ``inferred_source_share`` - so the pin itself now carries the lineage for future resolutions and move propagation.
 
     Args:
         pin: The pin about to be shared onward.
@@ -150,7 +144,7 @@ def resolve_and_stamp_origin_share(pin: Pin) -> PinShare | None:
 
 
 def propagate_exposures_for_pin_move(pin: Pin, old_location_id: int | None) -> int:
-    """Carry a moved pin's infection from its old location onto the new one. - Every exposure the owner had *near* the old location (a radius match, not an exact Location-row match - the pin may have been sitting close to, but not exactly on, an exposed spot, e.g. a distinct nearby Location row from ``get_nearby_or_create``'s dedup threshold) is copied to the new one, so sharing the moved pin (or any future pin dropped at the new spot) still chains back to the original share.
+    """Carry a moved pin's infection from its old location onto the new one. - Every exposure the owner had *near* the old location (a radius match, not an exact Location-row match - the pin may have been sitting close to, but not exactly on, an exposed...
 
     Args:
         pin: The pin that just moved (already saved with its new location).

@@ -1,5 +1,4 @@
-"""Cross-session tentative-answer accumulation for Consensus.
-When a competitive round's disagreement vote fails to reach consensus, every distinct submitted value is saved here instead of touching the wiki - a later session proposing the same (or, for coordinates, a nearby) value bumps ``support_count`` rather than creating a duplicate row, so consensus can build up over time across separate play sessions (see ``services.consensus.session``'s ``TENTATIVE`` resolution branch)."""
+"""Cross-session tentative-answer accumulation for Consensus."""
 
 from __future__ import annotations
 

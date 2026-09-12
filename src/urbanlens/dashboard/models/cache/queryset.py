@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.cache.model import GeocodedLocation  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
+    from urbanlens.dashboard.models.cache.model import GeocodedLocation  # noqa: F401 - mypy needs these; ruff does not
 
 
 class GeocodedLocationQuerySet(abstract.DashboardQuerySet["GeocodedLocation"]):

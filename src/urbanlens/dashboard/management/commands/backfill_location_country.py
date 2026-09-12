@@ -1,10 +1,7 @@
 """Backfill Location.country for rows geocoded before country parsing existed.
 
-Every Location's ``country`` used to be stuck on the model's old hardcoded
-"United States" default (see migration 0025), since the reverse-geocoding
-step never actually parsed a country out of the API response. This command
-re-derives the real country for rows still missing one, using the Google
-Geocoding API (through the same GeocodedLocation cache used elsewhere).
+This command re-derives the real country for rows still missing one, using the Google Geocoding API
+(through the same GeocodedLocation cache used elsewhere).
 """
 
 from __future__ import annotations

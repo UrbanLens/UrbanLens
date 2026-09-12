@@ -1,8 +1,4 @@
-"""Elevation plugin: metres above sea level, sourced through REData.
-
-Contributes a simple pin-detail "Elevation" info panel; see
-``services.apis.locations.redata_elevation_gateway`` for the gateway.
-"""
+"""Elevation plugin: metres above sea level, sourced through REData."""
 
 from __future__ import annotations
 
@@ -22,12 +18,7 @@ _METERS_PER_FOOT = 0.3048
 
 def _pick_elevation(readings: list[dict[str, Any]]) -> float | None:
     """The single "best" elevation reading to show as one line.
-
-    REData orders ``results`` finest-resolution-first, so the first entry is
-    authoritative. Its ``elevation_meters: null`` is itself a real answer (a
-    gap in that model's own coverage, e.g. open ocean) - not a cue to fall
-    through to a coarser model looking for a non-null value instead.
-    """
+    REData orders ``results`` finest-resolution-first, so the first entry is authoritative."""
     if not readings:
         return None
     value = readings[0].get("elevation_meters")
@@ -48,14 +39,7 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
         return super().gate(pin) and redata_configured()
 
     def fetch(self, pin: Pin) -> None:
-        """Look up elevation from every REData-configured DEM and cache the results.
-
-        Letting :class:`~...redata_context_gateway.LocationContextUnavailableError`
-        propagate (rather than catching it here) lets ``run_panel_fetch``'s
-        shared failure-suppression decide the retry cadence for a REData
-        outage instead of this panel permanently caching a null reading for
-        what might be transient.
-        """
+        """Look up elevation from every REData-configured DEM and cache the results."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.redata_elevation_gateway import RedataElevationGateway
 
@@ -71,12 +55,8 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
     def has_content(self, data: dict | None) -> bool:
         """Mirror of :meth:`render_context`'s own emptiness test.
 
-        Args:
-            data: The cached payload.
-
         Returns:
-            True when there is an elevation to show.
-        """
+            True when there is an elevation to show."""
         return (data or {}).get("elevation_m") is not None
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:

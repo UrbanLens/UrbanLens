@@ -57,11 +57,7 @@ MODEL_LABEL = "pin"
 
 @register
 class PinUndoHandler(UndoHandler):
-    """Restores a pin's own fields, hierarchy position, and labels - not its cascade children.
-
-    Reviews, visit history, notes, markup annotations, aliases, and comments
-    are gone the instant the pin is deleted and are not restored.
-    """
+    """Restores a pin's own fields, hierarchy position, and labels - not its cascade children."""
 
     model_label = MODEL_LABEL
     model = Pin
@@ -111,12 +107,7 @@ class PinUndoHandler(UndoHandler):
         Parents are created before their children and the link is set at creation rather than in a second pass.
 
         Raises:
-                UndoExpiredError: If the profile, location, wiki, or any label this
-                batch referenced was independently deleted during the retention
-                window, since recreating the row would otherwise fail with an
-                uncaught IntegrityError. Also raised when a pin that would come
-                back as a root pin finds its location already re-pinned by this
-                profile - the same constraint, refused cleanly instead of 500ing."""
+            UndoExpiredError: If the profile, location, wiki, or any label this batch referenced was independently deleted during the retention window, since recreating the row would otherwise fail with an uncaught IntegrityError."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.services.undo.service import UndoExpiredError

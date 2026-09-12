@@ -1,26 +1,9 @@
 """Health check endpoints for Docker, Kubernetes and load-balancer probes.
 
-Three endpoints with deliberately different meanings:
-
-``/health/`` and ``/health/live``
-    Is this process running? Nothing else. Cheap enough to probe every few
-    seconds, and never fails because a dependency is unwell - a liveness probe
-    that fails on a database blip gets the container killed for no reason.
-
-``/health/ready``
-    Can this instance serve requests? Database and cache are reachable, and it
-    reports how much of the connection pool is left - see ``_probe_connections``
-    for why that is a field rather than a failure.
-
-``/health/primary``
-    Can this instance serve *writes*? Everything ``ready`` checks, plus the
-    database not being a read-only replica.
-
-The last one is the whole point of the set. In a multi-site deployment exactly
-one site's database is the primary; the others stream from it and reject
-writes. An external load balancer pointed at ``/health/primary`` will therefore
-only ever consider the writable site healthy, and a promotion flips that
-without anyone touching the load balancer's configuration.
+Cheap enough to probe every few seconds, and never fails because a dependency is unwell - a liveness
+probe that fails on a database blip gets the container killed for no reason.
+Database and cache are reachable, and it reports how much of the connection pool is left - see
+``_probe_connections`` for why that is a field rather than a failure.
 """
 
 from __future__ import annotations
@@ -37,16 +20,11 @@ from rest_framework.viewsets import GenericViewSet
 
 logger = logging.getLogger(__name__)
 
-# Probes run often and must not become the thing that takes a site down, so a
-# dependency that has not answered by now counts as unreachable rather than
-# holding the worker.
+# Probes run often and must not become the thing that takes a site down, so a dependency that has not answered
+# by now counts as unreachable rather than holding the worker.
 _PROBE_TIMEOUT_SECONDS = 2
 
-#: Fraction of the database's connection ceiling above which this instance calls
-#: itself degraded. Not a failure - see `_probe_connections` on why the endpoint
-#: keeps answering 200 - but the point at which somebody should be told. 0.8
-#: leaves room to act: P104's outage went from healthy to 97-of-100 with nothing
-#: in between reporting the climb.
+#: Fraction of the database's connection ceiling above which this instance calls itself degraded.
 _CONNECTION_PRESSURE_FRACTION = 0.8
 
 _CACHE_PROBE_KEY = "health:probe"
@@ -55,15 +33,8 @@ _CACHE_PROBE_KEY = "health:probe"
 class HealthController(GenericViewSet):
     """Unauthenticated probes.
 
-    These must stay unauthenticated: compose probes with
-    ``curl -f http://localhost:8000/health/`` (no session cookie), a non-2xx
-    response marks the ``app`` container unhealthy, and that blocks ``app-ws``
-    (Daphne) from starting via ``depends_on: service_healthy``. Cloudflare and
-    Kubernetes probes likewise arrive without credentials.
-
-    Bodies stay terse. They report which dependency is unwell and whether this
-    database is a primary, which is operational detail rather than anything
-    sensitive, but there is no reason to hand out more than a prober needs.
+    They report which dependency is unwell and whether this database is a primary, which is operational
+    detail rather than anything sensitive, but there is no reason to hand out more than a prober needs.
     """
 
     authentication_classes: list = []
@@ -99,8 +70,8 @@ class HealthController(GenericViewSet):
             request: Incoming HTTP request (unused).
 
         Returns:
-            ``JsonResponse`` describing each dependency, with status 200 when
-            the database and cache both answered and 503 otherwise.
+            ``JsonResponse`` describing each dependency, with status 200 when the database and cache both
+            answered and 503 otherwise.
         """
         report = self._collect()
         healthy = report["db"] == "ok" and report["cache"] == "ok"
@@ -113,9 +84,8 @@ class HealthController(GenericViewSet):
             request: Incoming HTTP request (unused).
 
         Returns:
-            ``JsonResponse`` describing each dependency, with status 200 only
-            when this instance can serve writes, and 503 otherwise (including
-            when the database is a healthy read-only replica).
+            ``JsonResponse`` describing each dependency, with status 200 only when this instance can serve
+            writes, and 503 otherwise (including when...
         """
         report = self._collect()
         healthy = report["db"] == "ok" and report["cache"] == "ok" and report["role"] == "primary"
@@ -144,10 +114,7 @@ class HealthController(GenericViewSet):
     def _is_degraded(*, cache_status: str, db_status: str, connections: dict[str, int] | None) -> bool:
         """Whether this instance is serving but should be looked at.
 
-        Distinct from unhealthy on purpose. An instance whose cache is down still
-        serves pages (Django's cached_db sessions fall through to the database),
-        and one at 85% of its connection ceiling is still answering - but both are
-        worth an alert before they become an outage.
+        Distinct from unhealthy on purpose.
 
         Args:
             cache_status: What the cache probe reported.
@@ -168,21 +135,11 @@ class HealthController(GenericViewSet):
     def _probe_connections() -> dict[str, int] | None:
         """How much of the database's connection ceiling is in use.
 
-        The number P104's postmortem needed and nothing exposed: the outage
-        reported 97 of 100 connections idle, and the first anyone knew of it was
-        the site being down. A backend count is one cheap query and turns that
-        into something a scrape can alert on before the pool is gone.
-
-        Reported as a field, and **the endpoint stays 200 when it is high**. A
-        readiness probe that flips to 503 during a connection storm removes the
-        instances that are still serving, which converts a degradation into an
-        outage - this deployment's own history includes a readiness probe taking
-        a site out (see the ws deployment manifest's comments). Alert on the
-        field instead.
+        Alert on the field instead.
 
         Returns:
-            ``{"used": n, "max": m}``, or None when the database is not
-            PostgreSQL or the counts could not be read.
+            ``{"used": n, "max": m}``, or None when the database is not PostgreSQL or the counts could not
+            be read.
         """
         if connection.vendor != "postgresql":
             return None
@@ -194,9 +151,8 @@ class HealthController(GenericViewSet):
                 )
                 used, maximum = cursor.fetchone()
         except DatabaseError:
-            # Not a failure of the probe: pg_stat_activity needs pg_read_all_stats
-            # (or superuser), and a deployment that has dropped that privilege
-            # should still report ready rather than error.
+            # Not a failure of the probe: pg_stat_activity needs pg_read_all_stats (or superuser), and a
+            # deployment that has dropped that privilege should still report ready rather than error.
             logger.warning("Health probe: could not read connection usage", exc_info=True)
             return None
         return {"used": int(used), "max": int(maximum)}
@@ -205,15 +161,14 @@ class HealthController(GenericViewSet):
         """Check the database answers, and whether it is a writable primary.
 
         Returns:
-            ``(status, role)`` where status is ``ok`` or ``error`` and role is
-            ``primary``, ``replica`` or ``unknown``.
+            ``(status, role)`` where status is ``ok`` or ``error`` and role is ``primary``, ``replica`` or
+            ``unknown``.
         """
         try:
             if connection.vendor == "postgresql":
-                # SET LOCAL only applies inside a transaction, which is also
-                # what scopes it: a session-level SET would outlive the probe
-                # on a persistent connection (CONN_MAX_AGE) and silently cap
-                # every subsequent real query at the probe's timeout.
+                # SET LOCAL only applies inside a transaction, which is also what scopes it: a session-level SET
+                # would outlive the probe on a persistent connection (CONN_MAX_AGE) and silently cap every
+                # subsequent real query at the probe's timeout.
                 with transaction.atomic(), connection.cursor() as cursor:
                     cursor.execute(
                         "SET LOCAL statement_timeout = %s",
@@ -249,10 +204,9 @@ class HealthController(GenericViewSet):
     def _probe_migrations(self) -> str:
         """Report whether unapplied migrations exist.
 
-        Deliberately advisory. During a rolling multi-site deploy an instance
-        legitimately runs briefly against a schema its own image has not
-        caught up to, and failing readiness here would take the last serving
-        site out precisely when it is needed. Alert on this; do not act on it.
+        During a rolling multi-site deploy an instance legitimately runs briefly against a schema its own
+        image has not caught up to, and failing readiness here would take the last serving site out
+        precisely when it is needed.
 
         Returns:
             ``current``, ``behind``, or ``unknown`` if the check itself failed.

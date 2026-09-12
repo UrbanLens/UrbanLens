@@ -20,9 +20,7 @@ def search_web(query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
         max_results: Maximum number of results to request.
 
     Returns:
-        Result dicts (``title``, ``link``, ``snippet``, ``date``,
-        ``thumbnail``), or ``[]`` when REData is unconfigured or every
-        provider it tried failed to answer."""
+        Result dicts (``title``, ``link``, ``snippet``, ``date``, ``thumbnail``), or ``[]`` when REData is unconfigured or every provider it tried failed to answer."""
     if not redata_configured():
         return []
     from urbanlens.dashboard.services.apis.locations.redata_search_gateway import RedataSearchGateway
@@ -55,7 +53,7 @@ def format_search_date(raw: str | None) -> str:
 
     for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
         try:
-            dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))  # noqa: DTZ007  # tzinfo=UTC is applied on the next line
+            dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))  # noqa: DTZ007  # tzinfo=UTC is applied...
             dt = dt.replace(tzinfo=UTC)
             return _format_relative_search_date(dt)
         except ValueError:

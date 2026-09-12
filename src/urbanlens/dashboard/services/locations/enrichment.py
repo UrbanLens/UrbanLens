@@ -55,19 +55,9 @@ class EnrichmentSource(ABC):
         key: Unique slug identifying this source in run summaries and logs.
         verbose_name: Human-readable name for the admin UI; defaults to key.
         service_keys: Rate-limiter service keys consumed per enriched item.
-            The per-run budget is the *minimum* budget across these services.
-            Usually a fixed class attribute, but deliberately not a
-            ``ClassVar`` - a subclass whose service depends on runtime
-            configuration (e.g. dispatching to REData vs. direct Google, see
-            ``services.photos.photo_enrichment.PlacePhotoEnrichmentSource``) may
-            override it with a ``@property`` instead.
-        calls_per_item: Estimated API calls one :meth:`enrich` makes; budgets
-            are divided by this so a two-call source gets half the items.
-        geo_boundary: When set, candidate locations are restricted to this
-            geographic region (see ``services.geo.geo_boundary``); None means
-            unrestricted.
-        refreshes_names: When True, official names/aliases are re-resolved for
-            every location this source successfully enriches in a cycle."""
+        calls_per_item: Estimated API calls one :meth:`enrich` makes; budgets are divided by this so a two-call source gets half the items.
+        geo_boundary: When set, candidate locations are restricted to this geographic region (see ``services.geo.geo_boundary``); None means unrestricted.
+        refreshes_names: When True, official names/aliases are re-resolved for every location this source successfully enriches in a cycle."""
 
     key: ClassVar[str] = ""
     verbose_name: ClassVar[str] = ""
@@ -90,22 +80,18 @@ class EnrichmentSource(ABC):
         This is the per-source completion tracker: it must consider only this source's own marker (its ``LocationCache`` row, a stamped column, ...) so sources are tracked independently of one another.
 
         Returns:
-                A ``Q`` usable in ``Location.objects.filter``."""
+            A ``Q`` usable in ``Location.objects.filter``."""
 
     @abstractmethod
     def enrich(self, location: Location) -> bool:
         """Fetch and persist this source's data for one location.
 
-        Args:
-                location: The location to enrich.
-
         Returns:
-                True when data (or an empty "nothing found" marker) was stored."""
+            True when data (or an empty "nothing found" marker) was stored."""
 
 
 class LocationCacheEnrichmentSource(EnrichmentSource):
-    """Base for sources whose data and completion marker is a ``LocationCache`` row.
-    The *existence* of the row - fresh or stale - marks the source as having run for a location, so background enrichment only ever backfills never-fetched locations; refreshing stale rows stays the job of the lazy panel-fetch machinery that already knows a user is looking."""
+    """Base for sources whose data and completion marker is a ``LocationCache`` row."""
 
     cache_source: ClassVar[str] = ""
     refreshes_names: ClassVar[bool] = True
@@ -130,13 +116,8 @@ class LocationCacheEnrichmentSource(EnrichmentSource):
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Fetch this source's payload for one location.
 
-        Args:
-            location: The location to fetch data for.
-
         Returns:
-            Tuple of (payload dict or None when nothing was found, query key
-            recorded on the cache row).
-        """
+            Tuple of (payload dict or None when nothing was found, query key recorded on the cache row)."""
 
 
 class AddressEnrichmentSource(EnrichmentSource):
@@ -249,10 +230,7 @@ def compute_service_budget(service: str, site_settings: SiteSettings | None = No
         site_settings: Current settings; fetched when omitted.
 
     Returns:
-        Remaining call budget (never negative), ``0`` when the service is
-        disabled or exhausted, or ``None`` when the service configures
-        neither a daily nor a 30-day limit (i.e. unbounded - callers should
-        apply their own per-run cap)."""
+        Remaining call budget (never negative), ``0`` when the service is disabled or exhausted, or ``None`` when the service configures neither a daily nor a 30-day limit (i.e. unbounded - callers should apply their own per-run cap)."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
@@ -296,7 +274,6 @@ def compute_service_budget(service: str, site_settings: SiteSettings | None = No
 
 def stagger_seconds(source: EnrichmentSource) -> float:
     """Pause between one source's consecutive enrichments, from its per-minute limits.
-    Even a service with an enormous daily limit shouldn't see a burst of back-to-back requests from the background job, so the pause is derived from the tightest per-minute limit among the source's services and clamped to [MIN_STAGGER_SECONDS, MAX_STAGGER_SECONDS].
 
     Args:
         source: The enrichment source about to run a batch.
@@ -348,9 +325,7 @@ def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: Geo
     Args:
         missing: The source's :meth:`EnrichmentSource.missing_filter`.
         limit: Maximum candidates to return (the per-run item budget).
-        geo_boundary: Restrict to locations within this region (a real
-            PostGIS spatial filter against ``Location.point``), or None for
-            no restriction.
+        geo_boundary: Restrict to locations within this region (a real PostGIS spatial filter against ``Location.point``), or None for no restriction.
 
     Returns:
         Up to ``limit`` locations, best candidates first."""
@@ -419,8 +394,7 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
         sleep: Injected pause function for tests; defaults to ``time.sleep``.
 
     Returns:
-        A summary dict (also cached at ``LAST_RUN_CACHE_KEY``) with per-source
-        enriched/failed counts and skip reasons."""
+        A summary dict (also cached at ``LAST_RUN_CACHE_KEY``) with per-source enriched/failed counts and skip reasons."""
     from django.core.cache import cache
     from django.utils import timezone
 
@@ -532,10 +506,7 @@ def self_reported_skip(source: EnrichmentSource) -> str | None:
         source: The enrichment source to check.
 
     Returns:
-        ``"unavailable"`` when the source's own gate fails (e.g. missing API
-        key), ``"service_disabled"`` when any of its services is switched off
-        on the API-limits page, else None.
-    """
+        ``"unavailable"`` when the source's own gate fails (e.g. missing API key), ``"service_disabled"`` when any of its services is switched off on the API-limits page, else None."""
     if not source.gate():
         return "unavailable"
     if not all(service_is_enabled(service) for service in source.service_keys):
@@ -570,9 +541,7 @@ def last_run_summary() -> dict[str, Any] | None:
     """The most recent cycle's summary, for the site-admin page.
 
     Returns:
-        The summary dict cached by :func:`run_enrichment_cycle`, or None
-        when no cycle has completed since the cache was last cleared.
-    """
+        The summary dict cached by :func:`run_enrichment_cycle`, or None when no cycle has completed since the cache was last cleared."""
     from django.core.cache import cache
 
     summary = cache.get(LAST_RUN_CACHE_KEY)

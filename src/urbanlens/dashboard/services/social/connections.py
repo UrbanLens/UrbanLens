@@ -41,7 +41,6 @@ def are_connections(a: Profile, b: Profile) -> bool:
 
 def recommendable_strangers(new_member: Profile, others: Sequence[Profile]) -> list[Profile]:
     """Return which of ``others`` are eligible for a mutual "you might want to connect" suggestion with ``new_member``.
-    A pair is eligible only when neither side has opted out - this is a *mutual* introduction (both sides get suggested to each other), unlike an in-chat ``@friend`` recommendation where only the recommended person's ``allow_friend_recommendations`` is checked.
 
     Args:
         new_member: The profile that was just added.

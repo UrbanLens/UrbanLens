@@ -1,5 +1,4 @@
-"""Gateway for REData's CID -> coordinate resolution and cached place-detail endpoints.
-Kept as a separate class/service key rather than methods on ``RedataGateway`` since it's a distinct capability (place geocoding/detail, not property records) with its own call volume to track - the API key used must carry REData's ``places:read`` scope."""
+"""Gateway for REData's CID -> coordinate resolution and cached place-detail endpoints."""
 
 from __future__ import annotations
 
@@ -17,13 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 class RedataPermissionError(GatewayRequestError):
-    """Raised when REData rejects the API key itself (401/403), not a transient failure.
-    An expired/invalid key or a key missing the ``places:read`` scope will never succeed no matter how many times the request is retried - distinct from ``GatewayRequestError`` so callers can stop retrying and surface this to the user instead of looping forever."""
+    """Raised when REData rejects the API key itself (401/403), not a transient failure."""
 
 
 _REQUEST_TIMEOUT = 60
 
-#: REData caps a single call's batch at 10,000 (400 too_many_cids above that) -
 #: see api-reference.md. Chunked transparently so callers never have to think
 #: about this limit.
 _MAX_CIDS_PER_REQUEST = 10_000
@@ -31,8 +28,7 @@ _MAX_CIDS_PER_REQUEST = 10_000
 
 @dataclass(frozen=True, slots=True)
 class CidLookupEntry:
-    """One ``resolve_cids`` request entry - a CID, optionally with its source Google Maps URL.
-    REData's docs say passing the place's own ``url`` (or ``fid``/``data``) resolves "faster and more reliably" than a plain cid, since it lets REData hit the place directly instead of only having the bare id to go on - ``cid`` is never required alongside it (REData derives it automatically), but is included here too since callers already know it locally and it keeps ``RedataCidBatchResult`` keyed on the same value the caller expects."""
+    """One ``resolve_cids`` request entry - a CID, optionally with its source Google Maps URL."""
 
     cid: int
     url: str | None = None
@@ -40,11 +36,7 @@ class CidLookupEntry:
 
 @dataclass(frozen=True, slots=True)
 class RedataCidBatchResult:
-    """One (possibly chunked) ``resolve_cids`` call's outcome.
-
-    Every requested cid ends up in exactly one bucket - mirrors REData's own
-    ``results``/``pending`` split (see the module docstring).
-    """
+    """One (possibly chunked) ``resolve_cids`` call's outcome."""
 
     resolved: dict[int, tuple[float, float]] = field(default_factory=dict)
     #: REData confirmed, after repeated attempts, no resolvable location exists.
@@ -81,24 +73,11 @@ class RedataCidGateway(Gateway):
     def resolve_cids(self, cids: Sequence[int | CidLookupEntry]) -> RedataCidBatchResult:
         """Resolve a batch of Google Maps CIDs to coordinates via REData.
 
-        Args:
-                cids: CIDs to resolve (the decimal value after the ``:0x`` in a
-                Google Maps place URL's data segment), or a :class:`CidLookupEntry`
-                for a cid whose source Google Maps URL is also known - see that
-                class for why passing it is preferred. Transparently chunked
-                into REData's 10,000-per-request cap.
-
         Returns:
-                A :class:`RedataCidBatchResult` partitioning every input cid.
+            A :class:`RedataCidBatchResult` partitioning every input cid.
 
         Raises:
-                RedataPermissionError: REData rejected the API key itself (401/403) -
-                not transient, callers should stop retrying.
-                GatewayRequestError: A chunk's request to REData failed outright
-                (network error, non-200, unparseable/malformed body). Callers
-                should treat the whole batch as transiently unresolved and
-                retry later - REData not being reachable says nothing about
-                whether any individual cid is resolvable."""
+            RedataPermissionError: REData rejected the API key itself (401/403) - not transient, callers should stop retrying."""
         result = RedataCidBatchResult()
         if not cids:
             return result
@@ -178,24 +157,12 @@ class RedataCidGateway(Gateway):
 
     def get_place_detail(self, cid: int) -> dict[str, Any] | None:
         """Read REData's cached deep-scrape record for an already-resolved CID.
-        This is a pure database read of whatever that scrape last found - it never triggers a new one (see ``../REData/docs/api-reference.md``, "GET /places/cid/{cid}/").
-
-        Args:
-                cid: The Google Maps CID (see :meth:`resolve_cids`/:class:`CidLookupEntry`).
 
         Returns:
-                The place payload dict (``scrape_pending``/``scrape_stale`` say
-                whether the scrape has run yet / is due a refresh - the fields it
-                fills are still returned as last captured either way), or None
-                when REData has never resolved this CID at all - distinct from a
-                resolved CID whose scrape simply hasn't run yet, which still
-                returns a body.
+            The place payload dict (``scrape_pending``/``scrape_stale`` say whether the scrape has run yet / is due a refresh - the fields it fills are still returned as last captured either way), or None when REData has never resolved this CID at all -...
 
         Raises:
-                RedataPermissionError: REData rejected the API key itself (401/403) -
-                not transient, callers should stop retrying.
-                GatewayRequestError: The request to REData failed outright
-                (network error, a non-200/404 status, or an unparseable body)."""
+            RedataPermissionError: REData rejected the API key itself (401/403) - not transient, callers should stop retrying."""
         base_url = self.base_url
         if base_url is None:
             raise GatewayRequestError("UL_REDATA_API_URL is not configured.")
@@ -221,20 +188,12 @@ class RedataCidGateway(Gateway):
 
     def download_media(self, cid: int, media_id: int) -> tuple[bytes, str]:
         """Download one deep-scraped media item's actual file bytes.
-        Media (photos, videos, 360s, Street View) is downloaded eagerly at scrape time, not lazily on request - a 404 here means the download itself failed, not that it was never attempted, and this never re-fetches from Google (see ``../REData/docs/api-reference.md``, "GET /places/cid/{cid}/media/{id}/download/").
-
-        Args:
-                cid: The place's Google Maps CID.
-                media_id: The media item's id, from a :meth:`get_place_detail`
-                payload's ``media`` list.
 
         Returns:
-                Tuple of (file bytes, content-type).
+            Tuple of (file bytes, content-type).
 
         Raises:
-                RedataPermissionError: REData rejected the API key itself (401/403).
-                GatewayRequestError: The media item was never captured or its
-                download failed (404), or the request to REData failed outright."""
+            RedataPermissionError: REData rejected the API key itself (401/403)."""
         base_url = self.base_url
         if base_url is None:
             raise GatewayRequestError("UL_REDATA_API_URL is not configured.")

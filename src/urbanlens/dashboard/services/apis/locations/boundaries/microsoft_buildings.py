@@ -54,9 +54,7 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
     """Fetch building footprint polygons from Microsoft's open dataset.
 
     Attributes:
-        quadkey_zoom: Bing tile zoom level the current dataset-links.csv is
-            partitioned at. Defaults to 9; see module docstring.
-    """
+        quadkey_zoom: Bing tile zoom level the current dataset-links.csv is partitioned at."""
 
     service_key: ClassVar[str | None] = "microsoft_building_footprints"
     paid_service: ClassVar[bool] = False
@@ -78,14 +76,7 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
         return {row["Location"] for row in self._load_dataset_links() if row.get("Location")}
 
     def get_buildings(self, bbox: BBox, *, country: str | None = None) -> list[dict]:
-        """Download and return building footprint Features overlapping ``bbox``.
-
-        Args:
-            bbox: Area of interest.
-            country: Optional exact match against the dataset's ``Location``
-                column (see ``list_available_locations``) to disambiguate
-                shards near country borders and skip irrelevant downloads.
-        """
+        """Download and return building footprint Features overlapping ``bbox``."""
         validate_bbox(bbox)
         candidate_quadkeys = quadkeys_for_bbox(bbox, zoom=self.quadkey_zoom)
         rows = self._load_dataset_links()

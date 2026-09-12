@@ -1,12 +1,4 @@
-"""Police incidents plugin: block-scale incident reports near a pin, via REData.
-
-Safety context for visiting a site, from nine cities' own open-data portals.
-Two source properties the rendering respects rather than papers over: every
-publisher fuzzes locations before release (a point is *not* evidence about a
-specific building - the panel says "this block", never "this address"), and
-comparing counts across cities compares publishing scope, so the panel never
-ranks and always names the window it covers.
-"""
+"""Police incidents plugin: block-scale incident reports near a pin, via REData."""
 
 from __future__ import annotations
 
@@ -26,7 +18,6 @@ if TYPE_CHECKING:
 _MAX_ROWS = 6
 _YEARS = 3
 
-# REData's incidents endpoint accepts up to 25 years of history (its own
 # default is 3, the free panel's window above) - see
 # ``RedataIncidentsGateway.get_incidents``.
 _HISTORY_YEARS = 25
@@ -49,9 +40,7 @@ def _top_category_chips(incidents: list[dict], category_labels: dict[str, str]) 
         category_labels: Maps a raw category key to its display label.
 
     Returns:
-        Up to :data:`_TOP_CATEGORIES` chip strings like ``"5x Burglary"``,
-        most frequent category first.
-    """
+        Up to :data:`_TOP_CATEGORIES` chip strings like ``"5x Burglary"``, most frequent category first."""
     by_category: dict[str, int] = {}
     for incident in incidents:
         category = incident.get("category") or "other"
@@ -107,13 +96,7 @@ class PoliceIncidentsPanelSource(RedataInfoPanelSource):
 
 class IncidentHistoryPanelSource(RedataInfoPanelSource):
     """Full REData incident history (up to 25 years) for the pin's block, gated to subscribers.
-
-    A deeper research pull than :class:`PoliceIncidentsPanelSource`'s free
-    safety-context snapshot: instead of the most recent handful of reports
-    over 3 years, this shows the year-by-year trend across REData's whole
-    retention window. Cached under its own ``LocationCache`` source so the
-    two panels' different ``years``/``limit`` fetches never collide.
-    """
+    A deeper research pull than :class:`PoliceIncidentsPanelSource`'s free safety-context snapshot: instead of the most recent handful of reports over 3 years, this shows the year-by-year trend across REData's whole retention window."""
 
     key = "redata_incident_history"
     cache_source = "redata_incident_history"
@@ -129,13 +112,9 @@ class IncidentHistoryPanelSource(RedataInfoPanelSource):
         """The full 25-year incident window near the pin."""
         from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import RedataIncidentsGateway
 
-        # force_refresh=True: REData's coverage cache has no `years` dimension - it
-        # keys purely on coordinate + a radius pinned the same for every provider - so
-        # a cached hit here could silently be the free panel's narrower 3-year fetch.
-        # A live query costs more (portal load, our own API-cost tracking) than the
-        # free panel's cached-when-possible fetch below, but this panel's whole promise
-        # to subscribers is the 25-year window; serving a truncated one with no signal
-        # anything is wrong is worse than the extra cost. Scoped to this panel only.
+        # force_refresh=True: REData's coverage cache has no `years` dimension - it keys purely on
+        # coordinate + a radius pinned the same for every provider - so a cached hit here could
+        # silently be the free panel's narrower 3-year fetch.
         return RedataIncidentsGateway().get_incidents(latitude, longitude, years=_HISTORY_YEARS, limit=_HISTORY_LIMIT, force_refresh=True)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
@@ -152,10 +131,6 @@ class IncidentHistoryPanelSource(RedataInfoPanelSource):
 
         by_year: dict[str, int] = {}
         for incident in incidents:
-            # occurred_at is REData's full ISO-8601 datetime (e.g.
-            # "2026-08-03T17:03:00-05:00", not a bare "YYYY-MM-DD"), same as
-            # the free panel's occurred[:10] slice below - an exact-length
-            # check here would misclassify every real value as undated.
             occurred = incident.get("occurred_at") or ""
             year = occurred[:4] if len(occurred) >= 4 else "Undated"
             by_year[year] = by_year.get(year, 0) + 1

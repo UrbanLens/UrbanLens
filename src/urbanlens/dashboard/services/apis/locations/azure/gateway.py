@@ -1,5 +1,4 @@
-"""Shared request plumbing for the Azure Maps REST API.
-One subscription key authenticates every Azure Maps product area used here (Search, Geocoding, Render), unlike Google's split per-product keys, so the auth/request convention lives in one place: :func:`azure_maps_request`, shared by ``geocoding.py``, ``search.py``, and ``render.py``."""
+"""Shared request plumbing for the Azure Maps REST API."""
 
 from __future__ import annotations
 
@@ -34,9 +33,7 @@ def azure_maps_request(
         session: The calling gateway's (rate-limited) HTTP session.
         path: Endpoint path, e.g. ``"/geocode"``.
         subscription_key: The Azure Maps subscription key.
-        api_version: The endpoint's ``api-version`` value - Azure Maps
-            versions each product area (Search, Geocoding, Render)
-            independently, so callers must pass the right one for the path.
+        api_version: The endpoint's ``api-version`` value - Azure Maps versions each product area (Search, Geocoding, Render) independently, so callers must pass the right one for the path.
         params: Additional query parameters.
         timeout: Request timeout in seconds.
 
@@ -45,8 +42,7 @@ def azure_maps_request(
 
     Raises:
         ValueError: When no subscription key is configured.
-        requests.exceptions.RequestException: When the request fails.
-    """
+        requests.exceptions.RequestException: When the request fails."""
     if not subscription_key:
         raise ValueError("Azure Maps subscription key is not set. Set UL_AZURE_MAPS_SUBSCRIPTION_KEY in .env.")
     request_params: dict[str, Any] = {"subscription-key": subscription_key, "api-version": api_version, **(params or {})}
@@ -57,12 +53,7 @@ def azure_maps_request(
 
 @dataclass(slots=True, kw_only=True)
 class AzureMapsGateway(Gateway):
-    """Base gateway for the Azure Maps Search and Geocoding REST APIs.
-
-    Requires: ``UL_AZURE_MAPS_SUBSCRIPTION_KEY`` - a subscription key from an
-    Azure Maps account (Azure Portal -> your Azure Maps account ->
-    Authentication).
-    """
+    """Base gateway for the Azure Maps Search and Geocoding REST APIs."""
 
     service_key: ClassVar[str] = "azure_maps"
     paid_service: ClassVar[bool] = True
@@ -70,9 +61,5 @@ class AzureMapsGateway(Gateway):
     subscription_key: str | None = field(default_factory=lambda: settings.azure_maps_subscription_key)
 
     def _get(self, path: str, *, api_version: str, params: dict[str, Any] | None = None, timeout: int = 10) -> dict[str, Any]:
-        """Issue an authenticated GET against one Azure Maps endpoint.
-
-        See :func:`azure_maps_request` for the full contract (including the
-        ``ValueError`` raised when no subscription key is configured).
-        """
+        """Issue an authenticated GET against one Azure Maps endpoint."""
         return azure_maps_request(self.session, path, subscription_key=self.subscription_key, api_version=api_version, params=params, timeout=timeout)

@@ -21,8 +21,8 @@ _ZIP_MAGIC = b"PK\x03\x04"
 _GZIP_MAGIC = b"\x1f\x8b"
 
 # Hard limits to prevent resource exhaustion / zip bombs
-_MAX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB total across all extracted files
-_MAX_SINGLE_FILE_BYTES = 1 * 1024 * 1024 * 1024  # 1 GB per individual file
+_MAX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+_MAX_SINGLE_FILE_BYTES = 1 * 1024 * 1024 * 1024
 _MAX_FILE_COUNT = 1000
 
 # Only files with these extensions are considered when extracting from archives.
@@ -62,12 +62,7 @@ class ExtractionBudget:
     Charging is against bytes actually read rather than the size the archive declares."""
 
     def __init__(self, max_bytes: int = _MAX_UNCOMPRESSED_BYTES, max_files: int = _MAX_FILE_COUNT) -> None:
-        """Start an allowance.
-
-        Args:
-            max_bytes: Total uncompressed bytes permitted across the upload.
-            max_files: Total supported entries permitted across the upload.
-        """
+        """Start an allowance."""
         self.remaining_bytes = max_bytes
         self.remaining_files = max_files
 
@@ -84,12 +79,8 @@ class ExtractionBudget:
     def claim_bytes(self, size: int) -> None:
         """Account for *size* uncompressed bytes.
 
-        Args:
-            size: Bytes to deduct from the remaining allowance.
-
         Raises:
-            ValueError: The upload expands past the permitted total.
-        """
+            ValueError: The upload expands past the permitted total."""
         self.remaining_bytes -= size
         if self.remaining_bytes < 0:
             raise ValueError(f"Archive exceeds {_MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB uncompressed.")
@@ -99,7 +90,7 @@ def is_archive(data: bytes) -> bool:
     """Returns True if *data* starts with ZIP or GZIP magic bytes.
 
     Args:
-        data: Raw bytes to inspect (at least 4 bytes recommended).
+        data: Raw bytes to inspect .
 
     Returns:
         True when the bytes indicate a ZIP or GZIP/TGZ archive."""
@@ -108,14 +99,10 @@ def is_archive(data: bytes) -> bool:
 
 def extract_archive(data: bytes, budget: ExtractionBudget | None = None) -> list[ExtractedFile]:
     """Safely extract supported files from a ZIP or TGZ archive.
-    Security measures applied: - Type verified by magic bytes, not filename extension. - Path-traversal entries (``../`` or absolute paths) are silently skipped. - Symlinks and non-regular-file entries are skipped. - Per-file and cumulative uncompressed-size limits enforced, the cumulative ones shared across every call that passes the same ``budget``. - Only entries whose extension is in ``_ARCHIVE_ALLOWED_EXTENSIONS`` are extracted.
 
     Args:
         data: Raw bytes of the archive.
-        budget: Allowance to draw on. Callers expanding *nested* archives must
-            create one :class:`ExtractionBudget` and pass it to every call, so
-            the whole upload shares one limit; omitting it gives this archive
-            its own, which is only correct when nothing else will be extracted.
+        budget: Allowance to draw on.
 
     Returns:
         List of :class:`ExtractedFile` for every supported entry found.
@@ -163,7 +150,6 @@ def validate_content_type(name: str, data: bytes) -> str | None:
 
     # JSON: must start with '{' or '[' and parse successfully.
     # Recognised variants: "json" - GeoJSON (Takeout "Saved Places" or generic FeatureCollection)
-    # "location_history" - Google Semantic Location History (has "timelineObjects")
     if text[0] in "{[":
         try:
             parsed = json.loads(text)
@@ -246,17 +232,11 @@ def _sniff_wkb(data: bytes) -> bool:
     return (geom_code & 0xFFFF) % 1000 in _WKB_GEOMETRY_TYPE_CODES
 
 
-# ---------------------------------------------------------------------------
 # Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _safe_basename(path: str) -> str | None:
-    """Return the basename of *path*, or ``None`` if any component is suspicious.
-
-    Rejects paths that contain ``..`` components or that are absolute
-    (start with ``/`` on Unix or a drive letter on Windows).
-    """
+    """Return the basename of *path*, or ``None`` if any component is suspicious."""
     parts = path.replace("\\", "/").split("/")
     basename = parts[-1]
     if ".." in parts or not basename:

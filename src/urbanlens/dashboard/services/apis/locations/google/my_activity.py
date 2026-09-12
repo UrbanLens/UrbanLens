@@ -1,5 +1,4 @@
-"""Google Takeout "My Activity" (Maps) importer.
-Unmatched entries are not discarded and pins are never auto-created for them (a "Directions to" lookup covers everyday life - grocery stores, gas stations, a friend's house - not just places worth mapping), so they are queued as a self-directed VisitSuggestion the user can accept or reject from their notifications."""
+"""Google Takeout "My Activity" (Maps) importer."""
 
 from __future__ import annotations
 
@@ -63,13 +62,10 @@ def looks_like_my_activity(text: str) -> bool:
     """Cheap sniff for a Google Takeout My Activity HTML export.
 
     Args:
-        text: A prefix of the decoded file text - a few KB is enough, the
-            marker classes appear near the top of every My Activity export.
+        text: A prefix of the decoded file text - a few KB is enough, the marker classes appear near the top of every My Activity export.
 
     Returns:
-        True when the text carries the Material Design Lite class Google's My
-        Activity template always emits, alongside a "Maps" activity entry.
-    """
+        True when the text carries the Material Design Lite class Google's My Activity template always emits, alongside a "Maps" activity entry."""
     return "mdl-typography--title" in text and "Maps" in text
 
 
@@ -117,7 +113,7 @@ def _parse_timestamp(text: str) -> datetime | None:
     offset_hours = _TZ_OFFSET_HOURS.get(tz_abbr.upper()) if body else None
     if offset_hours is not None:
         try:
-            naive = datetime.strptime(body, _TIMESTAMP_FORMAT)  # noqa: DTZ007  # the zone comes from the trailing abbreviation, applied below
+            naive = datetime.strptime(body, _TIMESTAMP_FORMAT)  # noqa: DTZ007  # the zone comes from the trailing...
         except ValueError:
             pass
         else:
@@ -132,11 +128,7 @@ def _parse_timestamp(text: str) -> datetime | None:
 
 
 def _extract_timestamp(tail: str) -> datetime | None:
-    """Return the timestamp from a "Directions to" entry's trailing ``<br>``-separated lines.
-
-    Tries each line from last to first (the timestamp is normally the final
-    line, but this tolerates entries missing the origin/coordinate lines).
-    """
+    """Return the timestamp from a "Directions to" entry's trailing ``<br>``-separated lines."""
     lines = [html.unescape(_TAG_RE.sub("", line)).strip() for line in _BR_SPLIT_RE.split(tail)]
     for line in reversed(lines):
         if not line:
@@ -154,9 +146,7 @@ def parse_my_activity_entries(html_bytes: bytes) -> Generator[dict[str, Any], No
         html_bytes: Raw ``MyActivity.html`` file bytes.
 
     Yields:
-        Dict with keys: ``destination_name`` (str, HTML-unescaped link text),
-        ``latitude``, ``longitude`` (float), ``visited_at`` (tz-aware datetime).
-    """
+        Dict with keys: ``destination_name`` (str, HTML-unescaped link text), ``latitude``, ``longitude`` (float), ``visited_at`` (tz-aware datetime)."""
     try:
         text = html_bytes.decode("utf-8")
     except UnicodeDecodeError:
@@ -204,14 +194,12 @@ def import_my_activity_streaming(
     Entries that match no pin are queued as a self-directed VisitSuggestion instead of being discarded or auto-creating a pin - see ``services.visits.visits.create_visit_suggestion``.
 
     Args:
-        files: List of ``(filename, raw_bytes)`` pairs already extracted
-            from any archive by the caller.
-        profile: The user profile whose pins are used for proximity matching
-            and to whom unmatched entries are suggested.
+        files: List of ``(filename, raw_bytes)`` pairs already extracted from any archive by the caller.
+        profile: The user profile whose pins are used for proximity matching and to whom unmatched entries are suggested.
         radius_m: Match radius in metres (default 100 m).
 
     Yields:
-        SSE-formatted strings (``data: {...}\\n\\n``)."""
+        SSE-formatted strings (``data: {...}\\\\n\\\\n``)."""
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.location.queryset import quantize_coordinate
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion

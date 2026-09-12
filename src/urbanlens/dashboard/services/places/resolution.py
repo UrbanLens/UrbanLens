@@ -19,15 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_location_place(location: Location, *, save: bool = True) -> Place | None:
-    """Resolve which place a Location's coordinate sits on. Never calls a provider - it only asks what is already known.
+    """Resolve which place a Location's coordinate sits on.
+    Never calls a provider - it only asks what is already known.
 
     Args:
         location: The Location to resolve.
         save: Whether to persist the resolved FK and timestamp.
 
     Returns:
-        The most specific current place containing the coordinate, or None
-        when it is on no known parcel or building."""
+        The most specific current place containing the coordinate, or None when it is on no known parcel or building."""
     place = Place.objects.resolve_for_point(location.latitude, location.longitude)
     if save and location.place_id != (place.pk if place else None):
         # Deliberately not stamped when the answer is unchanged, and in particular not when it is
@@ -51,8 +51,7 @@ def resolve_locations_in(polygon, *, exclude_place: Place | None = None) -> int:
 
     Args:
         polygon: The area to re-resolve within; None is tolerated (no-op).
-        exclude_place: Skip locations already resolved to this place, when the
-            caller knows their answer cannot have changed.
+        exclude_place: Skip locations already resolved to this place, when the caller knows their answer cannot have changed.
 
     Returns:
         How many locations changed place."""
@@ -74,7 +73,6 @@ def resolve_locations_in(polygon, *, exclude_place: Place | None = None) -> int:
 
 def refresh_area(place: Place) -> float | None:
     """Recompute and store a place's cached area in square metres.
-    The area is what makes "most specific wins" an indexed sort rather than a PostGIS computation per candidate per request, so it has to be refreshed with the geometry it describes.
 
     Args:
         place: The place whose geometry has just changed.

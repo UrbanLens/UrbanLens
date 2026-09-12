@@ -1,5 +1,4 @@
-"""Boundary-provider abstractions for default Location geometry.
-Unlike ``LocationCache``, background enrichment (``BoundaryEnrichmentSource``) never proactively revisits a stale row - the same "refreshing stale rows stays the job of the lazy, request-triggered machinery" rule that source documents for every other cache."""
+"""Boundary-provider abstractions for default Location geometry."""
 
 from __future__ import annotations
 
@@ -36,8 +35,8 @@ def _as_multipolygon(geom: Polygon | MultiPolygon | None) -> MultiPolygon | None
     return geom
 
 
-#: Provider ``service_key`` → :class:`BoundarySource` value for the providers whose property
-#: geometry may serve as an official-boundary voting candidate.
+#: Provider ``service_key`` → :class:`BoundarySource` value for the providers whose property geometry
+#: may serve as an official-boundary voting candidate.
 #: Building-footprint providers (Overture, Microsoft, Google) are absent on purpose: they never
 #: produce property boundaries, and the vote is over which *property* boundary should officially
 PROVIDER_BOUNDARY_SOURCES: dict[str, str] = {
@@ -52,9 +51,8 @@ class ResolvedBoundaries:
 
     property_polygon: MultiPolygon | None = None
     building_polygon: MultiPolygon | None = None
-    #: Every property polygon any queried provider returned, as (service_key, polygon) pairs in
-    #: chain order - including polygons that lost the ``property_polygon`` slot to an earlier
-    #: provider.
+    #: Every property polygon any queried provider returned, as (service_key, polygon) pairs in chain
+    #: order - including polygons that lost the ``property_polygon`` slot to an earlier provider.
     #: Feeds the per-source candidate rows boundary voting chooses between; costs no extra API calls
     property_candidates: list[tuple[str, MultiPolygon]] = field(default_factory=list)
 
@@ -72,8 +70,7 @@ class ResolvedBoundaries:
 
 @dataclass(slots=True)
 class BoundaryProviderChain:
-    """Resolve typed default boundaries by trying providers in order.
-    ``RedataBoundaryProvider`` runs first: when it has data at all, it's authoritative survey-grade county GIS geometry, not community-tagged or ML-derived - but its coverage is narrower (US-only, varies by jurisdiction), so every other provider still matters as a fallback."""
+    """Resolve typed default boundaries by trying providers in order."""
 
     providers: tuple[BoundaryProvider, ...] = field(
         default_factory=lambda: (
@@ -88,15 +85,8 @@ class BoundaryProviderChain:
     def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> ResolvedBoundaries:
         """Run the chain and return typed boundaries for a coordinate.
 
-        Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            name: Optional place name forwarded to name-aware providers.
-
         Returns:
-            ResolvedBoundaries; either polygon may be None when no provider
-            found that boundary type.
-        """
+            ResolvedBoundaries; either polygon may be None when no provider found that boundary type."""
         resolved = ResolvedBoundaries()
         for provider in self.providers:
             if resolved.complete:
@@ -130,14 +120,8 @@ class BoundaryProviderChain:
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | MultiPolygon | None:
         """Untyped convenience lookup: the property boundary, else the building one.
 
-        Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            name: Optional place name forwarded to name-aware providers.
-
         Returns:
-            The best available polygon, or None when nothing was found.
-        """
+            The best available polygon, or None when nothing was found."""
         resolved = self.get_boundaries(latitude, longitude, name=name)
         return resolved.property_polygon or resolved.building_polygon
 
@@ -149,8 +133,7 @@ def generation_lock_key(location_id: int) -> str:
 
 
 def generation_status(location: Location) -> tuple[bool, bool]:
-    """Return (ran, stale) for a Location's place resolution.
-    ``boundary_generation_ran`` and ``boundary_generation_stale`` answer related questions off the same state, so every caller that needs both (``schedule_location_boundary_generation``, the refresh gate in ``tasks.generate_boundaries_for_location``) goes through here instead of calling both public functions and reading it twice."""
+    """Return (ran, stale) for a Location's place resolution."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     if location.place_resolved_at is None:
@@ -181,25 +164,19 @@ def boundary_generation_stale(location: Location) -> bool:
         location: The Location to check.
 
     Returns:
-        True when the location-default property row's ``generated_at`` is
-        older than ``SiteSettings.boundary_cache_days``. False when never
-        generated, or still fresh."""
+        True when the location-default property row's ``generated_at`` is older than ``SiteSettings.boundary_cache_days``."""
     return generation_status(location)[1]
 
 
 def schedule_location_boundary_generation(location: Location, profile=None) -> bool:
     """Ensure default-boundary generation is in flight for a Location, single-flight.
-    Covers both a never-generated location (nothing to show yet - callers surface this as "pending") and a stale one due for a background refresh (callers already have a - possibly stale - boundary to show, and should surface this as "refreshing" instead, never as "pending").
 
     Args:
         location: The Location to generate boundaries for.
-        profile: The requesting user's profile; generation is skipped when the
-            profile has external APIs disabled.
+        profile: The requesting user's profile; generation is skipped when the profile has external APIs disabled.
 
     Returns:
-        True when generation is in flight (newly scheduled or already
-        running), False when it's already fresh, not allowed, or the Celery
-        broker was unreachable."""
+        True when generation is in flight (newly scheduled or already running), False when it's already fresh, not allowed, or the Celery broker was unreachable."""
     from django.core.cache import cache
 
     if location.latitude is None or location.longitude is None:

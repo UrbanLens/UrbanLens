@@ -48,12 +48,11 @@ def _sorted_gallery(profile: Profile, request: HttpRequest):
         request: The current HttpRequest, read for ``sort`` and ``show``.
 
     Returns:
-        The gallery queryset, ordered, and narrowed to copies of someone else's
-        photo when ``show=from_others`` (see ``ImageQuerySet.copied_from_others``).
+        The gallery queryset, ordered, and narrowed to copies of someone else's photo when
+        ``show=from_others`` (see...
     """
-    # profile__user: image_to_gallery_json names the uploader via
-    # _visible_uploader_name -> Profile.username -> self.user.username, which is
-    # two queries per row without this - 2x the page size on every scroll fetch.
+    # profile__user: image_to_gallery_json names the uploader via _visible_uploader_name -> Profile.username ->
+    # self.user.username, which is two queries per row without this - 2x the page size on every scroll fetch.
     gallery = Image.objects.uploaded_by(profile).photos().select_related("pin", "wiki", "profile__user")
     if request.GET.get("show") == "from_others":
         gallery = gallery.copied_from_others()
@@ -78,14 +77,11 @@ def _attention_cards(profile: Profile) -> list[dict]:
         profile: The viewing profile whose unfiled photos to surface.
 
     Returns:
-        A list of ``{"image", "state", "suggestion"}`` dicts, newest first,
-        capped at ``_ATTENTION_LIMIT``. Only actionable states are included
-        (``filed`` photos are dropped).
+        A list of ``{"image", "state", "suggestion"}`` dicts, newest first, capped at
+        ``_ATTENTION_LIMIT``.
     """
-    # A photo whose processing died already has a card of its own under
-    # "Couldn't upload", where the actions are Retry and Discard. Leaving it
-    # here too offers a second card asking the owner to file a photo that does
-    # not yet exist as far as anyone else is concerned.
+    # A photo whose processing died already has a card of its own under "Couldn't upload", where the actions are
+    # Retry and Discard.
     images = list(Image.objects.needs_attention(profile).photos().filter(upload_failed_at__isnull=True).select_related("location")[:_ATTENTION_LIMIT])
     pending = {
         s.origin_image_id: s
@@ -94,9 +90,9 @@ def _attention_cards(profile: Profile) -> list[dict]:
             status=VisitSuggestionStatus.PENDING,
         ).select_related("location")
     }
-    # These are all needs_attention photos (no visit, not dismissed), so a photo is
-    # either awaiting a pending suggestion, geotagged-but-unpinned, or has no GPS -
-    # derived here without a per-photo classify_photo() query.
+    # These are all needs_attention photos (no visit, not dismissed), so a photo is either awaiting a pending
+    # suggestion, geotagged-but-unpinned, or has no GPS - derived here without a per-photo classify_photo()
+    # query.
     cards: list[dict] = []
     for image in images:
         suggestion = pending.get(image.pk)
@@ -112,9 +108,8 @@ def _attention_cards(profile: Profile) -> list[dict]:
 
 def _photo_issues(profile: Profile) -> dict:
     """Pending upload failures and metadata conflicts for Vault → Photos."""
-    # pin__location, not just pin: the card renders Pin.effective_name, which
-    # falls through to the location's display name whenever the pin has no
-    # custom one - a query per card without this.
+    # pin__location, not just pin: the card renders Pin.effective_name, which falls through to the location's
+    # display name whenever the pin has no custom one - a query per card without this.
     failures = list(PhotoUploadFailure.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("pin__location", "album", "image").order_by("-created")[:40])
     conflicts = list(PhotoMetadataConflict.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("existing_image", "new_image").order_by("-created")[:40])
     return {"upload_failures": failures, "metadata_conflicts": conflicts}
@@ -129,23 +124,13 @@ def _toast(message: str, level: str = "success", *, status: int = 200, refresh_q
         message: Text to display in the toast.
         level: toastr level (``success``/``info``/``warning``/``error``).
         status: HTTP status code.
-        refresh_queue: When True, also fires ``refreshQueue`` so the whole
-            organize queue re-fetches - used when an action may have changed
-            *other* cards too (e.g. creating a pin can retroactively file or
-            suggest other unfiled photos at the same place), not just the one
-            being swapped out here.
+        refresh_queue: When True, also fires ``refreshQueue`` so the whole organize queue re-fetches -
+        used when an action may have changed *other* cards too...
 
     Returns:
-        An empty-body response carrying an ``HX-Trigger`` header; swapping it with
-        ``outerHTML`` removes the card from the queue while the toast fires.
-
-    Note:
-        The empty body is the point, so this is only correct where the card
-        *should* go. A refusal reached from a card-swapping button wants
-        :func:`_render_card` instead, which re-renders the card alongside the
-        toast - returning this with ``level="error"`` would report the failure
-        and drop the photo out of the queue anyway. The ``error`` calls below
-        are all reached from the lightbox, which swaps nothing.
+        An empty-body response carrying an ``HX-Trigger`` header; swapping it with ``outerHTML`` removes
+        the card from the queue while the toast...
+        Note: The empty body is the point, so this is only correct where the card *should* go.
     """
     triggers: dict[str, Any] = {"showToast": {"message": message, "level": level}}
     if refresh_queue:
@@ -177,10 +162,8 @@ def _render_card(request: HttpRequest, image: Image, *, toast: str, level: str =
 def _render_failure_card(request: HttpRequest, failure: PhotoUploadFailure, toast: str, level: str = "warning") -> HttpResponse:
     """Re-render one upload-failure card unchanged, with a toast.
 
-    The counterpart of :func:`_render_card` for the "Couldn't upload" list. A
-    refusal reached from a card-swapping button must put the card back -
-    returning ``_toast`` there would report the problem and remove the card
-    anyway, leaving nothing to act on.
+    A refusal reached from a card-swapping button must put the card back - returning ``_toast`` there
+    would report the problem and remove the card anyway, leaving nothing to act on.
 
     Args:
         request: The current request.
@@ -248,12 +231,11 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
 
     GET /vault/photos/pin-albums/
 
-    Shown behind a toggle alongside the Vault's own albums, so a user can see
-    everything they've organized into albums in one place without leaving the
-    Vault - each card links out to the album's own page on its pin, which
-    still owns creating/renaming/deleting it. Lazily loaded (see
-    pages/vault/photos.html) rather than computed on every Vault Photos page
-    load, since most visits never open the toggle.
+    Shown behind a toggle alongside the Vault's own albums, so a user can see everything they've
+    organized into albums in one place without leaving the Vault - each card links out to the album's
+    own page on its pin, which still owns creating/renaming/deleting it.
+    Lazily loaded (see pages/vault/photos.html) rather than computed on every Vault Photos page load,
+    since most visits never open the toggle.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -269,15 +251,9 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.photos.albums import describe_albums
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        # Filtered through the join rather than by collecting the profile's
-        # pins and OR-ing one clause per pin, which is what albums_listing
-        # would do here: that builds a WHERE term per pin, and this panel's
-        # whole point is the account that has a lot of them.
-        #
-        # The location/wiki chain is selected because every card reads
-        # Pin.effective_name, which walks pin -> location -> wiki. Ordered by
-        # pk as well as name so two albums sharing a name cannot swap places
-        # between one page request and the next.
+        # Filtered through the join rather than by collecting the profile's pins and OR-ing one clause per pin,
+        # which is what albums_listing would do here: that builds a WHERE term per pin, and this panel's whole
+        # point is the account that has a lot of them.
         albums = Album.objects.filter(parent_pin__profile=profile).select_related("cover_image", "parent_pin__location__wiki").order_by("name", "pk")
         page = get_page(request, albums, _PIN_ALBUMS_PAGE_SIZE)
         rows = []
@@ -286,15 +262,13 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
         for entry in describe_albums(list(page.object_list), profile):
             pin = entry.album.parent_pin
             if pin is None:
-                # Unreachable: the filter above joins through parent_pin, so a
-                # wiki- or vault-owned album cannot be in this page. Narrowed
-                # rather than assumed because the field itself is nullable.
+                # Unreachable: the filter above joins through parent_pin, so a wiki- or vault-owned album cannot
+                # be in this page. Narrowed rather than assumed because the field itself is nullable.
                 continue
             row = _album_row(pin, entry.album, cover=entry.cover, photo_count=entry.photo_count, date_start=entry.date_start, date_end=entry.date_end)
             row["owner_pin_name"] = pin.effective_name
-            # detail_url is the AJAX-only album-detail partial (no page chrome) -
-            # this card is a plain, non-htmx navigation, so it needs the pin's
-            # actual detail page with the Photos tab pre-selected and this
+            # detail_url is the AJAX-only album-detail partial (no page chrome) - this card is a plain, non-htmx
+            # navigation, so it needs the pin's actual detail page with the Photos tab pre-selected and this
             # album pre-opened instead.
             row["pin_page_url"] = f"{reverse('pin.details', args=[pin.slug])}?album={entry.album.slug}#tab-photos"
             rows.append(row)
@@ -329,9 +303,8 @@ class PhotoItemsView(LoginRequiredMixin, View):
 
     GET /vault/photos/items/?offset=&limit=&sort=
 
-    Same ``{items, total, offset, limit}`` shape as the album grid's
-    ``AlbumItemsView`` (see controllers.albums), so both grids share one
-    fetch/scroll/prune engine on the client - see
+    Same ``{items, total, offset, limit}`` shape as the album grid's ``AlbumItemsView`` (see
+    controllers.albums), so both grids share one fetch/scroll/prune engine on the client - see
     frontend/ts/shared/photo-virtual-grid.ts.
     """
 
@@ -394,10 +367,8 @@ class PhotoUploadView(LoginRequiredMixin, View):
         try:
             img = upload_photo(profile, image_file)
         except PhotoUploadError as exc:
-            # Recorded, not just returned: this page renders a "Couldn't upload"
-            # panel (_photo_issues.html) that the pin/wiki upload path already
-            # feeds. Without this its own dropzone's failures show a toast that
-            # is gone in seconds and never reach the panel that exists for them.
+            # Recorded, not just returned: this page renders a "Couldn't upload" panel (_photo_issues.html) that
+            # the pin/wiki upload path already feeds.
             logger.info("photo upload rejected for profile %s: %s", profile.pk, exc.message)
             record_photo_upload_failure(profile, image_file.name or "photo", exc.generic_message)
             return JsonResponse({"error": exc.generic_message}, status=exc.status)
@@ -409,16 +380,14 @@ class PhotoActionView(LoginRequiredMixin, View):
     """Organize/lightbox actions on a single Image, each returning an HTMX card-removing response.
 
     POST /vault/photos/<image_id>/<action>/
-    where action is one of accept, reject, create-pin, log-visit, dismiss, delete, send-to-wiki, share.
 
-    ``_get_image`` only enforces ownership - it does not restrict ``media_type``,
-    since ``delete``/``share`` are legitimately generic and ``accept``/``reject``/
-    ``dismiss`` are naturally unreachable for a document (nothing ever creates a
-    ``VisitSuggestion`` from one). ``create-pin``/``log-visit``/``send-to-wiki``
-    each refuse a document explicitly instead, rather than widening this shared
-    lookup - those three are the ones that would otherwise let a document
-    acquire a ``pin``/``wiki`` FK and start appearing in that place's Photos
-    gallery, which has no document rendering of its own.
+    ``_get_image`` only enforces ownership - it does not restrict ``media_type``, since
+    ``delete``/``share`` are legitimately generic and ``accept``/``reject``/ ``dismiss`` are naturally
+    unreachable for a document (nothing ever creates a ``VisitSuggestion`` from one).
+    ``create-pin``/``log-visit``/``send-to-wiki`` each refuse a document explicitly instead, rather than
+    widening this shared lookup - those three are the ones that would otherwise let a document acquire a
+    ``pin``/``wiki`` FK and start appearing in that place's Photos gallery, which has no document
+    rendering of its own.
     """
 
     def _get_image(self, request: HttpRequest, image_id: int) -> tuple[Image, Profile]:
@@ -450,17 +419,15 @@ class PhotoActionView(LoginRequiredMixin, View):
     def create_pin(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Create a pin and log a visit, honouring the confirmation dialog's placement.
 
-        The confirmation dialog posts the (possibly dragged) ``latitude``/``longitude``
-        and an optional ``name``. When those are absent - e.g. a legacy one-click
-        request - the photo's own coordinates are used.
+        The confirmation dialog posts the (possibly dragged) ``latitude``/``longitude`` and an optional
+        ``name``.
         """
         if image.media_type == MediaKind.DOCUMENT:
             return _toast("Documents can't be filed to a pin.", "error")
         if image.pin_id:
-            # Another card's create-pin/log-visit call can retroactively file this
-            # photo out from under a queue the client hasn't refreshed yet (see
-            # create_pin_and_log_visit's resuggestion pass) - avoid logging a
-            # redundant second visit for a stale click.
+            # Another card's create-pin/log-visit call can retroactively file this photo out from under a queue
+            # the client hasn't refreshed yet (see create_pin_and_log_visit's resuggestion pass) - avoid logging
+            # a redundant second visit for a stale click.
             return _toast("This photo has already been filed.", "info", refresh_queue=True)
         lat = _parse_float(request.POST.get("latitude"))
         lng = _parse_float(request.POST.get("longitude"))
@@ -480,9 +447,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         if image.media_type == MediaKind.DOCUMENT:
             return _toast("Documents can't be filed to a pin.", "error")
         pin_slug = request.POST.get("pin_slug") or ""
-        # The shared location-search engine identifies pins by slug, falling back to
-        # the uuid when a pin has no slug (see AutocompleteResult.pin_slug) - accept
-        # either form here rather than only the slug.
+        # The shared location-search engine identifies pins by slug, falling back to the uuid when a pin has no
+        # slug (see AutocompleteResult.pin_slug) - accept either form here rather than only the slug.
         pin_filter = Q(slug=pin_slug)
         with contextlib.suppress(ValueError, AttributeError, TypeError):
             pin_filter |= Q(uuid=uuid_lib.UUID(pin_slug))
@@ -508,10 +474,9 @@ class PhotoActionView(LoginRequiredMixin, View):
     def send_to_wiki(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """File this photo onto a wiki the user has access to, from the lightbox's wiki picker.
 
-        Unlike ``log-visit`` (pin filing, one-shot for an unfiled photo), a
-        photo may be re-sent to a different wiki at any time - mirrors
-        ``PinGalleryBulkView``'s ``send_to_wiki`` bulk action, minus the
-        pin-derived-location lookup (a Vault photo may have no pin at all).
+        Unlike ``log-visit`` (pin filing, one-shot for an unfiled photo), a photo may be re-sent to a
+        different wiki at any time - mirrors ``PinGalleryBulkView``'s ``send_to_wiki`` bulk action, minus
+        the pin-derived-location lookup (a Vault photo may have no pin at all).
         """
         from urbanlens.dashboard.models.wiki import Wiki
         from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
@@ -529,9 +494,8 @@ class PhotoActionView(LoginRequiredMixin, View):
 
         attach_to_wiki(image, wiki, added_by=profile)
         Image.objects.filter(pk=image.pk).update(wiki=wiki)
-        # Judged on the FK just written, so the instance has to catch up. A
-        # photo re-contributed after being withdrawn keeps the votes that
-        # earned it, and earns the bonus back here.
+        # Judged on the FK just written, so the instance has to catch up. A photo re-contributed after being
+        # withdrawn keeps the votes that earned it, and earns the bonus back here.
         image.wiki_id = wiki.pk
         refresh_community_quota_bonus(image)
         return _toast(f"Sent to {wiki.name or 'the wiki'}.")
@@ -539,18 +503,10 @@ class PhotoActionView(LoginRequiredMixin, View):
     def share(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Share this photo with a friend via direct message, from the lightbox's friend picker.
 
-        A DM attachment is one-shot (``create_direct_message`` only accepts an
-        image not already attached to a message) - a photo already shared, or
-        being shared a second time, gets a lightweight deduped copy of the
-        same stored file attached instead, so the original attachment (and
-        whichever conversation it's already in) is left untouched.
-
-        The already-attached check and the send are done under a row lock on
-        *image* (``select_for_update``) so two near-simultaneous shares of the
-        same never-yet-attached photo can't both see it as unattached and
-        both attach the original to two different messages - the second
-        request blocks until the first commits, then correctly sees
-        ``direct_message_id`` set and makes its own deduped copy instead.
+        The already-attached check and the send are done under a row lock on *image* (``select_for_update``)
+        so two near-simultaneous shares of the same never-yet-attached photo can't both see it as unattached
+        and both attach the original to two different messages - the second request blocks until the first
+        commits, then correctly sees ``direct_message_id`` set and makes its own deduped copy instead.
         """
         from django.db import transaction
 
@@ -613,9 +569,9 @@ class PhotoActionView(LoginRequiredMixin, View):
         try:
             return handler(self, request, image, profile)
         except Exception:
-            # Any of these handlers can hit an unexpected DB/API failure - always
-            # surface it as a toast (per project UI standards) instead of letting
-            # it fall through to a bare 500 the client may not report cleanly.
+            # Any of these handlers can hit an unexpected DB/API failure - always surface it as a toast (per
+            # project UI standards) instead of letting it fall through to a bare 500 the client may not report
+            # cleanly.
             logger.exception("Photo action '%s' failed for image %s", action, image_id)
             return _render_card(request, image, toast="Something went wrong. Please try again.", level="error")
 
@@ -651,19 +607,13 @@ class PhotoPinSearchView(LoginRequiredMixin, View):
 class PhotoAssociationsView(LoginRequiredMixin, View):
     """GET: where one of the requesting user's own photos is filed and which albums hold it.
 
-    Owner-only - 204 for a photo that isn't the viewer's own (nothing to
-    show, and no "file this" actions make sense on someone else's photo).
-    Otherwise always renders the partial, even for a completely unfiled
-    photo: it also hosts the "File to a pin"/"Send to a wiki" trigger
-    buttons (see partials/_photo_associations.html), which must render
-    regardless of whether there's anything to display yet.
-
-    Shown in the shared lightbox's side panel (see partials/_photo_lightbox.html)
-    on every page that includes it, so the photo's owner can see - and act on -
-    its pin/wiki filing and album memberships without leaving whichever
-    gallery they're browsing.
-
     GET /vault/photos/<image_id>/associations/
+
+    Owner-only - 204 for a photo that isn't the viewer's own (nothing to show, and no "file this"
+    actions make sense on someone else's photo).
+    Otherwise always renders the partial, even for a completely unfiled photo: it also hosts the "File
+    to a pin"/"Send to a wiki" trigger buttons (see partials/_photo_associations.html), which must
+    render regardless of whether there's anything to display yet.
     """
 
     def get(self, request: HttpRequest, image_id: int) -> HttpResponse:
@@ -702,9 +652,8 @@ class PhotoShareFriendsView(LoginRequiredMixin, View):
 
     GET /vault/photos/share-friends/?image_id=
 
-    Trimmed down from pin_share_dialog.html's connections-picker markup - a
-    single-photo DM share needs no place/review-step context, just "which
-    friend."
+    Trimmed down from pin_share_dialog.html's connections-picker markup - a single-photo DM share needs
+    no place/review-step context, just "which friend."
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -724,9 +673,9 @@ class PhotoPinConfirmView(LoginRequiredMixin, View):
 
     GET /vault/photos/<image_id>/confirm-pin/
 
-    Shown before creating a pin from a photo that matches none of the user's
-    existing pins, so they can see the location, drag the marker, name it, or
-    change their mind and file the photo onto a different pin/place instead.
+    Shown before creating a pin from a photo that matches none of the user's existing pins, so they can
+    see the location, drag the marker, name it, or change their mind and file the photo onto a different
+    pin/place instead.
     """
 
     def get(self, request: HttpRequest, image_id: int) -> HttpResponse:
@@ -737,8 +686,8 @@ class PhotoPinConfirmView(LoginRequiredMixin, View):
             image_id: PK of the geotagged photo a pin is being created for.
 
         Returns:
-            The rendered confirmation partial, or 404 if the photo isn't the
-            viewer's or has no coordinates to place a marker at.
+            The rendered confirmation partial, or 404 if the photo isn't the viewer's or has no coordinates
+            to place a marker at.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image = get_object_or_404(Image.objects.select_related("location"), pk=image_id)
@@ -786,9 +735,8 @@ class PhotoUploadFailureDismissView(LoginRequiredMixin, View):
 class PhotoUploadFailureRetryView(LoginRequiredMixin, View):
     """Re-run processing for an upload whose task died.
 
-    Only for a failure that still has its stored row - a rejected upload never
-    became one, and retrying that means picking the file again, which is what
-    the file input on those cards is for.
+    Only for a failure that still has its stored row - a rejected upload never became one, and retrying
+    that means picking the file again, which is what the file input on those cards is for.
     """
 
     def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
@@ -799,8 +747,7 @@ class PhotoUploadFailureRetryView(LoginRequiredMixin, View):
             failure_id: The failure row to retry.
 
         Returns:
-            A toast. On refusal the card is re-rendered rather than swapped
-            away - see ``_toast``'s note on why an empty body is wrong there.
+            A toast.
         """
         from urbanlens.dashboard.services.media.upload_failures import MAX_USER_RETRIES, retry_upload_processing
 

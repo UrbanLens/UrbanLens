@@ -95,17 +95,11 @@ def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, que
         *args: Positional arguments passed to the task.
         countdown: Seconds to delay execution, if any.
         queue: Celery queue to dispatch to; None uses the task's default route.
-        expires: Seconds from now after which the broker should drop this task
-            unexecuted, rather than run it late. First-class (not part of
-            ``**kwargs``, which are task arguments, not ``apply_async``
-            options) for the assistant turn task: a turn whose caller has
-            already timed out and shown an error must not still execute and
-            spend a provider call minutes later once a worker slot frees up.
+        expires: Seconds from now after which the broker should drop this task unexecuted, rather than run it late.
         **kwargs: Keyword arguments passed to the task.
 
     Returns:
-        The AsyncResult on success, or None when the broker was unreachable.
-    """
+        The AsyncResult on success, or None when the broker was unreachable."""
     try:
         apply_kwargs: dict[str, Any] = {}
         if countdown is not None:

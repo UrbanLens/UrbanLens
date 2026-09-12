@@ -1,11 +1,4 @@
-"""Overture Maps building-attributes plugin: physical building characteristics panel.
-
-Free, open-data "real estate" context Overture actually publishes (it has no
-year-built field, unlike what a quick read of some API-candidate lists might
-suggest) - building class/subtype, height, floor count, and roof
-construction, reusing the same ``OvertureMapsGateway`` already wired into the
-boundary-provider chain (``services.apis.locations.boundaries.overture_maps``).
-"""
+"""Overture Maps building-attributes plugin: physical building characteristics panel."""
 
 from __future__ import annotations
 
@@ -22,14 +15,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: get_building_attributes() and get_nearby_places() are each independent S3
-#: GeoParquet range reads (connect/request timeouts of 10s/30s each - see
-#: OvertureMapsGateway), and observed in production to occasionally each take
-#: close to their own ceiling, compounding to 100s+ for one fetch() call when
-#: run back-to-back. get_nearby_places() is the less essential of the two
-#: (building attributes are this panel's primary content); skip it once the
-#: first call has already eaten most of a reasonable total budget, rather
-#: than always paying for both regardless of how slow the first one was.
+#: get_building_attributes() and get_nearby_places() are each independent S3 GeoParquet range reads
+#: (connect/request timeouts of 10s/30s each - see OvertureMapsGateway), and observed in production
+#: to occasionally each take close to their own ceiling, compounding to 100s+ for one fetch() call
+#: when run back-to-back. get_nearby_places() is the less essential of the two (building attributes
 _NEARBY_PLACES_BUDGET_SECONDS = 20.0
 
 
@@ -41,12 +30,10 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
     section_id = "overture-building-section"
     icon = "apartment"
     title = "Building Characteristics"
-    # Stays on the default (prefork) queue, not the fast thread-pool queue -
-    # OvertureMapsGateway reads GeoParquet via pyarrow/geopandas (real
-    # CPU-bound parsing/geometry work, same class of cost as BoundaryPanelSource's
-    # shapely work), and several of those running concurrently on a thread
-    # pool would cause enough GIL contention to slow down every other panel
-    # sharing it. See PanelSource.queue.
+    # Stays on the default (prefork) queue, not the fast thread-pool queue - OvertureMapsGateway
+    # reads GeoParquet via pyarrow/geopandas (real CPU-bound parsing/geometry work, same class of
+    # cost as BoundaryPanelSource's shapely work), and several of those running concurrently on a
+    # thread pool would cause enough GIL contention to slow down every other panel sharing it.
     queue = "celery"
 
     def fetch(self, pin: Pin) -> None:
@@ -81,13 +68,7 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
         LocationCache.set(pin.location, self.cache_source, {**attributes, "nearby_places": nearby_places}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Build the building-characteristics card from Overture's attribute + nearby-places lookup.
-
-        Suppressed for a parcel-scope pin: height, floor count, and roof shape
-        describe the one structure nearest the marker, which says nothing
-        useful about a site made of dozens of them (see
-        ``services.locations.site_scope``).
-        """
+        """Build the building-characteristics card from Overture's attribute + nearby-places lookup."""
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 
         if not data or is_site_scope(pin):

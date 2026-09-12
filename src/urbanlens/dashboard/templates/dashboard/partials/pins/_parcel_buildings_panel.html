@@ -1,30 +1,4 @@
-{% comment %}
-Every building standing on this property - from REData (county GIS + NY SHPO
-CRIS) or OpenStreetMap (see plugins.builtin.parcel_buildings), plus any
-BUILDING-typed child pin the owner created by hand that no external record
-covers - alongside a separate Parcels tab for PARCEL-typed children, which
-aren't buildings at all.
-
-Shared by the Private Pin page (PinController.parcel_buildings) and the wiki
-page (WikiParcelBuildingsPanelView); the wiki has no import action, no Mine/
-Parcels tabs (child wikis carry no distinct BUILDING/PARCEL split worth
-surfacing there), and its rows never link anywhere, since child wikis are
-markers on their parent's map rather than pages of their own.
-
-Context:
-    section_id, icon, title: panel identity (matches the placeholder's).
-    rows: every building for the "All" tab - external + user-created - see
-        _parcel_building_row.html for the shape. The wiki passes only this key.
-    mine_rows: the subset of rows with a child pin behind them (whether that
-        pin came from importing an external record or was hand-made). Omitted
-        (falsy/undefined) on the wiki, which has no Mine tab.
-    parcel_rows: PARCEL-typed children ({name, child_uuid, child_url}) - a
-        different tab entirely, not buildings. Omitted on the wiki.
-    unpinned_count: how many rows have no marker yet.
-    pin: the pin being viewed; omitted on the wiki page, which disables the
-        "add pins" action.
-    debug: optional DebugEntry for the admin overlay.
-{% endcomment %}
+{% comment %}Every building standing on this property - from REData (county GIS + NY SHPO CRIS) or OpenStreetMap, plus any BUILDING-typed child pin.{% endcomment %}
 <div id="{{ section_id }}" class="parcel-buildings card card--secondary"
      data-collapse-scope="pin" data-collapse-section="parcel_buildings">
     {% if debug %}

@@ -1,9 +1,7 @@
 {% load static %}
-{# Partial: social links list + add/remove forms. Re-rendered via HTMX after every change. #}
 <div id="social-links-content">
 
-    {# When a new known-platform link is added, fire a background check to verify the URL resolves. #}
-    {# hx-trigger="load" fires once when this element enters the DOM via HTMX swap. #}
+    {# When a new known-platform link is added, fire a background check to verify the URL resolves. hx-trigger="load" fires once when this. #}
     {% if verify_platform and verify_handle %}
     <span
         hx-get="{% url 'profile.social.verify' %}?platform={{ verify_platform }}&handle={{ verify_handle|urlencode }}"

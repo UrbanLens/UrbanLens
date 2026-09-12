@@ -1,11 +1,5 @@
 """Google Places plugin: place-name candidates and rate-limit defaults.
-
-Google Places has no pin-detail panel of its own - its details payload is
-cached into ``LocationCache`` by the place-details flow (see
-``tasks.prefetch_location_external_data``) and the linked ``GooglePlace`` row
-carries a resolved place name. This plugin wires both into the plugin system
-as name candidates and owns the service's rate-limit defaults.
-"""
+Google Places has no pin-detail panel of its own - its details payload is cached into ``LocationCache`` by the place-details flow (see ``tasks.prefetch_location_external_data``) and the linked ``GooglePlace`` row carries a resolved place name."""
 
 from __future__ import annotations
 
@@ -28,21 +22,16 @@ if TYPE_CHECKING:
 
 class GoogleMapsPhotosPanelSource(GalleryMediaSource):
     """Photos users have uploaded to Google Maps for a pin's location.
-
-    Found by coordinates only, via Places API (New) Nearby Search - never by
-    the pin/wiki's user-given name. Photo bytes are proxied server-side (see
-    ``controllers.media_proxy.GoogleMapsPhotoProxyView``) since resolving a
-    Places API (New) photo name requires the API key.
-    """
+    Found by coordinates only, via Places API (New) Nearby Search - never by the pin/wiki's user-given name."""
 
     key = "google_maps"
     cache_source = "google_maps_photos"
     icon = "photo_camera"
     title = "Google Maps"
-    # Deliberately not exposed on the external API: Google's Places API terms
-    # restrict redistributing photo data, and the photos only resolve through
-    # the session-authenticated GoogleMapsPhotoProxyView anyway - an external
-    # credential couldn't load them even if the metadata were exposed.
+    # Deliberately not exposed on the external API: Google's Places API terms restrict
+    # redistributing photo data, and the photos only resolve through the session-authenticated
+    # GoogleMapsPhotoProxyView anyway - an external credential couldn't load them even if the
+    # metadata were exposed.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     def gate(self, pin: Pin) -> bool:
@@ -68,12 +57,7 @@ class GoogleMapsPhotosPanelSource(GalleryMediaSource):
         )
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Build proxied media items from the cached photo names.
-
-        Each proxy URL carries a signature over its photo name - the proxy
-        view rejects anything else, so a copied/guessed reference can't burn
-        Places quota (see ``controllers.media_proxy.sign_photo_name``).
-        """
+        """Build proxied media items from the cached photo names."""
         from urllib.parse import quote
 
         from django.urls import reverse
@@ -100,12 +84,8 @@ class GooglePlacesNameProvider(NameProvider):
     def candidates(self, location: Location) -> list[str | None]:
         """Return the cached Google place name and the cached details name.
 
-        Args:
-            location: The location to name.
-
         Returns:
-            Raw candidate values; empty entries are filtered by the caller.
-        """
+            Raw candidate values; empty entries are filtered by the caller."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         values: list[str | None] = [location.cached_place_name]
@@ -117,12 +97,7 @@ class GooglePlacesNameProvider(NameProvider):
 
 
 class GooglePlaceLinkEnrichmentSource(EnrichmentSource):
-    """Background-links Locations to their shared GooglePlace row (a name source).
-
-    ``ensure_linked`` always creates and links the row - even when Google has
-    no name for the coordinates - so each location is attempted exactly once
-    and the linked row itself is the completion marker.
-    """
+    """Background-links Locations to their shared GooglePlace row (a name source)."""
 
     key: ClassVar[str] = "google_place_link"
     verbose_name: ClassVar[str] = "Google Place link"
@@ -142,12 +117,8 @@ class GooglePlaceLinkEnrichmentSource(EnrichmentSource):
     def enrich(self, location: Location) -> bool:
         """Link the location to its GooglePlace row, fetching the name if needed.
 
-        Args:
-            location: The location to link.
-
         Returns:
-            True when the location is linked afterwards.
-        """
+            True when the location is linked afterwards."""
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
         GooglePlaceService().ensure_linked(location)

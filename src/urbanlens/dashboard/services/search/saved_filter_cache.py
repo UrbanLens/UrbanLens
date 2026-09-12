@@ -1,5 +1,4 @@
-"""Backend cache for a saved filter's matching pin uuids.
-The cache key embeds both a fingerprint of the profile's pins (``Max(updated)`` plus the pin count, so edits, creates, AND deletes all change it) AND the saved filter's own ``updated`` timestamp, so an entry self-invalidates the moment either the matching pins OR the filter's own criteria change - no manual invalidation signal is needed, and a stale entry can never outlive the data it describes."""
+"""Backend cache for a saved filter's matching pin uuids."""
 
 from __future__ import annotations
 
@@ -11,7 +10,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
-_CACHE_TIMEOUT = 60 * 60 * 24  # 1 day - the last-updated fingerprints in the key are the real expiry
+_CACHE_TIMEOUT = 60 * 60 * 24
 _CACHE_KEY_TEMPLATE = "saved_filter_pins:{profile_id}:{filter_uuid}:{filter_updated}:{fingerprint}"
 
 
@@ -27,17 +26,12 @@ def get_or_compute_matching_uuids(profile: Profile, saved_filter: SavedFilter, *
     """Return the profile's pin uuids matching ``saved_filter``, using a warm cache when possible.
 
     Args:
-        profile: Owner of both the filter and the pins being matched -
-            every query here is scoped to this profile, so this can never
-            return or be primed with another user's pin data.
+        profile: Owner of both the filter and the pins being matched - every query here is scoped to this profile, so this can never return or be primed with another user's pin data.
         saved_filter: A ``SavedFilter`` already verified to belong to ``profile``.
-        fingerprint: A pre-computed :func:`pins_fingerprint` result, for a
-            caller resolving multiple filters for the same profile in one
-            request. Computed here when omitted, for single-filter callers.
+        fingerprint: A pre-computed :func:`pins_fingerprint` result, for a caller resolving multiple filters for the same profile in one request.
 
     Returns:
-        List of pin uuid strings matching the filter's criteria.
-    """
+        List of pin uuid strings matching the filter's criteria."""
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria
 
@@ -62,12 +56,10 @@ def warm_all_for_profile(profile: Profile) -> int:
     """Precompute and cache every one of a profile's saved filters.
 
     Args:
-        profile: Whose saved filters to warm - called right after login so
-            the first toolbar toggle of the session hits a warm cache.
+        profile: Whose saved filters to warm - called right after login so the first toolbar toggle of the session hits a warm cache.
 
     Returns:
-        Number of saved filters warmed.
-    """
+        Number of saved filters warmed."""
     count = 0
     for saved_filter in profile.saved_filters.all():
         get_or_compute_matching_uuids(profile, saved_filter)

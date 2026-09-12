@@ -1,5 +1,4 @@
-"""Writing to, valuing, and totalling the reputation ledger.
-Working out how badly a target needed a contribution means querying that target's state, and for photos it can mean walking external gallery panels - by far the most expensive input in the model, and exactly the cost this feature must not add to a page load."""
+"""Writing to, valuing, and totalling the reputation ledger."""
 
 from __future__ import annotations
 
@@ -37,13 +36,10 @@ def record_event(
 
     Args:
         profile: Who contributed.
-        rule_key: A registered rule. An unknown key is logged and ignored
-            rather than raising - a contribution must never fail because the
-            bookkeeping around it is misconfigured.
+        rule_key: A registered rule.
         target: The object contributed, if the rule has one.
         wiki: The wiki it landed on, for per-wiki caps and the admin breakdown.
-        occurred_at: When, defaulting to now. Explicit so a backfill can
-            attribute a row to the past.
+        occurred_at: When, defaulting to now.
 
     Returns:
         The row, or None when nothing was written."""
@@ -146,11 +142,7 @@ def score_event(event: ReputationEvent) -> Decimal | None:
 
 def _decay_multiplier(event: ReputationEvent) -> Decimal:
     """Return the diminishing-returns factor for this row.
-
-    A full point for the first contribution of a kind in the period, half for
-    the second, a quarter for the third. Counts rows *before* this one so the
-    factor does not depend on the order the scorer happens to reach them in.
-    """
+    Counts rows *before* this one so the factor does not depend on the order the scorer happens to reach them in."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
 
     earlier = (
@@ -171,9 +163,7 @@ def _apply_caps(event: ReputationEvent, value: Decimal) -> tuple[Decimal, str]:
     """Trim *value* to whatever the period ceilings still allow.
 
     Returns:
-        The allowed value, and a short note naming the binding cap (empty when
-        neither bound).
-    """
+        The allowed value, and a short note naming the binding cap (empty when neither bound)."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
 
     # Locked for the length of the caps check and the write that follows it.
@@ -202,7 +192,6 @@ def _apply_caps(event: ReputationEvent, value: Decimal) -> tuple[Decimal, str]:
 
 def retract_event(event: ReputationEvent, *, reason: str) -> bool:
     """Stop a row counting, reversibly.
-    A wiki edit's ``reverted`` flag is current state rather than history - reverting a revert clears it - so retraction has to be undoable.
 
     Args:
         event: The row.
@@ -252,7 +241,7 @@ def weight_events_for_target(target: Any, *, weight: Decimal, reason: str) -> in
 
     Args:
         target: The object the rows are about.
-        weight: The multiplier to store. 1 restores full value.
+        weight: The multiplier to store.
         reason: Short machine-readable label, stored for the audit trail.
 
     Returns:
@@ -298,12 +287,7 @@ def restore_event(event: ReputationEvent) -> bool:
 
 
 def _mark_stale(profile_id: int) -> None:
-    """Flag a profile's cached total as lagging the ledger.
-
-    Cheap compare-and-swap rather than a lock: the transition is one-way until
-    the recompute clears it, so a concurrent writer setting the same flag is a
-    harmless no-op.
-    """
+    """Flag a profile's cached total as lagging the ledger."""
     from urbanlens.dashboard.models.reputation.model import ProfileReputation
 
     if ProfileReputation.objects.filter(profile_id=profile_id, is_stale=False).update(is_stale=True):
@@ -316,7 +300,6 @@ def _mark_stale(profile_id: int) -> None:
 
 def recompute_total(profile: Profile | int) -> Decimal:
     """Rebuild a profile's cached totals from the ledger.
-    The ledger is truth and this is a cache, so the sum is recomputed rather than incremented - an incremental total drifts the first time a row is retracted, backfilled, or scored out of order.
 
     Args:
         profile: Whose totals to rebuild.

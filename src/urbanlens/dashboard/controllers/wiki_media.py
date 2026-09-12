@@ -21,10 +21,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# How many shared wiki photos to render as votable Media tiles. The full,
-# unlimited management surface (upload, delete, cover photo, Flickr import)
-# stays behind the section's "Manage" tab (WikiGalleryView), exactly as the
-# pin page's "Mine" tab manages the owner's own photos.
+# How many shared wiki photos to render as votable Media tiles.
 _WIKI_PHOTOS_PREVIEW_LIMIT = 60
 
 
@@ -56,10 +53,9 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         if not isinstance(panel, GalleryMediaSource):
             return HttpResponse(status=404)
 
-        # Same gate the pin page's own generic panel dispatch applies - a
-        # feature-gated source's photos must not leak through this separate
-        # wiki-media route, and LocationCache is shared with the pin page so
-        # a gated panel's row is just as reachable here without this check.
+        # Same gate the pin page's own generic panel dispatch applies - a feature-gated source's photos must not
+        # leak through this separate wiki-media route, and LocationCache is shared with the pin page so a gated
+        # panel's row is just as reachable here without this check.
         if not panel_visible_to(profile.user, panel):
             return HttpResponse(status=404)
 
@@ -75,9 +71,8 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
 
         scores = MediaRelevance.objects.vote_scores(location, source)
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"))
-        # Prefer an already-materialized local copy over hot-linking the
-        # provider - see the matching comment in controllers.pin. Voting is
-        # wiki-side too, so this is the same lookup either flow benefits from.
+        # Prefer an already-materialized local copy over hot-linking the provider - see the matching comment in
+        # controllers.pin. Voting is wiki-side too, so this is the same lookup either flow benefits from.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
         rendered_items = []
         for item in items:
@@ -90,18 +85,15 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     "is_relevant": my_marks.get(key),
                     "vote_score": scores.get(key, 0),
                     "local_url": local_image.image.url if local_image else None,
-                    # TIFFs, scanned PDFs and HEICs reach the gallery routinely
-                    # and none of them render in an <img> - see
-                    # services.media.previews.
+                    # TIFFs, scanned PDFs and HEICs reach the gallery routinely and none of them render in an
+                    # <img> - see services.media.previews.
                     "thumb_url": gallery_thumb_url(item.url, item.thumb_url, item.content_type),
-                    # Only present once this item has a local copy - a vote on
-                    # a still-transient item has no REData photo_id to
-                    # attach to (see WikiMediaVoteView.post).
+                    # Only present once this item has a local copy - a vote on a still-transient item has no
+                    # REData photo_id to attach to (see WikiMediaVoteView.post).
                     "image_id": local_image.pk if local_image else None,
-                    # Ownership isn't meaningful for an external-provider result
-                    # (explicitly None, not just absent - see the "photos"
-                    # branch below and pin_media_items.html's data-mine, which
-                    # needs to tell "no data" apart from "definitely not mine").
+                    # Ownership isn't meaningful for an external-provider result (explicitly None, not just
+                    # absent - see the "photos" branch below and pin_media_items.html's data-mine, which needs
+                    # to tell "no data" apart from "definitely not mine").
                     "is_mine": None,
                 },
             )
@@ -114,11 +106,8 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
-        # Same rows the wiki gallery serves, so the same filter: `visible_to`
-        # answers "may this account see this upload at all", which is a
-        # different question from "would a brand-new wiki have carried it".
-        # Without the second one this tab hands back the uploads the gallery
-        # conceals, on the same page load.
+        # Same rows the wiki gallery serves, so the same filter: `visible_to` answers "may this account see this
+        # upload at all", which is a different question from "would a brand-new wiki have carried it".
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
         images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).select_related("profile").visible_to(profile).exclude(image="").order_by("-created")[:_WIKI_PHOTOS_PREVIEW_LIMIT]
@@ -138,9 +127,8 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     "image_id": img.pk,
                     "lat": img.latitude,
                     "lng": img.longitude,
-                    # Drives the lightbox's "Copy to my Private Pin" action
-                    # (isMine === false) and its "Copied from..." line - see
-                    # pin_media_items.html and shared/media-lightbox.ts.
+                    # Drives the lightbox's "Copy to my Private Pin" action (isMine === false) and its "Copied
+                    # from..." line - see pin_media_items.html and shared/media-lightbox.ts.
                     "is_mine": img.profile_id == profile.pk,
                     "copied_from_label": img.copied_from_label or "",
                     "_redata_confidence": img.redata_confidence,
@@ -150,11 +138,10 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         if not rendered_items:
             return HttpResponse(status=204)
 
-        # Most relevant first: the community's own net vote score takes
-        # priority; REData's cached confidence (services.photos.redata_relevance)
-        # breaks ties among equally-voted photos - including the common case
-        # of no votes at all, where every score is otherwise 0 - falling back
-        # to upload recency for a photo REData hasn't scored yet.
+        # Most relevant first: the community's own net vote score takes priority; REData's cached confidence
+        # (services.photos.redata_relevance) breaks ties among equally-voted photos - including the common case
+        # of no votes at all, where every score is otherwise 0 - falling back to upload recency for a photo
+        # REData hasn't scored yet.
         rendered_items.sort(key=lambda entry: (entry["vote_score"], entry["_redata_confidence"] if entry["_redata_confidence"] is not None else -1, entry["_created"]), reverse=True)
 
         return render(request, "dashboard/partials/pins/pin_media_items.html", {"rendered_items": rendered_items, "source_key": "photos", "wiki_mode": True})
@@ -162,12 +149,8 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
     def _pending(self, request: HttpRequest, location: Location, profile: Profile, source: str, panel: GalleryMediaSource) -> HttpResponse:
         """Warm the provider's cache from the viewer's own pin, or give up quietly.
 
-        External media is fetched by a Celery task driven by a Pin (it supplies
-        the search name and coordinates). A wiki viewer reaches the page because
-        they have a pin at (or near) this location; we use *their* pin so the
-        fetch is gated by their ``external_apis_enabled`` and counts against
-        their quota. A boundary-mate viewer with no pin at this exact location
-        just sees whatever the Private Pin page has already cached (204).
+        A wiki viewer reaches the page because they have a pin at (or near) this location; we use *their*
+        pin so the fetch is gated by their ``external_apis_enabled`` and counts against their quota.
         """
         from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
 
@@ -193,24 +176,11 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
 class WikiMediaVoteView(LoginRequiredMixin, View):
     """Cast, flip, or clear the viewer's community vote on one wiki Media item.
 
-    POST /location/<slug>/wiki/media/vote/  →
-    ``{"my_vote": bool|null, "vote_score": int, "image_id"?: int, "image_url"?: str, "materialize_error"?: str}``
+    POST /location/<slug>/wiki/media/vote/ →
 
-    An up-vote (``is_relevant: true``) on an externally-sourced item (any
-    ``source`` other than ``"photos"``, which already lists real ``Image``
-    rows attached to this wiki - see ``WikiMediaProviderView._photos``) also
-    materializes it and attaches it to this wiki, exactly like the pin
-    detail page's "Send to wiki" bulk action - see the module docstring's
-    "An up-vote also submits the item to the wiki" bullet for why voting
-    here is treated as that same deliberate sharing action. This costs the
-    *voter's* storage quota (``materialize_media_item`` downloads and saves
-    it), same as any other materialize call. A failed download still keeps
-    the vote (the voter's opinion is worth keeping even if today's download
-    attempt failed) but is reported back via ``materialize_error`` so the
-    frontend can toast it. A down-vote or a cleared vote never materializes
-    anything - only an existing, already-materialized ``image_id`` supplied
-    by the client (re-scoped to this wiki's own attached media) gets its
-    REData signal reversed.
+    A down-vote or a cleared vote never materializes anything - only an existing, already-materialized
+    ``image_id`` supplied by the client (re-scoped to this wiki's own attached media) gets its REData
+    signal reversed.
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
@@ -241,10 +211,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
         if is_relevant is None:
             MediaRelevance.objects.for_gallery(profile, location, source).filter(item_key=item_key).delete()
         elif is_relevant and source != "photos" and url:
-            # An explicit click overrides any prior vote. The "photos" panel
-            # lists photos already attached to this wiki, so it falls to the
-            # branch below, which reuses the client's own image_id instead of
-            # re-downloading a local file.
+            # An explicit click overrides any prior vote.
             result = record_relevant_and_cache(
                 location=location,
                 profile=profile,
@@ -268,10 +235,9 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
                 item_key=item_key,
                 defaults={"is_relevant": bool(is_relevant)},
             )
-            # image_id is only trusted after re-scoping to this wiki's own
-            # attached media - scoping to the location alone let a caller
-            # record a vote against a pin-owned (not wiki-attached) photo at
-            # the same location, which they have no business voting on.
+            # image_id is only trusted after re-scoping to this wiki's own attached media - scoping to the
+            # location alone let a caller record a vote against a pin-owned (not wiki-attached) photo at the
+            # same location, which they have no business voting on.
             existing_image = Image.objects.filter(pk=image_id, wiki=wiki).first() if image_id else None
             if existing_image is not None:
                 queue_relevance_vote(existing_image, profile, is_relevant=bool(is_relevant))
@@ -288,16 +254,14 @@ class CopyWikiPhotoView(LoginRequiredMixin, View):
     """Copy a wiki photo onto the viewer's own pin at this location.
 
     POST /location/<slug>/wiki/media/copy-to-pin/<int:image_id>/ →
-    ``{"copied": true, "already_copied": bool, "pin_slug": str, "pin_name": str}``
 
-    Deliberately not a ``PhotoActionView`` action (``controllers.vault_photos``): that view's
-    shared image lookup only ever operates on images the requester already owns, which a wiki
-    photo being copied is not. The image is instead scoped and gated exactly like every other
-    wiki-photo lookup in this module - ``resolve_visible_wiki`` for wiki access,
-    ``visible_rows``/``visible_to`` for concealment and the uploader's own visibility setting -
-    so this can never expose a photo the wiki's own gallery views wouldn't already show this
-    viewer. The target is the viewer's own pin at this wiki's location, the same one "Back to my
-    pin" links to; there is no picker, matching that link's own assumption of a single pin.
+    Deliberately not a ``PhotoActionView`` action (``controllers.vault_photos``): that view's shared
+    image lookup only ever operates on images the requester already owns, which a wiki photo being
+    copied is not.
+    The image is instead scoped and gated exactly like every other wiki-photo lookup in this module -
+    ``resolve_visible_wiki`` for wiki access, ``visible_rows``/``visible_to`` for concealment and the
+    uploader's own visibility setting - so this can never expose a photo the wiki's own gallery views
+    wouldn't already show this viewer.
     """
 
     def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:

@@ -1,24 +1,4 @@
-"""Base class for UrbanLens plugins.
-
-A plugin bundles one external integration (usually one third-party API) into
-a single self-contained unit: its metadata, its default rate-limit
-configuration, and the concrete contributions it makes to the application
-(pin-detail panels, imagery providers, hook callbacks, ...).
-
-Plugins are discovered by the
-:class:`~urbanlens.dashboard.plugins.registry.PluginRegistry` from three
-places:
-
-1. Bundled plugins in :mod:`urbanlens.dashboard.plugins.builtin`.
-2. Third-party pip packages exposing the ``urbanlens.plugins`` entry-point
-   group.
-3. Extra dotted module paths listed in the ``UL_PLUGIN_MODULES`` setting.
-
-Plugin classes are instantiated once during discovery, which runs inside
-``AppConfig.ready()``. **Neither import nor ``__init__`` may touch the
-database or the network** - defer all real work to the contribution objects,
-which run lazily at request/Celery time.
-"""
+"""Base class for UrbanLens plugins."""
 
 from __future__ import annotations
 
@@ -36,22 +16,15 @@ if TYPE_CHECKING:
 
 class UrbanLensPlugin:
     """One pluggable integration: metadata plus typed contribution points.
-
-    Subclasses set ``name`` (a unique slug) and override whichever
-    contribution methods apply - every contribution is optional, so this is
-    deliberately a plain class rather than an ABC. A class without a ``name``
-    is treated as an abstract intermediate base and skipped by discovery.
+    Subclasses set ``name`` (a unique slug) and override whichever contribution methods apply - every contribution is optional, so this is deliberately a plain class rather than an ABC.
 
     Attributes:
-        name: Unique plugin slug (e.g. ``"nps"``). Required for discovery.
+        name: Unique plugin slug (e.g. ``"nps"``).
         verbose_name: Human-readable name shown in the admin UI.
         description: One-or-two sentence summary for the admin UI.
         version: Plugin version string.
         author: Plugin author, shown in the admin UI.
-        order: Sort key for aggregated contributions (e.g. the order imagery
-            providers appear in a carousel). Lower sorts earlier; defaults
-            to 100.
-    """
+        order: Sort key for aggregated contributions (e.g. the order imagery providers appear in a carousel)."""
 
     name: ClassVar[str] = ""
     verbose_name: ClassVar[str] = ""
@@ -63,106 +36,54 @@ class UrbanLensPlugin:
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
         """Default rate-limit configuration for this plugin's service keys.
 
-        Feeds the same machinery as ``rate_limiter.SERVICE_REGISTRY``: an
-        ``ApiRateLimit`` row is auto-created from these defaults the first
-        time each service key is used, after which admins manage the row via
-        the site-admin API limits page.
-
         Returns:
-            Mapping of service key to its defaults; empty when the plugin
-            makes no rate-limited API calls.
-        """
+            Mapping of service key to its defaults; empty when the plugin makes no rate-limited API calls."""
         return {}
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Pin-detail external-data panels contributed by this plugin.
 
         Returns:
-            PanelSource instances to add to the panel registry; empty when
-            the plugin contributes no panels.
-        """
+            PanelSource instances to add to the panel registry; empty when the plugin contributes no panels."""
         return []
 
     def get_satellite_providers(self) -> list[SatelliteViewProvider]:
         """Satellite-imagery providers for the pin-detail satellite carousel.
-
-        Called each time the carousel's provider chain runs, so returning
-        freshly constructed gateway instances is expected. Providers from all
-        plugins are concatenated in plugin ``order``.
+        Called each time the carousel's provider chain runs, so returning freshly constructed gateway instances is expected.
 
         Returns:
-            Provider gateway instances; empty when the plugin contributes
-            no satellite imagery.
-        """
+            Provider gateway instances; empty when the plugin contributes no satellite imagery."""
         return []
 
     def get_name_providers(self) -> list[NameProvider]:
         """Place-name candidate providers contributed by this plugin.
 
-        Providers yield raw name candidates for a location (usually read from
-        the LocationCache rows this plugin's panels populate). Candidates from
-        all plugins are cleaned, quality-gated, and resolved into the
-        location's official name; each surviving candidate is also persisted
-        as an official alias attributed to the provider's ``source`` slug.
-
         Returns:
-            NameProvider instances; empty when the plugin contributes no
-            place names.
-        """
+            NameProvider instances; empty when the plugin contributes no place names."""
         return []
 
     def get_street_view_providers(self) -> list[StreetViewProvider]:
         """Street-level imagery providers for the pin-detail street carousel.
-
-        Called each time the carousel's provider chain runs, so returning
-        freshly constructed gateway instances is expected. Providers from all
-        plugins are concatenated in plugin ``order``.
+        Called each time the carousel's provider chain runs, so returning freshly constructed gateway instances is expected.
 
         Returns:
-            Provider gateway instances; empty when the plugin contributes
-            no street-level imagery.
-        """
+            Provider gateway instances; empty when the plugin contributes no street-level imagery."""
         return []
 
     def get_enrichment_sources(self) -> list[EnrichmentSource]:
         """Background-enrichment sources contributed by this plugin.
-
-        Sources run inside the hourly scheduled enrichment task
-        (``tasks.run_scheduled_enrichment``), which proactively backfills
-        high-value data (names, aliases, addresses, boundaries, ...) for every
-        pinned/wiki'd Location while staying inside each service's configured
-        rate limits. Each source tracks its own per-location completion, so
-        contributing one never affects when another provider runs.
+        Each source tracks its own per-location completion, so contributing one never affects when another provider runs.
 
         Returns:
-            EnrichmentSource instances; empty when the plugin contributes no
-            background enrichment.
-        """
+            EnrichmentSource instances; empty when the plugin contributes no background enrichment."""
         return []
 
     def get_photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
         """Photo keywording strategies contributed by this plugin.
 
-        Providers run in the background after each photo upload (when the
-        uploader has keyword generation enabled) and store their own
-        ``ImageKeyword`` rows attributed to their slug, making photos
-        text-searchable in global search. Multiple plugins may contribute
-        providers simultaneously; each stores keywords independently.
-
         Returns:
-            PhotoKeywordProvider instances; empty when the plugin contributes
-            no photo keywording.
-        """
+            PhotoKeywordProvider instances; empty when the plugin contributes no photo keywording."""
         return []
 
     def register(self, hooks: HookRegistry) -> None:
-        """Attach action/filter callbacks to the shared hook bus.
-
-        Called once per plugin after all plugins are discovered. Override to
-        integrate with extension points that have no dedicated contribution
-        method.
-
-        Args:
-            hooks: The shared :data:`~urbanlens.dashboard.plugins.hooks.hooks`
-                registry.
-        """
+        """Attach action/filter callbacks to the shared hook bus."""

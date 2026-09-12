@@ -1,11 +1,4 @@
-{% comment %}
-The Vault "needs attention" organize queue - a horizontally scrolling band of
-actionable photo cards. Re-fetched via the `refreshQueue` event after uploads so
-newly ingested suggestions appear without a full page reload.
-
-Context:
-  attention_cards - list of {"image", "state", "suggestion"} dicts
-{% endcomment %}
+{% comment %}The Vault "needs attention" organize queue - a horizontally scrolling band of actionable photo cards.{% endcomment %}
 {% if attention_cards %}
 <section class="photos-attention" aria-label="Photos needing attention">
     <div class="photos-attention-head">

@@ -1,5 +1,4 @@
-"""Per-field-kind strategy registry - the single place a new Consensus field kind is wired in.
-Mirrors ``services.spotguessr.modes``'s ``ModeStrategy``/``_STRATEGIES`` registry: adding a 4th field kind later means adding one ``ConsensusFieldStrategy`` entry to ``_STRATEGIES`` below, rather than editing round generation, answer application, and agreement-checking separately and hoping they stay in sync."""
+"""Per-field-kind strategy registry - the single place a new Consensus field kind is wired in."""
 
 from __future__ import annotations
 
@@ -29,8 +28,7 @@ _EARTH_RADIUS_METERS = 6_371_000.0
 
 
 def haversine_distance_meters(a: Point, b: Point) -> float:
-    """Great-circle distance between two lon/lat points, in meters.
-    Deliberately pure Python (no DB round-trip) - unlike ``services.spotguessr.distance.geodesic_distance_meters``, which needs a real ``Location`` row to anchor its PostGIS annotation, this is a plain point-to-point comparison with no natural "anchor" row to hang it off of (``ConsensusFieldStrategy.agrees`` only ever receives the two raw values)."""
+    """Great-circle distance between two lon/lat points, in meters."""
     from urbanlens.dashboard.services.geo.distance import haversine_meters
 
     return haversine_meters(a.y, a.x, b.y, b.x)
@@ -44,11 +42,7 @@ ALIAS_SUGGEST_THRESHOLD = 2
 
 @dataclass(frozen=True)
 class RoundContent:
-    """What a strategy's ``build_round``/``build_check_round`` resolves for one candidate wiki.
-
-    Handed straight to ``ConsensusRound.objects.create()`` by the caller -
-    see ``services.consensus.selection``.
-    """
+    """What a strategy's ``build_round``/``build_check_round`` resolves for one candidate wiki."""
 
     target_image: Image | None = None
 
@@ -59,26 +53,12 @@ class ConsensusFieldStrategy:
 
     Attributes:
         kind: The ``ConsensusFieldKind`` value this strategy implements.
-        find_missing: Given a pool of candidate wikis, return those still
-            missing this field/data - used to generate an ordinary round.
-        find_known: Given a pool of candidate wikis, return those that
-            already have a confirmed value for this field/data - used to
-            generate a trust-check round (see ``services.consensus.trust``).
-        build_round: Given a wiki from ``find_missing``'s output, returns
-            the round content for it, or None if this particular wiki turns
-            out to have nothing usable after all (caller should try another).
-        build_check_round: Given a wiki from ``find_known``'s output,
-            returns ``(round content, known value)``, or None if this wiki
-            turns out to have nothing usable.
-        apply_answer: Applies a submitted (and already-validated) answer
-            value to the wiki (and/or its target image), saves it, and
-            returns a ``WikiEdit.changes``-shaped diff dict for the caller to
-            record - or None if this field kind isn't ``WikiEdit``-tracked
-            (``PHOTO_COORDINATES``; a submitted-but-duplicate alias also
-            returns None, since there's nothing new to record).
-        normalize: Canonical form of a submitted value, for agreement/vote
-            clustering and (for text kinds) storing on
-            ``ConsensusAnswer.normalized_text``.
+        find_missing: Given a pool of candidate wikis, return those still missing this field/data - used to generate an ordinary round.
+        find_known: Given a pool of candidate wikis, return those that already have a confirmed value for this field/data - used to generate a trust-check round (see ``services.consensus.trust``).
+        build_round: Given a wiki from ``find_missing``'s output, returns the round content for it, or None if this particular wiki turns out to have nothing usable after all (caller should try another).
+        build_check_round: Given a wiki from ``find_known``'s output, returns ``(round content, known value)``, or None if this wiki turns out to have nothing usable.
+        apply_answer: Applies a submitted (and already-validated) answer value to the wiki (and/or its target image), saves it, and returns a ``WikiEdit.changes``-shaped diff dict for the caller to record - or None if this field kind isn't ``WikiEdit``-tracked...
+        normalize: Canonical form of a submitted value, for agreement/vote clustering and (for text kinds) storing on ``ConsensusAnswer.normalized_text``.
         agrees: Whether two submitted values count as the same answer."""
 
     kind: str
@@ -121,13 +101,9 @@ def _wiki_field_strategy(
     agrees: Callable[[Any, Any], bool] = _text_agrees,
 ) -> ConsensusFieldStrategy:
     """Shared factory for the four plain Wiki-attribute field kinds (name/description/indoor_outdoor/pin_type).
-    Each of those four only differs in which attribute it reads/writes and what counts as "confirmed" - everything else (round shape, diff recording) is identical, so it's expressed once here rather than duplicated four times.
 
     Args:
-        written_fields: Columns ``set_value`` actually assigns, when that is not
-            just ``field_name``. The pin-type strategy also sets
-            ``pin_type_is_user_provided``, and a scoped save that listed only the
-            named field would silently drop it."""
+        written_fields: Columns ``set_value`` actually assigns, when that is not just ``field_name``."""
 
     def find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
         return [wiki for wiki in pool if confirmed_value(wiki) is None]
@@ -227,10 +203,8 @@ def _valid_pin_type_choices() -> set[str]:
     return set(PinType.values)
 
 
-# ----------------------------------------------------------------------
 # WIKI_ALIAS - additive, never routed through agree/vote/tentative (a wiki
 # can have several valid aliases at once, unlike the single-value kinds).
-# ----------------------------------------------------------------------
 
 
 def _alias_find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
@@ -271,10 +245,8 @@ def _alias_apply_answer(wiki: Wiki, value: Any, profile: Profile, round_: Consen
     return {"alias_added": {"from": None, "to": alias.name}}
 
 
-# ----------------------------------------------------------------------
 # PHOTO_COORDINATES - the only kind whose round targets a specific Image,
 # not the Wiki itself, and whose agreement is distance-based, not string-based.
-# ----------------------------------------------------------------------
 
 
 def _photo_find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
@@ -396,11 +368,7 @@ def all_kinds() -> list[str]:
 
 def validate_value(kind: str, value: Any) -> bool:
     """Whether ``value`` is a structurally acceptable submission for ``kind`` (before applying it).
-
-    Only checks the closed-vocabulary kinds - free text (name/description/
-    alias) and coordinates are validated by their own controller parsing,
-    not here.
-    """
+    Only checks the closed-vocabulary kinds - free text (name/description/ alias) and coordinates are validated by their own controller parsing, not here."""
     if kind == ConsensusFieldKind.WIKI_INDOOR_OUTDOOR:
         return value in _valid_indoor_outdoor_choices()
     if kind == ConsensusFieldKind.WIKI_PIN_TYPE:

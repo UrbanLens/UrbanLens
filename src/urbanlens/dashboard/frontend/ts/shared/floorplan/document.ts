@@ -1,10 +1,5 @@
 /**
  * The floorplan document as the editor sees it.
- *
- * Mirrors `services/floorplans/serialization.py` exactly. Walls are the only
- * stored geometry and live in plan-local metres; rooms are seed points that
- * bind to whichever derived face contains them, so a geometry edit can never
- * orphan a room's name.
  */
 
 import type { Pt } from "./coords";
@@ -14,12 +9,6 @@ export type WallKind = "exterior" | "interior" | "fence" | "virtual" | "collapse
 
 /**
  * Every wall kind, in the order they are offered, with what to call it.
- *
- * One list, because the editor had four hardcoded copies of these enums and a
- * kind added to the model reached none of them. The labels mirror the model's
- * own choice labels: a dropdown reading "virtual" and "collapsed" is showing
- * the database its own column values, and "Virtual (open edge)" is the phrase
- * that says what picking it does.
  */
 export const WALL_KINDS: ReadonlyArray<{ value: WallKind; label: string }> = [
     { value: "exterior", label: "Exterior wall" },
@@ -40,20 +29,11 @@ export const OPENING_KINDS: ReadonlyArray<{ value: OpeningKind; label: string }>
     { value: "hatch", label: "Hatch" },
 ];
 export type OpeningSwing = "none" | "left" | "right" | "double";
-// Trimmed to the kinds that earn their own icon: an entrance is already a
-// door opening on a wall, and "photo"/"note"/"fixture" markers carried no
-// information a label field didn't already say.
+// Trimmed to the kinds that earn their own icon.
 export type MarkerKind = "hazard" | "stair" | "elevator";
 
 /**
  * The fields every floorplan item carries, whatever kind of thing it is.
- *
- * Mirrors ``FloorplanItem`` on the server, which walls, openings, rooms,
- * markers and floors all inherit. Optional here because a freshly drawn item
- * has none of them - but note they round-trip whether or not this file
- * declares them, since the document is parsed JSON and the server rewrites
- * every one of these from the payload on save. Declaring them is what lets the
- * editor *show* them.
  */
 /** One entry in a plan's reference pool: a photo, a scan, a page. */
 export interface Reference {
@@ -100,11 +80,6 @@ export const LOCK_STATES: ReadonlyArray<{ value: LockState; label: string }> = [
 
 /**
  * One lock on an opening; a door may carry several, or none.
- *
- * Only the engagement axis, deliberately. Whether the lock is broken, seized or
- * missing is what every item's ``condition`` already records - and a broken lock
- * may be hanging open or rusted shut, which is the distinction that matters on
- * site and the one "broken" alone does not make.
  */
 export interface Lock extends ItemDetails {
     uuid?: string;
@@ -153,18 +128,10 @@ export interface Marker extends ItemDetails {
     y: number;
     facing_degrees?: number | null;
     connector_id?: string | null;
-    // WGS-84, computed from x/y and filled in just before every save (see
-    // floorplan-editor.ts's save()) so the server can create/move this
-    // marker's detail-pin twin without re-implementing the plan's
-    // local-to-world projection (PlanProjection.toWorld). Not used for
-    // rendering - x/y projected through the live PlanProjection is what
-    // actually places the marker on the map - so it is fine for this to be
-    // absent on a freshly-loaded document.
+    // WGS-84, computed from x/y and filled in just before every save) so the server can create/move this marker's detail-pin twin without.
     lat?: number | null;
     lng?: number | null;
-    // The linked detail pin's own icon/color, when it has customizations of
-    // its own (set via the Private Pin page's detail-pin dialog) - null falls
-    // back to the kind-based defaults below, same as a plain detail pin.
+    // The linked detail pin's own icon/color, when it has customizations of its own (set via the Private Pin page's detail-pin dialog).
     icon?: string | null;
     color?: string | null;
 }
@@ -225,9 +192,7 @@ export function emptyDocument(at: { lat: number; lng: number }): FloorplanDocume
         valid_from: null,
         plan_origin: at,
         rotation_degrees: 0,
-        // No name: writing "Ground floor" into the document as though the
-        // author had typed it is what left a renamed floor with no record of
-        // which storey it was. A blank name derives its label instead.
+        // No name: writing "Ground floor" into the document as though the author had typed it is what left a renamed floor with no record.
         floors: [{ level: 0, name: "", walls: [], rooms: [], markers: [] }],
         source_pool: [],
         reference_pool: [],
@@ -237,24 +202,11 @@ export function emptyDocument(at: { lat: number; lng: number }): FloorplanDocume
 let localIdCounter = 0;
 /**
  * A client-side id for a wall that has never been saved.
- *
- * Face derivation needs to attribute every edge to a wall, including ones the
- * user drew a second ago, so identity cannot wait for a round trip.
  */
 export const nextLocalId = (): string => `local-${++localIdCounter}`;
 
 /**
  * An id for a stair or lift shaft, unique everywhere.
- *
- * Not ``nextLocalId``: that is a counter that restarts at one on every page
- * load, which is harmless for item uuids because the server replaces those on
- * save, and is not harmless here because ``connector_id`` is free text and is
- * stored exactly as sent. Two shafts drawn in two sessions both came out as
- * ``local-3``, and the editor then reported two unrelated staircases as the
- * same one running through the building.
- *
- * Returns:
- *     A fresh identifier, safe to compare across sessions and devices.
  */
 export function newConnectorId(): string {
     const globalCrypto = globalThis.crypto as Crypto | undefined;
@@ -302,21 +254,6 @@ export interface CopyFloorOptions {
 
 /**
  * A deep copy of *source*'s contents, with fresh identity throughout.
- *
- * Every uuid is replaced rather than carried over. The server matches a
- * document item to an existing row purely by uuid and deletes by omission, so
- * a copy that kept the source's uuids would not duplicate the floor - it would
- * *move* every row onto the target and leave the floor it was copied from
- * empty.
- *
- * Args:
- *     source: The floor to copy from. Not modified.
- *     options: What to carry across besides walls; see
- *         :class:`CopyFloorOptions`.
- *
- * Returns:
- *     Walls (with their openings), and optionally rooms and markers, all
- *     newly identified and safe to append to another floor.
  */
 export function copyFloorContents(source: Floor, options: CopyFloorOptions = {}): Pick<Floor, "walls" | "rooms" | "markers"> {
     const { rooms = true, markers = false, connectors = false } = options;
@@ -331,10 +268,7 @@ export function copyFloorContents(source: Floor, options: CopyFloorOptions = {})
             ...opening,
             uuid: nextLocalId(),
             ...(opening.references ? { references: [...opening.references] } : {}),
-            // Locks come across as their own new rows. Spreading the opening
-            // carries them, and carrying their uuids with them would hand the
-            // copy the originals' identities - the same mistake this function
-            // exists to avoid one level up.
+            // Locks come across as their own new rows.
             ...(opening.locks ? { locks: opening.locks.map((lock) => ({ ...lock, uuid: nextLocalId() })) } : {}),
         })),
     }));
@@ -359,13 +293,6 @@ export function copyFloorContents(source: Floor, options: CopyFloorOptions = {})
 
 /**
  * Read a single attribute off an item.
- *
- * Args:
- *     item: Any floorplan item.
- *     key: The attribute name.
- *
- * Returns:
- *     The value as text, or "" when unset or not a string.
  */
 export function attribute(item: ItemDetails, key: string): string {
     const value = item.attributes?.[key];
@@ -374,15 +301,6 @@ export function attribute(item: ItemDetails, key: string): string {
 
 /**
  * Write a single attribute, dropping it when cleared.
- *
- * Storing "" would make an item that has been emptied indistinguishable from
- * one that was filled in with nothing, and leaves the key in every payload
- * forever.
- *
- * Args:
- *     item: Any floorplan item; mutated in place.
- *     key: The attribute name.
- *     value: The new value; blank removes the key.
  */
 export function setAttribute(item: ItemDetails, key: string, value: string): void {
     const next = { ...(item.attributes || {}) };

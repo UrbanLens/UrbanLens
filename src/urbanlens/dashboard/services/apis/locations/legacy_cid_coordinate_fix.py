@@ -1,5 +1,4 @@
-"""TEMPORARY - repairs pins placed at the wrong coordinates by the old CID lookup.
-This module lets a *re-import* repair those pins in place: when an imported record can be matched to one of the user's own pre-cutoff pins, that pin is moved onto the Location for its freshly-resolved coordinates, instead of a second, duplicate pin being created some distance away."""
+"""TEMPORARY - repairs pins placed at the wrong coordinates by the old CID lookup."""
 
 from __future__ import annotations
 
@@ -24,14 +23,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Pins and Locations created before this moment may have been placed from an S2-decoded guess
-#: rather than a real CID lookup.
+#: Pins and Locations created before this moment may have been placed from an S2-decoded guess rather
+#: than a real CID lookup.
 #: UTC rather than the viewer's zone: the boundary is inherently a day wide either way, and a fixed
 #: instant keeps the check reproducible.
 LEGACY_COORDINATE_CUTOFF = datetime(2026, 7, 25, tzinfo=UTC)
 
-#: How far apart two parsed coordinate pairs may be and still be considered the same place, in
-#: degrees (~11 m).
 #: Wide enough to absorb the rounding loss of DMS/DDM -> decimal conversion, and narrow enough that
 #: two genuinely different pins never collapse into one.
 _COORDINATE_MATCH_TOLERANCE = 1e-4
@@ -44,8 +41,8 @@ _MAX_CROSS_FORMAT_CANDIDATES = 500
 
 #: Whole string is nothing but coordinate punctuation, hemisphere/DMS letters and digits, and
 #: contains at least one digit.
-#: Used purely to narrow the SQL candidate set before parsing - anything it lets through still has
-#: to parse as a coordinate *and* land on the target coordinates.
+#: Used purely to narrow the SQL candidate set before parsing - anything it lets through still has to
+#: parse as a coordinate *and* land on the target coordinates.
 _COORDINATE_NAME_HINT = r"""^[-+0-9.,'"°′″nsewdms()\s]*[0-9][-+0-9.,'"°′″nsewdms()\s]*$"""
 
 #: A pin name that is *entirely* one decimal coordinate pair, e.g.
@@ -68,14 +65,12 @@ def is_legacy_location(location: Location) -> bool:
 
 def parse_coordinate_name(name: str | None) -> tuple[float, float] | None:
     """Parse a pin name that is *entirely* a coordinate, in any supported format.
-    Google Takeout exports an unnamed dropped pin with its coordinates as the name, in whichever format the user's client used - so this accepts decimal pairs, hemisphere-suffixed decimals, DMS/DDM and Maps-URL forms (the latter three via :func:`dm_location_detection.parse_coordinates`), but only when the match covers the whole string.
 
     Args:
         name: The pin name to parse.
 
     Returns:
-        ``(latitude, longitude)`` rounded to six decimal places, or None when the
-        name is not wholly a coordinate."""
+        ``(latitude, longitude)`` rounded to six decimal places, or None when the name is not wholly a coordinate."""
     stripped = (name or "").strip()
     if not stripped:
         return None
@@ -107,20 +102,11 @@ def repair_legacy_pin_coordinates(
         profile: The importing profile - only its own pins are ever considered.
         cid: Google Maps CID carried by the record being imported, if any.
         name: Name carried by the record being imported.
-        latitude: Freshly-resolved latitude for the record. Callers must only
-            pass coordinates from the corrected pipeline (a real CID resolution,
-            a cached CID lookup, or literal coordinates read out of the import
-            file) - never an S2-decoded guess, or this would move a pin from one
-            wrong place to another.
+        latitude: Freshly-resolved latitude for the record.
         longitude: Freshly-resolved longitude for the record.
 
     Returns:
-        The pin that was moved, or None when nothing matched, the match was
-        already in the right place, the move could not be made safely, or a
-        merge suggestion was raised instead (a collision with an existing pin
-        at the corrected location) - in every one of which cases the caller
-        should fall back to its normal create-or-merge path.
-    """
+        The pin that was moved, or None when nothing matched, the match was already in the right place, the move could not be made safely, or a merge suggestion was raised instead (a collision with an existing pin at the corrected location) - in every..."""
     correct = _as_valid_coordinates(latitude, longitude)
     if correct is None:
         return None
@@ -199,11 +185,7 @@ def _in_range(latitude: float, longitude: float) -> bool:
 
 
 def _as_valid_coordinates(latitude: float | Decimal | None, longitude: float | Decimal | None) -> tuple[float, float] | None:
-    """Coerce a caller-supplied coordinate pair to finite floats, or None.
-
-    Accepts ``Decimal`` as well as ``float``: a coordinate read back off a
-    ``Location`` is a ``Decimal``, while a freshly-resolved one is a ``float``.
-    """
+    """Coerce a caller-supplied coordinate pair to finite floats, or None."""
     if latitude is None or longitude is None:
         return None
     try:

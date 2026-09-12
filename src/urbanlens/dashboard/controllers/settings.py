@@ -45,9 +45,9 @@ logger = logging.getLogger(__name__)
 def _settings_redirect(anchor: str) -> HttpResponse:
     """Redirect to the settings page, landing on the tab containing ``anchor``.
 
-    The page's tab-switching JS resolves an id fragment to its containing
-    ``.settings-tab-panel`` and activates that tab, so a plain section id is
-    enough to land the user back where they were instead of the default tab.
+    The page's tab-switching JS resolves an id fragment to its containing ``.settings-tab-panel`` and
+    activates that tab, so a plain section id is enough to land the user back where they were instead of
+    the default tab.
 
     Args:
         anchor: The id of the section/subsection element to land on.
@@ -73,13 +73,13 @@ def _e2ee_enrolled(profile: Profile) -> bool:
 
 
 def _security_context(user: User, request: HttpRequest) -> dict:
-    """Context for the Security section (passkeys, TOTP status, backup codes) and the
-    Advanced tab's separate API Keys section.
+    """Context for the Security section (passkeys, TOTP status, backup codes) and the Advanced tab's
+    separate API Keys section.
 
     Thin wrapper around ``services.auth.two_factor.security_settings_context`` and
-    ``services.auth.api_keys.api_keys_settings_context``, which are also called
-    directly by the 2FA and API key action views (``two_factor.py``,
-    ``api_keys.py``) so they can re-render just their own section for htmx requests.
+    ``services.auth.api_keys.api_keys_settings_context``, which are also called directly by the 2FA and
+    API key action views (``two_factor.py``, ``api_keys.py``) so they can re-render just their own
+    section for htmx requests.
     """
     from urbanlens.dashboard.services.auth.api_keys import api_keys_settings_context
     from urbanlens.dashboard.services.auth.two_factor import security_settings_context
@@ -91,14 +91,12 @@ class SettingsView(LoginRequiredMixin, View):
     def _build_map_center_context(self, profile: Profile) -> dict:
         """Return preview coordinates and centroid for the map-center settings section.
 
-        The preview differs by mode:
-        - CUSTOM: show the stored custom coordinates.
-        - GPS / AUTO: show the pin-cluster centroid (GPS mode adds live geolocation
-          on top of this in the browser).
+        Uses the cached centroid (map_center_latitude/longitude on the profile) to avoid the expensive O(n²)
+        haversine computation on every page GET.
 
-        Uses the cached centroid (map_center_latitude/longitude on the profile) to
-        avoid the expensive O(n²) haversine computation on every page GET.  The cache
-        is refreshed lazily by compute_map_center() only when it is cold (null).
+        - CUSTOM: show the stored custom coordinates.
+        - GPS / AUTO: show the pin-cluster centroid (GPS mode adds live geolocation on top of this in the
+          browser).
         """
         from urbanlens.dashboard.models.profile.model import MapCenterMode
 
@@ -163,12 +161,7 @@ class SettingsView(LoginRequiredMixin, View):
             return redirect("login")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         section = request.POST.get("section")
-        # The settings page autosaves via fetch() and only checks the response
-        # status - a validation failure previously fell through to the normal
-        # 200 full-page re-render below (or a 302-then-200 redirect for the
-        # messages.error() branches), which fetch() can't distinguish from
-        # success, so the UI showed "Saved" for changes that were never
-        # persisted. AJAX requests get a JSON verdict instead.
+        # AJAX requests get a JSON verdict instead.
         is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
         privacy_form = PrivacySettingsForm(instance=profile)
@@ -357,9 +350,8 @@ class SettingsView(LoginRequiredMixin, View):
             **get_storage_settings_context(profile),
         }
         if is_xhr:
-            # Exactly one of these is bound-and-invalid (whichever `section` matched
-            # above and failed `is_valid()`) - the rest were never bound with POST
-            # data, so their .errors are empty.
+            # Exactly one of these is bound-and-invalid (whichever `section` matched above and failed
+            # `is_valid()`) - the rest were never bound with POST data, so their .errors are empty.
             bound_forms = (
                 privacy_form,
                 contact_form,
@@ -389,8 +381,7 @@ class SettingsView(LoginRequiredMixin, View):
 def geocode_address(request: HttpRequest) -> JsonResponse:
     """Return lat/lng for a free-text address or 'lat,lng' string.
 
-    Accepts:
-        GET ?address=<text>
+    Accepts: GET ?address=<text>
 
     Returns:
         JSON {lat, lng} on success, or {error} with an appropriate HTTP status.
@@ -466,9 +457,9 @@ class SaveMapDarkModeView(LoginRequiredMixin, View):
 class SaveMapPositionView(LoginRequiredMixin, View):
     """POST endpoint to save the user's last map pan/zoom for REMEMBER mode.
 
-    Accepts lat, lng (float strings) and zoom (integer string). Only writes
-    to the profile when map_center_mode is 'remember'; ignores the request
-    silently otherwise so stale JS calls are harmless.
+    Accepts lat, lng (float strings) and zoom (integer string).
+    Only writes to the profile when map_center_mode is 'remember'; ignores the request silently
+    otherwise so stale JS calls are harmless.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:

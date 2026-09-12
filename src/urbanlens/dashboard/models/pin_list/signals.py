@@ -31,11 +31,7 @@ def sync_smart_list_membership(sender: type[Pin], instance: Pin, **kwargs) -> No
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_smart_list_membership_sync")
 def sync_smart_list_membership_for_labels(sender, instance: Pin, action: str, reverse: bool = False, **kwargs) -> None:
     """Keep smart PinList membership current whenever a pin's labels change.
-
-    Label add/remove/clear never calls ``Pin.save()``, so this can't rely on
-    the ``post_save`` receiver above - a smart list whose ``smart_filter``
-    includes ``tags``/``exclude_tags``/``label_groups`` would otherwise never
-    pick up a pin gaining or losing a matching label.
+    Label add/remove/clear never calls ``Pin.save()``, so this can't rely on the ``post_save`` receiver above - a smart list whose ``smart_filter`` includes ``tags``/``exclude_tags``/``label_groups`` would otherwise never pick up a pin gaining or losing a matching label.
     """
     if reverse or action not in {"post_add", "post_remove", "post_clear"}:
         return
@@ -43,15 +39,7 @@ def sync_smart_list_membership_for_labels(sender, instance: Pin, action: str, re
 
 
 def _touch_pin(pin_id: int | None) -> None:
-    """Bump a pin's ``updated`` timestamp via a full save, on commit.
-
-    Going through ``Pin.save(update_fields=["updated"])`` (rather than a bare
-    ``.update()``) deliberately re-fires ``sync_smart_list_membership`` above
-    for free, and also keeps ``services.search.saved_filter_cache``'s
-    ``Max(Pin.updated)`` cache-key fingerprint current - both would otherwise
-    miss changes that don't call ``Pin.save()`` themselves (a PinLink
-    add/remove, or a child pin being created/deleted under a parent).
-    """
+    """Bump a pin's ``updated`` timestamp via a full save, on commit."""
     if not pin_id:
         return
 

@@ -1,5 +1,4 @@
-"""Content classifier for Trivia questions - shared by the user-submission and AI-generation paths.
-Follows ``services.labels.auto_tag``'s allowlisted-``<ANSWER>`` pattern: the model must answer with exactly one token from a fixed set; anything else (unparseable, empty, gateway unavailable) is treated as a rejection, never as an approval."""
+"""Content classifier for Trivia questions - shared by the user-submission and AI-generation paths."""
 
 from __future__ import annotations
 
@@ -71,13 +70,10 @@ def classify_trivia_question(prompt: str, answer: str, location: Location, *, pr
         prompt: The question text.
         answer: The canonical accepted answer.
         location: The location the question is about.
-        profile: The submitting profile, if user-submitted (used only for
-            the AI-availability gate - AI generation has no submitting
-            profile and passes None).
+        profile: The submitting profile, if user-submitted (used only for the AI-availability gate - AI generation has no submitting profile and passes None).
 
     Returns:
-        APPROVE, or REJECT with a reason - AI unavailable, an unparseable
-        response, or one of the classifier's own reject categories."""
+        APPROVE, or REJECT with a reason - AI unavailable, an unparseable response, or one of the classifier's own reject categories."""
     gateway = get_gateway("trivia_moderation", profile=profile, instructions=_INSTRUCTIONS)
     if gateway is None:
         logger.info("Trivia classifier unavailable (AI disabled); rejecting fail-closed")

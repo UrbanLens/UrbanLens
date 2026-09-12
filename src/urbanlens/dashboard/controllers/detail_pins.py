@@ -61,37 +61,28 @@ def _schedule_classification(kind: str, pk: int) -> None:
 class ChildWikiLocationError(ValueError):
     """A child wiki can't be placed at the requested point - it's already taken.
 
-    ``message`` is for logs, not the response: a catch site should author its
-    own user-facing text rather than relaying it, so a future raise here can't
-    smuggle unreviewed text into a response.
+    ``message`` is for logs, not the response: a catch site should author its own user-facing text
+    rather than relaying it, so a future raise here can't smuggle unreviewed text into a response.
     """
 
 
 def _location_for_child_wiki(latitude, longitude, *, exclude_wiki: Wiki | None = None) -> Location:
     """Find-or-create a Location for a new child wiki's own coordinates.
 
-    A Wiki's ``location`` is one-to-one, so - unlike a detail pin's plain FK -
-    a child wiki can never share a Location with another Wiki. Resolution is
-    exact rather than proximity-based, so two nearby child markers (or a marker
-    and its own parent) keep their own coordinates instead of being merged.
+    Resolution is exact rather than proximity-based, so two nearby child markers (or a marker and its
+    own parent) keep their own coordinates instead of being merged.
 
     Args:
         latitude: Submitted latitude.
         longitude: Submitted longitude.
-        exclude_wiki: A wiki to ignore when checking whether the point is
-            already taken - the wiki being moved, so re-submitting its current
-            point stays a no-op instead of colliding with itself.
+        exclude_wiki: A wiki to ignore when checking whether the point is already taken - the wiki being
+        moved, so re-submitting its current point stays a...
 
     Returns:
         The Location at exactly these coordinates, created if absent.
 
     Raises:
-        ChildWikiLocationError: A wiki already occupies that exact point. The
-            previous code tried to dodge the one-to-one by inserting a second
-            Location at the same coordinates, which the
-            ``(latitude, longitude)`` unique constraint refuses outright - so
-            this case was an unavoidable 500 rather than the "pick another
-            spot" it should always have been.
+        ChildWikiLocationError: A wiki already occupies that exact point.
     """
     location, created = Location.objects.get_exact_or_create(latitude, longitude)
     if created:
@@ -136,14 +127,8 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         if not lat or not lon:
             return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
 
-        # Defense-in-depth: this endpoint only ever creates a brand-new child pin
-        # (never re-parents an existing one), so a cycle can't actually form here
-        # today. Guard anyway so this stays safe if that ever changes, and so a
-        # pre-existing corrupted ancestor chain on `parent` is caught rather than
-        # silently extended. Walk from `parent`'s existing parent (not `parent`
-        # itself) - passing `parent` as both self and new_parent would trip the
-        # identity check unconditionally, since any saved pin is trivially its
-        # own pk match against itself.
+        # Defense-in-depth: this endpoint only ever creates a brand-new child pin (never re-parents an existing
+        # one), so a cycle can't actually form here today.
         if parent.would_create_cycle(parent.parent_pin):
             return JsonResponse({"ok": False, "error": "Invalid parent pin."}, status=400)
 
@@ -195,11 +180,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST
 
-        # A move is resolved (and rejected) before anything else is touched, so
-        # a refused move doesn't silently drop the style fields submitted with
-        # it. The pin itself is excluded from the overlap check: re-submitting
-        # its own current point (a drag that snapped back) is a no-op, not a
-        # collision.
+        # A move is resolved (and rejected) before anything else is touched, so a refused move doesn't silently
+        # drop the style fields submitted with it.
         new_latitude = body.get("latitude")
         new_longitude = body.get("longitude")
         new_location = None
@@ -225,9 +207,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
         if "border_opacity" in body:
             detail_pin.detail_border_opacity = safe_int(body["border_opacity"], 100)
 
-        # Type is handled apart from the loop above: it is non-nullable (a
-        # blank submission is the dialog's "Auto", not "clear it"), and a
-        # re-pick has to update pin_type_is_user_provided alongside it.
+        # Type is handled apart from the loop above: it is non-nullable (a blank submission is the dialog's
+        # "Auto", not "clear it"), and a re-pick has to update pin_type_is_user_provided alongside it.
         reclassify = False
         if "pin_type" in body:
             detail_pin.pin_type, detail_pin.pin_type_is_user_provided = _requested_pin_type(body)
@@ -258,12 +239,9 @@ class DetailPinEditView(LoginRequiredMixin, View):
         detail_pin = self._get_detail_pin(request, pin_slug, detail_pin_uuid)
         subtree = list(Pin.objects.filter(pk=detail_pin.pk).with_descendants())
         with transaction.atomic():
-            # The stash must happen inside the same atomic block as the delete: stashing
-            # first and deleting after ensures a mid-delete failure rolls back both together,
-            # rather than leaving a committed UndoAction claiming a deletion that never
-            # actually happened. Pin.parent_pin is on_delete=CASCADE, so deleting just the
-            # detail pin itself already cascades to every descendant captured in `subtree`
-            # above in one bulk operation - no need to delete each subtree member individually.
+            # The stash must happen inside the same atomic block as the delete: stashing first and deleting
+            # after ensures a mid-delete failure rolls back both together, rather than leaving a committed
+            # UndoAction claiming a deletion that never actually happened.
             stash_for_undo(PIN_MODEL_LABEL, subtree, detail_pin.profile)
             Pin.objects.filter(pk=detail_pin.pk).delete()
         response = HttpResponse("", status=200)
@@ -274,10 +252,10 @@ class DetailPinEditView(LoginRequiredMixin, View):
 class DetailPinJsonView(LoginRequiredMixin, View):
     """Return personal detail pins as JSON for Leaflet rendering on the pin details page.
 
-    By default only the pin's direct children are returned. With ``?children=1``
-    (the page-wide "show child pin details" toggle) the full descendant subtree is
-    returned instead, each nested pin annotated with the name of the child pin
-    it belongs to so the map can label it.
+    By default only the pin's direct children are returned.
+    With ``?children=1`` (the page-wide "show child pin details" toggle) the full descendant subtree is
+    returned instead, each nested pin annotated with the name of the child pin it belongs to so the map
+    can label it.
     """
 
     def get(self, request, pin_slug):
@@ -300,11 +278,10 @@ class DetailPinJsonView(LoginRequiredMixin, View):
 class LocationDetailPinJsonView(LoginRequiredMixin, View):
     """Return a wiki's child wikis as JSON for Leaflet rendering (map overlay).
 
-    Child wikis are community sub-markers nested under a location's wiki via
-    ``Wiki.parent_wiki``. By default only direct children are returned. With
-    ``?children=1`` (the page-wide "show child pin details" toggle) the full
-    descendant subtree is returned instead, each nested wiki annotated with
-    the name of the child wiki it belongs to so the map can label it.
+    By default only direct children are returned.
+    With ``?children=1`` (the page-wide "show child pin details" toggle) the full descendant subtree is
+    returned instead, each nested wiki annotated with the name of the child wiki it belongs to so the
+    map can label it.
     """
 
     def get(self, request, location_slug):
@@ -317,19 +294,11 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
         except ObjectDoesNotExist:
             wiki = None
         if wiki is None:
-            # A location whose wiki has not been created yet simply has no
-            # child wikis to show; the map overlay shouldn't error just
-            # because the background task has not run.
+            # A location whose wiki has not been created yet simply has no child wikis to show; the map overlay
+            # shouldn't error just because the background task has not run.
             return JsonResponse({"detail_pins": []})
-        # This is the endpoint the wiki page's Leaflet map actually fetches
-        # (wiki.html's data-detail-pins-json-url, loaded at map init), so it
-        # carries the same rule as the panel below.
-        #
-        # Filtered by who placed them, not hidden wholesale. A concealed viewer
-        # keeps their own markers and their friends', plus the ones mirrored
-        # from building data - because a viewer whose own detail pin vanished
-        # would know immediately that something was different about their
-        # account, which is the one thing this feature must never tell them.
+        # This is the endpoint the wiki page's Leaflet map actually fetches (wiki.html's
+        # data-detail-pins-json-url, loaded at map init), so it carries the same rule as the panel below.
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
         include_children = request.GET.get("children") == "1"
@@ -355,9 +324,8 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        # Same filter as the JSON endpoint above: a concealed viewer keeps their
-        # own detail pins and their friends', and the ones mirrored from
-        # building data, and loses strangers'.
+        # Same filter as the JSON endpoint above: a concealed viewer keeps their own detail pins and their
+        # friends', and the ones mirrored from building data, and loses strangers'.
         child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).order_by("pin_type", "name")
         return render(
             request,
@@ -383,12 +351,8 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         if not lat or not lon:
             return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
 
-        # Defense-in-depth: this endpoint only ever creates a brand-new child
-        # wiki (never re-parents an existing one), so a cycle can't actually
-        # form here today. Guard anyway so this stays safe if that ever
-        # changes, and so a pre-existing corrupted ancestor chain on `wiki`
-        # is caught rather than silently extended. Walk from `wiki`'s existing
-        # parent (not `wiki` itself) - see the matching Pin check for why.
+        # Defense-in-depth: this endpoint only ever creates a brand-new child wiki (never re-parents an existing
+        # one), so a cycle can't actually form here today.
         if wiki.would_create_cycle(wiki.parent_wiki):
             return JsonResponse({"ok": False, "error": "Invalid parent wiki."}, status=400)
 
@@ -398,10 +362,9 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             logger.info("child wiki location rejected: %s", exc)
             return JsonResponse({"ok": False, "error": "There is already a wiki marker at these exact coordinates. Place this one slightly apart."}, status=400)
 
-        # The real row's name for the fallback: `wiki` may be a concealed
-        # projection, and its name is the automatic placeholder this viewer was
-        # shown - persisting that as a community child wiki's name would write
-        # concealment into shared content.
+        # The real row's name for the fallback: `wiki` may be a concealed projection, and its name is the
+        # automatic placeholder this viewer was shown - persisting that as a community child wiki's name would
+        # write concealment into shared content.
         from urbanlens.dashboard.services.wiki.concealment import writable_wiki
 
         child_name = body.get("name") or writable_wiki(wiki).name
@@ -410,12 +373,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": name_error}, status=400)
         pin_type, pin_type_chosen = _requested_pin_type(body)
         child_wiki = Wiki.objects.create(
-            # Who placed it. Nothing recorded this before, which is why
-            # concealment had to hide detail pins wholesale rather than show a
-            # viewer their own - and a concealed viewer whose own marker
-            # vanished would have learned something was different immediately.
-            # Awarding is filtered on parent_wiki elsewhere, so this does not
-            # count as creating a community page.
+            # Who placed it.
             created_by=profile,
             name=child_name,
             description=body.get("description") or None,
@@ -445,8 +403,8 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
 class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
     """Edit, move, or delete a child wiki.
 
-    Both verbs share one URL (mirroring the personal-pin equivalent,
-    DetailPinEditView) so the frontend can use one base URL for both.
+    Both verbs share one URL (mirroring the personal-pin equivalent, DetailPinEditView) so the frontend
+    can use one base URL for both.
     Moves and deletes record a WikiEdit on the *parent* wiki.
     """
 
@@ -459,10 +417,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST
 
-        # A move is resolved (and rejected) before anything else is touched, so
-        # a refused move doesn't silently drop the style fields sent with it.
-        # This wiki is excluded from the occupancy check: re-submitting its own
-        # current point is a no-op, not a collision with itself.
+        # A move is resolved (and rejected) before anything else is touched, so a refused move doesn't silently
+        # drop the style fields sent with it.
         new_latitude = body.get("latitude")
         new_longitude = body.get("longitude")
         new_location = None
@@ -473,11 +429,9 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
                 logger.info("child wiki move rejected: %s", exc)
                 return JsonResponse({"ok": False, "error": "There is already a wiki marker at these exact coordinates. Move it slightly apart."}, status=400)
 
-        # Style/content fields update silently (no WikiEdit) - same reasoning
-        # as personal detail pins: these autosave on every panel change, and a
-        # granular audit entry per keystroke would flood the wiki's edit history.
-        # Unlike Pin.name, Wiki.name is required (non-null) - a blank submission
-        # keeps the current name instead of clearing it.
+        # Style/content fields update silently (no WikiEdit) - same reasoning as personal detail pins: these
+        # autosave on every panel change, and a granular audit entry per keystroke would flood the wiki's edit
+        # history.
         for field, value in {
             "name": body.get("name") or child_wiki.name,
             "description": body.get("description") or None,
@@ -543,17 +497,12 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
 
         subtree = with_wiki_descendants([child_wiki])
         with transaction.atomic():
-            # The stash must happen inside the same atomic block as the delete: stashing
-            # first and deleting after ensures a mid-delete failure rolls back both together,
-            # rather than leaving a committed UndoAction claiming a deletion that never
-            # actually happened. Wiki.parent_wiki is on_delete=CASCADE, so deleting just the
-            # child wiki itself already cascades to every descendant captured in `subtree`
-            # above in one bulk operation - no need to delete each subtree member individually.
+            # The stash must happen inside the same atomic block as the delete: stashing first and deleting
+            # after ensures a mid-delete failure rolls back both together, rather than leaving a committed
+            # UndoAction claiming a deletion that never actually happened.
             stash_for_undo(WIKI_MODEL_LABEL, subtree, profile)
-            # After the stash (which records what to hand back on undo) and
-            # before the delete (which nulls the FK this reads). Only the
-            # deleter's own bonuses go - the function's docstring has why
-            # nobody else's may.
+            # After the stash (which records what to hand back on undo) and before the delete (which nulls the
+            # FK this reads).
             revoke_community_bonuses_on_wiki_delete([w.pk for w in subtree], deleted_by=profile)
             Wiki.objects.filter(pk=child_wiki.pk).delete()
 

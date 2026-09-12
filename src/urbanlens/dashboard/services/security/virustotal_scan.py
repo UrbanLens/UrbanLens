@@ -15,11 +15,7 @@ logger = logging.getLogger(__name__)
 
 class VirusTotalNoVerdictError(Exception):
     """VirusTotal has no usable, explicit verdict for a hash right now.
-
-    Never a reason to reject or retry an upload by itself - callers catch
-    this and fall back to ``malware_error_for_upload`` (ClamAV), which
-    remains the scanner of record.
-    """
+    Never a reason to reject or retry an upload by itself - callers catch this and fall back to ``malware_error_for_upload`` (ClamAV), which remains the scanner of record."""
 
 
 def verdict_for_checksum(sha256: str) -> str | None:
@@ -29,18 +25,10 @@ def verdict_for_checksum(sha256: str) -> str | None:
         sha256: The file's SHA-256 hex digest.
 
     Returns:
-        ``None`` when VirusTotal explicitly reports the file clean (at least
-        one engine reported, and zero flagged it malicious or suspicious). A
-        user-facing rejection message, matching ``malware_error_for_upload``'s
-        shape, when at least one engine flagged it malicious or suspicious.
+        ``None`` when VirusTotal explicitly reports the file clean (at least one engine reported, and zero flagged it malicious or suspicious).
 
     Raises:
-        VirusTotalNoVerdictError: VirusTotal is not configured, the hash is
-            unknown to it, our self-imposed quota/rate limit is exhausted,
-            the service is administratively disabled, or any transport/HTTP
-            error occurred - every case with no explicit, trustworthy verdict
-            to act on.
-    """
+        VirusTotalNoVerdictError: VirusTotal is not configured, the hash is unknown to it, our self-imposed quota/rate limit is exhausted, the service is administratively disabled, or any transport/HTTP error occurred - every case with no explicit, trustworthy verdict to act on."""
     if not app_settings.virustotal_api_key:
         raise VirusTotalNoVerdictError("VirusTotal is not configured (no API key)")
 

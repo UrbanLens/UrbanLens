@@ -23,20 +23,9 @@ class RedataWalkabilityGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch the EPA National Walkability Index for the block group at a point.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-                The parsed envelope. The (at most one) result carries ``index``
-                (EPA's 1-20 scale), ``band`` (EPA's own label for that score,
-                e.g. "Most walkable"), ``intersection_density`` (street
-                intersections per square mile), nullable
-                ``transit_distance_meters`` (a stop on the parcel is a
-                legitimate ``0``), and ``block_group_geoid``.
+            The parsed envelope.
 
         Raises:
-                LocationContextUnavailableError: The source failed to answer, or
-                the request itself failed."""
+            LocationContextUnavailableError: The source failed to answer, or the request itself failed."""
         return self.near_point(_WALKABILITY_PATH, latitude, longitude, force_refresh=force_refresh)

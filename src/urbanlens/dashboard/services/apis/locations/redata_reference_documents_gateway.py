@@ -1,5 +1,4 @@
-"""REData-backed archival/reference-document clients: the Media gallery's four name-searched archives (Smithsonian Open Access, Library of Congress, Internet Archive, Digital Commonwealth) and the two geosearchable providers (Wikipedia, Wikidata) behind a pin-detail info panel.
-REData's ``GET /api/v1/reference-documents/search/`` (``../REData/docs/api-reference.md``, "GET /reference-documents/search/ - archival material by name") fronts the four name-only archives - ``internet_archive`` (worldwide), ``library_of_congress`` (USA, keyless) and ``smithsonian`` (USA, needs ``RD_SMITHSONIAN_API_KEY`` - on REData's side now, not this project's) and ``digital_commonwealth`` (Massachusetts, keyless)."""
+"""REData-backed archival/reference-document clients: the Media gallery's four name-searched archives (Smithsonian Open Access, Library of Congress, Internet Archive, Digital Commonwealth) and the two geosearchable providers (Wikipedia, Wikidata) behind a pin-detail info panel."""
 
 from __future__ import annotations
 
@@ -21,7 +20,7 @@ _NEAR_PATH = "/api/v1/reference-documents/"
 
 @dataclass(slots=True, kw_only=True)
 class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
-    """REST client for REData's two ``/api/v1/reference-documents/`` endpoints. :meth:`search` (``.../search/``) is not a near-a-coordinate lookup - ``lat``/``lng`` are optional region hints, there's no ``radius_meters``, and the required parameter is ``q`` - so it builds its own params dict and calls :meth:`_get_envelope` directly. :meth:`get_reference_documents` (the bare path) fits the shared near-a-coordinate contract exactly and is a thin wrapper over :meth:`~RedataLocationContextGateway.near_point`."""
+    """REST client for REData's two ``/api/v1/reference-documents/`` endpoints. :meth:`search` (``.../search/``) is not a near-a-coordinate lookup - ``lat``/``lng`` are optional region hints, there's no ``radius_meters``, and the required parameter is..."""
 
     service_key: ClassVar[str] = "redata_reference_documents"
 
@@ -37,25 +36,8 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
     ) -> list[dict[str, Any]]:
         """Search archival/reference material by name.
 
-        Args:
-            query: Free-text search string - a clean name (optionally with a
-                locality), never pre-quoted; REData applies each provider's own
-                quoting per its ``query_styles``.
-            latitude: WGS-84 latitude - a region hint only, never sent as a
-                coordinate search (see the module docstring).
-            longitude: WGS-84 longitude - see ``latitude``.
-            limit: Bounded positive integer.
-            provider: Restrict to one or more provider tags (e.g.
-                ``"smithsonian"``) - repeatable, matching REData's ``?provider=``.
-            force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-            The envelope's ``results`` list - dicts carrying at least
-            ``provider``, ``title``, ``url``, ``thumbnail_url``, ``date_text``
-            and ``license`` (REData's own field names - see the "reference
-            documents" section of ``api-reference.md``). Empty when nothing
-            matched.
-        """
+            The envelope's ``results`` list - dicts carrying at least ``provider``, ``title``, ``url``, ``thumbnail_url``, ``date_text`` and ``license`` (REData's own field names - see the "reference documents" section of ``api-reference.md``)."""
         params: dict[str, Any] = {"q": query}
         if latitude is not None and longitude is not None:
             params["lat"] = latitude
@@ -81,48 +63,22 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
         """Archival/encyclopaedic material about a coordinate.
         Two providers, both with a real geosearch index (unlike :meth:`search`'s four name-only archives) - see ``../REData/docs/api-reference.md``, "GET /reference-documents/ - archival material about a coordinate":
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                radius_meters: Search radius in meters. REData defaults to 1 km and caps at
-                10 km.
-                provider: Restrict to ``"wikipedia"``, ``"wikidata"``, or both (a list) -
-                omit to ask both.
-                force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-                The parsed envelope. Each ``results`` entry is one of REData's
-                ``ReferenceDocumentSerializer`` rows: ``provider``, ``kind``, ``title``,
-                ``description`` (Wikipedia's intro extract; a short gloss for Wikidata),
-                ``url``, ``thumbnail_url``, ``date_text``, ``creator``, ``license``,
-                ``latitude``/``longitude``, ``distance_meters`` and ``attributes``
-                (provider-specific - a Wikidata row's carries its raw claims).
+            The parsed envelope.
 
         Raises:
-                LocationContextUnavailableError: A total blackout (every source covering the
-                coordinate failed), a REData-side validation error, or the request itself
-                failed outright."""
+            LocationContextUnavailableError: A total blackout (every source covering the coordinate failed), a REData-side validation error, or the request itself failed outright."""
         return self.near_point(_NEAR_PATH, latitude, longitude, radius_meters=radius_meters, provider=provider, force_refresh=force_refresh)
 
 
 @dataclass(slots=True, kw_only=True)
 class _RedataReferenceDocumentProvider(MediaProvider):
-    """Base for one REData ``reference-documents/search`` archive in the Media gallery.
-    Subclasses set ``_redata_provider`` (REData's own ``?provider=`` tag); ``service_key``/``display_name`` stay each archive's own historical value so the ``LocationCache`` rows, cache keys and gallery tab label written under the old direct gateways keep working unchanged."""
+    """Base for one REData ``reference-documents/search`` archive in the Media gallery."""
 
     _redata_provider: ClassVar[str] = ""
 
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
-        """Yield this archive's matches for ``search_term``, via REData.
-
-        Args:
-            search_term: A clean, unquoted query built by
-                ``MediaPanelSource.search_terms`` per this class's
-                ``include_address``/``search_with_country``/``quote_*`` flags.
-            address: Unused - REData has no separate address parameter; any
-                address this provider wants is already folded into
-                ``search_term`` (see ``include_address``).
-        """
+        """Yield this archive's matches for ``search_term``, via REData."""
         if not search_term:
             return
         gateway = RedataReferenceDocumentsGateway()
@@ -148,9 +104,6 @@ class SmithsonianMediaProvider(_RedataReferenceDocumentProvider):
     paid_service: ClassVar[bool] = False
     _redata_provider: ClassVar[str] = "smithsonian"
 
-    # A raw, unquoted street address (house number + generic street-type word) is treated as
-    # independent OR terms by Smithsonian's Solr-family query parser and coincidentally matches
-    # unrelated records across the ~19M-object collection - see the module docstring.
     # Smithsonian metadata essentially never carries a literal street address anyway.
     include_address: ClassVar[bool] = False
     # A bare, unquoted "United States" is one of the most common phrases in a
@@ -205,8 +158,7 @@ class DigitalCommonwealthMediaProvider(_RedataReferenceDocumentProvider):
 
 @dataclass(slots=True, kw_only=True)
 class InternetArchiveMediaProvider(_RedataReferenceDocumentProvider):
-    """Internet Archive archival media, via REData.
-    The old ``InternetArchiveGateway`` hand-built a field-scoped Lucene boolean query and re-checked relevance locally to work around ``advancedsearch.php``'s bare-keyword full-text rewrite (see that deleted module's docstring) - that entire workaround is now REData's problem to solve server-side, so this provider is a plain name + locality search."""
+    """Internet Archive archival media, via REData."""
 
     service_key: ClassVar[str] = "internet_archive"
     display_name: ClassVar[str] = "Internet Archive"

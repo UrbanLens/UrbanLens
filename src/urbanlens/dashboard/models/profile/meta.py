@@ -69,13 +69,7 @@ class SyncAliasesDirection(TextChoices):
 
 class ConsentPreferenceWording:
     """Shared label text for the interaction-preference choice fields below.
-
-    A plain mixin, not itself an ``Enum`` - ``TextChoices`` can't be
-    subclassed once it already defines members, so members can't be shared
-    by inheritance the way regular class attributes can. Mixing this class
-    in instead lets the *wording* common to several fields (e.g. "Please ask
-    first") be edited in one place while each field still declares its own
-    member set.
+    A plain mixin, not itself an ``Enum`` - ``TextChoices`` can't be subclassed once it already defines members, so members can't be shared by inheritance the way regular class attributes can.
     """
 
     YES_PLEASE = "Yes, please."

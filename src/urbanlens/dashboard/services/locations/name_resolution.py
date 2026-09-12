@@ -25,26 +25,17 @@ class NameCandidate:
 
     Attributes:
         name: The cleaned surface form of the candidate name.
-        source: The provider slug the candidate came from. Doubles as the
-            alias ``source`` value when persisted and as the key looked up in
-            the admin-configured priority list.
-    """
+        source: The provider slug the candidate came from."""
 
     name: str
     source: str
 
 
 class NameProvider:
-    """One source of place-name candidates, contributed by a plugin.
-    Providers are instantiated by plugins at discovery time and must not touch the database or the network in ``__init__``; :meth:`candidates` runs lazily at request/Celery time and should only read already-cached data (fetching happens in the plugin's panel/task machinery, not here)."""
+    """One source of place-name candidates, contributed by a plugin."""
 
     def __init__(self, *, source: str, verbose_name: str = "") -> None:
-        """Initialize the provider.
-
-        Args:
-            source: Stable slug identifying this source (e.g. ``"wikipedia"``).
-            verbose_name: Human-readable name for admin UI; defaults to the slug.
-        """
+        """Initialize the provider."""
         self.source = source
         self.verbose_name = verbose_name or source
 
@@ -52,32 +43,16 @@ class NameProvider:
         """Return raw name candidates for a location.
         Values are cleaned and quality-gated by the caller, so returning ``None`` or junk entries is acceptable.
 
-        Args:
-                location: The location to name.
-
         Returns:
-                Raw candidate values in this provider's own preference order."""
+            Raw candidate values in this provider's own preference order."""
         return []
 
 
 class LocationCacheNameProvider(NameProvider):
-    """Declarative provider reading top-level keys from a fresh LocationCache row.
-
-    Covers the common case where a plugin's panel already caches an API payload
-    per location and the place name lives at one or more top-level keys of
-    that payload (e.g. Wikipedia's ``title``, NPS's ``fullName``).
-    """
+    """Declarative provider reading top-level keys from a fresh LocationCache row."""
 
     def __init__(self, *, source: str, cache_source: str, keys: tuple[str, ...], verbose_name: str = "") -> None:
-        """Initialize the provider.
-
-        Args:
-            source: Stable slug identifying this source.
-            cache_source: The ``LocationCache.source`` value to read.
-            keys: Top-level keys of the cached payload that may hold a name,
-                in preference order.
-            verbose_name: Human-readable name for admin UI; defaults to the slug.
-        """
+        """Initialize the provider."""
         super().__init__(source=source, verbose_name=verbose_name)
         self.cache_source = cache_source
         self.keys = keys
@@ -85,13 +60,8 @@ class LocationCacheNameProvider(NameProvider):
     def candidates(self, location: Location) -> list[str | None]:
         """Read the configured keys from the location's fresh cache row.
 
-        Args:
-            location: The location to name.
-
         Returns:
-            The raw values at each configured key, or an empty list when no
-            fresh cache row exists or the payload is not a dict.
-        """
+            The raw values at each configured key, or an empty list when no fresh cache row exists or the payload is not a dict."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         cached = LocationCache.get_fresh(location, self.cache_source)
@@ -108,15 +78,8 @@ class NameResolver(ABC):
     def resolve(self, candidates: Sequence[NameCandidate], location: Location) -> NameCandidate | None:
         """Pick the best candidate for a location.
 
-        Args:
-            candidates: Cleaned, quality-gated candidates in source-priority
-                arrival order (plugin ``(order, name)`` order).
-            location: The location being named, for resolvers that want
-                address or geographic context.
-
         Returns:
-            The winning candidate, or None when there is no acceptable one.
-        """
+            The winning candidate, or None when there is no acceptable one."""
 
 
 class RuleBasedNameResolver(NameResolver):
@@ -124,15 +87,7 @@ class RuleBasedNameResolver(NameResolver):
     Candidates are grouped by :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison` so trivially different spellings of the same name count as agreement."""
 
     def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None) -> None:
-        """Initialize the resolver.
-
-        Args:
-            priority: Source slugs in descending priority. Unknown slugs are
-                ignored; sources missing from the list rank after listed ones.
-            override_source: When set and at least one candidate comes from
-                this source, that candidate wins outright, bypassing the
-                agreement/priority ranking entirely.
-        """
+        """Initialize the resolver."""
         self._priority_rank: dict[str, int] = {slug: rank for rank, slug in enumerate(priority)}
         self._override_source = override_source
 
@@ -146,13 +101,8 @@ class RuleBasedNameResolver(NameResolver):
     def resolve(self, candidates: Sequence[NameCandidate], location: Location) -> NameCandidate | None:
         """Pick the best candidate per the agreement-then-priority rules.
 
-        Args:
-            candidates: Cleaned, quality-gated candidates in arrival order.
-            location: The location being named (unused by this resolver).
-
         Returns:
-            The winning candidate, or None when ``candidates`` is empty.
-        """
+            The winning candidate, or None when ``candidates`` is empty."""
         if self._override_source is not None:
             override = next((candidate for candidate in candidates if candidate.source == self._override_source), None)
             if override is not None:
@@ -195,29 +145,7 @@ def default_name_resolver(profile: Profile | None = None, *, location: Location 
 
     Args:
         profile: The profile whose action triggered this resolution, if any.
-            Unused by the current resolver but kept for a future
-            profile-aware (e.g. AI-backed) resolver to consume.
-
-            **Read this before consuming it.** One caller is a panel fetch
-            (``plugins.builtin.nominatim``), and panel fetches are
-            single-flighted per *location*, not per pin - see
-            ``services.pins.external_data.schedule_panel_fetch``. Several users
-            viewing the same place produce one fetch, and the profile it carries
-            is simply whoever's poll claimed the flight marker first. A resolver
-            that let this profile influence the outcome would therefore make a
-            *shared* location's name depend on which user happened to load the
-            page first, non-deterministically. That is precisely what the
-            paragraph above rules out today; a profile-aware resolver would need
-            the caller to establish whose preference legitimately applies rather
-            than inheriting a race winner.
-        location: The location being named, if known. When it has at least
-            one detail (child) pin (``Pin.parent_pin`` - see
-            ``models.pin.model``), REData's building name is given outright
-            priority over every other source for naming it - a child pin
-            typically represents one specific building within a larger
-            property, so the county/CRIS-sourced building name is a much
-            stronger signal there than for an ordinary root pin, where it
-            still competes normally via the admin-configured priority order.
+        location: The location being named, if known.
 
     Returns:
         The resolver to use for official-name selection."""

@@ -1,10 +1,5 @@
 /**
  * Shared map context menu: the base actions every map offers on right-click.
- *
- * Placement math is skipped - happy-dom reports getBoundingClientRect as zeros,
- * so asserting left/top would be asserting on the stub. What is real here is
- * the menu's contents, the clipboard write, extra items, Street View reveal,
- * and outside-click dismiss.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";

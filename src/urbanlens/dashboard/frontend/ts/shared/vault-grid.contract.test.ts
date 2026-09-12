@@ -1,16 +1,5 @@
 /**
  * Guards the one thing that keeps a loading placeholder out of the lightbox.
- *
- * The Vault grids give a skeleton tile the *same* base class as a real one
- * (`photo-tile photo-tile--skeleton`), differing only by the modifier and by
- * carrying no `data-id`. The page's lightbox builder collects tiles from the
- * DOM, so the `[data-id]` in its selector is the only thing standing between an
- * in-flight page fetch and a lightbox entry with `imageId: NaN` and no url -
- * reachable by prev/next, and blank.
- *
- * The selector lives in an inline `<script>` in the page template, which
- * `bun run typecheck` and the rest of the TS suite cannot see, and the skeleton
- * class lives here. Nothing but this test holds the two together.
  */
 
 import { describe, expect, test } from "bun:test";

@@ -18,7 +18,6 @@ TRIP_NOT_FOUND_MESSAGE = "No such trip."
 
 def get_trip_for_viewer(trip_slug: str, viewer: Profile) -> Trip:
     """Return the trip identified by *trip_slug*, if *viewer* may see it at all.
-    The previous implementation (``controllers.trip._trip_or_403``) rendered the same "not found" page for both but answered 404 for one and 403 for the other, which let anyone enumerate valid private trip slugs by reading the status code alone - exactly what the identical page was meant to prevent.
 
     Args:
         trip_slug: The trip's URL slug.
@@ -28,8 +27,7 @@ def get_trip_for_viewer(trip_slug: str, viewer: Profile) -> Trip:
         The trip.
 
     Raises:
-        TripNotFoundError: No such trip, or the viewer is neither its creator
-            nor one of its members."""
+        TripNotFoundError: No such trip, or the viewer is neither its creator nor one of its members."""
     trip = Trip.objects.filter(slug=trip_slug).select_related("creator__user").first()
     if trip is None:
         raise TripNotFoundError(TRIP_NOT_FOUND_MESSAGE)
@@ -74,8 +72,7 @@ def can_perform(profile: Profile, trip: Trip, level: str) -> bool:
     Args:
         profile: The profile attempting the action.
         trip: The trip being acted on.
-        level: One of ``Trip.PERM_NONE``/``PERM_ORGANIZERS``/``PERM_EVERYONE``,
-            normally read from the matching ``trip.allow_*`` field.
+        level: One of ``Trip.PERM_NONE``/``PERM_ORGANIZERS``/``PERM_EVERYONE``, normally read from the matching ``trip.allow_*`` field.
 
     Returns:
         True when the action is permitted."""
@@ -100,8 +97,7 @@ def require_perform(profile: Profile, trip: Trip, level: str, message: str) -> N
         message: The refusal message shown to the user.
 
     Raises:
-        TripPermissionError: The profile may not act at this level.
-    """
+        TripPermissionError: The profile may not act at this level."""
     if not can_perform(profile, trip, level):
         raise TripPermissionError(message)
 

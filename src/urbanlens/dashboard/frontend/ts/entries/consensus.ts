@@ -1,18 +1,5 @@
 /**
  * Consensus - wiki-data-completion game: gameplay, competitive lobby, and chat.
- *
- * Server-authoritative: this file never decides whether an answer is
- * correct, computes points, or resolves a vote itself - it only collects an
- * answer/skip/vote/photo, posts it, and renders whatever
- * `services.consensus.session` decided. Solo sessions apply an answer
- * immediately and have no reveal step worth showing (there's only one
- * player, so there's nothing to agree/disagree with) - after answering or
- * skipping, a solo session just fetches the next round directly via
- * `consensus.round` (no WebSocket). Competitive sessions open a WebSocket
- * (`consumers.ConsensusSessionConsumer`) for lobby updates, round
- * advancement, the reveal/vote sub-phase, and chat - mirrors
- * spotguessr.ts/trivia.ts's shape, trimmed to Consensus's simpler loop (no
- * ratings, no distance/date scoring, no photo-feedback thumbs).
  */
 import { getJson, postForm, postMultipart } from "../shared/session-request";
 import { confirmAction, toast } from "../shared/dialogs";
@@ -57,10 +44,7 @@ const FIELD_KIND = {
     PHOTO_COORDINATES: "photo_coordinates",
 } as const;
 
-// Mirrors IndoorOutdoor (models/abstract/choices.py) - a closed vocabulary,
-// rendered as a <select> rather than free text. No context variable carries
-// this from the server today, so it's transcribed here; keep in sync if the
-// model choices ever change.
+// Mirrors IndoorOutdoor (models/abstract/choices.py) - a closed vocabulary, rendered as a <select> rather than free text.
 const INDOOR_OUTDOOR_CHOICES: [string, string][] = [
     ["inside", "Inside"],
     ["outside", "Outside"],
@@ -272,12 +256,7 @@ function optionalEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
 // ---------------------------------------------------------------------------
 // Lifetime progression (the HUD level badge / points / meter)
 //
-// The level curve mirrors services.consensus.points -
-// `threshold(n) = round(LEVEL_SCALE_K * n * ln(n + 1))`. It is transcribed here
-// for the same reason INDOOR_OUTDOOR_CHOICES above is: no endpoint returns a
-// refreshed profile summary, so without it the badge would show the values the
-// page loaded with for the rest of the session. Keep in sync if the curve moves.
-// ---------------------------------------------------------------------------
+// The level curve mirrors services.consensus.points - `threshold(n) = round(LEVEL_SCALE_K * n * ln(n + 1))`.
 
 const LEVEL_SCALE_K = 100;
 const MAX_LEVEL = 500;
@@ -293,19 +272,10 @@ function levelForPoints(points: number): number {
     return level;
 }
 
-// basePoints is the server-rendered lifetime total; sessionPoints is whatever
-// the current session has added on top and is *set*, never accumulated blindly,
-// so a reveal-by-reveal running total and the authoritative summary figure
-// cannot double-count each other.
+// basePoints is the server-rendered lifetime total.
 const progression = { basePoints: 0, sessionPoints: 0 };
 
-// A competitive round's disagreement sub-phase broadcasts round.revealed
-// *twice* for the same round_id by design (see services/consensus/session.py's
-// _finish_round/resolve_vote): once with resolution "vote_open" and zero
-// points while the tiebreak vote is pending, again with the real points once
-// it resolves - so the guard has to be "same round AND same resolution
-// already credited", not just "same round", or a genuine reconnect-replay
-// duplicate would be indistinguishable from that legitimate second stage.
+// A competitive round's disagreement sub-phase broadcasts round.revealed *twice* for the same round_id by design.
 let lastCreditedReveal: { roundId: number; resolution: string } | null = null;
 
 function renderProgression(): void {
@@ -353,8 +323,7 @@ function initProgression(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Friend invite picker (mirrors spotguessr.ts/trivia.ts)
-// ---------------------------------------------------------------------------
+// Friend invite picker (mirrors spotguessr.ts/trivia.ts) ---------------------------------------------------------------------------
 
 async function loadFriendOptions(): Promise<FriendOption[]> {
     if (state.friendOptions.length) return state.friendOptions;
@@ -412,9 +381,7 @@ async function fetchFriendsEagerly(): Promise<void> {
     renderFriendCheckboxes(listEl, state.friendOptions, new Set());
 }
 
-// Builds a small checkbox-picker dialog on the fly and resolves with the
-// chosen profile ids (empty if cancelled) - see spotguessr.ts's
-// pickFriendsToInvite() for the original of this pattern.
+// Builds a small checkbox-picker dialog on the fly and resolves with the chosen profile ids (empty if cancelled).
 function pickFriendsToInvite(available: FriendOption[]): Promise<Set<number>> {
     return new Promise((resolve) => {
         const chosen = new Set<number>();
@@ -554,11 +521,7 @@ async function beginGame(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Round map - a small context map centered on the wiki's location, and (for
-// PHOTO_COORDINATES rounds only) click-to-place-a-marker for the answer.
-// Mirrors spotguessr.ts's guess-map click pattern; not imported directly
-// since spotguessr.ts doesn't export it as a reusable module.
-// ---------------------------------------------------------------------------
+// Round map - a small context map centered on the wiki's location, and (for PHOTO_COORDINATES rounds only) click-to-place-a-marker.
 
 function ensureRoundMap(): L.Map {
     if (state.roundMap) return state.roundMap;
@@ -620,21 +583,10 @@ function resetRoundMap(latitude: number | null, longitude: number | null): void 
 }
 
 // ---------------------------------------------------------------------------
-// Round rendering - the answer widget shown depends on field_kind; every
-// possible widget is pre-rendered in the template and toggled via
-// [data-field-only], mirroring spotguessr.ts's [data-mode-only] pattern.
-// ---------------------------------------------------------------------------
+// Round rendering - the answer widget shown depends on field_kind.
 
 /**
  * Shows only the stage columns this round needs.
- *
- * `#cs-round-map` itself is never hidden, re-parented or destroyed - Leaflet is
- * handed the id string once and keeps the instance - so the wrapper carries the
- * visibility instead.
- *
- * Args:
- *     showPhoto: Whether this round has a photo to display.
- *     showMap: Whether the map is part of answering this round.
  */
 function setStageLayout(showPhoto: boolean, showMap: boolean): void {
     const media = optionalEl("cs-stage-media");
@@ -741,9 +693,7 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
         photo.removeAttribute("src");
     }
 
-    // The map only answers a question on coordinate rounds; on the others it was
-    // a 260px inert decoration. Visibility is settled before resetRoundMap() so
-    // Leaflet is never constructed inside a display:none box.
+    // The map only answers a question on coordinate rounds; on the others it was a 260px inert decoration.
     setStageLayout(showPhoto, isPhotoRound);
 
     updateAnswerAreaVisibility(round.field_kind);
@@ -769,16 +719,13 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// Answer / skip / photo upload
-// ---------------------------------------------------------------------------
+// Answer / skip / photo upload ---------------------------------------------------------------------------
 
 async function afterAnswerOrSkip(): Promise<void> {
     el<HTMLButtonElement>("cs-submit-answer-btn").hidden = true;
     el<HTMLButtonElement>("cs-skip-btn").hidden = true;
     if (!state.isMultiplayer) {
-        // Solo sessions never open a WebSocket and have nothing to agree/
-        // disagree with - the answer already applied server-side, so just
-        // advance straight to the next round (or the summary).
+        // Solo sessions never open a WebSocket and have nothing to agree/ disagree.
         await goToNextRound();
         return;
     }
@@ -799,9 +746,7 @@ async function submitAnswer(): Promise<void> {
         payload = { value };
     }
 
-    // Busy state is applied here rather than through withBusy: the success path
-    // hands off to renderRound, which deliberately re-disables this button for
-    // the next round, so only the failure path may re-enable it.
+    // Busy state is applied here rather than through withBusy.
     const button = el<HTMLButtonElement>("cs-submit-answer-btn");
     button.classList.add("is-loading");
     button.disabled = true;
@@ -883,8 +828,7 @@ async function goToNextRound(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Reveal + vote (competitive only - arrives over the WebSocket)
-// ---------------------------------------------------------------------------
+// Reveal + vote (competitive only - arrives over the WebSocket).
 
 function formatAnswerValue(value: unknown): string {
     if (value && typeof value === "object" && "latitude" in (value as Record<string, unknown>) && "longitude" in (value as Record<string, unknown>)) {
@@ -894,10 +838,7 @@ function formatAnswerValue(value: unknown): string {
     return value === null || value === undefined || value === "" ? "(skipped)" : String(value);
 }
 
-// Deliberately identical text/markup whether resolution is "agreed" or a
-// trust-check outcome ("check_passed"/"check_failed") - the client must
-// never surface a check round as anything other than an ordinary one (see
-// services.consensus.serializers's module docstring).
+// Deliberately identical text/markup whether resolution is "agreed" or a trust-check outcome ("check_passed"/"check_failed").
 function revealTitle(resolution: string): string {
     switch (resolution) {
         case "agreed":
@@ -1065,9 +1006,7 @@ function renderReveal(data: RevealBroadcast): void {
 }
 
 // ---------------------------------------------------------------------------
-// Live "someone answered/voted" indicator - purely cosmetic, driven by the
-// answer.submitted/vote.submitted broadcasts (which carry only a profile_id).
-// ---------------------------------------------------------------------------
+// Live "someone answered/voted" indicator - purely cosmetic, driven by the answer.submitted/vote.submitted broadcasts.
 
 function markAnswered(profileId: number): void {
     state.answeredProfileIds.add(profileId);
@@ -1137,8 +1076,7 @@ function showSummary(summary: SummaryPayload): void {
 }
 
 // ---------------------------------------------------------------------------
-// Real-time (multiplayer only)
-// ---------------------------------------------------------------------------
+// Real-time (multiplayer only) ---------------------------------------------------------------------------
 
 function connectSessionSocket(): void {
     if (state.ws || state.sessionId === null) return;
@@ -1147,13 +1085,9 @@ function connectSessionSocket(): void {
     state.ws = openLiveSocket({
         path: `/ws/consensus/session/${state.sessionId}/`,
         onMessage: handleSocketMessage,
-        // Every open, reconnects included: a dropped connection takes the
-        // acknowledgement with it, and an entry left in the composer's queue
-        // would retire the wrong message later (see shared/chat-composer.ts).
+        // Every open, reconnects included: a dropped connection takes the acknowledgement with it, and an entry left in the composer's queue.
         onOpen: () => chatComposer?.reset(),
-        // 4404 here means the host removed this player, or the entitlement went
-        // away - nothing more is coming, so drop the handle rather than leave a
-        // dead one blocking a later join.
+        // 4404 here means the host removed this player, or the entitlement went away.
         onPermanentClose: () => {
             state.ws = null;
         },
@@ -1189,10 +1123,7 @@ function handleSocketMessage(data: any): void {
             appendChatMessage(data.message as ChatMessagePayload);
             break;
         case "error":
-            // The consumer refuses a frame with an error rather than a close -
-            // an out-of-scope credential, a failed write, or a volume limit.
-            // Dropping these silently is what made a throttle unsafe to add
-            // (P31); reportRefusal also gives the composer's text back.
+            // The consumer refuses a frame with an error rather than a close - an out-of-scope credential, a failed write, or a volume limit.
             if (chatComposer) chatComposer.reportRefusal(data.detail);
             else toastRefusal(data.detail);
             break;
@@ -1320,8 +1251,7 @@ async function endGameNow(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Deep link from an invite notification (?session=<id>)
-// ---------------------------------------------------------------------------
+// Deep link from an invite notification (?session=<id>) ---------------------------------------------------------------------------
 
 async function loadInitialSession(): Promise<void> {
     const raw = pageEl?.dataset.initialSessionId;

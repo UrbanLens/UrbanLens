@@ -4,11 +4,7 @@
 
 {% block page_title %}Consensus &middot; UrbanLens{% endblock %}
 
-{% comment %}
-Leaflet must be loaded here and nowhere else - L.map("cs-round-map") depends on
-it, and base.html warns that a second copy clobbers window.L for every other
-page's plugins.
-{% endcomment %}
+{% comment %}Leaflet must be loaded here and nowhere else.{% endcomment %}
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
@@ -42,11 +38,7 @@ page's plugins.
                 <span id="cs-round-live-indicator" class="consensus-round-live-indicator" hidden></span>
             </div>
             <div class="ul-game-hud__group ul-game-hud__group--trail">
-                {% comment %}
-                Lifetime progression, not session score. data-points seeds the
-                client so the level badge and meter can be recomputed as points
-                are earned instead of going stale for the rest of the session.
-                {% endcomment %}
+                {% comment %}Lifetime progression, not session score. data-points seeds the client so the level badge and meter can be recomputed as points are.{% endcomment %}
                 <div class="consensus-progression" id="cs-progression" data-points="{{ consensus_profile.total_points }}">
                     <span class="consensus-level-badge" id="cs-level-value" title="Consensus level">{{ consensus_profile.level }}</span>
                     <span class="consensus-progression-figures">
@@ -168,11 +160,7 @@ page's plugins.
                     </div>
                 </div>
 
-                {% comment %}
-                Neutral by design: revealTitle() renders identical copy for an
-                agreed round and for either trust-check outcome, so nothing here
-                may carry a per-resolution colour, icon or state class.
-                {% endcomment %}
+                {% comment %}Neutral by design: revealTitle() renders identical copy for an agreed round and for either trust-check outcome, so nothing here may.{% endcomment %}
                 <div id="cs-reveal-panel" class="ul-game-reveal consensus-reveal-panel" hidden>
                     <div class="ul-game-reveal__sheet">
                         <h3 id="cs-reveal-title" class="ul-game-panel__title"></h3>
@@ -214,12 +202,7 @@ page's plugins.
     </div>
 </div>
 
-{% comment %}
-Django cannot reverse a URL with a placeholder id, so every route carrying one
-is reversed with a sentinel the client substitutes at call time. This block must
-stay above the module script - consensus.ts reads window.CONSENSUS_URLS at
-module top level.
-{% endcomment %}
+{% comment %}Django cannot reverse a URL with a placeholder id, so every route carrying one is reversed with a sentinel the client substitutes.{% endcomment %}
 <script>
     window.CONSENSUS_URLS = {
         friends: "{% url 'consensus.friends' %}",

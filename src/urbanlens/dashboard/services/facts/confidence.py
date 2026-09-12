@@ -1,5 +1,4 @@
-"""Recomputing a Fact's confidence from its accumulated evidence.
-Dispatches per ``Fact.data_type``: NUMBER/POINT facts converge via a trust-and-recency-weighted centroid (generalizing ``services.photos.photo_coordinates.recompute_estimated_coordinates``); every other data type (TEXT/CHOICE/BOOL/DATE) converges via trust-weighted agreement clustering with Bayesian-smoothed confidence, extending ``ConsensusProfile``'s Beta-Bernoulli trust pattern (see ``services.consensus.trust``) rather than inventing a new statistic."""
+"""Recomputing a Fact's confidence from its accumulated evidence."""
 
 from __future__ import annotations
 
@@ -115,9 +114,7 @@ def _cluster_categorical(weighted: list[_WeightedEvidence]) -> tuple[list[tuple[
     """Group categorical evidence into agreement clusters.
 
     Returns:
-        ``(totals, total_weight)`` - ``totals`` is ``[(cluster_weight, value), ...]``
-        sorted heaviest-first; ``total_weight`` is the sum of all of them.
-    """
+        ``(totals, total_weight)`` - ``totals`` is ``[(cluster_weight, value), ...]`` sorted heaviest-first; ``total_weight`` is the sum of all of them."""
     clusters: list[list[_WeightedEvidence]] = []
     for item in weighted:
         cluster = next((cluster for cluster in clusters if _values_agree(cluster[0].value, item.value)), None)
@@ -159,12 +156,10 @@ def resolve_categorical(
     When the leading cluster is held back by that gate, confidence/status describe the *held* value's own standing, never the challenger's - so they always describe whatever value is actually being reported, not a value the fact isn't holding.
 
     Args:
-        totals: Cluster weights from :func:`_cluster_categorical`, heaviest
-            first.
+        totals: Cluster weights from :func:`_cluster_categorical`, heaviest first.
         total_weight: Sum of every cluster's weight.
         previous_value: The fact's currently stored value.
-        previously_confirmed: Whether the fact's status was already
-            ``CONFIRMED`` going into this recomputation.
+        previously_confirmed: Whether the fact's status was already ``CONFIRMED`` going into this recomputation.
 
     Returns:
         ``(value, confidence, status)``."""
@@ -187,7 +182,6 @@ def resolve_categorical(
 
 def recompute(fact_id: int) -> None:
     """Recompute one Fact's ``confidence``/``status``/value from its accumulated evidence.
-    NUMBER/POINT facts always recompute their centroid/mean fresh, mirroring ``services.photos.photo_coordinates.recompute_estimated_coordinates`` - a weighted average can't suddenly jump to a wildly different value from one new observation the way a discrete categorical winner can, so no equivalent gate is needed there.
 
     Args:
         fact_id: pk of the ``Fact`` to recompute."""

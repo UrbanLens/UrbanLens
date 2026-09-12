@@ -65,15 +65,8 @@ def metric_choices() -> list[tuple[str, str]]:
 
 class Achievement(abstract.PublicDashboardModel):
     """An award a site admin defines, earned by passing a threshold on one metric.
-
-    Achievements are data, not code: an admin picks one of the registered
-    metrics (see ``services.achievements.metrics``), a threshold, and an icon.
-    Adding a new achievement therefore needs no deploy - a ``post_save`` hook
-    backfills it against every existing profile so users who already qualify
-    receive it immediately.
-
-    Tiers ("10 pins", "100 pins", "1000 pins") are just several achievements
-    sharing a metric with different thresholds; there is no separate tier field.
+    Achievements are data, not code: an admin picks one of the registered metrics (see ``services.achievements.metrics``), a threshold, and an icon.
+    Adding a new achievement therefore needs no deploy - a ``post_save`` hook backfills it against every existing profile so users who already qualify receive it immediately.
 
     Attributes:
         name: Display name, e.g. "Cartographer".
@@ -123,10 +116,9 @@ class Achievement(abstract.PublicDashboardModel):
             Index(fields=["is_active"], name="idxdb_achv_active"),
         ]
 
-    #: The fields that decide *who qualifies*. A change to any of them has to
-    #: reach the users it newly covers; a change to anything else (name, colour,
-    #: icon, order, secrecy) does not. `models.achievements.signals` reads the
-    #: loaded values below to tell the two apart.
+    #: The fields that decide *who qualifies*.
+    #: A change to any of them has to reach the users it newly covers; a change to anything else
+    #: (name, colour, icon, order, secrecy) does not.
     QUALIFYING_FIELDS = ("metric", "threshold", "is_active")
 
     @classmethod
@@ -137,10 +129,7 @@ class Achievement(abstract.PublicDashboardModel):
             db: Database alias the row was loaded from.
             field_names: Names of the loaded fields.
             values: Loaded field values.
-            fetch_mode: Unused - django-stubs 6.1 types this ahead of the
-                pinned Django 6.0, which has no such parameter at runtime.
-                Accepted only so this override stays substitutable for the
-                declared base signature; never forwarded to ``super()``.
+            fetch_mode: Unused (kept for base-signature compatibility).
 
         Returns:
             The loaded Achievement instance.
@@ -153,23 +142,17 @@ class Achievement(abstract.PublicDashboardModel):
 
     def save(self, *args, **kwargs) -> None:
         """Save, then re-baseline the qualifying markers to what was just persisted.
-
-        ``post_save`` fires inside ``super().save()``, so the signal still sees
-        the pre-save values and can tell what changed; re-baselining afterwards
-        is what stops a *second* save of the same in-memory instance looking
-        like another change. Same shape as ``Pin.save``'s ``_loaded_name``.
+        ``post_save`` fires inside ``super().save()``, so the signal still sees the pre-save values and can tell what changed; re-baselining afterwards is what stops a *second* save of the same in-memory instance looking like another change.
 
         Args:
             *args: Passed through to ``Model.save``.
             **kwargs: Passed through to ``Model.save``.
         """
         super().save(*args, **kwargs)
-        # Only re-baseline what was actually written. A caller that changes a
-        # qualifying field but excludes it from `update_fields` has not
-        # persisted it, and recording the unsaved value here would make the
-        # *next* save of it look like no change - a missed backfill, silently.
-        # Erring the other way only costs a redundant one. `update_fields` is
-        # save()'s fourth positional parameter as well as a keyword.
+        # Only re-baseline what was actually written.
+        # A caller that changes a qualifying field but excludes it from `update_fields` has not
+        # persisted it, and recording the unsaved value here would make the *next* save of it look
+        # like no change - a missed backfill, silently.
         written = kwargs.get("update_fields", args[3] if len(args) > 3 else None)
         for field in self.QUALIFYING_FIELDS:
             if written is None or field in written:
@@ -241,12 +224,7 @@ class Achievement(abstract.PublicDashboardModel):
 
 
 class UserAchievement(abstract.FrontendDashboardModel):
-    """One award earned by one profile.
-
-    Awards are permanent: lowering a metric (deleting pins, say) never revokes
-    one. Re-earning is prevented by the uniqueness constraint, which is also
-    what makes concurrent evaluation safe - two workers racing to grant the same
-    award both call ``get_or_create`` and only one row results.
+    """One award earned by one profile. Awards are permanent: lowering a metric (deleting pins, say) never revokes one.
 
     Attributes:
         profile: Who earned it.
@@ -293,10 +271,8 @@ class UserAchievement(abstract.FrontendDashboardModel):
 
 class ProfileActivityDay(abstract.DashboardModel):
     """A single calendar day on which a profile performed one kind of action.
-
-    This is the source of truth behind streaks. Streak lengths are also cached
-    on :class:`ProfileStreak` so reading them is a single indexed row rather
-    than a scan, but they can always be rebuilt from these rows.
+    This is the source of truth behind streaks.
+    Streak lengths are also cached on :class:`ProfileStreak` so reading them is a single indexed row rather than a scan, but they can always be rebuilt from these rows.
 
     Attributes:
         profile: Who acted.
@@ -333,11 +309,7 @@ class ProfileActivityDay(abstract.DashboardModel):
 
 class ProfileStreak(abstract.DashboardModel):
     """Cached current and longest run of consecutive days for one activity kind.
-
-    ``longest_length`` is what achievements compare against, so a streak that is
-    broken later still keeps whatever it earned. ``current_length`` only ever
-    advances here - nothing fires on the day a user *stops* acting - so read it
-    through :meth:`current_length_as_of`, which treats a stale run as ended.
+    ``longest_length`` is what achievements compare against, so a streak that is broken later still keeps whatever it earned.
 
     Attributes:
         profile: Whose streak this is.

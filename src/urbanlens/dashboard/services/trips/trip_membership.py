@@ -39,10 +39,7 @@ def resolve_trip_member(trip: Trip, *, profile_id: int | str | None = None, slug
     Args:
         trip: The trip whose roster bounds the lookup.
         profile_id: The target's primary key, when addressing by id.
-        slug: The target's profile slug *or* uuid, when addressing by the
-            public identifier. Uuid is accepted because a member whose
-            identity is masked from the caller is served ``slug: null`` - their
-            uuid is the only handle such a caller has, and it discloses nothing.
+        slug: The target's profile slug *or* uuid, when addressing by the public identifier.
 
     Returns:
         The matching profile - a current member, or the trip's creator.
@@ -99,8 +96,7 @@ def list_members(trip: Trip, viewer: Profile) -> list[TripMembership]:
         viewer: The profile viewing the roster.
 
     Returns:
-        Memberships ordered by username, each with ``membership.profile``
-        carrying resolved ``display_name``/``display_avatar_url``/``is_masked``."""
+        Memberships ordered by username, each with ``membership.profile`` carrying resolved ``display_name``/``display_avatar_url``/``is_masked``."""
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     # "trip" is preloaded so a serializer marking the creator's row doesn't
@@ -176,8 +172,7 @@ def addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
         profile: The viewing profile.
 
     Returns:
-        Friends eligible to be invited, or an empty list when the viewer may
-        not invite anyone."""
+        Friends eligible to be invited, or an empty list when the viewer may not invite anyone."""
     if not can_perform(profile, trip, trip.allow_add_members):
         return []
     from urbanlens.dashboard.services.social.connections import get_connections
@@ -203,12 +198,8 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
     Raises:
         TripPermissionError: The actor may not add members.
         TripValidationError: No username was supplied.
-        TripQuotaError: The trip is already at ``max_trip_members``. Checked
-            before the username is resolved, so trip capacity can never be
-            used to infer whether an arbitrary username exists.
-        TripMemberNotFoundError: No user has that username, or a block
-            exists between the two profiles - both answer identically so a
-            block can't be distinguished from a nonexistent account."""
+        TripQuotaError: The trip is already at ``max_trip_members``.
+        TripMemberNotFoundError: No user has that username, or a block exists between the two profiles - both answer identically so a block can't be distinguished from a nonexistent account."""
     require_perform(actor, trip, trip.allow_add_members, ADD_MEMBER_DENIED)
 
     clean_username = (username or "").strip()
@@ -247,7 +238,8 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
 
 
 def remove_member(trip: Trip, actor: Profile, target: Profile) -> None:
-    """Remove a member from a trip. Members may remove themselves; only the creator may remove anyone else.
+    """Remove a member from a trip.
+    Members may remove themselves; only the creator may remove anyone else.
 
     Args:
         trip: The trip to remove from.
@@ -304,8 +296,7 @@ def join_trip(trip: Trip, profile: Profile) -> None:
 
     Args:
         trip: The trip being joined.
-        profile: The joining profile. The creator is already joined; the call
-            is a harmless no-op for them."""
+        profile: The joining profile."""
     if trip.creator_id == profile.id:
         return
     TripMembership.objects.for_trip_and_profile(trip, profile).update(status=TripMembership.STATUS_JOINED)
@@ -344,8 +335,7 @@ def set_trip_rsvp(trip: Trip, profile: Profile, rsvp: str | None) -> TripMembers
 
     Raises:
         TripValidationError: The value is not a valid RSVP choice.
-        TripNotFoundError: The profile has no membership row on this trip.
-    """
+        TripNotFoundError: The profile has no membership row on this trip."""
     value = (rsvp or "").strip()
     valid = {choice[0] for choice in TripMembership.RSVP_CHOICES}
     if value and value not in valid:

@@ -47,14 +47,10 @@ def extract_shapefile_bundles(files: list[tuple[str, bytes]]) -> tuple[list[Shap
     """Split *files* into Shapefile bundles (grouped by stem) and everything else.
 
     Args:
-        files: ``(filename, raw_bytes)`` pairs, e.g. already expanded from an
-            uploaded ZIP archive.
+        files: ``(filename, raw_bytes)`` pairs, e.g. already expanded from an uploaded ZIP archive.
 
     Returns:
-        A ``(bundles, remaining_files)`` tuple. Bundles missing a required
-        ``.shp`` or ``.dbf`` part are logged and dropped rather than passed
-        through as an incomplete bundle that would only fail later.
-    """
+        A ``(bundles, remaining_files)`` tuple."""
     grouped: dict[str, ShapefileBundle] = {}
     remaining: list[tuple[str, bytes]] = []
 
@@ -81,7 +77,6 @@ def extract_shapefile_bundles(files: list[tuple[str, bytes]]) -> tuple[list[Shap
 @untrusted_parse("geo.shapefile")
 def shapefile_to_dict(bundle: ShapefileBundle, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert one Shapefile bundle into pin dicts.
-    Each feature's geometry centroid becomes a pin location (a no-op for Point features); the name/description are guessed from the attribute table via ``pick_name_and_description`` since column names vary by producer (and DBF column names are truncated to 10 characters, so exact matches can't be relied on).
 
     Args:
         bundle: The grouped sidecar files for one Shapefile.

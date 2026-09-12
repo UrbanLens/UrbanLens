@@ -85,10 +85,7 @@ def _unlink(storage, name: str, instance: Model, field: str) -> None:
 
 def remember_replaced_file(sender, instance, **kwargs) -> None:
     """Note the file a save is about to replace, before the column changes.
-
-    Read here and deleted in `post_save`: the stored name is only knowable
-    before the write, and deleting it is only safe after the write succeeds.
-    """
+    Read here and deleted in `post_save`: the stored name is only knowable before the write, and deleting it is only safe after the write succeeds."""
     fields = _fields_for(instance)
     if not fields or instance.pk is None:
         return
@@ -133,9 +130,7 @@ def delete_removed_file(sender, instance, **kwargs) -> None:
 
 def connect() -> None:
     """Wire the receivers to the four models that have a managed file.
-
-    Per sender rather than globally: see the module docstring.
-    """
+    Per sender rather than globally: see the module docstring."""
     from django.apps import apps as django_apps
 
     for app_label, model_name, _field in MANAGED_FILE_FIELDS:

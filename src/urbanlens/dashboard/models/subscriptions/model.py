@@ -24,13 +24,11 @@ class SiteFeature(TextChoices):
     """Feature flags that can be unlocked by subscription roles."""
 
     AI = "ai", "AI features"
-    # Deliberately separate from AI: vision calls on every upload cost far more
     # than the text features AI covers, so admins grant this tier explicitly
     # (it is not part of the VIP canonical set).
     AI_PHOTO_PROCESSING = "ai_photo_processing", "AI photo processing"
     PLACES = "places", "Places layer (Google Places landmarks)"
     SEARCH = "search", "Web search engines"
-    # Deliberately separate from the VIP canonical set: video files are far
     # larger than photos, so admins grant this tier explicitly to manage
     # storage cost rather than bundling it into every VIP subscription.
     VIDEO_UPLOADS = "video_uploads", "Video uploads"
@@ -38,47 +36,31 @@ class SiteFeature(TextChoices):
     # which costs meaningfully more CPU than a photo upload - kept as its own
     # grant for the same reason as VIDEO_UPLOADS.
     DOCUMENT_UPLOADS = "document_uploads", "Document uploads"
-    # Nearby-facility/feature research tabs on the Private Pin page - separate
-    # from each plugin's own unconditional "data about this exact pin" card,
-    # which everyone gets. Today exactly one source declares this
-    # (EpaEchoNearbyPanelSource, EPA's nearby-regulated-facilities list); the
-    # newer sibling nearby-data panels added since (Cameras & Structures,
-    # Underground Structures, Permits & Violations, Reported Incidents, Water
-    # & Hydrology, Site Conditions, Fire & Disaster History) were deliberately
-    # left free - see test_panel_feature_gate.py. This flag names the concept,
-    # not every panel that could plausibly use it - check each
+    # Nearby-facility/feature research tabs on the Private Pin page - separate from each plugin's
+    # own unconditional "data about this exact pin" card, which everyone gets.
+    # This flag names the concept, not every panel that could plausibly use it - check each
     # PanelSource.required_feature, don't assume from this comment.
     NEARBY_RESEARCH = "nearby_research", "Nearby research data"
-    # Full REData incident history for a pin's block (up to 25 years back) - a
-    # deeper pull than the free "Reported Incidents" card everyone gets (last
-    # 3 years, top few rows only). Kept as its own flag rather than folded
-    # into NEARBY_RESEARCH: unlike a nearby-facility list, a block's
-    # multi-year crime-report history is sensitive enough that a site may
-    # want to manage access to it on its own terms.
+    # Full REData incident history for a pin's block (up to 25 years back) - a deeper pull than the
+    # free "Reported Incidents" card everyone gets (last 3 years, top few rows only).
+    # Kept as its own flag rather than folded into NEARBY_RESEARCH: unlike a nearby-facility list, a
+    # block's multi-year crime-report history is sensitive enough that a site may want to manage
     INCIDENT_HISTORY = "incident_history", "Historical incident data"
-    # Owner identity/contact details UrbanLens looked up *for* the user from
-    # county assessor records (via REData) - the paid data feed, and the part
-    # of a property record that names a private individual. Deliberately scoped
-    # to automatically-sourced records only: a user's own private PinOwner
-    # notes, and WikiOwner rows the community typed in themselves, are the
-    # users' own contributions and stay visible to everyone (see
-    # ``services.property.owner_access``).
+    # Owner identity/contact details UrbanLens looked up *for* the user from county assessor records
+    # (via REData) - the paid data feed, and the part of a property record that names a private
+    # individual.
     PROPERTY_OWNERS = "property_owners", "Official property owner names & contact info"
     # Automatic tag/category assignment from REData's label-suggestion service.
-    # Its own feature rather than part of AI: suggestions come from REData
-    # matching a place against the user's own taxonomy, not from an LLM call,
-    # so the cost profile and the grant decision are different.
+    # Its own feature rather than part of AI: suggestions come from REData matching a place against
+    # the user's own taxonomy, not from an LLM call, so the cost profile and the grant decision are
+    # different.
     AUTO_TAGGING = "auto_tagging", "Automatic tagging of pins"
-    # Gates access to features still under active development, but stable enough
-    # for general (VIP) use - a single flag reused across every in-progress
-    # feature, rather than one SiteFeature per beta, so a feature can graduate
-    # out of beta by just removing its gate instead of touching this enum.
+    # Gates access to features still under active development, but stable enough for general (VIP)
+    # use - a single flag reused across every in-progress feature, rather than one SiteFeature per
+    # beta, so a feature can graduate out of beta by just removing its gate instead of touching this
+    # enum.
     BETA_FEATURES = "beta_features", "Beta features"
     # Earlier-stage than BETA_FEATURES: features not yet ready for general use.
-    # Deliberately excluded from the built-in VIP role's seeded features and from
-    # any default SiteSettings.default_features, so user_has_feature() only grants this to
-    # site admins (via its own admin check) unless a site admin explicitly
-    # grants it to a role or as a site-wide default.
     ALPHA_FEATURES = "alpha_features", "Alpha features"
 
 
@@ -288,12 +270,7 @@ class PendingSubscriptionGrant(abstract.DashboardModel):
 
 def _paid_subscription_roles(user: User) -> list[SubscriptionRole]:
     """Roles the user currently holds via a paid (Stripe-backed) subscription.
-
-    Only counts ``RoleSubscription`` rows that are active/trialing *and* have
-    cleared their role's pay-what-you-want threshold (see
-    ``services.billing.pricing.role_pwyw_threshold_cents`` - re-evaluated at
-    each successful Stripe charge, so a dynamic-threshold role can silently
-    stop granting access without the row itself changing status).
+    Only counts ``RoleSubscription`` rows that are active/trialing *and* have cleared their role's pay-what-you-want threshold (see ``services.billing.pricing.role_pwyw_threshold_cents`` - re-evaluated at each successful Stripe charge, so a dynamic-threshold role can silently stop granting access without the row itself changing status).
     """
     from urbanlens.dashboard.models.billing import RoleSubscription
 
@@ -303,13 +280,7 @@ def _paid_subscription_roles(user: User) -> list[SubscriptionRole]:
 
 def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
     """Return whether the user has the feature, via the site default or an active role.
-
-    Anonymous users never have subscription-backed features. Site admins are
-    treated as having every subscription tier and feature. Authenticated users
-    also get whatever ``SiteSettings.default_features`` grants everyone, even
-    with no subscription at all. Keeping this guard in the helper lets callers
-    use ``request.user`` directly without duplicating authentication/type checks
-    throughout controllers and context processors.
+    Anonymous users never have subscription-backed features.
     """
     if not isinstance(user, User) or not user.is_authenticated:
         return False

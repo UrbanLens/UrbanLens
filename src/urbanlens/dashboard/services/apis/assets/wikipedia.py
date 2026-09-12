@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.utils.html import escape
 
-# only ever parses markup already run through nh3.clean() (or html.escape()), which strips doctypes/entities/attributes before lxml sees it
+# only ever parses markup already run through nh3.clean() (or html.escape()), which strips...
 import lxml.html as lxml_html  # nosec B410
 import nh3
 
@@ -98,12 +98,8 @@ _STOP_HEADING_TITLES = frozenset(
 
 @dataclass(slots=True, kw_only=True)
 class WikipediaGateway(Gateway):
-    """
-    Fetches Wikipedia article summaries for a geographic location.
-
-    The address-verification step ensures we return an article that is actually
-    about the queried address rather than a nearby unrelated landmark.
-    """
+    """Fetches Wikipedia article summaries for a geographic location.
+    The address-verification step ensures we return an article that is actually about the queried address rather than a nearby unrelated landmark."""
 
     service_key: ClassVar[str] = "wikipedia"
     paid_service: ClassVar[bool] = False
@@ -123,16 +119,8 @@ class WikipediaGateway(Gateway):
     ) -> list[dict[str, Any]]:
         """Return Wikipedia articles near the given coordinates as place dicts.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                radius_m: Search radius in metres (max 10 000 per Wikipedia API).
-                limit: Maximum articles to return.
-
         Returns:
-                List of place dicts compatible with the Places layer marker format.
-                Each has: ``place_id``, ``name``, ``lat``, ``lng``, ``source``,
-                ``description``, ``url``, ``types``, ``rating``, ``vicinity``."""
+            List of place dicts compatible with the Places layer marker format."""
         params: dict[str, str | int] = {
             "action": "query",
             "list": "geosearch",
@@ -180,22 +168,8 @@ class WikipediaGateway(Gateway):
     ) -> dict[str, Any] | None:
         """Find a Wikipedia article near the coordinates that matches the place.
 
-        Args:
-                latitude: WGS-84 latitude of the location.
-                longitude: WGS-84 longitude of the location.
-                address_components: Dict with optional keys 'locality', 'route',
-                'street_number', 'administrative_area_level_1'.
-                name: The place's own name (e.g. pin/wiki name), when known.
-                Checked against each candidate's title first, since a title
-                match is a far stronger signal than an address mention -- a
-                same-block article that happens to reference the street or
-                city is not necessarily the article for this specific place.
-
         Returns:
-                A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``,
-                ``description``, ``page_id``, ``infobox`` (ordered ``[label,
-                value]`` pairs, possibly empty - see ``_fetch_infobox``) - or
-                None if no matching article found."""
+            A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``, ``description``, ``page_id``, ``infobox`` (ordered ``[label, value]`` pairs, possibly empty - see ``_fetch_infobox``) - or None if no matching article found."""
         candidates = self._geo_search(latitude, longitude)
         for candidate in candidates:
             summary = self._fetch_summary(candidate["title"])
@@ -208,17 +182,9 @@ class WikipediaGateway(Gateway):
 
     def get_article_media(self, title: str) -> list[dict[str, Any]]:
         """Return the images actually shown on a specific Wikipedia article.
-        Unlike a Wikimedia Commons text search (which only finds files whose own title/description text happens to match a query - see ``WikimediaGateway``), this reads the article's own curated media list, so it also picks up images that are only reachable through an in-body gallery and aren't independently discoverable by name (a known gap: see docs/PROBLEMS.md for the original report).
-
-        Args:
-                title: Exact Wikipedia article title (as returned by
-                ``get_article_for_location``'s ``title`` key).
 
         Returns:
-                List of dicts with keys ``title`` (the Commons ``File:`` page
-                title, useful for cross-provider dedup), ``url`` (largest
-                available rendition), and ``thumb_url`` (smallest). Empty on
-                failure or no matches."""
+            List of dicts with keys ``title`` (the Commons ``File:`` page title, useful for cross-provider dedup), ``url`` (largest available rendition), and ``thumb_url`` (smallest)."""
         url = _MEDIA_LIST_URL.format(title=title.replace(" ", "_"))
         try:
             resp = self.session.get(url, timeout=10)
@@ -282,15 +248,8 @@ class WikipediaGateway(Gateway):
         """Fetch and extract an article's infobox as ordered label/value fact pairs.
         This instead requests the article's real rendered HTML (``action=parse``) and pulls just the infobox table out of it, since that's the only Wikipedia response that contains it.
 
-        Args:
-                title: Exact Wikipedia article title.
-
         Returns:
-                Ordered ``[label, value]`` pairs for infobox rows that have both
-                a label and real text content - skips the infobox's own title
-                row, section-divider rows (e.g. "Details"), and any image/map-only
-                row (the embedded Kartographer map has no Markdown equivalent).
-                Empty list on failure, a missing infobox, or no matching rows."""
+            Ordered ``[label, value]`` pairs for infobox rows that have both a label and real text content - skips the infobox's own title row, section-divider rows (e.g. "Details"), and any image/map-only row (the embedded Kartographer map has no Markdown equivalent)."""
         params: dict[str, str] = {
             "action": "parse",
             "page": title,
@@ -339,11 +298,7 @@ class WikipediaGateway(Gateway):
     @staticmethod
     def _clean_and_trim_extract(raw_html: str) -> str:
         """Sanitize untrusted article HTML, drop reference-style sections, and cap length.
-
-        Truncation happens at block-element boundaries (never mid-tag or
-        mid-sentence) so the result is always well-formed and never ends on a
-        dangling heading.
-        """
+        Truncation happens at block-element boundaries (never mid-tag or mid-sentence) so the result is always well-formed and never ends on a dangling heading."""
         # attribute_filter is required alongside attributes={} - nh3/ammonia keeps a hardcoded
         # "generic" attribute set (title, lang, ...) on every tag regardless of the allowlist.
         safe_html = nh3.clean(
@@ -456,7 +411,7 @@ def _absolute_media_url(src: str) -> str:
 
 @dataclass(slots=True, kw_only=True)
 class WikipediaMediaGateway(MediaProvider):
-    """Images from a pin's own already-matched Wikipedia article (see ``WikipediaGateway.get_article_media``), as a second, independent path into the Media gallery alongside ``WikimediaGateway``'s generic Commons text search - the two catch different failure modes (an unmatchable query vs. a gallery image with no matching Commons metadata), and together are meant to make it unlikely that images visibly present on a confidently-matched Wikipedia article never reach the gallery."""
+    """Images from a pin's own already-matched Wikipedia article (see ``WikipediaGateway.get_article_media``), as a second, independent path into the Media gallery alongside ``WikimediaGateway``'s generic Commons text search - the two catch different..."""
 
     service_key: ClassVar[str] = "wikipedia_media"
     display_name: ClassVar[str] = "Wikipedia"

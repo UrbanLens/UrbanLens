@@ -1,8 +1,4 @@
-{% comment %}
-Immich import progress fragment - returned by PinImmichImportView and polled by
-PinImmichImportProgressView. Includes hx-get polling while pending/running;
-stops polling once done/failed. Context: pin, task_id, state, percent, message, error
-{% endcomment %}
+{% comment %}Immich import progress fragment - returned by PinImmichImportView and polled by PinImmichImportProgressView.{% endcomment %}
 
 {% if state == "SUCCESS" %}
 <div class="immich-import-progress" id="immich-import-progress">

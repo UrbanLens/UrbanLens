@@ -37,11 +37,9 @@ EXPORT_TTL_SECONDS = 3600
 #: email never blows past typical mailbox attachment limits.
 EMAIL_ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024
 
-#: The export areas that predate the declarative registry at the bottom of this
-#: module - each is a hand-written ``_export_*`` function wired into
-#: :func:`run_export` by name. Listed in the order they run. New areas are added
-#: as an :class:`ExportType` subclass instead; ``VALID_EXPORT_TYPES`` and
-#: ``_ORDERED_TYPES`` are derived from both halves (see ``_REGISTERED_EXPORT_TYPES``).
+#: The export areas that predate the declarative registry at the bottom of this module - each is a
+#: hand-written ``_export_*`` function wired into :func:`run_export` by name.
+#: Listed in the order they run.
 _LEGACY_ORDERED_TYPES: tuple[str, ...] = (
     "profile",
     "settings",
@@ -68,10 +66,7 @@ def export_dir(job_id: str) -> str:
 
 class ExportJobStatus:
     """Cache-backed progress state for a user export job.
-
-    The export archive remains on disk as the final downloadable artifact; transient
-    status lives in the application cache rather than a JSON sidecar in MEDIA_ROOT.
-    """
+    The export archive remains on disk as the final downloadable artifact; transient status lives in the application cache rather than a JSON sidecar in MEDIA_ROOT."""
 
     def __init__(self, job_id: str) -> None:
         self.job_id = job_id
@@ -126,13 +121,8 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         export_types: Subset of ``VALID_EXPORT_TYPES``.
         export_dir_path: Filesystem path for this job (created by ``export_dir(job_id)``).
         base_url: Absolute site root URL, used to build pin detail URLs.
-        job_id: UUID string for this export job. Derived from ``export_dir_path``
-            basename when not provided, but callers should always pass it explicitly.
-        email_to_user: When True, email the finished export to the user's account
-            address (UL-373) - see :func:`send_export_email`. Email problems (no
-            address on file, delivery failure) never fail the export itself; the
-            outcome is surfaced through the job status message instead.
-    """
+        job_id: UUID string for this export job.
+        email_to_user: When True, email the finished export to the user's account address (UL-373) - see :func:`send_export_email`."""
     from django.contrib.auth import get_user_model
     from django.core.exceptions import ObjectDoesNotExist
 
@@ -230,11 +220,7 @@ def _run_export_steps(
 
 
 def _resolve_target(obj: Any) -> tuple[str, str, str]:
-    """Return (target_type, target_name, target_uuid) for an object with a pin or wiki FK.
-
-    ``target_uuid`` is what the importer matches on (names are neither unique
-    nor stable); the name is kept for human readability of the archive.
-    """
+    """Return (target_type, target_name, target_uuid) for an object with a pin or wiki FK."""
     if obj.pin:
         return "pin", obj.pin.effective_name, str(obj.pin.uuid)
     wiki = getattr(obj, "wiki", None)
@@ -256,15 +242,7 @@ def _build_zip(export_dir_path: str, temp_dir: str) -> None:
 
 def send_export_email(user: Any, export_dir_path: str, base_url: str, *, job_id: str) -> str:
     """Email the finished export ZIP to the user's account address (UL-373).
-
-    Small archives (up to ``EMAIL_ATTACHMENT_MAX_BYTES``) are attached
-    directly; larger ones get a link to the existing authenticated download
-    endpoint instead, which stays valid until the job's artifacts expire
-    (``EXPORT_TTL_SECONDS``). Follows the established outbound-email pattern
-    (see ``services.profile.account_deletion._send_email``): ``EmailMultiAlternatives``
-    with the site's default from-address, HTML alternative rendered from a
-    ``dashboard/email/`` template, and delivery failures logged rather than
-    raised - an email problem must never fail an otherwise-finished export.
+    Small archives (up to ``EMAIL_ATTACHMENT_MAX_BYTES``) are attached directly; larger ones get a link to the existing authenticated download endpoint instead, which stays valid until the job's artifacts expire (``EXPORT_TTL_SECONDS``).
 
     Args:
         user: The Django user the export belongs to.
@@ -273,10 +251,7 @@ def send_export_email(user: Any, export_dir_path: str, base_url: str, *, job_id:
         job_id: UUID string for this export job, used to build the download URL.
 
     Returns:
-        A short user-facing sentence describing the outcome, appended to the
-        job's "done" status message (emailed as attachment, emailed as link,
-        no address on file, or send failure).
-    """
+        A short user-facing sentence describing the outcome, appended to the job's "done" status message (emailed as attachment, emailed as link, no address on file, or send failure)."""
     import smtplib
 
     from django.core.mail import EmailMultiAlternatives
@@ -340,10 +315,7 @@ def _write_json(temp_dir: str, filename: str, data: Any) -> None:
 
 def _copy_into_archive(source_path: str | None, dest_dir: str, unique_suffix: Any) -> str | None:
     """Copy a stored media file into the archive, disambiguating name collisions.
-
-    Mirrors the file handling in :func:`_export_photos`: two rows can hold files
-    with the same basename, so a collision gets the row's own identifier
-    appended rather than silently overwriting the first copy.
+    Mirrors the file handling in :func:`_export_photos`: two rows can hold files with the same basename, so a collision gets the row's own identifier appended rather than silently overwriting the first copy.
 
     Args:
         source_path: Absolute path of the stored file, or None/"" when absent.
@@ -351,9 +323,7 @@ def _copy_into_archive(source_path: str | None, dest_dir: str, unique_suffix: An
         unique_suffix: Value appended to the stem on a name collision.
 
     Returns:
-        The archive-relative filename that was written, or None when there was
-        no readable source file.
-    """
+        The archive-relative filename that was written, or None when there was no readable source file."""
     if not source_path or not os.path.exists(source_path):
         return None
     filename = os.path.basename(source_path)
@@ -385,15 +355,7 @@ def _write_manifest(profile: Any, temp_dir: str, export_types: list[str]) -> Non
 
 
 def _export_profile(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export the profile's identity block, free-text content, and contact details.
-
-    Also carries the two other profile-scoped things a user authors by hand:
-    ``social_links`` (one link per platform) and ``secondary_emails`` (extra
-    addresses they can be found by). Verification state travels with the
-    secondary addresses for readability but is deliberately not re-importable -
-    see ``ProfileImport``. Neither the verification token nor any other
-    credential is exported.
-    """
+    """Export the profile's identity block, free-text content, and contact details."""
     from urbanlens.dashboard.models.profile.email import ProfileEmail
     from urbanlens.dashboard.models.social_link.model import SocialLink
 
@@ -433,14 +395,7 @@ def _export_profile(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
 
 def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export every user-configurable Profile setting, plus per-notification-type delivery preferences.
-
-    Deliberately excludes fields that aren't really "settings": identity/PII
-    (covered by profile.json), internal bookkeeping (deletion_requested_at,
-    profile_setup_complete, tos_accepted_at, ...), and anything security-
-    sensitive (there is none stored directly on Profile - passkeys/TOTP/etc.
-    live in their own models and are never exported).
-    """
+    """Export every user-configurable Profile setting, plus per-notification-type delivery preferences."""
     data = {
         "theme_mode": profile.theme_mode,
         "guidance_level": profile.guidance_level,
@@ -525,15 +480,7 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
 
 
 def _notification_preferences_dict(profile: Any) -> dict[str, Any]:
-    """Every field on the user's NotificationPreference row (delivery channel per notification type).
-
-    Introspected via the model's own field list rather than hand-enumerated:
-    every field here really is a plain delivery-channel setting (no PII, no
-    relations besides the owning profile), so this stays correct automatically
-    as new notification types are added - unlike the rest of this file, which
-    hand-lists fields deliberately so a new *sensitive* Profile field is never
-    exported without a human noticing.
-    """
+    """Every field on the user's NotificationPreference row (delivery channel per notification type)."""
     from urbanlens.dashboard.models.notifications.model import NotificationPreference
 
     prefs = NotificationPreference.objects.filter(profile=profile).first()
@@ -545,11 +492,7 @@ def _notification_preferences_dict(profile: Any) -> dict[str, Any]:
 
 def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """Export the user's custom field definitions and every stored value.
-
-    Each field row carries its values inline, with targets referenced by UUID
-    (matching the UUIDs used in the other export files) plus a human-readable
-    label so the export is useful on its own.
-    """
+    Each field row carries its values inline, with targets referenced by UUID (matching the UUIDs used in the other export files) plus a human-readable label so the export is useful on its own."""
     from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
 
     fields = (
@@ -604,28 +547,7 @@ def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") ->
 
 def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """Export all user pins as a rich JSON file (UrbanLens custom format).
-
-    Only personal Pin data is exported here - never the shared Location or Wiki it may
-    be linked to. Community wiki data (canonical name, address, description) belongs
-    to the instance, not to any one user's export.
-    Each pin's *effective* coordinates are exported instead of its raw
-    lat/lng override, so a pin that currently relies on its Location for
-    placement still has somewhere to land on import. On import, pins are
-    re-linked to an existing nearby Location or get a new one created, the
-    same way a manually-added pin or a Google Takeout import would be.
-
-    Also carries the pin's own review rating, security indicators (fences,
-    alarms, cameras, ...), and private article (if any) - a pin article is
-    only ever visible to its owner (see ``models.article.Article.is_private``),
-    so it's fully covered by exporting it alongside the rest of this pin.
-
-    ``PinAlias`` rows ride along in each pin's ``aliases`` list rather than in a
-    file of their own: an alias is scoped to one pin (it has no profile FK -
-    ownership is derived from ``pin.profile``) and means nothing detached from
-    it. Every alias is exported, including the ``official`` ones synced from
-    external name providers, so the archive shows every name the pin has ever
-    carried; only user-authored ones are restored on import.
-    """
+    Only personal Pin data is exported here - never the shared Location or Wiki it may be linked to."""
     from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.reviews.model import Review
@@ -699,11 +621,8 @@ def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.pin.model import Pin
 
-    # Only this profile's own pins are exportable, and prefetching the whole
-    # `pins` relation would pull every other profile's pins for a global label.
-    # Narrowing it in the Prefetch (rather than filtering the cached relation
-    # per row, which bypasses the cache and costs a query per label) is what
-    # keeps this flat in the number of labels.
+    # Only this profile's own pins are exportable, and prefetching the whole `pins` relation would
+    # pull every other profile's pins for a global label.
     own_pins = Prefetch("pins", queryset=Pin.objects.filter(profile=profile), to_attr="own_pins")
 
     # Export user-owned labels plus global labels that are assigned to the user's pins.
@@ -739,20 +658,7 @@ def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
 
 def _export_connections(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export friendship connections as a list of relationship records.
-
-    Outgoing rows the RECIPIENT hasn't accepted (requested/declined/ignored)
-    are anonymized - identity nulled and the three states collapsed into one
-    ``"pending"`` value. Until a request is accepted, the sender must not be
-    able to learn who they reached, whether an invited email belongs to a
-    registered account, or how (or whether) the recipient responded - the
-    same rule the pending-requests widget enforces (see
-    ``controllers.friendship._friend_list_ctx``); an export that included the
-    real username/uuid/status would reopen that exact enumeration channel.
-    Sender-initiated states (accepted friendships being removed, blocks,
-    mutes) keep their identity: the sender necessarily already knows who
-    they acted on.
-    """
+    """Export friendship connections as a list of relationship records."""
     from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
     from urbanlens.dashboard.models.friendship.model import Friendship
 
@@ -805,17 +711,7 @@ def _export_connections(profile: Any, temp_dir: str, *, base_url: str = "") -> N
 
 
 def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export every direct message the user sent or received, one row per message.
-
-    The exporting user's own content (body, attachments, whether they sent or
-    received it) is always included in full - "they should always be able to
-    see their own messages". The conversation partner's identity is passed
-    through `display_identity_for`, the same check the messages page itself
-    uses, so an export never reveals a partner's name/avatar beyond what the
-    user could currently see on screen (e.g. after being blocked or a privacy
-    change). Tombstoned/expired message bodies are also masked per the
-    viewer's own tombstone rules, for the same reason.
-    """
+    """Export every direct message the user sent or received, one row per message."""
     from django.db.models import Count
 
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
@@ -844,9 +740,9 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
             "direction": "sent" if is_sender else "received",
             "partner_display_name": identity["display_name"],
             # Stable identifier for the restore path (sent messages only, see
-            # _import_direct_messages). Withheld whenever the partner's
-            # identity is masked from the exporter - the uuid would identify
-            # them just as surely as their name.
+            # _import_direct_messages).
+            # Withheld whenever the partner's identity is masked from the exporter - the uuid would
+            # identify them just as surely as their name.
             "partner_uuid": None if identity["is_anonymized"] else str(partner.uuid),
             "is_tombstoned": bool(tombstone),
             "image_count": 0 if tombstone else message.exported_image_count,
@@ -857,10 +753,10 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
         if tombstone:
             row["body"] = tombstone
         elif message.is_encrypted:
-            # End-to-end encrypted: the server has no plaintext. Export the raw
-            # ciphertext (only the user's own key can read it) plus a note, and
-            # offer an in-browser "download decrypted transcript" on the
-            # messages page for a readable copy.
+            # End-to-end encrypted: the server has no plaintext.
+            # Export the raw ciphertext (only the user's own key can read it) plus a note, and offer
+            # an in-browser "download decrypted transcript" on the messages page for a readable
+            # copy.
             row["body"] = None
             row["encrypted"] = True
             row["ciphertext"] = message.ciphertext
@@ -962,19 +858,7 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
 
 def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export the trips this user is a member of.
-
-    Member and creator names go through ``resolve_visible_identities``, the same
-    resolution ``services.trips.trip_membership`` applies when the trip page renders
-    its member list - so a co-member whose profile visibility hides them from this
-    user is "Member 2" in the export exactly as they are on screen. This mirrors
-    what :func:`_export_direct_messages` does for a conversation partner: an export
-    is a copy of what the user can see, not a way around what they cannot.
-
-    ``member_uuids`` is still exported for everyone, masked or not. It carries no
-    name, and the import's re-invite step needs it to rebuild the trip's membership;
-    dropping it would turn a privacy fix into a lost feature.
-    """
+    """Export the trips this user is a member of."""
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
@@ -996,10 +880,9 @@ def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "start_date": str(trip.start_date) if trip.start_date else None,
                 "end_date": str(trip.end_date) if trip.end_date else None,
                 "creator": _name(trip.creator) if trip.creator else None,
-                # Whether the exporting user created this trip - the importer
-                # only re-creates trips the user owned (a membership in someone
-                # else's trip records THEIR trip, which an import can't rebuild
-                # on their behalf).
+                # Whether the exporting user created this trip - the importer only re-creates trips
+                # the user owned (a membership in someone else's trip records THEIR trip, which an
+                # import can't rebuild on their behalf).
                 "is_creator": trip.creator_id == profile.pk,
                 "members": [_name(p) for p in members],
                 # Stable identifiers for re-inviting members on import; same
@@ -1042,25 +925,14 @@ def _export_pin_lists(profile: Any, temp_dir: str, *, base_url: str = "") -> Non
 
 class ExportType(ABC):
     """One selectable export area, written into the archive as a single JSON file.
-
-    The original export areas are plain ``_export_*`` functions listed by name in
-    :data:`_LEGACY_ORDERED_TYPES` and wired into :func:`run_export` by hand.
-    Areas added since subclass this instead, so adding another one means writing
-    a class and appending an instance to :data:`_REGISTERED_EXPORT_TYPES` - the
-    checkbox allowlist (:data:`VALID_EXPORT_TYPES`), the run order
-    (:data:`_ORDERED_TYPES`) and the dispatch table in :func:`run_export` all
-    derive from that tuple.
-
-    Instances are callable with the same ``(profile, temp_dir, *, base_url)``
-    signature the legacy functions use, so both kinds dispatch identically.
+    Instances are callable with the same ``(profile, temp_dir, *, base_url)`` signature the legacy functions use, so both kinds dispatch identically.
 
     Attributes:
         key: The value the UI checkbox posts in ``export_types``.
         filename: Path of the JSON file, relative to the archive root.
         message: Progress message shown while this step runs.
         label: Checkbox label on the Tools export card.
-        description: One-line hint rendered under ``label``.
-    """
+        description: One-line hint rendered under ``label``."""
 
     key: ClassVar[str]
     filename: ClassVar[str]
@@ -1072,86 +944,49 @@ class ExportType(ABC):
     def payload(self, profile: Any, temp_dir: str, base_url: str) -> Any:
         """Build the JSON-serializable content of :attr:`filename`.
 
-        Args:
-            profile: The profile being exported.
-            temp_dir: The archive's staging directory - for a type that also
-                writes media files alongside its JSON.
-            base_url: Absolute site root URL, for types that emit links.
-
         Returns:
-            Any JSON-serializable value.
-        """
+            Any JSON-serializable value."""
 
     def __call__(self, profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-        """Run this export step.
-
-        Args:
-            profile: The profile being exported.
-            temp_dir: The archive's staging directory.
-            base_url: Absolute site root URL.
-        """
+        """Run this export step."""
         _write_json(temp_dir, self.filename, self.payload(profile, temp_dir, base_url))
 
 
 class ModelExportType[ExportedModelT: Model](ExportType):
     """An :class:`ExportType` backed by one profile-scoped queryset, one JSON row per object.
-
-    Covers the common shape: filter the model to the exporting profile, order it
-    deterministically, and map each object to a dict. Types spanning several
-    models (see :class:`MapAnnotationsExport`) subclass :class:`ExportType`
-    directly instead.
-    """
+    Types spanning several models (see :class:`MapAnnotationsExport`) subclass :class:`ExportType` directly instead."""
 
     @abstractmethod
     def queryset(self, profile: Any) -> Iterable[ExportedModelT]:
         """Return this profile's rows, deterministically ordered and prefetched.
 
-        Args:
-            profile: The profile being exported.
-
         Returns:
-            An iterable of model instances.
-        """
+            An iterable of model instances."""
 
     @abstractmethod
     def row(self, obj: ExportedModelT) -> dict[str, Any]:
         """Return the exported dict for one object.
 
-        Args:
-            obj: A model instance from :meth:`queryset`.
-
         Returns:
-            A JSON-serializable dict.
-        """
+            A JSON-serializable dict."""
 
     def payload(self, profile: Any, temp_dir: str, base_url: str) -> list[dict[str, Any]]:
         """Return one row per object in :meth:`queryset`.
 
-        Args:
-            profile: The profile being exported.
-            temp_dir: Unused by the single-queryset shape.
-            base_url: Unused by the single-queryset shape.
-
         Returns:
-            The exported rows.
-        """
+            The exported rows."""
         return [self.row(obj) for obj in self.queryset(profile)]
 
 
 def _markup_row(item: PinMarkup) -> dict[str, Any]:
     """Return the exported dict for one markup annotation.
-
-    Shared by the map-scoped items nested under each ``MarkupMap`` and the
-    standalone pin/wiki-scoped items, so both carry identical fields.
+    Shared by the map-scoped items nested under each ``MarkupMap`` and the standalone pin/wiki-scoped items, so both carry identical fields.
 
     Args:
         item: The annotation to serialize.
 
     Returns:
-        A JSON-serializable dict. ``layer_name`` is present for readability
-        only - custom layers are not themselves exported, so a restored item
-        lands on the base markup layer.
-    """
+        A JSON-serializable dict."""
     return {
         "uuid": str(item.uuid),
         "markup_type": item.markup_type,
@@ -1170,19 +1005,7 @@ def _markup_row(item: PinMarkup) -> dict[str, Any]:
 
 class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
     """Every safety check-in the user planned, with its contacts and message thread.
-
-    A contact row carries the name/email the user typed and when that contact was
-    notified, but never the contact's ``token``: that is the magic-link credential
-    for the public contact portal, and an archive the user downloads (and may
-    forward) must not contain a working key into their own check-in - the same
-    rule that keeps passkeys and message keys out of the archive entirely.
-
-    The shared ``destination_location`` is omitted for the reason ``_export_pins``
-    omits ``Location``: it is instance-owned community data, not this user's.
-    The destination they actually chose survives as plain coordinates. The route
-    map and any attached reference maps are referenced by uuid; their contents
-    live in the ``map_annotations`` area.
-    """
+    The shared ``destination_location`` is omitted for the reason ``_export_pins`` omits ``Location``: it is instance-owned community data, not this user's."""
 
     key = "safety_checkins"
     filename = "safety_checkins.json"
@@ -1193,12 +1016,8 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
     def queryset(self, profile: Any) -> Iterable[SafetyCheckin]:
         """Return this profile's check-ins, oldest first.
 
-        Args:
-            profile: The profile being exported.
-
         Returns:
-            Check-ins with contacts, messages and attached maps prefetched.
-        """
+            Check-ins with contacts, messages and attached maps prefetched."""
         from urbanlens.dashboard.models.safety.model import SafetyCheckin
 
         return SafetyCheckin.objects.filter(profile=profile).select_related("trip", "markup_map").prefetch_related("contacts__contact_profile", "messages__sender_profile", "messages__sender_contact", "markup_maps").order_by("created")
@@ -1206,12 +1025,8 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
     def row(self, obj: SafetyCheckin) -> dict[str, Any]:
         """Return the exported dict for one check-in.
 
-        Args:
-            obj: The check-in to serialize.
-
         Returns:
-            A JSON-serializable dict including nested contacts and messages.
-        """
+            A JSON-serializable dict including nested contacts and messages."""
         return {
             "uuid": str(obj.uuid),
             "title": obj.title,
@@ -1234,10 +1049,9 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
                 {
                     "name": contact.name or "",
                     "email": contact.email or "",
-                    # The owner picked this person as an emergency contact and
-                    # sees them named on their own check-in page, so identity is
-                    # not withheld here the way _export_connections withholds an
-                    # unaccepted request's recipient.
+                    # The owner picked this person as an emergency contact and sees them named on
+                    # their own check-in page, so identity is not withheld here the way
+                    # _export_connections withholds an unaccepted request's recipient.
                     "contact_profile_uuid": str(contact.contact_profile.uuid) if contact.contact_profile else None,
                     "contact_profile_username": contact.contact_profile.username if contact.contact_profile else None,
                     "notified_at": str(contact.notified_at) if contact.notified_at else None,
@@ -1260,23 +1074,7 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
 
 class MapAnnotationsExport(ExportType):
     """Standalone markup maps, the annotations drawn on them, and georeferenced image overlays.
-
-    Three models make one area because they are one feature: a ``MarkupMap`` is
-    a saved viewport whose ``PinMarkup`` items are meaningless without it, and a
-    ``MapImageOverlay`` is another drawing on the same maps. The payload is
-    therefore an object rather than a list:
-
-    * ``maps`` - each ``MarkupMap`` with its own items nested inside it.
-    * ``markup`` - annotations drawn directly on a pin's or a wiki's map,
-      referenced by ``target_type``/``target_uuid`` the way comments and photos are.
-    * ``overlays`` - georeferenced images, with any stored file copied into
-      ``map_annotations/`` exactly as ``_export_photos`` copies photos.
-
-    Wiki-scoped markup is included because the user drew it, even though it is
-    shared community data - the same reason a received direct message is
-    exported. Only their own personal (pin- and map-scoped) markup is restorable
-    on import.
-    """
+    Three models make one area because they are one feature: a ``MarkupMap`` is a saved viewport whose ``PinMarkup`` items are meaningless without it, and a ``MapImageOverlay`` is another drawing on the same maps."""
 
     key = "map_annotations"
     filename = "map_annotations.json"
@@ -1290,15 +1088,8 @@ class MapAnnotationsExport(ExportType):
     def payload(self, profile: Any, temp_dir: str, base_url: str) -> dict[str, Any]:
         """Build the three annotation sections, copying overlay files as it goes.
 
-        Args:
-            profile: The profile being exported.
-            temp_dir: The archive's staging directory (overlay files land in
-                ``<temp_dir>/map_annotations/``).
-            base_url: Unused.
-
         Returns:
-            A dict with ``maps``, ``markup`` and ``overlays`` keys.
-        """
+            A dict with ``maps``, ``markup`` and ``overlays`` keys."""
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
         from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 
@@ -1329,14 +1120,8 @@ class MapAnnotationsExport(ExportType):
     def _overlay_row(self, overlay: MapImageOverlay, temp_dir: str) -> dict[str, Any]:
         """Return the exported dict for one image overlay, copying its file into the archive.
 
-        Args:
-            overlay: The overlay to serialize.
-            temp_dir: The archive's staging directory.
-
         Returns:
-            A JSON-serializable dict; ``filename`` is None for an overlay that
-            references a remote ``image_url`` rather than a stored file.
-        """
+            A JSON-serializable dict; ``filename`` is None for an overlay that references a remote ``image_url`` rather than a stored file."""
         files_dir = os.path.join(temp_dir, self.files_dir_name)
         os.makedirs(files_dir, exist_ok=True)
         stored = overlay.image.image if overlay.image_id and overlay.image and overlay.image.image else None
@@ -1360,18 +1145,13 @@ class MapAnnotationsExport(ExportType):
 
 def _annotation_target(obj: Any) -> dict[str, Any]:
     """Return the ``target_type``/``target_uuid`` pair for a pin- or wiki-parented annotation.
-
-    Uses the same vocabulary :func:`_resolve_target` produces for comments and
-    photos ("pin" / "location"), so the importer can resolve all of them through
-    one helper.
+    Uses the same vocabulary :func:`_resolve_target` produces for comments and photos ("pin" / "location"), so the importer can resolve all of them through one helper.
 
     Args:
         obj: Any object with ``parent_pin``/``parent_wiki`` FKs.
 
     Returns:
-        A dict with ``target_type`` and ``target_uuid``; both empty when the
-        annotation has neither parent.
-    """
+        A dict with ``target_type`` and ``target_uuid``; both empty when the annotation has neither parent."""
     if obj.parent_pin_id and obj.parent_pin:
         return {"target_type": "pin", "target_uuid": str(obj.parent_pin.uuid)}
     if obj.parent_wiki_id and obj.parent_wiki:
@@ -1381,13 +1161,7 @@ def _annotation_target(obj: Any) -> dict[str, Any]:
 
 class SavedFiltersExport(ModelExportType["SavedFilter"]):
     """The user's named, reusable main-map filter combinations.
-
-    ``criteria`` is copied verbatim - it is the normalized search-form payload
-    ``services.search.filter_criteria`` replays, and can name labels or custom
-    fields by identifier. Reinterpreting it here would duplicate that module's
-    knowledge, so the importer copies it back as-is the same way
-    ``_import_pin_lists`` handles a smart list's ``smart_filter``.
-    """
+    Reinterpreting it here would duplicate that module's knowledge, so the importer copies it back as-is the same way ``_import_pin_lists`` handles a smart list's ``smart_filter``."""
 
     key = "saved_filters"
     filename = "saved_filters.json"
@@ -1398,12 +1172,8 @@ class SavedFiltersExport(ModelExportType["SavedFilter"]):
     def queryset(self, profile: Any) -> Iterable[SavedFilter]:
         """Return this profile's saved filters in display order.
 
-        Args:
-            profile: The profile being exported.
-
         Returns:
-            Saved filters ordered by ``order`` then creation time.
-        """
+            Saved filters ordered by ``order`` then creation time."""
         from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
         return SavedFilter.objects.filter(profile=profile).order_by("order", "created")
@@ -1411,12 +1181,8 @@ class SavedFiltersExport(ModelExportType["SavedFilter"]):
     def row(self, obj: SavedFilter) -> dict[str, Any]:
         """Return the exported dict for one saved filter.
 
-        Args:
-            obj: The saved filter to serialize.
-
         Returns:
-            A JSON-serializable dict.
-        """
+            A JSON-serializable dict."""
         return {
             "uuid": str(obj.uuid),
             "name": obj.name,
@@ -1431,11 +1197,7 @@ class SavedFiltersExport(ModelExportType["SavedFilter"]):
 
 class RoutesExport(ModelExportType["Route"]):
     """GPS tracks and planned routes the user imported from GPX or Google Takeout.
-
-    ``path`` is exported as GeoJSON - the stored simplified polyline, which is
-    all the app itself keeps (raw points are discarded at import time), so the
-    archive is not a lossier copy than the live row.
-    """
+    ``path`` is exported as GeoJSON - the stored simplified polyline, which is all the app itself keeps (raw points are discarded at import time), so the archive is not a lossier copy than the live row."""
 
     key = "routes"
     filename = "routes.json"
@@ -1446,12 +1208,8 @@ class RoutesExport(ModelExportType["Route"]):
     def queryset(self, profile: Any) -> Iterable[Route]:
         """Return this profile's routes, oldest first.
 
-        Args:
-            profile: The profile being exported.
-
         Returns:
-            The profile's routes ordered by creation time.
-        """
+            The profile's routes ordered by creation time."""
         from urbanlens.dashboard.models.routes.model import Route
 
         return Route.objects.for_profile(profile).order_by("created")
@@ -1459,12 +1217,8 @@ class RoutesExport(ModelExportType["Route"]):
     def row(self, obj: Route) -> dict[str, Any]:
         """Return the exported dict for one route.
 
-        Args:
-            obj: The route to serialize.
-
         Returns:
-            A JSON-serializable dict with the path as a GeoJSON LineString.
-        """
+            A JSON-serializable dict with the path as a GeoJSON LineString."""
         return {
             "uuid": str(obj.uuid),
             "name": obj.name or "",

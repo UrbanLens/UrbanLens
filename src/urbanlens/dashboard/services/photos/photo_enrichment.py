@@ -1,5 +1,4 @@
-"""Background-enrichment sources that cache small, wiki-attached location photos.
-Each is persisted as an ordinary, small (resized + WebP) ``Image`` row, attached to the location's Wiki (lazily created if absent, exactly like the "share to wiki" action any user can already take) rather than a pin or profile - these are site-owned, publicly-sourced reference imagery, not anyone's private upload, so there is no profile to charge storage quota against and no privacy concern in making them wiki-visible."""
+"""Background-enrichment sources that cache small, wiki-attached location photos."""
 
 from __future__ import annotations
 
@@ -38,7 +37,6 @@ DEFAULT_ENRICHED_MAX_DIMENSION = 1024
 
 def enriched_max_dimension(source: str) -> int:
     """The longest-edge cap a provider photo from *source* was stored under.
-    Lets a recovery path (``tasks.requeue_stalled_pending_uploads``) reprocess a profile-less row at the size it was meant to have, rather than at whatever the provider returned - these rows have no subscriber plan to read a policy from, and the cap is otherwise only known at the call site that created them.
 
     Args:
         source: The row's ``ImageSource`` value.
@@ -74,11 +72,7 @@ def _save_enriched_image(location: Location, content: bytes, *, source: str, sou
         max_dimension: Longest-edge cap passed to ``downscale_stored_image``.
 
     Returns:
-        The persisted Image row, still ``pending_scan`` and still at the
-        provider's own dimensions - ``tasks.process_image_upload`` scans,
-        strips and resizes it. Callers that need the finished row must
-        ``refresh_from_db``.
-    """
+        The persisted Image row, still ``pending_scan`` and still at the provider's own dimensions - ``tasks.process_image_upload`` scans, strips and resizes it."""
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.models.images.model import Image
@@ -119,12 +113,7 @@ def _save_enriched_image(location: Location, content: bytes, *, source: str, sou
 
 
 class _BackfillMarkerSource(EnrichmentSource):
-    """Shared "attempted once, ever" completion tracking via a LocationCache marker row.
-
-    Same contract as ``services.locations.enrichment.AddressEnrichmentSource``: the marker is written
-    regardless of whether anything was actually found, so a location that turns out to have no
-    coverage/photos isn't retried every cycle forever.
-    """
+    """Shared "attempted once, ever" completion tracking via a LocationCache marker row."""
 
     #: LocationCache source recording that a backfill attempt happened.
     marker_source: ClassVar[str] = ""

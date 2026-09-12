@@ -1,16 +1,10 @@
 """One-off backfill: remove the EXIF block from photos stored before it was stripped on upload.
 
-TEMPORARY - delete this command once it has been run against production.
-
-Uploads stop carrying EXIF from the commit that added this, but every file
-already in storage still has its block, and those are the ones that have had
-time to be contributed to wikis. The values are preserved on the row first
-(``exif_data``) for any photo that never recorded them, so the provenance
-survives even though the file no longer carries it.
-
-Deliberately passes ``max_dimension=None, convert_webp=False`` rather than each
-uploader's policy: this is a scrub, not a re-processing run, and resizing or
-re-encoding somebody's existing photos is a bigger change than they asked for.
+The values are preserved on the row first (``exif_data``) for any photo that never recorded them, so
+the provenance survives even though the file no longer carries it.
+Deliberately passes ``max_dimension=None, convert_webp=False`` rather than each uploader's policy:
+this is a scrub, not a re-processing run, and resizing or re-encoding somebody's existing photos is
+a bigger change than they asked for.
 """
 
 from __future__ import annotations
@@ -46,11 +40,8 @@ class Command(BaseCommand):
         skipped = 0
         failed = 0
 
-        # A management command has no UL_PROCESS_ROLE, so the sandbox guard sees
-        # 'unspecified' and would refuse the very decode this command exists to
-        # perform. The exemption is narrow and honest: these are files already in
-        # storage, already scanned, already served - not a fresh upload arriving
-        # from a stranger. Scoped to the loop so nothing else inherits it.
+        # A management command has no UL_PROCESS_ROLE, so the sandbox guard sees 'unspecified' and would refuse
+        # the very decode this command exists to perform.
         with allow_untrusted_parse("strip_exif_from_stored_photos: already-stored, already-scanned files"):
             for index, image in enumerate(queryset.iterator()):
                 if limit is not None and index >= limit:

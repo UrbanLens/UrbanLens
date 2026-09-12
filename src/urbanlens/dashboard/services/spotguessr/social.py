@@ -1,7 +1,4 @@
-"""Ratings visibility: your own ratings + friends' ratings with opt-out.
-
-See ``docs/designs/drafts/spotguessr.md`` ("Social: ratings visibility").
-"""
+"""Ratings visibility: your own ratings + friends' ratings with opt-out."""
 
 from __future__ import annotations
 
@@ -24,10 +21,7 @@ def visible_friend_ratings(profile: Profile) -> list[dict]:
     """Each visible friend's most-recently-played mode rating, excluding anyone who has opted out.
 
     Returns:
-        A list of ``{"profile": Profile, "rating": PlayerModeRating | None}``
-        dicts, one per visible friend - friends who haven't played yet still
-        appear, with ``rating=None``, since the opt-out is about visibility,
-        not about hiding the fact that a friend hasn't played."""
+        A list of ``{"profile": Profile, "rating": PlayerModeRating | None}`` dicts, one per visible friend - friends who haven't played yet still appear, with ``rating=None``, since the opt-out is about visibility, not about hiding the fact that a friend hasn't played."""
     friends = friend_profiles(profile)
     if not friends:
         return []

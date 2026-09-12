@@ -1,5 +1,4 @@
-"""Shared SSRF guard for server-side fetches of a user-supplied url.
-Used anywhere the app downloads content from a url a user (not a fixed, trusted provider) supplied - each such fetch runs from inside the server's own network, so an unvalidated url lets a user direct outbound requests at internal services (SSRF), including cloud metadata endpoints."""
+"""Shared SSRF guard for server-side fetches of a user-supplied url."""
 
 from __future__ import annotations
 
@@ -39,8 +38,7 @@ def resolve_public_http_url(url: str, *, max_length: int = 2048) -> tuple[str, s
         max_length: Reject anything longer than this.
 
     Returns:
-        ``(validated_url, ip_address)`` - connect to ``ip_address``, not to a
-        re-resolution of the hostname.
+        ``(validated_url, ip_address)`` - connect to ``ip_address``, not to a re-resolution of the hostname.
 
     Raises:
         UnsafeUrlError: On any rejection, with a user-facing message."""
@@ -80,7 +78,6 @@ def resolve_public_http_url(url: str, *, max_length: int = 2048) -> tuple[str, s
 
 def ensure_public_http_url(url: str, *, max_length: int = 2048) -> str:
     """Validate ``url`` is http(s) and doesn't currently resolve to an internal host.
-    This remains for *submission-time* validation, where the point is to reject an obviously-internal link at the moment a user pastes it rather than to protect a fetch: the value it returns is only a url, so a caller that passes it to ``requests`` re-resolves and reopens the rebind window.
 
     Args:
         url: The url to validate.
@@ -172,19 +169,13 @@ def fetch_public_url(
         timeout: Per-request timeout, in seconds.
         max_redirects: Redirect hops to follow before giving up.
         max_length: Reject urls longer than this.
-        session: Issue the requests on this session (e.g. a ``Gateway``'s
-            rate-limited, logging session). When omitted each hop goes through
-            ``requests.get``, which uses a fresh session per hop - so a cookie
-            set by one host in a redirect chain is never replayed to the next.
+        session: Issue the requests on this session (e.g. a ``Gateway``'s rate-limited, logging session).
 
     Returns:
-        The final streamed, non-redirect ``requests.Response``. Callers must
-        still bound how much of the body they read.
+        The final streamed, non-redirect ``requests.Response``.
 
     Raises:
-        UnsafeUrlError: A hop failed validation, a redirect had no target, the
-            connection landed on an address that was not the validated one, or
-            the chain exceeded ``max_redirects``.
+        UnsafeUrlError: A hop failed validation, a redirect had no target, the connection landed on an address that was not the validated one, or the chain exceeded ``max_redirects``.
         requests.RequestException: The underlying request failed."""
     import requests as _requests
 

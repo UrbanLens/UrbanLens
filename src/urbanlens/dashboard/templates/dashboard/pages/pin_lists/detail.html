@@ -91,9 +91,7 @@
         {% map_layers_panel "street,terrain,satellite,borders" panel_id="pin-list-map-layers" %}
     </section>
 
-    {# -- Smart list configuration - hidden entirely for a plain list until the #}
-    {# "Add Smart Filter" button (above) reveals it; starts collapsed even for  #}
-    {# an already-smart list, so it doesn't compete with the items below.      #}
+    {# Smart list configuration - hidden entirely for a plain list until the "Add Smart Filter" button (above) reveals it. #}
     <section class="pin-list-smart-panel" id="pin-list-smart-panel"
               {% if not pin_list.is_smart and not pin_list.smart_filter and not pin_list.smart_boundary %}hidden{% endif %}>
         <div class="pin-list-smart-panel-header">
@@ -205,7 +203,7 @@
 </dialog>
 
 {# -- Create/edit saved filter dialog - markup+JS shared with Organize's Filters tab (see _saved_filter_dialog_scripts.html). #}
-{# No data-success-redirect set - saving/deleting here just reloads this page so the "Match pins from a saved filter" select picks up the change. #}
+{# No data-success-redirect set - saving/deleting here just reloads this page so the "Match pins from a saved filter" select picks up. #}
 <dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog" aria-label="Saved filter"></dialog>
 
 {# -- Add to trip dialog ------------------------------------------------------#}

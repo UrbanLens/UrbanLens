@@ -59,15 +59,8 @@ def _haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> flo
 
 class MarkupMap(abstract.FrontendDashboardModel):
     """A standalone, reusable map view with user-drawn markup on it.
-
-    A MarkupMap owns a saved viewport (centre, zoom, base layer, borders
-    overlay) plus a set of :class:`PinMarkup` items (``items`` related name).
-    Other models attach a map by holding a nullable FK to it - safety
-    check-ins (``SafetyCheckin.markup_map``), comments (``Comment.markup_map``
-    / ``TripComment.markup_map``), and pin visits (``PinVisit.markup_map``) -
-    so a map can exist before its host does (e.g. drawn on the check-in
-    creation page and linked once the check-in is created) and can be reused
-    or managed independently on the Memories > Maps page.
+    A MarkupMap owns a saved viewport (centre, zoom, base layer, borders overlay) plus a set of :class:`PinMarkup` items (``items`` related name).
+    Other models attach a map by holding a nullable FK to it - safety check-ins (``SafetyCheckin.markup_map``), comments (``Comment.markup_map`` / ``TripComment.markup_map``), and pin visits (``PinVisit.markup_map``) - so a map can exist before its host does (e.g. drawn on the check-in creation page and linked once the check-in is created) and can be reused or managed independently on the Memories > Maps page.
 
     Attributes:
         uuid: Stable public identifier (used in URLs).
@@ -105,12 +98,10 @@ class MarkupMap(abstract.FrontendDashboardModel):
         blank=True,
         related_name="clones",
     )
-    # The profile who most recently sent this map to its current owner (via a
-    # DM attachment, a standalone map share, or a pin-share attachment) at the
-    # time it was cloned. Denormalized from the share event rather than
-    # derived from `cloned_from.profile` so the "From X" label survives even
-    # if the source map is later deleted, and so a forwarded chain always
-    # shows the immediate sender rather than the original creator.
+    # The profile who most recently sent this map to its current owner (via a DM attachment, a
+    # standalone map share, or a pin-share attachment) at the time it was cloned.
+    # Denormalized from the share event rather than derived from `cloned_from.profile` so the "From
+    # X" label survives even if the source map is later deleted, and so a forwarded chain always
     shared_by = ForeignKey(
         "dashboard.Profile",
         on_delete=SET_NULL,
@@ -118,11 +109,10 @@ class MarkupMap(abstract.FrontendDashboardModel):
         blank=True,
         related_name="+",
     )
-    # Direct association with the pin this map was created for (e.g. via the
-    # pin-share dialog's "New map" flow). Set immediately on creation,
-    # independent of whether the map is ever actually shared - distinct from
-    # PinShare.markup_map, which records a map attached to a specific share
-    # event. Backs the Private Pin page's "Markup Maps" section.
+    # Direct association with the pin this map was created for (e.g. via the pin-share dialog's "New
+    # map" flow).
+    # Set immediately on creation, independent of whether the map is ever actually shared - distinct
+    # from PinShare.markup_map, which records a map attached to a specific share event.
     pin = ForeignKey(
         "dashboard.Pin",
         on_delete=SET_NULL,
@@ -130,14 +120,10 @@ class MarkupMap(abstract.FrontendDashboardModel):
         blank=True,
         related_name="associated_maps",
     )
-    # Pins this map's geometry (saved viewport + markup) is detected to reveal,
-    # per services.sharing.map_pin_share_detection.detect_shared_pins - kept in sync by
-    # models.markup.signals any time the viewport or items change, independent
-    # of whether the map is ever actually shared. Deliberately separate from
-    # `pin` (a single explicit, user-set link): a map can geometrically point
-    # at several pins at once, and this set is a passive detection record
-    # consumed by search and pin-share tracking, never edited directly by a
-    # user, so it is unaffected by `pin` being cleared from the Private Pin page.
+    # Pins this map's geometry (saved viewport + markup) is detected to reveal, per
+    # services.sharing.map_pin_share_detection.detect_shared_pins - kept in sync by
+    # models.markup.signals any time the viewport or items change, independent of whether the map is
+    # ever actually shared.
     inferred_pins: ManyToManyField[Pin, Pin] = ManyToManyField(
         "dashboard.Pin",
         blank=True,
@@ -162,13 +148,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
     def _attached_rows(self, relation: str, *select_related: str) -> Any:
         """Rows from one attachment relation, using a prefetch when there is one.
-
-        `self.comments.select_related(...).first()` builds a *new* queryset, so
-        it queries even when the caller prefetched `comments` - which is how the
-        Memories map list ran up to eleven queries per card while its view
-        prefetched all six relations (P68). Reading
-        ``_prefetched_objects_cache`` first is what makes a `Prefetch` on this
-        relation actually count; without one, the `select_related` still applies.
+        Reading ``_prefetched_objects_cache`` first is what makes a `Prefetch` on this relation actually count; without one, the `select_related` still applies.
 
         Args:
             relation: The reverse accessor name, matching what a caller would
@@ -186,11 +166,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
     def _first_attached_row(self, relation: str, *select_related: str) -> Any:
         """The first row of one attachment relation, or None.
-
-        Separate from :meth:`_attached_rows` so the unprefetched path keeps
-        ``.first()``'s ``LIMIT 1`` rather than fetching every row to discard all
-        but one - which is what a single-map caller (a detail page, a delete
-        confirmation) does.
+        Separate from :meth:`_attached_rows` so the unprefetched path keeps ``.first()``'s ``LIMIT 1`` rather than fetching every row to discard all but one - which is what a single-map caller (a detail page, a delete confirmation) does.
 
         Args:
             relation: The reverse accessor name.
@@ -248,12 +224,6 @@ class MarkupMap(abstract.FrontendDashboardModel):
     def attachments(self) -> list[tuple[str, Any]]:
         """Return every host object currently attached to this map.
 
-        Unlike :attr:`attachment` (which returns only the first match, for
-        the single "primary" link shown on a map's card), this enumerates
-        every safety check-in, comment, trip comment, visit, and direct
-        message that currently references this map - used to tell the owner
-        exactly where a delete will remove it from before they confirm.
-
         Returns:
             List of (kind, instance) tuples, kind one of ``safety_checkin``
             / ``comment`` / ``trip_comment`` / ``visit`` / ``direct_message``.
@@ -270,13 +240,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
     def to_snapshot(self) -> dict:
         """Serialize this map (viewport + items) into the client snapshot format.
-
-        The snapshot format is the JSON schema the shared frontend map
-        composer/viewer speaks: ``{center_lat, center_lng, zoom, layer_mode,
-        show_borders, markup: [shape, ...]}`` with shapes carrying
-        ``latlngs`` as ``[lat, lng]`` pairs. It is embedded into templates
-        (via ``json_script``) for read-only rendering and prefilled into the
-        composer when editing.
+        The snapshot format is the JSON schema the shared frontend map composer/viewer speaks: ``{center_lat, center_lng, zoom, layer_mode, show_borders, markup: [shape, ...]}`` with shapes carrying ``latlngs`` as ``[lat, lng]`` pairs.
+        It is embedded into templates (via ``json_script``) for read-only rendering and prefilled into the composer when editing.
 
         Returns:
             Snapshot dict, always with valid centre coordinates (falls back
@@ -335,19 +300,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
 class CustomLayer(abstract.FrontendDashboardModel):
     """A user-created, independently-toggleable group of markup items on a Pin or Wiki map.
-
-    Lets a user pull a subset of their :class:`PinMarkup` annotations (e.g.
-    every shape marking a tunnel system) into a named layer that shows/hides
-    as one unit in the map's layers panel, separately from the base "Markup"
-    layer. Exactly one of ``parent_pin`` / ``parent_wiki`` is set - the same
-    convention PinMarkup itself uses for parent_pin/parent_wiki/parent_map,
-    enforced by the owning controller rather than a DB constraint. Unlike
-    PinMarkup, a CustomLayer never attaches to a standalone MarkupMap -
-    layers only make sense on the pin detail / wiki pages where the layers
-    panel lives.
-
-    Deleting a layer never deletes its items: ``PinMarkup.layer`` is
-    ``SET_NULL``, so its markup simply falls back to the base layer.
+    Lets a user pull a subset of their :class:`PinMarkup` annotations (e.g. every shape marking a tunnel system) into a named layer that shows/hides as one unit in the map's layers panel, separately from the base "Markup" layer.
+    Exactly one of ``parent_pin`` / ``parent_wiki`` is set - the same convention PinMarkup itself uses for parent_pin/parent_wiki/parent_map, enforced by the owning controller rather than a DB constraint.
 
     Attributes:
         uuid: Stable public identifier (used in URLs).
@@ -425,18 +379,8 @@ class CustomLayer(abstract.FrontendDashboardModel):
 
 class PinMarkup(abstract.FrontendDashboardModel):
     """A map annotation attached to a user's Pin, a Wiki page, or a MarkupMap.
-
-    Markup items let users annotate a map view with lines, arrows, text
-    labels, and geometric shapes (squares, circles, free polygons).
-
-    Exactly one of ``parent_pin`` / ``parent_wiki`` / ``parent_map`` is set,
-    mirroring how ``Pin`` itself distinguishes a personal detail pin
-    (``parent_pin`` set) from a community detail pin (``parent_wiki`` set).
-    Pin-scoped markup is personal (only the owning profile can see/edit it,
-    rendered on the "Markup" layer in the pin detail map); Wiki-scoped
-    markup is shared community data, editable by any signed-in user, rendered
-    on the wiki map; map-scoped markup belongs to a standalone
-    :class:`MarkupMap` (safety check-in routes, comment maps, visit maps).
+    Markup items let users annotate a map view with lines, arrows, text labels, and geometric shapes (squares, circles, free polygons).
+    Pin-scoped markup is personal (only the owning profile can see/edit it, rendered on the "Markup" layer in the pin detail map); Wiki-scoped markup is shared community data, editable by any signed-in user, rendered on the wiki map; map-scoped markup belongs to a standalone :class:`MarkupMap` (safety check-in routes, comment maps, visit maps).
 
     Attributes:
         uuid: Stable public identifier (used in URLs).
@@ -524,28 +468,14 @@ class PinMarkup(abstract.FrontendDashboardModel):
 
     def coerce_colors(self) -> None:
         """Reduce this item's colours to values a renderer can actually mean.
-
-        Separate from ``save`` because a bulk write never calls it: the undo
-        restore rebuilds a deleted map's annotations with ``bulk_create``, which
-        would otherwise reinstate a stored value verbatim - and a payload
-        written before this validation existed is exactly where a bad one would
-        be. ``PinMarkupQuerySet.bulk_create`` applies it for every such caller.
-
-        Invalid values fall back the same way the renderer's own ``safeColor``
-        does, so a bad colour degrades to the default instead of failing the
-        write.
+        Separate from ``save`` because a bulk write never calls it: the undo restore rebuilds a deleted map's annotations with ``bulk_create``, which would otherwise reinstate a stored value verbatim - and a payload written before this validation existed is exactly where a bad one would be.
         """
         self.color = sanitize_hex_color(self.color, "#e53e3e")
         self.border_color = sanitize_optional_color(self.border_color)
 
     def save(self, *args, **kwargs) -> None:
         """Persist the item, coercing its colours first.
-
-        Enforced here rather than in each view because both colours are written
-        by several paths (the create/edit JSON endpoints, ``from_snapshot_shape``
-        on import, map clones) and are interpolated into markup that reaches
-        ``innerHTML`` on the client, where an arbitrary string would be a stored
-        XSS vector.
+        Enforced here rather than in each view because both colours are written by several paths (the create/edit JSON endpoints, ``from_snapshot_shape`` on import, map clones) and are interpolated into markup that reaches ``innerHTML`` on the client, where an arbitrary string would be a stored XSS vector.
         """
         self.coerce_colors()
         super().save(*args, **kwargs)
@@ -573,10 +503,7 @@ class PinMarkup(abstract.FrontendDashboardModel):
 
     def to_snapshot_shape(self) -> dict | None:
         """Convert this item into the client snapshot shape format.
-
-        The snapshot format carries ``latlngs`` as ``[lat, lng]`` pairs and
-        uses ``rect`` for squares - it is what ``MarkupEngine.renderShape``
-        consumes on read-only comment/visit/memories map renders.
+        The snapshot format carries ``latlngs`` as ``[lat, lng]`` pairs and uses ``rect`` for squares - it is what ``MarkupEngine.renderShape`` consumes on read-only comment/visit/memories map renders.
 
         Returns:
             Shape dict, or None when the stored geometry is malformed.

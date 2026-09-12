@@ -38,10 +38,9 @@ class Command(BaseCommand):
             self.stdout.write(f"Would set color={DEFAULT_LABEL_COLOR!r} on {total} label(s).")
             return
 
-        # Saved one at a time (not queryset.update()) so Label's post_save signal
-        # fires and refreshes the map pin cache for every pin carrying each label -
-        # a bulk update would leave those pins showing the old clear color until
-        # something else happened to touch them.
+        # Saved one at a time (not queryset.update()) so Label's post_save signal fires and refreshes the map
+        # pin cache for every pin carrying each label - a bulk update would leave those pins showing the old
+        # clear color until something else happened to touch them.
         updated = 0
         for label in queryset.iterator():
             label.color = DEFAULT_LABEL_COLOR

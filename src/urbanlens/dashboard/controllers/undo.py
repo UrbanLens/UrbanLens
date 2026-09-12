@@ -56,10 +56,8 @@ def _stack_response(profile: Profile, *, ok: bool = True, error: str | None = No
 def _history_for_panel(profile: Profile) -> QuerySet[UndoAction]:
     """The history the panel renders, without the column it never shows.
 
-    `payload` carries the whole snapshot needed to reverse an action - for a bulk
-    delete, the entire stashed subtree. Deferred here rather than in
-    `get_undo_history` because the external API shares that function and does
-    serialize the payload, where a defer would cost one query per row.
+    Deferred here rather than in `get_undo_history` because the external API shares that function and
+    does serialize the payload, where a defer would cost one query per row.
 
     Args:
         profile: Whose history to list.

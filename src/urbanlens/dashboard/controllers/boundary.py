@@ -1,32 +1,12 @@
 """Boundary controller - get, save, and list typed property/building boundaries.
 
-Endpoints are JSON-only (no template rendering). The boundary editor UI is
-rendered by the pin detail and wiki page templates; these views serve its data
-calls. Both endpoints share one payload shape:
-
-    {
-        "latitude": ..., "longitude": ...,
-        "default_radius_meters": 50,
-        "pending": bool,          # never generated yet - nothing to show, generation in flight
-        "refreshing": bool,       # already generated, but stale - shown value is being refreshed in the background
-        "boundaries": {
-            "property": {"polygon": <GeoJSON|null>, "source": "pin|wiki|inherited|generated|circle|null"},
-            "building": {"polygon": <GeoJSON|null>, "source": ...},
-        },
-        "detail_buildings": [{"pin_id": ..., "polygon": <GeoJSON>}, ...],
-    }
-
-``pending`` and ``refreshing`` are mutually exclusive: a location is either
-still waiting on its first-ever generation (``pending``, nothing usable to
-show), or it already has *something* to show (real geometry or the default
-circle) that may be getting refreshed in the background (``refreshing``) once
-it's older than ``SiteSettings.boundary_cache_days``. The client polls on
-either flag the same way (see ``map-annotations.ts``'s ``fetchBoundaries``),
-redrawing from whatever ``boundaries`` it gets back each time.
-
-POST bodies carry ``{"boundary_type": "property"|"building", "polygon":
-<GeoJSON geometry|null>}``; null clears the custom drawing so display falls
-back down the resolution chain.
+Endpoints are JSON-only (no template rendering).
+{ "latitude": ..., "longitude": ..., "default_radius_meters": 50, "pending": bool, # never generated
+yet - nothing to show, generation in flight "refreshing": bool, # already generated, but stale -
+shown value is being refreshed in the background "boundaries": { "property": {"polygon":
+<GeoJSON|null>, "source": "pin|wiki|inherited|generated|circle|null"}, "building": {"polygon":
+<GeoJSON|null>, "source": ...}, }, "detail_buildings": [{"pin_id": ..., "polygon": <GeoJSON>}, ...],
+}
 """
 
 from __future__ import annotations
@@ -67,8 +47,8 @@ def _parse_boundary_type(value) -> str | None:
 def _detail_building_entries(pin: Pin) -> list[dict]:
     """Building boundaries drawn on this pin's detail pins (display-only).
 
-    The map hides the building layer only when neither the pin itself nor any
-    of its detail pins has a building boundary.
+    The map hides the building layer only when neither the pin itself nor any of its detail pins has a
+    building boundary.
 
     Args:
         pin: The parent pin whose detail pins are inspected.
@@ -106,22 +86,11 @@ def _wiki_boundary_payload(wiki: Wiki, *, pending: bool, refreshing: bool = Fals
     """Full boundary payload for a wiki page map.
 
     Args:
-        wiki: The wiki whose boundaries to resolve. May be a concealed
-            projection - ``resolve_for_wiki`` hides a wiki-drawn boundary for
-            one when concealed, since (unlike markup or layers) a wiki-scoped
-            ``Boundary`` row records no author at all.
+        wiki: The wiki whose boundaries to resolve.
         pending: Whether provider generation is still running.
         refreshing: Whether a stale generated boundary is being refreshed.
-        just_drawn: ``(boundary_type_value, polygon)`` for a boundary this
-            same request just saved, or None. Concealment would otherwise
-            hide a concealed viewer's own drawing from the very response
-            that just confirmed saving it - there is no author to check
-            (see the note above), but *this* request's own write needs no
-            authorship check at all: the caller already knows, with
-            certainty, that this profile is who just drew it. Bypasses
-            ``resolve_for_wiki`` for exactly that one boundary type; every
-            other entry (including this same type on a plain GET) still goes
-            through the normal, concealment-respecting resolution.
+        just_drawn: ``(boundary_type_value, polygon)`` for a boundary this same request just saved, or
+        None.
 
     Returns:
         The payload dict.
@@ -152,14 +121,8 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
     def get_boundaries(self, request: HttpRequest, pin_slug):
         """Return the effective property/building boundaries for a pin.
 
-        Default boundaries are generated lazily: the first view of a pin
-        detail page schedules the provider chain in Celery (via the
-        "boundary" panel source) and the map JS polls while ``pending``. Once
-        generated, they're periodically refreshed the same way, lazily and in
-        the background, whenever a view finds them older than
-        ``SiteSettings.boundary_cache_days`` - the stale geometry is served
-        immediately (``refreshing: true``) while the map JS keeps polling for
-        the newer answer.
+        Default boundaries are generated lazily: the first view of a pin detail page schedules the provider
+        chain in Celery (via the "boundary" panel source) and the map JS polls while ``pending``.
         """
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required."}, status=401)
@@ -183,10 +146,8 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
     def save_boundary(self, request: Request, pin_slug):
         """Create, update, or clear the user's custom boundary of one type.
 
-        Sending ``polygon: null`` deletes the pin's custom row so display
-        falls back down the resolution chain (parent pin, wiki, generated,
-        circle). Pin rows only ever hold user-drawn geometry - generated
-        polygons live on the shared location-default rows.
+        Pin rows only ever hold user-drawn geometry - generated polygons live on the shared location-default
+        rows.
         """
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required."}, status=401)
@@ -248,12 +209,11 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
 class WikiBoundaryView(LoginRequiredMixin, View):
     """Community boundary editor endpoints for the wiki page.
 
-    GET  /location/<slug>/wiki/boundary/  → typed boundary payload
-    POST /location/<slug>/wiki/boundary/  → {"boundary_type": ..., "polygon": <GeoJSON|null>}
+    GET /location/<slug>/wiki/boundary/ → typed boundary payload
+    POST /location/<slug>/wiki/boundary/ → {"boundary_type": ..., "polygon": <GeoJSON|null>}
 
-    Community drawings are stored on wiki-keyed Boundary rows; the shared
-    location-default rows only ever hold API-generated geometry, so a
-    community edit can never influence point→location matching.
+    Community drawings are stored on wiki-keyed Boundary rows; the shared location-default rows only
+    ever hold API-generated geometry, so a community edit can never influence point→location matching.
     """
 
     def get(self, request, location_slug):
@@ -323,11 +283,8 @@ class WikiBoundaryView(LoginRequiredMixin, View):
 
         already_ran = boundary_generation_ran(location)
         in_flight = schedule_location_boundary_generation(location, profile)
-        # A clear needs no override: with the row gone, resolve_for_wiki
-        # correctly falls through to place/circle for every viewer alike,
-        # concealed or not. A save does - see _wiki_boundary_payload's
-        # just_drawn parameter for why concealment must not hide this
-        # request's own write from its own response.
+        # A clear needs no override: with the row gone, resolve_for_wiki correctly falls through to place/circle
+        # for every viewer alike, concealed or not.
         just_drawn = (boundary_type, geom) if polygon_geojson else None
         payload = _wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran, just_drawn=just_drawn)
         payload["ok"] = True

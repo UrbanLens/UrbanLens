@@ -24,16 +24,12 @@ MAX_TRUST_RATING = 5
 
 
 class AnnotationError(ValueError):
-    """An annotation could not be written.
-    The message is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """An annotation could not be written."""
 
 
 class SelfAnnotationError(AnnotationError):
     """The author and the subject are the same profile.
-
-    Kept as its own class because it is the one refusal that is about *who* is
-    being annotated rather than about the value submitted.
-    """
+    Kept as its own class because it is the one refusal that is about *who* is being annotated rather than about the value submitted."""
 
 
 class NicknameEmptyError(AnnotationError):
@@ -68,8 +64,7 @@ def require_distinct(author: Profile, subject: Profile, message: str) -> None:
     Args:
         author: The profile writing the annotation.
         subject: The profile being annotated.
-        message: Log-only context for this particular annotation kind - never
-            shown to a user.
+        message: Log-only context for this particular annotation kind - never shown to a user.
 
     Raises:
         SelfAnnotationError: ``author`` and ``subject`` are the same profile."""
@@ -110,9 +105,7 @@ def set_nickname(author: Profile, subject: Profile, nickname: str) -> ProfileNic
     Raises:
         SelfAnnotationError: A profile cannot nickname itself.
         NicknameEmptyError: ``nickname`` was blank (after stripping).
-        NicknameTooLongError: ``nickname`` exceeds
-            :data:`MAX_PROFILE_NICKNAME_LENGTH`.
-    """
+        NicknameTooLongError: ``nickname`` exceeds :data:`MAX_PROFILE_NICKNAME_LENGTH`."""
     require_distinct(author, subject, "self-nickname attempt")
 
     nickname = (nickname or "").strip()
@@ -144,19 +137,14 @@ def set_trust(author: Profile, subject: Profile, rating: int) -> ProfileTrust:
     Args:
         author: The profile giving the rating.
         subject: The profile being rated.
-        rating: A value from :data:`MIN_TRUST_RATING` to
-            :data:`MAX_TRUST_RATING`.
+        rating: A value from :data:`MIN_TRUST_RATING` to :data:`MAX_TRUST_RATING`.
 
     Returns:
         The stored trust row.
 
     Raises:
         SelfAnnotationError: A profile cannot rate itself.
-        TrustRatingOutOfRangeError: The rating is outside the permitted
-            range. Checked here rather than left to the field validators,
-            because ``update_or_create`` does not run them - an out-of-range
-            value would otherwise be written and only fail later, if ever.
-    """
+        TrustRatingOutOfRangeError: The rating is outside the permitted range."""
     require_distinct(author, subject, "self-rating attempt")
 
     if not MIN_TRUST_RATING <= rating <= MAX_TRUST_RATING:

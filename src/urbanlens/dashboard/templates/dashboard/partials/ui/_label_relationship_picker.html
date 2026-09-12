@@ -1,9 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-Reusable Parent/Child label picker used by the create, edit, and bulk-edit label dialogs.
-   mode='replace': selections fully replace the label's parents/children on save (create/edit forms).
-   mode='additive': selections are added to whatever's already related, never removed (bulk-edit).
-{% endcomment %}
+{% comment %}Reusable Parent/Child label picker used by the create, edit, and bulk-edit label dialogs. mode='replace'.{% endcomment %}
 {% with rel_explainer_id=explainer_id|default:instance_id|add:'-rel-explainer' %}
 <div class="label-rel-picker" data-picker-id="{{ instance_id }}" data-mode="{{ mode }}">
     <div class="label-rel-top-row">

@@ -1,11 +1,5 @@
 """Building permits plugin: permit/violation history for a pin's site, via REData.
-
-A site's filing chronology - what work was permitted, what was cited, and
-(where the city publishes it) a deep link to the filing's own record and plan
-drawings. Providers are cities (Chicago, New York, San Francisco, Austin,
-Seattle), so the panel gates on the USA and quietly hides outside a covered
-city.
-"""
+Providers are cities (Chicago, New York, San Francisco, Austin, Seattle), so the panel gates on the USA and quietly hides outside a covered city."""
 
 from __future__ import annotations
 

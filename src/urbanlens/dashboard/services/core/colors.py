@@ -1,5 +1,4 @@
-"""Shared validation for user-supplied colours.
-Markup colours are written by JSON endpoints that build models directly, and are read back into ``innerHTML`` on the client (text-label spans, arrowhead SVG), so an arbitrary string in one of these fields is a stored-XSS vector rather than a cosmetic problem."""
+"""Shared validation for user-supplied colours."""
 
 from __future__ import annotations
 
@@ -42,8 +41,7 @@ def sanitize_optional_color(value: object, fallback: str = "") -> str:
 
     Args:
         value: The candidate colour, typically straight off a JSON body.
-        fallback: What to use when ``value`` is neither a colour nor ``"none"``;
-            defaults to the empty "unset" value.
+        fallback: What to use when ``value`` is neither a colour nor ``"none"``; defaults to the empty "unset" value.
 
     Returns:
         A 6-digit hex colour, ``"none"``, or ``fallback``."""
@@ -65,22 +63,15 @@ def clean_color(value: object, *, default: str | None = None, allow_none_keyword
     Built on :func:`is_hex_color` so there is one definition of what a colour is.
 
     Note:
-        This overlaps :func:`sanitize_hex_color` and :func:`sanitize_optional_color`, which arrived independently on another branch for the JSON endpoints. They should converge on one API; until then both are kept because both have callers, and silently dropping either would loosen validation somewhere.
+        This overlaps :func:`sanitize_hex_color` and :func:`sanitize_optional_color`, which arrived independently on another branch for the JSON endpoints.
 
     Args:
-        value: The raw submitted value, typically straight off ``request.POST``
-            or a JSON body. Surrounding whitespace is ignored, which form posts
-            routinely carry.
+        value: The raw submitted value, typically straight off ``request.POST`` or a JSON body.
         default: What to return when ``value`` is missing, blank, or not a colour.
-        allow_none_keyword: Permit the literal ``"none"`` (markup borders use it
-            to mean "no border"). Off by default so it cannot leak into fields
-            where it would be rendered as a CSS keyword by accident.
+        allow_none_keyword: Permit the literal ``"none"`` (markup borders use it to mean "no border").
 
     Returns:
-        A validated colour string, or ``default``. Every return is either
-        ``default`` or a string, which is what the overloads above state: given a
-        ``str`` default this never returns ``None``, so a caller assigning the
-        result straight into a non-nullable column does not have to prove it."""
+        A validated colour string, or ``default``."""
     if value is None:
         return default
     text = str(value).strip()
@@ -112,10 +103,7 @@ def require_color(value: object, *, default: str | None = None, allow_none_keywo
         allow_none_keyword: Permit the literal ``"none"``.
 
     Returns:
-        A validated colour string, or ``default``. The overloads carry what that
-        means for the caller: given a ``str`` default this never returns
-        ``None``, so a result assigned straight into a non-nullable column does
-        not have to be re-proven.
+        A validated colour string, or ``default``.
 
     Raises:
         InvalidColorError: When ``value`` is present and is not a colour."""

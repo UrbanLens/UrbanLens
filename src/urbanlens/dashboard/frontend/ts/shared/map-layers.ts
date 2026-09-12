@@ -1,32 +1,8 @@
 /**
- * Shared map layers component - the single source of truth for every Leaflet
- * map on the site: tile sources (street / dark / topographic / satellite),
- * overlays (weather, geopolitical borders), the Google-Maps-style layers
- * flyout panel, dark map mode, layer persistence, footer attribution, and
- * the shared right-click context menu (copy coordinates, Street View,
- * directions).
- *
- * Extracted verbatim from the main map (pages/map/index.html), which defines
- * the canonical UI and behavior. Every other map (pin detail, Location wiki,
- * safety check-in, trips, the comment map composer/viewer) drives the same
- * engine so layer behavior is guaranteed identical site-wide.
- *
- * Server-side counterpart: dashboard/templatetags/map_components.py renders
- * the panel markup ({% map_layers_panel %}) that `create()` binds to via
- * data attributes:
- *   [data-map-layers-panel]  panel/strip root
- *   [data-layers-toggle]     flyout open/close button (full panel variant)
- *   [data-layers-menu]       flyout menu (full panel variant)
- *   [data-map-layer="key"]   individual layer button
- *   [data-layer-kind]        "base" | "overlay" | "action" | "custom"
- *
- * Exposed globally as `window.MapLayers` (see entries-classic/core.ts) so the
- * classic inline scripts in templates can use it without a module import.
+ * Shared map layers component - the single source of truth for every Leaflet map on the site.
  */
 
-// Leaflet is loaded via a CDN <script> tag on map pages, so it must be typed
-// as an ambient global rather than imported (importing would bundle a second
-// copy and clobber CDN plugins hung off window.L).
+// Leaflet is loaded via a CDN <script> tag on map pages, so it must be typed as an ambient global rather than imported.
 declare const L: typeof import("leaflet");
 
 import { bindMapContextMenu, type BindMapContextMenuOptions } from "./map-context-menu";
@@ -41,12 +17,6 @@ interface TileDef {
 
 /**
  * Zoom range every map on the site uses.
- *
- * `L.map` must be given `maxZoom` explicitly, not left to be inferred from
- * whichever tile layer happens to be added first: leaflet.markercluster reads
- * `map.getMaxZoom()` in its `onAdd` and *throws a bare string* ("Map has no
- * maxZoom specified") when it is Infinity. A cluster group added before the
- * first tile layer therefore takes down the whole entry script.
  */
 export const MAP_MAX_ZOOM = 21;
 export const MAP_MIN_ZOOM = 2;
@@ -128,7 +98,6 @@ export function normalizeBase(key: string | null | undefined): BaseLayerKey {
 
 /**
  * Creates a tile layer for one of the canonical sources.
- *
  * @param kind - Canonical or legacy source key ("street", "standard", "satellite", "topo", "dark", ...).
  * @param extraOptions - Leaflet options merged over the canonical defaults (e.g. pane).
  */
@@ -138,16 +107,8 @@ export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Ti
 }
 
 /**
- * Layers this deployment's REData offers, registered alongside the built-in
- * ones so `tileLayer()` resolves them by id like any other.
- *
- * Fetched rather than hardcoded because the catalogue is per-deployment: which
- * vendors REData proxies depends on what it has been configured and licensed
- * for. A deployment without REData simply keeps the built-in layers, which is
- * why failure here is silent rather than surfaced.
- *
+ * Layers this deployment's REData offers, registered alongside the built-in ones so `tileLayer()` resolves them by id like any other.
  * @returns The ids registered, in catalogue order - empty when REData offers
- *   nothing or could not be reached.
  */
 export async function registerRedataLayers(): Promise<string[]> {
     let layers: RedataLayer[];
@@ -221,12 +182,8 @@ export interface CustomLayerToggle {
 
 export interface MapLayersOptions {
     /**
-     * Panel/strip root element or selector for this map's layer buttons.
-     * Always pass it explicitly when the page has a panel - multiple maps
-     * (and the comment-map composer in base.html) can coexist on one page,
-     * so a document-wide default would be ambiguous. Omit for headless use
-     * (no buttons; layers driven via the returned instance methods).
-     */
+ * Panel/strip root element or selector for this map's layer buttons.
+ */
     root?: HTMLElement | string | null;
     /** OpenWeatherMap API key; the weather button is hidden when absent. */
     apiKey?: string | null;
@@ -260,11 +217,8 @@ export interface MapLayersOptions {
     /** Page-specific toggles keyed by their button's data-map-layer value (pins, places, details, photos, ...). */
     custom?: Record<string, CustomLayerToggle>;
     /**
-     * Right-click menu. Default is the shared base (copy coordinates, Street
-     * View, directions). Pass false to opt out (a page that already draws its
-     * own menu, or one whose right-click is a specialised editor). Pass an
-     * options object to add page-specific items on top of the base.
-     */
+ * Right-click menu.
+ */
     contextMenu?: boolean | BindMapContextMenuOptions;
 }
 
@@ -300,7 +254,6 @@ const PANEL_TRANSITION_MS = 220;
 
 /**
  * Creates the layers engine for a map and binds it to the rendered panel.
- *
  * @param map - The Leaflet map instance.
  * @param options - Behavior configuration; see MapLayersOptions.
  * @returns The engine instance driving both the layers and the panel buttons.
@@ -410,8 +363,7 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // -- Attribution ---------------------------------------------------------------
-    // Replaces Leaflet's on-map control on pages that render attribution
-    // elsewhere (e.g. the main map's footer).
+    // Replaces Leaflet's on-map control on pages that render attribution elsewhere (e.g. the main map's footer).
     function attributionText(): string {
         const parts: string[] = [];
         if (map.hasLayer(satelliteLayer)) {
@@ -435,8 +387,6 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
 
     if (opts.onAttribution) {
         // A vector overlay can add/remove thousands of paths in one turn.
-        // Coalesce their layer events so attribution causes one DOM update per
-        // frame instead of one update per feature.
         let attributionFrame: number | null = null;
         map.on("layeradd layerremove", () => {
             if (attributionFrame !== null) return;
@@ -448,9 +398,7 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // -- Tile loading visual feedback -------------------------------------------------
-    // Grey-dim the target while base tiles download; restore when done. Each
-    // layer tracks loading via a counter so swapping layers never leaves the
-    // map permanently dimmed.
+    // Grey-dim the target while base tiles download; restore when done.
     if (opts.loadingTarget) {
         const target = opts.loadingTarget;
         let loadingCount = 0;
@@ -500,9 +448,7 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         persistState();
     }
 
-    // Button semantics from the main map: street always selects street;
-    // topo/satellite toggle themselves (falling back to street) and are
-    // mutually exclusive.
+    // Button semantics from the main map: street always selects street.
     function toggleBase(rawKey: string): void {
         const key = normalizeBase(rawKey);
         if (key !== "street") {
@@ -550,9 +496,7 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         if (!layer) return;
         const wasActive = layer.isActive();
         layer.toggle();
-        // Turning markups off implies boundaries should go with it - they're
-        // drawn from the same annotation layer conceptually and left on
-        // otherwise clutters the map once markups are hidden.
+        // Turning markups off implies boundaries should go with it.
         if (key === "details" && wasActive) setOverlay("borders", false);
         syncButtons();
     }

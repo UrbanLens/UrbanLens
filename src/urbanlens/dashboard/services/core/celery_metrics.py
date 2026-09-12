@@ -35,11 +35,7 @@ class CeleryQueueDepthCollector:
         """Yield the queue-depth gauges for this scrape.
 
         Yields:
-            ``urbanlens_celery_queue_depth`` labelled by queue, and
-            ``urbanlens_celery_broker_up`` so a scrape can tell "every queue is
-            empty" apart from "the broker did not answer" - which otherwise look
-            identical, and mean opposite things.
-        """
+            ``urbanlens_celery_queue_depth`` labelled by queue, and ``urbanlens_celery_broker_up`` so a scrape can tell "every queue is empty" apart from "the broker did not answer" - which otherwise look identical, and mean opposite things."""
         up = GaugeMetricFamily("urbanlens_celery_broker_up", "1 when the Celery broker answered this scrape, 0 when it did not.")
         depth = GaugeMetricFamily("urbanlens_celery_queue_depth", "Messages waiting on each Celery queue, by queue name.", labels=["queue"])
 
@@ -62,9 +58,7 @@ class CeleryQueueDepthCollector:
         """Ask the broker how many messages are waiting on each queue.
 
         Returns:
-            Mapping of queue name to depth, or ``None`` when the broker could
-            not be reached or the transport cannot answer the question.
-        """
+            Mapping of queue name to depth, or ``None`` when the broker could not be reached or the transport cannot answer the question."""
         try:
             with current_app.connection_for_read(transport_options={"socket_timeout": _BROKER_TIMEOUT_SECONDS}) as connection:
                 channel = connection.default_channel

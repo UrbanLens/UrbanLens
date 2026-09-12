@@ -1,12 +1,6 @@
 """ExternalVisitParticipant - a visit participant who is not (yet) a site member.
-
-Lets a pin owner record everyone who was present on a visit, not just
-connected members: an external participant is just a display name, with an
-optional one-way hash of their email address. The raw address is never
-stored - the person has not consented to being in our database - but the
-hash lets us recognise them if they ever register (or verify a matching
-secondary email), at which point the deferred friend request and visit
-suggestion are delivered (see ``services.visits.visit_invites``).
+Lets a pin owner record everyone who was present on a visit, not just connected members: an external participant is just a display name, with an optional one-way hash of their email address.
+The raw address is never stored - the person has not consented to being in our database - but the hash lets us recognise them if they ever register (or verify a matching secondary email), at which point the deferred friend request and visit suggestion are delivered (see ``services.visits.visit_invites``).
 """
 
 from __future__ import annotations

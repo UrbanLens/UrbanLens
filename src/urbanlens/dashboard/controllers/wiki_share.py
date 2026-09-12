@@ -1,15 +1,14 @@
 """Sharing a pin's own content to the community wiki for its place.
 
-GET  /map/pin/<slug>/wiki/share/  → HTMX dialog listing shareable pin fields
-POST /map/pin/<slug>/wiki/share/  → copy the chosen fields onto the wiki
+GET /map/pin/<slug>/wiki/share/ → HTMX dialog listing shareable pin fields
+POST /map/pin/<slug>/wiki/share/ → copy the chosen fields onto the wiki
 
-This used to be the "Create community wiki" button, and creation was the part
-of it that mattered least. Every pinned location gets its page automatically,
-so what is left is the part that always needed a person: choosing which of your
-own notes, names and photos to contribute to a page other people read. That is a
-deliberate act - see ``bin/check_pin_not_published_to_wiki.py`` for the bug that
-comes from letting it happen as a side effect - so it keeps its own dialog and
-its own explicit per-field selection.
+Every pinned location gets its page automatically, so what is left is the part that always needed a
+person: choosing which of your own notes, names and photos to contribute to a page other people
+read.
+That is a deliberate act - see ``bin/check_pin_not_published_to_wiki.py`` for the bug that comes
+from letting it happen as a side effect - so it keeps its own dialog and its own explicit per-field
+selection.
 """
 
 from __future__ import annotations
@@ -87,10 +86,8 @@ class PinWikiShareView(LoginRequiredMixin, View):
         shared_flag = "true" if shared else "false"
         overview_context = _overview_context(pin)
         overview_html = render(request, "dashboard/partials/pins/pin_overview_partial.html", overview_context).content.decode()
-        # The Community Wiki box lives in the page hero, outside #pin-overview
-        # (this view's own hx-target), and shows what the pin has contributed -
-        # without this OOB swap it stays stale until a full reload. Same fix
-        # PinOverviewView already needed for the slug-backfill case.
+        # The Community Wiki box lives in the page hero, outside #pin-overview (this view's own hx-target), and
+        # shows what the pin has contributed - without this OOB swap it stays stale until a full reload.
         hero_html = _pin_hero_oob(request, pin, linked_wiki_locations=overview_context["linked_wiki_locations"])
         response = HttpResponse(overview_html + hero_html)
         response["HX-Trigger"] = f'{{"wikiShared": {{"shared": {shared_flag}}}}}'

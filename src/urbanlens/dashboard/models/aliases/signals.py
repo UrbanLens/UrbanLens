@@ -1,13 +1,5 @@
 """Wiki-sync: mirror newly-added aliases between a pin and its community wiki.
-
-Additive only in both directions (never deletes an alias on either side - see
-each handler's docstring) and only fires for genuine new aliases, never edits
-to an existing one (Profile.sync_aliases' docstring documents this scope
-explicitly - "edits to aliases will not be synced" is a deliberate product
-decision, not a gap). Both handlers use get_or_create, which is naturally
-loop-safe: the mirrored write on the "other side" either creates a row (which
-re-fires the opposite handler, but that handler's own get_or_create then finds
-the row already exists and does nothing further) or finds one already there.
+Additive only in both directions (never deletes an alias on either side - see each handler's docstring) and only fires for genuine new aliases, never edits to an existing one (Profile.sync_aliases' docstring documents this scope explicitly - "edits to aliases will not be synced" is a deliberate product decision, not a gap).
 """
 
 from __future__ import annotations
@@ -27,11 +19,10 @@ logger = logging.getLogger(__name__)
 #: mirrored alias actually came from.
 WIKI_SYNC_SOURCE = "wiki_sync"
 
-#: LocationCache sources whose result quality depends on the name/aliases
-#: available for the location - a new alias may surface a Wikipedia article
-#: (or images on one) that couldn't be matched under the previous name set.
-#: "Wikipedia article images not reliably
-#: reaching Media section" entry for the report this addresses.
+#: LocationCache sources whose result quality depends on the name/aliases available for the location
+#: - a new alias may surface a Wikipedia article (or images on one) that couldn't be matched under
+#: the previous name set.
+#: "Wikipedia article images not reliably reaching Media section" entry for the report this
 _ALIAS_SENSITIVE_CACHE_SOURCES = ("wikipedia", "wikimedia", "wikipedia_media")
 
 
@@ -75,11 +66,8 @@ def sync_pin_alias_to_wiki(sender: type[PinAlias], instance: PinAlias, created: 
 @receiver(post_save, sender=WikiAlias, dispatch_uid="wiki_alias_sync_to_pins")
 def sync_wiki_alias_to_pins(sender: type[WikiAlias], instance: WikiAlias, created: bool, **kwargs) -> None:
     """Mirror a newly-added wiki alias onto every opted-in profile's pin at that location.
-
-    A location can have many pins (one per user who's pinned it); this fires
-    once per opted-in pin, each an independent additive get_or_create. Deleting
-    a wiki alias never propagates (no post_delete hook here), matching the
-    "additive only" spec.
+    A location can have many pins (one per user who's pinned it); this fires once per opted-in pin, each an independent additive get_or_create.
+    Deleting a wiki alias never propagates (no post_delete hook here), matching the "additive only" spec.
     """
     if not created:
         return

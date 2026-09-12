@@ -1,8 +1,5 @@
 /**
- * Browser permission status checks + prompt triggers for the Settings >
- * Connections "Browser Permissions" cards. Wraps the Permissions API where
- * supported (geolocation) and falls back to the permission-specific state
- * (Notification.permission) where the Permissions API doesn't cover it.
+ * Browser permission status checks + prompt triggers for the Settings > Connections "Browser Permissions" cards.
  */
 
 export type BrowserPermissionState = "granted" | "denied" | "prompt" | "unsupported";

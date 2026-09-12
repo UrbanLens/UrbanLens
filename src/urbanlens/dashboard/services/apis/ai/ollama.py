@@ -1,10 +1,4 @@
-"""Ollama gateway - free, open-source, self-hosted vision-model photo keywording.
-
-https://ollama.com/ - runs open-source vision models (e.g. LLaVA) locally, so
-there's no external API call, no per-call cost, and no API key: just a base
-URL pointing at the admin's own Ollama server (default
-``http://localhost:11434``, matching Ollama's own default port).
-"""
+"""Ollama gateway - free, open-source, self-hosted vision-model photo keywording."""
 
 from __future__ import annotations
 
@@ -15,7 +9,7 @@ from typing import ClassVar
 
 import requests
 
-from urbanlens.dashboard.services.ai.vision import _KEYWORD_PROMPT, _parse_keyword_text  # reuse the shared prompt/parsing, not worth duplicating
+from urbanlens.dashboard.services.ai.vision import _KEYWORD_PROMPT, _parse_keyword_text  # reuse the shared...
 from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -35,13 +29,8 @@ class OllamaGateway(Gateway):
     def describe_photo_keywords(self, image_bytes: bytes) -> list[str]:
         """Ask the local Ollama vision model for photo keywords.
 
-        Args:
-            image_bytes: JPEG bytes, already downscaled (never the full upload).
-
         Returns:
-            Raw keyword strings; empty when no server is configured or the
-            call fails.
-        """
+            Raw keyword strings; empty when no server is configured or the call fails."""
         if not self.base_url:
             return []
 

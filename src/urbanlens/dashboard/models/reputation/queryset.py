@@ -15,17 +15,13 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
+    from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
 def _pk_of(value: Model | int) -> int:
     """Return a primary key from either a model instance or a bare pk.
-
-    Signal handlers only ever hold ``instance.profile_id``, and fetching the
-    whole row to scope a query would add a query to every contributing write.
-    Mirrors ``services.achievements.activity._owner_filter``, but typed over
-    ``Model`` rather than ``Profile`` because the ledger scopes by wiki too.
+    Signal handlers only ever hold ``instance.profile_id``, and fetching the whole row to scope a query would add a query to every contributing write.
     """
     return value if isinstance(value, int) else value.pk
 
@@ -39,11 +35,8 @@ class ReputationEventQuerySet(abstract.DashboardQuerySet["ReputationEvent"]):
 
     def counting(self) -> Self:
         """Rows that currently contribute to a total.
-
         Excludes retracted rows and rows the scorer has not valued yet.
-        ``value`` is null between the synchronous write and the deferred
-        scoring pass, so "unscored" and "worth nothing" are different states
-        and must not be summed together.
+        ``value`` is null between the synchronous write and the deferred scoring pass, so "unscored" and "worth nothing" are different states and must not be summed together.
         """
         return self.filter(retracted=False, value__isnull=False)
 
@@ -70,12 +63,7 @@ class ReputationEventQuerySet(abstract.DashboardQuerySet["ReputationEvent"]):
 
     def total_value(self) -> Decimal:
         """Sum the weighted value of the counting rows in this queryset.
-
-        ``weight`` is 1 for almost every row; it is how an ending that should
-        reduce standing without erasing it is expressed (D9), as against
-        ``retracted``, which removes the row from this sum entirely. Applied
-        here rather than folded into ``value`` so the original score survives
-        and the weight can be changed, or undone, without re-scoring.
+        ``weight`` is 1 for almost every row; it is how an ending that should reduce standing without erasing it is expressed (D9), as against ``retracted``, which removes the row from this sum entirely.
         """
         weighted = ExpressionWrapper(F("value") * F("weight"), output_field=DecimalField(max_digits=18, decimal_places=4))
         return self.counting().aggregate(total=Sum(weighted))["total"] or Decimal(0)

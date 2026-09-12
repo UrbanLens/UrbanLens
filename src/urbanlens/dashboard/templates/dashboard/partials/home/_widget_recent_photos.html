@@ -1,8 +1,4 @@
-{% comment %}
-Recent photos widget. Context: home_recent_photos (Image queryset, up to 8).
-Opens the shared lightbox (dashboard/partials/_photo_lightbox.html, included by
-overview.html) via homeOpenLightbox() (overview.html's script block).
-{% endcomment %}
+{% comment %}Recent photos widget.{% endcomment %}
 {% if home_recent_photos %}
 <section class="home-widget ul-section" data-widget-key="recent_photos">
     <div class="home-widget-heading">
@@ -18,12 +14,7 @@ overview.html) via homeOpenLightbox() (overview.html's script block).
             data-copyright="{{ img.copyright|default:'' }}"
             data-source-url="{{ img.source_url|default:'' }}"
             data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
-            {% comment %}
-            aria-label on the button, not just alt on the image: when the file
-            404s, urbanlensMediaThumbFallback swaps the <img> for an icon and
-            the button loses its only accessible name. axe reports that as
-            button-name at critical.
-            {% endcomment %}
+            {% comment %}aria-label on the button, not just alt on the image.{% endcomment %}
             <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}" onclick="homeOpenLightbox({{ img.pk }})">
                 <img src="{{ img.display_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
                      onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">

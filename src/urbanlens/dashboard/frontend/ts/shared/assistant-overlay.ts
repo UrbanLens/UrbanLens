@@ -1,19 +1,5 @@
 /**
- * Global AI assistant overlay: a hotkey/floating-button-opened `<dialog>`
- * that reuses the same session-backed chat partials and endpoints
- * (_messages.html, _composer.html, /assistant/message/, /assistant/turn/...)
- * the full /assistant/ page renders - the overlay and the page are never two
- * separate implementations of the same conversation.
- *
- * Both the floating button and the dialog are rendered server-side only for
- * an enabled profile (see themes/base.html's `assistant_enabled_flag`), so
- * an ungated user has neither in the DOM - `fab()`/`dialog()` returning null
- * is this module's own signal that there is nothing to wire up here.
- *
- * The dialog's body starts as a loading skeleton and is fetched once, lazily,
- * the first time it opens - not embedded in every page's initial HTML, the
- * way the undo bar's contents are fetched async after mount rather than
- * rendered inline.
+ * Global AI assistant overlay: a hotkey/floating-button-opened `<dialog>` that reuses the same session-backed chat partials.
  */
 
 import { positionAboveColliders } from "./floating-controls";
@@ -54,15 +40,9 @@ function focusComposer(dlg: HTMLDialogElement): void {
     });
 }
 
-/** Fetch the overlay's body exactly once. Focuses the composer once it lands - on a first
- * open the composer doesn't exist yet at showModal() time, so openAssistantOverlay's own
- * focus attempt would silently find nothing without this.
- *
- * bodyLoaded only ever becomes true once the swap actually happens - a failed
- * first load (network error, non-2xx) must not permanently wedge the dialog on
- * its loading skeleton with every later open() silently doing nothing. bodyLoading
- * is the separate in-flight guard that still de-dupes a second open() while the
- * first request is outstanding. */
+/**
+ * Fetch the overlay's body exactly once.
+ */
 function loadBodyOnce(dlg: HTMLDialogElement): void {
     if (bodyLoaded || bodyLoading) return;
     const url = dlg.dataset.overlayUrl;
@@ -81,11 +61,7 @@ function loadBodyOnce(dlg: HTMLDialogElement): void {
         cleanup();
         focusComposer(dlg);
     };
-    // These events don't reliably identify which in-flight request they belong
-    // to the way afterSwap's event.target does, so any failure while this load
-    // is outstanding is treated as this one failing. Worst case a stray
-    // unrelated failure just makes the next open() retry a request that would
-    // have succeeded anyway - harmless, and far better than never retrying.
+    // These events don't reliably identify which in-flight request they belong to the way afterSwap's event.target does, so any failure.
     const onFailure = (): void => cleanup();
     document.body.addEventListener("htmx:afterSwap", onSwap);
     document.body.addEventListener("htmx:responseError", onFailure);
@@ -100,9 +76,7 @@ export function openAssistantOverlay(): void {
     const alreadyLoaded = bodyLoaded;
     loadBodyOnce(dlg);
     if (!dlg.open) dlg.showModal();
-    // On a first open, loadBodyOnce's own htmx:afterSwap listener focuses the
-    // composer once it actually exists; focusing here too would just find
-    // nothing (the body is still the loading skeleton) and no-op.
+    // On a first open, loadBodyOnce's own htmx:afterSwap listener focuses the composer once it actually exists.
     if (alreadyLoaded) focusComposer(dlg);
 }
 
@@ -134,11 +108,7 @@ interface AssistantClientAction {
 }
 
 /**
- * Turn a resolved turn's client_actions (HX-Trigger ulAssistantAction, see
- * controllers.assistant.AssistantTurnPollView) into the same document events
- * _page_explainer_script.html and onboarding-tour.ts already listen for -
- * reopening something not on the current page is a silent no-op there, not
- * an error here.
+ * Turn a resolved turn's client_actions (HX-Trigger ulAssistantAction, see controllers.assistant.AssistantTurnPollView) into the same.
  */
 function onAssistantAction(event: Event): void {
     const actions = (event as CustomEvent<{ actions?: AssistantClientAction[] }>).detail?.actions;
@@ -176,10 +146,7 @@ export function installGlobalAssistantOverlay(): void {
     document.addEventListener("keydown", onKeydown);
     document.addEventListener("click", onClick);
     window.addEventListener("resize", placeFab);
-    // This ships in the classic `core.js` bundle, which `themes/base.html` loads
-    // from `<head>` - `document.body` is null there, and `placeFab` has nothing
-    // to measure against yet. The same wait is written out in autosave-guard.ts,
-    // collapsible-sections.ts and undo-map-refresh.ts.
+    // This ships in the classic `core.js` bundle, which `themes/base.html` loads from `<head>`.
     whenBodyExists(() => {
         document.body.addEventListener("ulAssistantAction", onAssistantAction);
         placeFab();

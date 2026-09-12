@@ -1,5 +1,4 @@
-"""Equivalence-group resolution and admin mutations over the tag vocabulary.
-Always wins, even for a single-member ("singleton") group - the only way an admin can veto a coincidental default match is to give the colliding entries separate explicit groups. - **Default**: neither has an explicit group, and they humanize to the same display text (see :func:`default_group_key`)."""
+"""Equivalence-group resolution and admin mutations over the tag vocabulary."""
 
 from __future__ import annotations
 
@@ -45,8 +44,7 @@ def _invalidate_vocabulary_cache() -> None:
 
 
 class ExternalTagGroupError(Exception):
-    """A mapping action was refused.
-    The message is for logs, not the response: an HTTP-facing caller should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """A mapping action was refused."""
 
 
 class EmptySelectionError(ExternalTagGroupError):
@@ -93,8 +91,7 @@ def visible_tags_for_place(place: Place) -> list[PlaceExternalTag]:
         place: The place whose tags to resolve.
 
     Returns:
-        A subset of ``place.external_tags.all()``, in the same relative
-        order, with equivalent tags collapsed to one each."""
+        A subset of ``place.external_tags.all()``, in the same relative order, with equivalent tags collapsed to one each."""
     rows = list(place.external_tags.all())
     if not rows:
         return rows
@@ -173,12 +170,10 @@ def matching_vocabulary(term: str) -> list[ExternalTagVocabularyEntry]:
     "Equivalent" is the same bucketing :func:`visible_tags_for_place` uses - an explicit group, or a shared :func:`default_group_key` - run in the opposite direction: starting from a search term rather than a place's tags.
 
     Args:
-        term: A single search token (already lowercased or not - normalized
-            here).
+        term: A single search token (already lowercased or not - normalized here).
 
     Returns:
-        Matching entries across every matched equivalence bucket. Empty for
-        a blank term or no match."""
+        Matching entries across every matched equivalence bucket."""
     normalized = term.strip().lower()
     if not normalized:
         return []
@@ -194,17 +189,10 @@ def tag_match_q(term: str, path: str) -> Q:
 
     Args:
         term: A single search token.
-        path: ORM path to a ``PlaceExternalTag`` relation (e.g.
-            ``"location__place__external_tags"``).
+        path: ORM path to a ``PlaceExternalTag`` relation (e.g. ``"location__place__external_tags"``).
 
     Returns:
-        The OR of every matched ``(source, key, value)`` triple, anchored at
-        ``path``. When nothing matches, returns ``Q(pk__in=())`` - a
-        guaranteed-false Q - rather than an empty ``Q()``. An empty ``Q()``
-        is a no-op filter (matches everything); OR-ing that into a per-term
-        AND-across-terms clause would silently turn "no tag match" into
-        "match every row" once callers stop guarding for it.
-    """
+        The OR of every matched ``(source, key, value)`` triple, anchored at ``path``."""
     entries = matching_vocabulary(term)
     if not entries:
         return Q(pk__in=())
@@ -219,18 +207,15 @@ def create_group(entry_ids: Sequence[int], *, preferred_id: int | None = None) -
     """Create a new group containing the given vocabulary entries.
 
     Args:
-        entry_ids: Vocabulary entry ids to group together. Must have at
-            least 1 entry, none of which already belong to a group.
-        preferred_id: Which entry to mark preferred; defaults to the first
-            of ``entry_ids``.
+        entry_ids: Vocabulary entry ids to group together.
+        preferred_id: Which entry to mark preferred; defaults to the first of ``entry_ids``.
 
     Returns:
         The new group.
 
     Raises:
         EmptySelectionError: ``entry_ids`` was empty.
-        UnknownVocabularyEntryError: One or more ids don't resolve to an
-            existing entry.
+        UnknownVocabularyEntryError: One or more ids don't resolve to an existing entry.
         AlreadyGroupedError: One or more entries already belong to a group."""
     if len(entry_ids) < 1:
         raise EmptySelectionError("create_group called with an empty entry_ids.")
@@ -261,9 +246,7 @@ def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
         target_group_id: The group to join, or ``None`` to ungroup.
 
     Returns:
-        The id of the entry's *previous* group if this move emptied it (the
-        caller should remove that group's now-stale card from the DOM),
-        else ``None``. Also ``None`` for a no-op drop back where it started.
+        The id of the entry's *previous* group if this move emptied it (the caller should remove that group's now-stale card from the DOM), else ``None``.
 
     Raises:
         UnknownVocabularyEntryError: ``entry_id`` doesn't exist.

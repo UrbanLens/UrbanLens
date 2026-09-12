@@ -1,25 +1,12 @@
 """Relabel photos that connected-account imports filed as manual uploads.
 
-``tasks.import_immich_photos`` and ``tasks.import_google_photos`` built their
-``Image.objects.create(...)`` without a ``source=``, so every row they made
-defaulted to ``ImageSource.UPLOAD``. Fixed forward in ``169dc5b64``; this
-relabels what was already written.
+achievements - is decided by ``Image.is_own_contribution``, which does not read ``source`` at all,
+so a mislabelled row was never a privacy or scoring problem.
+The Immich half is one query per connected account, because an Immich URL is the user's own server
+and there is no single prefix - which is also why an account that has since been disconnected cannot
+be matched at all.
 
-The stakes are small and worth stating, because they used to be larger. Ownership
 - concealment, who may withdraw a photo from a wiki, reputation, the upload
-achievements - is decided by ``Image.is_own_contribution``, which does not read
-``source`` at all, so a mislabelled row was never a privacy or scoring problem.
-What is left is the Media gallery's per-source tabs: these photos appear under
-"Upload" instead of "Immich" or "Google Photos".
-
-Matching is by ``source_url``, which both importers write as the provider's own
-web URL for the asset, and both prefixes come from the code that writes them
-rather than being restated here. The Google half is one query. The Immich half
-is one query per connected account, because an Immich URL is the user's own
-server and there is no single prefix - which is also why an account that has
-since been disconnected cannot be matched at all. Those rows stay under
-"Upload"; a cosmetic tab for a photo whose server the user removed is not worth
-a heuristic that could catch a genuine upload.
 """
 
 from __future__ import annotations
@@ -49,8 +36,7 @@ class Command(BaseCommand):
         """Count, then relabel unless asked not to.
 
         Args:
-            *args: Unused.
-            **options: Parsed command options.
+            *args: Unused. **options: Parsed command options.
         """
         from urbanlens.dashboard.models.images.model import Image, ImageSource
         from urbanlens.dashboard.models.immich.model import ImmichAccount

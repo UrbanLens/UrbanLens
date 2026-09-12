@@ -1,8 +1,4 @@
-"""Round scoring: point-vs-boundary distance, and the points curve.
-
-See ``docs/designs/drafts/spotguessr.md`` ("Scoring: point vs. boundary distance",
-"Points") for the rules this encodes.
-"""
+"""Round scoring: point-vs-boundary distance, and the points curve."""
 
 from __future__ import annotations
 
@@ -51,8 +47,7 @@ def resolve_target(location: Location, image: Image | None) -> RoundTarget:
 
 
 def street_view_target(location: Location) -> RoundTarget:
-    """Street View mode's target: the location's own point.
-    There is no Image row to carry a more specific coordinate - Street View imagery is definitionally centered on the location's own point, so distance behaves exactly like a coordinate-bearing photo (see docs/designs/drafts/spotguessr.md's "Street View mode")."""
+    """Street View mode's target: the location's own point."""
     point = Point(float(location.longitude), float(location.latitude), srid=4326)
     return RoundTarget(is_point=True, geometry=point)
 
@@ -78,8 +73,7 @@ def points_for_distance(
     near_weight: float = NEAR_WEIGHT,
     max_points: int = MAX_ROUND_POINTS,
 ) -> int:
-    """Two-component exponential-decay points curve.
-    Blending a fast near-field decay (rewards precision) with a slow city-scale decay (keeps "same city" meaningfully non-zero) gives: full points only at (or inside) the target boundary, "a few blocks off" reading as excellent, "same city" reading as a reasonable partial score, and only genuinely distant guesses trailing off toward zero."""
+    """Two-component exponential-decay points curve."""
     distance_km = max(distance_meters, 0.0) / 1000.0
     near = math.exp(-distance_km / near_decay_km)
     city = math.exp(-distance_km / city_decay_km)

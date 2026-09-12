@@ -23,8 +23,8 @@ MULTI_BUILDING_THRESHOLD = 2
 #: (see ``plugins.builtin.parcel_buildings``).
 PARCEL_BUILDINGS_CACHE_SOURCE = "parcel_buildings"
 
-#: How close a marker has to be to a known building's coordinate to be considered "at" that
-#: building, when no real footprint polygon is available to test containment against.
+#: How close a marker has to be to a known building's coordinate to be considered "at" that building,
+#: when no real footprint polygon is available to test containment against.
 #: Roughly the footprint radius of a mid-sized structure - tight enough that an entrance pin on the
 #: far side of a courtyard doesn't match, loose enough to absorb the coordinate error in a county
 BUILDING_MATCH_METERS = 15.0
@@ -49,9 +49,7 @@ def meters_between(latitude_a: float, longitude_a: float, latitude_b: float, lon
     return (delta_latitude**2 + delta_longitude**2) ** 0.5
 
 
-# ----------------------------------------------------------------------
 # Scope
-# ----------------------------------------------------------------------
 
 
 def _children(target: Pin | Wiki):
@@ -68,9 +66,7 @@ def building_child_count(target: Pin | Wiki) -> int:
         target: The pin or wiki whose children to count.
 
     Returns:
-        The number of direct children with ``pin_type == PinType.BUILDING``
-        (0 for an unsaved target, which can't have children yet).
-    """
+        The number of direct children with ``pin_type == PinType.BUILDING`` (0 for an unsaved target, which can't have children yet)."""
     from urbanlens.dashboard.models.pin.model import PinType
 
     if target.pk is None:
@@ -85,8 +81,7 @@ def is_site_scope(target: Pin | Wiki) -> bool:
         target: The pin or wiki being rendered.
 
     Returns:
-        True when building-level records would misrepresent this marker, and
-        a summary of the buildings nested under it should be shown instead."""
+        True when building-level records would misrepresent this marker, and a summary of the buildings nested under it should be shown instead."""
     cached = getattr(target, "_site_scope_cache", None)
     if cached is not None:
         return cached
@@ -100,9 +95,7 @@ def is_site_scope(target: Pin | Wiki) -> bool:
     return result
 
 
-# ----------------------------------------------------------------------
 # Buildings known on the parcel
-# ----------------------------------------------------------------------
 
 
 def parcel_buildings(location: Location | None) -> list[dict] | None:
@@ -113,8 +106,7 @@ def parcel_buildings(location: Location | None) -> list[dict] | None:
         location: The location whose parcel to look up; None is tolerated.
 
     Returns:
-        The building records, ``[]`` when the providers were asked and found
-        none, or None when nothing has ever been cached for this location."""
+        The building records, ``[]`` when the providers were asked and found none, or None when nothing has ever been cached for this location."""
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
     if location is None:
@@ -135,17 +127,13 @@ def nearest_building(buildings: list[dict], latitude: float, longitude: float, *
     """The building record closest to a coordinate.
 
     Args:
-        buildings: Building records (each optionally carrying
-            ``latitude``/``longitude``).
+        buildings: Building records (each optionally carrying ``latitude``/``longitude``).
         latitude: WGS-84 latitude of the query point.
         longitude: WGS-84 longitude of the query point.
-        within_meters: When given, return None unless the closest building is
-            at least this close.
+        within_meters: When given, return None unless the closest building is at least this close.
 
     Returns:
-        The nearest building record, or None when there are none (or none
-        within ``within_meters``).
-    """
+        The nearest building record, or None when there are none (or none within ``within_meters``)."""
     best: dict | None = None
     best_distance = float("inf")
     for building in buildings:
@@ -162,14 +150,11 @@ def nearest_building(buildings: list[dict], latitude: float, longitude: float, *
     return best
 
 
-# ----------------------------------------------------------------------
 # Automatic classification
-# ----------------------------------------------------------------------
 
 
 def looks_like_a_building(location: Location | None) -> bool:
     """Whether a coordinate sits on a known building footprint.
-    A building place only exists because some provider - county GIS via REData, OSM via Overpass, Overture, Microsoft/Google footprints - published a footprint, and the location only resolved onto it because that footprint *contains* this exact point, so the resolution is itself the answer.
 
     Args:
         location: The location to test; None is tolerated.
@@ -190,7 +175,6 @@ def looks_like_a_building(location: Location | None) -> bool:
 
 def classify_building_pin_type(target: Pin | Wiki) -> bool:
     """Type an unclassified marker as a building when it stands on one.
-    The two are deliberately separate: a pin on the only building of an ordinary house is standing on a building (so a child marker there types as one) while the property as a whole still commits to no scope, because parcel and building are the same thing there.
 
     Args:
         target: The pin or wiki to classify.
@@ -215,7 +199,6 @@ def classify_building_pin_type(target: Pin | Wiki) -> bool:
 
 def reclassify_markers_on_place(place) -> int:
     """Re-derive the cached scope of every marker standing on a place.
-    There is no scope to assert there, so rewriting markers would only overwrite the observations :func:`classify_building_pin_type` recorded.
 
     Args:
         place: The place whose markers to re-derive.

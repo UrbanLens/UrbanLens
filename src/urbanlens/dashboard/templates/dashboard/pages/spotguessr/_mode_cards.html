@@ -1,9 +1,4 @@
-{% comment %}
-Big tappable card per SpotGuessr mode. Clicking a card's body starts a game
-immediately using current/last-used settings; the gear icon opens the shared
-settings dialog (_settings_dialog.html) pre-scoped to that mode. See
-spotguessr.ts's initModeCards()/openSettingsDialog().
-{% endcomment %}
+{% comment %}Big tappable card per SpotGuessr mode.{% endcomment %}
 <div class="spotguessr-mode-cards">
     {% for card in mode_cards %}
     <div class="spotguessr-mode-card spotguessr-mode-card--{{ card.accent }}">

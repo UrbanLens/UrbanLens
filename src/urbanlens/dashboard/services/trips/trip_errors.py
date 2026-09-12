@@ -1,23 +1,14 @@
-"""Transport-neutral error vocabulary for the shared trip services.
-Neither can be the service layer's concern, so services raise these instead of building responses."""
+"""Transport-neutral error vocabulary for the shared trip services."""
 
 from __future__ import annotations
 
 
 class TripError(ValueError):
     """Base class for every expected (i.e. non-bug) trip service failure.
-
-    Subclasses ``ValueError`` so a caller that has not been taught about the
-    trip vocabulary still treats it as bad input rather than letting it
-    escape as a 500.
-    """
+    Subclasses ``ValueError`` so a caller that has not been taught about the trip vocabulary still treats it as bad input rather than letting it escape as a 500."""
 
     def __init__(self, message: str) -> None:
-        """Store the human-readable, unescaped failure message.
-
-        Args:
-            message: What went wrong, phrased for the end user.
-        """
+        """Store the human-readable, unescaped failure message."""
         super().__init__(message)
         self.message = message
 
@@ -36,11 +27,7 @@ class TripValidationError(TripError):
 
 class TripQuotaError(TripValidationError):
     """A ``SiteSettings`` cap (members, activities, upcoming trips) is already reached - 400.
-
-    A subclass of :class:`TripValidationError` so existing handlers keep
-    answering 400, while a caller that wants to say something specific about
-    quotas (e.g. offer an upgrade path) can catch it on its own.
-    """
+    A subclass of :class:`TripValidationError` so existing handlers keep answering 400, while a caller that wants to say something specific about quotas (e.g. offer an upgrade path) can catch it on its own."""
 
 
 class TripMemberNotFoundError(TripNotFoundError):
@@ -48,11 +35,6 @@ class TripMemberNotFoundError(TripNotFoundError):
     Carries the submitted ``username`` separately from the formatted message so each caller can present it safely in its own medium: the internal HTMX view HTML-escapes it, while the external API puts it into a JSON string unescaped."""
 
     def __init__(self, message: str, username: str) -> None:
-        """Record the message plus the raw username that could not be resolved.
-
-        Args:
-            message: Human-readable failure message, unescaped.
-            username: The username exactly as the caller submitted it.
-        """
+        """Record the message plus the raw username that could not be resolved."""
         super().__init__(message)
         self.username = username

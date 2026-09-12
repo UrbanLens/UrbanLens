@@ -1,5 +1,4 @@
-"""AI trip suggestions (UL-60): pins worth adding, and a drive/weather/vote-aware schedule.
-A location is only ever offered as an "add this pin" suggestion when EVERY joined trip member already has it pinned on their own map, unconditionally - this never bypasses even for members who have external sharing off, because it's a pure membership check, never data sent anywhere."""
+"""AI trip suggestions (UL-60): pins worth adding, and a drive/weather/vote-aware schedule."""
 
 from __future__ import annotations
 
@@ -116,8 +115,7 @@ _UNAVAILABLE = TripSuggestions(summary="", pin_suggestions=[], schedule=None, ge
 
 
 def _joined_profiles(trip: Trip) -> list[Profile]:
-    """Profiles of every member who has actually joined the trip (not just invited).
-    The creator is always treated as joined, matching ``_viewer_has_joined``/ ``_can_perform`` elsewhere - defensive against a creator row somehow missing its own membership, since this set gates what's privacy-safe to show the model and under-counting it would be the safe direction anyway, but over-counting (treating a non-member as joined) never happens here."""
+    """Profiles of every member who has actually joined the trip (not just invited)."""
     from urbanlens.dashboard.models.trips.model import TripMembership
 
     profiles = {m.profile_id: m.profile for m in TripMembership.objects.filter(trip=trip, status=TripMembership.STATUS_JOINED).select_related("profile")}
@@ -429,9 +427,7 @@ def generate_trip_suggestions(trip: Trip, requester: Profile) -> TripSuggestions
     """Generate fresh AI trip suggestions - always live, never cached (see get_trip_suggestions).
 
     Returns:
-        A ``TripSuggestions`` with ``generated=False`` when AI is unavailable
-        for this profile/site, otherwise the (possibly empty) result.
-    """
+        A ``TripSuggestions`` with ``generated=False`` when AI is unavailable for this profile/site, otherwise the (possibly empty) result."""
     gateway = get_gateway(profile=requester, feature="trip_suggestions", instructions=_INSTRUCTIONS, formatting=_FORMATTING)
     if gateway is None:
         return _UNAVAILABLE
@@ -462,17 +458,11 @@ def get_trip_suggestions(trip: Trip, requester: Profile, *, force_refresh: bool 
 
     Args:
         trip: The trip to generate suggestions for.
-        requester: The joined member asking - gates AI availability and
-            resolves their own "Add to trip" pin slugs.
-        force_refresh: Bypass the cache, subject to a short per-viewer
-            cooldown (serves the last cached result instead of erroring, or
-            generates fresh with nothing cached yet).
+        requester: The joined member asking - gates AI availability and resolves their own "Add to trip" pin slugs.
+        force_refresh: Bypass the cache, subject to a short per-viewer cooldown (serves the last cached result instead of erroring, or generates fresh with nothing cached yet).
 
     Returns:
-        The (possibly cached) suggestions. ``generated=False`` means AI is
-        unavailable for this profile/site - render an explanatory state, not
-        an empty suggestions list.
-    """
+        The (possibly cached) suggestions."""
     key = _cache_key(trip, requester)
     if not force_refresh:
         cached = cache.get(key)

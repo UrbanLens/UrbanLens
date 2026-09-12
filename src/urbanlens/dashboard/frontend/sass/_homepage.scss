@@ -142,7 +142,7 @@ body.page-home {
         align-items: center;
         justify-content: center;
         margin: 0 auto 1.1rem;
-        
+
         .material-symbols-outlined,
         .material-icons {
             color: $color-indigo-600;
@@ -275,10 +275,7 @@ body.page-home {
 }
 
 // -- Signed-in homepage dashboard (pages/home/overview.html) ------------------
-// A grid of independently-toggleable/reorderable widgets (see
-// services.home_widgets and partials/home/_widget_*.html) - plain "your
-// overview" framing, not walled off as a special "private" area the way the
-// profile-annotation panel is (see .profile-private-zone in _profile.scss).
+// A grid of independently-toggleable/reorderable widgets.
 
 .home-overview-page {
     display: flex;

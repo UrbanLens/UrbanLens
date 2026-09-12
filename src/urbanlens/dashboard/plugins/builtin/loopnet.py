@@ -1,17 +1,4 @@
-"""LoopNet plugin: commercial real-estate listings panel on the Private Pin page.
-
-Retrieval lives entirely in REData (the standalone service that already owns
-property records for this app - see ``plugins.builtin.property_records``):
-``RedataGateway.lookup_parcel_uuid`` resolves the pin's address to a parcel,
-then ``lookup_listings`` returns REData's cached LoopNet data for it - never
-fetched live inline with the request, so a cache miss can mean "not yet
-fetched" rather than "nothing available"; see ``lookup_listings``'s own
-docstring for the ``refresh_queued`` flag this implies. Listing photos are
-exposed to the pin's Media gallery via :meth:`LoopnetPanelSource.media_items`,
-streamed through :class:`~urbanlens.dashboard.controllers.pin.PinLoopnetPhotoView`
-so REData's API key never reaches the browser (the same reasoning as every
-other authenticated media proxy in this app, e.g. Immich's thumbnail view).
-"""
+"""LoopNet plugin: commercial real-estate listings panel on the Private Pin page."""
 
 from __future__ import annotations
 
@@ -37,25 +24,17 @@ class LoopnetPanelSource(GalleryMediaSource):
     section_id = "loopnet-section"
     icon = "business_center"
     title = "LoopNet Listings"
-    # Deliberately not exposed on the external API: commercial listing data
-    # sourced through REData's licensed LoopNet access, plus its photos only
-    # resolve through the session-authenticated PinLoopnetPhotoView proxy - an
-    # external credential couldn't load them anyway. Opt back in only after
-    # REData's redistribution terms and an equivalent external-API proxy have
-    # both been reviewed.
+    # Deliberately not exposed on the external API: commercial listing data sourced through REData's
+    # licensed LoopNet access, plus its photos only resolve through the session-authenticated
+    # PinLoopnetPhotoView proxy - an external credential couldn't load them anyway.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     @staticmethod
     def address(pin: Pin) -> str:
         """Street + city + state search address, or ``""`` when insufficient.
 
-        Args:
-            pin: The pin whose location's address should be assembled.
-
         Returns:
-            A comma-joined address string; empty when the location lacks a
-            street route (LoopNet needs at least street-level precision).
-        """
+            A comma-joined address string; empty when the location lacks a street route (LoopNet needs at least street-level precision)."""
         location = pin.location
         if not location or not location.route:
             return ""
@@ -102,14 +81,8 @@ class LoopnetPanelSource(GalleryMediaSource):
     def media_items(self, data: dict) -> list[MediaItem]:
         """Turn cached LoopNet listing photos into gallery items.
 
-        Args:
-            data: This source's cached ``{"listings": [...]}`` dict.
-
         Returns:
-            One item per listing photo, proxied through
-            ``PinLoopnetPhotoView`` (never a raw REData URL - the API key
-            can't reach the browser).
-        """
+            One item per listing photo, proxied through ``PinLoopnetPhotoView`` (never a raw REData URL - the API key can't reach the browser)."""
         from django.urls import reverse
 
         from urbanlens.dashboard.services.apis.assets.base import MediaItem

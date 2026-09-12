@@ -1,15 +1,4 @@
-{% comment %}
-Safety check-in partner list + invite-by-username form (owner-only editing; an
-accepted partner sees the same list read-only via detail.html's viewer_is_partner
-gate). Unlike the emergency-contact picker, a partner must be an existing account
-(looked up by username, no friendship required - mirrors Trip's add-member flow)
-and must accept before they show as anything but "Invited".
-
-Expects: checkin, partners (queryset/list of SafetyCheckinPartner), and
-optionally error (an invite-rejection message from the last POST) and
-viewer_is_partner (hides the invite form/remove buttons - a partner sees
-this list read-only; only the owner manages it).
-{% endcomment %}
+{% comment %}Safety check-in partner list + invite-by-username form.{% endcomment %}
 <div class="safety-partner-picker card" id="safety-partner-picker" data-role="partner-picker">
     <div class="card-header">
         <i class="material-symbols-outlined">shield_person</i>

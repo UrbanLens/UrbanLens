@@ -1,8 +1,4 @@
-{% comment %}
-Google Photos import progress fragment - returned by PinGooglePhotosImportView and
-polled by PinGooglePhotosImportProgressView. Same shape as _immich_import_progress.html.
-Context: pin, task_id, state, percent, message, error
-{% endcomment %}
+{% comment %}Google Photos import progress fragment - returned by PinGooglePhotosImportView and polled by PinGooglePhotosImportProgressView.{% endcomment %}
 
 {% if state == "SUCCESS" %}
 <div class="immich-import-progress" id="google-photos-import-progress">

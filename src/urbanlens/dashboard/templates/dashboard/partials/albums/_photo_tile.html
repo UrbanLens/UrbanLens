@@ -1,12 +1,4 @@
-{% comment %}
-One photo tile in an album grid (list loose-photos, or an album's own grid).
-
-Expects:
-  img          - Image (optional album_item_id)
-  profile      - viewing profile, for `data-mine`
-  in_album     - when true, this tile is inside an album (remove button, item id)
-  album_slug   - current album slug when in_album
-{% endcomment %}
+{% comment %}One photo tile in an album grid (list loose-photos, or an album's own grid).{% endcomment %}
 <li class="gallery-item{% if in_album %} album-item{% endif %}"
     id="gallery-item-{{ img.pk }}"
     draggable="true"

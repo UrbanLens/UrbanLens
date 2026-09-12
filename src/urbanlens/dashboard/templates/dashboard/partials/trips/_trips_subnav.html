@@ -1,9 +1,4 @@
-{% comment %}
-Overview | Events | Calendar tab strip for the trips section.
-
-Context:
-  active - "overview", "list", or "calendar" (which tab is current)
-{% endcomment %}
+{% comment %}Overview | Events | Calendar tab strip for the trips section.{% endcomment %}
 <nav class="ul-subnav-tabs" aria-label="Trips views">
     <a href="{% url 'trips.overview' %}"
        class="ul-subnav-tab {% if active == 'overview' %}is-active{% endif %}"

@@ -130,8 +130,7 @@ def _delete_file_field(instance, field_name: str, *, label: str) -> None:
 
 
 def _delete_profile_files(profile: Profile) -> None:
-    """Best-effort delete of storage files owned by this profile, before the DB rows go.
-    Every model below cascade-deletes its row when the profile's User row is deleted (see ``hard_delete_profile``) - Django never deletes a FileField's underlying file on row deletion, so each one must be cleaned up here first or the physical file is orphaned forever."""
+    """Best-effort delete of storage files owned by this profile, before the DB rows go."""
     _delete_file_field(profile, "avatar", label="profile")
 
     for image in profile.uploaded_images.all():
@@ -151,8 +150,7 @@ def hard_delete_profile(profile: Profile) -> None:
     """Permanently delete a profile's account and all of its data.
 
     Args:
-        profile: The profile whose grace period has fully elapsed (see
-            ``ProfileQuerySet.due_for_hard_delete``)."""
+        profile: The profile whose grace period has fully elapsed (see ``ProfileQuerySet.due_for_hard_delete``)."""
     email = profile.user.email if profile.user else ""
     username = profile.username
 

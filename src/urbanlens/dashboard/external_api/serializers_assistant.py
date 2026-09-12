@@ -10,10 +10,9 @@ from urbanlens.dashboard.services.ai.assistant import MAX_MESSAGE_CHARS
 class AssistantHistoryEntrySerializer(serializers.Serializer):
     """One prior turn in the conversation, carried by the client between requests.
 
-    The assistant is stateless server-side for this API - unlike the web
-    chat, which keeps history in the Django session, a bearer-token client
-    has no session to keep it in. A client resends the ``history`` this
-    domain returns, unmodified, as the next call's input.
+    The assistant is stateless server-side for this API - unlike the web chat, which keeps history in
+    the Django session, a bearer-token client has no session to keep it in.
+    A client resends the ``history`` this domain returns, unmodified, as the next call's input.
     """
 
     role = serializers.ChoiceField(choices=["user", "assistant"])
@@ -25,21 +24,20 @@ class AssistantMessageRequestSerializer(serializers.Serializer):
 
     message = serializers.CharField(max_length=MAX_MESSAGE_CHARS, allow_blank=False)
     history = AssistantHistoryEntrySerializer(many=True, required=False, default=list)
-    #: Optional client-side "screen" path, resolved server-side under this
-    #: caller's own access rules (services.ai.page_context) - mirrors the web
-    #: chat's own window.location.pathname. No shipped tool reads the result
-    #: yet (needs_page=True starts in batch 4).
+    #: Optional client-side "screen" path, resolved server-side under this caller's own access rules
+    #: (services.ai.page_context) - mirrors the web chat's own window.location.pathname. No shipped tool reads
+    #: the result yet (needs_page=True starts in batch 4).
     page_path = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class AssistantProposalSerializer(serializers.Serializer):
     """One write-tool proposal awaiting the caller's confirmation.
 
+    /assistant/turn/<turn_id>/confirm/<n>/``).
+
     Never carries the tool's ``args`` - those stay server-side
-    (``services.ai.turns.store_turn_proposals``) until a confirm request
-    replays them for real; this is only what a client needs to render a
-    confirm control and address it (``n``, this domain's own
-    ``POST /assistant/turn/<turn_id>/confirm/<n>/``).
+    (``services.ai.turns.store_turn_proposals``) until a confirm request replays them for real; this is
+    only what a client needs to render a confirm control and address it (``n``, this domain's own ``POST
     """
 
     n = serializers.IntegerField(read_only=True)
@@ -66,9 +64,8 @@ class AssistantProposalConfirmResponseSerializer(serializers.Serializer):
 class AssistantTurnPendingSerializer(serializers.Serializer):
     """Body of a 202 response: the turn was enqueued (or is still running) on ai-worker.
 
-    ``turn_id`` is only present on the initial POST's 202 - the poll
-    endpoint's own URL already carries it, so echoing it back there would be
-    redundant.
+    ``turn_id`` is only present on the initial POST's 202 - the poll endpoint's own URL already carries
+    it, so echoing it back there would be redundant.
     """
 
     turn_id = serializers.CharField(read_only=True, required=False)

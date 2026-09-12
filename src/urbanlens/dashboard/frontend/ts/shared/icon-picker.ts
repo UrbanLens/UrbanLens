@@ -1,21 +1,10 @@
 /**
- * Icon picker widget shared by categories/tags/organize's create and bulk-edit
- * dialogs (dashboard/partials/ui/_icon_picker.html). The partial's markup calls
- * `IconPicker.toggle/setTab/search/pick(...)` via inline onclick/oninput
- * attributes, including markup injected later via HTMX (edit dialogs) - so
- * this stays a `window.IconPicker` global rather than an imported class,
- * matching the existing contract instead of rewriting every template that
- * includes that partial (including pages outside this migration's scope).
+ * Icon picker widget shared by categories/tags/organize's create and bulk-edit dialogs (dashboard/partials/ui/_icon_picker.html).
  */
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
 
 /**
- * The catalogue is fetched once per page rather than rendered into every
- * picker: one grid is 594 KB of markup, and pages carrying a dozen of them paid
- * for each (P68). The response is picker-agnostic - each button reads its
- * picker id from the enclosing `.icon-picker-dropdown` - so this one promise
- * serves every picker on the page, and the browser caches it across pages under
- * a content-hashed URL.
+ * The catalogue is fetched once per page rather than rendered into every picker.
  */
 interface IconCatalogue {
     tabs: string;
@@ -43,9 +32,7 @@ function loadCatalogue(url: string): Promise<IconCatalogue> {
             })
             .then(parseCatalogue)
             .catch((error) => {
-                // Dropped so the next open retries. A cached rejection is how a
-                // one-shot loader leaves a picker reading "Loading icons..."
-                // until a full page reload.
+                // Dropped so the next open retries.
                 gridRequest = null;
                 throw error;
             });
@@ -58,7 +45,9 @@ export function resetIconGridForTests(): void {
     gridRequest = null;
 }
 
-/** Marks the item matching this picker's current value, which the server used to render. */
+/**
+ * Marks the item matching this picker's current value, which the server used to render.
+ */
 function markSelectedIcon(id: string, grid: HTMLElement): void {
     const input = document.getElementById(`icon-value-${id}`) as HTMLInputElement | null;
     const current = input?.value ?? "";
@@ -129,9 +118,7 @@ export const IconPicker = {
                 search.focus();
             }
             IconPicker.setTabSilent(id, "");
-            // Revealed first, filled second: the panel's chrome (search, tabs)
-            // is already there, so the fetch shows as a loading row inside an
-            // open panel rather than as a click that appears to do nothing.
+            // Revealed first, filled second: the panel's chrome (search, tabs) is already there, so the fetch shows as a loading row inside an open.
             void fillIconGrid(id).then(() => reapplyFilter(id));
         }
     },
@@ -184,10 +171,7 @@ export const IconPicker = {
         const input = document.getElementById(`icon-value-${id}`) as HTMLInputElement | null;
         if (input) {
             input.value = icon;
-            // Assigning .value fires nothing, so until now the only way to
-            // learn about a pick was to read the field at form-submit time.
-            // That is why this picker could only be used inside a form; a
-            // panel that has to react to a choice had no way to hear it.
+            // Assigning .value fires nothing, so until now the only way to learn about a pick was to read the field at form-submit time.
             input.dispatchEvent(new Event("input", { bubbles: true }));
             input.dispatchEvent(new Event("change", { bubbles: true }));
         }

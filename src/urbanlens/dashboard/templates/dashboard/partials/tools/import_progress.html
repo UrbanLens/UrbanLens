@@ -1,7 +1,4 @@
-{% comment %}
-Import progress fragment - returned by ImportStartView and polled by ImportStatusView.
-Includes hx-get polling while status is pending/running; removes polling when done/error.
-{% endcomment %}
+{% comment %}Import progress fragment - returned by ImportStartView and polled by ImportStatusView.{% endcomment %}
 
 {% if status == "done" %}
 <div class="export-progress-wrap" id="import-status-poll">

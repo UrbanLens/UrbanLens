@@ -30,8 +30,8 @@ DEFAULT_AVATAR_COLOR = MaterialColor.GREEN.value
 
 #: Background substituted when a caller names a colour outside ``MaterialColor``.
 #: Restricting to the palette is not cosmetic: the value is interpolated into generated SVG markup,
-#: so an arbitrary caller-supplied string there would be an injection point into a file the site
-#: then serves.
+#: so an arbitrary caller-supplied string there would be an injection point into a file the site then
+#: serves.
 UNRECOGNIZED_AVATAR_COLOR_FALLBACK = MaterialColor.GREY.value
 
 
@@ -57,10 +57,10 @@ class AvatarScanUnavailableError(AvatarUploadError):
     """The antivirus scanner couldn't be reached to scan the upload. Maps to HTTP 503."""
 
 
-#: Dispatches on the HTTP status ``image_upload_error`` paired with its message - the only
-#: structured signal available for which check failed, since that function hands back a plain
-#: ``(message, status_code)`` tuple shared by a dozen other, unrelated upload call sites this
-#: refactor does not own.
+#: Dispatches on the HTTP status ``image_upload_error`` paired with its message - the only structured
+#: signal available for which check failed, since that function hands back a plain ``(message,
+#: status_code)`` tuple shared by a dozen other, unrelated upload call sites this refactor does not
+#: own.
 _AVATAR_ERROR_TYPES_BY_STATUS: dict[int, type[AvatarUploadError]] = {
     413: AvatarTooLargeError,
     400: AvatarUnsupportedFormatError,
@@ -71,11 +71,7 @@ _AVATAR_ERROR_TYPES_BY_STATUS: dict[int, type[AvatarUploadError]] = {
 
 class AvatarService:
     """Avatar utilities: emoji SVG generation, provider-URL resolution, and image download.
-
-    All methods are class methods so callers never need to instantiate this class.
-    The class groups related constants (ANIMAL_EMOJIS, COLORS) with the functions
-    that consume them, and can be subclassed to swap out the data or extend behavior.
-    """
+    All methods are class methods so callers never need to instantiate this class."""
 
     ANIMAL_EMOJIS: dict[str, str] = {
         "labelr": "🦡",
@@ -152,13 +148,8 @@ class AvatarService:
     def generate_emoji_svg(cls, emoji: str, color: str) -> str:
         """Return an SVG string: a filled circle with a centered emoji.
 
-        Args:
-            emoji: The Unicode emoji character to render.
-            color: A CSS hex color string for the circle background.
-
         Returns:
-            UTF-8-safe SVG markup.
-        """
+            UTF-8-safe SVG markup."""
         return (
             '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">'
             f'<circle cx="100" cy="100" r="100" fill="{color}"/>'
@@ -173,30 +164,22 @@ class AvatarService:
         """Return *n* random (animal, emoji, color) dicts for the avatar picker.
         Both animals and colors are sampled without replacement so that no two suggestions share the same animal or the same background color.
 
-        Args:
-                n: Number of options to generate.
-
         Returns:
-                List of dicts with keys ``animal``, ``emoji``, and ``color``."""
+            List of dicts with keys ``animal``, ``emoji``, and ``color``."""
         import random as _random
 
         candidates = list(cls.ANIMAL_EMOJIS.items())
         n = min(n, len(candidates), len(cls.COLORS))
-        chosen_animals = _random.sample(candidates, n)  # nosec B311 - cosmetic avatar suggestions, not security-sensitive
-        chosen_colors = _random.sample(cls.COLORS, n)  # nosec B311 - cosmetic avatar suggestions, not security-sensitive
+        chosen_animals = _random.sample(candidates, n)  # nosec B311 - cosmetic avatar suggestions, not...
+        chosen_colors = _random.sample(cls.COLORS, n)  # nosec B311 - cosmetic avatar suggestions, not...
         return [{"animal": animal, "emoji": emoji, "color": chosen_colors[i]} for i, (animal, emoji) in enumerate(chosen_animals)]
 
     @classmethod
     def resolve_provider_url(cls, backend: Any, user: User, response: dict[str, Any]) -> str | None:
         """Return the provider-specific or Gravatar avatar URL for this user.
 
-        Args:
-                backend: The social-auth backend in use.
-                user: The authenticated Django User.
-                response: Raw OAuth response payload.
-
         Returns:
-                A URL string or None if no avatar could be determined."""
+            A URL string or None if no avatar could be determined."""
         name = getattr(backend, "name", "")
 
         if name == "google-oauth2":
@@ -227,12 +210,8 @@ class AvatarService:
         """Fetch image bytes from a URL, returning None on any failure.
         Only http and https URLs are accepted; any other scheme is rejected before the network request is made.
 
-        Args:
-                url: The full URL of the image to download.
-                timeout: Request timeout in seconds.
-
         Returns:
-                Raw image bytes, or None if the download failed or returned a non-200 status."""
+            Raw image bytes, or None if the download failed or returned a non-200 status."""
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
             logger.warning("Rejecting avatar URL with unexpected scheme: %s", parsed.scheme)
@@ -278,8 +257,7 @@ def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile
 
     Raises:
         AvatarTooLargeError: The file exceeds the site's max upload size.
-        AvatarUnsupportedFormatError: The file isn't an accepted image type,
-            or its declared type doesn't match its bytes.
+        AvatarUnsupportedFormatError: The file isn't an accepted image type, or its declared type doesn't match its bytes.
         AvatarMalwareDetectedError: The antivirus scan flagged the file.
         AvatarScanUnavailableError: The antivirus scanner couldn't be reached."""
     from urbanlens.dashboard.models.images.model import MediaKind

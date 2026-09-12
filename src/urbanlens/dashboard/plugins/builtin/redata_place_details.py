@@ -1,32 +1,5 @@
 """REData place-details plugin: a compact Google Maps info card for CID-linked locations.
-
-Many Locations already carry a resolved Google Maps CID (``Location.cid``, via CID-link
-imports - see ``services.apis.locations.cid_resolution``). Resolving that CID only ever
-asks REData for a coordinate; REData's own scrape opportunistically captures far more for
-the same CID (hours, rating, price level, phone/website, photos, reviews, ...) and today
-that data is simply discarded once the coordinate lands.
-
-This plugin reads it back via a second, independent REData endpoint -
-``RedataCidGateway.get_place_detail`` (``GET /places/cid/{cid}/``, a pure database read
-that never triggers a new scrape - see that method's docstring). It is deliberately a
-compact card, not a Google Maps clone: name, category, rating, price, hours' own one-line
-summary, phone, a website link, and up to three photos. Reviews, visitor "updates",
-popular-times, the "about" accessibility grid and address components are all real fields
-REData returns here too, but are left out - a photographer deciding whether a place is
-worth visiting needs the facts above, not a second copy of Google's own review pane.
-
-Photos are served through :class:`~urbanlens.dashboard.controllers.pin.PinPlaceCidMediaView`
-so REData's API key never reaches the browser (same reasoning as every other REData-backed
-media proxy in this app - see ``controllers.pin.RedataMediaProxyMixin``).
-
-**Gated behind ``SiteFeature.PLACES``** (decided 2026-09-08): reuses the flag that already
-gates the map's Places layer for this same provider (``places_google_enabled`` in
-``services.profile.profile_settings``). The underlying REData record can still be fetched
-and cached in the background for the benefit of other users who do hold the feature
-(:class:`RedataPlaceDetailsEnrichmentSource` carries no feature check - see its own
-docstring) - only the per-viewer *fetch-on-demand* and *display* are gated, never the shared
-cache write.
-"""
+This plugin reads it back via a second, independent REData endpoint - ``RedataCidGateway.get_place_detail`` (``GET /places/cid/{cid}/``, a pure database read that never triggers a new scrape - see that method's docstring)."""
 
 from __future__ import annotations
 
@@ -50,24 +23,14 @@ if TYPE_CHECKING:
 #: Human-readable provider name for every MediaItem this plugin emits.
 _SOURCE_NAME = "Google Maps (REData)"
 
-#: Photos are the one part of the deep scrape worth showing on a compact card, and even
-#: those are capped - REData can return dozens per popular place, and this panel's job is
-#: a quick glance, not a Google Maps clone (see the module docstring). ``info_card``'s own
-#: contract only carries a single ``image_url`` (no gallery), which is why this panel also
-#: declares :attr:`PanelApiKind.MEDIA` (see ``CrisBuildingPanelSource`` for the same "both
-#: an info card and a media provider" shape) rather than trying to cram three photos into
-#: that one field.
+#: Photos are the one part of the deep scrape worth showing on a compact card, and even those are
+#: capped - REData can return dozens per popular place, and this panel's job is a quick glance, not a
+#: Google Maps clone (see the module docstring).
 _MAX_PHOTOS = 3
 
 
 def _coerce_cid(cid_value: Any) -> int | None:
-    """Coerce a cached payload's ``cid`` field to ``int``, or None when unusable.
-
-    REData's own responses spell a CID as a native JSON number on this
-    endpoint (unlike the string form ``resolve_cids`` uses for its bulk-keyed
-    response) - coerced defensively anyway rather than trusted, since this
-    value only ever gets used to build a proxy URL.
-    """
+    """Coerce a cached payload's ``cid`` field to ``int``, or None when unusable."""
     if cid_value is None:
         return None
     try:
@@ -90,12 +53,7 @@ class RedataPlaceDetailsPanelSource(CoordinateGatedInfoPanelSource, GalleryMedia
 
     def gate(self, pin: Pin) -> bool:
         """Requires REData to be configured and this pin's location to already carry a CID.
-
-        Deliberately not the inherited coordinate/``geo_boundary`` gate: a
-        pin can have coordinates with no linked CID (most of them - only
-        CID-link imports set one), and this panel has nothing to fetch
-        without one, no matter where the pin sits.
-        """
+        Deliberately not the inherited coordinate/``geo_boundary`` gate: a pin can have coordinates with no linked CID (most of them - only CID-link imports set one), and this panel has nothing to fetch without one, no matter where the pin sits."""
         location = pin.location
         return redata_configured() and location is not None and location.cid is not None
 
@@ -115,17 +73,7 @@ class RedataPlaceDetailsPanelSource(CoordinateGatedInfoPanelSource, GalleryMedia
         LocationCache.set(pin.location, self.cache_source, detail or {}, query_key=str(cid_int))
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Build the compact card from a cached place-detail payload.
-
-        No usable ``name`` means either a 404 (this CID was never resolved by
-        REData at all - see :meth:`~.RedataCidGateway.get_place_detail`) or a
-        row this plugin wrote before REData had anything - either way, there
-        is nothing here worth a card.
-
-        Hours are rendered from ``hours.summary`` verbatim - REData/Google's
-        own one-line rollup (e.g. "Open 24 hours") - never reconstructed from
-        the per-day table; that string is already the finished answer.
-        """
+        """Build the compact card from a cached place-detail payload."""
         name = str(data.get("name") or "").strip()
         if not name:
             return None
@@ -155,18 +103,7 @@ class RedataPlaceDetailsPanelSource(CoordinateGatedInfoPanelSource, GalleryMedia
         }
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Up to :data:`_MAX_PHOTOS` of the cached record's ``media`` entries where ``kind == "photo"``.
-
-        Videos/360s/Street View are left for a future gallery-focused pass -
-        this card's photos are meant as a quick preview, not the full media
-        archive REData holds for the place.
-
-        Not overriding :meth:`~.GalleryMediaSource.media_is_ready`: unlike
-        ``CrisBuildingPanelSource``, this source's enrichment counterpart
-        (:class:`RedataPlaceDetailsEnrichmentSource`) writes the exact same
-        full payload this fetch does rather than a partial one, so a row from
-        either path is equally trustworthy for the media half.
-        """
+        """Up to :data:`_MAX_PHOTOS` of the cached record's ``media`` entries where ``kind == "photo"``."""
         from django.urls import reverse
 
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
@@ -190,12 +127,7 @@ class RedataPlaceDetailsPanelSource(CoordinateGatedInfoPanelSource, GalleryMedia
         return items
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """The cached record as both an information card and its (up to 3) photos.
-
-        Neither inherited ``api_payload`` alone would do (one drops the
-        photos, the other drops the card) - see ``CrisBuildingPanelSource``
-        for the identically-shaped precedent this mirrors.
-        """
+        """The cached record as both an information card and its (up to 3) photos."""
         data = self.cached_data(pin)
         if data is None:
             return None
@@ -218,27 +150,13 @@ class RedataPlaceDetailsEnrichmentSource(LocationCacheEnrichmentSource):
         return redata_configured()
 
     def missing_filter(self) -> Q:
-        """Locations with a resolved CID and no cache row yet for this source.
-
-        Narrower than the inherited "no row yet" filter alone: without this,
-        every CID-less Location (the overwhelming majority) would be
-        "enriched" into a permanent empty row the first time a cycle reached
-        it, for a source that can never have anything to say about it.
-        """
+        """Locations with a resolved CID and no cache row yet for this source."""
         from django.db.models import Q
 
         return Q(google_place__cid__isnull=False) & super().missing_filter()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Read REData's cached deep-scrape record for the location's CID.
-
-        A transient REData failure here is swallowed into "nothing found" for
-        this cycle rather than retried within it - same tradeoff
-        ``CrisBuildingEnrichmentSource`` makes: the row this writes is not
-        the last word, since the lazy panel-fetch path re-checks staleness
-        (unlike this cycle's own completion tracking) whenever a user
-        actually visits the pin.
-        """
+        """Read REData's cached deep-scrape record for the location's CID."""
         from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
         from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
@@ -265,10 +183,10 @@ class RedataPlaceDetailsPlugin(UrbanLensPlugin):
     )
     author: ClassVar[str] = "UrbanLens"
 
-    # No get_service_defaults() override - this plugin's gateway (RedataCidGateway,
-    # service key "redata_cid_lookup") is already registered directly in
-    # rate_limiter.SERVICE_REGISTRY, not through a plugin (see cid_resolution.py's
-    # own precedent - it doesn't register defaults either).
+    # No get_service_defaults() override - this plugin's gateway (RedataCidGateway, service key
+    # "redata_cid_lookup") is already registered directly in rate_limiter.SERVICE_REGISTRY, not
+    # through a plugin (see cid_resolution.py's own precedent - it doesn't register defaults
+    # either).
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the compact place-details pin-detail panel (also a Media-gallery source)."""

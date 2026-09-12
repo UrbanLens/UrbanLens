@@ -171,8 +171,7 @@ def _record_mention(message: DirectMessage, location: Location, kind: str, match
         matched_text: The exact text that matched, for display.
 
     Returns:
-        The mention row, or None when one already exists for this
-        (message, location) or the write failed."""
+        The mention row, or None when one already exists for this (message, location) or the write failed."""
     from urbanlens.dashboard.services.sharing.share_provenance import (
         find_profile_pin_near_location,
         profile_is_exposed_to,
@@ -232,14 +231,13 @@ def _record_mention(message: DirectMessage, location: Location, kind: str, match
 
 
 def detect_coordinate_mentions(message: DirectMessage) -> list[DirectMessageLocationMention]:
-    """Scan a message for coordinates and record mentions/shares. Synchronous and DB-only.
+    """Scan a message for coordinates and record mentions/shares.
 
     Args:
         message: The just-created message (plaintext; encrypted bodies skip).
 
     Returns:
-        Newly created mention rows (may be empty).
-    """
+        Newly created mention rows (may be empty)."""
     if message.is_encrypted or not message.body:
         return []
     from urbanlens.dashboard.models.location.model import Location

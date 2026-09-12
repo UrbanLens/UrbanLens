@@ -1,10 +1,4 @@
-"""Aggregates a profile's personal "journal" - visit notes, ratings, and comments.
-
-Adding a future journal entry type is one new ``_x_entries`` function keyed
-into ``JOURNAL_SOURCES`` below, plus the matching scope entry in the external
-API's ``MemoriesJournalView`` - which fails closed on a source it has no scope
-mapping for, so a new domain cannot reach API callers unnoticed.
-"""
+"""Aggregates a profile's personal "journal" - visit notes, ratings, and comments."""
 
 from __future__ import annotations
 
@@ -35,8 +29,7 @@ def _newest(queryset: Any, ordering: str, limit: int | None) -> Any:
         limit: How many rows this source may contribute, or None for all.
 
     Returns:
-        The ordered, optionally sliced queryset.
-    """
+        The ordered, optionally sliced queryset."""
     ordered = queryset.order_by(ordering)
     return ordered if limit is None else ordered[:limit]
 
@@ -53,8 +46,7 @@ class JournalEntry:
         subtitle: Secondary display text (e.g. "Visit note", "Wiki comment").
         body: The entry's free text, untruncated (visit notes or comment text).
         url: Link to the relevant detail page (with an anchor where one exists).
-        rating: Star rating 0-5, only set for "review" entries.
-    """
+        rating: Star rating 0-5, only set for "review" entries."""
 
     kind: str
     occurred_at: datetime
@@ -170,8 +162,8 @@ def _article_entries(profile: Profile, limit: int | None = None) -> Iterator[Jou
 
 #: Journal sources by key, in the order they are declared.
 #: Keyed rather than a bare tuple because the journal is a *multi-domain* aggregate: a visit note, a
-#: pin comment, a trip comment and a wiki article body are four different privacy domains that
-#: happen to share one feed.
+#: pin comment, a trip comment and a wiki article body are four different privacy domains that happen
+#: to share one feed.
 JOURNAL_SOURCES: dict[str, Callable[[Profile, int | None], Iterator[JournalEntry]]] = {
     "visits": _visit_entries,
     "reviews": _review_entries,
@@ -185,20 +177,11 @@ def get_journal_entries(profile: Profile, sources: Iterable[str] | None = None, 
 
     Args:
         profile: The profile whose journal to build.
-        sources: Keys from :data:`JOURNAL_SOURCES` to include. None (the
-            default) means every source, which is what the internal Memories
-            page wants; the external API passes the subset its caller's scopes
-            allow. Unknown keys are ignored rather than raising, so a caller
-            filtering against a stale key list degrades to fewer entries rather
-            than a 500.
-        limit: Return at most this many entries, and let each source fetch at
-            most this many rows. Exact, not approximate: the newest ``N`` of a
-            union can only contain entries that are in some source's own newest
-            ``N``, so no entry that belongs in the result is left behind.
+        sources: Keys from :data:`JOURNAL_SOURCES` to include.
+        limit: Return at most this many entries, and let each source fetch at most this many rows.
 
     Returns:
-        List of JournalEntry across the selected sources, newest first.
-    """
+        List of JournalEntry across the selected sources, newest first."""
     selected = JOURNAL_SOURCES.items() if sources is None else [(key, JOURNAL_SOURCES[key]) for key in sources if key in JOURNAL_SOURCES]
     entries: list[JournalEntry] = []
     for key, source in selected:
@@ -244,9 +227,9 @@ def _article_count(profile: Profile) -> int:
 
 
 #: How many entries each source holds, without building any of them.
-#: A parallel mapping rather than a second return value from the sources themselves, because
-#: counting is one `.count()` per queryset while yielding is a full fetch - the whole point of the
-#: count is not to pay for the rows.
+#: A parallel mapping rather than a second return value from the sources themselves, because counting
+#: is one `.count()` per queryset while yielding is a full fetch - the whole point of the count is
+#: not to pay for the rows.
 JOURNAL_SOURCE_COUNTS: dict[str, Callable[[Profile], int]] = {
     "visits": _visit_count,
     "reviews": _review_count,

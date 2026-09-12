@@ -31,47 +31,15 @@ def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]]
     ``acks_late=False`` overrides the project default (``CELERY_TASK_ACKS_LATE = True``) deliberately: a turn that dies mid-loop must not be redelivered and re-spend a provider call for a bubble the caller has already timed out on.
 
     Args:
-        profile_id: The requesting profile's id - re-fetched here rather
-            than passed as a model instance, since Celery serializes task
-            arguments.
+        profile_id: The requesting profile's id - re-fetched here rather than passed as a model instance, since Celery serializes task arguments.
         history: Prior conversation entries, already capped by the caller.
         user_message: The new message, already capped by the caller.
-        lock_token: The single-flight lock token this turn holds
-            (``services.ai.turns.acquire_turn_lock``). Checked against the
-            profile's current lock before any provider call - a stale task
-            whose lock has already expired and been re-acquired by a newer
-            turn must not spend work on a bubble nothing is polling for.
-            :func:`~services.ai.turns.release_turn_lock` is separately
-            self-guarding, so even if that check were somehow bypassed the
-            release below can't clobber a newer turn's lock.
-        page: ``services.ai.page_context.page_object_to_dict``'s output for
-            whatever the web view resolved before enqueueing, or ``None``.
-            Re-verified against *this* task's own profile via
-            ``verify_page_object`` before use - the web view's earlier
-            resolution is never trusted as-is, only its ``{kind, id}``.
-        dismissals: ``services.ai.dismissals.dismissals_to_list``'s output
-            for the client's own dismissal ring at enqueue time, or ``None``.
-            Re-validated (not re-verified against anything - this is
-            client-echoed UI copy, not access-controlled data) via
-            ``dismissals_from_list`` before use.
+        lock_token: The single-flight lock token this turn holds (``services.ai.turns.acquire_turn_lock``).
+        page: ``services.ai.page_context.page_object_to_dict``'s output for whatever the web view resolved before enqueueing, or ``None``.
+        dismissals: ``services.ai.dismissals.dismissals_to_list``'s output for the client's own dismissal ring at enqueue time, or ``None``.
 
     Returns:
-        ``{"reply": str, "actions": list[str], "proposals": list[dict]}`` on
-        every handled path (unavailable, expired, or a real turn) - the poll
-        endpoint always has something to show; a real turn's result also
-        carries ``"client_actions": list[dict]`` (see ``AssistantTurn`` -
-        tool effects, e.g. ``reopen_explainer``, that happen in the browser).
-        ``proposals`` (from
-        ``AssistantTurn.proposals``) are write tools the model asked for
-        that did *not* run - see ``services.ai.tools.registry.execute``'s
-        ``confirmed`` parameter; the poll endpoint that resolves this result
-        is what persists them (``services.ai.turns.store_turn_proposals``)
-        for a later confirm request to look up, since this task has no
-        reason to know its own turn_id. An unhandled exception (including
-        ``SoftTimeLimitExceeded`` if the in-loop deadline check in
-        ``run_assistant_turn`` somehow doesn't catch a hang first) still
-        propagates as a Celery ``FAILURE``, which the poll endpoint renders
-        as its own error bubble."""
+        ``{"reply": str, "actions": list[str], "proposals": list[dict]}`` on every handled path (unavailable, expired, or a real turn) - the poll endpoint always has something to show; a real turn's result also carries ``"client_actions": list[dict]``..."""
     from urbanlens.dashboard.models.profile.model import Profile
 
     profile = Profile.objects.filter(pk=profile_id).first()

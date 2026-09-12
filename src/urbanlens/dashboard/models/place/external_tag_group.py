@@ -1,16 +1,5 @@
 """Admin-curated equivalence groups over the PlaceExternalTag vocabulary.
-
-Different providers often describe the same real-world concept differently
-(OSM's ``amenity=restaurant`` vs. Overture's ``building_subtype=restaurant``).
-This module lets an admin mark two or more distinct ``(source, key, value)``
-tags as meaning the same thing, and pick which one is shown when a Place
-carries more than one member of the group. See
-``services.locations.external_tag_groups`` for the resolution logic and
-``docs/FEATURES.md`` for the feature overview.
-
-Deliberately separate from ``PlaceExternalTag`` itself: a given tag tuple
-repeats across many Places, and grouping/preference is a property of the tag,
-not of any one Place's copy of it.
+Different providers often describe the same real-world concept differently (OSM's ``amenity=restaurant`` vs.
 """
 
 from __future__ import annotations
@@ -45,11 +34,7 @@ class ExternalTagGroup(abstract.DashboardModel):
 
 class ExternalTagVocabularyEntry(abstract.DashboardModel):
     """One distinct ``(source, key, value)`` tag ever reported by a provider.
-
-    Auto-registered (``get_or_create``) by ``PlaceExternalTag.sync_for_source``
-    as new tags appear, and never auto-deleted - a tag going temporarily
-    unseen on every Place shouldn't drop an admin's mapping decision, the
-    same reasoning that keeps an unused ``Label`` alive.
+    Auto-registered (``get_or_create``) by ``PlaceExternalTag.sync_for_source`` as new tags appear, and never auto-deleted - a tag going temporarily unseen on every Place shouldn't drop an admin's mapping decision, the same reasoning that keeps an unused ``Label`` alive.
 
     Attributes:
         source: Which provider reported this tag.

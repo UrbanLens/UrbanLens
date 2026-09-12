@@ -1,15 +1,4 @@
-{% comment %}
-Shared "Add Friend" dialog, opened by {% include "dashboard/partials/profile/_add_friend_button.html" %}.
-
-Required:
-  target_profile_id - pk of the profile the request is being sent to
-  dialog_id          - must match the opening button's dialog_id
-
-Optional:
-  hx_target - if set, the form posts via HTMX and swaps this target in place
-              (e.g. "#friend_list"); otherwise it's a plain form post that
-              redirects back to the profile page (see friend.request view).
-{% endcomment %}
+{% comment %}Shared "Add Friend" dialog, opened by {% include "dashboard/partials/profile/_add_friend_button.html" %}.{% endcomment %}
 <dialog id="{{ dialog_id|default:'add-friend-dialog' }}" class="invite-dialog ul-dialog" aria-label="Add a friend">
     <div class="dialog-header">
         <span><i class="material-symbols-outlined">person_add</i> Add Friend</span>

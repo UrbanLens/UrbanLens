@@ -191,9 +191,7 @@ $memories-type-colors: (
 .memories-map-wrap {
     position: relative;
     margin-bottom: 1.5rem;
-    // Definite height so container queries (the layers panel's toggle button,
-    // see @include map-query-container) can size against this box - `contain:
-    // size` otherwise collapses an "auto" height to 0.
+    // Definite height so container queries (the layers panel's toggle button, see @include map-query-container) can size against this box.
     height: 420px;
     @include map-query-container;
 }
@@ -385,9 +383,7 @@ $memories-type-colors: (
 
 // -- Photos page ------------------------------------------------------------
 
-// Condensed to roughly album-card size - the whole page stays a drop target
-// (see the page-wide dragenter/drop listeners in photos.html/documents.html),
-// so this is just the click-to-upload affordance, not the only way in.
+// Condensed to roughly album-card size - the whole page stays a drop target, so this is just the click-to-upload affordance, not.
 .photos-dropzone {
     display: flex;
     flex-direction: column;
@@ -471,9 +467,7 @@ $memories-type-colors: (
     }
 }
 
-// The sort control rides at the far right of the gallery header; the <select>
-// itself is unstyled here on purpose - it already gets the site's standard
-// form-control skin from _reset.scss.
+// The sort control rides at the far right of the gallery header; the <select> itself is unstyled here on purpose.
 .photos-sort-label {
     display: flex;
     align-items: center;
@@ -732,9 +726,7 @@ $memories-type-colors: (
     color: var(--ul-grey-7);
 }
 
-// Positioning context for the floating {% map_search_bar %} (.addr-search-bar)
-// rendered on top of the confirm-pin map, the same way .safety-map-wrapper
-// does for the safety check-in destination picker.
+// Positioning context for the floating {% map_search_bar %} (addr-search-bar) rendered on top of the confirm-pin map, the same way.
 .photo-pin-confirm-map-wrap {
     position: relative;
     margin-bottom: .85rem;
@@ -862,9 +854,7 @@ $memories-type-colors: (
         height: 100%;
         object-fit: cover;
         display: block;
-        // Fades in once the thumbnail has actually decoded (see the tile's
-        // onload handler) instead of popping in over the tile background -
-        // the same background is what shows through while it's still loading.
+        // Fades in once the thumbnail has actually decoded instead of popping in over the tile background.
         opacity: 0;
         transition: opacity .2s ease;
 
@@ -922,9 +912,7 @@ $memories-type-colors: (
     }
 }
 
-// Vault > Documents: same grid engine as .photos-grid (shared/photo-virtual-grid.ts
-// doesn't care about tile shape), but a document has a filename to show, not a
-// thumbnail to crop square - wider, shorter cards instead of aspect-ratio tiles.
+// Vault > Documents: same grid engine as.photos-grid (shared/photo-virtual-grid.ts doesn't care about tile shape), but a document has.
 .document-grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 }
@@ -1309,9 +1297,7 @@ $memories-type-colors: (
     }
 }
 
-// Mobile-first: the quick-log form, "Add details", and "Not visited" each get
-// their own row by default; wider cards (see the grid breakpoint below) have
-// room for everything on one line.
+// Mobile-first: the quick-log form, "Add details", and "Not visited" each get their own row by default.
 .unlogged-card-actions {
     display: flex;
     flex-direction: column;

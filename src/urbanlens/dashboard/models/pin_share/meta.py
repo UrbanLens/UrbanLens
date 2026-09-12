@@ -6,10 +6,10 @@ class PinShareStatus(abstract.TextChoices):
     ACCEPTED = "accepted", "Accepted"
     REJECTED = "rejected", "Rejected"
     ALREADY_PINNED = "already_pinned", "Already pinned"
-    # Auto-recorded when the place was revealed indirectly - a shared
-    # MarkupMap's geometry (see services.sharing.map_pin_share_detection) or a trip
-    # activity (see services.trips.trip_share_tracking) - never actionable, never
-    # materializes a Pin via _create_pin_from_share.
+    # Auto-recorded when the place was revealed indirectly - a shared MarkupMap's geometry (see
+    # services.sharing.map_pin_share_detection) or a trip activity (see
+    # services.trips.trip_share_tracking) - never actionable, never materializes a Pin via
+    # _create_pin_from_share.
     DETECTED = "detected", "Detected"
 
 

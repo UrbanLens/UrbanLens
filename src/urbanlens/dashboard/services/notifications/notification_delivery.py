@@ -1,5 +1,4 @@
-"""Shared email/WhatsApp/SMS dispatch helpers for per-notification-type delivery preferences.
-Each is a thin wrapper that no-ops quietly rather than raising, since a missing destination (email address, phone number, unconfigured Twilio credentials) shouldn't break the caller's own request/task."""
+"""Shared email/WhatsApp/SMS dispatch helpers for per-notification-type delivery preferences."""
 
 from __future__ import annotations
 
@@ -18,18 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 def send_notification_email(recipient: Profile, *, title: str, body_text: str, url: str | None = None, action_label: str = "View on UrbanLens") -> None:
-    """Email *recipient* a generic notification. The caller has already checked their preference.
+    """Email *recipient* a generic notification.
 
     Args:
         recipient: Who to email - uses ``recipient.user.email``.
-        title: Subject line and email heading - the same string the in-app
-            notification's own ``title`` already is.
+        title: Subject line and email heading - the same string the in-app notification's own ``title`` already is.
         body_text: The notification's own ``message`` text.
-        url: Site-relative path (e.g. from ``reverse()``) the action button
-            should link to, or None for types with no single deep link (e.g.
-            a visit suggestion) - falls back to the site root.
-        action_label: Button text.
-    """
+        url: Site-relative path (e.g. from ``reverse()``) the action button should link to, or None for types with no single deep link (e.g. a visit suggestion) - falls back to the site root.
+        action_label: Button text."""
     recipient_email = recipient.user.email if recipient.user else None
     if not recipient_email:
         return

@@ -141,27 +141,7 @@
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
-    {% comment %}Request lanes for this page's enrichment panels.
-
-    Every panel here fetches on load, and there are enough of them that opening
-    this page once measured 58 simultaneous requests against a Postgres whose
-    default max_connections is 100 - each Django request takes its own connection
-    (CONN_MAX_AGE is 0), so two readers is enough to start answering 500s from
-    whichever panel arrives when the pool is full (P53).
-
-    hx-sync's "queue all" against a shared element is htmx's own answer: requests
-    naming the same lane run one after another instead of together. Four panel
-    lanes and three media lanes bound the burst at seven rather than fifty-eight,
-    and the worst a lane can do is make its panels arrive later.
-
-    Deferring on visibility instead - revealed, or intersect - cannot work here:
-    every one of these panels renders with the `hidden` attribute and only
-    unhides once its content arrives, so it never intersects anything and would
-    never fire at all.
-
-    The lanes are empty spans rather than an existing element because hx-sync
-    queues against whatever the selector resolves to, and an element that also
-    makes requests of its own would join its own queue.{% endcomment %}
+    {% comment %}Request lanes for this page's enrichment panels.{% endcomment %}
     <span id="pin-panel-lane-0" hidden></span>
     <span id="pin-panel-lane-1" hidden></span>
     <span id="pin-panel-lane-2" hidden></span>
@@ -170,11 +150,7 @@
     <span id="pin-media-lane-1" hidden></span>
     <span id="pin-media-lane-2" hidden></span>
 
-    {# The one-time "organize this property?" suggestion: child pins for the     #}
-    {# buildings here, plus nesting any top-level pins that stand inside it.   #}
-    {# 204s (and removes itself) whenever there's nothing to suggest, the      #}
-    {# owner has declined for this pin, or they've turned suggestions off.     #}
-    {# See controllers.pin_restructure. #}
+    {# The one-time "organize this property?" suggestion. #}
     {% if not parent_pin %}
     <div id="pin-restructure-slot"
          hx-get="{% url 'pin.restructure.offer' pin.slug %}"
@@ -214,11 +190,9 @@
         <div class="map-resize-handle" id="pin-detail-map-resize-handle"
              title="Drag to resize the map" role="separator" aria-orientation="horizontal"
              aria-label="Resize map"></div>
-    </div>{# end .location-map #}
+    </div>
 
-    {# -- Satellite / street view / photos: each card grows to fill the space -- #}
-    {# left behind when a sibling in this row is collapsed (see .pin-media-row -- #}
-    {# in _pin-detail.scss and the [data-collapse-scope] handling in base.html). #}
+    {# Satellite / street view / photos: each card grows to fill the space left behind when a sibling in this row is collapsed #}
     <div class="pin-media-row">
         <div id="satellite-view-section"
             hx-sync="#pin-panel-lane-0:queue all" class="satellite-view card card--primary" data-ext-panel-204 hidden
@@ -252,18 +226,7 @@
             </div>
         </div>
 
-        {# -- Combined Media section: the pin's own photos + every external ---- #}
-        {# provider (Wikimedia, Smithsonian, ...) in one place. "All" (default) #}
-        {# shows everything together, with a capped preview of the pin's own   #}
-        {# photos (PinController._photos_media_preview) alongside the external #}
-        {# providers; "Mine" swaps in the full, unlimited photo gallery        #}
-        {# (_photo_gallery.html, completely unchanged - same partial the wiki  #}
-        {# and safety check-in pages still use standalone) with everything it  #}
-        {# already had: drag-drop upload, delete, reposition, cover photo,     #}
-        {# bulk select/delete/send-to-wiki. The two halves stay separate      #}
-        {# because their pagination models differ: this section's external    #}
-        {# items are a capped, client-side-paginated batch, while a pin's own #}
-        {# photos need real unlimited pagination.                             #}
+        {# Combined Media section: the pin's own photos + every external provider (Wikimedia, Smithsonian, ...) in one place. #}
         <div id="media-gallery-section" class="media-gallery card card--secondary"
              data-media-view="all"
              data-media-sort="{{ profile.media_gallery_sort }}"
@@ -272,9 +235,7 @@
                 <i class="material-symbols-outlined">collections</i>
                 <h3>Media</h3>
                 <span class="badge" id="media-count-badge" hidden></span>
-                {# .card-header-actions is the shared multi-action wrapper (see panel-header-grid #}
-                {# mixin) - without it, these buttons had no grid-area of their own and fell #}
-                {# to CSS Grid auto-placement, landing on an implicit second row below the title. #}
+                {# .card-header-actions is the shared multi-action wrapper. #}
                 <div class="card-header-actions">
                     {% if profile.external_apis_enabled %}
                     <button type="button" class="media-gallery-header-btn" title="Import Photos"
@@ -312,12 +273,7 @@
                 </div>
             </div>
 
-            {# -- Source filter tabs + All/Mine view switch, combined into one row -- #}
-            {# "All" and "Mine" are built into rebuildMediaTabs() alongside the      #}
-            {# per-source tabs (see index.html's media-gallery IIFE) so there's a    #}
-            {# single tab strip instead of two stacked ones - "Mine" switches to the #}
-            {# pin's own full gallery panel below; every other tab filters within    #}
-            {# the combined grid. #}
+            {# Source filter tabs + All/Mine view switch, combined into one row "All" and "Mine" are built into rebuildMediaTabs() alongside. #}
             <div class="card-tabs" id="media-tabs" role="tablist" aria-label="Media view"></div>
 
             <div class="media-view-panel" data-media-view-panel="all">
@@ -345,8 +301,7 @@
                 </div>
             </div>
         </div>
-        {# Per-provider loaders - hidden, append their results into #media-gallery-grid #}
-        {# above as each responds (see the media-gallery IIFE further down this file). #}
+        {# Per-provider loaders - hidden, append their results into #media-gallery-grid above as each responds. #}
         <div class="media-provider-loader" id="media-loader-photos"
             hx-sync="#pin-media-lane-0:queue all"
             hx-get="{% url 'pin.media' pin.slug 'photos' %}"
@@ -371,8 +326,7 @@
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
-        {# Images from the pin's own matched Wikipedia article page, distinct from the #}
-        {# Wikimedia Commons text search above - see WikipediaMediaGateway. #}
+        {# Images from the pin's own matched Wikipedia article page, distinct from the Wikimedia Commons text search above. #}
         <div class="media-provider-loader" id="media-loader-wikipedia_media"
             hx-sync="#pin-media-lane-0:queue all"
             hx-get="{% url 'pin.media' pin.slug 'wikipedia_media' %}"
@@ -455,11 +409,10 @@
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
-    </div>{# end .pin-media-row #}
+    </div>
 
     {# -- Categories / aliases: same fill-the-gap behavior as above -- #}
-    {# Visit History moved to its own subnav tab (data-tab="visits") - see    #}
-    {# the page-tab-panel below - it no longer shares this masonry row.      #}
+    {# Visit History moved to its own subnav tab (data-tab="visits") - see the page-tab-panel below - it no longer shares this masonry row #}
     <div class="pin-lists-row">
         <div class="organization-card card card--secondary"
              data-collapse-scope="pin" data-collapse-section="categories">
@@ -488,10 +441,7 @@
         {% with link_count=pin.links.count %}
         <div class="pin-links-card card card--secondary"
              data-collapse-scope="pin" data-collapse-section="links"
-             {# Auto-collapsed (session-only, never persisted - see base.html's #}
-             {# _applyState) whenever the pin has no links yet, so an empty card #}
-             {# doesn't take up space by default; the user can still expand it #}
-             {# manually to add one. #}
+             {# Auto-collapsed. #}
              data-collapse-if-empty="{% if not link_count %}true{% endif %}">
             <div class="card-header">
                 <i class="material-symbols-outlined">link</i>
@@ -530,9 +480,7 @@
             hx-swap="outerHTML"
             id="pin-custom-fields-panel"
             class="cf-panel-area">
-            {# Loads unconditionally (no collapse gate): section-display cards and #}
-            {# fixed-display overlays live in this response too, and they must render #}
-            {# even when the Custom Fields card itself is collapsed. #}
+            {# Loads unconditionally (no collapse gate): section-display cards and fixed-display overlays live in this response too, and they must. #}
             <div class="custom-fields-panel card card--secondary"
                  data-collapse-scope="pin" data-collapse-section="custom-fields">
                 <div class="card-header">
@@ -557,8 +505,7 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        {# Only rendered when the pin has associated markup maps - the view returns 204 #}
-        {# otherwise, and the htmx:afterOnLoad handler below removes this placeholder. #}
+        {# Only rendered when the pin has associated markup maps. #}
         <div hx-get="{% url 'pin.markup_maps' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','markup-maps'))], ul:unhide, refreshMarkupMaps from:body"
             hx-swap="outerHTML"
@@ -573,12 +520,9 @@
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
-    </div>{# end .pin-lists-row #}
+    </div>
 
-    {# -- Auxiliary cards: a single adaptive grid that reflows to fill the ---- #}
-    {# space left by any card that doesn't render (optional cards, or cards -- #}
-    {# removed at runtime when their HTMX request returns 204 - see the ------ #}
-    {# htmx:afterOnLoad handler near the bottom of this file). ---------------- #}
+    {# Auxiliary cards: a single adaptive grid that reflows to fill the space left by any card that doesn't render. #}
     <div class="pin-aux-grid">
         {% if pin.meaningful_name and can_use_web_search %}
         <div id="web-search-section"
@@ -702,13 +646,12 @@
                 <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
-    </div>{# end .pin-aux-grid #}
+    </div>
 
-</div>{# end .pin-detail-grid #}
-</section>{# end overview tab #}
+</div>
+</section>
 
-{# -- Visit History tab: previously crammed into Overview alongside a dozen  #}
-{# other cards - promoted to its own subnav tab so it reads as its own page. #}
+{# Visit History tab: previously crammed into Overview alongside a dozen other cards. #}
 <section class="page-tab-panel" data-tab-panel="visits" hidden>
     <div id="visit-history-panel"
         hx-get="{% url 'pin.visits' pin.slug %}{% if include_children %}?children=1{% endif %}"
@@ -725,8 +668,7 @@
 
 {# -- Photos tab: albums first, then this pin's photos not in any album ---- #}
 <section class="page-tab-panel" data-tab-panel="photos" hidden>
-    {# ?album= is carried through so a deep link (or a Back navigation) loads #}
-    {# that album directly instead of the list. See controllers.albums.       #}
+    {# ?album= is carried through so a deep link (or a Back navigation) loads that album directly instead of the list. #}
     <div id="albums-panel"
         hx-get="{% url 'pin.albums' pin.slug %}?{% if include_children %}children=1{% endif %}{% if include_children and request.GET.album %}&{% endif %}{% if request.GET.album %}album={{ request.GET.album|urlencode }}{% endif %}{% if request.GET.album_pin %}&album_pin={{ request.GET.album_pin|urlencode }}{% endif %}"
         hx-trigger="revealed"
@@ -741,8 +683,7 @@
 </section>
 
 {# -- Article tab: the user's private, Wikipedia-style article, plus a ------ #}
-{# Wikipedia sub-tab (moved here from the Overview tab's aux grid) showing -- #}
-{# the matched Wikipedia article read-only for reference/comparison. -------- #}
+{# Wikipedia sub-tab (moved here from the Overview tab's aux grid) showing the matched Wikipedia article read-only. #}
 <section class="page-tab-panel" data-tab-panel="article" hidden>
     <div class="card-tabs article-subtabs" role="tablist" aria-label="Article view">
         <button type="button" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
@@ -765,8 +706,7 @@
         </div>
     </div>
     <div data-article-subtab="wikipedia" hidden>
-        {# data-ext-panel-204-hide-tab: no Wikipedia article means nothing to show #}
-        {# on this sub-tab at all - hide the tab button itself, not just this card. #}
+        {# data-ext-panel-204-hide-tab: no Wikipedia article means nothing to show on this sub-tab at all. #}
         <div id="wikipedia-section"
             hx-sync="#pin-panel-lane-3:queue all" class="card card--secondary" data-ext-panel-204 hidden
             data-ext-panel-204-hide-tab="article-subtab-btn-wikipedia"
@@ -834,9 +774,7 @@
 </section>
 
 {# -- Floating actions menu (bottom-right, follows scroll) ----------------- #}
-{# Holds the uncommon pin-hierarchy actions so they never clutter the page:  #}
-{# the page-wide "child pin details" toggle, jump-to-parent, and detach.     #}
-{# Hidden entirely when there is nothing to show (no children, no parent).  #}
+{# Holds the uncommon pin-hierarchy actions so they never clutter the page the page-wide "child pin details" toggle, jump-to-parent,. #}
 {% if parent_pin %}{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid as pin_parent_url %}{% url 'pin.detach_parent' pin.slug as pin_detach_url %}{% endif %}
 {% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_pins include_children=include_children parent_url=pin_parent_url parent_name=parent_pin.effective_name detach_url=pin_detach_url csrf_token=csrf_token request=request show_article_actions=True only %}
 
@@ -862,8 +800,7 @@
     {% include "dashboard/partials/pins/_import_photos_dialog.html" %}
 </dialog>
 
-{# -- Import a public Flickr album by URL (distinct from the per-user OAuth #}
-{# "Flickr" tab above - see controllers/flickr.py's module docstring) ------ #}
+{# Import a public Flickr album by URL. #}
 <dialog id="flickr-album-dialog" class="ul-dialog" aria-label="Flickr album"></dialog>
 
 {# -- Add link dialog -------------------------------------------------------- #}
@@ -943,7 +880,7 @@
                 {% endfor %}
             </div>
         </div>
-        </div>{# end .pin-edit-form-body #}
+        </div>
 
         <div class="form-actions pin-edit-form-actions">
             <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Changes</button>

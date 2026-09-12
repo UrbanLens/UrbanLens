@@ -62,8 +62,7 @@ def _get_or_create_role_subscription(user: User, role: SubscriptionRole, subscri
         stripe_subscription: The live Subscription, as a plain dict.
 
     Returns:
-        The existing or newly created RoleSubscription, synced from
-        ``stripe_subscription``."""
+        The existing or newly created RoleSubscription, synced from ``stripe_subscription``."""
     from urbanlens.dashboard.models.billing import RoleSubscription
 
     defaults = {"user": user, "role": role, "pledged_amount_cents": 0}
@@ -94,8 +93,7 @@ def _recover_role_subscription_from_metadata(subscription_id: str) -> RoleSubscr
         subscription_id: The Stripe subscription id to create a row for.
 
     Returns:
-        The newly created RoleSubscription, or None when its metadata can't
-        be resolved to a real user and role."""
+        The newly created RoleSubscription, or None when its metadata can't be resolved to a real user and role."""
     from django.contrib.auth.models import User
 
     from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole
@@ -226,8 +224,7 @@ def _handle_invoice_payment_failed(invoice: dict) -> None:
 
 
 def _handle_charge_refunded(charge: dict) -> None:
-    """Debit each newly seen refund on *charge* from the banked pay-what-you-want balance.
-    ``charge.refunded`` payloads are cumulative (every refund to date rides along on each delivery), so refunds are applied per refund-object id via ``StripeProcessedRefund`` rather than per event - the event-level dedup in the receiving view cannot tell a redelivered refund inside a fresh event from a new one."""
+    """Debit each newly seen refund on *charge* from the banked pay-what-you-want balance."""
     invoice_id = charge.get("invoice")
     if not invoice_id:
         # A one-off charge, not a subscription invoice - nothing was ever banked from it.

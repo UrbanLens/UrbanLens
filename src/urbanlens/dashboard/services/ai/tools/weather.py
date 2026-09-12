@@ -1,10 +1,4 @@
-"""The assistant's weather tool - calls OpenWeatherMap/Open-Meteo directly, never REData.
-
-Mirrors ``services.apis.locations.weather_resolution``'s own OpenWeatherMap-
-then-Open-Meteo direct fallback chain, minus its REData-first branch: this
-tool must not depend on REData being configured or reachable at all (see
-``docs/AI_PIPELINE.md``'s "no REData" guarantee for the sandboxed AI worker).
-"""
+"""The assistant's weather tool - calls OpenWeatherMap/Open-Meteo directly, never REData."""
 
 from __future__ import annotations
 

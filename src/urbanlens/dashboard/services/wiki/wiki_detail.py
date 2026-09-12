@@ -1,5 +1,4 @@
-"""Full wiki-detail payload for the external API's ``GET /wikis/{location_slug}/``.
-Deliberately shaped like ``services.pins.pin_detail.build_pin_detail`` - same module layout, same ``_isoformat_or_none``/``_boundary_geojson`` helpers, same "assemble a plain JSON-safe dict, let the serializer document it" contract - so a reader who has understood one immediately understands the other."""
+"""Full wiki-detail payload for the external API's ``GET /wikis/{location_slug}/``."""
 
 from __future__ import annotations
 
@@ -99,9 +98,7 @@ def _stats(wiki: Wiki, profile: Profile, *, conceal: bool = False) -> dict[str, 
         conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
-        ``{field: {rounded, exact, count, my_vote}}`` for every stat field.
-        ``count`` is already privacy-fuzzed by the queryset's composite method.
-    """
+        ``{field: {rounded, exact, count, my_vote}}`` for every stat field."""
     stats: dict[str, dict[str, Any]] = {}
     for field in WikiStatField.values:
         composite = WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal, viewer=profile)
@@ -118,19 +115,12 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
     """Assemble the full detail payload for one wiki.
 
     Args:
-        wiki: The wiki to serialize. Caller is responsible for the visibility
-            check - this never gates access itself (see
-            ``services.wiki.wiki_access.resolve_visible_wiki``, which every caller
-            must go through first).
+        wiki: The wiki to serialize.
         location: The wiki's Location, already resolved by that same call.
-        profile: The requesting profile, needed for own-vote lookup, author
-            masking, and the concealment decision.
+        profile: The requesting profile, needed for own-vote lookup, author masking, and the concealment decision.
 
     Returns:
-        A JSON-serializable dict covering identity, description, dates,
-        security, coordinates, boundary, aliases, links, community stats and
-        counts, the article summary, and the comment count.
-    """
+        A JSON-serializable dict covering identity, description, dates, security, coordinates, boundary, aliases, links, community stats and counts, the article summary, and the comment count."""
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealed_community_summary, concealment_active
 
     conceal = concealment_active(wiki, profile)

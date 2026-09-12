@@ -1,5 +1,4 @@
-"""Custom python-social-auth pipeline steps.
-Step contracts -------------- - Return ``None`` or an empty dict to do nothing and pass through. - Return a dict to merge extra data into the pipeline state. - Raise ``StopPipeline`` to abort the login. - Return an ``HttpResponse`` (e.g. a redirect) to interrupt the pipeline and send that response straight back to the browser instead of continuing - used by ``enforce_two_factor_for_sso`` below to detour through the 2FA challenge page instead of letting python-social-auth log the user in."""
+"""Custom python-social-auth pipeline steps."""
 
 from __future__ import annotations
 
@@ -33,7 +32,8 @@ def generate_sso_username(
     *args: Any,
     **kwargs: Any,
 ) -> dict[str, Any] | None:
-    """Choose an initial username for new SSO users. Otherwise falls back to a random ``{adjective}{animal}{number}`` name.
+    """Choose an initial username for new SSO users.
+    Otherwise falls back to a random ``{adjective}{animal}{number}`` name.
 
     Args:
         backend: The social-auth backend in use.
@@ -189,7 +189,7 @@ def enforce_two_factor_for_sso(
     *args: Any,
     **kwargs: Any,
 ) -> HttpResponseRedirect | None:
-    """Detour through the 2FA challenge if this account has a second factor enabled. python-social-auth logs the user in automatically once the pipeline finishes - there is no equivalent of ``CustomLoginView.form_valid()``'s ``has_second_factor()`` gate in the SSO path, so without this step an account with a passkey/authenticator app configured could bypass 2FA entirely by signing in with Google/Discord instead of a password.
+    """Detour through the 2FA challenge if this account has a second factor enabled. python-social-auth logs the user in automatically once the pipeline finishes - there is no equivalent of ``CustomLoginView.form_valid()``'s ``has_second_factor()`` gate...
 
     Args:
         strategy: The social-auth strategy, used here for ``strategy.request``.
@@ -250,8 +250,7 @@ def _provider_username_preference(
         details: Normalised details dict produced by ``social_details``.
 
     Returns:
-        Sanitized username candidate, or None when no provider handle is usable.
-    """
+        Sanitized username candidate, or None when no provider handle is usable."""
     name = getattr(backend, "name", "")
     if name == "discord":
         raw = response.get("username")

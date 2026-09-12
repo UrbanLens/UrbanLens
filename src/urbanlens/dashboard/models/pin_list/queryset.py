@@ -28,10 +28,7 @@ class PinListQuerySet(abstract.PublicDashboardQuerySet):
 
     def active_smart_lists(self, profile: Profile | int) -> PinListQuerySet:
         """The profile's smart lists that actually have matching rules configured.
-
-        A smart list with neither ``smart_filter`` nor ``smart_boundary`` set
-        has nothing to auto-match against yet, so callers syncing smart-list
-        membership only need to consider lists with at least one of the two.
+        A smart list with neither ``smart_filter`` nor ``smart_boundary`` set has nothing to auto-match against yet, so callers syncing smart-list membership only need to consider lists with at least one of the two.
 
         Args:
             profile: The owning profile.

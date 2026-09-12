@@ -1,8 +1,4 @@
-{% comment %}
-`@trip` invite dialog: pick one of the sender's upcoming trips (or plan a new
-one) to invite the conversation partner to. Picking one stages it as a
-composer attachment - see `_share_pin_dialog.html`. Context: `partner`, `trips`.
-{% endcomment %}
+{% comment %}`@trip` invite dialog: pick one of the sender's upcoming trips (or plan a new one) to invite the conversation partner to.{% endcomment %}
 <dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="trip" data-field-name="trip_slug" aria-labelledby="dm-share-dialog-title">
   <div class="dialog-header">
     <span id="dm-share-dialog-title">Invite {{ partner.username }} to a trip</span>

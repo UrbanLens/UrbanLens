@@ -36,10 +36,9 @@ _ALLOWED_ICONS = {value for value, _label in CUSTOM_LAYER_ICON_CHOICES}
 def _resolve_layer_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, QuerySet[CustomLayer]]:
     """Resolve the CustomLayer owner (Pin or Wiki) from URL kwargs.
 
-    Same permission split as ``markup._resolve_owner``'s pin/wiki branches:
-    pin-scoped requires ownership, wiki-scoped uses ``resolve_visible_wiki``
-    (any signed-in user who has pinned the location may manage its layers,
-    matching the existing shared markup-editing model).
+    Same permission split as ``markup._resolve_owner``'s pin/wiki branches: pin-scoped requires
+    ownership, wiki-scoped uses ``resolve_visible_wiki`` (any signed-in user who has pinned the location
+    may manage its layers, matching the existing shared markup-editing model).
 
     Args:
         request: The current HttpRequest (used for the ownership checks).
@@ -54,15 +53,9 @@ def _resolve_layer_owner(request: HttpRequest, pin_slug: str | None, location_sl
         return pin, CustomLayer.objects.for_pin(pin)
     if location_slug is None:
         raise Http404
-    # Filtered by who created it, not hidden outright - the same rule
-    # controllers.markup applies to PinMarkup and for the same reason: a
-    # layer you made yourself and then can't find in your own layers panel
-    # is a malfunction, and a malfunction only some accounts get is a tell.
-    # `visible_rows` also scopes the by-id lookups below (_get_layer), so a
-    # concealed viewer can edit/reorder/delete their own and their friends'
-    # layers but not reach a stranger's - narrower than the ordinary
-    # any-signed-in-user write model, but only for ids concealment already
-    # keeps this viewer from ever seeing, so nothing new is exposed.
+    # Filtered by who created it, not hidden outright - the same rule controllers.markup applies to PinMarkup
+    # and for the same reason: a layer you made yourself and then can't find in your own layers panel is a
+    # malfunction, and a malfunction only some accounts get is a tell.
     from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
@@ -93,18 +86,16 @@ def _get_layer(request: HttpRequest, pin_slug: str | None, location_slug: str | 
 def _share_layer_to_wiki(pin_layer: CustomLayer, profile: Profile) -> tuple[CustomLayer | None, bool]:
     """Copy a pin-scoped layer's name/color/icon into a wiki-scoped layer.
 
-    Never creates the wiki itself (same rule ``services.pins.pin_wiki_sync``
-    follows for sending pins to a wiki) and never duplicates: if a wiki layer
-    with the same name already exists, that one is reused rather than adding
-    a second copy on repeat clicks.
+    Never creates the wiki itself (same rule ``services.pins.pin_wiki_sync`` follows for sending pins to
+    a wiki) and never duplicates: if a wiki layer with the same name already exists, that one is reused
+    rather than adding a second copy on repeat clicks.
 
     Args:
         pin_layer: The pin-scoped ``CustomLayer`` to share.
         profile: The profile to attribute a newly-created wiki layer to.
 
     Returns:
-        Tuple of (the wiki-scoped layer, whether it was newly created). The
-        layer is ``None`` when the pin's location has no community wiki yet.
+        Tuple of (the wiki-scoped layer, whether it was newly created).
 
     Raises:
         ValueError: If ``pin_layer`` isn't pin-scoped.
@@ -138,10 +129,9 @@ def _share_layer_to_wiki(pin_layer: CustomLayer, profile: Profile) -> tuple[Cust
 def _render_layer_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[CustomLayer]) -> HttpResponse:
     """Render the manage-layers list partial, with an ``HX-Trigger`` for the map JS.
 
-    URLs are pre-built here (by positional ``args``, so the pin vs. wiki URL
-    name difference is invisible to the template) rather than reversed
-    in-template, since ``{% url %}`` can't cleanly take a dynamic view name
-    plus a dynamic set of keyword arguments.
+    URLs are pre-built here (by positional ``args``, so the pin vs. wiki URL name difference is
+    invisible to the template) rather than reversed in-template, since ``{% url %}`` can't cleanly take
+    a dynamic view name plus a dynamic set of keyword arguments.
 
     Args:
         request: The current HttpRequest.
@@ -149,11 +139,8 @@ def _render_layer_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[Cus
         qs: The owner's CustomLayer queryset.
 
     Returns:
-        Rendered ``_custom_layers_list.html`` partial with an
-        ``HX-Trigger: ul:custom-layers-changed`` payload carrying the fresh
-        layer list, so map-annotations.ts can re-sync the layers panel
-        buttons/toggles and the markup layer-assignment dropdown without a
-        full page reload.
+        Rendered ``_custom_layers_list.html`` partial with an ``HX-Trigger: ul:custom-layers-changed``
+        payload carrying the fresh layer list, so...
     """
     is_pin = isinstance(owner, Pin)
     url_prefix = "pin.layers" if is_pin else "location.wiki.layers"
@@ -331,7 +318,7 @@ class CustomLayerReorderView(LoginRequiredMixin, View):
             location_slug: Slug of the parent location (community-layer route).
 
         Returns:
-            Re-rendered layer list. A move at either boundary is a no-op.
+            Re-rendered layer list.
         """
         owner, qs, layer = _get_layer(request, pin_slug, location_slug, layer_uuid)
         ordered = list(qs.order_by("order", "created"))
@@ -353,8 +340,8 @@ class CustomLayerShareToWikiView(LoginRequiredMixin, View):
 
     POST /map/pin/<pin_slug>/layers/<layer_uuid>/share-to-wiki/
 
-    Pin-only - there's no wiki-side equivalent, since sharing only ever flows
-    from a personal layer up to the shared wiki, never the other way.
+    Pin-only - there's no wiki-side equivalent, since sharing only ever flows from a personal layer up
+    to the shared wiki, never the other way.
     """
 
     def post(self, request: HttpRequest, layer_uuid: str, pin_slug: str) -> HttpResponse:
@@ -366,8 +353,8 @@ class CustomLayerShareToWikiView(LoginRequiredMixin, View):
             pin_slug: Slug of the parent pin.
 
         Returns:
-            Re-rendered layer list with a ``showToast`` HX-Trigger describing
-            the outcome (shared, or no wiki yet).
+            Re-rendered layer list with a ``showToast`` HX-Trigger describing the outcome (shared, or no
+            wiki yet).
         """
         owner, qs, layer = _get_layer(request, pin_slug, None, layer_uuid)
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -377,11 +364,10 @@ class CustomLayerShareToWikiView(LoginRequiredMixin, View):
         if wiki_layer is None:
             toast = {"level": "info", "message": "This property has no community wiki yet."}
         else:
-            # Deliberately identical whether this created a new wiki layer or
-            # reused a same-named one already there: distinguishing the two
-            # would let a caller learn, from the toast alone, whether some
-            # other user had already created a same-named layer on this wiki
-            # - a name-existence oracle once viewer concealment is live.
+            # Deliberately identical whether this created a new wiki layer or reused a same-named one already
+            # there: distinguishing the two would let a caller learn, from the toast alone, whether some other
+            # user had already created a same-named layer on this wiki - a name-existence oracle once viewer
+            # concealment is live.
             toast = {"level": "success", "message": f'"{layer.name}" is on the community wiki.'}
         triggers = json.loads(response["HX-Trigger"])
         triggers["showToast"] = toast

@@ -53,37 +53,20 @@ class RedataPhotosGateway(RedataJsonGateway):
         Brier score is the headline metric on purpose: it is a proper scoring rule, so unlike AUC it penalises a model that ranks well while being systematically overconfident.
 
         Returns:
-                The decoded ``GET /photos/model/`` body.
+            The decoded ``GET /photos/model/`` body.
 
         Raises:
-                GatewayRequestError: The request to REData failed."""
+            GatewayRequestError: The request to REData failed."""
         return self._get_json("/api/v1/photos/model/", timeout=_MODEL_READ_TIMEOUT)
 
     def submit_photos(self, photos: list[dict[str, Any]]) -> dict[str, Any]:
         """Submit (upsert) photo observations for scoring.
 
-        Args:
-                photos: Up to :data:`MAX_PHOTOS_PER_SUBMIT` submission dicts, each
-                keyed by ``photo_id`` (UrbanLens's own id - see
-                ``services.photos.redata_relevance``). A field REData doesn't
-                recognize a value for is simply omitted rather than sent as
-                ``None`` - see that module's docstring for why.
-
         Returns:
-                ``{count, results, unknown, created, updated, image_warnings,
-                pending}`` - ``results`` maps ``photo_id`` to its confidence
-                record (``confidence``, ``scorer``, ``model_version``,
-                ``scored_at``, ``upvotes``, ``downvotes``); ``pending`` lists ids
-                still queued for scoring (image analysis in progress).
-
-                Off production this is always the empty result, unsent - see
-                :mod:`services.core.environment`. Callers then simply cache no
-                confidence, which is the same state a photo is in before its
-                first successful submission.
+            ``{count, results, unknown, created, updated, image_warnings, pending}`` - ``results`` maps ``photo_id`` to its confidence record (``confidence``, ``scorer``, ``model_version``, ``scored_at``, ``upvotes``, ``downvotes``); ``pending`` lists ids...
 
         Raises:
-                GatewayRequestError: The request failed outright, or REData
-                reported a non-2xx status."""
+            GatewayRequestError: The request failed outright, or REData reported a non-2xx status."""
         if not photos:
             return _empty_submit_result()
         if skip_upstream_contribution("REData photo observations (POST /photos/)", detail=f"{len(photos)} photo(s)"):
@@ -93,25 +76,11 @@ class RedataPhotosGateway(RedataJsonGateway):
     def submit_votes(self, votes: list[dict[str, Any]]) -> dict[str, Any]:
         """Record relevance votes - the model's training label, never a scoring input.
 
-        Args:
-                votes: Up to :data:`MAX_VOTES_PER_SUBMIT` vote dicts (``photo_id``,
-                ``is_relevant``, and optionally ``voter_id``/``voted_at``).
-
         Returns:
-                ``{recorded, unknown_photo_ids, updated_photos}`` - a vote for a
-                photo REData was never told about is reported in
-                ``unknown_photo_ids``, not auto-created.
-
-                Off production nothing is sent and every submitted ``photo_id``
-                comes back in ``unknown_photo_ids`` - see
-                :mod:`services.core.environment`. That is the truthful shape:
-                REData genuinely does not know these votes, and it is the same
-                answer production gives for a photo it was never told about, so
-                callers need no extra branch.
+            ``{recorded, unknown_photo_ids, updated_photos}`` - a vote for a photo REData was never told about is reported in ``unknown_photo_ids``, not auto-created.
 
         Raises:
-                GatewayRequestError: The request failed outright, or REData
-                reported a non-2xx status."""
+            GatewayRequestError: The request failed outright, or REData reported a non-2xx status."""
         if not votes:
             return _empty_vote_result([])
         if skip_upstream_contribution("REData photo relevance votes (POST /photos/votes/)", detail=f"{len(votes)} vote(s)"):
@@ -121,17 +90,11 @@ class RedataPhotosGateway(RedataJsonGateway):
     def get_confidence_batch(self, photo_ids: list[str]) -> dict[str, Any]:
         """Look up cached confidence scores for many photos at once.
 
-        Args:
-                photo_ids: Up to :data:`MAX_PHOTO_IDS_PER_CONFIDENCE_LOOKUP` ids.
-
         Returns:
-                ``{count, results, unknown}`` - ``results`` maps ``photo_id`` to
-                its confidence record; ``unknown`` lists ids REData has never
-                been told about.
+            ``{count, results, unknown}`` - ``results`` maps ``photo_id`` to its confidence record; ``unknown`` lists ids REData has never been told about.
 
         Raises:
-                GatewayRequestError: The request failed outright, or REData
-                reported a non-2xx status."""
+            GatewayRequestError: The request failed outright, or REData reported a non-2xx status."""
         if not photo_ids:
             return {"count": 0, "results": {}, "unknown": []}
         return self._post_json("/api/v1/photos/confidence/", {"photo_ids": photo_ids})

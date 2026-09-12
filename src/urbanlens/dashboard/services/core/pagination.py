@@ -25,15 +25,8 @@ def get_page(
         request: The current request; checked for a ``page`` parameter.
         items: Anything ``Paginator`` accepts - a queryset or a plain list.
         page_size: Number of items per page.
-        default_last: When no ``page`` parameter is present, show the last
-            page instead of the first. Useful for sections ordered oldest
-            to newest (e.g. comments) where the most recent items should be
-            visible by default.
-        param: Which request parameter carries the page number. Worth
-            overriding when a single page renders two paginated sections: they
-            each fetch their own partial by its own URL, so their HTMX
-            pagination is independent, but the *first* render is one request
-            and a shared ``?page=`` would move both of them at once.
+        default_last: When no ``page`` parameter is present, show the last page instead of the first.
+        param: Which request parameter carries the page number.
 
     Returns:
         The requested ``Page`` of ``items``."""

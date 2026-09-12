@@ -1,5 +1,4 @@
-"""Gateway for Google's Open Buildings dataset (V3).
-Like Microsoft's dataset, this is static, sharded, downloadable data rather than a query API -- Google publishes building polygons and centroid points as gzip-compressed CSVs, one shard per S2 *level-4* cell, on public Google Cloud Storage: https://sites.research.google/gr/open-buildings/"""
+"""Gateway for Google's Open Buildings dataset (V3)."""
 
 from __future__ import annotations
 
@@ -55,9 +54,7 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
     """Fetch building polygons/points from Google's Open Buildings V3 dataset.
 
     Attributes:
-        min_confidence: Drop rows below this model confidence score
-            (dataset range is roughly 0.65-1.0). Default 0.0 keeps everything.
-    """
+        min_confidence: Drop rows below this model confidence score (dataset range is roughly 0.65-1.0)."""
 
     service_key: ClassVar[str | None] = "google_open_buildings"
     paid_service: ClassVar[bool] = False
@@ -68,11 +65,7 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
 
     def get_buildings(self, bbox: BBox, *, as_geojson: bool = True) -> list[dict]:
         """Building footprint polygons overlapping ``bbox``.
-
-        Returns GeoJSON Features by default (requires shapely). Pass
-        ``as_geojson=False`` to get raw dicts with a ``geometry_wkt`` string
-        instead, if you'd rather avoid the shapely dependency.
-        """
+        Pass ``as_geojson=False`` to get raw dicts with a ``geometry_wkt`` string instead, if you'd rather avoid the shapely dependency."""
         return self._download_shards(bbox, POLYGONS_BASE_URL, has_geometry=True, as_geojson=as_geojson)
 
     def get_building_points(self, bbox: BBox) -> list[dict]:

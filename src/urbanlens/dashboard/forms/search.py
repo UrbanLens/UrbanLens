@@ -21,26 +21,6 @@ class SearchForm(forms.Form):
     """Filter form for map pin search.
 
     Fields are all optional; omitting a field means "no filter on that dimension."
-
-    Label filtering accepts either the legacy ``tags``/``exclude_tags`` fields OR the
-    richer ``label_groups`` JSON field (produced by the formula bar).  ``label_groups``
-    takes precedence when present.  Its schema is a JSON array of group objects::
-
-        [{"op": "and"|"or"|"not", "ids": [<label_id>, ...]}, ...]
-
-    ``and``  - pin must have ALL labels in the group.
-    ``or``   - pin must have AT LEAST ONE label in the group.
-    ``not``  - pin must have NONE of the labels in the group.
-
-    ``security_<field>`` filters (one per ``SECURITY_FIELDS`` entry) match a
-    pin's security indicator exactly against a chosen ``SecurityLevel``.
-    ``has_links`` is tri-state ("yes"/"no"/"" for any). ``min_detail_pins``/
-    ``max_detail_pins`` filter by the count of a pin's own detail pins.
-
-    When constructed with a ``profile``, one form field per custom pin field is
-    added dynamically (named ``cf_<id>`` for text, ``cf_<id>_min``/``_max`` for
-    numbers, ``cf_<id>_after``/``_before`` for dates) so the owner can filter
-    the map by their own custom field values.
     """
 
     name = forms.CharField(required=False)
@@ -97,10 +77,7 @@ class SearchForm(forms.Form):
     security_plywood = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
     security_locked = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
     overlapping_pins = forms.BooleanField(required=False)
-    # Raw GeoJSON MultiPolygon text (a SavedFilter's drawn/geocoded regions) - see
-    # parse_region_geojson(). Not rendered as a visible field on the map's filter
-    # sidebar; only carried through so applying a saved filter with regions still
-    # narrows map results correctly.
+    # Raw GeoJSON MultiPolygon text (a SavedFilter's drawn/geocoded regions) - see parse_region_geojson().
     include_regions = forms.CharField(required=False)
     exclude_regions = forms.CharField(required=False)
 
@@ -109,8 +86,8 @@ class SearchForm(forms.Form):
 
         Args:
             *args: Standard form args (usually the request data).
-            profile: The requesting user's profile; enables custom-field filters.
-            **kwargs: Standard form kwargs.
+            profile: The requesting user's profile; enables custom-field filters. **kwargs: Standard form
+            kwargs.
         """
         super().__init__(*args, **kwargs)
         self.profile = profile
@@ -140,12 +117,10 @@ class SearchForm(forms.Form):
             elif cf.field_type == CustomFieldType.CHECKBOX:
                 self.fields[f"cf_{cf.pk}"] = forms.ChoiceField(required=False, choices=[("", "Any"), ("checked", "Checked"), ("unchecked", "Unchecked")])
             elif cf.field_type == CustomFieldType.REFERENCE:
-                # The rendered <select> (``_filter_input.html``) calls
-                # ``field.reference_choices()`` directly and doesn't use this form
-                # field's widget at all, so there's no need to eagerly compute all
-                # (up to 500) choices here just to construct the form - a plain
-                # CharField plus the access-scoped single-value clean_ method below
-                # is enough to validate whatever was actually submitted.
+                # The rendered <select> (``_filter_input.html``) calls ``field.reference_choices()`` directly
+                # and doesn't use this form field's widget at all, so there's no need to eagerly compute all (up
+                # to 500) choices here just to construct the form - a plain CharField plus the access-scoped
+                # single-value clean_ method below is enough to validate whatever was actually submitted.
                 self.fields[f"cf_{cf.pk}"] = forms.CharField(required=False)
                 setattr(self, f"clean_cf_{cf.pk}", partial(self._clean_reference_field, cf))
             else:  # text and url fields filter as free-text "contains"
@@ -154,11 +129,8 @@ class SearchForm(forms.Form):
     def _clean_reference_field(self, cf: CustomField) -> int | None:
         """Resolve and access-check one submitted ``cf_<id>`` reference value.
 
-        Bound per-field as ``clean_cf_<id>`` from ``__init__`` so Django's normal
-        ``full_clean()`` machinery invokes it. Only the single submitted pk is
-        resolved (via :func:`resolve_reference`) instead of computing the full
-        (up to 500-row) :meth:`CustomField.reference_choices` list just to
-        validate one value.
+        Only the single submitted pk is resolved (via :func:`resolve_reference`) instead of computing the
+        full (up to 500-row) :meth:`CustomField.reference_choices` list just to validate one value.
 
         Args:
             cf: The reference-type custom field this value belongs to.
@@ -167,8 +139,8 @@ class SearchForm(forms.Form):
             The resolved target's pk, or None when nothing was submitted.
 
         Raises:
-            forms.ValidationError: When a non-empty value doesn't resolve to a
-                target the requesting profile may reference.
+            forms.ValidationError: When a non-empty value doesn't resolve to a target the requesting profile
+            may reference.
         """
         raw = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
         if not raw:
@@ -186,16 +158,8 @@ class SearchForm(forms.Form):
         """Collect active custom-field filters from cleaned_data.
 
         Returns:
-            List of criteria dicts (each carrying its ``field`` plus the active
-            bounds/text), or None when no custom-field filter is set. Shapes::
-
-                {"field": cf, "contains": str}                      # text / url
-                {"field": cf, "min": Decimal|None, "max": ...}      # number
-                {"field": cf, "after": date|None, "before": ...}    # date
-                {"field": cf, "after_time": time|None, "before_time": ...}  # time
-                {"field": cf, "equals": str}                        # select
-                {"field": cf, "checked": bool}                      # checkbox
-                {"field": cf, "ref_id": int}                        # reference
+            List of criteria dicts (each carrying its ``field`` plus the active bounds/text), or None when
+            no custom-field filter is set.
         """
         criteria: list[dict] = []
         for cf in self.custom_fields:
@@ -241,9 +205,7 @@ class SearchForm(forms.Form):
             key: "include_regions" or "exclude_regions".
 
         Returns:
-            The parsed MultiPolygon, or None when absent or malformed. Never
-            raises - a corrupted region payload should drop that one
-            criterion, not fail the whole search.
+            The parsed MultiPolygon, or None when absent or malformed.
         """
         raw = (self.cleaned_data.get(key) or "").strip()
         if not raw:
@@ -263,8 +225,8 @@ class SearchForm(forms.Form):
         """Parse the ``label_groups`` JSON field into a list of group dicts.
 
         Returns:
-            List of ``{"op": str, "ids": list[int]}`` dicts, or ``None`` when the
-            field is absent or malformed.
+            List of ``{"op": str, "ids": list[int]}`` dicts, or ``None`` when the field is absent or
+            malformed.
         """
         raw = (self.cleaned_data.get("label_groups") or "").strip()
         if not raw:
@@ -278,12 +240,8 @@ class SearchForm(forms.Form):
                 op = g.get("op")
                 ids = g.get("ids")
                 if op in {"and", "or", "not"} and isinstance(ids, list):
-                    # str(i).isdigit() returns False for a leading "-", so any
-                    # negative-number id is silently dropped here. This is a known,
-                    # accepted edge case rather than an oversight: label PKs are
-                    # always positive (Django's default auto-incrementing PK), so a
-                    # negative id never occurs for a real label in practice, and this
-                    # function's contract is to never raise on malformed input.
+                    # str(i).isdigit() returns False for a leading "-", so any negative-number id is silently
+                    # dropped here.
                     group: dict[str, Any] = {"op": op, "ids": [int(i) for i in ids if str(i).isdigit()]}
                     # Only meaningful on an "or" group - see
                     # PinQuerySet.apply_label_groups.

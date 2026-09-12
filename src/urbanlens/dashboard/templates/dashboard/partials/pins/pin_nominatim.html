@@ -10,9 +10,7 @@
     {% endif %}
     <div class="card-header">
         <i class="material-symbols-outlined">map</i>
-        {# Disambiguates this panel from the separate "Photon (OpenStreetMap)" #}
-        {# panel - both reverse-geocode the same OSM data via different,      #}
-        {# independent services, by design (see NominatimPanelSource).        #}
+        {# Disambiguates this panel from the separate "Photon (OpenStreetMap)" panel. #}
         <h3>Nominatim</h3>
         {% if place.osm_url %}
         <a href="{{ place.osm_url }}" target="_blank" rel="noopener noreferrer"

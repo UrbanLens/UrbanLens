@@ -1,5 +1,4 @@
-"""`@pin` / `@trip` / `@friend` sharing embedded in direct messages.
-Each function creates the underlying share/invite/recommendation through the same code the standalone features use (pin sharing, trip membership, friendship), sends the chat message via `create_direct_message`, and wraps the two together in a `DirectMessageShare` so deleting the message can revoke the offer later (see `DirectMessageShare.revoke`)."""
+"""`@pin` / `@trip` / `@friend` sharing embedded in direct messages."""
 
 from __future__ import annotations
 
@@ -66,13 +65,11 @@ class RecommendedProfileNotConnectedError(ShareTargetPermissionError):
 
 
 class FriendRecommendationUnavailableError(ShareTargetPermissionError):
-    """The recommendation can't go through: opted out, or a block exists.
-    Deliberately raised for both conditions - ``allow_friend_recommendations`` is off, or a block exists in either direction between the recommended profile and the recipient - so a catch site that maps this one type to one response can never let the sender learn which of the two it was."""
+    """The recommendation can't go through: opted out, or a block exists."""
 
 
 class ShareValidationError(ValueError):
-    """A share request itself was malformed.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch this and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """A share request itself was malformed."""
 
 
 def send_message_with_share(
@@ -92,43 +89,31 @@ def send_message_with_share(
     client_uuid: UUID | None = None,
 ) -> DirectMessage:
     """Send one direct message, resolving and attaching an optional `@`-share.
-    A pin share is not just a row: `share_pin_in_message` -> `create_pin_share` -> `resolve_and_stamp_origin_share` + `record_share_exposure` is what keeps the `LocationExposure` provenance chain intact, so that a location's re-share history stays traceable back to whoever first exposed it.
 
     Args:
         sender: The sending profile.
         recipient: The conversation partner.
         body: Plaintext message text (blank when sending `ciphertext`).
-        shared_pin_slug: Slug (or uuid) of one of the *sender's own* pins to
-            share. Resolved against the sender's pins only.
+        shared_pin_slug: Slug (or uuid) of one of the *sender's own* pins to share.
         shared_trip_slug: Slug of a trip to invite `recipient` to.
-        shared_profile_slug: Slug of one of the sender's connections to
-            recommend.
-        markup_map_uuid: UUID of a `MarkupMap` to attach. Combined with
-            `shared_pin_slug` this is a customized pin share; on its own it is
-            a plain map attachment.
+        shared_profile_slug: Slug of one of the sender's connections to recommend.
+        markup_map_uuid: UUID of a `MarkupMap` to attach.
         ciphertext: End-to-end encrypted note, in place of `body`.
         nonce: Base64 nonce for `ciphertext`.
         key_version: `ConversationKey.version` that encrypted `ciphertext`.
         reply_to_id: PK of an earlier message in this conversation to quote.
         image_ids: PKs of the sender's own images to attach.
-        client_uuid: Caller-generated idempotency key. Checked *before* any
-            share is resolved or created, so a retried share send cannot
-            create a second `PinShare` (and a second `LocationExposure`) for a
-            message that already exists.
+        client_uuid: Caller-generated idempotency key.
 
     Returns:
         The created (or, on an idempotent replay, the pre-existing) DirectMessage.
 
     Raises:
-        SharedPinNotFoundError: `shared_pin_slug` doesn't resolve to one of
-            the sender's own pins.
+        SharedPinNotFoundError: `shared_pin_slug` doesn't resolve to one of the sender's own pins.
         SharedTripNotFoundError: `shared_trip_slug` doesn't resolve to a trip.
-        SharedProfileNotFoundError: `shared_profile_slug` doesn't resolve to
-            a profile.
-        ValueError: More than one share field was given, or `create_direct_message`
-            rejected the content.
-        PermissionError: Propagated from the underlying share service (not
-            connected, trip non-membership, recommendations disabled, ...)."""
+        SharedProfileNotFoundError: `shared_profile_slug` doesn't resolve to a profile.
+        ValueError: More than one share field was given, or `create_direct_message` rejected the content.
+        PermissionError: Propagated from the underlying share service (not connected, trip non-membership, recommendations disabled, ...)."""
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage as DirectMessageModel
 
     provided = [field for field in (shared_pin_slug, shared_trip_slug, shared_profile_slug) if field]
@@ -241,11 +226,7 @@ def share_pin_in_message(
         pin: The pin being shared.
         body: Message text accompanying the share.
         markup_map_uuid: Optional customized map to attach (see `create_direct_message`).
-        ciphertext: Optional end-to-end encrypted note accompanying the share,
-            in place of `body`. Only the *note* is encrypted - the
-            `DirectMessageShare` row itself is server-visible metadata by
-            design, because the server has to resolve and revoke the offer it
-            represents. Do not attempt to encrypt it.
+        ciphertext: Optional end-to-end encrypted note accompanying the share, in place of `body`.
         nonce: Base64 nonce for `ciphertext`.
         key_version: `ConversationKey.version` that encrypted `ciphertext`.
         reply_to_id: PK of an earlier message in this conversation to quote.
@@ -256,10 +237,8 @@ def share_pin_in_message(
         The newly created DirectMessage.
 
     Raises:
-        PermissionError: If sender/recipient aren't connected friends, or
-            messaging is otherwise not permitted.
-        ValueError: Propagated from `create_direct_message` for bad input.
-    """
+        PermissionError: If sender/recipient aren't connected friends, or messaging is otherwise not permitted.
+        ValueError: Propagated from `create_direct_message` for bad input."""
     from django.db import IntegrityError, transaction
 
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage as DirectMessageModel
@@ -322,14 +301,11 @@ def invite_to_trip_in_message(
     """Invite `recipient` to `trip` as a chat message carrying the invite.
 
     Args:
-        sender: The profile sending the invite (must already be a trip member,
-            and connected to `recipient`).
+        sender: The profile sending the invite (must already be a trip member, and connected to `recipient`).
         recipient: The conversation partner being invited.
         trip: The trip to invite them to.
         body: Message text accompanying the invite.
-        ciphertext: Optional end-to-end encrypted note in place of `body`; the
-            `DirectMessageShare` row stays server-visible (see
-            `share_pin_in_message`).
+        ciphertext: Optional end-to-end encrypted note in place of `body`; the `DirectMessageShare` row stays server-visible (see `share_pin_in_message`).
         nonce: Base64 nonce for `ciphertext`.
         key_version: `ConversationKey.version` that encrypted `ciphertext`.
         reply_to_id: PK of an earlier message in this conversation to quote.
@@ -341,8 +317,7 @@ def invite_to_trip_in_message(
     Raises:
         TripInviteNotConnectedError: `sender`/`recipient` aren't connected.
         NotATripMemberError: `sender` isn't a member of `trip`.
-        ValueError: Propagated from `create_direct_message` for bad input.
-    """
+        ValueError: Propagated from `create_direct_message` for bad input."""
     from django.db import transaction
 
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
@@ -417,12 +392,9 @@ def recommend_friend_in_message(
     Args:
         sender: The profile making the recommendation.
         recipient: The conversation partner receiving the recommendation.
-        recommended: The profile being recommended - must be one of sender's
-            own connections and must allow friend recommendations.
+        recommended: The profile being recommended - must be one of sender's own connections and must allow friend recommendations.
         body: Message text accompanying the recommendation.
-        ciphertext: Optional end-to-end encrypted note in place of `body`; the
-            `DirectMessageShare` row stays server-visible (see
-            `share_pin_in_message`).
+        ciphertext: Optional end-to-end encrypted note in place of `body`; the `DirectMessageShare` row stays server-visible (see `share_pin_in_message`).
         nonce: Base64 nonce for `ciphertext`.
         key_version: `ConversationKey.version` that encrypted `ciphertext`.
         reply_to_id: PK of an earlier message in this conversation to quote.
@@ -433,10 +405,8 @@ def recommend_friend_in_message(
 
     Raises:
         CannotRecommendSelfError: `recommended` is `sender` or `recipient`.
-        RecommendedProfileNotConnectedError: `recommended` isn't one of
-            sender's connections.
-        FriendRecommendationUnavailableError: `recommended` has turned off
-            friend recommendations, or has a block with `recipient`.
+        RecommendedProfileNotConnectedError: `recommended` isn't one of sender's connections.
+        FriendRecommendationUnavailableError: `recommended` has turned off friend recommendations, or has a block with `recipient`.
         ValueError: Propagated from `create_direct_message` for bad input."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 

@@ -1,5 +1,4 @@
-"""AI-generated trivia questions mined from wiki article content.
-Every wiki already implies at least one profile can see it (a Wiki only ever exists because its creator had pinned that location - see ``services.wiki.wiki_access``'s visibility rule) - so, unlike a per-viewer request, this background generator needs no additional profile-scoping before reading a wiki's article text."""
+"""AI-generated trivia questions mined from wiki article content."""
 
 from __future__ import annotations
 
@@ -53,9 +52,7 @@ def generate_questions_for_wiki(wiki: Wiki) -> list[TriviaQuestion]:
         wiki: The wiki to mine for trivia questions.
 
     Returns:
-        Every newly-created (APPROVED) question - empty if the wiki was
-        skipped (no substantial content, already generated, AI unavailable)
-        or nothing survived classification."""
+        Every newly-created (APPROVED) question - empty if the wiki was skipped (no substantial content, already generated, AI unavailable) or nothing survived classification."""
     if TriviaQuestion.objects.filter(location=wiki.location, source=TriviaQuestionSource.AI_GENERATED).exists():
         return []
     if not wiki.description or len(wiki.description) < MIN_DESCRIPTION_LENGTH:

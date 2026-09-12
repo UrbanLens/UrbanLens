@@ -1,5 +1,4 @@
-"""JSON-shape builders shared by the HTTP controller and the WebSocket consumer.
-A round's outbound payload never differs between an ordinary round and a trust-check round (see ``models.consensus.model.ConsensusRound.is_check_round``'s docstring) - that parity is load-bearing for the whole trust mechanism, so ``serialize_round`` deliberately has no branch on it at all."""
+"""JSON-shape builders shared by the HTTP controller and the WebSocket consumer."""
 
 from __future__ import annotations
 
@@ -27,11 +26,7 @@ def _answer_value(answer: ConsensusAnswer) -> Any:
 
 
 def serialize_round(round_: ConsensusRound) -> dict[str, Any]:
-    """Round data safe to send before it's answered - never the (possibly already-known) answer.
-
-    Deliberately identical in shape whether or not ``round_.is_check_round``
-    is set - see this module's docstring.
-    """
+    """Round data safe to send before it's answered - never the (possibly already-known) answer."""
     wiki = round_.wiki
     data: dict[str, Any] = {
         "round_id": round_.pk,
@@ -63,11 +58,7 @@ def serialize_answer(answer: ConsensusAnswer) -> dict[str, Any]:
 
 def serialize_round_reveal(round_: ConsensusRound) -> dict[str, Any]:
     """The outcome + every participant's result - broadcast/returned once a round settles.
-
-    ``vote_options`` is only populated while ``resolution`` is
-    ``VOTE_OPEN`` - the distinct candidate values participants can vote for,
-    each carrying the ``ConsensusAnswer`` id a vote must reference.
-    """
+    ``vote_options`` is only populated while ``resolution`` is ``VOTE_OPEN`` - the distinct candidate values participants can vote for, each carrying the ``ConsensusAnswer`` id a vote must reference."""
     answers = round_.answers.select_related("profile__user").order_by("submitted_at")
     data: dict[str, Any] = {
         "round_id": round_.pk,

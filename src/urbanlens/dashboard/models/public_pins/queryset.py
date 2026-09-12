@@ -10,7 +10,7 @@ from django.db.models import Count, Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.public_pins.model import PublicPinCandidate, PublicPinVote  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
+    from urbanlens.dashboard.models.public_pins.model import PublicPinCandidate, PublicPinVote  # noqa: F401 - mypy needs these; ruff does not
 
 
 @dataclass(slots=True, frozen=True)

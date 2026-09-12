@@ -104,10 +104,8 @@ logger = logging.getLogger(__name__)
 
 app_name = "dashboard"
 
-# The REST surface is deliberately minimal: the frontend only uses
-# PATCH/DELETE on individual pins (map popup quick-edit, pin move, delete)
-# and the review-create-or-update path below (star-rating widget). Nothing
-# external consumes this API; expose more only when the app itself needs it.
+# The REST surface is deliberately minimal: the frontend only uses PATCH/DELETE on individual pins (map popup
+# quick-edit, pin move, delete) and the review-create-or-update path below (star-rating widget).
 router = routers.DefaultRouter()
 router.register("pins", PinViewSet, basename=PinViewSet.basename)
 
@@ -118,9 +116,8 @@ urlpatterns = [
         name="review-create-or-update",
     ),
     path("rest/", include(router.urls)),
-    # API-key-authenticated surface for third-party applications - see
-    # external_api/__init__.py for why this is deliberately not part of the
-    # session-authenticated router above.
+    # API-key-authenticated surface for third-party applications - see external_api/__init__.py for why this is
+    # deliberately not part of the session-authenticated router above.
     path("api/external/v1/", include("urbanlens.dashboard.external_api.urls")),
     re_path("^$", IndexController.as_view(), name="home"),
     path("home/", HomeOverviewView.as_view(), name="home.view"),
@@ -402,21 +399,18 @@ urlpatterns = [
                     "pin/",
                     include(
                         [
-                            # Registered before the <slug:pin_slug>/ catch-all below -
-                            # "map-height" is a single path segment just like a real
-                            # slug, so Django would otherwise match it there first
-                            # (treating "map-height" as a pin slug) and 405 every POST,
-                            # exactly the same class of bug documented in
-                            # test_pin_media_endpoints.py's module docstring for
-                            # media/relevance/ vs the media/<str:source>/ catch-all.
+                            # Registered before the <slug:pin_slug>/ catch-all below - "map-height" is a single
+                            # path segment just like a real slug, so Django would otherwise match it there first
+                            # (treating "map-height" as a pin slug) and 405 every POST, exactly the same class
+                            # of bug documented in test_pin_media_endpoints.py's module docstring for...
                             path(
                                 "map-height/",
                                 pin.PinController.as_view({"post": "set_map_height"}),
                                 name="pin.map_height",
                             ),
-                            # Also registered before the <slug:pin_slug>/ catch-all, same reason -
-                            # these proxy a REData media file by listing/resource uuid, not by pin,
-                            # so there's no pin_slug segment for them to nest under at all.
+                            # Also registered before the <slug:pin_slug>/ catch-all, same reason - these proxy a
+                            # REData media file by listing/resource uuid, not by pin, so there's no pin_slug
+                            # segment for them to nest under at all.
                             path(
                                 "loopnet/photo/<str:listing_uuid>/<int:photo_id>/",
                                 pin.PinLoopnetPhotoView.as_view(),
@@ -479,8 +473,8 @@ urlpatterns = [
                                 name="pin.nearby_pins.json",
                             ),
                             # This catch-all must stay below the more specific media/ routes above -
-                            # <str:source> would otherwise swallow "relevance"/"send-to-wiki" as a
-                            # provider name and 405 on their POST-only methods.
+                            # <str:source> would otherwise swallow "relevance"/"send-to-wiki" as a provider name
+                            # and 405 on their POST-only methods.
                             path(
                                 "<slug:pin_slug>/media/<str:source>/",
                                 pin.PinController.as_view({"get": "media_provider"}),
@@ -861,9 +855,8 @@ urlpatterns = [
                                 pin.PinController.as_view({"post": "clear_debug_cache"}),
                                 name="pin.debug.clear_cache",
                             ),
-                            # Album routes: the literal "albums/" collection route and
-                            # every per-album action are registered before the
-                            # <slug:album_slug> detail route, so a literal segment
+                            # Album routes: the literal "albums/" collection route and every per-album action
+                            # are registered before the <slug:album_slug> detail route, so a literal segment
                             # can't be swallowed by the slug converter.
                             path(
                                 "<slug:pin_slug>/albums/",
@@ -1546,9 +1539,8 @@ urlpatterns = [
                     links.LocationLinkDeleteView.as_view(),
                     name="location.wiki.link.delete",
                 ),
-                # Album routes: literal per-album action segments are registered
-                # before the <slug:album_slug> detail route so they can't be
-                # swallowed by the slug converter.
+                # Album routes: literal per-album action segments are registered before the <slug:album_slug>
+                # detail route so they can't be swallowed by the slug converter.
                 path(
                     "<slug:location_slug>/wiki/albums/",
                     albums.AlbumPhotosView.as_view(),
@@ -2064,14 +2056,9 @@ urlpatterns = [
                 path("photos/<int:image_id>/confirm-pin/", vault_photos.PhotoPinConfirmView.as_view(), name="vault.photos.pin_confirm"),
                 path("photos/<int:image_id>/associations/", vault_photos.PhotoAssociationsView.as_view(), name="vault.photos.associations"),
                 path("photos/<int:image_id>/<str:action>/", vault_photos.PhotoActionView.as_view(), name="vault.photos.action"),
-                # Vault (Profile-owned) albums: same view classes as pin/wiki
-                # albums (controllers.albums), with no owner-slug segment -
-                # there is exactly one Vault per profile, resolved from the
-                # request itself. The literal "albums/" collection route and
-                # every per-album action are registered before the
-                # <slug:album_slug> detail route, same reasoning as the pin
-                # routes: a literal segment can't be swallowed by the slug
-                # converter. No move/ route - a Vault album has nowhere to move to.
+                # Vault (Profile-owned) albums: same view classes as pin/wiki albums (controllers.albums), with
+                # no owner-slug segment - there is exactly one Vault per profile, resolved from the request
+                # itself.
                 path("photos/albums/", albums.AlbumPhotosView.as_view(), name="vault.photos.albums", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/edit/", albums.AlbumEditView.as_view(), name="vault.photos.albums.edit", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/delete/", albums.AlbumDeleteView.as_view(), name="vault.photos.albums.delete", kwargs={"vault": True}),

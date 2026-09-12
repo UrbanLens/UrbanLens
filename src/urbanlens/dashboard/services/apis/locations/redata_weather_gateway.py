@@ -21,22 +21,11 @@ class RedataWeatherGateway(RedataLocationContextGateway):
     def get_weather(self, latitude: float, longitude: float) -> list[dict[str, Any]]:
         """Fetch every registered weather provider's current/forecast/sun data for a point.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-
         Returns:
-                One entry per provider that answered - each a dict with
-                ``provider``, ``current``, ``forecast``, ``sun`` keys (REData's
-                own shape - see the module docstring). Empty when every
-                registered provider failed to cover the coordinate, which
-                shouldn't happen in practice (weather covers everywhere) but is
-                handled the same as "REData found nothing" by callers.
+            One entry per provider that answered - each a dict with ``provider``, ``current``, ``forecast``, ``sun`` keys (REData's own shape - see the module docstring).
 
         Raises:
-                LocationContextUnavailableError: A total blackout (every source
-                failed), a REData-side validation error, or the request
-                itself failed outright."""
+            LocationContextUnavailableError: A total blackout (every source failed), a REData-side validation error, or the request itself failed outright."""
         envelope = self.near_point("/api/v1/weather/", latitude, longitude)
         return envelope.results
 
@@ -50,30 +39,11 @@ class RedataWeatherHistoryGateway(RedataLocationContextGateway):
     def get_history(self, latitude: float, longitude: float, *, start: date, end: date) -> list[dict[str, Any]]:
         """Fetch one recorded day's weather per day in a date range.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                start: First day to ask for, inclusive.
-                end: Last day to ask for, inclusive.
-
         Returns:
-                One dict per day REData could answer for, each carrying its own
-                ``date`` plus ``temperature_max_c``/``temperature_min_c``/
-                ``temperature_mean_c``, ``precipitation_mm``, ``snowfall_cm``,
-                ``wind_speed_max_kmh`` and ``wind_gusts_max_kmh``. Units are fixed
-                by REData (Celsius, millimetres, centimetres, km/h); a null is a
-                real answer, since ERA5 gained some variables later than others.
-
-                The range is **clamped, not rejected** - ERA5 starts in 1940 and
-                lags real time by about six days - so a request spanning either
-                edge returns the days that exist rather than failing, and an
-                entirely future range returns nothing. Match rows by their own
-                ``date``; do not assume one row per day asked for.
+            One dict per day REData could answer for, each carrying its own ``date`` plus ``temperature_max_c``/``temperature_min_c``/ ``temperature_mean_c``, ``precipitation_mm``, ``snowfall_cm``, ``wind_speed_max_kmh`` and ``wind_gusts_max_kmh``.
 
         Raises:
-                LocationContextUnavailableError: The source was unavailable or
-                rate-limited, REData rejected the parameters, or the request
-                itself failed."""
+            LocationContextUnavailableError: The source was unavailable or rate-limited, REData rejected the parameters, or the request itself failed."""
         envelope = self.near_point(
             "/api/v1/weather/history/",
             latitude,

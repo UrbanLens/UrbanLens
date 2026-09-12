@@ -1,18 +1,4 @@
-{% comment %}
-Read-only listing of the profile's albums from across all of their pins,
-shown behind the "Show your pin albums" toggle on Vault > Photos. Each card
-is a plain link to the album's own page on its pin - full navigation, not an
-HTMX swap - since that pin's own Photos tab is what actually manages the
-album; this is a discovery surface, not a second copy of that UI.
-
-Context:
-  album_rows - one dict per album (see controllers.albums._album_row and
-               VaultPinAlbumsView.get), each carrying owner_pin_name and
-               pin_page_url - the pin's own detail page (Photos tab, album
-               pre-opened), not detail_url, which is the AJAX-only partial
-               endpoint the pin's own interactive album cards hx-get instead
-  page_obj   - the Django Page for this slice
-{% endcomment %}
+{% comment %}Read-only listing of the profile's albums from across all of their pins, shown behind the "Show your pin albums" toggle on Vault >.{% endcomment %}
 {% if album_rows %}
 <ul class="albums-grid vault-pin-albums-grid">
     {% for row in album_rows %}

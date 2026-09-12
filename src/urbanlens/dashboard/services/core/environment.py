@@ -1,5 +1,4 @@
-"""Which deployment this process is, for service code that must behave differently off production.
-Nearly every REData endpoint is safe to call from anywhere - even the POST-shaped ones, which mostly just ask REData to go fetch third-party data about a place and cache it, so pointing a dev slot at production REData is actively *better* than giving it its own instance (shared cache, no duplicate third-party quota burn)."""
+"""Which deployment this process is, for service code that must behave differently off production."""
 
 from __future__ import annotations
 
@@ -21,14 +20,10 @@ def is_production() -> bool:
 
 def skip_upstream_contribution(surface: str, *, detail: str = "") -> bool:
     """Whether to skip sending UrbanLens's own data to ``surface`` for storage/training.
-    Call this at the point of departure, and return the callee's normal "nothing to send" result when it answers True - a skip is an ordinary outcome of running outside production, not a failure, so it must not raise, must not be reported as an error, and must not be retried.
 
     Args:
-        surface: Human-readable name of what would have been written, e.g.
-            ``"REData photo observations (POST /photos/)"``. Appears verbatim
-            in the log line, so make it greppable against the code.
-        detail: Optional extra context for the log line, e.g. how many records
-            were held back.
+        surface: Human-readable name of what would have been written, e.g. ``"REData photo observations (POST /photos/)"``.
+        detail: Optional extra context for the log line, e.g. how many records were held back.
 
     Returns:
         True when the caller must not send, False on production."""

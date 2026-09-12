@@ -44,15 +44,13 @@ def upsert_label_customization(
 
     Args:
         profile: The profile whose overrides these are.
-        label: The label being customized. Any label the profile can see is
-            valid - this is the only way a client can restyle a global label.
+        label: The label being customized.
         name: Display-name override, or None/"" to clear it.
         icon: Icon override, or None/"" to clear it.
         color: Color override, or None/"" to clear it.
 
     Returns:
-        The stored :class:`LabelCustomization`, or None when every override was
-        empty and any existing row was therefore deleted."""
+        The stored :class:`LabelCustomization`, or None when every override was empty and any existing row was therefore deleted."""
     from urbanlens.dashboard.models.labels.customization import LabelCustomization
     from urbanlens.dashboard.services.core import icons
     from urbanlens.dashboard.services.core.text_limits import column_max_length

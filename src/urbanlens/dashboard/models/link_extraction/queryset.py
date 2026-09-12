@@ -29,10 +29,6 @@ class LinkExtractionQuerySet(abstract.DashboardQuerySet):
     def started_today(self, profile: Profile) -> Self:
         """Runs the profile started since local midnight - the daily-limit window.
 
-        Every run counts against the limit regardless of how it ended (a failed
-        AI call still consumed a fetch and possibly tokens), so this deliberately
-        does not filter by status.
-
         Args:
             profile: The requesting user.
 

@@ -1,22 +1,4 @@
-"""Azure Maps plugin: reverse geocoding/POI panel and place names.
-
-Azure Maps is Microsoft's actively-maintained geospatial platform. One Azure
-Maps subscription key authenticates every product area used here (Search,
-Geocoding), wrapped by the gateways in ``services.apis.locations.azure``.
-
-``AzureMapsPanelSource`` is deliberately kept direct-only: it combines a
-reverse-geocode call *and* a nearest-POI search into one cached payload, and
-REData has no single endpoint that does both (its geocode domain doesn't do
-POI search, and its points-of-interest domain has no ``azure_maps``
-provider) - splitting this panel across two REData calls with only one
-migrated would be a worse, inconsistent middle ground.
-
-This plugin's other half - static aerial/satellite imagery
-(``AzureMapsRenderGateway``) - has been retired: it was a single
-current-image-per-call fit for REData's ``/imagery/`` contract, now served
-by ``RedataSatelliteProvider`` alongside the other REData imagery providers
-(see ``plugins.builtin.satellite_imagery``).
-"""
+"""Azure Maps plugin: reverse geocoding/POI panel and place names."""
 
 from __future__ import annotations
 
@@ -47,15 +29,7 @@ class AzureMapsPanelSource(LocationCachePanelSource):
 
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the nearest POI, if any.
-
-        Two Azure Maps calls feed one cached payload: reverse geocoding for
-        the formatted address/admin districts, and a tight-radius POI search
-        for business-style details (category, phone, website) the geocoder
-        alone doesn't return - mirroring how NominatimPanelSource combines
-        both concerns into a single OpenStreetMap round trip. An empty result
-        is cached explicitly when neither call finds anything, so the panel
-        degrades to quietly absent rather than polling forever.
-        """
+        An empty result is cached explicitly when neither call finds anything, so the panel degrades to quietly absent rather than polling forever."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.azure.geocoding import AzureMapsGeocodingGateway
         from urbanlens.dashboard.services.apis.locations.azure.search import AzureMapsSearchGateway
@@ -71,19 +45,10 @@ class AzureMapsPanelSource(LocationCachePanelSource):
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The reverse-geocoded address and nearest POI as an information card, or None.
-
-        Applies ``PinController.azure_maps_info``'s own emptiness rule: with
-        neither a formatted address nor a POI the payload is coordinates
-        echoed back, which the client already has - suppressed on both
-        surfaces rather than rendered as an empty card.
-
-        Args:
-            pin: The pin whose panel is being read.
+        Applies ``PinController.azure_maps_info``'s own emptiness rule: with neither a formatted address nor a POI the payload is coordinates echoed back, which the client already has - suppressed on both surfaces rather than rendered as an empty card.
 
         Returns:
-            ``{"info": {...}}``, or None when nothing has landed yet or
-            neither Azure call found anything.
-        """
+            ``{"info": {...}}``, or None when nothing has landed yet or neither Azure call found anything."""
         data = self.cached_data(pin)
         if not data or not (data.get("formatted_address") or data.get("poi")):
             return None
@@ -121,13 +86,8 @@ class AzureMapsNameProvider(NameProvider):
     def candidates(self, location: Location) -> list[str | None]:
         """Return the cached nearest-POI name and the reverse-geocoded locality.
 
-        Args:
-            location: The location to name.
-
         Returns:
-            Raw candidate values; empty when no fresh Azure Maps cache row
-            exists for this location.
-        """
+            Raw candidate values; empty when no fresh Azure Maps cache row exists for this location."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         cached = LocationCache.get_fresh(location, "azure_maps")
@@ -151,10 +111,7 @@ class AzureMapsPlugin(UrbanLensPlugin):
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
         """Rate-limit defaults for the Azure Maps Search/Geocoding APIs.
-
-        Both product areas share one subscription key and one quota, so they
-        share a single ``azure_maps`` service key/rate-limit row too.
-        """
+        Both product areas share one subscription key and one quota, so they share a single ``azure_maps`` service key/rate-limit row too."""
         return {
             "azure_maps": ServiceDefaults(
                 display_name="Azure Maps (Search/Geocoding)",

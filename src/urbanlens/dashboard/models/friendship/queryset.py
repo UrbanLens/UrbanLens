@@ -34,25 +34,7 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
 
     def between(self, from_profile: Profile | int, to_profile: Profile | int) -> Friendship | None:
         """Return the relationship joining two profiles, in either direction.
-
-        "One row per pair" is enforced as of 2026-09-05
-        (``friendship_one_row_per_pair``, and migration 0054 merges any pair
-        that already existed). Before that it was a convention: ``unique_together``
-        is on ``(from_profile, to_profile)``, which permits ``A->B`` **and**
-        ``B->A`` to both exist, and this used to ``.get()`` - so a reciprocal
-        pair raised ``MultipleObjectsReturned`` out of the profile page, the
-        friends API, and (once mute was wired into delivery) every notification
-        between them.
-
-        The tolerance below is kept rather than reverted to ``.get()``: a
-        database restored from a backup that predates the migration still holds
-        the pair, and answering deterministically is better than refusing to
-        render a profile.
-
-        The oldest row wins, deterministically: it is the one the pair's history
-        actually hangs off, and picking arbitrarily would make the answer depend
-        on query planning. A second row is data to repair, not a reason to
-        refuse to answer - see "reciprocal Friendship rows" in docs/PROBLEMS.md.
+        The tolerance below is kept rather than reverted to ``.get()``: a database restored from a backup that predates the migration still holds the pair, and answering deterministically is better than refusing to render a profile.
 
         Args:
             from_profile: One of the two profiles, or its pk.
@@ -112,28 +94,15 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
         return self.exclude(status=FriendshipStatus.ACCEPTED)
 
     def ever_friends(self) -> Self:
-        """
-        Return friendships that are (or once were) an accepted friendship.
-
-        ``remove()`` never deletes the row, it just moves status to
-        ``REMOVED`` - so this is the set of rows that reached ``ACCEPTED``
-        at some point, unlike ``is_friend()`` which only sees the current
-        state.
+        """Return friendships that are (or once were) an accepted friendship.
+        ``remove()`` never deletes the row, it just moves status to ``REMOVED`` - so this is the set of rows that reached ``ACCEPTED`` at some point, unlike ``is_friend()`` which only sees the current state.
         """
         return self.filter(status__in=(FriendshipStatus.ACCEPTED, FriendshipStatus.REMOVED))
 
     def muted_by(self, viewer: Profile | int) -> Self:
         """Return the relationships ``viewer`` has muted.
-
-        Reads the mute columns, never ``status``. Mute used to *be* a status,
-        which is why this filter has to exist at all: any caller that reaches
-        for ``status="Muted"`` is reproducing the bug where muting a friend
-        overwrote ``Accepted`` and un-friended them everywhere.
-
-        Takes the viewer because there is one row per pair with a column per
-        side: "muted" is not a property of the relationship, and a filter that
-        did not ask whose preference it meant could only answer the wrong
-        question.
+        Reads the mute columns, never ``status``.
+        Takes the viewer because there is one row per pair with a column per side: "muted" is not a property of the relationship, and a filter that did not ask whose preference it meant could only answer the wrong question.
 
         Args:
             viewer: The profile whose own mutes to return, or its pk.

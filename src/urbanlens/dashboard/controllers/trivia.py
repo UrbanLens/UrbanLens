@@ -48,9 +48,9 @@ def _participant_session(profile: Profile, session_id: int) -> TriviaSession:
     return participant.session
 
 
-#: Placeholder ids reversed into the URL templates handed to the frontend -
-#: mirrors ``controllers.spotguessr``'s ``_url_templates``, needed because
-#: ``{% url %}`` can't emit a JS template directly for ``<int:...>`` converters.
+#: Placeholder ids reversed into the URL templates handed to the frontend - mirrors ``controllers.spotguessr``'s
+#: ``_url_templates``, needed because ``{% url %}`` can't emit a JS template directly for ``<int:...>``
+#: converters.
 _SESSION_ID_SENTINEL = 999999999
 _ROUND_ID_SENTINEL = 888888888
 _QUESTION_ID_SENTINEL = 777777777
@@ -124,16 +124,12 @@ class TriviaHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
 
-    POST /games/trivia/start/   body: ``difficulty``, ``total_rounds``,
-    optional ``invite_profile_ids`` (repeated) to start a multiplayer lobby
-    instead of solo play.
+    POST /games/trivia/start/ body: ``difficulty``, ``total_rounds``,
 
-    A solo start whose config has no eligible questions at all (e.g. the
-    profile hasn't pinned anything with an in-rotation question yet) never
-    creates a TriviaSession - it responds with
-    ``{"error_code": "no_eligible_questions"}`` instead. Multiplayer can't be
-    pre-checked this way (invitees haven't joined yet) - see
-    ``TriviaBeginView`` for that case.
+    optional ``invite_profile_ids`` (repeated) to start a multiplayer lobby instead of solo play.
+    A solo start whose config has no eligible questions at all (e.g. the profile hasn't pinned anything
+    with an in-rotation question yet) never creates a TriviaSession - it responds with ``{"error_code":
+    "no_eligible_questions"}`` instead.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -309,10 +305,9 @@ class TriviaEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     POST /games/trivia/session/<session_id>/end/
 
-    Unlike waiting out the stall-sweep Celery task
-    (``tasks.sweep_stalled_trivia_sessions``), this lets the host end the
-    game the moment they decide it's not going anywhere. Any in-flight round
-    is revealed first with whatever answers already exist (see
+    Unlike waiting out the stall-sweep Celery task (``tasks.sweep_stalled_trivia_sessions``), this lets
+    the host end the game the moment they decide it's not going anywhere.
+    Any in-flight round is revealed first with whatever answers already exist (see
     ``services.trivia.session.end_session_now``).
     """
 
@@ -472,11 +467,10 @@ class TriviaSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 class TriviaQuestionVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Upvote, downvote, or report the question just answered. Host-agnostic - any participant may vote.
 
-    POST /games/trivia/questions/<question_id>/vote/   body: ``kind``
+    POST /games/trivia/questions/<question_id>/vote/ body: ``kind``
 
-    Restricted to a question the profile has actually been asked at least
-    once, mirroring ``SpotGuessrPhotoFeedbackView``'s "you can only react to
-    a round you've guessed on" rule.
+    Restricted to a question the profile has actually been asked at least once, mirroring
+    ``SpotGuessrPhotoFeedbackView``'s "you can only react to a round you've guessed on" rule.
     """
 
     def post(self, request: HttpRequest, question_id: int) -> HttpResponse:
@@ -496,12 +490,11 @@ class TriviaQuestionVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
 class TriviaQuestionSubmitView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Submit a user-written trivia question about a location the profile has pinned.
 
-    POST /games/trivia/questions/submit/   body: ``location_id``, ``prompt``, ``answer``
+    POST /games/trivia/questions/submit/ body: ``location_id``, ``prompt``, ``answer``
 
-    The question is created PENDING_REVIEW and classified asynchronously -
-    the response never indicates whether it will ultimately be
-    approved or rejected (see services.trivia.classifier's module docstring
-    for why the submitter is deliberately never told).
+    The question is created PENDING_REVIEW and classified asynchronously - the response never indicates
+    whether it will ultimately be approved or rejected (see services.trivia.classifier's module
+    docstring for why the submitter is deliberately never told).
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:

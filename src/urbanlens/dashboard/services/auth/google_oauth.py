@@ -1,5 +1,4 @@
-"""Provider-agnostic Google OAuth 2.0 authorization-code flow helpers.
-Extracted from ``dashboard/services/apis/calendar/google.py`` so any feature needing its own Google OAuth grant (Calendar, Google Photos, ...) can reuse the same token exchange/refresh/revoke mechanics against the site's one Google OAuth client (``UL_GOOGLE_CLIENT_ID``/``UL_GOOGLE_CLIENT_SECRET``), each requesting whatever scopes its feature needs."""
+"""Provider-agnostic Google OAuth 2.0 authorization-code flow helpers."""
 
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a credential
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a...
 GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 
 _OAUTH_TIMEOUT = 30
@@ -52,12 +51,10 @@ def build_authorization_url(
         scopes: OAuth scopes to request.
         state: Signed opaque state token, verified on callback.
         access_type: ``"offline"`` (default) so Google issues a refresh token.
-        prompt: ``"consent"`` (default) so a refresh token is issued even on
-            a re-authorization.
+        prompt: ``"consent"`` (default) so a refresh token is issued even on a re-authorization.
 
     Returns:
-        Fully-formed authorization URL to redirect the user to.
-    """
+        Fully-formed authorization URL to redirect the user to."""
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -80,8 +77,7 @@ def exchange_code_for_tokens(client_id: str, client_secret: str, code: str, redi
         redirect_uri: The same redirect URI used to obtain the code.
 
     Returns:
-        Token response payload (``access_token``, ``refresh_token``,
-        ``expires_in``, ``id_token``, ``scope``, ...).
+        Token response payload (``access_token``, ``refresh_token``, ``expires_in``, ``id_token``, ``scope``, ...).
 
     Raises:
         GatewayRequestError: When the token exchange fails."""
@@ -114,8 +110,7 @@ def refresh_access_token(client_id: str, client_secret: str, refresh_token: str)
         Token response payload (``access_token``, ``expires_in``, ...).
 
     Raises:
-        GoogleAuthExpiredError: When the refresh fails (e.g. access revoked).
-    """
+        GoogleAuthExpiredError: When the refresh fails (e.g. access revoked)."""
     response = requests.post(
         GOOGLE_TOKEN_URL,
         data={

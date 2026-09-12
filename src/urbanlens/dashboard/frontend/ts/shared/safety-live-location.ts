@@ -1,23 +1,5 @@
 /**
  * Live location sharing for a safety check-in.
- *
- * While enabled, the owner's position is reported to the server so a partner
- * watching the check-in sees where they are. Because the whole point is that
- * somebody can find you, a failure here has to be visible: the previous version
- * swallowed every error, so a check-in resolved elsewhere left the browser
- * happily posting positions that the server rejected while the page still said
- * sharing was on and the partner watched a frozen marker.
- *
- * ``fetch`` only rejects on network failure, never on an HTTP error status, so
- * every response is checked explicitly. The update endpoint answers 400 when
- * sharing has been turned off or the check-in has concluded, and 204 both for a
- * recorded position and for one dropped by its own rate limit - a 204 is a
- * success either way, since the client cannot tell and does not need to.
- *
- * The same reasoning covers the browser end of the pipe: if permission is
- * denied, or there is no geolocation at all, no position will ever be sent, so
- * sharing is switched off here and on the server rather than left on to look
- * like it is working.
  */
 
 export interface LiveLocationOptions {
@@ -34,18 +16,12 @@ export interface LiveLocationOptions {
 }
 
 /**
- * 30s balances "a partner watching in an emergency wants a current position"
- * against battery and bandwidth. Someone overdue on a hike is not moving fast
- * enough for tighter updates to tell a partner anything more.
+ * 30s balances "a partner watching in an emergency wants a current position" against battery and bandwidth.
  */
 const MIN_INTERVAL_MS = 30000;
 
 /**
  * How many position reports must fail in a row before saying so.
- *
- * One failure is usually a blip and warning about it would train people to
- * ignore the warning. Two in a row, thirty seconds apart, means it is not
- * recovering - which on a safety feature the owner needs to know.
  */
 const FAILURES_BEFORE_WARNING = 2;
 
@@ -77,30 +53,18 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
     let warned = false;
     let geoWarned = false;
     /**
-     * The sharing state we want the server to hold, waiting to be sent.
-     *
-     * Sharing writes are serialized through one chain rather than fired as
-     * they arise, because the flag is last-write-wins on the server and these
-     * decisions interleave: a permission denial forces "off" while the user's
-     * "on" is still open, and the user may switch back on before either
-     * settles. Anything that races there ends with the server disabled under a
-     * checked toggle and a running watcher - every position rejected, with
-     * nothing on the page saying so. One request at a time, latest intent last,
-     * removes the orderings instead of handling them.
-     */
+ * The sharing state we want the server to hold, waiting to be sent.
+ */
     let pendingIntent: { enabled: boolean; onRefused: () => void } | null = null;
     let flushing = false;
 
     const post = (url: string, body: FormData): Promise<Response> => fetch(url, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body });
 
     /**
-     * Ask the server for a sharing state, superseding any write not yet sent.
-     *
-     * @param enabled - The state to converge on.
-     * @param onRefused - Called if the server refuses *and* nothing newer has
-     *   been asked for since - a refusal that a later intent has already
-     *   overtaken is not worth reporting.
-     */
+ * Ask the server for a sharing state, superseding any write not yet sent.
+ * @param enabled - The state to converge on.
+ * @param onRefused - Called if the server refuses *and* nothing newer has
+ */
     function requestSharingState(enabled: boolean, onRefused: () => void): void {
         pendingIntent = { enabled, onRefused };
         if (!flushing) void flushSharingState();
@@ -128,12 +92,8 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
     }
 
     /**
-     * Switch sharing off here and on the server, and say why.
-     *
-     * Called when the browser will not produce positions at all. Leaving the
-     * toggle on would leave the owner - and the partner watching the check-in -
-     * believing a position is on its way when none will ever be sent.
-     */
+ * Switch sharing off here and on the server, and say why.
+ */
     function disableSharing(message: string): void {
         stopWatching();
         toggle.checked = false;
@@ -142,16 +102,8 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
     }
 
     /**
-     * The server would not accept the forced "off".
-     *
-     * A non-ok status resolves like any other response, so without this the
-     * refusal read as success: switched off here, still enabled server-side,
-     * partner still looking at the last known position. Since this browser
-     * genuinely cannot send positions, the switch stays off and the owner is
-     * told how to reach a control that still works - after a reload the toggle
-     * renders from the server's state, so it comes back on and can be turned
-     * off for real.
-     */
+ * The server would not accept the forced "off".
+ */
     function forcedOffRefused(): void {
         notify("error", "Live location is still switched on for this check-in. Reload the page and turn it off, or your partner will keep seeing your last position.");
     }
@@ -239,9 +191,7 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
     toggle.addEventListener("change", () => {
         const enabled = toggle.checked;
 
-        // Started optimistically so the switch feels immediate, then undone if the
-        // server refuses - otherwise the page claims to be sharing a location that
-        // is going nowhere.
+        // Started optimistically so the switch feels immediate, then undone if the server refuses.
         if (enabled) {
             // When the watch cannot run at all, disableSharing has already reset
             // the toggle and told the server, so there is nothing left to send.

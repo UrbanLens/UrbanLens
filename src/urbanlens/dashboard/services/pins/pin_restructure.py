@@ -24,22 +24,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 #: Cap on how many child pins one apply will create or nest. Far above any real
-#: parcel (the largest campus this was built for has ~100 buildings), purely a
 #: backstop against a provider returning something pathological.
 MAX_RESTRUCTURE_ITEMS = 500
 
 #: Default icon/background styling for auto-created building pins.
 #: The generic per-type default (a mid-grey building icon, no background) reads poorly against
-#: satellite imagery; these give every imported building marker a legible black icon on a faint
-#: white disc without the owner having to style a hundred pins by hand.
+#: satellite imagery; these give every imported building marker a legible black icon on a faint white
+#: disc without the owner having to style a hundred pins by hand.
 BUILDING_PIN_ICON_COLOR = "#000000"
 BUILDING_PIN_BG_COLOR = "#ffffff"
 BUILDING_PIN_BG_OPACITY = 35
 
 
-# ----------------------------------------------------------------------
 # Geometry helpers
-# ----------------------------------------------------------------------
 
 
 def building_footprint(building: dict[str, Any]) -> GEOSGeometry | None:
@@ -49,10 +46,7 @@ def building_footprint(building: dict[str, Any]) -> GEOSGeometry | None:
         building: A cached building record (see ``plugins.builtin.parcel_buildings``).
 
     Returns:
-        The footprint as a GEOS geometry, or None when the record carries only
-        a point (or nothing parseable - a malformed ``geometry`` is treated as
-        "no footprint", never an error).
-    """
+        The footprint as a GEOS geometry, or None when the record carries only a point (or nothing parseable - a malformed ``geometry`` is treated as "no footprint", never an error)."""
     geometry = building.get("geometry")
     if not isinstance(geometry, dict) or geometry.get("type") in (None, "Point"):
         return None
@@ -106,11 +100,7 @@ def match_marker(building: dict[str, Any], candidates: list) -> Any | None:
         candidates: Markers not yet matched to a building.
 
     Returns:
-        The covering marker, or None. When several qualify (overlapping
-        footprints, or two pins inside one building) the nearest to the
-        building's centroid wins, so the remaining markers stay available for
-        the buildings they are actually closest to.
-    """
+        The covering marker, or None."""
     covering = [marker for marker in candidates if marker_covers_building(building, marker)]
     if not covering:
         return None
@@ -131,10 +121,7 @@ def unmatched_buildings(buildings: list[dict[str, Any]], markers: list) -> list[
         markers: Existing child markers to match against.
 
     Returns:
-        The subset of ``buildings`` with usable coordinates and no covering
-        marker. Each marker is consumed by at most one building, so on a dense
-        campus one pin can't silently mark several footprints as done.
-    """
+        The subset of ``buildings`` with usable coordinates and no covering marker."""
     unmatched = list(markers)
     missing: list[dict[str, Any]] = []
     for building in buildings:
@@ -148,9 +135,7 @@ def unmatched_buildings(buildings: list[dict[str, Any]], markers: list) -> list[
     return missing
 
 
-# ----------------------------------------------------------------------
 # What could be restructured
-# ----------------------------------------------------------------------
 
 
 @dataclass(slots=True)
@@ -189,9 +174,7 @@ def nestable_root_pins(pin: Pin) -> list[Pin]:
         pin: The prospective parent pin.
 
     Returns:
-        Top-level pins of the same profile whose coordinates fall inside the
-        property boundary, excluding this pin and anything that would form a
-        cycle. Empty when the property has no real boundary."""
+        Top-level pins of the same profile whose coordinates fall inside the property boundary, excluding this pin and anything that would form a cycle."""
     if pin.pk is None:
         return []
     polygon = property_polygon(pin)
@@ -254,7 +237,6 @@ def already_pinned_points(pin: Pin, buildings: list[dict[str, Any]]) -> set[tupl
 
 def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
     """Buildings on this pin's parcel that no pin of the owner's covers yet.
-    Only children were consulted before, so a top-level pin sitting on a building - exactly the kind ``nestable_root_pins`` exists to re-home - left that building counted as unpinned forever: the dialog offered it, ``create_building_pins`` asked for its point, ``resolve_child_pin_location`` refused (a profile may not hold two pins at one point), the building was skipped, and the count came back unchanged.
 
     Args:
         pin: The parent pin.
@@ -335,9 +317,7 @@ def should_offer(pin: Pin) -> bool:
     return bool(pin.profile.suggest_pin_restructure)
 
 
-# ----------------------------------------------------------------------
 # Applying it
-# ----------------------------------------------------------------------
 
 
 def building_name(building: dict[str, Any]) -> str:
@@ -347,10 +327,7 @@ def building_name(building: dict[str, Any]) -> str:
         building: A cached building record.
 
     Returns:
-        The building's own name, else "Building <number>", else "" - which
-        leaves the pin unnamed, falling back to its location's display name
-        exactly like any other nameless pin.
-    """
+        The building's own name, else "Building <number>", else "" - which leaves the pin unnamed, falling back to its location's display name exactly like any other nameless pin."""
     name = (building.get("name") or "").strip()
     if name:
         return name
@@ -359,8 +336,7 @@ def building_name(building: dict[str, Any]) -> str:
 
 
 def building_selection_key(building: dict[str, Any]) -> str:
-    """Return a stable, opaque key for selecting a cached building record.
-    The dialog sends keys rather than coordinates or serialized building data, then the POST recomputes the current missing-building list and accepts only keys still present there."""
+    """Return a stable, opaque key for selecting a cached building record."""
     canonical = json.dumps(building, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode()).hexdigest()[:24]
 
@@ -372,8 +348,7 @@ def select_buildings(buildings: list[dict[str, Any]], selection_keys: list[str])
 
 
 def _provisionable_buildings(pin: Pin, selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Cached parcel buildings safe to materialize as Places.
-    The UI imports a filtered subset of the parcel cache, but provisioning is deliberately broader than the selected rows so the property has a complete building tree."""
+    """Cached parcel buildings safe to materialize as Places."""
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_within_boundary, buildings_on_property
 
     known = site_scope.parcel_buildings(pin.location) or selected
@@ -386,7 +361,6 @@ def _provisionable_buildings(pin: Pin, selected: list[dict[str, Any]]) -> list[d
 
 def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     """Create a child pin for each given building, in one transaction.
-    That ordering is what makes the rest of the app behave: the child pins then resolve onto their own structures rather than onto the parcel, so each building's page draws its own outline, its wiki gets its own boundary, and the property stops looking like 124 overlapping copies of itself.
 
     Args:
         pin: The parent pin.
@@ -467,7 +441,6 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
 
 def nest_root_pins(pin: Pin, candidates: list[Pin]) -> int:
     """Re-parent top-level pins under this pin, keeping everything else about them.
-    Only the ``parent_pin`` link changes - names, notes, photos, labels, visit history, and the pins' own children all travel with them.
 
     Args:
         pin: The new parent.
@@ -566,7 +539,6 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
 
     if created:
         # One entry for the whole import: a hundred separate "child_wiki_added"
-        # rows would bury every other edit in the wiki's history.
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,

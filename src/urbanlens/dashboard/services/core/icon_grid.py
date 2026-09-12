@@ -24,6 +24,5 @@ def icon_grid_version() -> str:
     """A short content hash of :func:`icon_grid_html`, used to version its URL.
 
     Returns:
-        Sixteen hex characters, stable for a given catalogue and changing with
-        any edit to it."""
+        Sixteen hex characters, stable for a given catalogue and changing with any edit to it."""
     return hashlib.sha256(icon_grid_html().encode("utf-8")).hexdigest()[:16]

@@ -25,24 +25,16 @@ logger = logging.getLogger(__name__)
 #: property boundary at all.
 DEFAULT_RADIUS_METERS = 50
 
-#: Metres per degree of latitude (WGS-84), effectively constant regardless of
-#: latitude - unlike a degree of longitude, whose real-world length shrinks by
-#: a factor of cos(latitude) away from the equator. Shared by every
-#: metres<->degrees conversion in this codebase that needs the correction
-#: (see :func:`meters_to_lng_degrees` / :func:`buffer_point_by_meters`).
+#: Metres per degree of latitude (WGS-84), effectively constant regardless of latitude - unlike a
+#: degree of longitude, whose real-world length shrinks by a factor of cos(latitude) away from the
+#: equator.
+#: Shared by every metres<->degrees conversion in this codebase that needs the correction (see
 METERS_PER_DEGREE_LAT = 111_320.0
 
 
 def meters_to_lng_degrees(meters: float, latitude: float) -> float:
     """Convert a real-world east-west distance to a longitude-degree delta.
-
-    A degree of longitude spans fewer real-world metres away from the
-    equator (by a factor of ``cos(latitude)``), so naively dividing by a
-    constant metres-per-degree value (as if longitude behaved like latitude)
-    understates the delta needed at higher latitudes. This is the one
-    implementation every metres->degrees-of-longitude conversion in the
-    codebase should share, instead of re-deriving the ``cos(latitude)``
-    correction locally.
+    A degree of longitude spans fewer real-world metres away from the equator (by a factor of ``cos(latitude)``), so naively dividing by a constant metres-per-degree value (as if longitude behaved like latitude) understates the delta needed at higher latitudes.
 
     Args:
         meters: Real-world east-west distance, in metres.
@@ -56,18 +48,7 @@ def meters_to_lng_degrees(meters: float, latitude: float) -> float:
 
 def buffer_point_by_meters(point: Point, radius_meters: float, *, latitude: float | None = None) -> Polygon:
     """Buffer a WGS-84 point by a real-world metre radius, as a true circle.
-
-    ``GEOSGeometry.buffer()`` operates in the geometry's own coordinate units
-    (degrees, for SRID 4326), so naively converting ``radius_meters`` to
-    degrees with a single constant and buffering by that amount on both axes
-    produces a shape that is a circle in *degree* space but an ellipse in
-    *real-world distance*: it is squashed east-west, since a degree of
-    longitude covers fewer metres than a degree of latitude away from the
-    equator. This buffers in degree space using the latitude-only
-    conversion (giving the correct north-south extent), then stretches the
-    longitude axis of the result by ``1 / cos(latitude)`` around the centre
-    point so the real-world east-west extent matches the requested radius
-    too.
+    ``GEOSGeometry.buffer()`` operates in the geometry's own coordinate units (degrees, for SRID 4326), so naively converting ``radius_meters`` to degrees with a single constant and buffering by that amount on both axes produces a shape that is a circle in *degree* space but an ellipse in *real-world distance*: it is squashed east-west, since a degree of longitude covers fewer metres than a degree of latitude away from the equator.
 
     Args:
         point: The WGS-84 (SRID 4326) centre point.
@@ -152,11 +133,9 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
         return self.filter(pin=pin, boundary_type=boundary_type).with_coordinate_location().first()
 
     # ------------------------------------------------------------------
-    # Batched row lookups
-    #
-    # Counterparts to row_for_pin/row_for_wiki/row_for_location for callers
-    # resolving many pins' boundaries at once (e.g. markup-triggered pin-share
-    # detection) - one query for the whole batch instead of one per item.
+    # Batched row lookups Counterparts to row_for_pin/row_for_wiki/row_for_location for callers
+    # resolving many pins' boundaries at once (e.g. markup-triggered pin-share detection) - one
+    # query for the whole batch instead of one per item.
     # ------------------------------------------------------------------
 
     def rows_by_pin_id(self, pin_ids: Iterable[int], boundary_type: str) -> dict[int, Boundary]:
@@ -191,16 +170,7 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
 
     def official_polygons_by_location_id(self, location_ids: Iterable[int], boundary_type: str) -> dict[int, GEOSGeometry | None]:
         """Bulk-resolve each location's official place outline, keyed by location id.
-
-        The batched counterpart to the place step of :meth:`resolve_for_pin`,
-        for callers resolving many markers at once.
-
-        A **missing key** means the location has no place at all, and the
-        caller should continue down the wiki/circle fallback chain. A key
-        mapping to **None** means the location has a place that deliberately
-        contributes nothing for this type (a building asked for its parcel),
-        and the caller must stop - falling through would draw exactly the
-        outline the scope rule just refused.
+        The batched counterpart to the place step of :meth:`resolve_for_pin`, for callers resolving many markers at once.
 
         Args:
             location_ids: Primary keys of the locations to look up.
@@ -225,14 +195,8 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
 
     def resolve_for_wiki(self, wiki: Wiki, boundary_type: str) -> tuple[GEOSGeometry | None, str | None]:
         """Resolve the polygon to display for a wiki page, with its source.
-
-        Scope first (a wiki anchored to a building draws the footprint, not
-        the parcel), then wiki-customized row → the wiki's place outline →
-        circle fallback (property only; buildings have no fallback shape).
-
-        Scoping here is what makes "the boundary used when creating a wiki for
-        a building is the building's" true by construction rather than by
-        every call site remembering to ask for the right type.
+        Scope first (a wiki anchored to a building draws the footprint, not the parcel), then wiki-customized row → the wiki's place outline → circle fallback (property only; buildings have no fallback shape).
+        Scoping here is what makes "the boundary used when creating a wiki for a building is the building's" true by construction rather than by every call site remembering to ask for the right type.
 
         Args:
             wiki: The Wiki whose boundary is being displayed. When this is a
@@ -273,20 +237,7 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
 
     def resolve_for_pin(self, pin: Pin, boundary_type: str) -> tuple[GEOSGeometry | None, str | None]:
         """Resolve the polygon that applies to a pin, with its source.
-
-        Two questions, in that order. **Should this marker draw this kind of
-        boundary at all?** A marker standing on a footprint on a
-        multi-building property is not about the 200-acre parcel under it, so
-        a property request answers nothing - see
-        ``services.places.scope.place_polygon``. Then, **whose version of that
-        shape?**: the pin's own drawing → the community's → the official
-        outline → a circle.
-
-        Parent inheritance survives only for **placeless** pins, where no
-        provider knows the coordinate and a detail pin genuinely has nothing
-        else to fall back on. It is still gated on the pin standing inside the
-        parent's polygon, so a detail pin for a different structure never
-        inherits the main one.
+        Two questions, in that order. **Should this marker draw this kind of boundary at all?** A marker standing on a footprint on a multi-building property is not about the 200-acre parcel under it, so a property request answers nothing - see ``services.places.scope.place_polygon``.
 
         Args:
             pin: The Pin to resolve a boundary for.
@@ -307,13 +258,10 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
         place = pin.location.place if (pin.location_id and pin.location is not None and pin.location.place_id) else None
         scoped = place_polygon(place, boundary_type) if place is not None else None
 
-        # A hull fitted around this pin's own children describes the markers we
-        # happen to know about, not the property - so it stands in only while
-        # nobody has offered the real outline, and steps aside the moment one
-        # exists. Left ahead of the place, geometry the chain had just fetched
-        # stayed invisible on the very page that asked for it, and the map drew
-        # a shape the app had invented. Every other generated row - the
-        # pre-places location default among them - keeps the precedence it had.
+        # A hull fitted around this pin's own children describes the markers we happen to know
+        # about, not the property - so it stands in only while nobody has offered the real outline,
+        # and steps aside the moment one exists.
+        # Left ahead of the place, geometry the chain had just fetched stayed invisible on the very
         if row is not None and row.generated_polygon and not (row.generated_from_children and scoped is not None):
             return row.generated_polygon, "generated"
 

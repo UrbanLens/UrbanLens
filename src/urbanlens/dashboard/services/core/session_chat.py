@@ -1,14 +1,4 @@
-"""Session-scoped live text chat, shared by every participant-session game.
-
-SpotGuessr, Trivia and Consensus each carried their own ``send_chat_message`` /
-``recent_messages`` pair that differed only in which model, broadcaster and serializer
-they named - including three separate copies of the same ``MAX_MESSAGE_LENGTH = 1000``.
-Anything that should apply to session chat generally (a rate limit, moderation, edit or
-delete) previously had to be written three times and kept in sync by hand.
-
-Each game keeps its own ``chat`` module as a thin binding over ``SessionChat``, so
-existing callers and their import paths are unchanged.
-"""
+"""Session-scoped live text chat, shared by every participant-session game."""
 
 from __future__ import annotations
 
@@ -31,11 +21,7 @@ CHAT_HISTORY_LIMIT = 50
 
 class SessionRealtime(Protocol):
     """The broadcast entry point of a game's ``realtime`` module.
-
-    Deliberately the *module* rather than the ``SessionBroadcaster`` it wraps: the
-    attribute is looked up at call time, so ``patch("services.<game>.realtime.broadcast")``
-    - the idiom every existing game test uses - still intercepts the call.
-    """
+    Deliberately the *module* rather than the ``SessionBroadcaster`` it wraps: the attribute is looked up at call time, so ``patch("services.<game>.realtime.broadcast")`` - the idiom every existing game test uses - still intercepts the call."""
 
     def broadcast(self, session_id: int, event_type: str, payload: dict[str, Any]) -> None:
         """Send ``payload`` to every connected participant of ``session_id``."""
@@ -44,11 +30,7 @@ class SessionRealtime(Protocol):
 
 class ChatMessageManager[MessageT](Protocol):
     """The slice of a chat-message manager ``SessionChat`` depends on.
-
-    Structural rather than a base class: the three managers are already built by
-    ``DashboardManager.from_queryset(...)`` over unrelated querysets, and each needs
-    only to create a message and list a session's messages.
-    """
+    Structural rather than a base class: the three managers are already built by ``DashboardManager.from_queryset(...)`` over unrelated querysets, and each needs only to create a message and list a session's messages."""
 
     def create(self, *, session: Any, profile: Any, body: str) -> MessageT:
         """Persist one chat message."""
@@ -63,19 +45,12 @@ class SessionChat[SessionT: Model, MessageT]:
     """Send and read back the live text chat for one game's sessions.
 
     Args:
-        name: Which game this is, e.g. ``"trivia"``. Namespaces the per-session
-            rate-limit keys, so two games cannot charge each other's budgets.
-            Named explicitly rather than derived from the session model, because
-            a budget key that changes when a model is renamed silently resets
-            everyone's limit at deploy time.
+        name: Which game this is, e.g. ``"trivia"``.
         manager: The chat-message model's manager (e.g. ``GameSessionChatMessage.objects``).
-        realtime: The game's ``realtime`` module, used to push new messages to connected
-            participants.
+        realtime: The game's ``realtime`` module, used to push new messages to connected participants.
         serialize: Turns a saved message into the payload broadcast to clients.
         history_limit: Default number of past messages ``recent`` returns.
-        max_message_length: Bodies are truncated to this before saving. Must not exceed
-            the model field's own ``max_length`` or the insert fails at the database.
-    """
+        max_message_length: Bodies are truncated to this before saving."""
 
     def __init__(
         self,
@@ -97,21 +72,11 @@ class SessionChat[SessionT: Model, MessageT]:
     def send(self, session: SessionT, profile: Profile, body: str) -> MessageT:
         """Save a chat message and broadcast it to every connected participant.
 
-        Args:
-            session: The session this message belongs to.
-            profile: Who sent it - the caller is responsible for confirming they are an
-                actual participant (each game's controller and consumer both check
-                before calling).
-            body: Raw message text, trimmed and truncated to ``max_message_length``.
-
         Returns:
             The saved message.
 
         Raises:
-            MessageRateLimitedError: This participant's budget for this session
-                is spent. A ``ValueError``, so the consumers that already answer
-                one with an error frame report it unchanged.
-        """
+            MessageRateLimitedError: This participant's budget for this session is spent."""
         from urbanlens.dashboard.services.core.message_limits import charge_message, session_chat_identity
 
         # The rate limit this class's own docstring says belongs here rather
@@ -125,13 +90,8 @@ class SessionChat[SessionT: Model, MessageT]:
     def recent(self, session: SessionT, *, limit: int | None = None) -> list[MessageT]:
         """The most recent messages in ``session``, returned oldest first.
 
-        Args:
-            session: The session to read chat for.
-            limit: How many messages to return; defaults to ``history_limit``.
-
         Returns:
-            Up to ``limit`` messages, oldest first.
-        """
+            Up to ``limit`` messages, oldest first."""
         count = self.history_limit if limit is None else limit
         messages: list[MessageT] = list(self.manager.for_session(session).select_related("profile__user").order_by("-created")[:count])
         messages.reverse()

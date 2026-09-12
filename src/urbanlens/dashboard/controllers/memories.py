@@ -62,9 +62,8 @@ _VISITS_BULK_ACTIONS = [
 class _ShareGroup(TypedDict):
     """One place's entry in the Sharing page's ``share_groups`` list.
 
-    ``pin`` is None for location-only shares (e.g. coordinates detected in a
-    DM the sender never pinned) - ``place_label`` always carries a
-    displayable name either way.
+    ``pin`` is None for location-only shares (e.g. coordinates detected in a DM the sender never pinned)
+    - ``place_label`` always carries a displayable name either way.
     """
 
     pin: Pin | None
@@ -86,9 +85,8 @@ class _MapShareGroup(TypedDict):
 class _IncomingShareGroup(TypedDict):
     """One pin's entry in the Sharing page's ``incoming_share_groups`` list.
 
-    Unlike :class:`_ShareGroup`, there's no chain/reshare count here - the
-    chain machinery is rooted at the *sender's* side, and the recipient only
-    ever sees their own inbound shares of a given pin.
+    Unlike :class:`_ShareGroup`, there's no chain/reshare count here - the chain machinery is rooted at
+    the *sender's* side, and the recipient only ever sees their own inbound shares of a given pin.
     """
 
     pin: Pin | None
@@ -107,16 +105,15 @@ def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tup
     """Resolve a human label and link for one (kind, host) attachment entry.
 
     Args:
-        kind: One of ``safety_checkin`` / ``comment`` / ``trip_comment`` /
-            ``visit`` / ``direct_message``.
+        kind: One of ``safety_checkin`` / ``comment`` / ``trip_comment`` / ``visit`` /
+        ``direct_message``.
         host: The attached instance matching *kind*.
-        markup_map: The map being described - only needed to tell which side
-            of a ``direct_message`` is "the other person" (this map's owner
-            sent it, so the label always names the recipient).
+        markup_map: The map being described - only needed to tell which side of a ``direct_message`` is
+        "the other person" (this map's owner sent it, so the...
 
     Returns:
-        Tuple of (label, url), or (None, None) when the host can't be
-        resolved to a link (e.g. a comment on a wiki with no location).
+        Tuple of (label, url), or (None, None) when the host can't be resolved to a link (e.g. a comment
+        on a wiki with no location).
     """
     if kind == "safety_checkin":
         return f"Safety check-in: {host.title}", reverse("safety.checkin.detail", args=[host.slug or host.uuid])
@@ -138,28 +135,21 @@ def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tup
 def _safe_incoming_place_label(pin_shares: list[PinShare]) -> tuple[Pin | None, str]:
     """The pin (if safe to show) and display label for one Sharing-page "received" group.
 
-    ``PinShareStatus.DETECTED`` shares (auto-recorded from a shared map, a DM, or a trip
-    activity - see the status's own docstring) are "never actionable, never materialize a
-    Pin": the recipient never explicitly agreed to see anything about them, unlike an
-    EXPLICIT share awaiting accept/reject, where a preview of the current pin name is the
-    whole point. Reading ``PinShare.place_label``/``.pin`` unconditionally for a group made
-    up entirely of DETECTED shares put the sharer's live, currently-editable pin (name,
-    and via the pin.share.detail link, more) in front of a recipient who never consented to
-    see it - and kept tracking it live, since nothing here was ever a snapshot. When a group
-    is entirely DETECTED shares, this falls back to the snapshotted ``Location`` instead,
-    the same one every other pin-less share already resolves through.
+    ``PinShareStatus.DETECTED`` shares (auto-recorded from a shared map, a DM, or a trip activity - see
+    the status's own docstring) are "never actionable, never materialize a Pin": the recipient never
+    explicitly agreed to see anything about them, unlike an EXPLICIT share awaiting accept/reject, where
+    a preview of the current pin name is the whole point.
 
     Args:
         pin_shares: Every incoming share grouped under one pin/location key.
 
     Returns:
-        ``(pin, label)`` - matching ``(share.pin, share.place_label)`` whenever the group has
-        at least one non-DETECTED share, otherwise ``(None, <location-derived label>)``.
+        ``(pin, label)`` - matching ``(share.pin, share.place_label)`` whenever the group has at least
+        one non-DETECTED share, otherwise...
     """
     if any(share.reveals_live_pin for share in pin_shares):
-        # The group is keyed by pin/location, so every share in it points at
-        # the same place - one non-DETECTED member means the recipient was
-        # offered this pin and may see it.
+        # The group is keyed by pin/location, so every share in it points at the same place - one non-DETECTED
+        # member means the recipient was offered this pin and may see it.
         share = pin_shares[0]
         return share.pin, share.place_label
     return None, pin_shares[0].safe_place_label
@@ -172,8 +162,7 @@ def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]
         markup_map: The map to inspect.
 
     Returns:
-        Tuple of (label, url), or (None, None) when the map is an unattached
-        draft.
+        Tuple of (label, url), or (None, None) when the map is an unattached draft.
     """
     attachment = markup_map.attachment
     if attachment is None:
@@ -185,10 +174,9 @@ def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]
 def _map_attachment_entries(markup_map: MarkupMap) -> list[dict[str, str]]:
     """Resolve a label + link for every place a map is currently attached to.
 
-    Unlike :func:`_map_attachment_info` (the single "primary" link shown
-    under a map's title), this lists every comment, trip comment, safety
-    check-in, visit, and direct message referencing the map - so the owner
-    can see (and jump to) each one before deleting it.
+    Unlike :func:`_map_attachment_info` (the single "primary" link shown under a map's title), this
+    lists every comment, trip comment, safety check-in, visit, and direct message referencing the map -
+    so the owner can see (and jump to) each one before deleting it.
 
     Args:
         markup_map: The map to inspect.
@@ -211,8 +199,8 @@ def _unlogged_band_context(profile: Profile) -> dict[str, object]:
         profile: The viewing profile whose visited-but-unlogged pins to surface.
 
     Returns:
-        Context dict with ``unlogged_visits`` (the pins) and ``today`` (an ISO
-        date string used to bound and prefill the quick-log date inputs).
+        Context dict with ``unlogged_visits`` (the pins) and ``today`` (an ISO date string used to bound
+        and prefill the quick-log date inputs).
     """
     return {
         "unlogged_visits": unlogged_visited_pins(profile),
@@ -226,14 +214,12 @@ def _toast(message: str, level: str = "success", *, unlogged_count: int | None =
     Args:
         message: Text to display in the toast.
         level: toastr level (``success``/``info``/``warning``/``error``).
-        unlogged_count: When given, also tells the shared _photos_tabs.html nav
-            (outside this card's own swap target) to update or remove its
-            "Visits" tab label instead of leaving it stale, and refreshes the
-            Visits page's map markers (see pin-select-map.js).
+        unlogged_count: When given, also tells the shared _photos_tabs.html nav (outside this card's own
+        swap target) to update or remove its "Visits" tab label...
 
     Returns:
-        An empty-body response carrying an ``HX-Trigger`` header; swapping it with
-        ``outerHTML`` removes the card while the toast fires.
+        An empty-body response carrying an ``HX-Trigger`` header; swapping it with ``outerHTML`` removes
+        the card while the toast fires.
     """
     triggers: dict[str, object] = {"showToast": {"message": message, "level": level}}
     if unlogged_count is not None:
@@ -269,17 +255,16 @@ def _parse_bbox(request: HttpRequest) -> BBox | None:
 def _active_span(earliest: datetime.date | None, today: datetime.date) -> tuple[int, str]:
     """Describe how long a profile has been active in the largest sensible time unit.
 
-    Picks the coarsest unit (years, months, weeks, days) that still yields a
-    count of at least one, so a brand-new account whose only memory is a few
-    months old reads "3 months active" instead of a misleading "1 years active".
+    Picks the coarsest unit (years, months, weeks, days) that still yields a count of at least one, so a
+    brand-new account whose only memory is a few months old reads "3 months active" instead of a
+    misleading "1 years active".
 
     Args:
         earliest: The earliest date across the profile's memories, or None if it has none.
         today: The current date to measure against.
 
     Returns:
-        A ``(count, unit)`` tuple, e.g. ``(3, "Months")``. The unit is singular
-        when ``count`` is 1 (e.g. ``(1, "Day")``).
+        A ``(count, unit)`` tuple, e.g. ``(3, "Months")``.
     """
     if earliest is None:
         return (0, "Days")
@@ -331,9 +316,9 @@ def _earliest_memory_date(profile: Profile) -> datetime.date | None:
 def _compute_hero_stats(profile: Profile) -> tuple[dict[str, object], bool]:
     """Build the Memories page's hero-stat tiles (distance, places, photos, trips, active span).
 
-    Shared by the initial page render and ``MemoriesHeroStatsView`` (the latter
-    lets the tiles refresh in place after an in-page action like logging a
-    visit or adding photos, instead of only updating on the next full reload).
+    Shared by the initial page render and ``MemoriesHeroStatsView`` (the latter lets the tiles refresh
+    in place after an in-page action like logging a visit or adding photos, instead of only updating on
+    the next full reload).
 
     Args:
         profile: The profile whose memories to summarize.
@@ -344,11 +329,10 @@ def _compute_hero_stats(profile: Profile) -> tuple[dict[str, object], bool]:
     route_count = Route.objects.for_profile(profile).count()
     total_distance_km = total_travel_distance_km(profile)
     units = profile.effective_distance_units
-    # Pin.objects.visited() ORs in the "Visited" status label alongside a
-    # dated PinVisit record - a pin marked visited by label alone (no PinVisit
-    # row yet) must still count here, both for the stat itself and so
-    # has_memory_data (below) doesn't read a profile with only label-only
-    # visits as having no memory data at all.
+    # Pin.objects.visited() ORs in the "Visited" status label alongside a dated PinVisit record - a pin marked
+    # visited by label alone (no PinVisit row yet) must still count here, both for the stat itself and so
+    # has_memory_data (below) doesn't read a profile with only label-only visits as having no memory data at
+    # all.
     places_visited = Pin.objects.filter(profile=profile).visited().count()
     photo_count = Image.objects.filter(profile=profile).photos().count()
     trip_count = TripMembership.objects.trip_ids_for(profile).distinct().count()
@@ -415,9 +399,9 @@ class MemoriesHeroStatsView(LoginRequiredMixin, View):
 
     GET /memories/hero-stats/
 
-    Re-fetched via ``memoriesFeedRefresh`` (the same trigger already fired after
-    logging a visit or uploading photos) so distance/places/photos/trips/active-span
-    stay current after an in-page action, not just on the next full reload.
+    Re-fetched via ``memoriesFeedRefresh`` (the same trigger already fired after logging a visit or
+    uploading photos) so distance/places/photos/trips/active-span stay current after an in-page action,
+    not just on the next full reload.
     """
 
     def get(self, request: HttpRequest):
@@ -439,8 +423,8 @@ class MemoriesFeedDataView(LoginRequiredMixin, View):
 
     GET /memories/data/?start=YYYY-MM-DD&end=YYYY-MM-DD&bbox=minLat,minLng,maxLat,maxLng
 
-    A date range is always applied (defaulting to the trailing 90 days) so a
-    profile's full history is never loaded in a single request.
+    A date range is always applied (defaulting to the trailing 90 days) so a profile's full history is
+    never loaded in a single request.
     """
 
     def get(self, request: HttpRequest):
@@ -525,15 +509,14 @@ class MemoriesOnThisDayView(LoginRequiredMixin, View):
 class MemoriesVisitView(LoginRequiredMixin, View):
     """Log a dated visit for a marked-but-unlogged pin, or add details to an existing one.
 
-    GET  /memories/visit/<pin_slug>/                 → render the add-visit form (dialog body)
-    GET  /memories/visit/<pin_slug>/<visit_id>/      → render the edit-visit form for an existing visit
-    POST /memories/visit/<pin_slug>/                 → create a new dated PinVisit
-    POST /memories/visit/<pin_slug>/<visit_id>/      → update an existing PinVisit
+    GET /memories/visit/<pin_slug>/ → render the add-visit form (dialog body)
+    GET /memories/visit/<pin_slug>/<visit_id>/ → render the edit-visit form for an existing visit
+    POST /memories/visit/<pin_slug>/ → create a new dated PinVisit
+    POST /memories/visit/<pin_slug>/<visit_id>/ → update an existing PinVisit
 
-    Both POST variants reuse the pin-detail visit form's field handling (date,
-    notes, photos, map snapshot, participants) and return the refreshed
-    unlogged-visits band plus an ``HX-Trigger`` that toasts and reloads the
-    timeline feed.
+    Both POST variants reuse the pin-detail visit form's field handling (date, notes, photos, map
+    snapshot, participants) and return the refreshed unlogged-visits band plus an ``HX-Trigger`` that
+    toasts and reloads the timeline feed.
     """
 
     def _get_pin(self, request: HttpRequest, pin_slug: str) -> tuple[Pin, Profile]:
@@ -550,8 +533,8 @@ class MemoriesVisitView(LoginRequiredMixin, View):
             visit_id: PK of an existing visit to edit, or None to add a new one.
 
         Returns:
-            The rendered ``_visit_form.html`` partial, wired to post back to this
-            view and swap the unlogged-visits band.
+            The rendered ``_visit_form.html`` partial, wired to post back to this view and swap the
+            unlogged-visits band.
         """
         pin, _ = self._get_pin(request, pin_slug)
         visit = get_object_or_404(PinVisit.objects.prefetch_related("participants", "images"), id=visit_id, pin=pin) if visit_id else None
@@ -575,9 +558,7 @@ class MemoriesVisitView(LoginRequiredMixin, View):
         """Create or update a dated PinVisit and return the refreshed band.
 
         Args:
-            request: The HTTP request. The body carries ``visited_date`` (required)
-                and optional ``visited_time``, ``notes``, ``map_data``, ``photos``,
-                ``existing_photo_ids``, and ``participant_ids``.
+            request: The HTTP request.
             pin_slug: Slug of the pin the visit belongs to.
             visit_id: PK of the visit to update, or None to create a new one.
 
@@ -621,9 +602,8 @@ class MemoriesVisitView(LoginRequiredMixin, View):
         participants = _resolve_participants(request, pin)
         visit.participants.set(participants)
 
-        # On a brand-new visit, offer the tagged connections their own suggestion,
-        # mirroring the pin-detail "log a visit" flow. Each participant has an
-        # individual "send them a suggestion" toggle in the form.
+        # On a brand-new visit, offer the tagged connections their own suggestion, mirroring the pin-detail "log
+        # a visit" flow. Each participant has an individual "send them a suggestion" toggle in the form.
         suggest_ids = resolve_suggest_participant_ids(request)
         lat, lng = pin.effective_latitude, pin.effective_longitude
         if created and participants and lat is not None and lng is not None:
@@ -702,8 +682,8 @@ class MemoriesVisitsMapDataView(LoginRequiredMixin, View):
 
     GET /memories/visits/map-data/
 
-    Mirrors ``PinSuggestionMapDataView`` (Memories > Locations) - see
-    ``static/js/pin-select-map.js``, which drives both pages' maps.
+    Mirrors ``PinSuggestionMapDataView`` (Memories > Locations) - see ``static/js/pin-select-map.js``,
+    which drives both pages' maps.
     """
 
     def get(self, request: HttpRequest) -> JsonResponse:
@@ -726,19 +706,15 @@ class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
     """Quick-log or un-mark many visited-but-unlogged pins at once.
 
     POST /memories/visits/bulk/<action>/, JSON body
-    ``{"pin_slugs": [...], "visited_date": "YYYY-MM-DD"}`` (``visited_date``
-    only read for ``log``).
 
-    Modeled on ``PinSuggestionBulkActionView`` (Memories > Locations):
-    non-owned, already-resolved, or nonexistent slugs are silently skipped
-    rather than erroring the whole batch.
+    ``{"pin_slugs": [...], "visited_date": "YYYY-MM-DD"}`` (``visited_date`` only read for ``log``).
+    Modeled on ``PinSuggestionBulkActionView`` (Memories > Locations): non-owned, already-resolved, or
+    nonexistent slugs are silently skipped rather than erroring the whole batch.
 
-    - ``log``: creates a dated ``PinVisit`` for each pin, dated
-      ``visited_date`` (defaulting to today when omitted) - the same minimal
-      path as the single-item quick-log form (date only, no
-      notes/photos/participants/map).
-    - ``unmark``: clears each pin's "visited" status entirely, same as the
-      single-item "Not visited" button.
+    - ``log``: creates a dated ``PinVisit`` for each pin, dated ``visited_date`` (defaulting to today
+      when omitted) - the same minimal path as the single-item quic...
+    - ``unmark``: clears each pin's "visited" status entirely, same as the single-item "Not visited"
+      button.
     """
 
     def post(self, request: HttpRequest, action: str) -> JsonResponse:
@@ -795,20 +771,13 @@ _JOURNAL_PAGE_SIZE = 25
 def _place_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tuple[list[list[PinShare]], Page]:
     """One page of pin shares, grouped by the place each is about.
 
-    Grouping happens in the database rather than after fetching everything, so
-    the page pays for its own twenty places instead of for every share the
-    account has ever made or received.
-
-    Shares of a pin group by that pin. A share with no pin - coordinates typed
-    into a DM that the sender never pinned - groups by the shared Location
-    instead, so they do not all collapse into one bucket.
+    Grouping happens in the database rather than after fetching everything, so the page pays for its own
+    twenty places instead of for every share the account has ever made or received.
 
     Args:
         request: The current request; carries the page number.
         shares: The share queryset to group, already scoped to one direction.
-        param: Which request parameter carries this list's page number. Four
-            lists render on one page, so a shared ``page`` would move all of
-            them at once.
+        param: Which request parameter carries this list's page number.
 
     Returns:
         The page's groups, newest-share-first, and the ``Page`` of group keys.
@@ -835,8 +804,8 @@ def _place_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tup
 def _map_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tuple[list[list[MarkupMapShare]], Page]:
     """One page of map shares, grouped by the map each is about.
 
-    The map-share sibling of :func:`_place_grouped_page`; simpler only because
-    a map share always names a map.
+    The map-share sibling of :func:`_place_grouped_page`; simpler only because a map share always names
+    a map.
 
     Args:
         request: The current request; carries the page number.
@@ -934,15 +903,14 @@ def _received_share_context(request: HttpRequest, profile: Profile) -> dict[str,
 def _share_counts(profile: Profile) -> dict[str, int]:
     """How many shares each toggle button reports.
 
-    Counted rather than measured off the rendered lists: those are one page
-    each now, and the buttons name the totals.
+    Counted rather than measured off the rendered lists: those are one page each now, and the buttons
+    name the totals.
 
     Args:
         profile: Whose shares to count.
 
     Returns:
-        ``sent_count``, ``received_count``, and ``has_any_shares`` for the
-        empty state.
+        ``sent_count``, ``received_count``, and ``has_any_shares`` for the empty state.
     """
     from urbanlens.dashboard.models.markup.share import MarkupMapShare
     from urbanlens.dashboard.models.pin_share.model import PinShare
@@ -955,24 +923,14 @@ def _share_counts(profile: Profile) -> dict[str, int]:
 class MemoriesSharingView(LoginRequiredMixin, View):
     """The "Sharing" subpage of Memories - every pin and map shared to/from the user.
 
-    Groups the profile's sent :class:`PinShare` rows by pin, listing who each
-    pin was shared with, and how far the share travelled: the chain count
-    follows reshares transitively (A→B, B→C and B→D, D→E and D→F counts 5
-    shares for A's pin). Sent :class:`MarkupMapShare` rows are grouped by map
-    the same way, minus the reshare-chain machinery PinShare has.
-
-    Also lists the mirror image - pins and maps *received* from other
-    profiles - grouped the same way but without any chain/reshare counts
-    (those are rooted at the sender's side) and linking through the
-    recipient-scoped share-detail routes rather than the sender's own
-    pin/map pages, which the recipient has no access to.
-
-    Only the sent half is rendered here: the two halves are a client-side
-    toggle, so the received half was being queried, grouped and rendered on
-    every load for a panel nobody had asked to see. It fetches itself the
-    first time that button is clicked.
-
     GET /memories/sharing/
+
+    Also lists the mirror image - pins and maps *received* from other profiles - grouped the same way
+    but without any chain/reshare counts (those are rooted at the sender's side) and linking through the
+    recipient-scoped share-detail routes rather than the sender's own pin/map pages, which the recipient
+    has no access to.
+    Only the sent half is rendered here: the two halves are a client-side toggle, so the received half
+    was being queried, grouped and rendered on every load for a panel nobody had asked to see.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -1020,10 +978,9 @@ class MemoriesSharingSentView(LoginRequiredMixin, View):
 class MemoriesSharingReceivedView(LoginRequiredMixin, View):
     """HTMX partial: one page of the "Shared with you" lists.
 
-    Fetched the first time that toggle is clicked, and again on each of its
-    pagination clicks.
-
     GET /memories/sharing/received/
+
+    Fetched the first time that toggle is clicked, and again on each of its pagination clicks.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -1042,11 +999,10 @@ class MemoriesSharingReceivedView(LoginRequiredMixin, View):
 class MemoriesMapsView(LoginRequiredMixin, View):
     """The "Maps" subpage of Memories - every markup map the user has drawn.
 
-    Lists the profile's :class:`MarkupMap` rows (check-in routes, comment and
-    visit maps, plus unattached drafts) with thumbnails, a link to whatever
-    each map is attached to, and a delete action.
-
     GET /memories/maps/
+
+    Lists the profile's :class:`MarkupMap` rows (check-in routes, comment and visit maps, plus
+    unattached drafts) with thumbnails, a link to whatever each map is attached to, and a delete action.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -1059,11 +1015,6 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             Rendered Maps page listing every markup map the user created.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        # Every reverse relation `MarkupMap.attachments` walks, prefetched with
-        # the same select_related the property applies per row - otherwise each
-        # card costs up to ~11 queries on an unsliced queryset, and the page's
-        # own advertised workflow (draw a route on a check-in, a comment, a
-        # visit) is what makes a profile have many of them (P68).
         maps = (
             MarkupMap.objects.for_profile(profile)
             .select_related("shared_by__user")
@@ -1095,10 +1046,8 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             markup_map: The map to describe.
 
         Returns:
-            Dict with the map, its snapshot (for the Leaflet thumbnail), item
-            count, the primary attachment's label + link, and the full list
-            of every place (comments, trip comments, check-ins, visits, DMs)
-            the map is currently attached to.
+            Dict with the map, its snapshot (for the Leaflet thumbnail), item count, the primary
+            attachment's label + link, and the full list of...
         """
         label, url = _map_attachment_info(markup_map)
         attachments = _map_attachment_entries(markup_map)
@@ -1115,12 +1064,11 @@ class MemoriesMapsView(LoginRequiredMixin, View):
 class MemoriesJournalView(LoginRequiredMixin, View):
     """The "Journal" subpage of Memories - visit notes, ratings, and comments by date.
 
-    Merges every visit the profile added notes to, every pin they've rated,
-    and every comment they've posted (on pins, wikis, or trips) into a single
-    feed sorted newest-first, so a profile's own written history reads like a
-    diary instead of being scattered across pin/wiki/trip pages.
-
     GET /memories/journal/
+
+    Merges every visit the profile added notes to, every pin they've rated, and every comment they've
+    posted (on pins, wikis, or trips) into a single feed sorted newest-first, so a profile's own written
+    history reads like a diary instead of being scattered across pin/wiki/trip pages.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -1130,13 +1078,9 @@ class MemoriesJournalView(LoginRequiredMixin, View):
             request: The HTTP request.
 
         Returns:
-            Rendered Journal page listing the profile's visit notes, ratings,
-            and comments, newest first.
+            Rendered Journal page listing the profile's visit notes, ratings, and comments, newest first.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        # JournalFeed rather than a list: the page wants one day's worth of a
-        # merged feed plus its total, and building every entry from four
-        # unbounded querysets to get either is what this page used to do.
         page_obj = get_page(request, JournalFeed(profile), _JOURNAL_PAGE_SIZE)
         return render(
             request,
@@ -1155,9 +1099,10 @@ class MemoriesUnloggedActionView(LoginRequiredMixin, View):
     """Dismiss or un-mark a card in the "log your visits" queue.
 
     POST /memories/unlogged/<pin_slug>/<action>/
-    where action is "dismiss" (hide the suggestion without changing the pin's
-    visited status) or "unmark" (clear the pin's visited status entirely, e.g.
-    a stray "Visited" label or import glitch the user never actually visited).
+
+    where action is "dismiss" (hide the suggestion without changing the pin's visited status) or
+    "unmark" (clear the pin's visited status entirely, e.g. a stray "Visited" label or import glitch the
+    user never actually visited).
     """
 
     def _get_pin(self, request: HttpRequest, pin_slug: str) -> Pin:

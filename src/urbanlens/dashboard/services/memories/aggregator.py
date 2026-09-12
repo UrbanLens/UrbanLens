@@ -1,10 +1,5 @@
 """Extensible aggregation of a profile's "memories" - routes, trips, visits, photos.
-
-Adding a future memory type is one new ``_x_for_range`` function listed in
-``_event_sources`` below - nothing else needs to change. Each source function
-does its own date/bbox filtering on its own model's already-indexed fields, and
-contributes independently: one source failing omits its own events, never the feed.
-"""
+Each source function does its own date/bbox filtering on its own model's already-indexed fields, and contributes independently: one source failing omits its own events, never the feed."""
 
 from __future__ import annotations
 
@@ -53,8 +48,7 @@ class MemoryEvent:
         thumbnail_url: A representative photo URL, if any.
         icon: Material icon name for the map marker/card.
         color: Hex color for the map marker/card accent.
-        extra: Type-specific extra data the frontend may want.
-    """
+        extra: Type-specific extra data the frontend may want."""
 
     type: str
     occurred_at: datetime
@@ -112,11 +106,7 @@ def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
 
 
 def _trip_representative_point(trip: Trip) -> tuple[float, float] | None:
-    """Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity.
-
-    Mirrors the override priority used for trip map markers elsewhere
-    (lat_override/lng_override -> pin's effective coords -> location coords).
-    """
+    """Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity."""
     # trip.activities.all() rather than a fresh .select_related().order_by() chain, so the
     # caller's Prefetch is actually used - re-filtering the manager would re-query per trip.
     for activity in trip.activities.all():
@@ -257,11 +247,7 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
 
 
 def _event_sources() -> tuple[Callable[[Profile, date, date, BBox | None], Iterator[MemoryEvent]], ...]:
-    """The registered memory sources, resolved fresh on each call.
-
-    A module-level tuple would capture these at import time, which both hides
-    monkeypatching from tests and quietly defeats any later attempt to swap a source.
-    """
+    """The registered memory sources, resolved fresh on each call."""
     return (
         _routes_for_range,
         _trips_for_range,
@@ -272,7 +258,6 @@ def _event_sources() -> tuple[Callable[[Profile, date, date, BBox | None], Itera
 
 def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | None = None) -> list[MemoryEvent]:
     """Merge every registered event source over [start, end], sorted newest-first.
-    This is the page's extensibility seam - adding a memory type is one new function in ``_event_sources`` - so an unguarded fan-out means any single source raising (a corrupt row, a missing relation, a bug in a newly added source) discards the other three and 500s the whole feed.
 
     Args:
         profile: The profile whose memories to fetch.

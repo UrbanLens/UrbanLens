@@ -1,5 +1,4 @@
-"""Validation for user-supplied icon values on the way into the database.
-The client half is already covered (``_ulEscAttr`` in the map page, plus the ``^(https?://|/)`` test in front of it), so this is the server half: a value that is not one of the three shapes has no business being stored, and a renderer added later should not have to rediscover the rule."""
+"""Validation for user-supplied icon values on the way into the database."""
 
 from __future__ import annotations
 
@@ -44,9 +43,7 @@ def _is_emoji_token(text: str) -> bool:
         text: A stripped candidate value.
 
     Returns:
-        True when every code point is a non-ASCII symbol, mark, or joiner and
-        the whole token is short enough to be one glyph rather than prose.
-    """
+        True when every code point is a non-ASCII symbol, mark, or joiner and the whole token is short enough to be one glyph rather than prose."""
     if len(text) > MAX_EMOJI_CODEPOINTS:
         return False
     for char in text:
@@ -71,19 +68,12 @@ def clean_icon(value: object, *, default: str | None = None, max_length: int = M
     """Return ``value`` when it is an icon this application stores, else ``default``.
 
     Args:
-        value: The raw submitted value, typically straight off ``request.POST``
-            or a JSON body.
-        default: What to return when ``value`` is missing, blank, over-long, or
-            not one of the three recognised shapes.
-        max_length: Longest accepted icon. ``MAX_ICON_LENGTH`` suits the 255-wide
-            columns (``Pin.icon``, ``Wiki.icon``), but several are narrower -
-            ``Label.icon`` and ``CustomLayer.icon`` are 50, ``SavedFilter.icon``
-            is 64 - and a value this function accepted would then be a
-            ``DataError`` on write. Those callers pass their own column's width.
+        value: The raw submitted value, typically straight off ``request.POST`` or a JSON body.
+        default: What to return when ``value`` is missing, blank, over-long, or not one of the three recognised shapes.
+        max_length: Longest accepted icon.
 
     Returns:
-        A validated icon string, or ``default``.
-    """
+        A validated icon string, or ``default``."""
     if value is None:
         return default
     text = str(value).strip()

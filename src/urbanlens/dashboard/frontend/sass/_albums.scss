@@ -4,10 +4,7 @@
 // The photo grids themselves reuse .gallery-grid/.gallery-item from _gallery.scss;
 // everything here is the album shell around them.
 //
-// Layout rule for this surface: the main column holds album covers and photos
-// and nothing else. Configuration (custom order, delete, the map, the "add
-// existing" picker) lives in the header's overflow menu or in a panel the user
-// opens, so the page reads as content rather than as a control panel.
+// Layout rule for this surface: the main column holds album covers and photos and nothing else.
 
 $album-gutter: 1rem;
 
@@ -45,9 +42,7 @@ $album-gutter: 1rem;
 }
 
 // -- Create form ------------------------------------------------------------
-// Hidden until "New album" is pressed. The [hidden] rule is load-bearing: a
-// bare `hidden` attribute loses to any class that sets `display`, which is
-// exactly how this form ended up permanently visible.
+// Hidden until "New album" is pressed.
 
 .album-create-form {
     display: block;
@@ -101,10 +96,7 @@ $album-gutter: 1rem;
     font-size: .9rem;
 }
 
-// The <select> popup is drawn by the browser/OS, not by this box. Without an
-// explicit background+color on the options, a dark theme's light-on-dark text
-// is inherited into a light OS popup and the choices become unreadable;
-// color-scheme tells the browser to draw the popup dark to match.
+// The <select> popup is drawn by the browser/OS, not by this box.
 .album-create-kind {
     color-scheme: light dark;
 
@@ -827,9 +819,7 @@ $album-gutter: 1rem;
     max-height: min(32rem, calc(100vh - 2rem));
     padding: 0;
 
-    // Scoped to [open] rather than set bare: a plain `display` on a <dialog>
-    // beats the UA stylesheet's `dialog:not([open]) { display: none }`, which
-    // left this dialog laid out in the page even while closed.
+    // Scoped to [open] rather than set bare: a plain `display` on a <dialog> beats the UA stylesheet's `dialog:not([open]) { display.
     &[open] {
         display: flex;
         flex-direction: column;

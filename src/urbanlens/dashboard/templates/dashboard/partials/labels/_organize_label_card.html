@@ -66,7 +66,6 @@
 
         <div class="tag-card-actions">
             {% if kind == 'tag' or kind == 'category' or kind == 'status' %}
-                {# While stats are deferred the subtree total isn't known yet, so the link stays live; the HTMX row re-fetch renders it disabled if it turns out to be empty. #}
                 {% if stats_pending or label|tag_total_pins %}<a class="btn btn--icon" title="View on map" href="{{ label.id|label_map_url }}"><i class="material-symbols-outlined">travel_explore</i></a>{% else %}<a class="btn btn--icon" title="No pins in this label or its sub-labels" aria-disabled="true"><i class="material-symbols-outlined">travel_explore</i></a>{% endif %}
             {% endif %}
             {% if kind != 'people' and label.is_global %}

@@ -56,8 +56,7 @@ def get_email_limits(profile: Profile) -> tuple[int | None, int | None, int | No
         profile: The profile whose limits to resolve.
 
     Returns:
-        ``(per_hour, per_day, per_month)`` - each an int cap, or None when
-        that window is unlimited for this user."""
+        ``(per_hour, per_day, per_month)`` - each an int cap, or None when that window is unlimited for this user."""
     settings = SiteSettings.get_current()
     roles = active_subscription_roles(profile.user)
 
@@ -77,7 +76,6 @@ def get_email_limits(profile: Profile) -> tuple[int | None, int | None, int | No
 
 def email_rate_limit_error(profile: Profile) -> str | None:
     """Check whether the profile may trigger one more outbound email right now.
-    The check and the eventual write (`record_email_sent`) are far apart in time - callers only log the send after an outbound SMTP call completes - so a plain "count existing rows, compare to limit" check is not atomic: concurrent requests can all read the same count and all pass before any of them writes its log row, letting the caps be exceeded arbitrarily.
 
     Args:
         profile: The profile attempting to send.
@@ -120,9 +118,7 @@ def has_sent_join_email(profile: Profile, email: str) -> bool:
         email: Raw recipient address.
 
     Returns:
-        True when any join-type email was already sent to the address by this
-        user - a second one must not be sent.
-    """
+        True when any join-type email was already sent to the address by this user - a second one must not be sent."""
     return EmailSendLog.objects.filter(
         sender=profile,
         recipient_hash=hash_email(email),
@@ -164,8 +160,7 @@ def record_email_sent(profile: Profile, email: str, email_type: EmailType | str)
         email_type: What kind of email was sent.
 
     Returns:
-        The created log row.
-    """
+        The created log row."""
     return EmailSendLog.objects.create(
         sender=profile,
         recipient_hash=hash_email(email),

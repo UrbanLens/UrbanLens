@@ -26,10 +26,7 @@ class Operator:
         example: A complete example query using this operator.
         aliases: Other spellings that resolve to ``key``.
         choices: For ``KIND_ENUM``, the accepted values.
-        unsupported_reason: Set when the operator is recognized but cannot
-            currently be answered. Parsing still succeeds so the UI can
-            explain *why* rather than returning a silently empty result.
-    """
+        unsupported_reason: Set when the operator is recognized but cannot currently be answered."""
 
     key: str
     kind: str
@@ -113,9 +110,7 @@ def lookup(spelling: str) -> Operator | None:
         spelling: A candidate key, as typed (case-insensitive).
 
     Returns:
-        The matching :class:`Operator`, or None so the caller can fall back to
-        treating the token as free text.
-    """
+        The matching :class:`Operator`, or None so the caller can fall back to treating the token as free text."""
     return _BY_SPELLING.get(spelling.strip().lower())
 
 
@@ -125,12 +120,9 @@ class Clause:
 
     Attributes:
         operator: The operator this clause invokes.
-        values: The value split on commas. More than one means "any of these";
-            comma-OR covers nearly all real disjunction without asking anyone
-            to reason about boolean precedence.
+        values: The value split on commas.
         negated: Whether the clause was written with a leading ``-``.
-        raw: The clause exactly as typed, for echoing back.
-    """
+        raw: The clause exactly as typed, for echoing back."""
 
     operator: Operator
     values: tuple[str, ...]
@@ -154,13 +146,8 @@ class OperatorScan:
 
     Attributes:
         clauses: Recognized operator clauses, in the order they appeared.
-        text: Everything that was not an operator, re-joined with single
-            spaces, for the heuristic parser to work on.
-        unknown_keys: Keys shaped like operators that are not in the
-            vocabulary. Their text is left in ``text`` and also reported here,
-            so the UI can say "``foo:`` isn't an operator - searched as text"
-            instead of quietly doing something unexpected.
-    """
+        text: Everything that was not an operator, re-joined with single spaces, for the heuristic parser to work on.
+        unknown_keys: Keys shaped like operators that are not in the vocabulary."""
 
     clauses: list[Clause] = field(default_factory=list)
     text: str = ""
@@ -202,8 +189,7 @@ def scan(raw: str) -> OperatorScan:
         raw: The query exactly as typed.
 
     Returns:
-        An :class:`OperatorScan` holding the clauses, the leftover text, and
-        any operator-shaped keys that were not recognized."""
+        An :class:`OperatorScan` holding the clauses, the leftover text, and any operator-shaped keys that were not recognized."""
     scan_result = OperatorScan()
     if not raw:
         return scan_result

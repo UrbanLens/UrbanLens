@@ -56,17 +56,7 @@ _KEYWORD_COLOR_FIELDS = frozenset({"detail_bg_color", "detail_border_color"})
 
 class PinType(TextChoices):
     """What a pin/wiki marker physically represents.
-
-    ``PARCEL`` and ``BUILDING`` are the two that drive scope: a parcel is the
-    grounds of a place (a campus, a lot) and is described by the buildings
-    standing on it, while a building is a single structure described by its
-    own building-level records.
-
-    ``LOCATION_MARKER`` is not "unknown" - it is the honest answer for an
-    ordinary property, where the parcel and the building are the same thing
-    and singling out either would be inventing a distinction. It is also the
-    default, and is derived automatically from the place a marker resolves
-    onto (see ``services.places.scope``).
+    ``PARCEL`` and ``BUILDING`` are the two that drive scope: a parcel is the grounds of a place (a campus, a lot) and is described by the buildings standing on it, while a building is a single structure described by its own building-level records.
     """
 
     LOCATION_MARKER = "location", "Location"
@@ -81,12 +71,7 @@ class PinType(TextChoices):
 
     @property
     def icon(self) -> str:
-        """The Material Symbols glyph for this type.
-
-        One mapping, shared by the detail-pin lists, the child-wiki list, and
-        the type badge on both detail pages - the three places that previously
-        each carried their own ``{% if %}`` ladder and could drift apart.
-        """
+        """The Material Symbols glyph for this type."""
         return PIN_TYPE_ICONS.get(self.value, "push_pin")
 
 
@@ -106,22 +91,11 @@ PIN_TYPE_ICONS: dict[str, str] = {
 
 
 class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
-    """A user's personal record for a physical location.
+    """A user's personal record for a physical location. A Pin belongs to exactly one Profile (user)."""
 
-    Pin is the *personal* half of the two-model design:
-    - Location  - one row per real-world place, shared across all users.
-    - Pin       - one row per (user, place) pair; links to a Location via FK.
-
-    A Pin belongs to exactly one Profile (user). Multiple users can each have
-    their own Pin that references the same Location. Everything stored here is
-    specific to that one user: their custom label, notes, visit history, status,
-    priority, and the marker coordinates.
-    """
-
-    # True when the owner explicitly renamed the pin after creation. Names
-    # supplied by creation/import pipelines are not protected: they may be
-    # parser fallbacks such as raw coordinates. External naming refreshes may
-    # replace placeholder/auto-generated labels only while this is False.
+    # True when the owner explicitly renamed the pin after creation.
+    # Names supplied by creation/import pipelines are not protected: they may be parser fallbacks
+    # such as raw coordinates.
     name_is_user_provided = BooleanField(
         default=False,
         help_text="Prevents external API name refreshes from overwriting a user-entered pin name.",
@@ -142,18 +116,15 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     unlogged_visit_dismissed = BooleanField(default=False)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
-    # True when ``pin_type`` was explicitly chosen by the user, exactly like
-    # name_is_user_provided guards ``name``. Automatic classification (see
-    # services.locations.site_scope.classify_building_pin_type) only ever
-    # writes pin_type while this is False.
+    # True when ``pin_type`` was explicitly chosen by the user, exactly like name_is_user_provided
+    # guards ``name``.
+    # Automatic classification (see services.locations.site_scope.classify_building_pin_type) only
+    # ever writes pin_type while this is False.
     pin_type_is_user_provided = BooleanField(
         default=False,
         help_text="Prevents automatic building/parcel classification from overwriting a user-chosen pin type.",
     )
-    # Whether this pin is indoors, outdoors, or both (e.g. a building with an
-    # outdoor courtyard). Left unset (None) until something actually
-    # classifies it - groundwork for a future feature, not yet surfaced in
-    # any UI.
+    # Whether this pin is indoors, outdoors, or both (e.g. a building with an outdoor courtyard).
     indoor_outdoor = CharField(
         max_length=10,
         choices=IndoorOutdoor.choices,
@@ -161,19 +132,16 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         help_text="Whether this pin's location is inside, outside, or both; unset when not yet classified.",
     )
-    # Set when the owner declines this pin's restructure suggestion (create
-    # child pins for the buildings here / nest the top-level pins that fall
-    # inside this property). Permanent per pin: a "no" means no even if new
-    # buildings or new matching top-level pins turn up later, so a declined
-    # suggestion can never come back on its own.
+    # Set when the owner declines this pin's restructure suggestion (create child pins for the
+    # buildings here / nest the top-level pins that fall inside this property).
+    # Permanent per pin: a "no" means no even if new buildings or new matching top-level pins turn
+    # up later, so a declined suggestion can never come back on its own.
     restructure_offer_dismissed = BooleanField(default=False)
 
-    # When this pin's confident buildings were automatically turned into child
-    # pins (see services.pins.auto_nest). One-shot per pin: once stamped, the
-    # sweep never runs for it again, so deleting an auto-created child is a
-    # decision that sticks rather than something the next refresh undoes.
-    # Buildings discovered later go through the explicit "add buildings"
-    # dialog instead.
+    # When this pin's confident buildings were automatically turned into child pins (see
+    # services.pins.auto_nest).
+    # One-shot per pin: once stamped, the sweep never runs for it again, so deleting an auto-created
+    # child is a decision that sticks rather than something the next refresh undoes.
     buildings_auto_nested_at = DateTimeField(null=True, blank=True)
 
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
@@ -235,14 +203,10 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         related_name="pins_created",
     )
-    # Best-effort, heuristic link to a map-detected share that plausibly
-    # explains how the owner learned about this location, for pins the owner
-    # created themselves rather than by accepting a share. Populated lazily
-    # (see services.sharing.map_sharing.infer_source_share_for_pin) only when the
-    # owner explicitly shares this pin onward, so reshare chains still credit
-    # the map that originally revealed it. Never set by _create_pin_from_share
-    # - source_share covers that case exactly, and the two are never both
-    # meaningful for the same pin.
+    # Best-effort, heuristic link to a map-detected share that plausibly explains how the owner
+    # learned about this location, for pins the owner created themselves rather than by accepting a
+    # share.
+    # Populated lazily (see services.sharing.map_sharing.infer_source_share_for_pin) only when the
     inferred_source_share = ForeignKey(
         "dashboard.PinShare",
         on_delete=SET_NULL,
@@ -250,10 +214,10 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         related_name="pins_inferred",
     )
-    # Hero banner photo for the Private Pin page. Any Image tied to this pin
-    # (its own gallery uploads or a materialized Media-gallery item, see
-    # services.media.media_materialize) is eligible; SET_NULL so deleting the photo
-    # just drops the banner rather than the pin.
+    # Hero banner photo for the Private Pin page.
+    # Any Image tied to this pin (its own gallery uploads or a materialized Media-gallery item, see
+    # services.media.media_materialize) is eligible; SET_NULL so deleting the photo just drops the
+    # banner rather than the pin.
     cover_photo = ForeignKey(
         "dashboard.Image",
         on_delete=SET_NULL,
@@ -280,10 +244,9 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
-    #: Memoized parcel-vs-building scope for this instance, filled on first ask
-    #: (several independent panels ask during one page render, and the answer
-    #: can't change mid-request). Not a field - see
-    #: ``services.locations.site_scope.is_site_scope``.
+    #: Memoized parcel-vs-building scope for this instance, filled on first ask (several independent
+    #: panels ask during one page render, and the answer can't change mid-request).
+    #: Not a field - see ``services.locations.site_scope.is_site_scope``.
     _site_scope_cache: bool | None = None
 
     # ------------------------------------------------------------------
@@ -298,10 +261,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             db: Database alias the row was loaded from.
             field_names: Names of the loaded fields.
             values: Loaded field values.
-            fetch_mode: Unused - django-stubs 6.1 types this ahead of the
-                pinned Django 6.0, which has no such parameter at runtime.
-                Accepted only so this override stays substitutable for the
-                declared base signature; never forwarded to ``super()``.
+            fetch_mode: Unused (kept for base-signature compatibility).
 
         Returns:
             The loaded Pin instance.
@@ -315,18 +275,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def save(self, *args, **kwargs) -> None:
         """Save the pin, keeping the alias list in sync with the name.
-
-        The alias list is the full set of names a pin has ever had, including
-        the current one - so whenever a meaningful ``name`` is persisted, an
-        alias row for it is ensured. This single enforcement point covers
-        every write path (HTMX controllers, REST serializer, Django admin),
-        and also sanitizes ``name`` to a strict character set before it's
-        persisted (see ``sanitize_name``).
-
-        Moving the pin to a different Location also propagates the owner's
-        share-chain exposures onto the new location here, so the "infection"
-        follows the pin no matter which write path moved it (see
-        ``services.sharing.share_provenance``).
+        The alias list is the full set of names a pin has ever had, including the current one - so whenever a meaningful ``name`` is persisted, an alias row for it is ensured.
         """
         update_fields = kwargs.get("update_fields")
         if update_fields is None or "name" in update_fields:
@@ -352,36 +301,20 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def coerce_colors(self) -> None:
         """Drop `color` to NULL unless it is a colour this application stores.
-
-        Enforced on the column rather than at each writer because the value is
-        served as `effective_color` and interpolated into a Leaflet `divIcon`'s
-        `html`, and the writers do not share a gate: the floorplan editor's save
-        assigns it straight from its JSON body, and the archive importer assigns
-        it from an uploaded file. Neither passes an API serializer.
-
-        `detail_bg_color`/`detail_border_color` go through the same treatment.
-        They reach `rgba(...)` through `hexToRgb`, which yields `NaN,NaN,NaN`
-        rather than an injection - so this is about the marker rendering at all,
-        not about escaping.
+        Enforced on the column rather than at each writer because the value is served as `effective_color` and interpolated into a Leaflet `divIcon`'s `html`, and the writers do not share a gate: the floorplan editor's save assigns it straight from its JSON body, and the archive importer assigns it from an uploaded file.
         """
         self.color = clean_color(self.color, default=None)
         for field in _KEYWORD_COLOR_FIELDS:
-            # `allow_none_keyword`: the detail-pin controller accepts the literal
-            # "none" for these two, meaning "no fill / no border" rather than
-            # "unset", and the Wiki twin of that endpoint keeps it. Coercing it
-            # away here would make the two halves of one feature disagree.
+            # `allow_none_keyword`: the detail-pin controller accepts the literal "none" for these
+            # two, meaning "no fill / no border" rather than "unset", and the Wiki twin of that
+            # endpoint keeps it.
+            # Coercing it away here would make the two halves of one feature disagree.
             setattr(self, field, clean_color(getattr(self, field), default=None, allow_none_keyword=True))
 
     def mark_viewed(self) -> None:
         """Record that the owner just opened this pin's detail page.
-
-        Throttled to once per calendar day per pin - the detail page is
-        typically reloaded many times in a single visit (partial swaps,
-        re-fetches after edits), and this is a "recently viewed" signal, not
-        a precise view-count. Uses ``save(update_fields=[...])`` rather than a
-        bare ``.update()`` so the normal post_save signal still fires,
-        keeping smart-list/saved-filter resync in sync with any
-        ``last_viewed_after``/``last_viewed_before`` filter criteria.
+        Throttled to once per calendar day per pin - the detail page is typically reloaded many times in a single visit (partial swaps, re-fetches after edits), and this is a "recently viewed" signal, not a precise view-count.
+        Uses ``save(update_fields=[...])`` rather than a bare ``.update()`` so the normal post_save signal still fires, keeping smart-list/saved-filter resync in sync with any ``last_viewed_after``/``last_viewed_before`` filter criteria.
         """
         now = timezone.now()
         if self.last_viewed_at is not None and self.last_viewed_at.date() == now.date():
@@ -391,10 +324,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def _sync_exposures_after_save(self, update_fields) -> None:
         """Propagate share-chain exposures when this save moved the pin.
-
-        Only fires when the persisted ``location`` actually changed in this
-        save (see ``from_db``'s ``_loaded_location_id`` capture) - creation
-        and non-location saves are no-ops.
+        Only fires when the persisted ``location`` actually changed in this save (see ``from_db``'s ``_loaded_location_id`` capture) - creation and non-location saves are no-ops.
 
         Args:
             update_fields: The ``update_fields`` this save was called with
@@ -415,12 +345,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def would_create_cycle(self, new_parent: Pin | None) -> bool:
         """Return True if ``new_parent`` becoming this pin's parent would close a loop.
-
         Walks ``new_parent``'s own ``parent_pin`` chain looking for this pin's pk.
-        A ``visited`` guard bounds the walk to the number of distinct pins actually
-        in the chain, so the check still terminates promptly even against data that
-        is already corrupted with a pre-existing cycle (mirrors the cycle-safe walk
-        in ``Label.get_label_and_descendants``).
+        A ``visited`` guard bounds the walk to the number of distinct pins actually in the chain, so the check still terminates promptly even against data that is already corrupted with a pre-existing cycle (mirrors the cycle-safe walk in ``Label.get_label_and_descendants``).
 
         Args:
             new_parent: The pin that would be assigned to ``self.parent_pin``, or
@@ -448,9 +374,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def ancestor_chain(self) -> list[Pin]:
         """Return this pin's ancestors, nearest parent first.
-
-        Walks ``parent_pin`` with a visited guard so a pre-existing corrupted
-        cycle terminates instead of looping (mirrors ``would_create_cycle``).
+        Walks ``parent_pin`` with a visited guard so a pre-existing corrupted cycle terminates instead of looping (mirrors ``would_create_cycle``).
 
         Returns:
             The ancestor pins in order (parent, grandparent, ...); empty for a
@@ -475,14 +399,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def promote_children(self) -> int:
         """Move this pin's direct children up one level, without deleting this pin.
-
-        Children move to this pin's own parent, or become top-level pins if
-        this pin has none. In the latter case, a child that shares this pin's
-        own Location can't be promoted without violating the
-        one-root-pin-per-Location-per-profile constraint (this pin still
-        occupies that slot), so it is left in place; that conflict doesn't
-        exist when there's a parent to move to instead, since only *root*
-        pins are constrained by Location.
+        Children move to this pin's own parent, or become top-level pins if this pin has none.
 
         Returns:
             The number of children actually promoted.
@@ -503,22 +420,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def swap_with_parent(self) -> Pin:
         """Swap places with this pin's parent: this pin becomes the parent, the parent becomes its child.
-
-        The rest of the hierarchy is preserved - this pin takes over the
-        former parent's own parent slot (grandparent, or top-level if none),
-        and the former parent moves one level down to become this pin's
-        child. This pin is reattached directly to the grandparent slot in a
-        single save (skipping past the old parent) rather than detaching to
-        None first: a detach-first step would transiently make this pin a
-        second root pin at its own Location, which can spuriously trip
-        ``db_pin_unique_location_per_profile`` even when the final state (a
-        child of the grandparent) is perfectly valid. Only when there is no
-        grandparent - i.e. this pin's final state really is a new top-level
-        pin - does it get a bare ``parent_pin = None``, and that's exactly
-        the case the conflict check below guards. The two saves are wrapped
-        in a transaction so a failure between them can't leave the hierarchy
-        half-swapped, and at no point do this pin and the old parent ever
-        point at each other simultaneously.
+        The rest of the hierarchy is preserved - this pin takes over the former parent's own parent slot (grandparent, or top-level if none), and the former parent moves one level down to become this pin's child.
+        This pin is reattached directly to the grandparent slot in a single save (skipping past the old parent) rather than detaching to None first: a detach-first step would transiently make this pin a second root pin at its own Location, which can spuriously trip ``db_pin_unique_location_per_profile`` even when the final state (a child of the grandparent) is perfectly valid.
 
         Returns:
             The former parent pin, now this pin's child.
@@ -552,13 +455,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def backfill_wiki_link_slugs(self) -> None:
         """Ensure this pin, its location, and its wiki (if any) all have slugs.
-
-        Legacy rows created before slug generation was automatic can have a
-        blank ``Location.slug``, which silently hides the wiki create/view
-        link on the pin overview partial (see its
-        ``{% if pin.location and pin.location.slug %}`` guard) since the url
-        can't be reversed without one. Safe to call on every request - each
-        check is a no-op once the slug exists.
+        Safe to call on every request - each check is a no-op once the slug exists.
         """
         if self.wiki and not self.wiki.slug:
             self.wiki.ensure_slug()
@@ -577,14 +474,10 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             return None
         from urbanlens.dashboard.models.labels.meta import KIND_USER
 
-        # `.all()` + a Python filter, not `.exclude(kind=...)`: a filtered call on the
-        # related manager builds a fresh queryset and so ignores prefetch_related("labels"),
-        # which made this one query per pin on every list that renders effective_icon /
-        # effective_color. Unprefetched callers still pay exactly one query, as before.
-        #
-        # Secondary sort by name matches services.map_pins.payload._ordered_location_labels'
-        # tie-break - without it, two labels sharing the same `order` on one pin could pick
-        # a different "winning" icon here than the map marker resolves to.
+        # `.all()` + a Python filter, not `.exclude(kind=...)`: a filtered call on the related
+        # manager builds a fresh queryset and so ignores prefetch_related("labels"), which made this
+        # one query per pin on every list that renders effective_icon / effective_color.
+        # Unprefetched callers still pay exactly one query, as before.
         labels = sorted((label for label in self.labels.all() if label.kind != KIND_USER), key=lambda label: (-label.order, label.name or ""))
         for label in labels:
             if label.custom_icon and not label.icon_is_overridden:
@@ -646,14 +539,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     @property
     def deduplicated_identity_fields(self) -> list[tuple[str, str]]:
         """(label, value) pairs for Place Name/Official Name/Address, with near-duplicate text collapsed.
-
-        These three fields often carry the same core address text at
-        different levels of formatting completeness (e.g. "123 Main St" vs.
-        "123 Main St, Springfield, IL 62704, USA") rather than genuinely
-        distinct information - a plain equality check only catches an exact
-        match, not one string being a formatting-level superset of another.
-        Keeps the most detailed version of any duplicated text and drops the
-        rest, restoring Place Name / Official Name / Address display order.
+        These three fields often carry the same core address text at different levels of formatting completeness (e.g.
+        "123 Main St, Springfield, IL 62704, USA") rather than genuinely distinct information - a plain equality check only catches an exact match, not one string being a formatting-level superset of another.
 
         Returns:
             (label, value) pairs to render.
@@ -669,16 +556,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def ancestor_search_names(self) -> list[str]:
         """Meaningful names and aliases from this pin's ancestor chain, nearest first.
-
-        A child pin's own name is frequently a generic building label
-        ("Superintendent's Cottage", "Staff House") shared verbatim by
-        unrelated properties nationwide, with no identifying power by itself.
-        External search/media queries need the parent site's identity too, or
-        a query for the child's name alone matches whichever same-named
-        building a provider's relevance ranking prefers, rather than this
-        specific site (see ``get_unique_search_name``, and the SearXNG/Flickr
-        media providers, which fold this into their own required-clause query
-        shapes directly).
+        A child pin's own name is frequently a generic building label ("Superintendent's Cottage", "Staff House") shared verbatim by unrelated properties nationwide, with no identifying power by itself.
+        External search/media queries need the parent site's identity too, or a query for the child's name alone matches whichever same-named building a provider's relevance ranking prefers, rather than this specific site (see ``get_unique_search_name``, and the SearXNG/Flickr media providers, which fold this into their own required-clause query shapes directly).
 
         Returns:
             Deduplicated (case-insensitive) ancestor names, nearest parent
@@ -705,13 +584,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True, quote_locality: bool = False) -> str | None:
         """Name to use when searching for this location in external APIs.
-
-        Address components fall back to the linked Location's geocoded address
-        when the pin has none of its own, since a Location-linked pin's own
-        address fields are typically blank (see ``effective_latitude``). For a
-        child pin, the nearest ancestor's name is included too (see
-        ``ancestor_search_names``) - a child's own name is often a generic
-        building label with no identifying power on its own.
+        Address components fall back to the linked Location's geocoded address when the pin has none of its own, since a Location-linked pin's own address fields are typically blank (see ``effective_latitude``).
 
         Args:
             include_country: Whether to append the country to the query.
@@ -778,12 +651,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     @property
     def effective_color(self) -> str | None:
         """Color hex for the map icon circle, when one applies.
-
-        Only an explicit ``pin.color`` or the label that supplies the displayed icon
-        may contribute. Other labels on the pin (e.g. a yellow tag when a green
-        icon tag has no color) must not produce a circle.
-
-        Prefetch labels (with customizations) when calling in bulk (e.g. map_data_context).
+        Only an explicit ``pin.color`` or the label that supplies the displayed icon may contribute.
         """
         if self.color:
             return self.color
@@ -797,13 +665,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     @property
     def community_wiki(self):
         """The community page for the place this pin stands on, if there is one.
-
-        Not the same as ``self.wiki``, which is a cache set only when a pin is
-        explicitly linked, nor as ``self.location.wiki``, which is the page
-        anchored to this exact coordinate. Resolving through the *place* is
-        what lets the second person to pin a property see the page the first
-        one created, instead of being offered a "Create Community Wiki" button
-        for a wiki that already exists.
+        Not the same as ``self.wiki``, which is a cache set only when a pin is explicitly linked, nor as ``self.location.wiki``, which is the page anchored to this exact coordinate.
         """
         from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -833,13 +695,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     @property
     def effective_latitude(self) -> float:
-        """Pin marker latitude, as a float.
-
-        Not a pure duplicate of the inherited ``AddressableModel.latitude`` - that
-        property returns a ``Decimal``, while this returns ``float`` for the ~160
-        call sites (JSON payloads, distance math, templates) that expect one. Keep
-        both rather than pushing a ``float()`` cast onto every caller.
-        """
+        """Pin marker latitude, as a float."""
         return float(self.location.latitude)
 
     @property
@@ -862,12 +718,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     @property
     def rating(self) -> int:
         """The most recent review's rating, or 0.
-
-        Uses `max()` over `self.reviews.all()` rather than `.latest()`: `latest()`
-        appends ORDER BY + LIMIT and so always issues a query, even when the caller
-        has done `prefetch_related("reviews")`. `.all()` reads the prefetch cache when
-        one exists and costs a single query when it does not. `Review.Meta` sets
-        `get_latest_by = "created"`, which is what the key below reproduces.
+        Uses `max()` over `self.reviews.all()` rather than `.latest()`: `latest()` appends ORDER BY + LIMIT and so always issues a query, even when the caller has done `prefetch_related("reviews")`.
         """
         reviews = self.reviews.all()
         if not reviews:
@@ -876,23 +727,16 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         return max(reviews, key=lambda review: review.created).rating
 
     def __str__(self) -> str:
-        """A short, query-free label for admin lists, logs and error pages.
-
-        Deliberately does not touch `labels` or `location`: `__str__` runs on every repr,
-        so a query here is one per row in an admin list and one per log line. It also
-        stays on a single line - the previous multi-line form rendered as a paragraph
-        inside select dropdowns and broke log grepping.
-        """
+        """A short, query-free label for admin lists, logs and error pages."""
         return self.name or f"Pin {self.pk}"
 
     def to_json(self) -> dict[str, Any]:
         from urbanlens.dashboard.models.labels.meta import KIND_STATUS, KIND_TAG
 
-        # Filtered in Python, not with .filter(): calling .filter() on a prefetched
-        # many-to-many builds a fresh queryset and ignores the prefetch cache, so a
-        # caller that prefetch_related("labels") still paid a query per kind per pin.
-        # .all() reads the cache when one is present, and costs a single query when
-        # it is not.
+        # Filtered in Python, not with .filter(): calling .filter() on a prefetched many-to-many
+        # builds a fresh queryset and ignores the prefetch cache, so a caller that
+        # prefetch_related("labels") still paid a query per kind per pin. .all() reads the cache
+        # when one is present, and costs a single query when it is not.
         labels = list(self.labels.all())
         return {
             "uuid": str(self.uuid),
@@ -968,17 +812,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def slug_is_placeholder(self) -> bool:
         """Whether this pin's slug was derived from a placeholder rather than a name.
-
-        A pin created before anything knew what it was gets a slug like
-        ``unnamed-location`` or ``dropped-pin``, and slugs are generated once and
-        never revisited - so naming the pin afterwards left the placeholder in the
-        URL forever. Reported from staging: a pin named "HRSH", with three
-        aliases, still addressed as ``unnamed-location``.
-
-        Decided by reading the slug back as words and asking the same question the
-        naming service asks of any name. That keeps the rule in one place, and
-        means a slug is only ever replaced when it says nothing - a slug derived
-        from a real name is never touched, so existing links keep working.
+        A pin created before anything knew what it was gets a slug like ``unnamed-location`` or ``dropped-pin``, and slugs are generated once and never revisited - so naming the pin afterwards left the placeholder in the URL forever.
 
         Returns:
             True when the current slug carries no information.

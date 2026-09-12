@@ -26,14 +26,11 @@ if TYPE_CHECKING:
 class AlphaFeatureRequiredMixin:
     """Refuses users who do not hold :attr:`SiteFeature.ALPHA_FEATURES`.
 
-    The games (SpotGuessr, Trivia, Consensus) are alpha features: the same
-    entitlement that hides the games nav and the hub must also gate every
-    in-game route, otherwise anyone with a URL can play.
-
-    Mix this in **after** ``LoginRequiredMixin`` (e.g.
-    ``class FooView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View)``)
-    so anonymous visitors are redirected to the login page first rather than
-    receiving a bare 403.
+    The games (SpotGuessr, Trivia, Consensus) are alpha features: the same entitlement that hides the
+    games nav and the hub must also gate every in-game route, otherwise anyone with a URL can play.
+    Mix this in **after** ``LoginRequiredMixin`` (e.g. ``class FooView(LoginRequiredMixin,
+    AlphaFeatureRequiredMixin, View)``) so anonymous visitors are redirected to the login page first
+    rather than receiving a bare 403.
 
     Raises:
         PermissionDenied: When the authenticated user lacks the feature.
@@ -48,9 +45,8 @@ class AlphaFeatureRequiredMixin:
 class GameEntry:
     """One row in the games directory.
 
-    ``url`` resolves ``url_name`` lazily (on template access, not at import
-    time) - ``GAMES`` below is built at module import, before every URL
-    pattern is necessarily registered yet.
+    ``url`` resolves ``url_name`` lazily (on template access, not at import time) - ``GAMES`` below is
+    built at module import, before every URL pattern is necessarily registered yet.
     """
 
     def __init__(self, *, name: str, description: str, icon: str, url_name: str) -> None:
@@ -102,15 +98,14 @@ class RatedRow(Protocol):
 def rating_stats(own_rating: RatedRow | None, friend_ratings: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Stat chips for the shared game hero (``partials/games/_game_hero_body.html``).
 
-    SpotGuessr and Trivia expose structurally identical rating rows and
-    identical ``visible_friend_ratings`` payloads, so both build their chips
-    here rather than keeping two copies that can drift apart.
+    SpotGuessr and Trivia expose structurally identical rating rows and identical
+    ``visible_friend_ratings`` payloads, so both build their chips here rather than keeping two copies
+    that can drift apart.
 
     Args:
         own_rating: The viewer's rating row, or None for a player with no rated games yet.
-        friend_ratings: ``{"profile": Profile, "rating": <row> | None}`` mappings for
-            friends who have opted into sharing (a friend who hasn't played yet
-            still appears, with ``rating=None``).
+        friend_ratings: ``{"profile": Profile, "rating": <row> | None}`` mappings for friends who have
+        opted into sharing (a friend who hasn't played yet still...
 
     Returns:
         One dict per chip, with ``label``, ``value``, ``note`` and ``is_self`` keys.

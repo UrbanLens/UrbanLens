@@ -28,9 +28,7 @@ class PinCollectionState:
         """A short opaque value that changes on any create, edit or delete.
 
         Returns:
-            The value clients compare. Only equality is meaningful - nothing
-            should parse it, and its format is free to change.
-        """
+            The value clients compare."""
         stamp = self.last_updated.isoformat() if self.last_updated else "none"
         return f"{stamp}:{self.total}"
 

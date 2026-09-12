@@ -21,11 +21,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class RoundContent:
-    """What ``ModeStrategy.build_round`` resolves for one candidate location.
-
-    Handed straight to ``GameRound.objects.create()`` by the caller - see
-    ``services.spotguessr.session.get_or_create_round``.
-    """
+    """What ``ModeStrategy.build_round`` resolves for one candidate location."""
 
     target: RoundTarget
     image: Image | None = None
@@ -38,27 +34,9 @@ class ModeStrategy:
 
     Attributes:
         mode: The ``SpotGuessrMode`` value this strategy implements.
-        shows_imagery: Whether a round in this mode shows the player real
-            photographic content worth reacting to (thumbs up/down/report) -
-            Photos and Street View do, Named Place (text-only) doesn't. Read
-            by ``services.spotguessr.relevance`` and serialized onto every
-            round payload so the frontend never has to hardcode its own copy
-            of "which modes show a photo".
-        build_round: Given an eligible ``Location``, the session's
-            ``GameConfig``, and its joined participants, returns the
-            mode-specific ``RoundContent`` for that location, or ``None`` if
-            this location has nothing usable for this mode yet (e.g. no
-            photo, no name/alias, no Street View coverage) - the caller
-            should exclude it and try another candidate rather than treat
-            that as a hard error. Most strategies ignore the participant
-            list; Photos mode uses it to tell a single-participant session
-            apart from a multiplayer one (see ``_build_photos``).
-        serialize_round: Mutates a round's outbound JSON payload in place,
-            adding whatever fields this mode's ``RoundPayload`` needs
-            (``image_url``, ``display_text``, ``street_view_image``, ...).
-            Never includes the answer - that's the same rule every mode's
-            round payload follows regardless of strategy.
-    """
+        shows_imagery: Whether a round in this mode shows the player real photographic content worth reacting to (thumbs up/down/report) - Photos and Street View do, Named Place (text-only) doesn't.
+        build_round: Given an eligible ``Location``, the session's ``GameConfig``, and its joined participants, returns the mode-specific ``RoundContent`` for that location, or ``None`` if this location has nothing usable for this mode yet (e.g. no photo, no...
+        serialize_round: Mutates a round's outbound JSON payload in place, adding whatever fields this mode's ``RoundPayload`` needs (``image_url``, ``display_text``, ``street_view_image``, ...)."""
 
     mode: str
     shows_imagery: bool

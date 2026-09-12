@@ -25,14 +25,12 @@ _SNIFFED_IMAGE_EXTENSIONS = _IMAGE_EXTENSIONS | {"apng"}
 
 def guess_media_kind_from_extension(filename: str) -> MediaKind | None:
     """Guess a file's claimed MediaKind from its filename extension alone.
-    For places with no client-supplied Content-Type to trust at all - e.g. a file extracted from a data-export archive during re-import - the extension is the only signal available for what the file *claims* to be, to then cross-check against :func:`sniff_media_kind`'s magic-byte read of what it *actually* is via :func:`content_type_mismatch_error`.
 
     Args:
         filename: The file's name (path or bare name; only the extension is used).
 
     Returns:
-        The guessed ``MediaKind``, or ``None`` if the extension isn't one of
-        the recognized image/video/document extensions."""
+        The guessed ``MediaKind``, or ``None`` if the extension isn't one of the recognized image/video/document extensions."""
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if extension in _IMAGE_EXTENSIONS:
         return MediaKind.PHOTO
@@ -45,14 +43,12 @@ def guess_media_kind_from_extension(filename: str) -> MediaKind | None:
 
 def unsupported_image_extension_error(filename: str) -> str | None:
     """Reject a photo upload whose extension we would not serve as a passive image.
-    The magic-byte check in :func:`content_type_mismatch_error` deliberately fails *open* for formats ``filetype`` cannot fingerprint, which is right for documents but leaves a hole for photos: **SVG has no magic-byte signature**, so a scripted ``.svg`` passes sniffing, passes antivirus (script in markup is not a virus signature), and gets stored.
 
     Args:
         filename: The uploaded file's client-supplied name.
 
     Returns:
-        A user-facing error message when the extension is not an allowed image
-        extension, else None."""
+        A user-facing error message when the extension is not an allowed image extension, else None."""
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if extension in _IMAGE_EXTENSIONS:
         return None
@@ -63,14 +59,10 @@ def sniff_media_kind(file_obj: IO[bytes]) -> MediaKind | None:
     """Detect the real media kind of an uploaded file from its magic bytes.
 
     Args:
-        file_obj: The uploaded file to sniff. Its read position is left
-            unchanged (``filetype`` only peeks at the first few KB and
-            restores the original position itself).
+        file_obj: The uploaded file to sniff.
 
     Returns:
-        The ``MediaKind`` the file's bytes actually match, or ``None`` if
-        ``filetype`` doesn't recognize the format at all.
-    """
+        The ``MediaKind`` the file's bytes actually match, or ``None`` if ``filetype`` doesn't recognize the format at all."""
     kind = filetype.guess(file_obj)
     if kind is None:
         return None
@@ -91,8 +83,7 @@ def photo_is_not_an_image_error(file_obj: IO[bytes]) -> str | None:
         file_obj: The uploaded file.
 
     Returns:
-        A user-facing error message when the bytes are not a recognisable
-        image, else ``None``."""
+        A user-facing error message when the bytes are not a recognisable image, else ``None``."""
     if sniff_media_kind(file_obj) == MediaKind.PHOTO:
         return None
     return "That file doesn't look like an image. Please upload a JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, or AVIF file."
@@ -103,15 +94,10 @@ def content_type_mismatch_error(file_obj: IO[bytes], declared_media_type: MediaK
 
     Args:
         file_obj: The uploaded file.
-        declared_media_type: The ``MediaKind`` the caller classified the
-            upload as, based on the client-supplied Content-Type/extension.
+        declared_media_type: The ``MediaKind`` the caller classified the upload as, based on the client-supplied Content-Type/extension.
 
     Returns:
-        A user-facing error message on a confirmed mismatch (e.g. a
-        ``.jpg``-named file whose bytes are actually an executable), or
-        ``None`` when the bytes match or the format isn't one ``filetype``
-        can fingerprint (in which case the declared type is trusted).
-    """
+        A user-facing error message on a confirmed mismatch (e.g. a ``.jpg``-named file whose bytes are actually an executable), or ``None`` when the bytes match or the format isn't one ``filetype`` can fingerprint (in which case the declared type is trusted)."""
     sniffed = sniff_media_kind(file_obj)
     if sniffed is None or sniffed == declared_media_type:
         return None

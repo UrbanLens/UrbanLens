@@ -1,19 +1,6 @@
 """Deleting a photo removes its bytes, whichever path deleted it.
-
-Django stopped removing a ``FileField``'s file on row delete in 1.3, and nothing
-here replaced it: file cleanup lived in ``delete_stored_file``, which the gallery
-delete view calls and a cascade does not. So a photo removed by any other route -
-a profile being deleted, a queryset ``.delete()``, an orphan sweep - left its
-bytes on disk.
-
-That is worse than untidy. ``MediaGateView`` serves a file whose owning row has
-gone to any authenticated user (deliberately: see the "Authenticated media gate"
-entry in docs/PROBLEMS.md), so bytes left behind by a delete stayed fetchable by
-anyone who had ever been given the URL. "I deleted that photo" has to mean it.
-
-The work still goes through :func:`delete_stored_file` rather than unlinking
-here: sharing a pin reuses one storage key across several ``Image`` rows, so the
-file goes only when the last row pointing at it does.
+Django stopped removing a ``FileField``'s file on row delete in 1.3, and nothing here replaced it: file cleanup lived in ``delete_stored_file``, which the gallery delete view calls and a cascade does not.
+So a photo removed by any other route - a profile being deleted, a queryset ``.delete()``, an orphan sweep - left its bytes on disk.
 """
 
 from __future__ import annotations

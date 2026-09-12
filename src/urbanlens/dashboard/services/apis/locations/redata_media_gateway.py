@@ -16,8 +16,7 @@ _MEDIA_LOOKUP_PATH = "/api/v1/media/lookup/"
 
 @dataclass(slots=True, kw_only=True)
 class RedataMediaGateway(RedataLocationContextGateway):
-    """REST client for REData's ``/api/v1/media/lookup/`` near-point endpoint.
-    Shares one outbound rate-limit bucket (``redata_media``) across every media lookup UrbanLens makes through REData, regardless of which upstream ``provider`` tag was requested - REData is the actual caller of Mapillary/KartaView/Panoramax now, and pools its own outbound budget for them server-side (see the base gateway's docstring), so the meaningful unit to rate-limit from UrbanLens's side is "calls to REData's media endpoint", not one bucket per upstream network."""
+    """REST client for REData's ``/api/v1/media/lookup/`` near-point endpoint."""
 
     service_key: ClassVar[str] = "redata_media"
 
@@ -35,33 +34,8 @@ class RedataMediaGateway(RedataLocationContextGateway):
     ) -> list[dict[str, Any]]:
         """Look up media items near a coordinate.
 
-        Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            kind: Restrict to one or more ``MediaItemKind`` tags (e.g.
-                ``"photo"``) - repeatable, matching REData's ``?kind=``.
-            provider: Restrict to one or more provider tags (e.g.
-                ``"mapillary"``) - repeatable, matching REData's ``?provider=``.
-            radius_meters: Search radius in meters. Mapillary/KartaView/Panoramax
-                are fixed at 100m on REData's own side regardless of this value;
-                harmless to pass for the other registered media providers.
-            limit: Bounded positive integer (REData caps at 200).
-            is_aerial: Keep only drone/aerial footage, which REData flags on
-                each item from the publisher's own title and description.
-                Applied here rather than sent as a query parameter: ``is_aerial``
-                is a ``filterset_fields`` entry on REData's ``/media/`` viewset,
-                not something ``/media/lookup/`` reads, so passing it did
-                nothing and the whole nearby set came back as "aerial".
-            force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-            The envelope's ``results`` list, provider-tagged dicts per REData's
-            ``MediaItemSerializer`` shape (``provider``, ``external_id``,
-            ``kind``, ``title``, ``description``, ``url``, ``thumbnail_url``,
-            ``credit``, ``latitude``, ``longitude``, ``attributes``, ...).
-            Empty when nothing is nearby - see :meth:`near_point` for when this
-            raises instead.
-        """
+            The envelope's ``results`` list, provider-tagged dicts per REData's ``MediaItemSerializer`` shape (``provider``, ``external_id``, ``kind``, ``title``, ``description``, ``url``, ``thumbnail_url``, ``credit``, ``latitude``, ``longitude``, ``attributes``, ...)."""
         extra_params: dict[str, Any] = {}
         if kind is not None:
             extra_params["kind"] = kind
@@ -86,25 +60,16 @@ class RedataMediaGateway(RedataLocationContextGateway):
 
 @dataclass(slots=True, kw_only=True)
 class _RedataStreetViewProvider(StreetViewProvider):
-    """Base for one REData ``media/lookup`` provider surfaced in the street-view carousel.
-    ``service_key`` stays each provider's own historical tag (``mapillary``/``kartaview``/``panoramax``) rather than sharing :class:`RedataMediaGateway`'s - it namespaces this provider's own 24h slide cache (see ``StreetViewProvider.get_street_view_slides``) and the debug overlay's per-provider breakdown, both of which must stay distinct per network even though the actual HTTP call is now made (and rate-limited) through one shared REData gateway instance."""
+    """Base for one REData ``media/lookup`` provider surfaced in the street-view carousel."""
 
     _redata_provider: ClassVar[str] = ""
     _display_name: ClassVar[str] = ""
 
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
         """Yield one dated slide per capture *date* from this provider, newest first.
-        Sourced from REData's ``/street-view/timeline/`` rather than ``/media/lookup/``: the timeline holds every date a camera passed the point (not just each network's current nearby photos), and its ``representative`` is the frame taken nearest the query point - an arbitrary pick shows a picture down the street about half the time.
-
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                radius: Unused - REData pins the street-view search at 100 m per
-                provider; kept for the ``StreetViewProvider`` signature.
-                limit: Maximum number of dated slides to yield.
 
         Yields:
-                ``StreetViewSlide`` entries, newest capture date first."""
+            ``StreetViewSlide`` entries, newest capture date first."""
         from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
 
         timeline = RedataStreetViewGateway().get_timeline(latitude, longitude, provider=self._redata_provider)

@@ -12,9 +12,8 @@ from django.views import View
 
 logger = logging.getLogger(__name__)
 
-#: Backend path used to log the seeded account in. Named explicitly because the
-#: project runs several authentication backends and ``auth_login`` cannot pick
-#: one on its own for a user it did not authenticate.
+#: Named explicitly because the project runs several authentication backends and ``auth_login`` cannot pick one
+#: on its own for a user it did not authenticate.
 _AUTH_BACKEND = "urbanlens.dashboard.services.auth.auth_backend.EmailOrUsernameModelBackend"
 
 
@@ -24,9 +23,8 @@ class DemoLoginView(View):
     def post(self, request: HttpRequest) -> HttpResponse:
         """Create a demo account and log the visitor into it.
 
-        POST rather than GET deliberately: seeding writes several hundred rows,
-        and a GET would be fired by every crawler, link preview and prefetch
-        that ever saw the button.
+        POST rather than GET deliberately: seeding writes several hundred rows, and a GET would be fired by
+        every crawler, link preview and prefetch that ever saw the button.
 
         Args:
             request: The current request.

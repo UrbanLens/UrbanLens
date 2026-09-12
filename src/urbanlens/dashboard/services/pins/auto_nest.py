@@ -23,11 +23,7 @@ def eligible(pin: Pin) -> bool:
         pin: The candidate parent.
 
     Returns:
-        True for a root pin whose owner has the feature on, that has never
-        been swept, was never told "no" via the restructure offer, has no
-        children yet (an existing hierarchy is the user's own arrangement),
-        and is not user-typed as a single structure.
-    """
+        True for a root pin whose owner has the feature on, that has never been swept, was never told "no" via the restructure offer, has no children yet (an existing hierarchy is the user's own arrangement), and is not user-typed as a single structure."""
     from urbanlens.dashboard.models.pin.model import PinType
 
     if pin.parent_pin_id is not None or pin.buildings_auto_nested_at is not None or pin.restructure_offer_dismissed:

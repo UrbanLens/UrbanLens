@@ -1,5 +1,4 @@
-"""Server-side page context resolution (plan §9, batch 3).
-The client sends only its own URL path (``location.pathname``, query string stripped server-side) - never DOM text, never an object id beyond what the URL itself already names. :func:`resolve_page_context` resolves that path the same way Django would for the request that rendered it (``django.urls.resolve()``), then re-runs the *same* access check the page's own view would before returning an object id - a spoofed or unresolvable path resolves to nothing (never an error), and a URL naming an object the requesting profile can't see resolves to nothing too, never that object."""
+"""Server-side page context resolution (plan §9, batch 3)."""
 
 from __future__ import annotations
 
@@ -29,15 +28,8 @@ class PageContext:
     """What :func:`resolve_page_context` returns for a URL path.
 
     Attributes:
-        url_name: The resolved Django URL name (e.g. ``"pin.details"``) -
-            also the lookup key into ``services.ai.page_help.PAGE_HELP``
-            (batch 4's ``get_page_help`` tool), so no separate key is kept
-            here.
-        object: The page's own object, re-loaded under the requesting
-            profile's access rules, or ``None`` for a page with none (the
-            map) or where the URL's own object doesn't exist / isn't visible
-            to this profile.
-    """
+        url_name: The resolved Django URL name (e.g. ``"pin.details"``) - also the lookup key into ``services.ai.page_help.PAGE_HELP`` (batch 4's ``get_page_help`` tool), so no separate key is kept here.
+        object: The page's own object, re-loaded under the requesting profile's access rules, or ``None`` for a page with none (the map) or where the URL's own object doesn't exist / isn't visible to this profile."""
 
     url_name: str
     object: PageObject | None = None
@@ -101,18 +93,11 @@ def resolve_page_context(path: str, profile: Profile) -> PageContext | None:
     """Resolve a client-sent ``location.pathname`` into a :class:`PageContext`.
 
     Args:
-        path: The client's current path. Any query string is stripped before
-            resolution - this module only ever trusts the path itself.
-        profile: The requesting profile - every object load is scoped to it,
-            exactly as the real page's own view would scope it.
+        path: The client's current path.
+        profile: The requesting profile - every object load is scoped to it, exactly as the real page's own view would scope it.
 
     Returns:
-        The resolved context, or ``None`` when the path doesn't resolve to a
-        known Django URL, resolves to a page this module has no entry for, or
-        names an object that either doesn't exist or isn't visible to
-        ``profile``. All of these read identically to a caller - the point is
-        that a spoofed path can't be told apart from a merely unsupported one.
-    """
+        The resolved context, or ``None`` when the path doesn't resolve to a known Django URL, resolves to a page this module has no entry for, or names an object that either doesn't exist or isn't visible to ``profile``."""
     clean_path = urlsplit(path).path or "/"
     try:
         match = resolve(clean_path)
@@ -147,8 +132,8 @@ def _trip_still_visible(profile: Profile, obj_id: int) -> bool:
 
 #: kind -> "does this profile still have access to this id" check, used by
 #: :func:`verify_page_object`.
-#: Each entry re-applies the same profile-scoping filter its loader above uses, but by id rather
-#: than by URL kwargs, since verification only ever has the id round-tripped through a task queue.
+#: Each entry re-applies the same profile-scoping filter its loader above uses, but by id rather than
+#: by URL kwargs, since verification only ever has the id round-tripped through a task queue.
 _EXISTENCE_CHECKS: dict[str, Callable[[Profile, int], bool]] = {
     "pin": _pin_still_visible,
     "trip": _trip_still_visible,
@@ -157,16 +142,13 @@ _EXISTENCE_CHECKS: dict[str, Callable[[Profile, int], bool]] = {
 
 def verify_page_object(profile: Profile, page_object: PageObject) -> bool:
     """Re-confirm that ``profile`` may still see ``page_object``.
-    The web view resolves a turn's page once, before enqueueing, and only ``{kind, id}`` round-trips through the task queue to ``ai-worker`` (see ``services.ai.tasks.run_assistant_turn_task``) - never the raw URL path, and never anything the loader itself derived beyond that id.
 
     Args:
         profile: The task's own resolved profile.
         page_object: The ``{kind, id}`` pair carried by the queue payload.
 
     Returns:
-        True if ``profile`` may still see this object. False for an unknown
-        ``kind`` (a payload this version of the code doesn't recognize) as
-        well as a real access failure - both mean "don't use this"."""
+        True if ``profile`` may still see this object."""
     check = _EXISTENCE_CHECKS.get(page_object.kind)
     return False if check is None else check(profile, page_object.id)
 

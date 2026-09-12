@@ -1,21 +1,4 @@
-"""Bulk, user-initiated sync between a pin's child pins and its wiki's child wikis.
-
-Two hierarchies can drift apart even when both exist: someone hand-places a
-child pin for a building nobody has documented on the community wiki yet, or
-the wiki already has a child wiki for a building the pin owner hasn't gotten
-around to pinning personally. Neither side should have to notice and
-re-create the other's work by hand - this module is the explicit "sync them"
-action reachable from the detail-pins panel's multi-select toolbar (send
-selected child pins to the wiki) and its "pull from wiki" button (create
-personal child pins for whatever the wiki already has).
-
-This is deliberately a manual, opt-in action rather than automatic background
-sync: a child pin a user placed can be private/exploratory in a way they may
-not want published, and the community wiki's child wikis may include entries
-the pin owner disagrees with. Compare with ``services.pins.pin_restructure``, which
-covers the *external-data-driven* case (buildings REData/Overpass already
-know about) as part of the one-time "organize this property?" suggestion.
-"""
+"""Bulk, user-initiated sync between a pin's child pins and its wiki's child wikis."""
 
 from __future__ import annotations
 
@@ -43,14 +26,7 @@ MAX_SYNC_ITEMS = 500
 
 
 class _Located(Protocol):
-    """Structural type for anything with coordinates - both Pin and Wiki qualify.
-
-    Both inherit ``latitude``/``longitude`` from ``abstract.AddressableModel``
-    (a proxy to ``self.location``); Pin additionally has its own
-    ``effective_latitude``/``effective_longitude`` (a legacy duplicate, see
-    that property's own "TODO: Delete this"), which Wiki never grew - so this
-    module deliberately uses the property both share.
-    """
+    """Structural type for anything with coordinates - both Pin and Wiki qualify."""
 
     @property
     def latitude(self) -> Decimal: ...
@@ -62,18 +38,14 @@ class _Located(Protocol):
 
 def _nearest_uncovered[T: _Located](marker: _Located, candidates: list[T]) -> T | None:
     """The candidate closest to ``marker``, within building-match range - or None.
-
-    The proximity-only fallback: for anything not typed as a building (an
-    entrance, a POI, a hazard - see :func:`_find_existing_match`), or when no
-    REData footprint data settles it.
+    The proximity-only fallback: for anything not typed as a building (an entrance, a POI, a hazard - see :func:`_find_existing_match`), or when no REData footprint data settles it.
 
     Args:
         marker: A pin or wiki to find a match for.
         candidates: Markers of the *other* kind, not yet matched to anything.
 
     Returns:
-        The nearest candidate within ``site_scope.BUILDING_MATCH_METERS``, or None.
-    """
+        The nearest candidate within ``site_scope.BUILDING_MATCH_METERS``, or None."""
     if not candidates:
         return None
     lat, lng = float(marker.latitude), float(marker.longitude)
@@ -90,13 +62,10 @@ def _building_containing(marker: _Located, buildings: list[dict[str, Any]]) -> d
 
     Args:
         marker: A pin or wiki to locate.
-        buildings: Cached REData building records for the parcel (see
-            ``plugins.builtin.parcel_buildings``); records with no footprint
-            (a bare point, or nothing parseable) never match here.
+        buildings: Cached REData building records for the parcel (see ``plugins.builtin.parcel_buildings``); records with no footprint (a bare point, or nothing parseable) never match here.
 
     Returns:
-        The containing building record, or None.
-    """
+        The containing building record, or None."""
     point = Point(float(marker.longitude), float(marker.latitude), srid=4326)
     for building in buildings:
         footprint = pin_restructure.building_footprint(building)
@@ -108,25 +77,13 @@ def _building_containing(marker: _Located, buildings: list[dict[str, Any]]) -> d
 def _find_existing_match[T: _Located](marker: _Located, candidates: list[T], buildings: list[dict[str, Any]]) -> T | None:
     """The candidate that already covers ``marker``.
 
-    Two building-typed markers are matched by REData's real footprint when
-    it's known, before falling back to proximity: a building pin shared from
-    one end of a long hall and the receiving side's own pin for the same
-    building placed at the other end can easily sit farther apart than
-    ``site_scope.BUILDING_MATCH_METERS``, yet the parcel's own building
-    footprint settles unambiguously that they're the same structure - which
-    is exactly the distinction a fixed radius gets wrong on a dense campus.
-    Everything else (entrances, POIs, hazards - anything with no "which
-    building" concept) is always proximity-matched.
-
     Args:
         marker: The pin or wiki being matched.
         candidates: Markers of the other kind, not yet matched to anything.
-        buildings: The parcel's cached REData building records (``[]`` when
-            none have ever been fetched for this location).
+        buildings: The parcel's cached REData building records (``[]`` when none have ever been fetched for this location).
 
     Returns:
-        The matching candidate, or None.
-    """
+        The matching candidate, or None."""
     if marker.pin_type == PinType.BUILDING and buildings:
         containing = _building_containing(marker, buildings)
         if containing is not None:
@@ -141,10 +98,7 @@ def _find_existing_match[T: _Located](marker: _Located, candidates: list[T], bui
 
 def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) -> int:
     """Create a matching child wiki for each selected child pin not already covered.
-
-    Never creates the wiki itself - community pages are only ever created
-    explicitly (``services.wiki.wiki_share.WikiShareService``); this
-    silently does nothing when the property has none yet.
+    Never creates the wiki itself - community pages are only ever created explicitly (``services.wiki.wiki_share.WikiShareService``); this silently does nothing when the property has none yet.
 
     Args:
         parent_pin: The parent pin, whose location's wiki (if any) gains children.
@@ -152,8 +106,7 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
         profile: The profile to attribute the resulting WikiEdit to.
 
     Returns:
-        How many child wikis were created.
-    """
+        How many child wikis were created."""
     from urbanlens.dashboard.controllers.detail_pins import ChildWikiLocationError, _location_for_child_wiki
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.models.wiki_edit import WikiEdit
@@ -174,12 +127,9 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
             try:
                 child_location = _location_for_child_wiki(child.latitude, child.longitude)
             except ChildWikiLocationError:
-                # Same collision services.pins.pin_restructure.mirror_buildings_to_wiki
-                # already guards against: something (often the parent wiki
-                # itself) already occupies that exact point. Skip it rather than
-                # aborting the whole batch - this whole call is inside one
-                # transaction.atomic(), so an uncaught raise here used to roll
-                # back every child wiki this send had already created.
+                # Same collision services.pins.pin_restructure.mirror_buildings_to_wiki already
+                # guards against: something (often the parent wiki itself) already occupies that
+                # exact point.
                 logger.info("send_pins_to_wiki: skipping pin %s - a wiki marker already occupies its point", child.pk)
                 continue
             child_wiki = Wiki.objects.create(
@@ -200,7 +150,6 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
 
     if created:
         # One entry for the whole batch - one row per pin would bury every
-        # other edit in the wiki's history on a large send.
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,
@@ -212,15 +161,11 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
 def pull_children_from_wiki(parent_pin: Pin) -> int:
     """Create a personal child pin for each of the wiki's child wikis not already covered.
 
-    The inverse of :func:`send_pins_to_wiki`: fills in whatever the community
-    has documented that this owner hasn't personally pinned yet.
-
     Args:
         parent_pin: The parent pin to add matching child pins under.
 
     Returns:
-        How many child pins were created.
-    """
+        How many child pins were created."""
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
 
@@ -244,11 +189,10 @@ def pull_children_from_wiki(parent_pin: Pin) -> int:
             try:
                 location = resolve_child_pin_location(parent_pin.profile, cw.latitude, cw.longitude)
             except PinCreationError:
-                # The owner already has a pin on that exact point, so this child
-                # wiki is in fact already covered - _find_existing_match just
-                # didn't recognise it (no building match, and further apart than
-                # its proximity threshold). Skip it rather than aborting the
-                # whole pull.
+                # The owner already has a pin on that exact point, so this child wiki is in fact
+                # already covered - _find_existing_match just didn't recognise it (no building
+                # match, and further apart than its proximity threshold).
+                # Skip it rather than aborting the whole pull.
                 logger.debug("pull_children_from_wiki: child wiki %s already pinned at its exact point", cw.pk)
                 continue
             new_pin = Pin.objects.create(

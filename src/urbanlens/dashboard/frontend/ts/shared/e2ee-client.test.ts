@@ -1,11 +1,5 @@
 /**
  * Outgoing encryption must say *why* it produced no ciphertext.
- *
- * "Nobody to encrypt to" and "the key request failed" are different answers:
- * the first legitimately allows the caller to send plaintext, the second must
- * not, because the thread is one both participants believe is encrypted. These
- * were once the same `null`, so a single 500 on a key fetch sent a readable
- * message into an encrypted conversation with nothing but a console line.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 

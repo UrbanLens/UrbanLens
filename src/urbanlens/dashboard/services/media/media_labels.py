@@ -25,8 +25,7 @@ MAX_MEDIA_LABEL_NAME_LENGTH = 255
 
 
 class MediaLabelError(ValueError):
-    """A media-label submission that cannot be applied.
-    The message is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """A media-label submission that cannot be applied."""
 
 
 class TooManyMediaLabelsError(MediaLabelError):
@@ -46,11 +45,8 @@ def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> li
 
     Args:
         image: The photo/video/document whose labels to set.
-        names: The label names to apply. Whitespace is stripped and
-            case-insensitive duplicates collapse to one label.
-        profile: The owner the labels are scoped to. Labels are looked up and
-            created against this profile only, so a name that matches another
-            user's (or a global) label never attaches it here.
+        names: The label names to apply.
+        profile: The owner the labels are scoped to.
 
     Returns:
         The labels now attached to *image*, in submission order.
@@ -58,8 +54,7 @@ def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> li
     Raises:
         TooManyMediaLabelsError: More than :data:`MAX_MEDIA_LABELS` names were given.
         BlankMediaLabelNameError: One of the names was blank.
-        MediaLabelNameTooLongError: One of the names exceeded
-            :data:`MAX_MEDIA_LABEL_NAME_LENGTH`."""
+        MediaLabelNameTooLongError: One of the names exceeded :data:`MAX_MEDIA_LABEL_NAME_LENGTH`."""
     if len(names) > MAX_MEDIA_LABELS:
         raise TooManyMediaLabelsError(f"Submission had {len(names)} labels, exceeding the cap of {MAX_MEDIA_LABELS}.")
 

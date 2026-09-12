@@ -40,8 +40,7 @@ class OhmTemporalCoveragePanelSource(LocationCachePanelSource):
         return bool(pin.effective_latitude and pin.effective_longitude)
 
     def fetch(self, pin: Pin) -> None:
-        """Query OHM for dated coverage near the pin and cache the result.
-        A transient failure (network/timeout/malformed response) is logged and left uncached so the next scheduled fetch retries it - a temporary outage is not the same fact as "confirmed no coverage", matching how ``RedataSatelliteProvider`` distinguishes the two (see ``plugins.builtin.satellite_imagery``)."""
+        """Query OHM for dated coverage near the pin and cache the result."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         try:
@@ -57,15 +56,11 @@ def temporal_slider_years(location: Location | None, user: AbstractBaseUser | An
     """Years the beta time slider should offer for ``location``, or ``[]`` to hide it entirely.
 
     Args:
-        location: The location being viewed, or None (e.g. a pin with no
-            Location).
+        location: The location being viewed, or None (e.g. a pin with no Location).
         user: The viewer, checked against :data:`SiteFeature.BETA_FEATURES`.
 
     Returns:
-        Sorted distinct years, or ``[]`` when the viewer lacks
-        ``BETA_FEATURES``, the coverage panel has never run (or its result has
-        gone stale) for this location, or it ran and OHM had no dated coverage
-        nearby."""
+        Sorted distinct years, or ``[]`` when the viewer lacks ``BETA_FEATURES``, the coverage panel has never run (or its result has gone stale) for this location, or it ran and OHM had no dated coverage nearby."""
     if location is None or not user_has_feature(user, SiteFeature.BETA_FEATURES):
         return []
 
@@ -80,17 +75,13 @@ def temporal_slider_years(location: Location | None, user: AbstractBaseUser | An
 
 def get_temporal_features(location: Location, year: int) -> dict[str, Any]:
     """A GeoJSON FeatureCollection of OHM features near ``location`` as of ``year``.
-    Cached per year using a *per-year* ``LocationCache`` source string (``f"ohm_features_{year}"``) rather than one fixed source with ``query_key=str(year)``: ``LocationCache.get_fresh``/``set`` both key uniqueness on ``(location, source)`` alone - ``query_key`` plays no part in the lookup (see ``models.cache.location_cache.LocationCache``) - so a single shared source across years would silently overwrite/misread whichever year was cached last.
 
     Args:
         location: The location to query around.
         year: The calendar year to fetch features for.
 
     Returns:
-        ``{"type": "FeatureCollection", "features": [...]}``. A transient OHM
-        failure returns an empty FeatureCollection *without* caching it, so
-        the next request retries rather than remembering a fluke as "no
-        features that year".
+        ``{"type": "FeatureCollection", "features": [...]}``.
 
     Raises:
         ValueError: ``year`` is outside the plausible ``MIN_YEAR``-``MAX_YEAR`` range."""

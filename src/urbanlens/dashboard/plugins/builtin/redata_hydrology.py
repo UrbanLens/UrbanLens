@@ -1,9 +1,4 @@
-"""Hydrology plugin: water near a pin - streams, wetlands, watershed - via REData.
-
-Practical site context: a culverted stream or seasonally-flooded wetland
-under a property explains standing water, deterioration and access windows.
-USA-only (USGS NHD/WBD + USFWS NWI).
-"""
+"""Hydrology plugin: water near a pin - streams, wetlands, watershed - via REData."""
 
 from __future__ import annotations
 

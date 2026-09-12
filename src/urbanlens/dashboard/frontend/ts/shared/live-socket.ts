@@ -1,24 +1,9 @@
 /**
- * A WebSocket that stays up: it heartbeats through idle timeouts and reconnects
- * after a drop.
- *
- * Every socket in this project reaches the browser through a Cloudflare tunnel,
- * which closes a connection that has carried no traffic for roughly 100 seconds.
- * A lobby waiting for the host to start, or a chat nobody is typing in, is idle
- * by definition, so without a heartbeat those sockets die on their own and the
- * client is left believing it is still connected. The three game clients also
- * had no reconnect at all - their close handler set ``ws = null`` and stopped,
- * so a single drop meant no more live rounds, scores, or chat until a reload.
- *
- * The two inline template clients (``_notification_push.html``,
- * ``_chat_panel.html``) cannot import this - they carry their own copy of the
- * heartbeat interval and point back here for the reasoning.
+ * A WebSocket that stays up: it heartbeats through idle timeouts and reconnects after a drop.
  */
 
 /**
- * Cloudflare's idle cutoff is ~100s and is not configurable below an Enterprise
- * plan, so the interval has to fit inside it with room to spare: at 45s a ping
- * that gets lost still leaves another one before the cutoff.
+ * Cloudflare's idle cutoff is ~100s and is not configurable below an Enterprise plan, so the interval has to fit inside it with room.
  */
 const HEARTBEAT_MS = 45000;
 
@@ -36,11 +21,7 @@ const RECONNECT_MAX_MS = 30000;
 const RECONNECT_JITTER = 0.25;
 
 /**
- * The close code every consumer in ``dashboard/consumers.py`` uses for "not
- * authorized, and retrying will not change that" - a revoked contact token, a
- * player the host kicked, a credential that lost its scope. Reconnecting on it
- * is a busy loop against a refusal, not a recovery, so it stops the socket for
- * good.
+ * The close code every consumer in ``dashboard/consumers.py`` uses for "not authorized, and retrying will not change that".
  */
 const CLOSE_UNAUTHORIZED = 4404;
 
@@ -66,12 +47,6 @@ export interface LiveSocketHandle {
 
 /**
  * Open a managed connection to *path* and keep it open.
- *
- * Args:
- *     options: The path to connect to and the callbacks that consume it.
- *
- * Returns:
- *     A handle for sending frames and for shutting the whole thing down.
  */
 export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
     const { path, onMessage, onOpen, onPermanentClose, heartbeatMs = HEARTBEAT_MS } = options;
@@ -95,9 +70,7 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
     }
 
     function startHeartbeat(): void {
-        // Cleared first because every reconnect passes through here: an interval
-        // per reconnect outlives the socket that started it, and a helper that
-        // leaks one is worse than the hand-rolled sockets it replaces.
+        // Cleared first because every reconnect passes through here.
         clearHeartbeat();
         heartbeat = setInterval(() => {
             if (socket?.readyState === WebSocket.OPEN) socket.send(HEARTBEAT_FRAME);
@@ -119,9 +92,7 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
         try {
             data = JSON.parse(String(event.data));
         } catch {
-            // A frame that cannot be read is not a reason to drop the connection,
-            // but it is worth saying so - a socket quietly ignoring everything the
-            // server sends looks identical to a socket with nothing to deliver.
+            // A frame that cannot be read is not a reason to drop the connection, but it is worth saying so.
             console.warn(`live-socket: ignoring unparseable frame on ${path}`);
             return;
         }

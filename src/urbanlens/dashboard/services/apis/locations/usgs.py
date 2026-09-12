@@ -18,7 +18,7 @@ _M2M_URL = "https://m2m.cr.usgs.gov/api/api/json/stable"
 _TNM_URL = "https://tnmaccess.nationalmap.gov/api/v1"
 _HTMC_PRODUCTS = "Historical Topographic Map Collection (HTMC)"
 _M2M_SESSION_CACHE_KEY = "usgs_m2m_auth"
-_M2M_SESSION_TTL = 7200  # USGS M2M session tokens expire after ~2 hours
+_M2M_SESSION_TTL = 7200
 
 
 @dataclass(slots=True, kw_only=True)
@@ -64,15 +64,11 @@ class UsgsGateway(Gateway):
     def m2m_request(self, endpoint: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         """Send a POST request to the M2M API.
 
-        Args:
-                endpoint: M2M endpoint name (e.g. ``"scene-search"``).
-                payload: Request body to serialise as JSON.
-
         Returns:
-                Parsed JSON response.
+            Parsed JSON response.
 
         Raises:
-                ValueError: When no credentials are configured and authentication is needed."""
+            ValueError: When no credentials are configured and authentication is needed."""
         session_token = self._session_token()
         headers = {"X-Auth-Token": session_token} if session_token else None
         response = self.session.post(f"{_M2M_URL}/{endpoint}", json=payload or {}, headers=headers, timeout=30)
@@ -82,13 +78,8 @@ class UsgsGateway(Gateway):
     def dataset_search(self, **payload: Any) -> dict[str, Any]:
         """Search EarthExplorer/M2M datasets.
 
-        Args:
-            **payload: M2M dataset-search parameters (``datasetName``,
-                ``spatialFilter``, ``temporalFilter``, etc.).
-
         Returns:
-            Parsed JSON with a ``data`` list of matching dataset objects.
-        """
+            Parsed JSON with a ``data`` list of matching dataset objects."""
         return self.m2m_request("dataset-search", payload)
 
     def search_scenes_near_coordinates(
@@ -102,16 +93,8 @@ class UsgsGateway(Gateway):
     ) -> dict[str, Any]:
         """Search EarthExplorer scenes intersecting a coordinate.
 
-        Args:
-            latitude: WGS-84 latitude of the target location.
-            longitude: WGS-84 longitude of the target location.
-            dataset_name: M2M dataset identifier (e.g. ``"landsat_ot_c2_l2"``).
-            max_results: Maximum scenes to return.
-            **payload: Additional M2M scene-search parameters.
-
         Returns:
-            Parsed JSON with a ``data`` object containing the matching scenes.
-        """
+            Parsed JSON with a ``data`` object containing the matching scenes."""
         spatial_filter = {
             "filterType": "mbr",
             "lowerLeft": {"latitude": latitude, "longitude": longitude},
@@ -125,23 +108,15 @@ class UsgsGateway(Gateway):
     def download_options(self, **payload: Any) -> dict[str, Any]:
         """Return available M2M download products for a set of scenes.
 
-        Args:
-            **payload: M2M download-options parameters (``datasetName``, ``entityIds``, etc.).
-
         Returns:
-            Parsed JSON with a ``data`` list of available download products.
-        """
+            Parsed JSON with a ``data`` list of available download products."""
         return self.m2m_request("download-options", payload)
 
     def download_request(self, **payload: Any) -> dict[str, Any]:
         """Request downloads for selected M2M products.
 
-        Args:
-            **payload: M2M download-request parameters (``downloads`` list, ``label``, etc.).
-
         Returns:
-            Parsed JSON with download URLs and status information.
-        """
+            Parsed JSON with download URLs and status information."""
         return self.m2m_request("download-request", payload)
 
     def tnm_products_for_coordinates(
@@ -154,15 +129,8 @@ class UsgsGateway(Gateway):
     ) -> dict[str, Any]:
         """Return The National Map products intersecting coordinates.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                delta: Half-width of the bounding box in degrees.
-                **params: Additional TNM API parameters (``datasets``, ``prodFormats``,
-                ``prodExtents``, ``outputFormat``, etc.).
-
         Returns:
-                Parsed JSON with a list of matching TNM products."""
+            Parsed JSON with a list of matching TNM products."""
         response = self.session.get(
             f"{_TNM_URL}/products",
             params={"bbox": create_bbox_str(latitude, longitude, delta), **params},
@@ -181,13 +149,6 @@ class UsgsGateway(Gateway):
     ) -> dict[str, Any]:
         """Return HTMC historical topographic maps near coordinates.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                delta: Half-width of the bounding box in degrees.
-                **params: Additional TNM API parameters.
-
         Returns:
-                Parsed JSON with a list of matching HTMC products including
-                download URLs for the scanned map PDFs."""
+            Parsed JSON with a list of matching HTMC products including download URLs for the scanned map PDFs."""
         return self.tnm_products_for_coordinates(latitude, longitude, delta=delta, datasets=_HTMC_PRODUCTS, **params)

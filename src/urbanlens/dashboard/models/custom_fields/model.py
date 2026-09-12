@@ -1,14 +1,6 @@
 """Custom field models - user-defined fields attachable to pins, photos, people, and maps.
-
-A :class:`CustomField` is a private, per-user field *definition* (e.g. "Gate code",
-text, for pins). A :class:`CustomFieldValue` stores that field's value for one
-specific target object. Both are only ever visible to the field's owner - custom
-fields are a personal organization tool, never shared or community data.
-
-Adding support for a new target entity requires:
-    1. A new :class:`CustomFieldEntity` choice.
-    2. A new nullable FK on :class:`CustomFieldValue` (plus the constraint updates).
-    3. An entry in :data:`CustomFieldValue.TARGET_FIELD_BY_ENTITY`.
+A :class:`CustomField` is a private, per-user field *definition* (e.g.
+Both are only ever visible to the field's owner - custom fields are a personal organization tool, never shared or community data.
 """
 
 from __future__ import annotations
@@ -158,9 +150,7 @@ ENTITY_ICONS: dict[str, str] = {
 
 class CustomField(abstract.FrontendDashboardModel):
     """A user-defined field definition for one entity type.
-
-    Custom fields are private to their owning profile: only the owner sees
-    them, their values, and the filter controls they add to the map.
+    Custom fields are private to their owning profile: only the owner sees them, their values, and the filter controls they add to the map.
 
     Attributes:
         profile: The owning profile. Fields (and their values) are deleted
@@ -342,7 +332,6 @@ class CustomField(abstract.FrontendDashboardModel):
             return Decimal(default)
 
 
-#: The reference FK columns on CustomFieldValue, used to build the constraint.
 _REF_COLUMNS: tuple[str, ...] = ("ref_pin", "ref_wiki", "ref_markup_map", "ref_trip", "ref_image", "ref_pin_list", "ref_profile")
 
 
@@ -358,12 +347,7 @@ def _at_most_one_of(columns: tuple[str, ...]) -> Q:
 
 class CustomFieldValueError(ValueError):
     """A raw value could not be parsed/stored for a custom field.
-
-    The message here is for logs, not a response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a fallback)
-    and author its own user-facing text, rather than relaying the message -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``.
+    The message here is for logs, not a response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``.
     """
 
 
@@ -410,13 +394,8 @@ class ReferenceTargetNotFoundError(CustomFieldValueError):
 
 class CustomFieldValue(abstract.DashboardModel):
     """The value of one custom field on one target object.
-
-    Exactly one target FK is set, matching ``field.entity_type``. The value is
-    stored in the typed column matching ``field.field_type`` so numbers and
-    dates filter/sort correctly in SQL.
-
-    Values are private to ``field.profile``. Deleting the field, the target,
-    or the owning profile deletes the value.
+    Exactly one target FK is set, matching ``field.entity_type``.
+    The value is stored in the typed column matching ``field.field_type`` so numbers and dates filter/sort correctly in SQL.
     """
 
     field = ForeignKey(
@@ -462,10 +441,9 @@ class CustomFieldValue(abstract.DashboardModel):
     value_time = TimeField(null=True, blank=True)
     value_boolean = BooleanField(null=True, blank=True)
 
-    # -- Reference value FKs (at most one set, matching field.config ref_type) --
-    # Deleting the referenced object deletes the value row: a reference to a
-    # gone object carries no information, unlike SET_NULL which would leave an
-    # invalid "value with nothing in it" row behind.
+    # -- Reference value FKs (at most one set, matching field.config ref_type) -- Deleting the
+    # referenced object deletes the value row: a reference to a gone object carries no information,
+    # unlike SET_NULL which would leave an invalid "value with nothing in it" row behind.
     ref_pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
     ref_wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
     ref_markup_map = ForeignKey("dashboard.MarkupMap", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")

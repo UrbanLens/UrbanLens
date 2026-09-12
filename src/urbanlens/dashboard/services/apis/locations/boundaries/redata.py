@@ -1,5 +1,4 @@
-"""Boundary provider backed by REData's authoritative county parcel/building geometry.
-Unlike every other provider in the chain (community-tagged OSM ways, ML-derived building-footprint datasets), this is survey-grade geometry straight from the county assessor's own GIS layer - the same data ``plugins.builtin.property_records`` already fetches for the Ownership card, just consumed for its ``parcel_geometry``/``building_geometry`` instead of its attribute fields."""
+"""Boundary provider backed by REData's authoritative county parcel/building geometry."""
 
 from __future__ import annotations
 
@@ -17,8 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _largest_polygon(geom: Polygon | MultiPolygon | None) -> Polygon | None:
-    """Reduce a possibly-multi-shell result to the single largest polygon.
-    Deliberately returns the ``MultiPolygon``'s own element directly rather than re-wrapping it in ``Polygon(...)`` - unlike ``LineString``/``Point``, Django's ``Polygon`` constructor has no "copy an existing Polygon" overload, and passing one in raises (confirmed - not a hypothetical)."""
+    """Reduce a possibly-multi-shell result to the single largest polygon."""
     if isinstance(geom, Polygon):
         return geom
     if isinstance(geom, MultiPolygon):
@@ -41,10 +39,6 @@ def suggested_boundary(candidates: list[dict]) -> Polygon | MultiPolygon | None:
         if candidate.get("is_suggested"):
             return polygon
 
-    # Nothing won the scoring (an unscored call, or every candidate tied at zero), so fall back the
-    # way REData's own rule reads: the parcel's own cadastral line before anything merely related to
-    # it, then best-scoring, then smallest - a too-large boundary is what sent 2604 buildings to the
-    # UI.
     def rank(entry: tuple[dict, Polygon | MultiPolygon]) -> tuple[int, float, float]:
         candidate, polygon = entry
         return (0 if candidate.get("kind") == "parcel" else 1, -float(candidate.get("confidence") or 0.0), polygon.area)
@@ -66,18 +60,8 @@ class RedataBoundaryProvider(BoundaryProvider):
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | MultiPolygon | None]:
         """Fetch REData's parcel record for this coordinate and convert its geometry fields.
 
-        Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            name: Unused - REData is looked up strictly by coordinate.
-
         Returns:
-            ``{"property": ..., "building": ...}``, both possibly None. An
-            empty dict (rather than a dict of Nones) when REData isn't
-            configured for this install at all, so the chain doesn't even
-            log a skipped-provider warning for an intentionally-unused
-            integration.
-        """
+            ``{"property": ..., "building": ...}``, both possibly None."""
         if not settings.redata_api_url or not settings.redata_api_key:
             return {}
 
@@ -103,14 +87,8 @@ class RedataBoundaryProvider(BoundaryProvider):
         """REData's own best boundary for this parcel, when it has no cadastral line.
         ``parcel_geometry`` is null for every New York parcel by construction - the state's Tier 1 source is a centroid point layer, so there is no ring to extract - which is why this path, not the cadastral one, is what a NY pin actually resolves through.
 
-        Args:
-                gateway: The already-constructed gateway to reuse.
-                parcel_uuid: The parcel's REData uuid, or None when the lookup
-                resolved no parcel at all.
-
         Returns:
-                The suggested boundary, or None when REData offers no candidate or
-                the request failed."""
+            The suggested boundary, or None when REData offers no candidate or the request failed."""
         if not parcel_uuid:
             return None
         try:
@@ -124,19 +102,8 @@ class RedataBoundaryProvider(BoundaryProvider):
         """Approximate the property boundary as the convex hull of the parcel's own buildings.
         A jurisdiction that never digitized a parcel-boundary shapefile can still publish individual building locations (county GIS or NY SHPO's CRIS inventory), since those only need a point each.
 
-        Args:
-                gateway: The already-constructed ``RedataGateway`` to reuse - the
-                parcel lookup and this buildings lookup are for the same
-                parcel, no need to re-resolve credentials/base URL.
-                parcel_uuid: The parcel's REData uuid, or None if the parcel
-                lookup didn't resolve one (e.g. no parcel at this coordinate
-                at all).
-
         Returns:
-                A convex-hull ``Polygon`` around the parcel's building
-                coordinates, or None when there's no uuid, fewer than 3 usable
-                coordinates, the points are collinear (the hull degenerates to a
-                line or point), or the buildings lookup itself failed."""
+            A convex-hull ``Polygon`` around the parcel's building coordinates, or None when there's no uuid, fewer than 3 usable coordinates, the points are collinear (the hull degenerates to a line or point), or the buildings lookup itself failed."""
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
 
         if not parcel_uuid:

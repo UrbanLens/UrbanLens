@@ -1,10 +1,5 @@
 """User-submitted trivia question intake.
-
-A submitted question is created PENDING_REVIEW and classified
-asynchronously (see services.trivia.classifier's module docstring for why
-the submitter is never notified either way, by design - so they can't
-iteratively probe the filter).
-"""
+A submitted question is created PENDING_REVIEW and classified asynchronously (see services.trivia.classifier's module docstring for why the submitter is never notified either way, by design - so they can't iteratively probe the filter)."""
 
 from __future__ import annotations
 
@@ -55,7 +50,6 @@ def _enqueue_classification(question_id: int) -> None:
 
 def classify_and_update(question: TriviaQuestion) -> None:
     """Run the shared content classifier on a PENDING_REVIEW question and record its verdict.
-    Never raises for an AI-related failure - classify_trivia_question itself fails closed (returns a rejection) rather than raising.
 
     Args:
         question: The question to classify."""

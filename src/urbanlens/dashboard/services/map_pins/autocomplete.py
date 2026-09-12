@@ -1,9 +1,4 @@
-"""
-Autocomplete search service for the map address search bar.
-
-Searches the local database for pins, locations, and their aliases; and can
-proxy Google Places Autocomplete requests to hide the API key from the browser.
-"""
+"""Autocomplete search service for the map address search bar."""
 
 from __future__ import annotations
 

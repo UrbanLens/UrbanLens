@@ -20,9 +20,9 @@ if TYPE_CHECKING:
 _DISCORD_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
 
 #: Profile columns that hold a private contact method (ContactMethodsForm).
-#: Free text with no uniqueness constraint - unlike the OAuth-linked login identity this module's
-#: own docstring excludes, these are just a way for someone else to reach you and carry no side
-#: effects on write.
+#: Free text with no uniqueness constraint - unlike the OAuth-linked login identity this module's own
+#: docstring excludes, these are just a way for someone else to reach you and carry no side effects
+#: on write.
 _CONTACT_FIELDS: tuple[str, ...] = ("phone_number", "signal_username", "discord_username", "whatsapp_number", "telegram_username", "matrix_handle")
 
 #: Read-through ``User`` fields exposed here rather than living on ``Profile`` itself - see
@@ -35,16 +35,10 @@ class SettingsValidationError(Exception):
     """Raised when a settings patch is rejected, carrying per-field messages.
 
     Attributes:
-        errors: Field name -> human-readable reason, shaped to be returned
-            directly as a 400 body.
-    """
+        errors: Field name -> human-readable reason, shaped to be returned directly as a 400 body."""
 
     def __init__(self, errors: dict[str, str]) -> None:
-        """Store the per-field errors.
-
-        Args:
-            errors: Field name -> human-readable reason.
-        """
+        """Store the per-field errors."""
         self.errors = errors
         super().__init__("; ".join(f"{field}: {message}" for field, message in sorted(errors.items())))
 
@@ -113,7 +107,6 @@ SETTINGS_FIELDS: tuple[str, ...] = (
     "keyword_label_categories",
     "keyword_label_tags",
     "keyword_label_statuses",
-    # History (HistorySettingsForm).
     "track_pin_visits",
     "track_routes",
     "track_geolocation",
@@ -185,27 +178,17 @@ def _validate_discord_username(data: dict[str, Any], errors: dict[str, str]) -> 
 
 def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) -> list[str]:
     """Validate and apply a partial settings update to *profile* (and, for name fields, *user*) in memory.
-    ``first_name``/``last_name`` are the one exception: they live on ``User``, not ``Profile``, so this function saves *user* itself immediately when either is touched, rather than asking the caller to manage a second model's save alongside the one it already owns.
 
     Args:
         profile: The profile to mutate.
-        data: Submitted field -> value pairs. Only keys actually present are
-            touched, so omitting a field differs from setting it null.
-        user: The user whose feature entitlements gate the AI/Places fields,
-            and whose ``first_name``/``last_name`` are written directly.
-            Passed separately rather than read off ``profile.user`` so the
-            caller's authenticated user is what's checked and written.
+        data: Submitted field -> value pairs.
+        user: The user whose feature entitlements gate the AI/Places fields, and whose ``first_name``/``last_name`` are written directly.
 
     Returns:
-        The names of the changed *profile* fields, for the caller's own
-        ``update_fields`` - never includes ``first_name``/``last_name``,
-        which this function has already saved onto ``user`` itself.
+        The names of the changed *profile* fields, for the caller's own ``update_fields`` - never includes ``first_name``/``last_name``, which this function has already saved onto ``user`` itself.
 
     Raises:
-        SettingsValidationError: If any submitted field is unknown, gated
-            behind a feature the user lacks, outside the values their plan
-            entitles them to, or (for ``discord_username``) outside the
-            allowed character set."""
+        SettingsValidationError: If any submitted field is unknown, gated behind a feature the user lacks, outside the values their plan entitles them to, or (for ``discord_username``) outside the allowed character set."""
     errors: dict[str, str] = {}
 
     unknown = set(data) - set(SETTINGS_FIELDS)
@@ -248,17 +231,13 @@ def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) 
 
 def read_settings(profile: Profile, *, user: User) -> dict[str, Any]:
     """Build the full settings document for *profile*.
-    Includes read-only context a client needs to render a settings UI without a second round-trip: which features are available (so it can hide the AI and Places cards), which downscale values the plan permits, and the distance unit actually in effect once the profile's inferred fallback is applied.
 
     Args:
-        profile: The profile to read. Should be re-read from the instance
-            *after* any save, so community-gated coercions are reflected.
+        profile: The profile to read.
         user: The user whose feature entitlements are reported.
 
     Returns:
-        Every allowlisted field's current value, plus the read-only keys
-        ``updated``, ``effective_distance_units``, ``features``,
-        ``allowed_image_dimensions`` and ``allowed_video_heights``."""
+        Every allowlisted field's current value, plus the read-only keys ``updated``, ``effective_distance_units``, ``features``, ``allowed_image_dimensions`` and ``allowed_video_heights``."""
     payload: dict[str, Any] = {field: getattr(profile, field) for field in SETTINGS_FIELDS}
     payload["updated"] = profile.updated
     payload["effective_distance_units"] = profile.effective_distance_units

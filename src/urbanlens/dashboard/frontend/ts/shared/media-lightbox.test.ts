@@ -1,8 +1,5 @@
 /**
- * media-lightbox.ts fixed a real bug (docs/PROBLEMS.md, 2026-09-01): the wiki
- * page's Media section had no `window.mediaOpenLightbox`, so clicking a tile
- * threw. These tests exercise the DOM-parsing logic that broke silently
- * before - nothing here previously had any coverage at all.
+ * media-lightbox.ts fixed a real bug (docs/PROBLEMS.md, 2026-09-01).
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -116,9 +113,7 @@ describe("openMediaLightbox", () => {
     });
 
     test("author is read from data-media-author, not hardcoded blank", () => {
-        // Regression: a copied photo's "By {author}" line silently never
-        // rendered on this path because this function always hardcoded "" -
-        // see docs/PROBLEMS.md, 2026-09-01.
+        // Regression: a copied photo's "By {author}" line silently never rendered on this path because this function always hardcoded "".
         const credited = buildTile({ mediaUrl: "a", mediaAuthor: "Uploaded by john" });
         const uncredited = buildTile({ mediaUrl: "b" });
         buildGrid("media-gallery-grid", null, [credited, uncredited]);

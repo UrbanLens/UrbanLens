@@ -30,11 +30,7 @@
     border-radius: $radius-md;
     border: 1px solid var(--ul-surface-border);
 
-    // Leaflet's own .leaflet-interactive rule sets a pointer cursor on every
-    // room/wall/marker shape, which otherwise wins over this class living on
-    // an ancestor - a non-select tool needs the crosshair to hold even while
-    // hovering a shape, since it reads as "in select mode" the moment it
-    // doesn't.
+    // Leaflet's own.leaflet-interactive rule sets a pointer cursor on every room/wall/marker shape, which otherwise wins over this class.
     &.is-drawing {
         cursor: crosshair;
 
@@ -43,21 +39,13 @@
         }
     }
 
-    // Once there's an exterior wall, the basemap recedes so the plan itself
-    // is the thing in focus - image overlays (a traced blueprint) are
-    // unaffected, since Leaflet renders those in a separate pane.
+    // Once there's an exterior wall, the basemap recedes so the plan itself is the thing in focus.
     &.has-plan .leaflet-tile-pane {
         filter: saturate(.35) brightness(.97);
     }
 }
 
-// Position/background/border/collapse all come from .map-buttons itself
-// (_layout.scss) - the same markup and classes as the main map's own tool
-// pill (_map_toolbar.html), so this only adds what's actually floorplan-
-// specific: the marker-kind sub-group, the active-tool state (.map-btn-icon
-// has no such state of its own - the main map signals "select mode" on the
-// map element instead, which doesn't fit a set of mutually exclusive tools),
-// and fitting the reparented leaflet-rotate control to the same icon size.
+// Position/background/border/collapse all come from.map-buttons itself (_layout.scss).
 .floorplan-toolbar {
     &__markers {
         display: flex;
@@ -74,10 +62,7 @@
         opacity: 1;
     }
 
-    // leaflet-rotate's own control (reparented in here by floorplan-editor.ts
-    // so it reads as one more tool instead of floating over this pill) is
-    // sized and positioned for a standalone Leaflet corner control - shrink
-    // it to match everything else in the row.
+    // leaflet-rotate's own control.
     .leaflet-control-rotate {
         margin: 0;
         border: 0;
@@ -171,9 +156,7 @@
         gap: .5rem;
     }
 
-    // Predictable top-right corner for the one remaining explicit action -
-    // see the "more" menu's own comment in editor.html for why it's the only
-    // one left now that ordinary edits autosave.
+    // Predictable top-right corner for the one remaining explicit action.
     &__header {
         display: flex;
         align-items: center;
@@ -264,9 +247,7 @@
         font-size: .95rem;
     }
 
-    // The sitewide default placeholder color reads close enough to real text
-    // on this field's background that an example name ("Boiler room") looked
-    // like an actual value rather than a hint.
+    // The sitewide default placeholder color reads close enough to real text on this field's background that an example name ("Boiler room").
     input.form-input::placeholder {
         color: var(--ul-grey-5);
         opacity: .55;
@@ -305,22 +286,14 @@
 
 // -- Map overlays -----------------------------------------------------------
 
-// A fixed dark color, not a --ul-grey-* token: the room fill it sits over
-// (ROOM_FILL/UNBOUND_FILL in floorplan-editor.ts) is a plain white/near-white
-// Leaflet style, not theme-aware, so a token that inverts for dark mode was
-// turning this light-on-white - illegible regardless of the site's own theme.
-// The white halo still helps on the satellite/aerial backdrop before any
-// exterior wall exists (see .has-plan), doubled up for a stronger edge.
+// A fixed dark color, not a --ul-grey-* token.
 .floorplan-room-label {
     background: transparent;
     border: 0;
     box-shadow: none;
     text-align: center;
 
-    // Zoomed out far enough, a room's name is wider than the room, and the
-    // names obscure the geometry they annotate. `visibility`, not `display`:
-    // the label has to keep its box so it can still be measured on the next
-    // pass, or it would report zero width, always "fit", and flicker back.
+    // Zoomed out far enough, a room's name is wider than the room, and the names obscure the geometry they annotate.
     &.is-clipped {
         visibility: hidden;
     }
@@ -362,9 +335,7 @@
     pointer-events: none;
 }
 
-// A background circle around the glyph, same treatment as detail-pin markers
-// elsewhere on the site (map-annotations.ts's detailIcon()) - a bare icon on
-// satellite imagery has too little contrast to read at a glance.
+// A background circle around the glyph, same treatment as detail-pin markers elsewhere on the site (map-annotations.ts's detailIcon()).
 .floorplan-marker__badge {
     display: flex;
     align-items: center;
@@ -383,9 +354,7 @@
     flex-direction: column;
     gap: .4rem;
     min-width: 8rem;
-    // .leaflet-popup-content/-wrapper are zeroed out globally (_map.scss) so
-    // the main map's own pin popups can own their padding - this needs its
-    // own, or it renders flush against the popup's rounded edge.
+    // .leaflet-popup-content/-wrapper are zeroed out globally (_map.scss) so the main map's own pin popups can own their padding.
     padding: .65rem .85rem;
 
     strong {
@@ -400,10 +369,7 @@
     }
 }
 
-// Without this the browser claims a finger drag as a page scroll or a pinch
-// and never delivers pointermove, so every drag below would be mouse-only -
-// which is exactly what it was. Set on the drawn geometry rather than the map
-// container, so panning and pinch-zooming the plan itself still work.
+// Without this the browser claims a finger drag as a page scroll or a pinch and never delivers pointermove, so every drag below would be.
 .floorplan-wall,
 .floorplan-room,
 .floorplan-opening,
@@ -411,10 +377,7 @@
     touch-action: none;
 }
 
-// Joints are drawn on every corner so the gesture is discoverable at all, so
-// they have to stay quiet until aimed at.
-// Announced but not shown. There is no site-wide utility for this yet; if one
-// appears, this should give way to it.
+// Joints are drawn on every corner so the gesture is discoverable at all, so they have to stay quiet until aimed at.
 .floorplan-page .sr-only {
     position: absolute;
     width: 1px;
@@ -433,13 +396,7 @@
     outline-offset: -3px;
 }
 
-// Over the canvas, not in the sidebar. Below 900px the sidebar stacks under
-// the map, so anything living in it is off-screen for the whole time someone is
-// drawing - which is exactly when a delete control is wanted. Bottom-left,
-// not top-left: Leaflet's own default zoom control lives there now (undo and
-// redo moved into the top-right drawing-tools toolbar, and zoom is no longer
-// reparented - see floorplan-editor.ts), and this is the one corner nothing
-// else in the editor claims at either width.
+// Over the canvas, not in the sidebar.
 .floorplan-canvas-controls {
     position: absolute;
     z-index: 500;
@@ -454,12 +411,7 @@
     }
 }
 
-// Bottom right, horizontal, matching the main map's own saved-filters
-// toolbar (.map-saved-filters-toolbar, _layout.scss) - same idea, same
-// override technique: .map-buttons for identical background/border/shadow/
-// button styling and the collapse toggle "for free", pinned bottom-right at
-// every breakpoint (unlike .map-buttons, which flips to top-right on desktop)
-// since it is not a drawing tool that belongs beside the ones in the corner.
+// Bottom right, horizontal, matching the main map's own saved-filters toolbar (map-saved-filters-toolbar, _layout.scss).
 .floorplan-canvas-floors {
     top: auto !important;
     bottom: 28px !important;
@@ -478,14 +430,7 @@
     }
 }
 
-// Groups the drawing tools and the tool-options panel below them, so the
-// second always clears the first regardless of how many rows either wraps
-// to on a narrow phone (adding an eighth tool button was enough to make
-// #floorplan-tools itself wrap at 320px) - a fixed pixel offset between two
-// things that can each reflow independently is exactly the failure mode the
-// main map's own "Mobile map bottom dock" section in _layout.scss describes,
-// solved there with a measured custom property; solved here structurally
-// instead, since the panels have no scroll container to break out of.
+// Groups the drawing tools and the tool-options panel below them, so the second always clears the first regardless of how many rows.
 .floorplan-toolbar-stack {
     position: absolute;
     z-index: 1000; // matches .map-buttons' own, so it stacks consistently with .floorplan-canvas-floors
@@ -496,19 +441,10 @@
     align-items: flex-end;
     gap: 8px;
     max-width: calc(100% - 20px);
-    // #floorplan-tools and .floorplan-tool-options are right-aligned within
-    // this box (align-items: flex-end) and are rarely the same width, so the
-    // box itself - sized to its widest child - has empty space down its
-    // narrower side. That space is not a button; a click there must fall
-    // through to the map underneath rather than be swallowed by this
-    // wrapper, which is what re-enabling pointer-events on the two children
-    // (below) is for.
+    // #floorplan-tools and.floorplan-tool-options are right-aligned within this box.
     pointer-events: none;
 
-    // .map-buttons is position:absolute by default, so it can float solo
-    // elsewhere on the site - reset to participate in this stack's normal
-    // flex flow instead, which is what makes the "clears however tall its
-    // sibling turned out to be" behaviour work without measuring anything.
+    // .map-buttons is position:absolute by default, so it can float solo elsewhere on the site.
     > .map-buttons {
         position: static;
         pointer-events: auto;
@@ -527,14 +463,7 @@
 .floorplan-tool-options {
     max-width: min(22rem, calc(100% - 20px));
 
-    // This panel is anchored to the bottom of the canvas and grows upward on
-    // a phone (.floorplan-toolbar-stack), and one choice per line (below)
-    // makes it taller than the old wrapped row ever was - tall enough, on a
-    // narrow phone, to reach up and cover Leaflet's own top-left zoom
-    // control (position: topleft, untouched - see floorplan-editor.ts).
-    // Capped with its own scrollbar there rather than letting that happen;
-    // desktop has the width to spare and sits on the opposite (top-right)
-    // side of the map from zoom, so it is left free to grow.
+    // This panel is anchored to the bottom of the canvas and grows upward on a phone (floorplan-toolbar-stack), and one choice per line.
     @include down($breakpoint-sm) {
         .map-buttons-content {
             max-height: 7.5rem;
@@ -542,15 +471,7 @@
         }
     }
 
-    // The base .map-buttons-content is a row of icon buttons - this panel's
-    // rows are option groups (a label plus one choice per line, below), so
-    // the groups themselves stack in a column instead. Not row + wrap +
-    // flex-basis: 100%: asking a flex item for 100% of a shrink-to-fit row's
-    // own width is circular, and Chromium resolves it by growing the row to
-    // this panel's own max-width - on a wide desktop map that put the panel
-    // far enough over the canvas to swallow clicks meant for a wall. A
-    // column has no such width to ask for; it is simply as wide as its
-    // widest child, same as the row was meant to be.
+    // The base.map-buttons-content is a row of icon buttons.
     .map-buttons-content {
         flex-direction: column;
         align-items: flex-start;
@@ -680,10 +601,7 @@
     align-items: stretch;
     gap: 1px;
 
-    // Fixed height on both children - without it a bare label button (no
-    // delete button) and one paired with the smaller __delete icon button
-    // report different natural heights, so the lone "+ Floor" button (no
-    // delete button next to it) rendered visibly taller than the others.
+    // Fixed height on both children - without it a bare label button (no delete button) and one paired with the smaller __delete icon button.
     .btn {
         height: 2rem;
         white-space: nowrap;
@@ -798,12 +716,7 @@
     gap: .35rem;
 }
 
-// A door may carry several locks - a padlock, a deadbolt and a chain are three
-// separate answers - so each row is "what kind" and "is it locked", with the
-// remove control kept small enough not to read as the row's main action.
-// The pin's own photos, offered for attaching. A strip rather than a picker
-// dialog: there are rarely more than a handful, and seeing them is most of
-// deciding which one shows the wall you are looking at.
+// A door may carry several locks - a padlock, a deadbolt and a chain are three separate answers.
 .floorplan-photos {
     display: flex;
     flex-direction: column;
@@ -816,10 +729,7 @@
     }
 }
 
-// A citation whose picture is gone. The reference outlives the image on purpose
-// (deleting a photo from someone's media must not delete the plan's note about
-// it), so it needs a form that says "there was a photo here" and offers to let go
-// of it - rather than being a thumbnail that cannot be drawn.
+// A citation whose picture is gone.
 .floorplan-photo-missing {
     display: flex;
     align-items: center;

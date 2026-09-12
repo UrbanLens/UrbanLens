@@ -20,11 +20,7 @@ from urbanlens.dashboard.services.social.connections import are_connections
 
 
 class PinSharePermissionError(PermissionError):
-    """A pin share was refused because sender and recipient aren't connected.
-
-    The message is for logs, not the response: a catch site should author its
-    own user-facing text rather than relaying it.
-    """
+    """A pin share was refused because sender and recipient aren't connected."""
 
 
 if TYPE_CHECKING:
@@ -60,8 +56,7 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
         The newly created PinShare.
 
     Raises:
-        PermissionError: If `sender` and `recipient` aren't connected friends.
-    """
+        PermissionError: If `sender` and `recipient` aren't connected friends."""
     if recipient.pk == sender.pk:
         raise PinSharePermissionError(f"profile {sender.pk} attempted to share a pin with themselves")
     if not are_connections(sender, recipient):
@@ -112,7 +107,6 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
 
 def _official_name_for(location) -> str | None:
     """A name for a shared pin that does not come from the person sharing it.
-    So the sharer either names the share deliberately (``PinShare.shared_name``) or the copy falls back to what the outside world calls the place: the location's externally-sourced ``official_name``, else an alias on its wiki that came from a provider rather than from a person.
 
     Args:
         location: The location the shared pin sits at, or None.
@@ -132,18 +126,13 @@ def _official_name_for(location) -> str | None:
 
 def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin:
     """Materialise a recipient-side Pin from an accepted share.
-    ``source_share`` is set on the new pin, and that is what makes the recipient's own future shares of this place chain under the share they received it through - see this module's docstring for why that, rather than a second ``LocationExposure`` row, is how acceptance records lineage.
 
     Args:
-        share: The accepted share to copy the pin from. Location-only shares
-            (no sender pin, e.g. coordinates detected in a DM) produce a bare
-            pin at the shared location instead of a property copy.
-        parent_pin: When the share is part of a "pin + child pins" bundle, the
-            recipient-side pin the new pin should nest under.
+        share: The accepted share to copy the pin from.
+        parent_pin: When the share is part of a "pin + child pins" bundle, the recipient-side pin the new pin should nest under.
 
     Returns:
-        The newly created Pin, carrying over every user-visible property
-        (name, icon, labels, notes, scores, security indicators, photos)."""
+        The newly created Pin, carrying over every user-visible property (name, icon, labels, notes, scores, security indicators, photos)."""
     source = share.pin
     if source is None:
         return Pin.objects.create(
@@ -265,12 +254,8 @@ def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
     def materialise(child_share: PinShare) -> Pin:
         """Create (or reuse) the recipient-side pin for one bundled child share.
 
-        Args:
-            child_share: The bundled share to materialise.
-
         Returns:
-            The recipient-side pin for that share.
-        """
+            The recipient-side pin for that share."""
         source = child_share.pin
         if source is None:  # pragma: no cover - excluded by the pin__isnull filter above
             return target_root
@@ -298,22 +283,13 @@ def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
 
 def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, str]:
     """Apply an accept/reject decision to a pending ``share`` and return a status message.
-    It performs **no** authorization of its own: callers must have already established that the responding profile is ``share.to_profile``, and should do so by scoping the lookup itself (``get_object_or_404(PinShare, pk=..., to_profile=...)``) rather than with a separate permission branch - both because an id belonging to someone else must be indistinguishable from one that does not exist, and because ``PinShare`` ids are sequential integers, so an unscoped caller here is a cross-tenant *write* reachable by counting.
 
     Args:
-        share: The share to respond to. Callers still check
-            ``share.status == PinShareStatus.PENDING`` first for the error
-            message, but that check is advisory - accept re-reads the status
-            under a row lock, so a share answered concurrently replays rather
-            than double-applying.
-        action: ``"accept"`` or ``"reject"``. Anything else is a no-op reported
-            as "Unknown action." rather than an exception, because the internal
-            HTMX callers post a raw form field and a typo there must not 500.
+        share: The share to respond to.
+        action: ``"accept"`` or ``"reject"``.
 
     Returns:
-        A ``(target_pin, message)`` tuple. ``target_pin`` is the recipient-side
-        Pin on accept (None otherwise); ``message`` is a human-readable summary
-        suitable for a toast/Django message."""
+        A ``(target_pin, message)`` tuple."""
     target_pin = None
     if action == "accept":
         with transaction.atomic():

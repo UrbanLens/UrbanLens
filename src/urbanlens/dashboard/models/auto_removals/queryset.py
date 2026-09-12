@@ -7,11 +7,7 @@ from urbanlens.dashboard.models import abstract
 
 def normalize_auto_removal_value(kind: str, value: str) -> str:
     """Normalize a value the same way for both recording and checking a tombstone.
-
-    Alias/owner names are matched case-insensitively (mirroring the DB-level
-    case-insensitive uniqueness on aliases/owners); label values are already
-    a bare primary-key string and links are matched by their exact URL, so
-    both are left as-is beyond trimming.
+    Alias/owner names are matched case-insensitively (mirroring the DB-level case-insensitive uniqueness on aliases/owners); label values are already a bare primary-key string and links are matched by their exact URL, so both are left as-is beyond trimming.
     """
     from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind
 

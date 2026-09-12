@@ -1,5 +1,4 @@
-"""Delta-sync pages of a profile's pins and pin deletions, for external clients.
-A sync client calls ``pins/`` repeatedly with the ``sync_watermark`` it was handed on its previous sync as ``modified_since``, pages through changed pins with the opaque cursor, then does the same against ``pins/deleted/`` for tombstones - after which its local copy matches the server without ever downloading unchanged rows."""
+"""Delta-sync pages of a profile's pins and pin deletions, for external clients."""
 
 from __future__ import annotations
 
@@ -33,13 +32,11 @@ TOMBSTONE_RETENTION = timedelta(days=400)
 
 
 class InvalidSyncCursorError(ValueError):
-    """The supplied cursor is not one this service issued.
-    The message is for logs, not the response: a caller's HTTP-facing code should catch this and author its own user-facing text, rather than relaying the exception's message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """The supplied cursor is not one this service issued."""
 
 
 class StaleDeletedSinceError(ValueError):
-    """``deleted_since`` predates the tombstone retention floor.
-    Tombstones older than :data:`TOMBSTONE_RETENTION` are pruned, so a client asking for deletions from before that floor could silently miss some - incremental sync is no longer trustworthy and the client must resync its pins from scratch (drop local rows absent from a full ``pins/`` walk)."""
+    """``deleted_since`` predates the tombstone retention floor."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,12 +109,10 @@ def sync_pins_page(
 
     Args:
         profile: The profile whose pins to page through.
-        modified_since: Inclusive lower bound on ``updated``; ``None`` means
-            a full sync from the beginning.
+        modified_since: Inclusive lower bound on ``updated``; ``None`` means a full sync from the beginning.
         cursor: Opaque continuation token from the previous page, if any.
         limit: Page size, clamped to ``MapPinPayloadService.MAX_LIMIT``.
-        include_total: Also count every row matching the window (one extra
-            query) - meant for a client's initial-sync progress bar.
+        include_total: Also count every row matching the window (one extra query) - meant for a client's initial-sync progress bar.
 
     Returns:
         The page of serialized pins, ordered by ``(updated, pk)``.
@@ -177,22 +172,16 @@ def sync_tombstones_page(
 
     Args:
         profile: The profile whose deletions to page through.
-        deleted_since: Inclusive lower bound on the deletion time; ``None``
-            returns every retained tombstone (a client doing its very first
-            sync doesn't need any - it holds nothing to delete).
+        deleted_since: Inclusive lower bound on the deletion time; ``None`` returns every retained tombstone (a client doing its very first sync doesn't need any - it holds nothing to delete).
         cursor: Opaque continuation token from the previous page, if any.
         limit: Page size, clamped to ``MapPinPayloadService.MAX_LIMIT``.
 
     Returns:
-        The page of deletions, ordered by ``(created, pk)``, each as
-        ``{"pin_uuid": ..., "deleted_at": ...}``.
+        The page of deletions, ordered by ``(created, pk)``, each as ``{"pin_uuid": ..., "deleted_at": ...}``.
 
     Raises:
         InvalidSyncCursorError: ``cursor`` is malformed or was never ours.
-        StaleDeletedSinceError: ``deleted_since`` predates the tombstone
-            retention floor - pruning may have removed deletions the client
-            never saw, so it must full-resync instead (HTTP 410 upstream).
-    """
+        StaleDeletedSinceError: ``deleted_since`` predates the tombstone retention floor - pruning may have removed deletions the client never saw, so it must full-resync instead (HTTP 410 upstream)."""
     if deleted_since is not None and deleted_since < timezone.now() - TOMBSTONE_RETENTION:
         raise StaleDeletedSinceError(f"deleted_since={deleted_since.isoformat()} is older than TOMBSTONE_RETENTION ({TOMBSTONE_RETENTION.days} days) for profile {profile.pk}; tombstones this old may already be pruned.")
     watermark = _watermark()

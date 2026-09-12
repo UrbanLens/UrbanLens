@@ -1,5 +1,4 @@
-"""Trip activity behavior, shared by the internal HTMX panel and the external REST API.
-Cross-cutting obligations that must never be re-implemented by a caller are enforced inside these functions rather than beside them:"""
+"""Trip activity behavior, shared by the internal HTMX panel and the external REST API."""
 
 from __future__ import annotations
 
@@ -59,12 +58,10 @@ def _as_bool(value: Any) -> bool:
     """Coerce a form/JSON value to a bool, accepting the usual text spellings.
 
     Args:
-        value: A real bool, or one of the ``"true"``/``"1"``/``"on"`` spellings
-            an HTML form or a loosely-typed JSON body produces.
+        value: A real bool, or one of the ``"true"``/``"1"``/``"on"`` spellings an HTML form or a loosely-typed JSON body produces.
 
     Returns:
-        The boolean interpretation; anything unrecognized is False.
-    """
+        The boolean interpretation; anything unrecognized is False."""
     if isinstance(value, bool):
         return value
     return isinstance(value, str) and value.strip().lower() in _TRUTHY
@@ -91,9 +88,7 @@ def activity_queryset(trip: Trip) -> QuerySet[TripActivity]:
         trip: The trip whose activities are wanted.
 
     Returns:
-        Activities ordered by scheduled time (unscheduled last), then explicit
-        ``order``, then creation time.
-    """
+        Activities ordered by scheduled time (unscheduled last), then explicit ``order``, then creation time."""
     return trip.activities.select_related(
         "location",
         "pin",
@@ -118,8 +113,7 @@ def get_activity(trip: Trip, activity_id: int) -> TripActivity:
         The activity.
 
     Raises:
-        TripNotFoundError: No such activity on this trip.
-    """
+        TripNotFoundError: No such activity on this trip."""
     activity = TripActivity.objects.filter(id=activity_id, trip=trip).select_related("location", "pin", "added_by__user", "child_trip").first()
     if activity is None:
         raise TripNotFoundError(ACTIVITY_NOT_FOUND)
@@ -192,19 +186,14 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
     """Resolve an activity's target place from submitted location fields.
 
     Args:
-        body: Submitted fields - any of ``pin_uuid``/``pin_slug``,
-            ``location_uuid``/``location_slug``, ``geocoded_lat``/``geocoded_lng``
-            (plus optional ``geocoded_name``/``title``).
+        body: Submitted fields - any of ``pin_uuid``/``pin_slug``, ``location_uuid``/``location_slug``, ``geocoded_lat``/``geocoded_lng`` (plus optional ``geocoded_name``/``title``).
         profile: The submitting profile; pin lookups are scoped to their own pins.
 
     Returns:
         The resolved ``(location, pin)`` pair - either or both may be None.
 
     Raises:
-        TripValidationError: A ``pin_uuid``/``pin_slug`` was submitted but does
-            not resolve to one of *profile*'s own pins - either it does not
-            exist, or it belongs to someone else. Both cases answer identically
-            so the response can't be used to probe another account's pins."""
+        TripValidationError: A ``pin_uuid``/``pin_slug`` was submitted but does not resolve to one of *profile*'s own pins - either it does not exist, or it belongs to someone else."""
     import uuid as uuid_module
 
     from urbanlens.dashboard.models.location.model import Location
@@ -321,8 +310,7 @@ def _masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
         hidden: Whether this viewer may see its location.
 
     Returns:
-        A display title safe to put anywhere in the page, including in
-        attributes the eye does not reach."""
+        A display title safe to put anywhere in the page, including in attributes the eye does not reach."""
     if not hidden:
         return activity.effective_title
     return (activity.title or "").strip() or HIDDEN_ACTIVITY_TITLE
@@ -335,19 +323,10 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
     Args:
         trip: The trip whose activities are being rendered.
         viewer: The profile viewing them.
-        include_legs: When False, driving legs are omitted entirely and no
-            routing call is attempted. The external list endpoint defaults to
-            False so a plain list fetch never triggers OSRM traffic.
+        include_legs: When False, driving legs are omitted entirely and no routing call is attempted.
 
     Returns:
-        One dict per activity in itinerary order, carrying the activity plus
-        ``index``, ``vote_up``/``vote_down``/``user_vote``, ``rsvp``/
-        ``rsvp_is_override``/``trip_rsvp``, ``can_manage``,
-        ``effective_location_hidden``, ``display_title``/``display_location_name``/
-        ``display_location_ref``/``display_child_trip_name``/``display_child_trip_uuid``
-        (already masked for this viewer - templates must use these, never
-        ``act.location``, ``act.effective_title``, or ``act.child_trip``),
-        ``pin_slug``, ``has_coords`` and ``leg``."""
+        One dict per activity in itinerary order, carrying the activity plus ``index``, ``vote_up``/``vote_down``/``user_vote``, ``rsvp``/ ``rsvp_is_override``/``trip_rsvp``, ``can_manage``, ``effective_location_hidden``,..."""
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     activities = list(activity_queryset(trip))
@@ -501,10 +480,8 @@ def create_activity(
 
     Raises:
         TripPermissionError: The actor may not add activities to this trip.
-        TripValidationError: The notes exceed the shared text limit, or
-            ``place`` names a pin that isn't the actor's own.
-        TripQuotaError: The trip is already at ``max_trip_activities``.
-    """
+        TripValidationError: The notes exceed the shared text limit, or ``place`` names a pin that isn't the actor's own.
+        TripQuotaError: The trip is already at ``max_trip_activities``."""
     require_perform(actor, trip, trip.allow_add_activities, ADD_ACTIVITY_DENIED)
 
     clean_title = _clean_text(title)
@@ -584,9 +561,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
         trip: The trip owning the activity.
         actor: The profile making the change.
         activity_id: Primary key of the activity to update.
-        changes: Any of ``title``, ``notes``, ``scheduled_at``,
-            ``scheduled_end``, ``place``, ``status``, ``child_trip_uuid``,
-            ``location_hidden``.
+        changes: Any of ``title``, ``notes``, ``scheduled_at``, ``scheduled_end``, ``place``, ``status``, ``child_trip_uuid``, ``location_hidden``.
 
     Returns:
         The saved activity.
@@ -594,8 +569,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     Raises:
         TripPermissionError: The actor may not edit activities on this trip.
         TripNotFoundError: No such activity on this trip.
-        TripValidationError: The notes exceed the shared text limit, or
-            ``place`` names a pin that isn't the actor's own."""
+        TripValidationError: The notes exceed the shared text limit, or ``place`` names a pin that isn't the actor's own."""
     require_perform(actor, trip, trip.allow_edit_activities, EDIT_ACTIVITY_DENIED)
     activity = get_activity(trip, activity_id)
 
@@ -640,8 +614,7 @@ def delete_activity(trip: Trip, actor: Profile, activity_id: int) -> None:
 
     Raises:
         TripPermissionError: The actor may not delete activities on this trip.
-        TripNotFoundError: No such activity on this trip.
-    """
+        TripNotFoundError: No such activity on this trip."""
     require_perform(actor, trip, trip.allow_edit_activities, DELETE_ACTIVITY_DENIED)
     get_activity(trip, activity_id).delete()
 
@@ -757,8 +730,7 @@ def set_activity_status(trip: Trip, actor: Profile, activity_id: int, *, status:
 
     Raises:
         TripPermissionError: The actor has not joined the trip.
-        TripNotFoundError: No such activity on this trip.
-    """
+        TripNotFoundError: No such activity on this trip."""
     require_perform(actor, trip, Trip.PERM_EVERYONE, CONTRIBUTE_DENIED)
     activity = get_activity(trip, activity_id)
 
@@ -818,15 +790,13 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
         trip: The trip owning the activity.
         actor: The profile marking it complete.
         activity_id: Primary key of the activity to complete.
-        completed_date: The date it happened; clamped to today and defaulted
-            to today when omitted or unparseable.
+        completed_date: The date it happened; clamped to today and defaulted to today when omitted or unparseable.
 
     Returns:
         The saved activity.
 
     Raises:
-        TripPermissionError: The actor has not joined the trip, or the
-            activity's location is hidden from them.
+        TripPermissionError: The actor has not joined the trip, or the activity's location is hidden from them.
         TripNotFoundError: No such activity on this trip."""
     require_perform(actor, trip, Trip.PERM_EVERYONE, CONTRIBUTE_DENIED)
     activity = get_activity(trip, activity_id)

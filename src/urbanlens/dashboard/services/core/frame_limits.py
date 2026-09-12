@@ -44,9 +44,8 @@ class FrameBudget:
 
     Attributes:
         name: Distinguishes this budget's keys from every other budget's.
-        limit: Charges allowed per window. Zero or less disables the budget.
-        window_seconds: Length of the fixed window.
-    """
+        limit: Charges allowed per window.
+        window_seconds: Length of the fixed window."""
 
     name: str
     limit: int
@@ -55,16 +54,8 @@ class FrameBudget:
     def consume(self, identity: str) -> bool:
         """Charge one event against *identity*'s budget.
 
-        Args:
-            identity: Who to charge. Callers build this from ids they already
-                hold, never from client-supplied text, so one sender cannot
-                spend another's budget.
-
         Returns:
-            True when the event is within budget, False once it is spent. Also
-            True when the cache is unavailable - see the module docstring for
-            why this tier fails open and what still bounds a socket when it does.
-        """
+            True when the event is within budget, False once it is spent."""
         if self.limit <= 0:
             return True
         try:
@@ -75,10 +66,7 @@ class FrameBudget:
 
     def refund(self, identity: str) -> None:
         """Give back one charge, for an event that turned out not to happen.
-        A decrement can race the window rolling over, and the honest failure mode for a *refund* is being off by one in the sender's favour rather than holding a lock over a counter whose whole point is that it costs nothing.
-
-        Args:
-                identity: The identity that was charged."""
+        A decrement can race the window rolling over, and the honest failure mode for a *refund* is being off by one in the sender's favour rather than holding a lock over a counter whose whole point is that it costs nothing."""
         if self.limit <= 0:
             return
         key = f"{_KEY_PREFIX}:{self.name}:{identity}"
@@ -99,7 +87,7 @@ class ConnectionRate:
     Holds no cache and no lock: a consumer instance handles its own frames on one event loop, so a plain attribute is already serialised.
 
     Attributes:
-        limit: Events allowed per window. Zero or less disables the counter.
+        limit: Events allowed per window.
         window_seconds: Length of the fixed window."""
 
     limit: int

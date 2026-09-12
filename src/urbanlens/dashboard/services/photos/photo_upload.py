@@ -1,5 +1,4 @@
-"""Shared photo/video/document upload pipeline.
-Extracted from ``controllers.vault_photos.PhotoUploadView.post`` so the Vault page's drag-and-drop uploader and the external API's ``POST photos/`` run byte-for-byte the same admission checks: media-type sniffing, the per-account video/document feature gates, the malware/size/dimension checks in ``services.media.images.image_upload_error``, per-profile duplicate rejection, and the storage quota."""
+"""Shared photo/video/document upload pipeline."""
 
 from __future__ import annotations
 
@@ -26,18 +25,10 @@ class PhotoUploadError(Exception):
 
     Attributes:
         message: User-facing explanation, safe to return to an untrusted caller.
-        status: The HTTP status the calling view should respond with (400 for
-            an unusable file, 403 for a feature the account lacks, 409 for a
-            duplicate, 413 for a quota overrun).
-    """
+        status: The HTTP status the calling view should respond with (400 for an unusable file, 403 for a feature the account lacks, 409 for a duplicate, 413 for a quota overrun)."""
 
     def __init__(self, message: str, status: int) -> None:
-        """Store the user-facing message and the HTTP status it maps to.
-
-        Args:
-            message: User-facing explanation of the refusal.
-            status: HTTP status code the caller should respond with.
-        """
+        """Store the user-facing message and the HTTP status it maps to."""
         super().__init__(message)
         self.message = message
         self.status = status
@@ -62,19 +53,14 @@ def _resolve_media_type(file_obj: UploadedFile, profile: Profile) -> MediaKind:
     """Classify an upload as photo/video/document and enforce the per-account gates.
 
     Args:
-        file_obj: The uploaded file, whose ``content_type`` and name extension
-            are both consulted (documents are commonly served as
-            ``application/octet-stream``, so the extension is the fallback).
-        profile: The uploading profile, whose user's feature grants decide
-            whether video and document uploads are permitted at all.
+        file_obj: The uploaded file, whose ``content_type`` and name extension are both consulted (documents are commonly served as ``application/octet-stream``, so the extension is the fallback).
+        profile: The uploading profile, whose user's feature grants decide whether video and document uploads are permitted at all.
 
     Returns:
         The resolved :class:`MediaKind`.
 
     Raises:
-        PhotoUploadError: The file is not a supported type (400), or is a
-            video/document the account isn't entitled to upload (403).
-    """
+        PhotoUploadError: The file is not a supported type (400), or is a video/document the account isn't entitled to upload (403)."""
     from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
     from urbanlens.dashboard.services.media.documents import DOCUMENT_EXTENSIONS
 
@@ -114,14 +100,10 @@ def upload_photo(
         wiki: Optional wiki gallery to publish the upload into.
 
     Returns:
-        The created :class:`Image`. EXIF-derived fields (coordinates,
-        ``taken_at``, ``author``) are populated asynchronously by
-        ``tasks.process_image_upload`` and are typically still unset on the
-        returned instance.
+        The created :class:`Image`.
 
     Raises:
-        PhotoUploadError: The upload was refused; see the exception's
-            ``status`` for how to answer the caller."""
+        PhotoUploadError: The upload was refused; see the exception's ``status`` for how to answer the caller."""
     from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
     from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 

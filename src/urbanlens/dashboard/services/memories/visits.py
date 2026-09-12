@@ -22,8 +22,7 @@ def maybe_suggest_photo_visit(image: Image) -> VisitSuggestion | None:
     Either way, rather than silently logging a visit, a ``VisitSuggestion`` the uploader confirms or dismisses is raised.
 
     Args:
-        image: The uploaded Image, with ``taken_at``, ``latitude``, and
-            ``longitude`` populated (and ``pin``/``profile`` as applicable).
+        image: The uploaded Image, with ``taken_at``, ``latitude``, and ``longitude`` populated (and ``pin``/``profile`` as applicable).
 
     Returns:
         The created VisitSuggestion, or None if the photo doesn't qualify."""

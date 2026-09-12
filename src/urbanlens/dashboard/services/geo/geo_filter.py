@@ -1,5 +1,4 @@
-"""Geographic filtering utilities.
-The underlying boundary now lives in ``services.geo.geo_boundary`` (``USA``), the generalized replacement for this module's old standalone bbox check - a plugin that needs an arbitrary geographic gate (a different country, a state, a hand-drawn polygon) should use ``GeoBoundary`` directly rather than adding a new bespoke helper here."""
+"""Geographic filtering utilities."""
 
 from __future__ import annotations
 
@@ -30,8 +29,7 @@ def require_usa(service: str, lat: float | None, lng: float | None) -> bool:
         lng: Longitude.
 
     Returns:
-        ``True`` if the coordinates are in the USA (call may proceed),
-        ``False`` if outside the USA (call should be skipped)."""
+        ``True`` if the coordinates are in the USA (call may proceed), ``False`` if outside the USA (call should be skipped)."""
     if is_usa_coordinates(lat, lng):
         return True
 

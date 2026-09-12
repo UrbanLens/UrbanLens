@@ -27,12 +27,8 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.man
 
 @dataclass(slots=True, kw_only=True)
 class WikimediaGateway(MediaProvider):
-    """
-    Searches Wikimedia Commons for freely licensed images.
-
-    Only call this when the pin has a meaningful name - coordinate-only names
-    produce low-quality Commons results.
-    """
+    """Searches Wikimedia Commons for freely licensed images.
+    Only call this when the pin has a meaningful name - coordinate-only names produce low-quality Commons results."""
 
     service_key: ClassVar[str] = "wikimedia"
     display_name: ClassVar[str] = "Wikimedia Commons"
@@ -53,12 +49,8 @@ class WikimediaGateway(MediaProvider):
     def search_images(self, query: str) -> list[dict[str, Any]]:
         """Search Commons for images matching *query* and return thumbnail info.
 
-        Args:
-                query: Human-readable wiki/place name used as the search term.
-
         Returns:
-                List of dicts with keys ``title``, ``url``, ``thumb``,
-                ``description_url``, ``mime``.  Empty list on failure or no results."""
+            List of dicts with keys ``title``, ``url``, ``thumb``, ``description_url``, ``mime``."""
         page_ids = self._search_files(query)
         if not page_ids:
             return []
@@ -87,11 +79,7 @@ class WikimediaGateway(MediaProvider):
             return []
 
     def _fetch_image_info(self, titles: list[str]) -> list[dict[str, Any]]:
-        """Fetch image URLs and thumbnail URLs for the given file titles.
-
-        Chunks requests to stay under the API's 50-titles-per-request cap --
-        see ``_TITLES_BATCH_SIZE``.
-        """
+        """Fetch image URLs and thumbnail URLs for the given file titles."""
         results: list[dict[str, Any]] = []
         for i in range(0, len(titles), _TITLES_BATCH_SIZE):
             results.extend(self._fetch_image_info_batch(titles[i : i + _TITLES_BATCH_SIZE]))

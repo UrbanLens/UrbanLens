@@ -19,9 +19,7 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
 
     def bulk_create(self, objs, *args, **kwargs):
         """Create labels in bulk, coercing each colour first.
-
-        ``bulk_create`` does not call ``save()``, so the model's coercion has to
-        be repeated here or a bulk path stores what a single write would reject.
+        ``bulk_create`` does not call ``save()``, so the model's coercion has to be repeated here or a bulk path stores what a single write would reject.
 
         Args:
             objs: The labels to create.
@@ -38,10 +36,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
 
     def bulk_update(self, objs, fields, *args, **kwargs):
         """Update labels in bulk, coercing each colour first.
-
-        The third path past ``save()``, and the one the external API's bulk edit
-        uses. That endpoint validates its input and 400s on a bad colour, so
-        this is the backstop for every other caller.
+        The third path past ``save()``, and the one the external API's bulk edit uses.
+        That endpoint validates its input and 400s on a bad colour, so this is the backstop for every other caller.
 
         Args:
             objs: The labels to update.
@@ -127,13 +123,7 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
 
     def with_hierarchy(self) -> Self:
         """Prefetch parents/children without computing pin or location counts.
-
-        Cheap counterpart to `with_pin_counts()` for a page's first paint: the
-        Organize page renders label cards from this immediately, then a
-        follow-up HTMX request re-fetches the same rows via `with_pin_counts()`
-        to back-fill the stat badges once they're ready, so the DOM shows up
-        before the count queries (including the per-label descendant BFS in
-        `tag_total_pins`) have run at all.
+        Cheap counterpart to `with_pin_counts()` for a page's first paint: the Organize page renders label cards from this immediately, then a follow-up HTMX request re-fetches the same rows via `with_pin_counts()` to back-fill the stat badges once they're ready, so the DOM shows up before the count queries (including the per-label descendant BFS in `tag_total_pins`) have run at all.
         """
         from urbanlens.dashboard.models.labels.model import Label
 
@@ -144,11 +134,7 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
 
     def with_pin_counts(self) -> Self:
         """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents.
-
-        Each count is a correlated subquery rather than a sibling `Count()` on the
-        same queryset - annotating `pins` and `wikis` together would join both M2M
-        tables in before grouping, producing a row per (pin, wiki) pair per label
-        (a cartesian fan-out) that `distinct=True` only fixes after the fact.
+        Each count is a correlated subquery rather than a sibling `Count()` on the same queryset - annotating `pins` and `wikis` together would join both M2M tables in before grouping, producing a row per (pin, wiki) pair per label (a cartesian fan-out) that `distinct=True` only fixes after the fact.
         """
         from urbanlens.dashboard.models.labels.model import Label
 
@@ -168,15 +154,7 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
 
     def in_display_order(self) -> Self:
         """Rank order, then name.
-
-        Not called `ordered`: Django's `QuerySet.ordered` is a bool property,
-        and a method of the same name shadows it, so anything reading it as a
-        bool - `Paginator` does, via `getattr(object_list, "ordered", None)` -
-        sees a truthy bound method instead of the property's answer. Nothing
-        misbehaved in practice, because `Label.Meta.ordering` is set and that
-        property would have returned True anyway; the rename is to stop a
-        subclass silently redefining a documented part of the QuerySet API,
-        which is what mypy's `override` check flagged.
+        Not called `ordered`: Django's `QuerySet.ordered` is a bool property, and a method of the same name shadows it, so anything reading it as a bool - `Paginator` does, via `getattr(object_list, "ordered", None)` - sees a truthy bound method instead of the property's answer.
         """
         return self.order_by("-order", "name")
 

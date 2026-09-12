@@ -1,11 +1,4 @@
-{% comment %}
-Map picker tiles for the pin-share dialog - extracted so the "New map"
-flow can refetch just this fragment (via pin.share.maps) after creating a
-map, without reloading the rest of the already-filled-in share form.
-
-Context:
-  maps - the sender's MarkupMap queryset/list.
-{% endcomment %}
+{% comment %}Map picker tiles for the pin-share dialog.{% endcomment %}
 {% for candidate in maps %}
 {% with uuid_str=candidate.uuid|stringformat:"s" %}
 <div class="pin-share-map-tile" data-uuid="{{ candidate.uuid }}">

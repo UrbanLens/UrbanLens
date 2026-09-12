@@ -46,10 +46,8 @@ class AutoTagService:
     """Suggests and optionally applies labels to a Pin or Location.
 
     Args:
-        kinds: Label kinds to process.  Defaults to ``["category"]``.
-        max_labels: Maximum suggestions returned *per kind*.  ``None`` means no
-            limit (accept all keyword hits + everything the AI proposes).
-            Defaults to ``None`` (multiple)."""
+        kinds: Label kinds to process.
+        max_labels: Maximum suggestions returned *per kind*."""
 
     _DEFAULT_KINDS: tuple[str, ...] = ("category",)
 
@@ -64,14 +62,11 @@ class AutoTagService:
     # -- public entry points --------------------------------------------------
 
     def suggest_for_pin(self, pin: Pin, *, apply: bool = False) -> list[Label]:
-        """Suggest (and optionally apply) labels for a Pin. Only labels visible to that user (global + user-owned) are considered.
-
-        Args:
-                pin: Target Pin instance.
-                apply: When True, attach all matched labels before returning.
+        """Suggest (and optionally apply) labels for a Pin.
+        Only labels visible to that user (global + user-owned) are considered.
 
         Returns:
-                Matched Label instances across all configured kinds."""
+            Matched Label instances across all configured kinds."""
         profile = getattr(pin, "profile", None)
         results: list[Label] = []
         for kind in self.kinds:
@@ -99,12 +94,8 @@ class AutoTagService:
         """Suggest (and optionally apply) labels for a community Wiki.
         A Wiki is shared/global, so only global labels (``profile=None``) are considered and no user preference check is performed.
 
-        Args:
-                wiki: Target Wiki instance.
-                apply: When True, attach all matched labels before returning.
-
         Returns:
-                Matched Label instances across all configured kinds."""
+            Matched Label instances across all configured kinds."""
         results: list[Label] = []
         for kind in self.kinds:
             eligible = self._eligible_labels(kind, profile=None)
@@ -120,14 +111,7 @@ class AutoTagService:
 
     @staticmethod
     def _exclude_removed(target: Pin | Wiki, matched: list[Label]) -> list[Label]:
-        """Drop any matched label the user has already removed from this target.
-
-        Args:
-                target: Pin or Wiki being tagged.
-                matched: Labels the matching pipeline selected.
-
-        Returns:
-                ``matched``, minus any label previously removed from this target."""
+        """Drop any matched label the user has already removed from this target."""
         from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 
         if type(target).__name__ == "Wiki":
@@ -142,13 +126,8 @@ class AutoTagService:
     def _ai_kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
         """Return False when the user has disabled AI-based auto-tagging for this label kind.
 
-        Args:
-            kind: Label kind string (e.g. ``"category"``).
-            profile: Owner profile to check.
-
         Returns:
-            True if AI-based auto-tagging is permitted for this kind and profile.
-        """
+            True if AI-based auto-tagging is permitted for this kind and profile."""
         if not getattr(profile, "ai_enabled", True) or not getattr(profile, "external_apis_enabled", True):
             return False
         pref_field = _AI_KIND_PREF.get(kind)
@@ -159,12 +138,8 @@ class AutoTagService:
         """Return False when the user has disabled keyword-based auto-tagging for this label kind.
         Keyword matching makes no external API call, so it isn't gated on ``external_apis_enabled`` - only the user's own keyword-tagging toggles.
 
-        Args:
-                kind: Label kind string (e.g. ``"category"``).
-                profile: Owner profile to check.
-
         Returns:
-                True if keyword-based auto-tagging is permitted for this kind and profile."""
+            True if keyword-based auto-tagging is permitted for this kind and profile."""
         if not getattr(profile, "keyword_tagging_enabled", True):
             return False
         pref_field = _KEYWORD_KIND_PREF.get(kind)
@@ -174,13 +149,8 @@ class AutoTagService:
     def _redata_kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
         """Whether REData-sourced auto-tagging applies for this kind and profile.
 
-        Args:
-                kind: Label kind string.
-                profile: Owner profile to check.
-
         Returns:
-                True when this profile may have labels of this kind applied
-                automatically from REData's suggestions."""
+            True when this profile may have labels of this kind applied automatically from REData's suggestions."""
         from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
         from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 
@@ -194,14 +164,8 @@ class AutoTagService:
         """Labels REData suggests for this pin, restricted to the eligible set.
         REData answers about the profile's whole taxonomy, so the result is filtered back through ``eligible`` - which is what enforces the per-label opt-out and the protected-label exclusion here, rather than trusting the upstream answer to respect either.
 
-        Args:
-                pin: The pin being tagged.
-                eligible: Labels of this kind the profile allows auto-tagging on.
-                kind: Label kind string, for the log line.
-
         Returns:
-                Matched labels, highest confidence first; empty when REData is
-                unconfigured, fails, or suggests nothing above the floor."""
+            Matched labels, highest confidence first; empty when REData is unconfigured, fails, or suggests nothing above the floor."""
         from urbanlens.dashboard.services.labels.redata_suggestions import get_suggestions
 
         suggestions = get_suggestions(pin)
@@ -218,12 +182,8 @@ class AutoTagService:
         """Return labels eligible for auto-tagging.
         For Pin targets (profile given) both global and user-owned labels are included; for Location targets only global labels.
 
-        Args:
-                kind: Label kind to filter by.
-                profile: Owning profile for Pin targets; ``None`` for Location targets.
-
         Returns:
-                Ordered list of eligible Label instances."""
+            Ordered list of eligible Label instances."""
         from django.db.models import Q
 
         from urbanlens.dashboard.models.labels.model import Label
@@ -248,16 +208,8 @@ class AutoTagService:
     ) -> list[Label]:
         """Run the keyword and/or AI matching stages and return up to max_labels results.
 
-        Args:
-            target: Pin or Location being tagged.
-            eligible: Pre-filtered list of candidate labels.
-            kind: Label kind (used for AI instructions).
-            do_keyword: Whether to run the keyword-matching stage.
-            do_ai: Whether to run the AI-matching stage on labels keyword matching didn't catch.
-
         Returns:
-            Matched Label instances.
-        """
+            Matched Label instances."""
         if not eligible:
             return []
 
@@ -289,11 +241,8 @@ class AutoTagService:
         """Build the text corpus for keyword matching (name + place name only).
         Addresses are intentionally excluded to avoid false positives such as "Church Street" matching the Church category.
 
-        Args:
-                target: Pin or Wiki instance.
-
         Returns:
-                Space-joined text of relevant name fields."""
+            Space-joined text of relevant name fields."""
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
         parts: list[str] = []
@@ -321,14 +270,8 @@ class AutoTagService:
     ) -> bool:
         """Return True if this label's name patterns or custom keywords match text.
 
-        Args:
-                label: Label to test.
-                text: Text to search in.
-                compiled_patterns: Pre-compiled pattern dict from
-                ``keywords._get_compiled()``.
-
         Returns:
-                True on first match found."""
+            True on first match found."""
         # 1. Built-in regex patterns.
         label_name_lower = label.name.lower()
         for cat_key, patterns in compiled_patterns.items():
@@ -350,13 +293,8 @@ class AutoTagService:
     def _keyword_match(self, eligible: list[Label], text: str) -> list[Label]:
         """Return all eligible labels that match the text via keywords.
 
-        Args:
-            eligible: Candidate labels.
-            text: Text to match against (from ``_build_keyword_text``).
-
         Returns:
-            Matched labels in eligibility order.
-        """
+            Matched labels in eligibility order."""
         if not text:
             return []
 
@@ -381,14 +319,8 @@ class AutoTagService:
     ) -> list[Label]:
         """Use the LLM gateway to select labels from the eligible list.
 
-        Args:
-            target: Pin or Location being tagged.
-            eligible: Labels not yet matched by keywords.
-            kind: Label kind (used for instructions wording).
-
         Returns:
-            Matched Label instances validated against the eligible list.
-        """
+            Matched Label instances validated against the eligible list."""
         from urbanlens.dashboard.services.ai.factory import get_gateway
 
         prompt = self._build_prompt(target)
@@ -415,13 +347,8 @@ class AutoTagService:
     def _build_instructions(eligible: list[Label], kind: str) -> str:
         """Build the AI system instructions with the constrained label list.
 
-        Args:
-            eligible: Labels the AI may choose from.
-            kind: Label kind name used in the instruction text.
-
         Returns:
-            Instruction string to pass to the gateway.
-        """
+            Instruction string to pass to the gateway."""
         if eligible:
             names = ", ".join(b.name for b in eligible)
             return (
@@ -438,11 +365,8 @@ class AutoTagService:
     def _build_prompt(target: Pin | Wiki) -> str:
         """Build the location-context prompt to send to the AI.
 
-        Args:
-                target: Pin or Location instance.
-
         Returns:
-                Prompt string, or empty string if no usable data is available."""
+            Prompt string, or empty string if no usable data is available."""
         from urbanlens.dashboard.services.ai.scanner import wrap_user_data
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 

@@ -1,5 +1,4 @@
-"""Copying a wiki photo onto the copier's own pin, with durable authorship provenance.
-Copying one onto your own pin must not let the copy silently pass as your own work, and must not let the original later disappearing take your copy's attribution with it - see :class:`~urbanlens.dashboard.models.images.model.Image`'s ``copied_from*`` fields for exactly what is captured at copy time and why each is denormalized rather than resolved live."""
+"""Copying a wiki photo onto the copier's own pin, with durable authorship provenance."""
 
 from __future__ import annotations
 
@@ -17,14 +16,12 @@ def copy_wiki_photo_to_pin(image: Image, target_pin: Pin, profile: Profile) -> t
     Reuses the wiki photo's own stored file rather than duplicating bytes, and does not re-run upload processing - the new row points at an already-processed file, exactly like ``create_pin_from_share``'s copies.
 
     Args:
-        image: The wiki photo being copied. Callers must have already verified ``profile`` can
-            see it on this wiki - this function does not check visibility.
+        image: The wiki photo being copied.
         target_pin: The pin the copy is filed under.
         profile: The profile making the copy (the new row's owner).
 
     Returns:
-        ``(copy, created)`` - the copy row, and whether it was newly created (``False`` when
-        ``target_pin`` already had a copy of this exact photo)."""
+        ``(copy, created)`` - the copy row, and whether it was newly created (``False`` when ``target_pin`` already had a copy of this exact photo)."""
     existing = Image.objects.filter(pin=target_pin, copied_from=image).first()
     if existing is not None:
         return existing, False

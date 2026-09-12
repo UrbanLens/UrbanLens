@@ -57,14 +57,9 @@ class LocationGuess:
     Attributes:
         latitude: Suggested latitude.
         longitude: Suggested longitude.
-        display_name: The matched place's full name, for showing the user what
-            is being suggested.
-        source: ``"address"`` when the pin's name parsed as a street address,
-            ``"name"`` when it matched a place name, ``"area"`` when only the S2
-            cell was available, and ``"...+area"`` when the cell corroborated a
-            geocoded match.
-        confidence: 0-1, for ordering and for deciding whether to show it at all.
-    """
+        display_name: The matched place's full name, for showing the user what is being suggested.
+        source: ``"address"`` when the pin's name parsed as a street address, ``"name"`` when it matched a place name, ``"area"`` when only the S2 cell was available, and ``"...+area"`` when the cell corroborated a geocoded match.
+        confidence: 0-1, for ordering and for deciding whether to show it at all."""
 
     latitude: float
     longitude: float
@@ -80,9 +75,7 @@ def s2_hint_for(failure: PinImportFailure) -> tuple[float, float] | None:
         failure: The unresolved import row.
 
     Returns:
-        An approximate (latitude, longitude), or None when the row carries no
-        usable URL. Wrong about one time in three - see the module docstring.
-    """
+        An approximate (latitude, longitude), or None when the row carries no usable URL."""
     url = (getattr(failure, "maps_url", "") or "").strip()
     if not url:
         return None
@@ -107,8 +100,7 @@ def _agrees(latitude: float, longitude: float, hint: tuple[float, float] | None)
         hint: The decoded cell position, or None.
 
     Returns:
-        True when both are present and within :data:`_AGREEMENT_DEGREES`.
-    """
+        True when both are present and within :data:`_AGREEMENT_DEGREES`."""
     if hint is None:
         return False
     return haversine_km(latitude, longitude, hint[0], hint[1]) <= _AGREEMENT_KM
@@ -120,13 +112,10 @@ def _within_hint(latitude: float, longitude: float, near: tuple[float, float] | 
     Args:
         latitude: Candidate latitude.
         longitude: Candidate longitude.
-        near: Approximate (latitude, longitude) the pin is believed to be near,
-            or None when the caller has no hint.
+        near: Approximate (latitude, longitude) the pin is believed to be near, or None when the caller has no hint.
 
     Returns:
-        True when there is no hint, or the candidate is within
-        :data:`_MAX_HINT_KM` of it.
-    """
+        True when there is no hint, or the candidate is within :data:`_MAX_HINT_KM` of it."""
     if near is None:
         return True
     return haversine_km(latitude, longitude, near[0], near[1]) <= _MAX_HINT_KM
@@ -141,8 +130,7 @@ def _candidate(raw: dict, *, source: str, confidence: float) -> LocationGuess | 
         confidence: Confidence to record on the guess.
 
     Returns:
-        The guess, or None when the result carries no usable coordinates.
-    """
+        The guess, or None when the result carries no usable coordinates."""
     try:
         latitude = float(raw["lat"])
         longitude = float(raw["lon"])
@@ -163,14 +151,10 @@ def guess_for_failure(failure: PinImportFailure, *, near: tuple[float, float] | 
 
     Args:
         failure: The unresolved import row.
-        near: Optional approximate (latitude, longitude) from a caller that
-            trusts its own hint. Unlike the S2 cell, this *does* filter:
-            candidates further than :data:`_MAX_HINT_DEGREES` away are discarded.
+        near: Optional approximate (latitude, longitude) from a caller that trusts its own hint.
 
     Returns:
-        The best guess, or None when nothing clears the bar. Returning None is the
-        normal outcome for a vague name with no URL, and is preferable to a wrong
-        pin."""
+        The best guess, or None when nothing clears the bar."""
     name = (failure.name or "").strip()
     hint = s2_hint_for(failure)
 

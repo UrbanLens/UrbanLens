@@ -1,8 +1,4 @@
-"""Name/alias selection for Named Place mode rounds.
-
-See ``docs/designs/drafts/spotguessr.md`` ("Named Place mode") for the rules this
-encodes.
-"""
+"""Name/alias selection for Named Place mode rounds."""
 
 from __future__ import annotations
 
@@ -21,9 +17,7 @@ def candidate_name_for_location(location: Location, *, use_aliases: bool = True)
 
     Args:
         location: The round's answer location.
-        use_aliases: When True (``config.use_aliases``, default), prefer a
-            random meaningful alias over the wiki's own name - false always
-            uses the official wiki name."""
+        use_aliases: When True (``config.use_aliases``, default), prefer a random meaningful alias over the wiki's own name - false always uses the official wiki name."""
     wiki = getattr(location, "wiki", None)
     if wiki is None:
         return None
@@ -31,6 +25,6 @@ def candidate_name_for_location(location: Location, *, use_aliases: bool = True)
     if use_aliases:
         meaningful_aliases = [alias.name for alias in wiki.aliases.all() if is_meaningful_name(alias.name)]
         if meaningful_aliases:
-            return random.choice(meaningful_aliases)  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive
+            return random.choice(meaningful_aliases)  # noqa: S311 # nosec: B311 - game content selection, not...
 
     return wiki.name if is_meaningful_name(wiki.name) else None

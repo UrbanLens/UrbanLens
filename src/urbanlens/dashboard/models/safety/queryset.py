@@ -21,9 +21,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
     def due_for_reminder(self) -> Self:
         """Return scheduled check-ins whose expected check-in time has arrived.
-
-        Excludes rows already past their grace period - those belong to
-        ``overdue()`` instead, whether or not the reminder ever went out.
+        Excludes rows already past their grace period - those belong to ``overdue()`` instead, whether or not the reminder ever went out.
 
         Returns:
             Filtered queryset.
@@ -37,11 +35,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
     def overdue(self) -> Self:
         """Return check-ins whose grace period has elapsed with no response.
-
-        Includes check-ins still stuck on SCHEDULED (not just AWAITING_CHECKIN) so a
-        missed or failed ``send_due_checkin_reminders`` run can't prevent escalation -
-        the reminder-send transitions status to AWAITING_CHECKIN only after the
-        notification succeeds (see ``services.visits.safety.send_checkin_reminder``).
+        Includes check-ins still stuck on SCHEDULED (not just AWAITING_CHECKIN) so a missed or failed ``send_due_checkin_reminders`` run can't prevent escalation - the reminder-send transitions status to AWAITING_CHECKIN only after the notification succeeds (see ``services.visits.safety.send_checkin_reminder``).
 
         Returns:
             Filtered queryset.
@@ -57,11 +51,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
     def due_for_final_warning(self) -> Self:
         """Return awaiting check-ins about to escalate to emergency contacts.
-
-        Catches check-ins within ``FINAL_WARNING_LEAD_TIME`` of their overdue
-        point that haven't already gotten a final warning - once escalated,
-        ``overdue()`` takes over and this no longer matches (status moves off
-        AWAITING_CHECKIN).
+        Catches check-ins within ``FINAL_WARNING_LEAD_TIME`` of their overdue point that haven't already gotten a final warning - once escalated, ``overdue()`` takes over and this no longer matches (status moves off AWAITING_CHECKIN).
 
         Returns:
             Filtered queryset.
@@ -80,15 +70,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
     def due_for_auto_delete(self) -> Self:
         """Return resolved check-ins past their owner's auto-delete window, if any.
-
-        The window is a per-profile ``SafetyPreference.auto_delete_after_days`` setting;
-        a null value means "never auto-delete" and excludes the profile's check-ins here.
-
-        The window counts from whichever is later, ``resolved_at`` or ``created`` -
-        the undo-delete framework (``services.undo.handlers.safety_checkin``) recreates
-        a restored check-in as a brand-new row carrying its *original* ``resolved_at``,
-        so counting from ``resolved_at`` alone could make a just-restored check-in
-        immediately due again on the next sweep, silently undoing the undo.
+        The window is a per-profile ``SafetyPreference.auto_delete_after_days`` setting; a null value means "never auto-delete" and excludes the profile's check-ins here.
 
         Returns:
             Filtered queryset.
@@ -112,13 +94,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
     def due_for_archival(self) -> Self:
         """Return resolved check-ins whose post-resolution encryption grace window has elapsed.
-
-        Excludes check-ins already archived (``archive`` one-to-one exists) -
-        this is what makes ``services.visits.safety.archive_checkin`` idempotent
-        across the eta-scheduled task and the periodic sweep both picking up
-        the same row. Also excludes check-ins that gave up after repeated
-        archival failures (``archive_failed_at`` set) - those need a human,
-        not another sweep tick (see ``services.visits.safety.MAX_ARCHIVE_ATTEMPTS``).
+        Excludes check-ins already archived (``archive`` one-to-one exists) - this is what makes ``services.visits.safety.archive_checkin`` idempotent across the eta-scheduled task and the periodic sweep both picking up the same row.
 
         Returns:
             Filtered queryset.
@@ -127,10 +103,6 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
     def active(self) -> Self:
         """Return check-ins that have not yet reached a terminal status.
-
-        Used to enforce that a profile may only have one active check-in at a
-        time (see ``services.visits.safety.create_checkin``) and to power the
-        navbar's active-check-in banner.
 
         Returns:
             Filtered queryset.
@@ -141,11 +113,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
     def shared_with(self, profile: Profile) -> Self:
         """Return other profiles' check-ins where ``profile`` is a registered emergency contact.
-
-        Powers the safety overview's "Shared with you" section - a logged-in
-        emergency contact gets a read-only view of the check-in (see
-        ``SafetyCheckinDetailView._render_shared_view``) even before/without
-        the owner ever posting it to a community wiki.
+        Powers the safety overview's "Shared with you" section - a logged-in emergency contact gets a read-only view of the check-in (see ``SafetyCheckinDetailView._render_shared_view``) even before/without the owner ever posting it to a community wiki.
 
         Args:
             profile: The viewing profile.
@@ -158,11 +126,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
     def partnered_with(self, profile: Profile) -> Self:
         """Return other profiles' check-ins where ``profile`` is an accepted safety check-in partner.
-
-        Mirrors ``shared_with`` - powers the safety overview's "Check-ins you
-        partner on" section. Unlike ``shared_with``, an INVITED-but-not-yet-
-        accepted partner row doesn't count here (see
-        ``SafetyHomeView.get``'s separate ``pending_partner_invites``).
+        Mirrors ``shared_with`` - powers the safety overview's "Check-ins you partner on" section.
 
         Args:
             profile: The viewing profile.
@@ -193,11 +157,7 @@ class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet):
 
     def by_token(self, token: str) -> Self:
         """Resolve a contact by their magic-link token.
-
-        A contact identified only by email has no account to log into, so
-        the public contact portal (and the check-in/markup-map views it
-        links to) all resolve the requesting contact this same way - see
-        the model's own docstring for why ``token`` is the credential here.
+        A contact identified only by email has no account to log into, so the public contact portal (and the check-in/markup-map views it links to) all resolve the requesting contact this same way - see the model's own docstring for why ``token`` is the credential here.
 
         Args:
             token: The magic-link token from the URL.

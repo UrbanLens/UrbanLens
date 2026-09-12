@@ -108,9 +108,7 @@ class ProfileEmailQuerySet(abstract.DashboardQuerySet):
 
     def verified_for(self, normalized_email: str) -> ProfileEmailQuerySet:
         """Verified claims on one normalized address (at most one row exists).
-
-        Only verified rows count for identity matching anywhere - an
-        unverified row is inert by design (see the model docstring).
+        Only verified rows count for identity matching anywhere - an unverified row is inert by design (see the model docstring).
 
         Args:
             normalized_email: The normalized form (see ``normalize_email``).

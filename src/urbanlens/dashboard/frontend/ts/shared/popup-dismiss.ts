@@ -1,15 +1,5 @@
 /**
- * Click-outside dismissal for two small popups that have no other close affordance:
- * the trip member RSVP menu and the photo-album "add to" picker.
- *
- * Neither has anything to do with comments; they were only ever co-located with the
- * reaction picker because all three shared one document click listener in
- * ``base.html``. Splitting them out is behaviour-preserving - independent branches of
- * one listener and separate listeners on the same target run identically - and keeps
- * the reaction picker's module about reactions.
- *
- * The album picker is a ``<details>`` element, so it closes by clearing ``open``
- * rather than setting ``hidden``.
+ * Click-outside dismissal for two small popups that have no other close affordance.
  */
 
 function onDocumentClick(event: MouseEvent): void {

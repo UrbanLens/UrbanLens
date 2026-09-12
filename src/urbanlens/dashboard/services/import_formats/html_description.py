@@ -1,8 +1,4 @@
-"""Best-effort parsing of the loose HTML/text descriptions found in KMZ/KML
-placemarks (Google My Maps exports commonly embed an <img>, plain-text
-key/value lines separated by <br>, and bare (unwrapped) URLs in the same
-description field).
-"""
+"""Best-effort parsing of the loose HTML/text descriptions found in KMZ/KML placemarks (Google My Maps exports commonly embed an <img>, plain-text key/value lines separated by <br>, and bare (unwrapped) URLs in the same description field)."""
 
 from __future__ import annotations
 

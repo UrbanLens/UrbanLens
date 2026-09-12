@@ -50,9 +50,9 @@ def _viewer_profile(request: HttpRequest) -> Profile | None:
 def _visible_profile_or_404(request: HttpRequest, profile_slug: str) -> tuple[Profile, Profile | None]:
     """Return (subject, viewer), raising 404 when the viewer may not see the subject.
 
-    Achievements are shown to exactly the audience that can see the profile
-    itself, so this reuses ``Profile.can_view_profile`` rather than inventing a
-    second visibility rule that could drift from it.
+    Achievements are shown to exactly the audience that can see the profile itself, so this reuses
+    ``Profile.can_view_profile`` rather than inventing a second visibility rule that could drift from
+    it.
     """
     profile = get_object_or_404(Profile, slug=profile_slug)
     viewer = _viewer_profile(request)
@@ -166,10 +166,9 @@ def _admin_context(**extra: Any) -> dict[str, Any]:
 def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
     """Return the submitted custom-icon file, if any.
 
-    Mirrors ``labels._uploaded_custom_icon``: the icon picker partial names its
-    file input ``custom_icon-<picker_id>`` (scoped per widget instance), so the
-    create form and every row's edit form can share one page without their
-    uploads colliding on field name.
+    Mirrors ``labels._uploaded_custom_icon``: the icon picker partial names its file input
+    ``custom_icon-<picker_id>`` (scoped per widget instance), so the create form and every row's edit
+    form can share one page without their uploads colliding on field name.
     """
     for field_name in request.FILES:
         if field_name == "custom_icon" or field_name.startswith("custom_icon-"):
@@ -185,8 +184,8 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
         request: The request carrying the POSTed form.
 
     Raises:
-        ValidationError: When a required field is missing or unparseable, so the
-            caller can report it without a half-populated row being written.
+        ValidationError: When a required field is missing or unparseable, so the caller can report it
+        without a half-populated row being written.
     """
     name = (request.POST.get("name") or "").strip()
     if not name:
@@ -200,9 +199,9 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
 
     achievement.name = name
     achievement.description = (request.POST.get("description") or "").strip() or None
-    # Truncated to the column widths: these are assigned straight from POST, and
-    # CharField max_length is enforced by full_clean(), which save() does not call -
-    # so an over-long value reached the database and returned a 500.
+    # Truncated to the column widths: these are assigned straight from POST, and CharField max_length is
+    # enforced by full_clean(), which save() does not call - so an over-long value reached the database and
+    # returned a 500.
     achievement.metric = (request.POST.get("metric") or "").strip()[: Achievement._meta.get_field("metric").max_length]  # noqa: SLF001 - _meta is public API
     achievement.threshold = threshold
     achievement.icon = (request.POST.get("icon") or "").strip()[: Achievement._meta.get_field("icon").max_length] or None  # noqa: SLF001
@@ -220,9 +219,8 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
             raise ValidationError({"custom_icon": upload_error[0]})
         achievement.custom_icon = uploaded
     elif request.POST.get("clear_custom_icon"):
-        # Clearing the field alone leaves the file on disk (Django never
-        # deletes FileField storage), where the media gate's icon branch keeps
-        # serving it - the same orphan class as deleted comment photos.
+        # Clearing the field alone leaves the file on disk (Django never deletes FileField storage), where the
+        # media gate's icon branch keeps serving it - the same orphan class as deleted comment photos.
         if achievement.custom_icon:
             achievement.custom_icon.delete(save=False)
         achievement.custom_icon = None
@@ -283,9 +281,8 @@ class SiteAdminAchievementEditView(_AchievementAdminMixin, View):
     def delete(self, request: HttpRequest, achievement_id: int) -> HttpResponse:
         achievement = get_object_or_404(Achievement, pk=achievement_id)
         name = achievement.name
-        # Cascades to every UserAchievement. Deactivating is the non-destructive
-        # option and is what the UI steers toward; this is the deliberate escape
-        # hatch for an award created by mistake.
+        # Cascades to every UserAchievement. Deactivating is the non-destructive option and is what the UI
+        # steers toward; this is the deliberate escape hatch for an award created by mistake.
         achievement.delete()
         messages.success(request, f"Deleted achievement “{name}”.")
         return render(request, "dashboard/partials/admin/_achievement_rows.html", _admin_context())

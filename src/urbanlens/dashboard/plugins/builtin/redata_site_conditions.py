@@ -1,10 +1,4 @@
-"""Site conditions plugin: land cover, walkability and soil for a pin, via REData.
-
-Three single-answer USA-only domains (NLCD land cover, EPA walkability, USDA
-soil survey) folded into one panel rather than three thin ones - each
-contributes a fact or two, and any source that fails to answer is simply
-absent rather than blanking the panel.
-"""
+"""Site conditions plugin: land cover, walkability and soil for a pin, via REData."""
 
 from __future__ import annotations
 
@@ -40,11 +34,7 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
 
     def fetch(self, pin: Pin) -> None:
         """Fetch all three domains, caching whichever answered.
-
-        Each domain is fetched independently: one source's outage must not
-        blank the facts the others can still supply, so failures are logged
-        and recorded as an absent key rather than raised.
-        """
+        Each domain is fetched independently: one source's outage must not blank the facts the others can still supply, so failures are logged and recorded as an absent key rather than raised."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.redata_land_cover_gateway import RedataLandCoverGateway
         from urbanlens.dashboard.services.apis.locations.redata_soil_gateway import RedataSoilGateway
@@ -63,20 +53,16 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
             try:
                 data[domain] = fetch_one()
             except LocationContextUnavailableError as exc:
-                # outage-cache-ok: one domain of three failing is a partial
-                # result, not an outage - the domains that answered are real
-                # data worth caching, and the missing ones re-fetch when the
-                # row goes stale. The total-failure case returns below without
-                # writing, which is the case the check exists for.
+                # outage-cache-ok: one domain of three failing is a partial result, not an outage -
+                # the domains that answered are real data worth caching, and the missing ones
+                # re-fetch when the row goes stale.
                 failed += 1
                 logger.warning("Site-conditions %s lookup failed: %s", domain, exc)
         if failed and not data:
             # Every domain failed, so there is nothing to cache but the outage.
-            # The existence of the row marks this source as fetched, so writing
-            # an empty dict would leave the panel permanently blank rather than
-            # retried - the same shape as the SearXNG image cache. A *partial*
-            # result is still written: the domains that answered are real data,
-            # and the missing ones re-fetch when the row next goes stale.
+            # The existence of the row marks this source as fetched, so writing an empty dict would
+            # leave the panel permanently blank rather than retried - the same shape as the SearXNG
+            # image cache.
             logger.warning("Site-conditions: every domain failed, leaving it unfetched to retry")
             return
         LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}")

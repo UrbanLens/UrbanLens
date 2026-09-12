@@ -1,9 +1,5 @@
 /**
- * Vault > Documents gallery grid: infinite scroll, off-screen pruning, and the
- * sort control. Same shared engine as Vault Photos (see photo-virtual-grid.ts
- * and vault-photo-grid.ts), parameterized for this page's `.document-tile`
- * markup - a filename + type icon instead of a thumbnail, since a document
- * has no image to decode.
+ * Vault > Documents gallery grid: infinite scroll, off-screen pruning, and the sort control.
  */
 
 import { bindPhotoGrid } from "./photo-virtual-grid";
@@ -79,11 +75,7 @@ function bindGrid(grid: HTMLElement, sort: string): void {
     unbindGrid = bindPhotoGrid(grid, {
         inAlbum: false,
         itemSelector: ".document-tile[data-id]",
-        // A document tile has no <img> to prune (see TILE_SHELL - an icon and
-        // a filename, not a decoded bitmap). The explicit null opts out of the
-        // scroll listeners entirely; omitting it would fall back to the album
-        // grid's selector and scan on every scroll for something that can
-        // never match.
+        // A document tile has no <img> to prune.
         imageSelector: null,
         renderTile: renderVaultDocumentTile,
         extraParams: { sort },
@@ -119,10 +111,7 @@ if (document.readyState === "loading") {
     init();
 }
 
-// Exposed so pages/vault/documents.html's own inline upload handler can
-// prepend a freshly-uploaded document through the exact same tile markup
-// this module renders for fetched pages - see vault-photo-grid.ts's identical
-// convention for photos.
+// Exposed so pages/vault/documents.html's own inline upload handler can prepend a freshly-uploaded document through the exact same tile.
 window.renderVaultDocumentTile = renderVaultDocumentTile;
 
 window.refreshVaultDocumentGrid = function refreshVaultDocumentGrid(): void {

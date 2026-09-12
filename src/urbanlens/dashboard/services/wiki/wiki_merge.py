@@ -51,7 +51,6 @@ def _nestable_child_wikis(wiki: Wiki):
 
 def _containing_root_wiki(wiki: Wiki) -> Wiki | None:
     """The wiki of the nearest ancestor place that has one.
-    The hierarchy was already decided when the places were provisioned - a building is ``PART_OF`` its parcel, a parcel is ``MEMBER_OF`` the site it belongs to - so walking one FK chain gives the tightest fit directly, instead of re-deriving it by sorting every containing polygon by area on every reconciliation.
 
     Args:
         wiki: The wiki looking for a bigger container.
@@ -120,8 +119,7 @@ def reconcile_wiki_nesting(wiki: Wiki) -> int:
         wiki: The wiki whose place was just (re)resolved.
 
     Returns:
-        How many wikis were newly nested (0, 1, or more - this wiki plus
-        however many it absorbed)."""
+        How many wikis were newly nested (0, 1, or more - this wiki plus however many it absorbed)."""
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     # Re-fetched rather than trusted from the caller: direction 1's guard below reads

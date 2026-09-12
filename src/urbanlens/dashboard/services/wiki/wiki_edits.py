@@ -1,5 +1,4 @@
-"""Shared wiki field-editing and revert logic.
-Extracted from ``controllers/location_wiki.py`` so the internal HTMX views and the external API apply community edits through one implementation - the audit trail (``WikiEdit.changes``) and the conflict-aware revert rules are exactly the kind of thing that silently diverges when two callers each grow their own copy."""
+"""Shared wiki field-editing and revert logic."""
 
 from __future__ import annotations
 
@@ -52,10 +51,8 @@ def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
     """Persist only the wiki columns named in *changed_fields*.
 
     Args:
-        wiki: The wiki to save. Already mutated by the caller.
-        changed_fields: Names of the fields that were changed. Boundary keys
-            (``bounding_box``, ``boundary_*``) are dropped: those edits live on
-            ``Boundary`` rows, which are saved separately."""
+        wiki: The wiki to save.
+        changed_fields: Names of the fields that were changed."""
     columns = [field for field in changed_fields if field != "bounding_box" and not field.startswith("boundary_")]
     wiki.save(update_fields=[*columns, "updated"])
 
@@ -68,10 +65,7 @@ def _is_unchanged(new_val: object, shown_val: object) -> bool:
         shown_val: The value on the row the submitter's form was filled from.
 
     Returns:
-        True when writing it would change nothing they can see. An empty string
-        and ``None`` count as the same, because a nullable field renders as an
-        empty input either way.
-    """
+        True when writing it would change nothing they can see."""
     return new_val == shown_val or (new_val or "") == (shown_val or "")
 
 
@@ -80,23 +74,16 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
     Only keys in :data:`WIKI_EDITABLE_FIELDS` are considered; anything else in *changes* is ignored.
 
     Args:
-        wiki: The wiki to edit. Mutated and saved in place when anything
-            actually changes.
+        wiki: The wiki to edit.
         profile: The editing profile, recorded as ``WikiEdit.editor``.
         changes: Raw submitted ``{field: value}`` mapping.
-        baseline: The wiki as the submitter saw it, when that differs from the
-            row being written - a concealed projection. Change detection runs
-            against this; the audit record still keeps the stored value. Leave
-            unset and both come from *wiki*, which is what every caller outside
-            the two edit views wants.
+        baseline: The wiki as the submitter saw it, when that differs from the row being written - a concealed projection.
 
     Returns:
         The recorded :class:`WikiEdit`, or ``None`` when nothing changed.
 
     Raises:
-        WikiEditValidationError: A description over
-            :data:`MAX_WIKI_DESCRIPTION_LENGTH`, an unrecognized security level,
-            or a date that isn't ``YYYY-MM-DD``."""
+        WikiEditValidationError: A description over :data:`MAX_WIKI_DESCRIPTION_LENGTH`, an unrecognized security level, or a date that isn't ``YYYY-MM-DD``."""
     valid_security = {value for value, _label in SecurityLevel.choices}
     # new_vals holds the actual Python values to set on the wiki.
     # audit holds JSON-safe strings for the WikiEdit audit record.
@@ -131,7 +118,7 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
                 new_val = raw.date()
             else:
                 try:
-                    new_val = datetime.strptime(str(raw), "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; the wiki field is a date
+                    new_val = datetime.strptime(str(raw), "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards...
                 except ValueError:
                     raise WikiEditValidationError(f"{field} must be a date in YYYY-MM-DD format.", field) from None
         elif field == "description":
@@ -163,22 +150,14 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
 
 def revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) -> tuple[dict[str, dict], list[str]]:
     """Restore the fields captured in ``target_edit.changes`` to their prior ("from") values.
-    If someone else changed the field again after this edit (so the current value no longer matches), restoring the edit's "from" value would silently clobber that later change - so the field is left untouched and its name is collected in the returned skip list instead.
 
     Args:
-        location: The wiki's Location, needed to create a Boundary row when
-            reverting a boundary change that had deleted one.
-        wiki: The wiki being reverted. Mutated in place.
+        location: The wiki's Location, needed to create a Boundary row when reverting a boundary change that had deleted one.
+        wiki: The wiki being reverted.
         target_edit: The edit whose changes are being undone.
 
     Returns:
-        A tuple of:
-        - A diff dict in the same ``{"field": {"from": ..., "to": ...}}``
-        shape used by ``WikiEdit.changes``, computed against the values as
-        they stood right before this call - only for fields actually
-        reverted.
-        - A list of field names skipped because their current value no
-        longer matched this edit's "to" value (a conflicting later edit)."""
+        A tuple of: - A diff dict in the same ``{"field": {"from": ..., "to": ...}}`` shape used by ``WikiEdit.changes``, computed against the values as they stood right before this call - only for fields actually reverted. - A list of field names..."""
     revert_changes: dict[str, dict] = {}
     skipped_fields: list[str] = []
     for field, diff in target_edit.changes.items():
@@ -228,14 +207,10 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
         location: The wiki's Location (see :func:`revert_edit_fields`).
         wiki: The wiki being reverted.
         profile: The profile performing the revert.
-        target_edit: The edit to undo. Must not already be reverted - callers
-            check ``target_edit.reverted`` first and report that separately.
+        target_edit: The edit to undo.
 
     Returns:
-        A tuple of the new reverting :class:`WikiEdit` (or ``None`` when every
-        field had been changed again since, so there was nothing left to
-        revert) and the list of field names skipped for that reason.
-    """
+        A tuple of the new reverting :class:`WikiEdit` (or ``None`` when every field had been changed again since, so there was nothing left to revert) and the list of field names skipped for that reason."""
     revert_changes, skipped_fields = revert_edit_fields(location, wiki, target_edit)
 
     if not revert_changes:
@@ -261,9 +236,6 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
     # sees it; retraction is compare-and-swap, so a second writer is a no-op.
     target_edit.save(update_fields=["reverted", "reverted_by", "updated"])
 
-    # Reverting a *revert* puts the original edit's content back in force, so its "reverted" flag
-    # would now lie - the history display and the wiki-edits achievement metric (which excludes
-    # reverted rows) both read it.
     # Cleared only when this revert applied fully: after a partial revert (skipped_fields non-empty)
     if not skipped_fields:
         undone_ids = list(target_edit.reverts.values_list("pk", flat=True))

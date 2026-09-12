@@ -32,26 +32,13 @@ def get_gateway(feature: str | None = None, profile: Profile | None = None, prov
     Reads provider, model, and feature-flag state from SiteSettings so the site admin can control AI behaviour without a code deploy.
 
     Args:
-        feature: Optional feature key (see ``_FEATURE_FIELDS``).  When provided,
-            that feature's per-toggle must be enabled in addition to the global
-            ``ai_enabled`` flag.
-        profile: Optional profile the call is being made on behalf of. When
-            given, its ``ai_enabled``/``external_apis_enabled`` preferences and
-            the ``SiteFeature.AI`` subscription entitlement must all hold -
-            centralizes the per-profile check so individual callers don't each
-            duplicate it.
-        provider: Optional provider override (``"openai"``, ``"cloudflare"``,
-            or ``"anthropic"``). When given, this takes precedence over the
-            site-wide ``ai_provider`` setting - used by callers that need a
-            specific provider's capabilities (e.g. the chat assistant's
-            tool-calling protocol) regardless of the site default.
-        **kwargs: Extra keyword arguments forwarded to the gateway constructor
-            (e.g. ``instructions``, ``formatting``).
+        feature: Optional feature key (see ``_FEATURE_FIELDS``).
+        profile: Optional profile the call is being made on behalf of.
+        provider: Optional provider override (``"openai"``, ``"cloudflare"``, or ``"anthropic"``).
+        **kwargs: Extra keyword arguments forwarded to the gateway constructor (e.g. ``instructions``, ``formatting``).
 
     Returns:
-        A configured ``LLMGateway`` subclass instance, or ``None`` if AI is
-        globally disabled, disabled for the given profile, or the requested
-        feature is turned off."""
+        A configured ``LLMGateway`` subclass instance, or ``None`` if AI is globally disabled, disabled for the given profile, or the requested feature is turned off."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     site = SiteSettings.get_current()

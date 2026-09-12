@@ -37,10 +37,7 @@ def _provider_outline(pin: Pin) -> MultiPolygon | None:
         pin: The pin whose place to consult.
 
     Returns:
-        The place's property polygon, or None when no provider has offered one
-        (or the place has nothing to say about property boundaries - see
-        ``services.places.scope.place_polygon``).
-    """
+        The place's property polygon, or None when no provider has offered one (or the place has nothing to say about property boundaries - see ``services.places.scope.place_polygon``)."""
     from urbanlens.dashboard.services.places.scope import place_polygon
 
     location = pin.location if pin.location_id else None
@@ -54,8 +51,7 @@ def refit_child_pin_boundary(parent_pin_id: int | None) -> None:
     Existing pin/community drawings and official location boundaries take precedence and are never created, updated, or removed here.
 
     Args:
-        parent_pin_id: Primary key of the parent whose direct children changed.
-            ``None`` is a no-op for root-pin saves/deletes."""
+        parent_pin_id: Primary key of the parent whose direct children changed."""
     if parent_pin_id is None:
         return
     # Serializing by parent prevents concurrent bulk add/delete requests from

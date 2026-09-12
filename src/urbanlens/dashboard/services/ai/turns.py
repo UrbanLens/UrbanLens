@@ -1,4 +1,4 @@
-"""Turn lifecycle primitives shared by the web view, the external API, and the task itself. - The per-profile single-flight lock (:func:`acquire_turn_lock`/ :func:`release_turn_lock`), a thin wrapper over ``services.core.locks.acquire_lock``/``release_lock`` - so a user's second message while the first is still running gets the pending bubble back rather than starting a competing turn, and the task itself can detect a stale redelivery by checking whether its lock token still owns the lock before it writes a result. - The turn record (:func:`store_turn_record`/:func:`read_turn_record`) - which task id and lock token a turn id maps to, so the poll endpoint can look up progress via ``services.core.celery.get_task_progress`` without trusting anything the client sends beyond the id itself, and can refuse a poll from a profile that isn't the one who started the turn."""
+"""Turn lifecycle primitives shared by the web view, the external API, and the task itself. - The per-profile single-flight lock (:func:`acquire_turn_lock`/ :func:`release_turn_lock`), a thin wrapper over..."""
 
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ if TYPE_CHECKING:
 #: See :func:`turn_poll_delay`.
 TURN_POLL_INTERVAL_SECONDS: tuple[int, ...] = (1, 1, 2, 2, 3, 3, 5, 5)
 #: A poller gives up after this many attempts.
-#: Matches the schedule's own shape - by the time a client has polled this many times (the
-#: schedule's tail is 5s, so this is several minutes), the turn task's own ``time_limit`` (120s) has
-#: long since resolved it one way or another, so a poller still going has lost the result, not the
+#: Matches the schedule's own shape - by the time a client has polled this many times (the schedule's
+#: tail is 5s, so this is several minutes), the turn task's own ``time_limit`` (120s) has long since
+#: resolved it one way or another, so a poller still going has lost the result, not the
 MAX_POLL_ATTEMPTS = 60
 
 #: Turn record cache TTL - long enough that a client which briefly lost
@@ -37,15 +37,10 @@ def turn_poll_delay(attempt: int) -> int:
     """The delay (seconds) before the ``attempt``-th poll.
 
     Args:
-        attempt: 0-indexed poll attempt number. Negative values are treated
-            as 0 rather than raising - a caller-supplied attempt count is
-            just a pacing hint, not worth failing a poll over.
+        attempt: 0-indexed poll attempt number.
 
     Returns:
-        :data:`TURN_POLL_INTERVAL_SECONDS`'s value at that index, or its
-        last value once the schedule is exhausted - later polls keep
-        happening at the slowest configured cadence rather than stopping.
-    """
+        :data:`TURN_POLL_INTERVAL_SECONDS`'s value at that index, or its last value once the schedule is exhausted - later polls keep happening at the slowest configured cadence rather than stopping."""
     index = min(max(attempt, 0), len(TURN_POLL_INTERVAL_SECONDS) - 1)
     return TURN_POLL_INTERVAL_SECONDS[index]
 
@@ -61,10 +56,7 @@ def acquire_turn_lock(profile: Profile) -> str | None:
         profile: The requesting profile.
 
     Returns:
-        An opaque token to hand to :func:`release_turn_lock`, or ``None`` if
-        this profile already has a turn in flight - the caller must return
-        the existing pending bubble rather than enqueue a second turn.
-    """
+        An opaque token to hand to :func:`release_turn_lock`, or ``None`` if this profile already has a turn in flight - the caller must return the existing pending bubble rather than enqueue a second turn."""
     return acquire_lock(_turn_lock_key(profile), _TURN_LOCK_TTL_SECONDS)
 
 
@@ -73,14 +65,12 @@ def release_turn_lock(profile: Profile, token: str | None) -> None:
 
     Args:
         profile: The same profile passed to :func:`acquire_turn_lock`.
-        token: The token it returned. ``None`` is a no-op.
-    """
+        token: The token it returned."""
     release_lock(_turn_lock_key(profile), token)
 
 
 def turn_lock_is_current(profile: Profile, token: str) -> bool:
     """Whether ``token`` is still the current holder of the per-profile turn lock.
-    The turn task calls this before doing any real work: if the lock has already expired and been re-acquired by a newer turn (the TTL lapsed while this task sat queued, or a prior run of it never released - ``acks_late=False`` means that should not redeliver, but this check does not depend on that guarantee holding), a stale task must not spend a provider call on a turn nothing is polling for anymore, or - if it ran to completion regardless - release a lock a newer turn now owns. :func:`release_turn_lock` is separately self-guarding for that second part (see :func:`~services.core.locks.release_lock`); this check is what avoids doing the work at all.
 
     Args:
         profile: The profile whose lock to check.
@@ -105,16 +95,9 @@ def store_turn_record(turn_id: str, *, profile_id: int, task_id: str, lock_token
 
     Args:
         turn_id: The turn id returned to the client.
-        profile_id: The requesting profile's id. The poll endpoint checks
-            this against the polling request's own profile before returning
-            anything - a turn id never answers a different profile's poll.
-        task_id: The Celery task id ``services.core.celery.get_task_progress``
-            reads.
-        lock_token: The single-flight lock token this turn holds, so
-            ``run_assistant_turn_task`` can verify it still owns the lock
-            before writing a result - a stale redelivery of an already-
-            resolved (or superseded) turn must not clobber a newer one.
-    """
+        profile_id: The requesting profile's id.
+        task_id: The Celery task id ``services.core.celery.get_task_progress`` reads.
+        lock_token: The single-flight lock token this turn holds, so ``run_assistant_turn_task`` can verify it still owns the lock before writing a result - a stale redelivery of an already- resolved (or superseded) turn must not clobber a newer one."""
     cache.set(_turn_record_key(turn_id), {"profile_id": profile_id, "task_id": task_id, "lock_token": lock_token}, _TURN_RECORD_TTL_SECONDS)
 
 
@@ -122,9 +105,7 @@ def read_turn_record(turn_id: str) -> dict[str, Any] | None:
     """The record :func:`store_turn_record` wrote for ``turn_id``.
 
     Returns:
-        The stored ``{"profile_id", "task_id", "lock_token"}`` mapping, or
-        ``None`` if it expired or a turn id this cache never issued was polled.
-    """
+        The stored ``{"profile_id", "task_id", "lock_token"}`` mapping, or ``None`` if it expired or a turn id this cache never issued was polled."""
     record = cache.get(_turn_record_key(turn_id))
     return record if isinstance(record, dict) else None
 
@@ -138,10 +119,7 @@ def store_turn_result(turn_id: str, result: dict[str, Any]) -> None:
 
     Args:
         turn_id: The turn the result belongs to.
-        result: The task's own return value, or :data:`FAILED_TURN_RESULT`
-            for a turn that failed - stored verbatim so the caller's normal
-            rendering path handles a re-poll exactly as it handled the
-            first one."""
+        result: The task's own return value, or :data:`FAILED_TURN_RESULT` for a turn that failed - stored verbatim so the caller's normal rendering path handles a re-poll exactly as it handled the first one."""
     cache.set(_turn_result_key(turn_id), result, _TURN_RECORD_TTL_SECONDS)
 
 
@@ -149,9 +127,7 @@ def read_turn_result(turn_id: str) -> dict[str, Any] | None:
     """The result :func:`store_turn_result` cached for ``turn_id``, if any.
 
     Returns:
-        The stored result, or ``None`` when this turn has not resolved yet
-        (the caller should consult Celery) or its cache entry has expired.
-    """
+        The stored result, or ``None`` when this turn has not resolved yet (the caller should consult Celery) or its cache entry has expired."""
     result = cache.get(_turn_result_key(turn_id))
     return result if isinstance(result, dict) else None
 
@@ -177,10 +153,8 @@ def store_turn_proposals(turn_id: str, *, profile_id: int, proposals: list[dict[
 
     Args:
         turn_id: The turn these proposals belong to.
-        profile_id: The requesting profile's id - checked by
-            :func:`read_turn_proposal` before a confirm attempt runs anything.
-        proposals: ``AssistantTurn.proposals`` - each already carries its own
-            ``n`` (index within the turn)."""
+        profile_id: The requesting profile's id - checked by :func:`read_turn_proposal` before a confirm attempt runs anything.
+        proposals: ``AssistantTurn.proposals`` - each already carries its own ``n`` (index within the turn)."""
     cache.set(_turn_proposals_key(turn_id), {"profile_id": profile_id, "proposals": proposals}, _TURN_RECORD_TTL_SECONDS)
 
 
@@ -192,11 +166,7 @@ def read_turn_proposal(turn_id: str, n: int) -> dict[str, Any] | None:
         n: The proposal's index within that turn.
 
     Returns:
-        ``{"profile_id", "tool", "args", "confirm_label"}`` - the caller
-        must still compare ``profile_id`` against the requesting profile
-        itself (this function does not, so a mismatch and a genuinely
-        unknown turn read identically to callers that want that).
-    """
+        ``{"profile_id", "tool", "args", "confirm_label"}`` - the caller must still compare ``profile_id`` against the requesting profile itself (this function does not, so a mismatch and a genuinely unknown turn read identically to callers that want that)."""
     record = cache.get(_turn_proposals_key(turn_id))
     if not isinstance(record, dict):
         return None
@@ -214,6 +184,5 @@ def claim_turn_proposal(turn_id: str, n: int) -> bool:
         n: The proposal's index within that turn.
 
     Returns:
-        True for the first caller to claim it; False for every subsequent
-        one, which must not run the write again."""
+        True for the first caller to claim it; False for every subsequent one, which must not run the write again."""
     return cache.add(_turn_proposal_claim_key(turn_id, n), 1, _TURN_RECORD_TTL_SECONDS)

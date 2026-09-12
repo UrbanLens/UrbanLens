@@ -2,10 +2,10 @@
 
 Two groups of views:
 
-- Settings ("Connect Immich"): ``ImmichSettingsView`` / ``ImmichDisconnectView``,
-  loaded as an HTMX subsection on the settings page (mirrors ``UndoHistoryView``).
-- Pin detail ("Import from Immich"): search, a thumbnail proxy (keeps the API
-  key server-side), and a Celery-backed import with progress polling.
+- Settings ("Connect Immich"): ``ImmichSettingsView`` / ``ImmichDisconnectView``, loaded as an HTMX
+  subsection on the settings page (mirrors ``UndoHistoryView``).
+- Pin detail ("Import from Immich"): search, a thumbnail proxy (keeps the API key server-side), and
+  a Celery-backed import with progress polling.
 """
 
 from __future__ import annotations
@@ -46,14 +46,8 @@ _PICKER_PARTIAL = "dashboard/partials/pins/_immich_picker_dialog.html"
 _PROGRESS_PARTIAL = "dashboard/partials/pins/_immich_import_progress.html"
 _SCAN_PROGRESS_PARTIAL = "dashboard/partials/settings/_immich_scan_progress.html"
 _THUMBNAIL_CACHE_TTL = 60 * 60 * 24
-#: How long a profile's active library-scan task id is remembered, so
-#: navigating away from Tools and coming back later resumes the progress bar
-#: instead of losing track of an already-running scan. Generous relative to
-#: how long even a very large library sweep should realistically take.
-# Must outlive the task's own hard limit (CELERY_TASK_TIME_LIMIT, 3600s) or a
-# second sweep could start while the first is still running. The margin is the
-# whole reason it is not simply equal to it. Six hours used to be the value; that
-# stranded the button for five hours after a crash.
+#: How long a profile's active library-scan task id is remembered, so navigating away from Tools and coming back
+#: later resumes the progress bar instead of losing track of an already-running scan.
 _SCAN_TASK_ID_TTL = 60 * 75
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
@@ -67,9 +61,8 @@ _EMPTY_MESSAGES: dict[str, str] = {
 class _HasAssetId(Protocol):
     """The only thing this view needs from whichever endpoint answered.
 
-    A read-only property rather than ``id: str``: both result types are frozen
-    dataclasses, and a protocol declaring a settable attribute is not satisfied
-    by one that cannot be set.
+    A read-only property rather than ``id: str``: both result types are frozen dataclasses, and a
+    protocol declaring a settable attribute is not satisfied by one that cannot be set.
     """
 
     @property
@@ -94,9 +87,9 @@ def _scan_task_cache_key(profile_id: int) -> str:
 def get_active_scan_task_id(profile_id: int) -> str | None:
     """Return the task id of `profile_id`'s in-progress library scan, if any.
 
-    Lets a fresh page load (a new visit, or returning after navigating away)
-    resume polling an already-running scan instead of only ever offering the
-    bare "start a scan" button - see ToolsIndexView.get().
+    Lets a fresh page load (a new visit, or returning after navigating away) resume polling an
+    already-running scan instead of only ever offering the bare "start a scan" button - see
+    ToolsIndexView.get().
     """
     return cache.get(_scan_task_cache_key(profile_id))
 
@@ -155,9 +148,10 @@ class ImmichDisconnectView(LoginRequiredMixin, View):
 class ImmichLibraryScanStartView(LoginRequiredMixin, View):
     """POST /settings/immich/scan/ - enqueue a full-library location sweep.
 
-    Explicit, opt-in action (a button on the Immich settings subsection) -
-    never triggered automatically on connect. Only produces/updates
-    ``PinSuggestion`` rows for the user to review; see ``tasks.sweep_immich_library_locations``.
+    Explicit, opt-in action (a button on the Immich settings subsection) - never triggered automatically
+    on connect.
+    Only produces/updates ``PinSuggestion`` rows for the user to review; see
+    ``tasks.sweep_immich_library_locations``.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -218,8 +212,8 @@ class ImmichLibraryScanProgressView(LoginRequiredMixin, View):
 class PinImmichSearchView(LoginRequiredMixin, View):
     """GET pin/<slug>/immich/search/ - photos on the user's Immich server, filtered by mode.
 
-    Three modes (see ``PhotoImportMode``): nearby this pin's location, taken on
-    one of the pin's recorded PinVisit dates, or unfiltered (most recent first).
+    Three modes (see ``PhotoImportMode``): nearby this pin's location, taken on one of the pin's
+    recorded PinVisit dates, or unfiltered (most recent first).
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
@@ -251,10 +245,8 @@ class PinImmichSearchView(LoginRequiredMixin, View):
             return render(request, _PICKER_PARTIAL, {**context, "error": "External lookups are turned off in your settings."})
 
         gateway = ImmichGateway(account=account)
-        # The three modes answer from two different Immich endpoints, so they
-        # return two different shapes - a MapMarker carries coordinates, a
-        # SearchAsset does not. All this view needs from either is the id it
-        # renders and de-dupes on, which is what the annotation says.
+        # The three modes answer from two different Immich endpoints, so they return two different shapes - a
+        # MapMarker carries coordinates, a SearchAsset does not.
         results: Sequence[_HasAssetId]
         try:
             if mode == PhotoImportMode.VISITS:
@@ -268,8 +260,6 @@ class PinImmichSearchView(LoginRequiredMixin, View):
                 if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
                     return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
                 pin_point = (float(pin.location.latitude), float(pin.location.longitude))
-                # Measured and cached per pin, so the radius <select>'s six
-                # options share one library download instead of one each.
                 neighbourhood = nearby_assets(gateway, account, pin_point)
                 results = within_radius(neighbourhood, radius_m)
                 context["nearby_limit"] = NEARBY_ASSET_LIMIT
@@ -288,9 +278,9 @@ class PinImmichSearchView(LoginRequiredMixin, View):
 class PinImmichThumbnailView(LoginRequiredMixin, View):
     """GET pin/<slug>/immich/thumbnail/<asset_id>/ - proxies one Immich thumbnail.
 
-    The API key must never reach the browser, so thumbnails can't be linked
-    to directly - this view fetches them server-side and caches the bytes
-    briefly to avoid re-hitting the user's server on every dialog reopen.
+    The API key must never reach the browser, so thumbnails can't be linked to directly - this view
+    fetches them server-side and caches the bytes briefly to avoid re-hitting the user's server on every
+    dialog reopen.
     """
 
     def get(self, request: HttpRequest, pin_slug: str, asset_id: str) -> HttpResponse:

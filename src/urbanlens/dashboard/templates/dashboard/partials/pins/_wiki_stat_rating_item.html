@@ -1,12 +1,4 @@
-{% comment %}
-One community stat item (danger / vulnerability / priority / rating) on a Wiki.
-Shows the community composite (average of every profile's vote) alongside the
-viewer's own vote, which is a clickable star widget just like the pin
-equivalent - clicking casts a vote and only ever recalculates the composite.
-
-Usage:
-  {% include "dashboard/partials/pins/_wiki_stat_rating_item.html" with wiki=wiki field="danger" label="Danger" help="..." modifier="danger" wide=False my_vote=my_vote composite=composite %}
-{% endcomment %}
+{% comment %}One community stat item (danger / vulnerability / priority / rating) on a Wiki.{% endcomment %}
 <div class="wiki-stat-item" id="wiki-stat-{{ field }}">
     <span class="field-label">
         {% include "dashboard/partials/ui/_tooltip_label.html" with label=label help=help wide=wide %}

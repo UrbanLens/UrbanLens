@@ -1,22 +1,5 @@
 /**
- * Shared Leaflet.markercluster helpers actually used by the pin-detail / wiki
- * maps (`entries/map-annotations.ts`'s `detailPinLayer`) and, via
- * `photo-map.ts`, their photo layer.
- *
- * The main `/map/` page does **not** import this module. Its inline
- * `<script>` (`pages/map/index.html`) hand-rolls its own equivalent
- * `L.markerClusterGroup`/`iconCreateFunction`/badge markup, independently of
- * `createPinClusterGroup`/`pinClusterIconParts` here - inline template
- * scripts can't import a TS module (see P34/P83). The two copies currently
- * agree (`PIN_CLUSTER_PX` below and `pages/map/index.html`'s own `{ s: 34,
- * m: 42, l: 50 }` both say the same sizes as `.pin-cluster--{s,m,l}` in
- * `_map.scss`), but nothing enforces that: see P92.
- *
- * Pin-detail and wiki maps zoom in close enough that neighbouring buildings
- * must stay independently clickable. Clustering therefore collapses to a 1px
- * radius from zoom 18 up - only coincident markers still group (and can
- * spiderfy). Photos have their own radius in photo-map.ts, because same-spot
- * GPS hits should stay stacked at every zoom.
+ * Shared Leaflet.markercluster helpers actually used by the pin-detail / wiki maps (`entries/map-annotations.ts`'s `detailPinLayer`).
  */
 
 declare const L: typeof import("leaflet");
@@ -47,11 +30,6 @@ const PIN_CLUSTER_PX = { s: 34, m: 42, l: 50 } as const;
 
 /**
  * Cluster radius for child pins on a pin-detail or wiki map.
- *
- * Mirrors the main map's "auto" radius at mid zooms, then drops to 1px once
- * individual buildings are on screen so a campus of close footprints never
- * hides its markers behind a badge.
- *
  * @param zoom - The map's current zoom level.
  */
 export function detailPinClusterRadius(zoom: number): number {
@@ -82,18 +60,6 @@ export function hasMarkerCluster(): boolean {
 
 /**
  * Whether *map* can host a cluster group at all.
- *
- * leaflet.markercluster's `onAdd` does `throw "Map has no maxZoom specified"` -
- * a bare string, so it is not even an Error - when `map.getMaxZoom()` is
- * Infinity, which is the case for a map built without an explicit `maxZoom`
- * until its first tile layer lands. That throw propagates out of `.addTo(map)`
- * and aborts whatever entry script was mid-initialisation, leaving a blank map
- * container and every later binding in that function unregistered.
- *
- * Callers pass their map so a misconfigured one costs clustering rather than
- * the whole page. Set `maxZoom` on the map (see MAP_MAX_ZOOM) to fix it
- * properly.
- *
  * @param map - Map the group is about to be added to.
  */
 export function canCluster(map?: L.Map): boolean {
@@ -106,10 +72,6 @@ export function canCluster(map?: L.Map): boolean {
 
 /**
  * A MarkerClusterGroup that uses the same numbered badge as the main map.
- *
- * Falls back to a plain LayerGroup when the plugin is not on the page, so
- * callers can add/remove markers identically either way.
- *
  * @param options - Extra cluster-group options (merged over the defaults).
  * @param map - Map the group will be added to, checked for a usable maxZoom.
  */
@@ -142,10 +104,7 @@ export function createPinClusterGroup(
 }
 
 /**
- * Pull a marker out of a cluster group for the length of a drag, then put it
- * back. Leaflet.markercluster does not update clusters while a member is being
- * dragged - the main map already does this dance for root pins.
- *
+ * Pull a marker out of a cluster group for the length of a drag, then put it back.
  * @param marker - The marker that may be dragged.
  * @param group - Cluster group (or plain LayerGroup fallback) that owns it.
  * @param map - The map, so the marker can sit on it mid-drag.
@@ -167,10 +126,6 @@ export function returnToCluster(marker: L.Marker, group: L.LayerGroup, map: L.Ma
 
 /**
  * True when the Leaflet (or native) mouse event was a ctrl/cmd click.
- *
- * Used to start additive multi-select from a second click without first
- * arming the select tool.
- *
  * @param event - A Leaflet mouse event or a native MouseEvent.
  */
 export function isAdditiveClick(event: { originalEvent?: { ctrlKey?: boolean; metaKey?: boolean }; ctrlKey?: boolean; metaKey?: boolean }): boolean {
@@ -196,12 +151,9 @@ export class AdditiveSelectMemory {
     }
 
     /**
-     * Ids that should become selected when the user modifier-clicks `id`
-     * outside of select mode. Always includes `id`; includes the last
-     * remembered id when it is a different thing.
-     *
-     * @param id - The id that was just modifier-clicked.
-     */
+ * Ids that should become selected when the user modifier-clicks `id` outside of select mode.
+ * @param id - The id that was just modifier-clicked.
+ */
     idsForAdditiveStart(id: string): string[] {
         if (this.lastId && this.lastId !== id) return [this.lastId, id];
         return [id];

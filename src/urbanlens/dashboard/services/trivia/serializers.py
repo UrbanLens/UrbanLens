@@ -1,10 +1,4 @@
-"""JSON-shape builders shared by the HTTP controller and the WebSocket consumer.
-
-Mirrors ``services.spotguessr.serializers`` - one source of truth for both
-the HTTP endpoints and the real-time broadcasts, since UL-392-style
-multiplayer needs the exact same shapes. A round's answer is never included
-until it's actually revealed.
-"""
+"""JSON-shape builders shared by the HTTP controller and the WebSocket consumer."""
 
 from __future__ import annotations
 

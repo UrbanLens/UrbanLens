@@ -18,8 +18,7 @@ class RedataInfoPanelSource(CoordinateGatedInfoPanelSource):
     ``render_context`` remains the subclass's own, since turning one domain's rows into a card is the only genuinely per-panel code.
 
     Attributes:
-        payload_key: The key the envelope's ``results`` are stored under in the
-            ``LocationCache`` row, and read back from in ``render_context``."""
+        payload_key: The key the envelope's ``results`` are stored under in the ``LocationCache`` row, and read back from in ``render_context``."""
 
     payload_key: ClassVar[str]
 
@@ -27,27 +26,17 @@ class RedataInfoPanelSource(CoordinateGatedInfoPanelSource):
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
         """Make this panel's one REData call.
 
-        Args:
-                latitude: WGS-84 latitude of the pin.
-                longitude: WGS-84 longitude of the pin.
-
         Returns:
-                The parsed near-point envelope, whose ``complete`` flag decides
-                whether the result may be cached.
+            The parsed near-point envelope, whose ``complete`` flag decides whether the result may be cached.
 
         Raises:
-                LocationContextUnavailableError: The request failed outright. Left
-                to propagate - the panel-fetch machinery already treats a raise
-                as "not fetched", which is what leaves the source retryable."""
+            LocationContextUnavailableError: The request failed outright."""
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
-        """Shape the envelope's rows before they are cached. Identity by default.
-
-        Args:
-                rows: The envelope's ``results``.
+        """Shape the envelope's rows before they are cached.
 
         Returns:
-                The rows to store."""
+            The rows to store."""
         return rows
 
     def gate(self, pin: Pin) -> bool:
@@ -57,11 +46,7 @@ class RedataInfoPanelSource(CoordinateGatedInfoPanelSource):
         return super().gate(pin) and redata_configured()
 
     def fetch(self, pin: Pin) -> None:
-        """Call REData and cache the rows, unless the answer is an outage.
-
-        Args:
-            pin: The pin whose location is being filled.
-        """
+        """Call REData and cache the rows, unless the answer is an outage."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         latitude = float(pin.effective_latitude or 0)

@@ -26,16 +26,16 @@ if TYPE_CHECKING:
 from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
 
 #: Preserves the concrete queryset class through the shared helpers.
-#: Without it they hand back a plain QuerySet, and a provider that then calls a custom manager
-#: method - PhotoSearchProvider's visible_to() is the one that matters - is calling something the
-#: type no longer admits exists.
+#: Without it they hand back a plain QuerySet, and a provider that then calls a custom manager method
+#: - PhotoSearchProvider's visible_to() is the one that matters - is calling something the type no
+#: longer admits exists.
 _QS = TypeVar("_QS", bound="QuerySet[Any, Any]")
 
 logger = logging.getLogger(__name__)
 
-#: A concealed wiki's field/alias match cannot be expressed as a SQL predicate - name/description
-#: are versioned fields resolved per viewer, and whether a given wiki is concealed at all depends on
-#: the reputation ledger, not on any column search can filter by.
+#: A concealed wiki's field/alias match cannot be expressed as a SQL predicate - name/description are
+#: versioned fields resolved per viewer, and whether a given wiki is concealed at all depends on the
+#: reputation ledger, not on any column search can filter by.
 #: So the SQL query over-fetches candidates and each is re-verified in Python against exactly what
 _CONCEALMENT_OVERFETCH = 4
 
@@ -69,9 +69,7 @@ def _concealed_wiki_survives(wiki: Any, viewer: Profile, terms: list[str]) -> bo
         terms: Lowercased AND-ed search terms (``parsed.terms``).
 
     Returns:
-        True when there is nothing to re-verify (no free-text terms - a
-        near-me-only or date-only query carries no textual oracle) or every
-        term appears in what this viewer may see."""
+        True when there is nothing to re-verify (no free-text terms - a near-me-only or date-only query carries no textual oracle) or every term appears in what this viewer may see."""
     if not terms:
         return True
     return _terms_survive(terms, _concealed_wiki_haystacks(wiki, viewer))
@@ -87,9 +85,7 @@ def _concealed_article_survives(article: Any, viewer: Profile, terms: list[str])
         terms: Lowercased AND-ed search terms.
 
     Returns:
-        True when there is nothing to re-verify, or every term appears in
-        the newest revision this viewer may see (content) or in the host
-        wiki's own concealed name/description/aliases."""
+        True when there is nothing to re-verify, or every term appears in the newest revision this viewer may see (content) or in the host wiki's own concealed name/description/aliases."""
     if not terms:
         return True
     from urbanlens.dashboard.services.wiki.concealment import visible_article_revision
@@ -102,7 +98,6 @@ def _concealed_article_survives(article: Any, viewer: Profile, terms: list[str])
 
 def _concealed_comment_survives(comment: Any, viewer: Profile) -> bool:
     """Whether *comment* is one of *viewer*'s own or a friend's, per the same rule ``conceal_rows`` applies elsewhere.
-    A comment's text doesn't change per viewer - unlike a wiki's merged fields, there's nothing to re-resolve - so the only question concealment raises for search is row-level visibility, answered by the actor id exactly as :func:`conceal_rows` would filter the comment queryset the page itself renders from.
 
     Args:
         comment: A candidate Comment row.
@@ -122,17 +117,11 @@ def _concealment_survivors(queryset: Any, viewer: Profile, limit: int, wiki_of, 
         queryset: The already SQL-matched, ordered, unsliced queryset.
         viewer: The searching profile.
         limit: The caller's real result limit.
-        wiki_of: ``candidate -> Wiki | None``. None means "not wiki-hosted" -
-            always kept.
-        survives: ``(candidate, viewer) -> bool``, called only when
-            ``wiki_of(candidate)`` is concealed for ``viewer``.
+        wiki_of: ``candidate -> Wiki | None``.
+        survives: ``(candidate, viewer) -> bool``, called only when ``wiki_of(candidate)`` is concealed for ``viewer``.
 
     Returns:
-        Up to ``limit`` candidates, order preserved. Never silently pads past
-        what was fetched - a page can come back under ``limit`` when
-        concealed drops are a large share of the over-fetched set; that is a
-        disclosed trade-off of over-fetching rather than a full second-pass
-        query, not a bug."""
+        Up to ``limit`` candidates, order preserved."""
     from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
     candidates = list(queryset[:limit])
@@ -182,18 +171,10 @@ def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q
     Args:
         terms: Lowercased search terms (AND-ed together).
         fields: ORM field paths each term may appear in (OR-ed together).
-        extra: Optional per-term Q builder, OR-ed alongside the field
-            matches - e.g. tag-equivalence matching, which isn't expressible
-            as a plain ``field__icontains`` lookup. Must itself guard against
-            returning a no-op ``Q()`` for "no match" (see
-            :func:`~urbanlens.dashboard.services.locations.external_tag_groups.tag_match_q`),
-            since OR-ing a no-op into an AND-across-terms clause would turn
-            "this term matched nothing extra" into "this term matches
-            everything."
+        extra: Optional per-term Q builder, OR-ed alongside the field matches - e.g. tag-equivalence matching, which isn't expressible as a plain ``field__icontains`` lookup.
 
     Returns:
-        The combined Q object; empty Q when ``terms`` is empty.
-    """
+        The combined Q object; empty Q when ``terms`` is empty."""
     combined = Q()
     for term in terms:
         term_q = Q()
@@ -209,13 +190,11 @@ def place_filter(location_path: str, place: str) -> Q:
     """Build a predicate matching a place name against Location address fields.
 
     Args:
-        location_path: ORM path prefix to the Location relation (e.g.
-            ``"location"`` or ``"pin__location"``).
+        location_path: ORM path prefix to the Location relation (e.g. ``"location"`` or ``"pin__location"``).
         place: The place name parsed from the query.
 
     Returns:
-        Q OR-ing the place over locality/state/county/country/street/name.
-    """
+        Q OR-ing the place over locality/state/county/country/street/name."""
     combined = Q()
     for field_name in _PLACE_FIELDS:
         combined |= Q(**{f"{location_path}__{field_name}__icontains": place})
@@ -230,9 +209,7 @@ def date_range_filter(field_path: str, parsed: ParsedQuery) -> Q:
         parsed: The parsed query carrying date_start/date_end.
 
     Returns:
-        Q constraining the field's date to the parsed range; empty Q when the
-        query has no date range.
-    """
+        Q constraining the field's date to the parsed range; empty Q when the query has no date range."""
     if not (parsed.date_start and parsed.date_end):
         return Q()
     return Q(**{f"{field_path}__date__gte": parsed.date_start, f"{field_path}__date__lte": parsed.date_end})
@@ -244,13 +221,11 @@ def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float
 
     Args:
         location_path: ORM path prefix to the Location relation.
-        parsed: The parsed query carrying ``near_lat``/``near_lng`` (filled in
-            by the engine from the profile's known location).
+        parsed: The parsed query carrying ``near_lat``/``near_lng`` (filled in by the engine from the profile's known location).
         radius_km: Half-width of the box, in kilometres.
 
     Returns:
-        Q constraining the location to the box; empty Q when the query has no
-        near-me coordinates."""
+        Q constraining the location to the box; empty Q when the query has no near-me coordinates."""
     if parsed.near_lat is None or parsed.near_lng is None:
         return Q()
     lat_delta = radius_km / 111.0
@@ -269,16 +244,12 @@ def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[st
     """Build the annotation and predicate to match a person by name.
 
     Args:
-        other_path: ORM path prefix to the Profile being matched (e.g.
-            ``"sender"``, ``"recipient"``, ``"source_share__from_profile"``).
+        other_path: ORM path prefix to the Profile being matched (e.g. ``"sender"``, ``"recipient"``, ``"source_share__from_profile"``).
         person: The name fragment parsed from a "from <person>" clause.
-        viewer: The searching profile - only nicknames *they* privately
-            assigned count, never one assigned by/to someone else.
+        viewer: The searching profile - only nicknames *they* privately assigned count, never one assigned by/to someone else.
 
     Returns:
-        (annotation dict to merge into ``queryset.annotate(**...)``, Q to
-        filter with) - both keyed/scoped to ``other_path`` so multiple calls
-        for different paths can be combined without colliding."""
+        (annotation dict to merge into ``queryset.annotate(**...)``, Q to filter with) - both keyed/scoped to ``other_path`` so multiple calls for different paths can be combined without colliding."""
     from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 
     key = other_path.replace("__", "_")
@@ -300,7 +271,6 @@ def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[st
 
 def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labels") -> _QS:  # noqa: UP047
     """Filter *queryset* by `label:`/`-label:` (aliases `tag`, `labels`).
-    Applied as two separate ``.filter()``/``.exclude()`` calls rather than one combined ``Q()`` - Django's well-known multi-valued-relation pitfall means an OR-inclusion and a NOT-exclusion on the *same* M2M combined in a single filter call don't mean what they look like they mean; two calls each get their own join and are unambiguous.
 
     Args:
         queryset: The already access-scoped queryset.
@@ -326,14 +296,12 @@ def author_clause(path: str, parsed: ParsedQuery, profile: Profile) -> tuple[dic
     """The annotation/Q pair for `by:`/`author:`/`creator:`, or None when unset.
 
     Args:
-        path: ORM path prefix to the Profile being matched (e.g. ``"profile"``,
-            ``"creator"``, ``"last_edited_by"``, ``"sender"``).
+        path: ORM path prefix to the Profile being matched (e.g. ``"profile"``, ``"creator"``, ``"last_edited_by"``, ``"sender"``).
         parsed: The structured query, carrying ``author``.
         profile: The searching profile, for the "me" case.
 
     Returns:
-        None when ``parsed.author`` is unset; otherwise an (annotation dict,
-        Q) pair the caller applies exactly as :func:`person_match`'s result."""
+        None when ``parsed.author`` is unset; otherwise an (annotation dict, Q) pair the caller applies exactly as :func:`person_match`'s result."""
     if not parsed.author:
         return None
     if parsed.author.strip().lower() == "me":
@@ -402,10 +370,8 @@ def apply_sort(queryset: _QS, parsed: ParsedQuery, *, location_path: str | None 
     Args:
         queryset: The already filtered/access-scoped queryset.
         parsed: The structured query, carrying ``sort``.
-        location_path: ORM path to this row's Location relation, enabling
-            `nearest`; omit for models with no location.
-        visited_field: This model's own "last visited" DateTimeField name,
-            enabling `visited`; omit for models with no such concept.
+        location_path: ORM path to this row's Location relation, enabling `nearest`; omit for models with no location.
+        visited_field: This model's own "last visited" DateTimeField name, enabling `visited`; omit for models with no such concept.
 
     Returns:
         (queryset, whether a sort mode was actually applied)."""
@@ -426,9 +392,7 @@ class SearchProvider(ABC):
 
     Attributes:
         slug: The RESULT_TYPES slug this provider serves.
-        fuzzy_field: Model field trigram similarity is computed against; when
-            empty the provider matches with ``icontains`` only.
-    """
+        fuzzy_field: Model field trigram similarity is computed against; when empty the provider matches with ``icontains`` only."""
 
     slug: ClassVar[str] = ""
     fuzzy_field: ClassVar[str] = ""
@@ -437,41 +401,16 @@ class SearchProvider(ABC):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         """Run this provider's search.
 
-        Args:
-            profile: The requesting user's profile; results must be scoped to
-                content this profile owns or has direct access to.
-            parsed: The structured query.
-            limit: Maximum number of results to return.
-
         Returns:
-            Results ordered most relevant first. Every result must carry
-            ``object_slug``/``object_uuid`` as well as ``url``: the latter is a
-            web path, and the external search endpoint drops it entirely because
-            a JSON client cannot follow it. A provider that populates only
-            ``url`` therefore returns hits that mobile callers can display but
-            never open - a failure that no template test would notice.
-        """
+            Results ordered most relevant first."""
         raise NotImplementedError
 
     def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None, tag_path: str | None = None) -> _QS:
         """Apply term matching plus fuzzy title matching and relevance ordering.
         "Belnear Medical Center" matches "near me" as a literal substring), since otherwise a result literally named after the phrase could be silently dropped.
 
-        Args:
-                queryset: The access-scoped queryset.
-                parsed: The structured query.
-                fields: ORM field paths for exact (icontains) term matching.
-                location_path: ORM path to this row's Location relation, enabling
-                near-me handling; omit for models with no location.
-                tag_path: ORM path to this row's ``PlaceExternalTag`` relation
-                (e.g. ``"location__place__external_tags"``), enabling
-                external-tag matching alongside the plain field list - see
-                :func:`~urbanlens.dashboard.services.locations.external_tag_groups.tag_match_q`.
-                Omit for models with no place-tagged location.
-
         Returns:
-                Filtered queryset annotated with ``search_sim``/``near_hit`` where
-                applicable, ordered most relevant first."""
+            Filtered queryset annotated with ``search_sim``/``near_hit`` where applicable, ordered most relevant first."""
         # parsed.near_me is required explicitly, not just near_lat/lng being set: `sort:nearest`
         # alone (no "near me" wording) also needs a resolved point (for apply_sort's Distance()
         # ordering below), but must NOT also impose the near-me radius filter/boost - sort:nearest
@@ -506,11 +445,7 @@ class SearchProvider(ABC):
     @staticmethod
     def score_of(obj: object) -> float:
         """Relevance score for an ORM row: fuzzy similarity plus a near-me bonus.
-
-        The near-me bonus dominates the 0-1 fuzzy range so a proximity match
-        always outranks a distant one at equal text relevance, without ever
-        excluding the distant one outright.
-        """
+        The near-me bonus dominates the 0-1 fuzzy range so a proximity match always outranks a distant one at equal text relevance, without ever excluding the distant one outright."""
         value = getattr(obj, "search_sim", None)
         try:
             score = float(value) if value is not None else 0.5
@@ -958,10 +893,7 @@ def _display_names(viewer: Profile, subjects: list) -> dict[int, str]:
 
 class DirectMessageSearchProvider(SearchProvider):
     """The user's direct messages.
-
-    Only plaintext bodies are searchable: end-to-end encrypted messages never
-    reach the server in readable form, so they cannot be matched here.
-    """
+    Only plaintext bodies are searchable: end-to-end encrypted messages never reach the server in readable form, so they cannot be matched here."""
 
     slug = "messages"
     fuzzy_field = ""
@@ -1234,9 +1166,7 @@ def default_providers() -> list[SearchProvider]:
     """The full provider chain, in the order sections render.
 
     Returns:
-        Fresh provider instances (they are stateless, but new instances keep
-        the engine trivially thread-safe).
-    """
+        Fresh provider instances (they are stateless, but new instances keep the engine trivially thread-safe)."""
     return [
         PinSearchProvider(),
         PhotoSearchProvider(),

@@ -122,10 +122,9 @@ class ToolsIndexView(LoginRequiredMixin, View):
 #: or a second export could start while the first is still copying photos.
 _EXPORT_GUARD_TTL = 60 * 75
 
-#: Statuses that mean the job is over, whichever way it went. Read off the
-#: writers in `services/import_export/export.py` and `tasks.py`, which use
-#: exactly "running", "done" and "error" - a guessed vocabulary here would leave
-#: the guard held for the whole TTL after a successful export.
+#: Statuses that mean the job is over, whichever way it went. Read off the writers in
+#: `services/import_export/export.py` and `tasks.py`, which use exactly "running", "done" and "error" - a
+#: guessed vocabulary here would leave the guard held for the whole TTL after a successful export.
 _EXPORT_TERMINAL_STATES = frozenset({"done", "error"})
 
 
@@ -133,9 +132,7 @@ def _export_guard_key(user_id: int | None) -> str:
     """One in-flight export per account.
 
     Args:
-        user_id: The exporting account. `None` only if these views lose their
-            `LoginRequiredMixin`, which would otherwise give every anonymous
-            caller the same guard key and let one of them block all the others.
+        user_id: The exporting account.
 
     Returns:
         The cache key holding that account's in-flight export.
@@ -155,9 +152,8 @@ class ExportStartView(LoginRequiredMixin, View):
         """Accept export parameters, enqueue a Celery task, return progress fragment.
 
         Args:
-            request: POST with ``export_types`` list, optional ``google_takeout``
-                flag, and optional ``email_export`` flag (email the finished
-                archive to the account address, UL-373).
+            request: POST with ``export_types`` list, optional ``google_takeout`` flag, and optional
+            ``email_export`` flag (email the finished archive to the...
 
         Returns:
             Rendered export progress partial so HTMX can swap it in.
@@ -174,9 +170,8 @@ class ExportStartView(LoginRequiredMixin, View):
 
         email_to_user = bool(request.POST.get("email_export"))
 
-        # Claimed before anything is created, so a double-click cannot get two
-        # exports past a read-then-write check. An export copies every photo the
-        # account owns, twice, onto the shared media volume.
+        # Claimed before anything is created, so a double-click cannot get two exports past a read-then-write
+        # check. An export copies every photo the account owns, twice, onto the shared media volume.
         guard = _export_guard_key(request.user.pk)
         if not single_flight.claim(guard, _EXPORT_GUARD_TTL):
             return render(
@@ -256,9 +251,9 @@ class ExportStatusView(LoginRequiredMixin, View):
 
             return render(request, "dashboard/partials/tools/export_progress.html", {"job_id": job_id, **data})
         except Exception:
-            # Surface a friendly, non-polling error state instead of letting HTMX's poller
-            # hang on a raw 500 with no feedback to the user (see ImportStatusView for the
-            # same pattern - the fragment's "error" state removes the hx-get polling attrs).
+            # Surface a friendly, non-polling error state instead of letting HTMX's poller hang on a raw 500
+            # with no feedback to the user (see ImportStatusView for the same pattern - the fragment's "error"
+            # state removes the hx-get polling attrs).
             logger.exception("Unexpected error rendering export status: job %s, user %s", job_id, request.user.pk)
             return _export_error_partial(request, job_id, "Something went wrong checking export status. Please try again.")
 
@@ -310,11 +305,10 @@ class ExportDownloadView(LoginRequiredMixin, View):
 class ExportFormatDownloadView(LoginRequiredMixin, View):
     """Download ALL of the requester's root pins as a single GeoJSON/KML/GPX/CSV file (UL-382).
 
-    The quick, synchronous counterpart to the full ZIP export above: no Celery
-    job, no polling - one GET straight to a file download, using the same
-    per-format writers the targeted bulk export uses
-    (``controllers.pin_bulk.PinBulkExportView``). Root pins only: detail (sub)
-    pins share their parent's site and would just duplicate coordinates in
+    The quick, synchronous counterpart to the full ZIP export above: no Celery job, no polling - one GET
+    straight to a file download, using the same per-format writers the targeted bulk export uses
+    (``controllers.pin_bulk.PinBulkExportView``).
+    Root pins only: detail (sub) pins share their parent's site and would just duplicate coordinates in
     formats that carry nothing but name/coords/description.
     """
 
@@ -374,9 +368,8 @@ class ImportStartView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        # Lowered to the ingress cap, if there is one: a body the proxy rejects
-        # never reaches this view, so the uploader would see the proxy's error
-        # rather than this one.
+        # Lowered to the ingress cap, if there is one: a body the proxy rejects never reaches this view, so the
+        # uploader would see the proxy's error rather than this one.
         max_import_bytes = cap_to_ingress(_MAX_IMPORT_SIZE_BYTES)
         if upload.size and upload.size > max_import_bytes:
             return HttpResponse(
@@ -450,10 +443,9 @@ class ImportStatusView(LoginRequiredMixin, View):
 
             return render(request, "dashboard/partials/tools/import_progress.html", {"job_id": job_id, **data})
         except Exception:
-            # Never let an unexpected error surface as a raw 500 to the HTMX poller - it has
-            # no error handling and will just silently stop, leaving the progress bar spinning
-            # forever with no feedback to the user. Render the error state instead, which
-            # drops the hx-get polling attributes and shows a message.
+            # Never let an unexpected error surface as a raw 500 to the HTMX poller - it has no error handling
+            # and will just silently stop, leaving the progress bar spinning forever with no feedback to the
+            # user.
             logger.exception("Unexpected error rendering import status: job %s, user %s", job_id, request.user.pk)
             return _import_error_partial(request, job_id, "Something went wrong checking import status. Please try again.")
 
@@ -511,26 +503,12 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
 def _parse_cluster(cluster: Any) -> list[LocationHit]:
     """Parse and validate one cluster row from the local-scan upload payload.
 
-    Each cluster becomes exactly *one* synthetic hit, carrying the cluster's
-    full ``count`` as its ``weight`` and every one of its ``dates`` (see
-    ``LocationHit.weight``/``extra_dates``) - matching/clustering only ever
-    need one representative point per distinct location, since every hit a
-    single cluster used to expand into shared the exact same coordinates.
-    This used to create ``count`` separate synthetic hits (one per date,
-    cycling through ``dates``) so the shape matched individually-scanned
-    hits exactly; with up to 500 clusters allowed per request and up to 2000
-    photos per cluster, that could balloon into hundreds of thousands of
-    hits, each checked against every one of the profile's pin boundaries in
-    ``_match_hits_to_pins`` - easily enough synchronous work to trip a
-    reverse proxy's read timeout (504) on submit for a large scan.
-
     Args:
         cluster: One raw JSON object from the ``clusters`` array.
 
     Returns:
-        A single-item list with the synthetic LocationHit for this cluster,
-        or an empty list if the row is malformed (missing/invalid
-        coordinates or no valid dates).
+        A single-item list with the synthetic LocationHit for this cluster, or an empty list if the row
+        is malformed (missing/invalid...
     """
     if not isinstance(cluster, dict):
         return []
@@ -586,19 +564,20 @@ def _parse_cluster(cluster: Any) -> list[LocationHit]:
 class PhotoLocationScanUploadView(LoginRequiredMixin, View):
     """POST /tools/photo-scan/upload/ - ingest results from the local folder scanner.
 
-    The scanner (``frontend/ts/entries/photo-location-scan.ts``) clusters and
-    de-dupes matches entirely client-side before uploading, so this payload is
-    small - one row per cluster, not per photo - and the photo/video files
-    themselves never reach the server, only the extracted lat/lng/date/label
-    metadata. Feeds the same ``ingest_location_hits`` pipeline the Immich
-    sweep uses, so results merge/dedupe against any existing suggestions.
+    The scanner (``frontend/ts/entries/photo-location-scan.ts``) clusters and de-dupes matches entirely
+    client-side before uploading, so this payload is small - one row per cluster, not per photo - and
+    the photo/video files themselves never reach the server, only the extracted lat/lng/date/label
+    metadata.
+    Feeds the same ``ingest_location_hits`` pipeline the Immich sweep uses, so results merge/dedupe
+    against any existing suggestions.
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
         """Ingest a batch of pre-clustered location results.
 
         Args:
-            request: POST with a JSON body ``{"clusters": [{"latitude", "longitude", "dates", "count", "label"}, ...]}``.
+            request: POST with a JSON body ``{"clusters": [{"latitude", "longitude", "dates", "count",
+            "label"}, ...]}``.
 
         Returns:
             JSON summary of suggestions created/updated, or a 400 error.
@@ -639,13 +618,10 @@ class PhotoLocationScanUploadView(LoginRequiredMixin, View):
 class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
     """POST /tools/photo-scan/upload-photo/ - upload one opt-in candidate photo.
 
-    The local-folder scanner never uploads photo files by default (see
-    ``PhotoLocationScanUploadView``) - this endpoint exists only for photos the
-    user explicitly checked in the scanner's opt-in picker, immediately after
-    the cluster metadata upload has told the client which ``PinSuggestion``
-    each cluster became. The image is staged unattached (candidate only) until
-    the suggestion is accepted or rejected - see ``services.pins.pin_suggestions.accept_pin_suggestion``
-    and ``reject_pin_suggestion``.
+    The local-folder scanner never uploads photo files by default (see ``PhotoLocationScanUploadView``)
+
+    - this endpoint exists only for photos the user explicitly checked in the scanner's opt-in picker,
+      immediately after the cluster metadata upload has told the c...
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:

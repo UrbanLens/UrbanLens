@@ -1,13 +1,5 @@
 """EmailSendLog - privacy-preserving record of user-triggered outbound emails.
-
-Every email a user causes the site to send to a third party (join-the-site
-invitations, visit invites, ...) is logged here so that per-user send caps can
-be enforced and duplicate "join the site" emails to the same address can be
-suppressed.
-
-The recipient's address is stored only as a one-way hash of its normalized
-form: the recipient has not consented to having their address stored, and a
-hash is all that rate limiting and duplicate detection need.
+Every email a user causes the site to send to a third party (join-the-site invitations, visit invites, ...) is logged here so that per-user send caps can be enforced and duplicate "join the site" emails to the same address can be suppressed.
 """
 
 from __future__ import annotations

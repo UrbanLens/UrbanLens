@@ -49,16 +49,8 @@ class EsriGateway(SatelliteViewProvider):
     ) -> Generator[SatelliteSlide]:
         """Return a list of current Esri World Imagery slides for the given bounding box.
 
-        Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            zoom: Zoom level (1-22).
-            width: Image width in pixels (max 1280).
-            height: Image height in pixels (max 1280).
-
         Returns:
-            List of SatelliteSlide, empty when no imagery is available or the request fails.
-        """
+            List of SatelliteSlide, empty when no imagery is available or the request fails."""
         bbox_str = create_bbox_str(latitude, longitude)
 
         yield self.get_world_imagery_slide(bbox_str, width=width, height=height)

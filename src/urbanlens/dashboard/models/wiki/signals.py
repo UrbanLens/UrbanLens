@@ -8,10 +8,7 @@ from urbanlens.dashboard.models.wiki import Wiki
 @receiver(post_save, sender=Wiki, dispatch_uid="wiki_suggest_categories")
 def suggest_and_add_categories(sender: type[Wiki], instance: Wiki, created: bool, **kwargs) -> None:
     """Suggest categories for a newly created Wiki and attach them.
-
-    Auto-tagging is deferred to Wiki creation (rather than Location creation) so
-    it only runs for places that actually have a community page, keeping the
-    label suggestion work bounded.
+    Auto-tagging is deferred to Wiki creation (rather than Location creation) so it only runs for places that actually have a community page, keeping the label suggestion work bounded.
 
     Args:
         sender: The model class.

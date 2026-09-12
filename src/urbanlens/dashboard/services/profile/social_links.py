@@ -1,5 +1,4 @@
-r"""Social link URL parser and profile-link renderer.
-Security contract ----------------- * Only http/https URLs are accepted - data:, javascript:, etc. are rejected. * Every extracted handle is validated against per-platform rules (``_PLATFORM_HANDLE_RULES``); handles outside the allowed character set or length range are rejected, preventing HTML injection and path-traversal payloads. * For ``website`` links the full canonicalized URL is stored, but fragments (``#...``) are stripped and length is capped at 500 characters. * Discord has no public profile-URL format; its handle is accepted via a dedicated form field and validated separately."""
+r"""Social link URL parser and profile-link renderer."""
 
 from __future__ import annotations
 
@@ -125,10 +124,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
         raw: A full profile URL, e.g. ``https://instagram.com/johndoe``.
 
     Returns:
-        A ``(platform_key, handle)`` tuple where ``platform_key`` is one of
-        the keys in :data:`PLATFORM_URL_TEMPLATE`, or ``None`` if the input
-        cannot be recognised or fails validation.
-    """
+        A ``(platform_key, handle)`` tuple where ``platform_key`` is one of the keys in :data:`PLATFORM_URL_TEMPLATE`, or ``None`` if the input cannot be recognised or fails validation."""
     raw = raw.strip()
     if not raw:
         return None
@@ -236,11 +232,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
 
 
 def get_profile_links(profile: Profile) -> list[dict]:
-    """Return a list of link dicts for all SocialLink rows attached to *profile*.
-
-    Each dict contains: ``platform``, ``handle``, ``url`` (may be None for
-    Discord), ``display_name``, ``icon``.
-    """
+    """Return a list of link dicts for all SocialLink rows attached to *profile*."""
     result = []
     for link in profile.social_links.all().order_by("platform"):
         platform = link.platform

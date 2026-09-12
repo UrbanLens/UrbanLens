@@ -1,5 +1,4 @@
-"""Video processing utilities - ffmpeg-based downscaling and metadata extraction.
-Every function here degrades gracefully (logs and returns None/empty) when the binaries are missing or a given file can't be processed, rather than failing the upload - a video is still usable at its original resolution even if downscaling isn't available."""
+"""Video processing utilities - ffmpeg-based downscaling and metadata extraction."""
 
 from __future__ import annotations
 
@@ -52,12 +51,7 @@ def probe_video(path: str) -> dict[str, Any] | None:
         path: Local filesystem path to the video file.
 
     Returns:
-        The parsed ffprobe JSON (``format``/``streams`` keys), or None if
-        ffprobe is unavailable or the file can't be probed.
-
-        Gated on ffprobe alone. It previously required ffmpeg as well, which was
-        incidental - this function never invokes ffmpeg - and contradicted the
-        sentence above."""
+        The parsed ffprobe JSON (``format``/``streams`` keys), or None if ffprobe is unavailable or the file can't be probed."""
     ffprobe = ffprobe_path()
     if ffprobe is None:
         return None
@@ -103,11 +97,7 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
         path: Local filesystem path to the video file.
 
     Returns:
-        Dict with any of ``taken_at`` (datetime), ``latitude``/``longitude``
-        (float), ``width``/``height`` (int) that could be determined. Missing
-        keys mean that piece of metadata wasn't present or ffprobe/the file
-        didn't yield it - never raises.
-    """
+        Dict with any of ``taken_at`` (datetime), ``latitude``/``longitude`` (float), ``width``/``height`` (int) that could be determined."""
     metadata: dict[str, Any] = {}
     probed = probe_video(path)
     if not probed:
@@ -194,31 +184,19 @@ def _reencode(src_path: str, out_path: str, max_height: int, *, strip_location: 
 
 @untrusted_parse("video.transcode")
 def _remux_without_location(src_path: str, out_path: str) -> bool:
-    """Drop the location tags without touching the streams; True on success.
-
-    A stream copy, so it costs a file rewrite rather than a transcode and loses
-    no quality. This is what lets a video be scrubbed even when it is already
-    small enough that no downscale was warranted.
-    """
+    """Drop the location tags without touching the streams; True on success."""
     return _run_ffmpeg(["-c", "copy", *_clear_location_args(), "-movflags", "+faststart", out_path], src_path, "location strip")
 
 
 def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[str, Any], StoredFileReplacement | None]:
     """Extract metadata from an uploaded video, downscale it if oversized, and scrub its location.
-    Copies the stored file to a local temp path once (ffmpeg/ffprobe need a real file, not a stream) and reuses that copy for both metadata probing and, if needed, re-encoding - so the file is only fetched from storage a single time regardless of storage backend.
 
     Args:
         image: The Image row whose stored video to process.
-        max_height: Vertical resolution cap in pixels, or None to skip
-            downscaling. Metadata extraction and the location scrub happen
-            either way.
+        max_height: Vertical resolution cap in pixels, or None to skip downscaling.
 
     Returns:
-        (metadata, replacement): metadata is as :func:`extract_video_metadata`;
-        replacement is None when the file was left alone, and otherwise carries
-        the new size plus the superseded name - still on disk, for the caller to
-        discard once the row names its successor (see
-        :func:`~urbanlens.dashboard.services.media.images.discard_superseded_file`)."""
+        (metadata, replacement): metadata is as :func:`extract_video_metadata`; replacement is None when the file was left alone, and otherwise carries the new size plus the superseded name - still on disk, for the caller to discard once the row names..."""
     old_name = image.image.name
     if not old_name or not ffmpeg_available():
         return {}, None

@@ -385,17 +385,14 @@ LOCATION_SEARCH_SOURCES = frozenset({"local", "places"})
 def parse_search_sources(raw: str | None) -> frozenset[str]:
     """Parse the ``sources`` query param into the set of sources to search.
 
-    Unknown entries are dropped rather than rejected: a newer client asking
-    for a source this server doesn't have should still get the ones it does,
-    instead of failing the whole search.
+    Unknown entries are dropped rather than rejected: a newer client asking for a source this server
+    doesn't have should still get the ones it does, instead of failing the whole search.
 
     Args:
         raw: The raw comma-separated value, or None when the param was absent.
 
     Returns:
-        The recognized subset of :data:`LOCATION_SEARCH_SOURCES`. An absent
-        param means all of them; an empty or wholly-unrecognized value means
-        none, which yields an empty result rather than an implicit default.
+        The recognized subset of: data:`LOCATION_SEARCH_SOURCES`.
     """
     if raw is None:
         return LOCATION_SEARCH_SOURCES
@@ -403,17 +400,17 @@ def parse_search_sources(raw: str | None) -> frozenset[str]:
     return frozenset(requested & LOCATION_SEARCH_SOURCES)
 
 
-#: Fixed source_key for the single hit a pin-suggestion POST produces - this
-#: endpoint is one discovered place per call (mirrors PinsView.post), so there's
-#: never more than one id to look up in IngestSummary.suggestion_ids_by_key.
+#: Fixed source_key for the single hit a pin-suggestion POST produces - this endpoint is one discovered place
+#: per call (mirrors PinsView.post), so there's never more than one id to look up in
+#: IngestSummary.suggestion_ids_by_key.
 _SUGGESTION_SOURCE_KEY = "external_api_submission"
 
 
 def _get_pin_list(request: Request, list_slug: str) -> PinList | None:
     """The caller's pin list matching *list_slug* (by slug or uuid), or None.
 
-    Another profile's list reads as "not found" rather than "forbidden" - the
-    existence of someone else's list is not the caller's business.
+    Another profile's list reads as "not found" rather than "forbidden" - the existence of someone
+    else's list is not the caller's business.
 
     Args:
         request: The authenticated request.
@@ -436,9 +433,8 @@ def _get_pin_list(request: Request, list_slug: str) -> PinList | None:
 def _get_label(request: Request, label_uuid: UUID) -> Label | None:
     """A label visible to the caller, with their customizations prefetched.
 
-    The ``with_customizations_for`` call is required for the ``effective_*``
-    fields to be correct rather than silently wrong - see
-    :class:`LabelsView`'s docstring.
+    The ``with_customizations_for`` call is required for the ``effective_*`` fields to be correct rather
+    than silently wrong - see :class:`LabelsView`'s docstring.
 
     Args:
         request: The authenticated request.
@@ -454,18 +450,15 @@ def _get_label(request: Request, label_uuid: UUID) -> Label | None:
 def _reload_label(label: Label, profile: Profile) -> Label:
     """Re-read *label* with customizations prefetched, for a post-write response.
 
-    A label that was just created or mutated in memory has no
-    ``_user_customizations`` attribute (or a stale one), which would make every
-    ``effective_*`` field in the response wrong. Re-reading is the only way to
-    populate it, since the prefetch is a queryset-level operation.
+    A label that was just created or mutated in memory has no ``_user_customizations`` attribute (or a
+    stale one), which would make every ``effective_*`` field in the response wrong.
 
     Args:
         label: The label just written.
         profile: The caller, whose customizations to load.
 
     Returns:
-        The freshly-loaded label. Falls back to the in-memory instance if the
-        row has vanished (it was just deleted by a concurrent request).
+        The freshly-loaded label.
     """
     reloaded = Label.objects.visible_to(profile).with_customizations_for(profile).prefetch_related("parents").filter(pk=label.pk).first()
     return reloaded if reloaded is not None else label
@@ -495,9 +488,8 @@ def _resolve_source_saved_filter(profile: Profile, data: dict) -> tuple[SavedFil
         data: Validated write-serializer data.
 
     Returns:
-        ``(saved_filter, None)`` on success - where ``saved_filter`` is None
-        when the key was absent or explicitly null - or ``(None, response)``
-        carrying a 400 when the uuid names no filter of the caller's.
+        ``(saved_filter, None)`` on success - where ``saved_filter`` is None when the key was absent or
+        explicitly null - or ``(None,...
     """
     if not data.get("source_saved_filter_uuid"):
         return None, None
@@ -515,10 +507,10 @@ def _resolve_parent_labels(profile: Profile, data: dict) -> tuple[list[Label], R
         data: Validated write-serializer data.
 
     Returns:
-        ``(parents, None)`` on success, or ``(([], response)`` carrying a 400
-        when any uuid names no visible label. Unknown parents are rejected
-        rather than dropped: silently building a different hierarchy than the
-        client asked for is worse than refusing.
+        ``(parents, None)`` on success, or ``(([], response)`` carrying a 400 when any uuid names no
+        visible label.
+        rather than dropped: silently building a different hierarchy than the client asked for is worse
+        than refusing.
     """
     if "parent_uuids" not in data:
         return [], None
@@ -540,11 +532,9 @@ def _validated_color(data: dict, *, default: None = None, key: str = "color") ->
 def _validated_color(data: dict, *, default: str | None = None, key: str = "color") -> str | None:
     """Read a colour from a request body, 400ing rather than substituting.
 
-    `clean_color` replaces a value it does not recognise with the default, which
-    is right for a form post (the user sees the swatch that resulted) and wrong
-    here: the client is told the write succeeded and only finds out by reading
-    the record back. Missing and blank keep falling back - "unset" is not an
-    invalid colour.
+    `clean_color` replaces a value it does not recognise with the default, which is right for a form
+    post (the user sees the swatch that resulted) and wrong here: the client is told the write succeeded
+    and only finds out by reading the record back.
 
     Args:
         data: The parsed request body.
@@ -552,12 +542,11 @@ def _validated_color(data: dict, *, default: str | None = None, key: str = "colo
         key: The body key to read.
 
     Returns:
-        A validated colour, or `default` - a `str` when `default` is one, so a
-        result assigned into a non-nullable column needs no further narrowing.
+        A validated colour, or `default` - a `str` when `default` is one, so a result assigned into a
+        non-nullable column needs no further...
 
     Raises:
-        ValidationError: When the key is present and is not a colour. Rendered
-            by `ErrorEnvelopeMixin` as the package's field-keyed 400.
+        ValidationError: When the key is present and is not a colour.
     """
     try:
         return require_color(data.get(key), default=default)
@@ -568,22 +557,13 @@ def _validated_color(data: dict, *, default: str | None = None, key: str = "colo
 class ExternalApiView(ErrorEnvelopeMixin, APIView):
     """Base for every external endpoint: credential auth, scope gate, per-credential throttle.
 
-    Two credential kinds are accepted - PAT-style ``ApiKey`` bearer keys and
-    django-oauth-toolkit access tokens (the native apps' OAuth2 + PKCE flow) -
-    both enforced against the same per-method scope declarations.
-
-    Scopes are declared per HTTP method in ``required_scopes_by_method``;
-    ``HasApiKeyScope`` reads the ``required_scopes`` property and fails closed
-    when the current method has no entry, so an endpoint can never gain a new
-    method without also declaring what that method requires.
-
-    ``ErrorEnvelopeMixin`` is listed first so its ``get_exception_handler``
-    beats ``APIView``'s in the MRO. Inheriting it here rather than per-endpoint
-    is what makes ``{"error": ...}`` the package's *only* error shape: without
-    it, a handler's hand-written returns use that envelope while the 400 from
-    ``is_valid(raise_exception=True)`` and every 401/403/404/405/429 DRF raises
-    on the way in use ``detail``/field-keyed shapes instead, and no generated
-    client can parse all three. See ``external_api.errors``.
+    Scopes are declared per HTTP method in ``required_scopes_by_method``; ``HasApiKeyScope`` reads the
+    ``required_scopes`` property and fails closed when the current method has no entry, so an endpoint
+    can never gain a new method without also declaring what that method requires.
+    Inheriting it here rather than per-endpoint is what makes ``{"error": ...}`` the package's *only*
+    error shape: without it, a handler's hand-written returns use that envelope while the 400 from
+    ``is_valid(raise_exception=True)`` and every 401/403/404/405/429 DRF raises on the way in use
+    ``detail``/field-keyed shapes instead, and no generated client can parse all three.
     """
 
     authentication_classes = [ApiKeyAuthentication, OAuth2Authentication]
@@ -596,18 +576,7 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
     def initial(self, request, *args, **kwargs):
         """Authenticate, then bind the caller as the source of any writes.
 
-        ``WriteSourceMiddleware`` cannot do this for the API. Both credential
-        kinds here are DRF authenticators, resolved in this method - so at
-        middleware time a bearer-token request still carries an
-        ``AnonymousUser``, and every write from a native app would record with
-        no actor at all. Field provenance decides what a concealed viewer sees
-        of their *own* contributions, so losing the identity here would conceal
-        an API editor's edit from the API editor.
-
-        Bound for the life of the request rather than in a context manager: DRF
-        dispatches the handler after ``initial()`` returns, so there is no block
-        to wrap. The ContextVar is per request-thread and every entry point
-        rebinds before its first write.
+        ``WriteSourceMiddleware`` cannot do this for the API.
         """
         super().initial(request, *args, **kwargs)
 
@@ -629,16 +598,11 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
 class UnscopedExternalApiView(ExternalApiView):
     """Base for the rare endpoint that needs authentication but no particular scope.
 
-    The one deliberate exception to ``HasApiKeyScope``'s fail-closed default,
-    and reserved for endpoints that describe *the credential itself* rather
-    than any of the user's data. Requiring a scope there would be circular: a
-    client asks what it may do precisely because it doesn't yet know, and a
-    credential can always be told its own shape without that revealing anything
-    it couldn't already discover by probing.
-
-    Do not use this as a shortcut for an endpoint that touches user data - such
-    an endpoint needs a scope, and inheriting from here would silently grant it
-    to every credential.
+    The one deliberate exception to ``HasApiKeyScope``'s fail-closed default, and reserved for endpoints
+    that describe *the credential itself* rather than any of the user's data.
+    Requiring a scope there would be circular: a client asks what it may do precisely because it doesn't
+    yet know, and a credential can always be told its own shape without that revealing anything it
+    couldn't already discover by probing.
     """
 
     permission_classes = [IsAuthenticated]
@@ -647,9 +611,8 @@ class UnscopedExternalApiView(ExternalApiView):
 class OwnedPinMixin:
     """Pin lookup scoped to the requesting credential's owner.
 
-    Every pin-scoped external endpoint resolves its pin through here, so
-    another user's pin is uniformly indistinguishable from a nonexistent one -
-    both 404, never 403, which would confirm the pin exists.
+    Every pin-scoped external endpoint resolves its pin through here, so another user's pin is uniformly
+    indistinguishable from a nonexistent one - both 404, never 403, which would confirm the pin exists.
     """
 
     @staticmethod
@@ -680,9 +643,8 @@ class OwnedPinMixin:
     def get_owned_pin_lite(self, request: Request, pin_slug: str) -> Pin | None:
         """The key owner's pin, without the detail-only joins.
 
-        For sub-resource endpoints, which need the pin to scope and authorize
-        the query rather than to serialize it - the extra joins would be
-        loaded and thrown away.
+        For sub-resource endpoints, which need the pin to scope and authorize the query rather than to
+        serialize it - the extra joins would be loaded and thrown away.
 
         Args:
             request: The authenticated request.
@@ -697,11 +659,11 @@ class OwnedPinMixin:
 class WhoAmIView(ExternalApiView):
     """GET: the calling API key's owner - their profile uuid and slug, nothing else.
 
-    Still the narrowest *profile* read in the API: no settings, friends, or any
-    other private data, per the ``profile:read`` scope's definition. The slug is
-    served alongside the uuid because it is the identifier every other endpoint
-    in this API actually speaks - see :class:`WhoAmISerializer` for why a client
-    cannot recognize itself in other endpoints' payloads without it.
+    Still the narrowest *profile* read in the API: no settings, friends, or any other private data, per
+    the ``profile:read`` scope's definition.
+    The slug is served alongside the uuid because it is the identifier every other endpoint in this API
+    actually speaks - see :class:`WhoAmISerializer` for why a client cannot recognize itself in other
+    endpoints' payloads without it.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -712,11 +674,6 @@ class WhoAmIView(ExternalApiView):
     def get(self, request: Request) -> Response:
         """Return the authenticated key owner's profile uuid and slug."""
         profile = request.user.profile
-        # Backfilled rather than read straight off the row: profiles created
-        # before slugs existed still have an empty one, and this endpoint
-        # promising a slug that is sometimes "" would make every client write
-        # a fallback path for it. ensure_slug() persists what it generates, so
-        # the slug handed out here is the same one the profile routes answer to.
         profile.ensure_slug()
         return Response(WhoAmISerializer(profile).data)
 
@@ -724,16 +681,9 @@ class WhoAmIView(ExternalApiView):
 class PinsView(ExternalApiView):
     """The key owner's pins: GET delta-syncs them, POST creates one.
 
-    GET is a sync feed, not a browse API: ordered by ``(updated, pk)``, it
-    pages through pins changed since ``modified_since`` with an opaque cursor
-    and hands back the ``sync_watermark`` to use as the next sync's
-    ``modified_since``. Deletions are the separate ``pins/deleted/`` feed.
-
-    POST goes through the exact same ``services.pins.pin_creation.create_pin_for_profile``
-    call as the map UI's "Add pin" form - the same sanitization, geocoding
-    gate, and background enrichment apply regardless of which caller created
-    the pin. A caller-generated ``uuid`` makes the create idempotent for
-    offline-outbox retries.
+    GET is a sync feed, not a browse API: ordered by ``(updated, pk)``, it pages through pins changed
+    since ``modified_since`` with an opaque cursor and hands back the ``sync_watermark`` to use as the
+    next sync's ``modified_since``.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -813,11 +763,10 @@ class PinsView(ExternalApiView):
             logger.info("external API pin creation rejected: %s", exc)
             return Response({"error": "That address couldn't be converted to coordinates."}, status=400)
         except DuplicateUuidError as exc:
-            # 400, not 409: a distinct status here would tell an attacker probing
-            # uuids that this one belongs to *someone* (a Conflict, vs. plain
-            # Bad Request for one that doesn't exist at all) - the original code's
-            # single blanket 400 for every PinCreationError avoided that distinction
-            # entirely, and this is the case it matters for.
+            # 400, not 409: a distinct status here would tell an attacker probing uuids that this one belongs to
+            # *someone* (a Conflict, vs. plain Bad Request for one that doesn't exist at all) - the original
+            # code's single blanket 400 for every PinCreationError avoided that distinction entirely, and this
+            # is the case it matters for.
             logger.info("external API pin creation rejected: %s", exc)
             return Response({"error": "That pin couldn't be created."}, status=400)
         except PinCreationError as exc:
@@ -831,9 +780,9 @@ class PinsView(ExternalApiView):
                 "uuid": str(pin.uuid),
                 "slug": pin.slug,
                 "name": pin.effective_name,
-                # True when the coordinates also match another existing Location -
-                # the pin was still created, but callers may want to flag this for
-                # manual review rather than silently trusting the auto-resolved place.
+                # True when the coordinates also match another existing Location - the pin was still created,
+                # but callers may want to flag this for manual review rather than silently trusting the
+                # auto-resolved place.
                 "ambiguous_location": len(result.all_locations) > 1,
                 # False when this was an idempotent replay of an earlier create
                 # (same client-generated uuid) - the pin already existed.
@@ -847,20 +796,9 @@ class PinsView(ExternalApiView):
 class PinDetailView(OwnedPinMixin, ExternalApiView):
     """GET the key owner's full pin detail; PATCH or DELETE it.
 
-    GET returns a superset of the sync feed's payload - description, dates,
-    security indicators, personal notes/aliases/links, custom fields, the
-    property boundary, the cover photo, and the discovered wiki slug (see
-    ``services.pins.pin_detail.build_pin_detail``).
-
-    PATCH extends the same semantics as the internal ``PinViewSet``
-    (renaming, re-icon, a coordinate move that relinks the Location) plus
-    ``parent_id`` to detach (``null``) or re-parent a pin under another of
-    the caller's own pins - something no single internal endpoint exposes.
-
-    DELETE mirrors ``PinViewSet.destroy``: a pin with child pins requires an
-    explicit ``?children=delete`` or ``?children=keep``, refused with 409
-    otherwise; every deletion stages an Undo History entry and writes a
-    tombstone for sync clients.
+    DELETE mirrors ``PinViewSet.destroy``: a pin with child pins requires an explicit
+    ``?children=delete`` or ``?children=keep``, refused with 409 otherwise; every deletion stages an
+    Undo History entry and writes a tombstone for sync clients.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -897,28 +835,18 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
     def patch(self, request: Request, pin_slug: str) -> Response:
         """Apply a partial update to one of the key owner's pins.
 
-        Field writes go through ``services.pins.pin_edit.apply_pin_edits``, the same
-        function behind the website's own pin-edit dialog, so the two surfaces
-        cannot drift on which companion flags a write implies (a submitted
-        ``pin_type`` marking the type user-provided, for instance) or on the
-        tombstones a label removal has to leave behind.
-
-        A move that would cost the owner access to a community wiki (wiki
-        visibility follows where their pins are) is refused with 409 and a
-        ``requires_wiki_loss_confirmation`` payload naming them, matching the
-        internal ``PinViewSet``. Re-send with ``confirm_wiki_loss: true`` to go
-        ahead. Every other update is unaffected, as is a move that costs the
-        owner nothing.
+        Field writes go through ``services.pins.pin_edit.apply_pin_edits``, the same function behind the
+        website's own pin-edit dialog, so the two surfaces cannot drift on which companion flags a write
+        implies (a submitted ``pin_type`` marking the type user-provided, for instance) or on the tombstones
+        a label removal has to leave behind.
 
         Args:
             request: The authenticated request carrying the partial update.
             pin_slug: The pin's slug, or its uuid.
 
         Returns:
-            The pin's full detail payload, or an error envelope: 404 when the
-            pin isn't the caller's (never 403 - that would confirm it exists),
-            400 for an unresolvable parent/label or an impossible move, 409 for
-            the unconfirmed wiki-loss handshake.
+            The pin's full detail payload, or an error envelope: 404 when the pin isn't the caller's (never
+            403 - that would confirm it exists), 400 for an unresolvable parent/label or an impossible...
         """
         pin = self.get_owned_pin(request, pin_slug)
         if pin is None:
@@ -936,11 +864,7 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
             if new_parent is None:
                 return Response({"error": "No such pin to set as parent."}, status=400)
 
-        # Same reasoning for labels: an unknown uuid is refused before anything
-        # is written. Scoped to labels this profile may actually use, so another
-        # user's private label is "no such label" rather than a usable id - and
-        # a partial resolution is a 400, never a silently smaller set than the
-        # client asked for.
+        # Same reasoning for labels: an unknown uuid is refused before anything is written.
         labels: list[Label] | None = None
         if "label_uuids" in data:
             wanted = list(dict.fromkeys(data["label_uuids"]))
@@ -948,9 +872,8 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
             if len(labels) != len(wanted):
                 return Response({"error": "One or more label_uuids do not name a label you can use."}, status=400)
 
-        # Asked only once the request is known to be otherwise valid: confirming
-        # a move and then being handed a 400 for an unrelated bad field would be
-        # a pointless prompt.
+        # Asked only once the request is known to be otherwise valid: confirming a move and then being handed a
+        # 400 for an unrelated bad field would be a pointless prompt.
         if "latitude" in data and not data.get("confirm_wiki_loss"):
             lost = wikis_hidden_by_pin_move(pin, data["latitude"], data["longitude"])
             if lost:
@@ -963,11 +886,9 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
                     status=409,
                 )
 
-        # The nested `security` object is flattened into the flat Pin-column
-        # mapping by the serializer itself - parsing the wire format is its job,
-        # and the `security` wire key collides with a Pin column of the same
-        # name, which is exactly the kind of trap that must be solved in one
-        # place. See PinUpdateSerializer.pin_field_edits.
+        # The nested `security` object is flattened into the flat Pin-column mapping by the serializer itself -
+        # parsing the wire format is its job, and the `security` wire key collides with a Pin column of the same
+        # name, which is exactly the kind of trap that must be solved in one place.
         edits = serializer.pin_field_edits()
 
         try:
@@ -1027,18 +948,12 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
 class PinSuggestionsView(ExternalApiView):
     """POST: submit a discovered place as a pending suggestion, not a real pin.
 
-    Unlike ``PinsView.post``, nothing is created on the map immediately - the
-    submission is staged as a ``PinSuggestion`` (see
-    ``services.pins.pin_suggestions.ingest_location_hits``) that the key's owner
-    must explicitly accept or reject from the Memories -> Locations review
-    queue before anything appears. An external "discovery" app that finds
-    candidate places autonomously (rather than acting on the user's own
-    behalf, like the mobile app's offline outbox does for ``PinsView``)
-    should use this endpoint instead.
-
-    A submission near one of the owner's existing pins, or another pending
-    suggestion, merges into it exactly like an Immich/local-scan hit would -
-    this is the same clustering/matching pipeline, just a third kind of hit.
+    An external "discovery" app that finds candidate places autonomously (rather than acting on the
+    user's own behalf, like the mobile app's offline outbox does for ``PinsView``) should use this
+    endpoint instead.
+    A submission near one of the owner's existing pins, or another pending suggestion, merges into it
+    exactly like an Immich/local-scan hit would - this is the same clustering/matching pipeline, just a
+    third kind of hit.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1056,9 +971,8 @@ class PinSuggestionsView(ExternalApiView):
         data = serializer.validated_data
         profile = request.user.profile
 
-        # A PinSuggestion is itself a location-history trail (see
-        # ingest_location_hits) - fail closed exactly like the local-scan
-        # upload endpoint does, rather than silently accepting and dropping it.
+        # A PinSuggestion is itself a location-history trail (see ingest_location_hits) - fail closed exactly
+        # like the local-scan upload endpoint does, rather than silently accepting and dropping it.
         if not visit_logging_allowed(profile):
             return Response({"error": "Visit-history tracking is turned off in your settings."}, status=403)
 
@@ -1105,9 +1019,9 @@ class PinSuggestionsView(ExternalApiView):
 class PinTombstonesView(ExternalApiView):
     """GET: the key owner's pin deletions since ``deleted_since``, for delta sync.
 
-    Serves ``PinTombstone`` rows - the durable record written when a pin is
-    hard-deleted. Without this feed a sync client can learn about new and
-    changed pins from ``pins/`` but would hold deleted ones forever.
+    Serves ``PinTombstone`` rows - the durable record written when a pin is hard-deleted.
+    Without this feed a sync client can learn about new and changed pins from ``pins/`` but would hold
+    deleted ones forever.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1132,10 +1046,8 @@ class PinTombstonesView(ExternalApiView):
             logger.info("external API tombstone sync rejected: %s", exc)
             return Response({"error": "That cursor is invalid or expired."}, status=400)
         except StaleDeletedSinceError as exc:
-            # 410 Gone: tombstones this old may already be pruned, so the
-            # incremental deletions feed can no longer be trusted from that
-            # point. The client must full-resync (walk pins/ without
-            # modified_since and drop local pins absent from the result).
+            # 410 Gone: tombstones this old may already be pruned, so the incremental deletions feed can no
+            # longer be trusted from that point.
             logger.info("external API tombstone sync requires full resync: %s", exc)
             return Response(
                 {"error": "That deletion range is too old to sync incrementally - do a full resync instead.", "full_resync_required": True},
@@ -1154,9 +1066,9 @@ class PinTombstonesView(ExternalApiView):
 class PushDevicesView(ExternalApiView):
     """POST: register (or re-activate) this device as a push destination.
 
-    Idempotent on the submitted address, so an app can re-register on every
-    launch without tracking whether it already did. The response echoes the
-    device's public ``uuid``, which is what ``DELETE push-devices/<uuid>/``
+    Idempotent on the submitted address, so an app can re-register on every launch without tracking
+    whether it already did.
+    The response echoes the device's public ``uuid``, which is what ``DELETE push-devices/<uuid>/``
     takes to unregister.
     """
 
@@ -1200,16 +1112,11 @@ class PushDevicesView(ExternalApiView):
 class AccountSettingsView(ExternalApiView):
     """GET the caller's account preferences; PATCH to change them.
 
-    Named for the account rather than matching ``controllers.settings.SettingsView``
-    (the site's own multi-form settings page) - the two are unrelated and share
-    only the underlying ``Profile`` fields, via
-    ``services.profile.profile_settings``.
-
-    PATCH is partial by construction: only submitted keys are touched, so a
-    client syncing one toggle never overwrites preferences changed on the web
-    in the meantime. The response is always the full post-save document, since
-    ``Profile.save()`` may coerce community-gated fields and the client needs
-    to see what it actually ended up with.
+    Named for the account rather than matching ``controllers.settings.SettingsView`` (the site's own
+    multi-form settings page) - the two are unrelated and share only the underlying ``Profile`` fields,
+    via ``services.profile.profile_settings``.
+    PATCH is partial by construction: only submitted keys are touched, so a client syncing one toggle
+    never overwrites preferences changed on the web in the meantime.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1234,9 +1141,8 @@ class AccountSettingsView(ExternalApiView):
         try:
             touched = apply_settings_patch(profile, serializer.validated_data, user=request.user)
         except SettingsValidationError as exc:
-            # Per-field, unlike the internal view's silent no-op: a sync client
-            # that cannot tell a rejected write from an accepted one will retry
-            # it forever.
+            # Per-field, unlike the internal view's silent no-op: a sync client that cannot tell a rejected
+            # write from an accepted one will retry it forever.
             return Response({"error": "Some settings could not be changed.", "fields": exc.errors}, status=400)
 
         if touched:
@@ -1253,11 +1159,11 @@ class AccountSettingsView(ExternalApiView):
 class AuthSessionView(UnscopedExternalApiView):
     """GET: what the calling credential is and what it may do.
 
-    Deliberately scope-free (see :class:`UnscopedExternalApiView`) - a client
-    calls this to discover its own grant, so gating it behind a scope would be
-    circular. It reveals nothing the caller couldn't establish by probing
-    endpoints and collecting 403s; it just saves it the trouble, and lets it
-    schedule a token refresh before ``expires_at`` instead of after a failure.
+    Deliberately scope-free (see :class:`UnscopedExternalApiView`) - a client calls this to discover its
+    own grant, so gating it behind a scope would be circular.
+    It reveals nothing the caller couldn't establish by probing endpoints and collecting 403s; it just
+    saves it the trouble, and lets it schedule a token refresh before ``expires_at`` instead of after a
+    failure.
     """
 
     #: This is a read despite declaring no scopes, which request_tier would
@@ -1268,9 +1174,7 @@ class AuthSessionView(UnscopedExternalApiView):
     def get(self, request: Request) -> Response:
         """Describe the credential this request authenticated with."""
         credential = request.auth
-        # Same discriminator permissions.py uses: only an OAuth2 AccessToken
-        # carries allow_scopes. Its `scopes` attribute is a {name: description}
-        # dict, so the granted list comes from the raw `scope` string instead.
+        # Same discriminator permissions.py uses: only an OAuth2 AccessToken carries allow_scopes.
         if hasattr(credential, "allow_scopes"):
             application = credential.application
             payload = {
@@ -1300,11 +1204,10 @@ class _OwnedImageMixin:
     """Resolves the ``<uuid:image_uuid>`` path segment to a photo the caller owns.
 
     Scoped to ``profile__user=request.user`` and deliberately **not** to
-    ``Image.objects.visible_to(...)``: visibility is a *read* relation that
-    includes friends' and community photos, and every write endpoint here
-    (delete, relabel, re-file, vote) would otherwise let a caller mutate a
-    photo they merely happen to be allowed to look at. The one read endpoint
-    that may widen to ``visible_to`` does so explicitly, on its own.
+    ``Image.objects.visible_to(...)``: visibility is a *read* relation that includes friends' and
+    community photos, and every write endpoint here (delete, relabel, re-file, vote) would otherwise let
+    a caller mutate a photo they merely happen to be allowed to look at.
+    The one read endpoint that may widen to ``visible_to`` does so explicitly, on its own.
     """
 
     def _get_image(self, request: Request, image_uuid: UUID) -> Image | None:
@@ -1320,14 +1223,11 @@ def _resolve_own_pin(request: Request, value: str) -> Pin | None:
 class PhotosView(PaginatedListMixin, ExternalApiView):
     """The key owner's photo library: GET browses it, POST uploads to it.
 
-    GET is a browse endpoint (page-number paginated), not a delta sync: unlike
-    ``pins/`` there is no tombstone feed for photos, so a client that needs to
-    detect deletions re-walks the list.
-
-    POST runs the identical admission pipeline as the Memories page's
-    drag-and-drop uploader (``services.photos.photo_upload.upload_photo``) - the same
-    media-type sniffing, feature gates, malware/size checks, duplicate
-    rejection and storage quota.
+    GET is a browse endpoint (page-number paginated), not a delta sync: unlike ``pins/`` there is no
+    tombstone feed for photos, so a client that needs to detect deletions re-walks the list.
+    POST runs the identical admission pipeline as the Memories page's drag-and-drop uploader
+    (``services.photos.photo_upload.upload_photo``) - the same media-type sniffing, feature gates,
+    malware/size checks, duplicate rejection and storage quota.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1344,16 +1244,9 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
         params = serializer.validated_data
         profile = request.user.profile
 
-        # Deliberately NOT .photos(): PhotoSerializer/build_photo_payload return
-        # media_type for exactly this reason - this endpoint (and its POST,
-        # which already runs the same media-type-agnostic upload_photo()) is a
-        # general media library, "photos" being the API's noun for it rather
-        # than a literal restriction. Narrowing this to actual photos would be
-        # a real regression for any client listing their videos/documents.
-        #
-        # profile__user: Profile.username reads self.user.username.
-        # pin__location(__wiki): pin_name -> Pin.effective_name -> Location.display_name,
-        # which reads the location's Wiki. Both are per-row queries without these.
+        # Deliberately NOT .photos(): PhotoSerializer/build_photo_payload return media_type for exactly this
+        # reason - this endpoint (and its POST, which already runs the same media-type-agnostic upload_photo())
+        # is a general media library, "photos" being the API's noun for it rather than a literal restriction.
         queryset = Image.objects.uploaded_by(profile).select_related(
             "pin",
             "pin__location",
@@ -1385,8 +1278,6 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
         taken_from = params.get("taken_from")
         taken_to = params.get("taken_to")
         if taken_from is not None or taken_to is not None:
-            # taken_at is null for anything without EXIF, so the upload time
-            # stands in - matching how the rest of the app orders photos.
             queryset = queryset.annotate(_taken=Coalesce("taken_at", "created"))
             if taken_from is not None:
                 queryset = queryset.filter(_taken__gte=taken_from)
@@ -1402,8 +1293,6 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request, view=self)
         images = list(page or [])
-        # One suggestion query for the page instead of one per photo inside
-        # classify_photo, matching how the Memories queue builds its cards.
         pending_ids = pending_suggestion_image_ids(images)
         payload = [build_photo_payload(image, profile, pending_ids) for image in images]
         return paginator.get_paginated_response(PhotoSerializer(payload, many=True).data)
@@ -1412,10 +1301,9 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
     def post(self, request: Request) -> Response:
         """Upload one photo, video, or document to the key owner's library.
 
-        EXIF-derived fields (``latitude``/``longitude``/``taken_at``/
-        ``author``) are extracted asynchronously by ``process_image_upload``
-        and are normally still null in this response - re-fetch the photo
-        shortly afterwards rather than treating this payload as final.
+        EXIF-derived fields (``latitude``/``longitude``/``taken_at``/ ``author``) are extracted
+        asynchronously by ``process_image_upload`` and are normally still null in this response - re-fetch
+        the photo shortly afterwards rather than treating this payload as final.
         """
         serializer = PhotoUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -1434,11 +1322,7 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
             visit = PinVisit.objects.filter(pk=data["visit"], pin__profile=profile).select_related("pin__location").first()
             if visit is None:
                 return Response({"error": "No such visit."}, status=400)
-            # The two references have to agree. Each passed its own ownership
-            # check independently, so a `pin` of A plus a `visit` belonging to
-            # B was accepted and stored verbatim - a photo that shows in A's
-            # gallery while claiming it was taken on a visit to B, which
-            # quietly breaks both gallery filtering and visit history.
+            # The two references have to agree.
             if pin is not None and visit.pin_id != pin.pk:
                 return Response({"error": "That visit belongs to a different pin."}, status=400)
             # A visit implies its pin, so a caller naming only the visit gets
@@ -1458,9 +1342,9 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
 class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
     """GET one photo's metadata; DELETE it and its stored file.
 
-    GET widens to ``Image.objects.visible_to`` when the photo isn't the
-    caller's own, so a client can resolve a photo it legitimately sees in a
-    shared gallery. DELETE never does - see :class:`_OwnedImageMixin`.
+    GET widens to ``Image.objects.visible_to`` when the photo isn't the caller's own, so a client can
+    resolve a photo it legitimately sees in a shared gallery.
+    DELETE never does - see :class:`_OwnedImageMixin`.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1483,25 +1367,15 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
     def delete(self, request: Request, image_uuid: UUID) -> Response:
         """Delete one of the caller's own photos, file included.
 
-        A photo the caller contributed to a community wiki is taken off their
-        own library and left on the wiki, unless ``?from_wiki=true`` says
-        otherwise - the same rule the pin gallery follows. Contributing is a
-        deliberate act, so undoing it is another one, and a client that says
-        nothing gets the answer that needs no action. Clients can ask first:
-        ``wiki_slug`` and ``source`` are both on the photo payload.
-
-        ``from_wiki`` is honoured only for an upload. A photo fetched from a URL
-        was a public resource online before this app saw it, so there is no
-        consent here to withdraw - it is removed on the wiki itself or not at
-        all, and that is enforced here rather than left to the client.
+        A photo the caller contributed to a community wiki is taken off their own library and left on the
+        wiki, unless ``?from_wiki=true`` says otherwise - the same rule the pin gallery follows.
 
         Args:
             request: The API request; ``from_wiki=true`` also withdraws it.
             image_uuid: UUID of the photo.
 
         Returns:
-            204 when something was removed, 404 for a photo that is not the
-            caller's.
+            204 when something was removed, 404 for a photo that is not the caller's.
         """
         image = self._get_image(request, image_uuid)
         if image is None:
@@ -1514,13 +1388,8 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
             Image.objects.filter(pk=image.pk).update(pin=None)
             return Response(status=204)
 
-        # Reached only when there's no wiki copy to protect, or the caller
-        # explicitly asked to withdraw it too - either way nothing is left that
-        # should keep this row alive, regardless of any pin still attached.
-        # Matches controllers.vault_photos.PhotoActionView.delete_photo: drop the
-        # stored file before the row, so deleting the row can't orphan bytes -
-        # delete_stored_file has its own reference-count check for a file
-        # shared with another row (e.g. pin-to-pin sharing).
+        # Reached only when there's no wiki copy to protect, or the caller explicitly asked to withdraw it too -
+        # either way nothing is left that should keep this row alive, regardless of any pin still attached.
         delete_stored_file(image)
         image.delete()
         return Response(status=204)
@@ -1563,19 +1432,12 @@ class PhotoLabelsView(_OwnedImageMixin, ExternalApiView):
 class PhotoVoteView(_OwnedImageMixin, ExternalApiView):
     """POST: cast, flip, or withdraw a community relevance vote on a photo.
 
-    Only meaningful for a photo materialized into a Location's Media gallery -
-    a plain personal upload has no ``(source, item_key)`` identity for
-    ``MediaRelevance`` to key a vote by, and is refused with 400.
-
-    **Resolves by visibility, not ownership** - the one write in this group
-    that does, and deliberately so. A relevance vote does not mutate the image:
-    it inserts the *caller's own* ``MediaRelevance`` row keyed by
-    ``(source, item_key, profile)``, which is why the reasoning in
-    :class:`_OwnedImageMixin` (a write must not reach a photo you can merely
-    look at) does not apply here. Voting only on your own uploads is not
-    community voting at all, and a gallery photo belonging to someone else has
-    no other endpoint through which a client could reach it - the wiki gallery
-    surfaces it, ``PhotoDetailView.get`` serves it, and this route answered 404.
+    Only meaningful for a photo materialized into a Location's Media gallery - a plain personal upload
+    has no ``(source, item_key)`` identity for ``MediaRelevance`` to key a vote by, and is refused with
+    400.
+    A relevance vote does not mutate the image: it inserts the *caller's own* ``MediaRelevance`` row
+    keyed by ``(source, item_key, profile)``, which is why the reasoning in :class:`_OwnedImageMixin` (a
+    write must not reach a photo you can merely look at) does not apply here.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1606,10 +1468,9 @@ class PhotoVoteView(_OwnedImageMixin, ExternalApiView):
 class PhotoFileView(_OwnedImageMixin, ExternalApiView):
     """POST: file an unfiled photo onto a pin, creating one if needed.
 
-    The API counterpart of the Memories organize queue's "log visit" and
-    "create pin" actions, going through the same
-    ``services.memories.photos`` functions so a photo filed here lands in the
-    user's visit history identically to one filed on the site.
+    The API counterpart of the Memories organize queue's "log visit" and "create pin" actions, going
+    through the same ``services.memories.photos`` functions so a photo filed here lands in the user's
+    visit history identically to one filed on the site.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1729,12 +1590,11 @@ class VisitSuggestionActionView(ExternalApiView):
 class PinSuggestionListApiView(ExternalApiView):
     """GET: the caller's pending batch-scan pin suggestions.
 
-    Distinct from ``PinSuggestionsView`` (POST-only - stages a *new*
-    suggestion submitted by an external "discovery" app): this lists the
-    review queue an Immich library sweep or local-folder scan already
-    populated, mirroring ``VisitSuggestionsView`` for the sibling suggestion
-    type. Not paginated, matching that sibling - a review queue is naturally
-    small and bounded by how much a batch scan found.
+    Distinct from ``PinSuggestionsView`` (POST-only - stages a *new* suggestion submitted by an external
+    "discovery" app): this lists the review queue an Immich library sweep or local-folder scan already
+    populated, mirroring ``VisitSuggestionsView`` for the sibling suggestion type.
+    Not paginated, matching that sibling - a review queue is naturally small and bounded by how much a
+    batch scan found.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1774,9 +1634,9 @@ class PinSuggestionListApiView(ExternalApiView):
 class PinSuggestionActionApiView(ExternalApiView):
     """POST: accept or reject one pending pin suggestion.
 
-    Applies the suggestion's own defaults - its ``suggested_name`` for a
-    brand-new pin, no label or candidate-photo selection. The web review
-    queue's richer accept dialog (name override, label picker, candidate
+    Applies the suggestion's own defaults - its ``suggested_name`` for a brand-new pin, no label or
+    candidate-photo selection.
+    The web review queue's richer accept dialog (name override, label picker, candidate
     Immich/local-scan photo picker) is not mirrored here in this pass; see
     ``docs/notes/mobile_app_notes.md``.
     """
@@ -1808,10 +1668,10 @@ class PinSuggestionActionApiView(ExternalApiView):
 class MemoriesTimelineView(PaginatedListMixin, ExternalApiView):
     """GET: one page of the caller's Memories timeline - routes, trips, visits, photos.
 
-    Defaults to the trailing 90 days, matching the internal Memories page's
-    own default window - a full history is never loaded from a single
-    request. Wraps ``services.memories.aggregator.get_memory_events``, the
-    same data the internal page's map/timeline renders.
+    Defaults to the trailing 90 days, matching the internal Memories page's own default window - a full
+    history is never loaded from a single request.
+    Wraps ``services.memories.aggregator.get_memory_events``, the same data the internal page's
+    map/timeline renders.
     """
 
     #: Mirrors ``controllers.memories._DEFAULT_WINDOW_DAYS``.
@@ -1849,9 +1709,9 @@ class MemoriesTimelineView(PaginatedListMixin, ExternalApiView):
 class MemoriesOnThisDayApiView(ExternalApiView):
     """GET: past-year visits/routes/photos matching today's month/day.
 
-    Mirrors the internal Memories page's "on this day" callout, including its
-    cap of ``_ON_THIS_DAY_LIMIT`` rows per category - a sensible default for a
-    naturally small, date-scoped result rather than a fully paginated feed.
+    Mirrors the internal Memories page's "on this day" callout, including its cap of
+    ``_ON_THIS_DAY_LIMIT`` rows per category - a sensible default for a naturally small, date-scoped
+    result rather than a fully paginated feed.
     """
 
     _ON_THIS_DAY_LIMIT = 10
@@ -1890,33 +1750,15 @@ class MemoriesOnThisDayApiView(ExternalApiView):
 class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
     """GET: the caller's Memories journal - visit notes, ratings, comments, article edits.
 
-    The journal is an aggregate of four separate privacy domains, so it is
-    filtered per source rather than gated by a single scope - the same
-    partial-fulfilment contract global search and the undo feed use. See
-    :data:`JOURNAL_SOURCE_SCOPES`.
+    The journal is an aggregate of four separate privacy domains, so it is filtered per source rather
+    than gated by a single scope - the same partial-fulfilment contract global search and the undo feed
+    use.
+    See :data:`JOURNAL_SOURCE_SCOPES`.
     """
 
-    #: Every scope a credential must hold before the matching journal source is
-    #: included, keyed by ``services.memories.journal.JOURNAL_SOURCES`` key.
-    #:
-    #: Serving the whole feed on ``photos:read`` alone would be a scope
-    #: escalation rather than a convenience: the entries carry complete visit
-    #: notes, pin/wiki/trip comment bodies, ratings, and - when a revision has
-    #: no edit summary - the full text of private pin and wiki articles. Those
-    #: are exactly the payloads ``visits:read``, ``pins:read``, ``trips:read``
-    #: and ``wiki:read`` exist to gate, so a photos-only integration could read
-    #: all of them by asking the journal instead of the domain endpoint.
-    #:
-    #: Each entry lists ``PHOTOS_READ`` (the endpoint's own scope) *as well as*
-    #: its domain scope, per ``filter_sources_by_grants``' contract: a section
-    #: must never be granted on the strength of a check made elsewhere.
-    #:
-    #: ``comments`` requires ``pins:read`` *and* ``trips:read`` because the one
-    #: source yields pin, wiki and trip comments interleaved and cannot be
-    #: split without three separate queries; ``wiki:read`` joins them for the
-    #: wiki comments it also carries. Requiring all three is the strict
-    #: reading, and the strict reading is the correct default for a source that
-    #: cannot be subdivided.
+    #: Every scope a credential must hold before the matching journal source is included, keyed by
+    #: ``services.memories.journal.JOURNAL_SOURCES`` key. Requiring all three is the strict reading, and the
+    #: strict reading is the correct default for a source that cannot be subdivided.
     JOURNAL_SOURCE_SCOPES: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "visits": frozenset({ApiKeyScope.PHOTOS_READ, ApiKeyScope.VISITS_READ}),
         "reviews": frozenset({ApiKeyScope.PHOTOS_READ, ApiKeyScope.PINS_READ}),
@@ -1932,27 +1774,19 @@ class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
     def get(self, request: Request) -> Response:
         """Return one page of the caller's journal, newest first.
 
-        Uses the external API's standard page-number envelope - see
-        ``PaginatedListMixin`` - rather than a bespoke ``offset``/``limit``/
-        ``total`` shape, which could never gain a field later without breaking
+        Uses the external API's standard page-number envelope - see ``PaginatedListMixin`` - rather than a
+        bespoke ``offset``/``limit``/ ``total`` shape, which could never gain a field later without breaking
         clients.
         """
         grants = filter_sources_by_grants(request.auth, self.JOURNAL_SOURCE_SCOPES)
 
-        # JournalFeed is a sequence, not a list: the paginator asks it only for
-        # its length and one slice, and it answers both without building the
-        # rest. Previously every selected source was materialized in full for
-        # every page - four unbounded querysets merged in Python to serve
-        # twenty rows.
-        #
-        # The envelope's `count` stays exact because the feed counts its
-        # sources rather than measuring the entries it built.
+        # JournalFeed is a sequence, not a list: the paginator asks it only for its length and one slice, and it
+        # answers both without building the rest.
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(JournalFeed(request.user.profile, sources=grants.granted), request, view=self)
         response = paginator.get_paginated_response(JournalEntrySerializer(page, many=True).data)
-        # Named so a client can tell "nothing happened yet" from "your
-        # credential cannot see this kind of entry" and prompt for
-        # re-authorization - see SourceGrants.
+        # Named so a client can tell "nothing happened yet" from "your credential cannot see this kind of entry"
+        # and prompt for re-authorization - see SourceGrants.
         response.data["omitted_sources"] = list(grants.omitted)
         return response
 
@@ -1975,9 +1809,8 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
         serializer = PinListQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
 
-        # prefetch_related("items") is what makes PinList.pin_count free - the
-        # property counts the prefetched rows instead of issuing a COUNT per
-        # list (see PinList.pin_count).
+        # prefetch_related("items") is what makes PinList.pin_count free - the property counts the prefetched
+        # rows instead of issuing a COUNT per list (see PinList.pin_count).
         queryset = PinList.objects.for_profile(request.user.profile).select_related("source_saved_filter").prefetch_related("items").order_by("-updated", "pk")
         if (is_smart := serializer.validated_data.get("is_smart")) is not None:
             queryset = queryset.filter(is_smart=is_smart)
@@ -2042,10 +1875,9 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
 class PinListDetailView(ExternalApiView):
     """One of the caller's pin lists: GET it, PATCH it, or DELETE it.
 
-    PATCH recomputes membership only when the rules actually changed
-    (``is_smart``, ``smart_filter``, or ``smart_boundary``) - a resync is a
-    full re-evaluation of every pin the profile owns, far too expensive to run
-    on an unrelated rename.
+    PATCH recomputes membership only when the rules actually changed (``is_smart``, ``smart_filter``, or
+    ``smart_boundary``) - a resync is a full re-evaluation of every pin the profile owns, far too
+    expensive to run on an unrelated rename.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -2081,9 +1913,8 @@ class PinListDetailView(ExternalApiView):
         # Captured before anything is applied, so the resync decision below
         # compares the real before/after rather than assuming a change.
         before = (pin_list.is_smart, pin_list.smart_filter, pin_list.smart_boundary)
-        # A bare save() writes every column from this request's snapshot,
-        # silently reverting any field a concurrent request changed in
-        # between - including one made through PinListEditView, the other
+        # A bare save() writes every column from this request's snapshot, silently reverting any field a
+        # concurrent request changed in between - including one made through PinListEditView, the other
         # independent implementation of this same partial-update logic.
         changed_fields: set[str] = set()
 
@@ -2107,9 +1938,8 @@ class PinListDetailView(ExternalApiView):
         if "source_saved_filter_uuid" in data:
             pin_list.source_saved_filter = source_filter
             changed_fields.add("source_saved_filter")
-            # Pointing a list at a filter copies that filter's criteria in;
-            # detaching it (null) leaves the last snapshot in place, matching
-            # PinListEditView and the SET_NULL on the FK itself.
+            # Pointing a list at a filter copies that filter's criteria in; detaching it (null) leaves the last
+            # snapshot in place, matching PinListEditView and the SET_NULL on the FK itself.
             if source_filter is not None:
                 pin_list.smart_filter = source_filter.criteria
                 changed_fields.add("smart_filter")
@@ -2148,9 +1978,9 @@ class PinListDetailView(ExternalApiView):
 class PinListItemsView(PaginatedListMixin, ExternalApiView):
     """The pins on one of the caller's lists: GET, add (POST), or remove (DELETE).
 
-    DELETE carries a body, which is unusual but deliberate: removing a set of
-    pins in one call is what an offline client replaying a queued batch needs,
-    and encoding hundreds of uuids in a query string is not viable.
+    DELETE carries a body, which is unusual but deliberate: removing a set of pins in one call is what
+    an offline client replaying a queued batch needs, and encoding hundreds of uuids in a query string
+    is not viable.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -2173,9 +2003,9 @@ class PinListItemsView(PaginatedListMixin, ExternalApiView):
     def post(self, request: Request, list_slug: str) -> Response:
         """Add pins to the list, skipping duplicates and honoring the per-list cap.
 
-        Uuids that name no pin of the caller's are silently dropped rather than
-        refused - an offline client replaying a queued batch should not have
-        the whole batch fail because one pin was deleted elsewhere meanwhile.
+        Uuids that name no pin of the caller's are silently dropped rather than refused - an offline client
+        replaying a queued batch should not have the whole batch fail because one pin was deleted elsewhere
+        meanwhile.
         """
         pin_list = _get_pin_list(request, list_slug)
         if pin_list is None:
@@ -2214,9 +2044,8 @@ class PinListItemsReorderView(ExternalApiView):
     def post(self, request: Request, list_slug: str) -> Response:
         """Set each item's order to its index in ``item_ids``.
 
-        Ids that aren't on this list are ignored rather than rejected, matching
-        the web UI's drag-and-drop behavior: a stale id from another tab should
-        not fail the whole reorder.
+        Ids that aren't on this list are ignored rather than rejected, matching the web UI's drag-and-drop
+        behavior: a stale id from another tab should not fail the whole reorder.
         """
         pin_list = _get_pin_list(request, list_slug)
         if pin_list is None:
@@ -2232,16 +2061,8 @@ class PinListItemsReorderView(ExternalApiView):
 class PinListResyncView(ExternalApiView):
     """POST: recompute a smart list's membership from its current rules, right now.
 
-    Runs synchronously, matching the internal behavior - ``resync_smart_list``
-    is called inline by the list-edit view too, and there is no Celery task for
-    it. Normally unnecessary, since membership is kept current by a Pin
-    post-save signal; it exists for the case where a client has reason to
-    believe the list has drifted.
-
-    Rate-limited far more tightly than an ordinary write (see
-    :class:`ExternalApiResyncThrottle`): the work this does is unbounded in the
-    caller's own pin count, so it is the one endpoint here where a cheap
-    request can buy expensive server-side work.
+    Runs synchronously, matching the internal behavior - ``resync_smart_list`` is called inline by the
+    list-edit view too, and there is no Celery task for it.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -2312,10 +2133,9 @@ class SavedFiltersView(PaginatedListMixin, ExternalApiView):
 class SavedFilterDetailView(ExternalApiView):
     """One of the caller's saved filters: GET it, PATCH it, or DELETE it.
 
-    A PATCH that changes ``criteria`` also resyncs every smart list derived
-    from this filter. ``PinList.smart_filter`` is a one-time *copy*, not a live
-    reference, so skipping that would leave those lists silently stale - the
-    response reports how many were refreshed as ``lists_resynced``.
+    A PATCH that changes ``criteria`` also resyncs every smart list derived from this filter.
+    ``PinList.smart_filter`` is a one-time *copy*, not a live reference, so skipping that would leave
+    those lists silently stale - the response reports how many were refreshed as ``lists_resynced``.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -2398,18 +2218,11 @@ class SavedFilterDetailView(ExternalApiView):
 class LabelsView(PaginatedListMixin, ExternalApiView):
     """Labels visible to the caller: GET pages through them, POST creates one.
 
-    **The ``.with_customizations_for(profile)`` call below is load-bearing and
-    must never be dropped.** ``Label._get_customization`` reads the
-    ``_user_customizations`` attribute that prefetch populates, and returns
-    "no customization" when the attribute is absent. Without the prefetch the
-    ``effective_name``/``effective_icon``/``effective_color``/``is_customized``
-    fields do not merely become an N+1 - they silently serialize the *wrong*
-    values, reporting the label's own styling for every caller who has
-    overridden it. There is no error; the data is just quietly incorrect.
-
-    Filters: ``kind``, ``is_global``, ``q`` (name contains), ``parent_uuid``.
-    ``?with_counts=true`` adds ``pin_count``/``location_count``, opt-in because
-    each is a correlated subquery per row.
+    **The ``.with_customizations_for(profile)`` call below is load-bearing and must never be dropped.**
+    ``Label._get_customization`` reads the ``_user_customizations`` attribute that prefetch populates,
+    and returns "no customization" when the attribute is absent.
+    ``?with_counts=true`` adds ``pin_count``/``location_count``, opt-in because each is a correlated
+    subquery per row.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -2437,10 +2250,9 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
             if parent is None:
                 return Response({"error": "No such parent label."}, status=400)
             queryset = queryset.filter(parents=parent)
-        # with_pin_counts() supplies its own Prefetch("parents", ...); adding a
-        # plain prefetch_related("parents") alongside it makes Django refuse
-        # the queryset outright ("lookup was already seen with a different
-        # queryset"), so the two are deliberately mutually exclusive here.
+        # with_pin_counts() supplies its own Prefetch("parents", ...); adding a plain
+        # prefetch_related("parents") alongside it makes Django refuse the queryset outright ("lookup was
+        # already seen with a different queryset"), so the two are deliberately mutually exclusive here.
         queryset = queryset.with_pin_counts() if params.get("with_counts") else queryset.prefetch_related("parents")
 
         return self.paginated_response(queryset, LabelSerializer, request)
@@ -2464,9 +2276,8 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
         if error is not None:
             return error
 
-        # Same check the HTML form path runs, for the same reason: without it the
-        # unique constraint raises IntegrityError and the client gets a 500 where
-        # a 400 explaining the collision is what it can act on.
+        # Same check the HTML form path runs, for the same reason: without it the unique constraint raises
+        # IntegrityError and the client gets a 500 where a 400 explaining the collision is what it can act on.
         conflict = find_conflicting_label(profile=profile, name=data["name"], kind=data["kind"])
         if conflict is not None:
             return Response({"error": label_conflict_message(conflict, singular_title=data["kind"].title())}, status=409)
@@ -2493,11 +2304,7 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
 class LabelDetailView(ExternalApiView):
     """One label visible to the caller: GET it, PATCH it, or DELETE it.
 
-    GET works for any visible label, including global ones. Writes do not:
-    a global label is shared by every user on the site, and a protected one
-    (e.g. the built-in "Visited" status) is depended on by the application
-    itself, so both are refused with 403. Use the ``customization/``
-    sub-resource to restyle a global label for yourself.
+    GET works for any visible label, including global ones.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -2532,9 +2339,8 @@ class LabelDetailView(ExternalApiView):
         if error is not None:
             return error
 
-        # A bare save() writes every column from this request's snapshot,
-        # silently reverting any field a concurrent request changed in
-        # between - including one made through LabelEditView, the other
+        # A bare save() writes every column from this request's snapshot, silently reverting any field a
+        # concurrent request changed in between - including one made through LabelEditView, the other
         # independent implementation of this same partial-update logic.
         changed_fields: list[str] = []
 
@@ -2563,11 +2369,7 @@ class LabelDetailView(ExternalApiView):
             label.keywords = data.get("keywords") or None
             changed_fields.append("keywords")
 
-        # Validated before anything is written. Saving first and checking the
-        # hierarchy afterwards meant a PATCH combining an ordinary field with a
-        # cycle-forming `parent_uuids` persisted the ordinary field and *then*
-        # answered 400 - a rejected request that had already been half applied,
-        # which no client can reason about or undo.
+        # Validated before anything is written.
         parent_ids = [parent.pk for parent in parents]
         if "parent_uuids" in data and would_create_cycle(label, parent_ids):
             return Response({"error": "That parent would create a loop in the label hierarchy."}, status=400)
@@ -2575,11 +2377,10 @@ class LabelDetailView(ExternalApiView):
         # `kind` is deliberately ignored on update - see LabelWriteSerializer.
         if changed_fields:
             label.save(update_fields=changed_fields)
-            # A label's icon/color/name feed into every pin's cached map marker
-            # without touching the Pin row itself, so the client's cache-
-            # freshness check (keyed to Max(Pin.updated)) would otherwise never
-            # notice this change - same reasoning as LabelEditView's internal
-            # equivalent, missing here before this fix.
+            # A label's icon/color/name feed into every pin's cached map marker without touching the Pin row
+            # itself, so the client's cache- freshness check (keyed to Max(Pin.updated)) would otherwise never
+            # notice this change - same reasoning as LabelEditView's internal equivalent, missing here before
+            # this fix.
             Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())
 
         if "parent_uuids" in data:
@@ -2602,14 +2403,9 @@ class LabelDetailView(ExternalApiView):
 class LabelCustomizationView(ExternalApiView):
     """The caller's private display overrides for one label.
 
-    Works for *any* label the caller can see, global ones included - this is
-    the only way a client changes how a shared label appears to its user,
-    since the label itself is not theirs to edit. Overrides are per-profile and
-    invisible to everyone else.
-
-    PUT replaces the override set; an empty submission (or one whose fields are
-    all blank) deletes it, restoring the label's own styling. Both verbs return
-    the refreshed label so a client never has to re-fetch to redraw.
+    Works for *any* label the caller can see, global ones included - this is the only way a client
+    changes how a shared label appears to its user, since the label itself is not theirs to edit.
+    Both verbs return the refreshed label so a client never has to re-fetch to redraw.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -2653,20 +2449,11 @@ class LabelCustomizationView(ExternalApiView):
 class LabelMergeView(ExternalApiView):
     """POST: merge other labels into the one named in the URL.
 
-    The URL label is the **target** and survives; the ``source_uuids`` in the
-    body are consumed - their pins, wikis, images or profile assignments move
-    onto the target, their children are reparented onto it, and the sources
-    themselves are deleted.
-
-    **This is destructive and cannot be undone.** Merging is not covered by the
-    Undo History framework: once the sources are deleted there is no staged
-    entry to restore them from, and re-creating labels with the same names
-    would not restore which pins carried which. Clients should confirm with the
-    user before calling this.
-
-    Sources must be the caller's own, unprotected, and of the target's kind.
-    Global labels can never be a source - they are shared by every user, so
-    consuming one would destroy other people's data.
+    **This is destructive and cannot be undone.** Merging is not covered by the Undo History framework:
+    once the sources are deleted there is no staged entry to restore them from, and re-creating labels
+    with the same names would not restore which pins carried which.
+    Global labels can never be a source - they are shared by every user, so consuming one would destroy
+    other people's data.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -2693,12 +2480,7 @@ class LabelMergeView(ExternalApiView):
         if not sources:
             return Response({"error": "No labels to merge."}, status=400)
 
-        # All-or-nothing. Filtering by owner silently dropped any uuid that was
-        # unknown or belonged to someone else, so a stale or malformed batch
-        # merged and *deleted* whichever sources happened to resolve and then
-        # reported success - an irreversible partial application of a
-        # destructive operation the caller believes ran in full. Anything the
-        # caller named that can't be merged fails the whole request instead.
+        # All-or-nothing. Anything the caller named that can't be merged fails the whole request instead.
         unresolved = {str(value) for value in requested_uuids} - {str(source.uuid) for source in sources}
         if unresolved:
             return Response({"error": f"No such label(s): {', '.join(sorted(unresolved))}."}, status=404)
@@ -2746,9 +2528,8 @@ _SUBRESOURCE_ERROR_STATUS: dict[type[PinSubResourceError], int] = {
     LinkExistsError: 409,
 }
 
-#: Hand-authored, user-facing text for each sub-resource failure. Dispatched by
-#: exception type, same as the status above - never derived from the raised
-#: exception's own (log-only) message. See PinSubResourceError's docstring.
+#: Hand-authored, user-facing text for each sub-resource failure. Dispatched by exception type, same as the
+#: status above - never derived from the raised exception's own (log-only) message.
 _SUBRESOURCE_ERROR_MESSAGE: dict[type[PinSubResourceError], str] = {
     AliasExistsError: "That alias already exists.",
     AliasIsCurrentNameError: "This alias is the current name - pick another name first.",
@@ -2786,16 +2567,9 @@ def _subresource_error_message(exc: PinSubResourceError) -> str:
 class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin, ExternalApiView):
     """Base for a pin's list-and-create sub-resource collections.
 
-    Notes, aliases, and links are structurally the same endpoint: a
-    pin-owned, CASCADE-deleted child collection that lists (paginated) and
-    creates. Only the related name, the serializers, and which service
-    function performs the create differ, so subclasses declare those four
-    things and inherit the ownership check, the 404 shape, the pagination, and
-    the error-to-status mapping.
-
-    Visits deliberately do *not* use this base - creating one is gated on the
-    owner's visit-tracking preference and answers 403, which has no analogue
-    here.
+    Only the related name, the serializers, and which service function performs the create differ, so
+    subclasses declare those four things and inherit the ownership check, the 404 shape, the pagination,
+    and the error-to-status mapping.
     """
 
     #: The ``related_name`` of the collection on ``Pin``.
@@ -3001,9 +2775,8 @@ class PinAliasDetailView(PinSubResourceDetailView[PinAlias]):
 class PinAliasUseView(OwnedPinMixin, ExternalApiView):
     """POST: make one of the pin's aliases its current name.
 
-    Answers with the full pin detail rather than the alias, so a client can
-    apply the rename (and everything derived from it) from the identical
-    payload shape ``GET pins/{slug}/`` already hands it.
+    Answers with the full pin detail rather than the alias, so a client can apply the rename (and
+    everything derived from it) from the identical payload shape ``GET pins/{slug}/`` already hands it.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -3062,11 +2835,10 @@ class PinLinkDetailView(PinSubResourceDetailView[PinLink]):
 class PinVisitsView(OwnedPinMixin, PaginatedListMixin, ExternalApiView):
     """The pin's visit history: GET lists it, POST logs a visit.
 
-    Its own view rather than a :class:`PinSubResourceView` subclass: logging a
-    visit is gated on the owner's visit-tracking preference (403 when off,
-    rather than silently discarding it), and reads/writes here are scoped to
-    ``visits:*`` rather than ``pins:*`` so a client can be granted a pin's
-    contents without its owner's movement history.
+    Its own view rather than a :class:`PinSubResourceView` subclass: logging a visit is gated on the
+    owner's visit-tracking preference (403 when off, rather than silently discarding it), and
+    reads/writes here are scoped to ``visits:*`` rather than ``pins:*`` so a client can be granted a
+    pin's contents without its owner's movement history.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -3103,15 +2875,13 @@ class PinVisitsView(OwnedPinMixin, PaginatedListMixin, ExternalApiView):
             logger.info("external API visit creation rejected: %s", exc)
             return Response({"error": "Enable visit logging in your profile settings before logging a visit."}, status=403)
         except VisitInFutureError as exc:
-            # Normally unreachable - PinVisitCreateSerializer rejects a future
-            # time first, with field-level detail. Mapped anyway so the service
-            # guard cannot surface as a 500 if the two ever disagree.
+            # Normally unreachable - PinVisitCreateSerializer rejects a future time first, with field-level
+            # detail. Mapped anyway so the service guard cannot surface as a 500 if the two ever disagree.
             logger.info("external API visit creation rejected: %s", exc)
             return Response({"error": "A visit cannot be logged in the future."}, status=400)
 
-        # Re-read through the same annotation the list path uses, so the created
-        # row carries photo_count rather than the response shape depending on
-        # which endpoint produced it.
+        # Re-read through the same annotation the list path uses, so the created row carries photo_count rather
+        # than the response shape depending on which endpoint produced it.
         created = pin.visit_history.annotate(photo_count=Count("images")).get(pk=visit.pk)
         return Response(PinVisitSerializer(created).data, status=201)
 
@@ -3128,10 +2898,10 @@ class PinVisitDetailView(OwnedPinMixin, ExternalApiView):
     def patch(self, request: Request, pin_slug: str, visit_id: int) -> Response:
         """Update the visit's date and/or notes, then re-derive the pin's last-visited date.
 
-        Only the two fields the create endpoint itself accepts (``visited_at``,
-        ``notes``) are writable here - participants, photos, and the drawn map
-        snapshot stay the web dialog's concern, so there is only ever one write
-        path for each of those.
+        Only the two fields the create endpoint itself accepts (``visited_at``, ``notes``) are writable here
+
+        - participants, photos, and the drawn map snapshot stay the web dialog's concern, so there is only
+          ever one write path for each of those.
         """
         pin = self.get_owned_pin_lite(request, pin_slug)
         if pin is None:
@@ -3177,15 +2947,12 @@ class PinVisitDetailView(OwnedPinMixin, ExternalApiView):
 class LocationSearchView(ExternalApiView):
     """GET: autocomplete over the caller's own pins and, optionally, external places.
 
-    The same two sources the web map's search bar uses
-    (``MapController.autocomplete_local`` / ``autocomplete_places``), merged
-    into one call so a mobile client makes one request per keystroke instead
-    of two. Results reuse ``AutocompleteResult.to_dict()`` verbatim, so both
-    surfaces stay on one wire shape.
-
-    External place lookups are skipped - and flagged with ``places_disabled``
-    rather than silently returning fewer results - when the caller has turned
-    external lookups off, or when no places provider is configured.
+    The same two sources the web map's search bar uses (``MapController.autocomplete_local`` /
+    ``autocomplete_places``), merged into one call so a mobile client makes one request per keystroke
+    instead of two.
+    External place lookups are skipped - and flagged with ``places_disabled`` rather than silently
+    returning fewer results - when the caller has turned external lookups off, or when no places
+    provider is configured.
     """
 
     #: Replaces the shared read cap; see LocationSearchThrottle.
@@ -3202,9 +2969,8 @@ class LocationSearchView(ExternalApiView):
         params = serializer.validated_data
 
         query = params["q"].strip()
-        # Matches the web autocomplete's floor: a single character matches so
-        # much of a large pin set that the result is noise, and the query is
-        # expensive enough not to run for it.
+        # Matches the web autocomplete's floor: a single character matches so much of a large pin set that the
+        # result is noise, and the query is expensive enough not to run for it.
         if len(query) < 2:
             return Response({"results": [], "places_disabled": False})
 
@@ -3227,9 +2993,8 @@ class LocationSearchView(ExternalApiView):
 class PlaceResolveView(ExternalApiView):
     """GET: resolve an autocomplete ``place_id`` to coordinates.
 
-    Split from the search call on purpose: coordinates cost a Places Details
-    lookup per place, so they're fetched only for the one suggestion the user
-    actually picks rather than for every row shown.
+    Split from the search call on purpose: coordinates cost a Places Details lookup per place, so
+    they're fetched only for the one suggestion the user actually picks rather than for every row shown.
     """
 
     #: Charged against the autocomplete budget - this is the second half of a
@@ -3247,12 +3012,9 @@ class PlaceResolveView(ExternalApiView):
             return Response({"error": "A place_id is required."}, status=400)
 
         profile = request.user.profile
-        # The internal MapController.resolve_place omits this gate even though
-        # its own autocomplete_places applies it - so a user who turned
-        # external lookups off can still trigger a Places Details call by
-        # selecting a suggestion. Recorded under "Messaging / external API (noted
-        # 2026-07-26)" in docs/PROBLEMS.md; this surface
-        # does not reproduce the omission.
+        # The internal MapController.resolve_place omits this gate even though its own autocomplete_places
+        # applies it - so a user who turned external lookups off can still trigger a Places Details call by
+        # selecting a suggestion.
         if not profile.external_apis_enabled:
             return Response({"error": "External lookups are turned off in your settings."}, status=403)
 
@@ -3271,24 +3033,17 @@ class PlaceResolveView(ExternalApiView):
 class SafetyCheckinScopedView(ExternalApiView):
     """Base for every endpoint addressing one of the caller's own check-ins.
 
-    The lookup is **owner-scoped only**. Check-ins shared with the caller as an
-    accepted partner, or with them as a registered emergency contact, are
-    deliberately unreachable through this surface: every write here (edit, mark
-    safe, cancel, invite, delete) is an owner action, and the read shape is the
-    owner's full document including the whole contact list. Serving a
-    partner/contact their narrower view means modelling check-ins owned by other
-    profiles - a structural change, not a filter tweak - so it is out of scope
-    for this pass rather than approximated.
+    The lookup is **owner-scoped only**.
+    Serving a partner/contact their narrower view means modelling check-ins owned by other profiles - a
+    structural change, not a filter tweak - so it is out of scope for this pass rather than
+    approximated.
     """
 
     def _get_checkin(self, request: Request, checkin_slug: str) -> SafetyCheckin | None:
         """The key owner's check-in matching *checkin_slug* (by slug, then uuid), or None.
 
-        Mirrors ``controllers.safety._get_checkin_by_slug``: the identifier is
-        usually a real slug, but older/direct-linked check-ins are addressed by
-        raw uuid. A non-uuid string makes the uuid comparison raise
-        ``ValidationError`` rather than simply not matching, so that is caught
-        and reported as "not found" like any other miss.
+        A non-uuid string makes the uuid comparison raise ``ValidationError`` rather than simply not
+        matching, so that is caught and reported as "not found" like any other miss.
 
         Args:
             request: The authenticated request, whose user scopes the lookup.
@@ -3309,9 +3064,9 @@ class SafetyCheckinScopedView(ExternalApiView):
     def _not_found(self) -> Response:
         """The single 404 body every check-in lookup miss answers with.
 
-        Another profile's check-in is reported as *not found*, never forbidden -
-        a 403 would confirm that a given slug names a real check-in belonging to
-        someone, which is itself a disclosure on a safety feature.
+        Another profile's check-in is reported as *not found*, never forbidden - a 403 would confirm that a
+        given slug names a real check-in belonging to someone, which is itself a disclosure on a safety
+        feature.
         """
         return Response({"error": "No such check-in."}, status=404)
 
@@ -3319,8 +3074,7 @@ class SafetyCheckinScopedView(ExternalApiView):
         """Serialize *checkin* as the standard detail document.
 
         Args:
-            checkin: The check-in to serialize. Re-fetched with the annotations
-                and prefetches the detail serializer expects.
+            checkin: The check-in to serialize.
             extra: Additional top-level keys to merge into the payload.
             status: HTTP status for the response.
 
@@ -3355,15 +3109,12 @@ class SafetyCheckinsView(SafetyCheckinScopedView, PaginatedListMixin):
             SafetyCheckin.objects.filter(profile__user=request.user)
             .select_related("trip", "archive")
             .annotate(contact_count=Count("contacts", distinct=True), partner_count=Count("partners", distinct=True))
-            # Explicit and total: checkin_by alone ties whenever two check-ins
-            # share a deadline, and an unstable sort silently drops or repeats
-            # rows across page boundaries.
+            # Explicit and total: checkin_by alone ties whenever two check-ins share a deadline, and an unstable
+            # sort silently drops or repeats rows across page boundaries.
             .order_by("-checkin_by", "-pk")
         )
-        # "Active" means "has not reached a terminal status", the same definition
-        # SafetyCheckin.objects.active() uses to enforce one-active-check-in-per-scope.
-        # Filtering on resolved_at instead would create a second, subtly different
-        # notion of active that could disagree with the rest of the system.
+        # "Active" means "has not reached a terminal status", the same definition SafetyCheckin.objects.active()
+        # uses to enforce one-active-check-in-per-scope.
         status_filter = (request.query_params.get("status") or "all").strip().lower()
         if status_filter == "active":
             queryset = queryset.exclude(status__in=SafetyCheckinStatus.resolved_statuses())
@@ -3402,9 +3153,9 @@ class SafetyCheckinsView(SafetyCheckinScopedView, PaginatedListMixin):
 
         allowed, rejected = validate_notifiable_contacts(profile, contact_inputs)
         if rejected:
-            # Creation is all-or-nothing, unlike an edit: the caller is choosing
-            # who gets told if they go missing, and silently starting a check-in
-            # with fewer contacts than asked for is the wrong failure mode.
+            # Creation is all-or-nothing, unlike an edit: the caller is choosing who gets told if they go
+            # missing, and silently starting a check-in with fewer contacts than asked for is the wrong failure
+            # mode.
             return Response({"error": " ".join(rejected)}, status=400)
 
         checkin_by = data["checkin_by"]
@@ -3427,9 +3178,8 @@ class SafetyCheckinsView(SafetyCheckinScopedView, PaginatedListMixin):
                 notify_community_wiki=data.get("notify_community_wiki", False),
             )
         except ActiveCheckinExistsError as exc:
-            # A state conflict, not a malformed request - a mobile client must
-            # be able to tell the two apart to offer "open the existing one"
-            # instead of "fix your input".
+            # A state conflict, not a malformed request - a mobile client must be able to tell the two apart to
+            # offer "open the existing one" instead of "fix your input".
             logger.info("Safety check-in create rejected for profile %s: %s", profile.pk, exc)
             return Response({"error": "You already have an active check-in in this scope."}, status=409)
 
@@ -3467,9 +3217,8 @@ class SafetyCheckinDetailApiView(SafetyCheckinScopedView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Built strictly from key *presence*: apply_checkin_edit reads None as
-        # "not submitted", so passing a field the caller omitted would either
-        # clobber it or invent a lock warning. See the serializer's no-default rule.
+        # Built strictly from key *presence*: apply_checkin_edit reads None as "not submitted", so passing a
+        # field the caller omitted would either clobber it or invent a lock warning.
         kwargs: dict = {}
         for field in ("title", "plan_details", "contact_message", "notify_community_wiki"):
             if field in data:
@@ -3483,10 +3232,7 @@ class SafetyCheckinDetailApiView(SafetyCheckinScopedView):
             logger.info("external API check-in edit rejected on checkin %s: %s", checkin.pk, exc)
             return Response({"error": "This check-in has been archived and can no longer be edited."}, status=409)
 
-        # Warnings are not errors: a locked field is silently ignored, exactly as
-        # the web autosave does. The client surfaces these as toasts and keeps the
-        # 200 - failing the whole request would make an unrelated field's edit
-        # collateral damage.
+        # Warnings are not errors: a locked field is silently ignored, exactly as the web autosave does.
         return self._detail_response(checkin, extra={"warnings": outcome.warnings})
 
     @extend_schema(responses={204: None, 404: ErrorSerializer})
@@ -3628,8 +3374,8 @@ class SafetyCheckinPhotosView(SafetyCheckinScopedView, PaginatedListMixin):
         """Attach one of the caller's already-uploaded images to this check-in.
 
         Deliberately *not* a second multipart upload path - see
-        :class:`~urbanlens.dashboard.external_api.serializers.SafetyPhotoAttachSerializer`
-        for why this waits on the shared upload service.
+        :class:`~urbanlens.dashboard.external_api.serializers.SafetyPhotoAttachSerializer` for why this
+        waits on the shared upload service.
         """
         checkin = self._get_checkin(request, checkin_slug)
         if checkin is None:
@@ -3701,9 +3447,9 @@ class SafetyCheckinMapsView(SafetyCheckinScopedView, PaginatedListMixin):
         if markup_map is None:
             return Response({"error": "No such map."}, status=400)
         if markup_map.pk == checkin.markup_map_id:
-            # Same rule the web attach view enforces: services.visits.safety._build_archive_payload
-            # keys its "maps" list by the primary map first, so allowing the primary
-            # map to also be attached would archive it twice.
+            # Same rule the web attach view enforces: services.visits.safety._build_archive_payload keys its
+            # "maps" list by the primary map first, so allowing the primary map to also be attached would
+            # archive it twice.
             return Response({"error": "This map is already the check-in's primary route map."}, status=400)
         checkin.markup_maps.add(markup_map)
         return self.get(request, checkin_slug)
@@ -3758,9 +3504,8 @@ class SafetyContactDefaultsView(ExternalApiView):
     def put(self, request: Request) -> Response:
         """Replace the caller's default contacts wholesale.
 
-        PUT rather than PATCH because the underlying
-        ``services.visits.safety.save_contact_defaults`` deletes and recreates the whole
-        set - there is no per-entry addressing to PATCH against.
+        PUT rather than PATCH because the underlying ``services.visits.safety.save_contact_defaults``
+        deletes and recreates the whole set - there is no per-entry addressing to PATCH against.
         """
         serializer = SafetyContactDefaultsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -3835,18 +3580,15 @@ class PushDeviceDetailView(ExternalApiView):
 def _friend_identity(viewer: Profile, subject: Profile, *, visible_pks: set[int] | None = None) -> dict[str, Any]:
     """Shape ``subject`` for ``FriendProfileSerializer`` as ``viewer`` may see them.
 
-    Always routed through ``services.profile.identity_visibility.resolve_visible_identity``
-    rather than read off the model, so a profile whose privacy settings don't
-    permit ``viewer`` is masked here exactly as it is in the web UI. The
-    ``uuid`` is still returned when masked - it is an opaque handle the caller
-    needs in order to act on the relationship, and it discloses no identity.
+    Always routed through ``services.profile.identity_visibility.resolve_visible_identity`` rather than
+    read off the model, so a profile whose privacy settings don't permit ``viewer`` is masked here
+    exactly as it is in the web UI.
 
     Args:
         viewer: The profile doing the looking.
         subject: The profile being displayed.
-        visible_pks: Pre-resolved ``Profile.visible_profile_pks`` when several
-            subjects are serialized together, so the visibility lookup runs once
-            for the page rather than once per row.
+        visible_pks: Pre-resolved ``Profile.visible_profile_pks`` when several subjects are serialized
+        together, so the visibility lookup runs once for the...
 
     Returns:
         A dict matching ``FriendProfileSerializer``'s fields.
@@ -3865,14 +3607,14 @@ def _friend_identity(viewer: Profile, subject: Profile, *, visible_pks: set[int]
 def _serialize_friendship(viewer: Profile, friendship: Friendship, *, visible_pks: set[int] | None = None) -> dict[str, Any]:
     """Shape one ``Friendship`` from ``viewer``'s point of view.
 
-    ``status`` and ``relationship_type`` are passed through untouched so the
-    wire values stay the model's own capitalized strings.
+    ``status`` and ``relationship_type`` are passed through untouched so the wire values stay the
+    model's own capitalized strings.
 
     Args:
         viewer: The profile the relationship is being described to.
         friendship: The relationship row.
-        visible_pks: Pre-resolved ``Profile.visible_profile_pks`` when a page of
-            relationships is serialized together.
+        visible_pks: Pre-resolved ``Profile.visible_profile_pks`` when a page of relationships is
+        serialized together.
 
     Returns:
         A dict matching ``FriendshipSerializer``'s fields.
@@ -3894,16 +3636,11 @@ def _serialize_friendship(viewer: Profile, friendship: Friendship, *, visible_pk
 class FriendsView(ExternalApiView):
     """The caller's friend relationships: GET lists them, POST requests a new one.
 
-    GET defaults to accepted friendships only; ``?status=Requested`` surfaces
-    the pending queue. Note the capitalization - ``FriendshipStatus`` values
-    are capitalized on the wire ("Accepted", "Requested"), unlike every other
-    enum on this surface.
-
-    POST evaluates the target's ``friend_request_visibility`` and both
-    profiles' ``community_enabled`` *before* the relationship is touched, and
-    answers a refusal with the same 404 an unknown uuid gets - a distinguishing
-    403 would confirm the profile exists to someone its owner has chosen not
-    to be discoverable by.
+    GET defaults to accepted friendships only; ``?status=Requested`` surfaces the pending queue.
+    POST evaluates the target's ``friend_request_visibility`` and both profiles' ``community_enabled``
+    *before* the relationship is touched, and answers a refusal with the same 404 an unknown uuid gets -
+    a distinguishing 403 would confirm the profile exists to someone its owner has chosen not to be
+    discoverable by.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -3933,9 +3670,8 @@ class FriendsView(ExternalApiView):
             logger.warning("friend list for %s raised %s: %s", profile.pk, type(exc).__name__, exc)
             return Response({"error": "That request could not be completed."}, status=400)
 
-        # Resolved once for the page: _friend_identity masks a profile the caller
-        # may not identify, and asking that per row re-derived the caller's own
-        # friend/trip/pin sets for every relationship listed.
+        # Resolved once for the page: _friend_identity masks a profile the caller may not identify, and asking
+        # that per row re-derived the caller's own friend/trip/pin sets for every relationship listed.
         others = [friendship.to_profile if friendship.from_profile_id == profile.pk else friendship.from_profile for friendship in page.friendships]
         visible_pks = Profile.visible_profile_pks(profile, others)
 
@@ -3956,9 +3692,8 @@ class FriendsView(ExternalApiView):
 
         target = Profile.objects.filter(uuid=data["profile_uuid"]).select_related("user").first()
 
-        # One 404 covers all four refusals - unknown uuid, self, community off
-        # on either side, and a visibility setting that excludes the caller.
-        # Any of them answering differently would confirm the profile exists.
+        # One 404 covers all four refusals - unknown uuid, self, community off on either side, and a visibility
+        # setting that excludes the caller. Any of them answering differently would confirm the profile exists.
         if target is None or target.pk == actor.pk or not target.community_enabled or not actor.community_enabled or not Profile.visibility_permits(target.friend_request_visibility, target, actor):
             return Response({"error": "No such profile."}, status=404)
 
@@ -3992,26 +3727,20 @@ class FriendDetailView(ExternalApiView):
 class FriendActionView(ExternalApiView):
     """Base for the single-verb friendship transitions.
 
-    Each subclass supplies only ``service_action``; the POST handler, the
-    target lookup and the error-to-status mapping live here once. That mapping
-    is the reason the service raises three distinct exception types:
-    ``FriendshipNotFoundError`` is a 404, ``FriendLimitExceededError`` a 403
-    (understood and refused), and anything else a 400.
-
-    ``service_action`` is an overridden method rather than a plain callable
-    class attribute: mypy binds a ``Callable``-typed attribute as a method and
-    strips its first parameter, so the ``(actor, target)`` signature could not
-    be expressed that way without a cast.
+    Each subclass supplies only ``service_action``; the POST handler, the target lookup and the
+    error-to-status mapping live here once.
+    ``service_action`` is an overridden method rather than a plain callable class attribute: mypy binds
+    a ``Callable``-typed attribute as a method and strips its first parameter, so the ``(actor,
+    target)`` signature could not be expressed that way without a cast.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "POST": frozenset({ApiKeyScope.SOCIAL_WRITE}),
     }
 
-    #: Body for a ``FriendshipNotFoundError`` 404. Overridden by
-    #: ``FriendUnblockView``, whose refusal must be byte-identical to an
-    #: unknown uuid's - a distinguishing message here would confirm a block
-    #: exists to the one person that must never learn it.
+    #: Body for a ``FriendshipNotFoundError`` 404. Overridden by ``FriendUnblockView``, whose refusal must be
+    #: byte-identical to an unknown uuid's - a distinguishing message here would confirm a block exists to the
+    #: one person that must never learn it.
     not_found_message: ClassVar[str] = "Friend request not found."
 
     def service_action(self, actor: Profile, target: Profile) -> Friendship:
@@ -4109,16 +3838,10 @@ class FriendBlockView(FriendActionView):
 class FriendMuteView(FriendActionView):
     """PATCH the mute state of an existing relationship; POST is a deprecated alias.
 
-    ``PATCH {"is_muted": true|false}`` is the real endpoint: it names the state
-    it wants rather than flipping whatever is there. That matters on a mobile
-    link, where a request can succeed server-side while its response is lost -
-    the client retries, and a toggle would silently undo the change the first
-    attempt already made. With an explicit target the retry is a no-op.
-
-    ``POST`` with no body is retained as a deprecated alias for
-    ``{"is_muted": true}``, because it is what shipped first and one integration
-    already calls it. It cannot unmute - a bodyless ``POST`` has no target state
-    to name, so use ``PATCH`` with ``{"is_muted": false}`` for that.
+    ``PATCH {"is_muted": true|false}`` is the real endpoint: it names the state it wants rather than
+    flipping whatever is there.
+    That matters on a mobile link, where a request can succeed server-side while its response is lost -
+    the client retries, and a toggle would silently undo the change the first attempt already made.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -4139,10 +3862,7 @@ class FriendMuteView(FriendActionView):
             profile_uuid: The other profile's public uuid.
 
         Returns:
-            The updated relationship, or an error body. 404 covers both an
-            unknown uuid and a pair with no relationship row - muting is only
-            offered on someone you already have a relationship with, and the
-            two cases must stay indistinguishable.
+            The updated relationship, or an error body.
         """
         target = self._resolve_target(profile_uuid)
         if target is None:
@@ -4170,14 +3890,8 @@ class FriendMuteView(FriendActionView):
 class FriendInvitesView(ExternalApiView):
     """POST: invite someone to connect by email address.
 
-    Answers ``200 {"result": "sent"}`` in every case that is not a validation
-    error or a rate limit - registered, unregistered, privacy-rejected, and
-    mail-send-failed alike. That invariance is the entire security property:
-    any branch in the status code, body or headers would let a caller
-    enumerate site membership one address at a time.
-
-    ``subscription_role`` is deliberately not accepted (see
-    ``FriendInviteSerializer``).
+    That invariance is the entire security property: any branch in the status code, body or headers
+    would let a caller enumerate site membership one address at a time.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -4220,8 +3934,8 @@ class FriendInvitesView(ExternalApiView):
 def _resolve_profile(profile_slug: str) -> Profile | None:
     """Look up a profile by slug, falling back to uuid.
 
-    Profiles are slug-addressed on the web, but a sync client that cached a
-    uuid should not break when the owner renames themselves.
+    Profiles are slug-addressed on the web, but a sync client that cached a uuid should not break when
+    the owner renames themselves.
 
     Args:
         profile_slug: A profile slug or a uuid string.
@@ -4241,13 +3955,10 @@ def _resolve_profile(profile_slug: str) -> Profile | None:
 class ProfileDetailView(ExternalApiView):
     """GET a profile the caller may see; PATCH the caller's own.
 
-    A profile whose ``profile_visibility`` excludes the caller answers 404,
-    not 403 - matching ``controllers.userprofile.ViewProfileView``, which
-    raises ``Http404`` for the same reason: a 403 would confirm the account
-    exists to exactly the people its owner excluded.
-
-    PATCH only ever touches the caller's own profile. Any other slug is a 404
-    for the same reason, rather than a 403.
+    A profile whose ``profile_visibility`` excludes the caller answers 404, not 403 - matching
+    ``controllers.userprofile.ViewProfileView``, which raises ``Http404`` for the same reason: a 403
+    would confirm the account exists to exactly the people its owner excluded.
+    Any other slug is a 404 for the same reason, rather than a 403.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -4278,9 +3989,8 @@ class ProfileDetailView(ExternalApiView):
             "started_exploring": target.started_exploring,
             "is_self": is_self,
             "friendship_status": friendship.status if friendship else None,
-            # Never queried for a self-view: nicknaming yourself is refused at
-            # write time, so the row can never exist and the lookup would be
-            # pure waste on the endpoint's most common call shape.
+            # Never queried for a self-view: nicknaming yourself is refused at write time, so the row can never
+            # exist and the lookup would be pure waste on the endpoint's most common call shape.
             "nickname": None if is_self else get_annotations(viewer, target).nickname,
             "contact": None,
             "visibility": None,
@@ -4309,26 +4019,17 @@ class ProfileDetailView(ExternalApiView):
     def _redact_unreadable(self, request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         """Drop the read-scoped sections when the caller only holds write scope.
 
-        ``PATCH`` answers with this same payload, and its declared scope is
-        ``social:write`` alone - so returning the built profile unconditionally
-        turned a write-only credential into a reader of the two things this
-        endpoint's ``GET`` scopes exist to protect: the account's contact
-        methods and its private visibility configuration. The escalation did
-        not even require a real edit; any accepted PATCH body reached the same
-        response.
-
-        Gating the *payload* rather than only the empty-body case is what makes
-        that airtight - a rule enforced on "did this request change anything"
-        is one trivially-satisfied field away from being no rule at all.
+        Gating the *payload* rather than only the empty-body case is what makes that airtight - a rule
+        enforced on "did this request change anything" is one trivially-satisfied field away from being no
+        rule at all.
 
         Args:
             request: The current request, carrying the credential (if any).
             payload: The fully built profile payload.
 
         Returns:
-            The payload, with ``contact`` and ``visibility`` blanked when a
-            credential caller lacks the ``GET`` scopes. Session callers hold no
-            credential and are unaffected.
+            The payload, with ``contact`` and ``visibility`` blanked when a credential caller lacks the
+            ``GET`` scopes.
         """
         if request.auth is None or credential_grants(request.auth, self.required_scopes_by_method["GET"]):
             return payload
@@ -4351,10 +4052,9 @@ class ProfileDetailView(ExternalApiView):
 
         for field, value in data.items():
             setattr(target, field, value)
-        # Deliberately a full save() rather than update_fields: Profile.save()
-        # coerces the community-gated visibility and wiki-sync fields when
-        # community_enabled is off, and those coercions must be persisted even
-        # though the caller never named those fields.
+        # Deliberately a full save() rather than update_fields: Profile.save() coerces the community-gated
+        # visibility and wiki-sync fields when community_enabled is off, and those coercions must be persisted
+        # even though the caller never named those fields.
         target.save()
 
         return self.get(request, profile_slug)
@@ -4363,10 +4063,9 @@ class ProfileDetailView(ExternalApiView):
 class ProfileNotesView(ExternalApiView):
     """The caller's own private notes about another profile.
 
-    Notes are always the *caller's*, never the subject's - the subject can
-    never see them, and a subject reading their own page gets their notes
-    about themselves, not other people's notes about them. Several notes per
-    subject are allowed, matching the model.
+    Notes are always the *caller's*, never the subject's - the subject can never see them, and a subject
+    reading their own page gets their notes about themselves, not other people's notes about them.
+    Several notes per subject are allowed, matching the model.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -4409,8 +4108,8 @@ class ProfileNoteDetailView(ExternalApiView):
     def _get_note(self, viewer: Profile, profile_slug: str, note_uuid: UUID) -> ProfileNote | None:
         """The caller's own note with this uuid about this subject, or None.
 
-        Scoped by author first, so another user's note uuid is
-        indistinguishable from one that does not exist.
+        Scoped by author first, so another user's note uuid is indistinguishable from one that does not
+        exist.
 
         Args:
             viewer: The calling profile, which must be the note's author.
@@ -4508,10 +4207,8 @@ class NotificationDetailView(ExternalApiView):
     def post(self, request: Request, notification_uuid: UUID) -> Response:
         """Mark it read, answering 204 whether or not a row actually matched.
 
-        A 404 for "no such notification" would double as an oracle: a caller
-        could learn whether a given uuid belongs to somebody by whether the
-        acknowledgement succeeded. Since the operation is idempotent and
-        nothing is returned either way, one status covers both.
+        A 404 for "no such notification" would double as an oracle: a caller could learn whether a given
+        uuid belongs to somebody by whether the acknowledgement succeeded.
         """
         mark_notification_read(request.user.profile, notification_uuid)
         return Response(status=204)
@@ -4551,12 +4248,11 @@ class NotificationsUnreadCountView(ExternalApiView):
 class NotificationDeliveryPreferencesView(ExternalApiView):
     """GET the caller's per-type notification delivery preferences; PATCH to change them.
 
-    Distinct from ``AccountSettingsView`` (``/settings/``), which covers
-    general account preferences - this is the notification matrix specifically.
-
-    Exposes exactly the stems ``NotificationPreference`` defines, which is a
-    strict subset of ``NotificationType``: most notification types have no
-    per-type delivery control at all, and none is invented here.
+    Distinct from ``AccountSettingsView`` (``/settings/``), which covers general account preferences -
+    this is the notification matrix specifically.
+    Exposes exactly the stems ``NotificationPreference`` defines, which is a strict subset of
+    ``NotificationType``: most notification types have no per-type delivery control at all, and none is
+    invented here.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -4574,35 +4270,23 @@ class NotificationDeliveryPreferencesView(ExternalApiView):
         """Apply a partial preference update and return the resulting document."""
         serializer = NotificationPreferenceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # Re-read from the saved row rather than echoing the submission: the
-        # service forces WhatsApp/SMS off when there is no number to deliver
-        # to, and the client must see the values it actually ended up with.
+        # Re-read from the saved row rather than echoing the submission: the service forces WhatsApp/SMS off
+        # when there is no number to deliver to, and the client must see the values it actually ended up with.
         prefs = update_preferences(request.user.profile, serializer.validated_data)
         return Response(serialize_preferences(prefs))
 
 
-# -- Trips ---------------------------------------------------------------------
-#
-# Every endpoint below delegates to the shared trip services
+# -- Trips --------------------------------------------------------------------- Every endpoint below delegates
+# to the shared trip services
 # (``services.trips.trip_access``/``trip_crud``/``trip_membership``/``trip_activities``/
-# ``trip_comments``/``trip_map``) - the same functions ``controllers.trip``
-# calls. Nothing about permissions, quotas, share provenance, calendar-sync
-# revocation, identity masking or location visibility is re-implemented here;
-# a view that tried to would be a bug, because the two surfaces would then
-# enforce different rules on the same data.
-#
-# Note that ``trips:read``/``trips:write`` are deliberately absent from
-# ``account.model._default_api_key_scopes`` - trip data includes other members'
-# identities, comments and coordinates, so reaching it requires an OAuth2 grant
-# the user consented to by name, not a blanket PAT.
+# ``trip_comments``/``trip_map``) - the same functions ``controllers.trip`` calls.
 
 
 class TripErrorResponseMixin:
     """Maps the shared trip-service exceptions onto this API's error envelope.
 
-    One table instead of a per-method ``except`` ladder, so a new endpoint
-    cannot accidentally answer 500 for a condition every other endpoint already
-    reports as 403 or 404.
+    One table instead of a per-method ``except`` ladder, so a new endpoint cannot accidentally answer
+    500 for a condition every other endpoint already reports as 403 or 404.
     """
 
     #: Ordered most-specific-first; the first isinstance match wins.
@@ -4615,10 +4299,8 @@ class TripErrorResponseMixin:
     def error_response(self, exc: TripError) -> Response:
         """Answer a trip-service error with ``{"error": ...}`` and its mapped status.
 
-        The message is emitted unescaped: it is a JSON string value, and the
-        HTML escaping the internal HTMX surface applies would show up here as
-        literal entities. ``TripMemberNotFoundError`` carries the raw submitted
-        username for exactly this reason.
+        The message is emitted unescaped: it is a JSON string value, and the HTML escaping the internal HTMX
+        surface applies would show up here as literal entities.
 
         Args:
             exc: The error raised by a trip service.
@@ -4633,9 +4315,9 @@ class TripErrorResponseMixin:
 class TripScopedApiView(TripErrorResponseMixin, ExternalApiView):
     """Base for the trip endpoints: resolves the trip once, for this caller.
 
-    ``trips:read`` gates every read and ``trips:write`` every mutation; the
-    tiered throttles pick the write bucket automatically from those scope
-    names, so no endpoint here needs a ``throttle_tier_by_method`` override.
+    ``trips:read`` gates every read and ``trips:write`` every mutation; the tiered throttles pick the
+    write bucket automatically from those scope names, so no endpoint here needs a
+    ``throttle_tier_by_method`` override.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -4657,8 +4339,7 @@ class TripScopedApiView(TripErrorResponseMixin, ExternalApiView):
             The trip.
 
         Raises:
-            TripNotFoundError: No such trip, or it isn't the caller's. Both
-                answer 404 - see ``services.trips.trip_access.get_trip_for_viewer``.
+            TripNotFoundError: No such trip, or it isn't the caller's.
         """
         return get_trip_for_viewer(trip_slug, request.user.profile)
 
@@ -4666,10 +4347,8 @@ class TripScopedApiView(TripErrorResponseMixin, ExternalApiView):
 def _activity_place_fields(data: dict) -> dict[str, object]:
     """Translate the API's place fields into what ``resolve_activity_place`` reads.
 
-    The shared resolver speaks the web form's vocabulary (``pin_slug``,
-    ``location_uuid``, ``geocoded_lat``/``geocoded_lng``/``geocoded_name``).
-    Rather than teach it a second one, the API's flatter field names are mapped
-    here - so both surfaces resolve a place through identical code.
+    Rather than teach it a second one, the API's flatter field names are mapped here - so both surfaces
+    resolve a place through identical code.
 
     Args:
         data: Validated activity payload.
@@ -4707,7 +4386,7 @@ def _calendar_sync_status(trip: Trip, profile: Profile) -> dict[str, object]:
         profile: The requesting profile.
 
     Returns:
-        The dict :class:`TripCalendarSyncStatusSerializer` documents.
+        The dict: class:`TripCalendarSyncStatusSerializer` documents.
     """
     from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
 
@@ -4729,7 +4408,7 @@ def _trip_viewer_block(trip: Trip, profile: Profile) -> dict[str, object]:
         profile: The requesting profile.
 
     Returns:
-        The dict :class:`TripViewerSerializer` documents.
+        The dict: class:`TripViewerSerializer` documents.
     """
     membership = TripMembership.objects.for_trip_and_profile(trip, profile).first()
     return {
@@ -4748,9 +4427,9 @@ def _trip_viewer_block(trip: Trip, profile: Profile) -> dict[str, object]:
 def _trip_detail_payload(trip: Trip, profile: Profile) -> Trip:
     """Assemble the bundled detail payload for one trip.
 
-    Decorates the instance in place rather than building a parallel dict, the
-    same per-request pattern ``Trip.viewer_membership`` already uses (all three
-    attributes are declared in the model's ``TYPE_CHECKING`` block).
+    Decorates the instance in place rather than building a parallel dict, the same per-request pattern
+    ``Trip.viewer_membership`` already uses (all three attributes are declared in the model's
+    ``TYPE_CHECKING`` block).
 
     Args:
         trip: The trip to describe.
@@ -4758,7 +4437,7 @@ def _trip_detail_payload(trip: Trip, profile: Profile) -> Trip:
 
     Returns:
         The trip itself carrying ``viewer``, ``calendar_sync`` and ``members``,
-        ready for :class:`TripDetailSerializer`.
+        ready for: class:`TripDetailSerializer`.
     """
     members = list_members(trip, profile)
     # The creator may not be one of the membership rows resolve_visible_identities
@@ -4775,9 +4454,9 @@ def _trip_detail_payload(trip: Trip, profile: Profile) -> Trip:
 class TripsView(TripErrorResponseMixin, PaginatedListMixin, ExternalApiView):
     """The caller's trips: GET lists them, POST creates one.
 
-    Unlike ``pins/``, this is a browse endpoint rather than a delta-sync feed -
-    a user has tens of trips, not thousands, and the app shows them in a paged
-    list rather than reconciling them offline. See ``external_api.pagination``.
+    Unlike ``pins/``, this is a browse endpoint rather than a delta-sync feed - a user has tens of
+    trips, not thousands, and the app shows them in a paged list rather than reconciling them offline.
+    See ``external_api.pagination``.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -4793,9 +4472,8 @@ class TripsView(TripErrorResponseMixin, PaginatedListMixin, ExternalApiView):
         params = query.validated_data
 
         profile = request.user.profile
-        # for_list_page carries the same count annotations the web list page
-        # uses, and returns a plain list for the "soonest first" ordering - so
-        # it is materialized rather than paginated as a queryset.
+        # for_list_page carries the same count annotations the web list page uses, and returns a plain list for
+        # the "soonest first" ordering - so it is materialized rather than paginated as a queryset.
         trips = list(Trip.objects.for_list_page(profile, sort=params["sort"], direction=params["dir"]))
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(trips, request, view=self)
@@ -4850,9 +4528,8 @@ class TripDetailView(TripScopedApiView):
     def patch(self, request: Request, trip_slug: str) -> Response:
         """Apply a partial update to one of the caller's trips."""
         profile = request.user.profile
-        # Resolved before validation so the serializer can compare a submitted
-        # date against the stored one - a PATCH sending only `end_date` has no
-        # `start_date` in its payload to check it against.
+        # Resolved before validation so the serializer can compare a submitted date against the stored one - a
+        # PATCH sending only `end_date` has no `start_date` in its payload to check it against.
         try:
             trip = self.trip(request, trip_slug)
         except TripError as exc:
@@ -4879,12 +4556,8 @@ class TripDetailView(TripScopedApiView):
 class TripMapView(TripScopedApiView):
     """GET the trip's map markers.
 
-    Deliberately unpaginated: a map has to fit its bounds to the whole set at
-    once, and a client that only had the first page would draw the wrong
-    viewport. The point set is bounded by ``max_trip_activities`` anyway.
-
-    Returns ``services.trips.trip_map.build_trip_map_points`` verbatim so it stays
-    byte-identical to the web map's own ``map-data/`` payload.
+    Deliberately unpaginated: a map has to fit its bounds to the whole set at once, and a client that
+    only had the first page would draw the wrong viewport.
     """
 
     @extend_schema(parameters=[TripMapQuerySerializer], responses={200: TripMapResponseSerializer, 404: ErrorSerializer})
@@ -4947,11 +4620,10 @@ class TripRsvpView(TripScopedApiView):
 class TripCalendarSyncView(TripScopedApiView):
     """POST: turn auto-sync on or off for an already-exported trip.
 
-    Only the toggle, never the initial connection: establishing one needs
-    Google's OAuth consent flow, which this surface does not build. When the
-    response says ``connected: false``, the client should send the user to the
-    web app to connect their calendar first - a 400 with the same status object
-    tells it exactly that.
+    Only the toggle, never the initial connection: establishing one needs Google's OAuth consent flow,
+    which this surface does not build.
+    When the response says ``connected: false``, the client should send the user to the web app to
+    connect their calendar first - a 400 with the same status object tells it exactly that.
     """
 
     @extend_schema(
@@ -5020,10 +4692,8 @@ class TripMembersView(TripScopedApiView, PaginatedListMixin):
 class TripMemberDetailView(TripScopedApiView):
     """One member: PATCH their organizer flag, or DELETE them from the trip.
 
-    Addressed by profile slug - or uuid, which is the only handle a caller has
-    for a member whose identity their privacy settings mask. Either way the
-    lookup never leaves this trip's roster, so it cannot be used to discover
-    whether an arbitrary profile exists.
+    Addressed by profile slug - or uuid, which is the only handle a caller has for a member whose
+    identity their privacy settings mask.
     """
 
     @extend_schema(
@@ -5108,11 +4778,10 @@ class TripActivitiesView(TripScopedApiView, PaginatedListMixin):
 def _serialize_one_activity(trip: Trip, profile: Profile, activity_id: int) -> dict:
     """Serialize a single activity through the shared render rows.
 
-    Rebuilding the whole row set for one activity looks wasteful, but it is
-    what guarantees the single-activity payload carries the same index, vote
-    tallies, effective RSVP, ``can_manage`` and location-visibility decisions
-    the list endpoint would give - the index in particular is only meaningful
-    relative to its siblings.
+    Rebuilding the whole row set for one activity looks wasteful, but it is what guarantees the
+    single-activity payload carries the same index, vote tallies, effective RSVP, ``can_manage`` and
+    location-visibility decisions the list endpoint would give - the index in particular is only
+    meaningful relative to its siblings.
 
     Args:
         trip: The trip owning the activity.
@@ -5137,10 +4806,9 @@ class TripActivityDetailView(TripScopedApiView):
     def patch(self, request: Request, trip_slug: str, activity_id: int) -> Response:
         """Apply a partial update to one activity."""
         profile = request.user.profile
-        # Resolved before validation so the serializer can compare a submitted
-        # schedule endpoint against the stored one - moving `scheduled_at` past
-        # the activity's existing `scheduled_end` is only detectable with the
-        # activity in hand.
+        # Resolved before validation so the serializer can compare a submitted schedule endpoint against the
+        # stored one - moving `scheduled_at` past the activity's existing `scheduled_end` is only detectable
+        # with the activity in hand.
         try:
             trip = self.trip(request, trip_slug)
         except TripError as exc:
@@ -5156,9 +4824,8 @@ class TripActivityDetailView(TripScopedApiView):
             changes["place"] = _activity_place_fields(data)
 
         try:
-            # Left to the service to raise for a missing activity, so the
-            # not-found answer stays in one place rather than being duplicated
-            # from the lookup above (which exists only for validation context).
+            # Left to the service to raise for a missing activity, so the not-found answer stays in one place
+            # rather than being duplicated from the lookup above (which exists only for validation context).
             update_activity(trip, profile, activity_id, changes=changes)
         except TripError as exc:
             return self.error_response(exc)
@@ -5177,10 +4844,9 @@ class TripActivityDetailView(TripScopedApiView):
 class TripActivityPositionView(TripScopedApiView):
     """POST: save a map-drag position override for one activity.
 
-    Requires the trip's edit-activities permission, and bounds-checks the
-    coordinates. Both were missing from the endpoint this mirrors, which is
-    now fixed on the internal surface too - see
-    ``services.trips.trip_activities.set_activity_position``.
+    Requires the trip's edit-activities permission, and bounds-checks the coordinates.
+    Both were missing from the endpoint this mirrors, which is now fixed on the internal surface too -
+    see ``services.trips.trip_activities.set_activity_position``.
     """
 
     @extend_schema(request=TripActivityPositionSerializer, responses={200: TripActivityPositionSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
@@ -5221,9 +4887,8 @@ class TripActivityVoteView(TripScopedApiView):
 class TripActivityStatusView(TripScopedApiView):
     """PUT: set an activity's status.
 
-    ``completed`` routes to ``complete_activity`` rather than a plain status
-    write, so completing through the API logs the same visit entries and date
-    snapping the web app's "mark complete" does.
+    ``completed`` routes to ``complete_activity`` rather than a plain status write, so completing
+    through the API logs the same visit entries and date snapping the web app's "mark complete" does.
     """
 
     @extend_schema(request=TripActivityStatusSerializer, responses={200: TripActivitySerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
@@ -5296,10 +4961,9 @@ class TripCommentsView(TripScopedApiView, PaginatedListMixin):
 def _serialize_one_comment(trip: Trip, profile: Profile, comment_id: int) -> dict:
     """Serialize a single comment through the shared visible-comment tree.
 
-    Going back through ``build_comment_tree`` rather than serializing the model
-    directly is what applies the mention rendering, the author masking and the
-    visibility gates - a comment serialized outside the tree would carry raw
-    text and an unmasked author.
+    Going back through ``build_comment_tree`` rather than serializing the model directly is what applies
+    the mention rendering, the author masking and the visibility gates - a comment serialized outside
+    the tree would carry raw text and an unmasked author.
 
     Args:
         trip: The trip owning the comment.

@@ -1,19 +1,4 @@
-{% comment %}
-Body of the "confirm where this pin goes" dialog, loaded into #photo-pin-confirm-body.
-
-Lets the user see and drag the marker for a pin about to be created from a
-geotagged photo, search for a different place or one of their own pins (the
-shared {% templatetag openblock %} map_search_bar {% templatetag closeblock %} + window.LocationSearchEngine, same as the main map -
-see dashboard/templatetags/map_components.py), name it, or click one of their
-own nearby pins plotted on the map to file the photo onto it instead. The
-create form and the "use this pin" actions both end by swapping the card by
-id; the enclosing dialog closes itself on any successful POST (see
-#photo-pin-confirm-dialog in photos.html).
-
-Context:
-  image - the Image a pin is being created for (has effective coordinates from
-          its own GPS or its linked Location)
-{% endcomment %}
+{% comment %}Body of the "confirm where this pin goes" dialog, loaded into #photo-pin-confirm-body.{% endcomment %}
 {% load map_components %}
 <div id="photo-pin-confirm"
      data-image-id="{{ image.pk }}"

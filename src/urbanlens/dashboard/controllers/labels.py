@@ -303,28 +303,20 @@ def _queryset_for_kind(kind: str, profile: Profile) -> QuerySet[Label]:
 def _auto_tag_available(user, profile: Profile, label_kind: str) -> bool:
     """Whether *profile* may auto-tag labels of this kind at all.
 
-    One helper for both halves of the same decision: the edit form asks this to decide
-    whether to show the per-label opt-out, and the save handler asks it to decide
-    whether to honour the submitted value. Written out separately (as they were), the two
-    can drift into rendering a control the server silently ignores, or ignoring one the
-    server would have accepted.
-
-    Auto-tagging is granted, not opted into: a user who has the capability and
-    has not switched it off gets it for every tag and category label, minus
-    whichever labels they excluded individually.
+    Written out separately (as they were), the two can drift into rendering a control the server
+    silently ignores, or ignoring one the server would have accepted.
 
     Args:
         user: The requesting user, for the site-level AI feature check.
         profile: The owning profile, holding the per-kind preference flags.
-        label_kind: The label's kind - only tags, categories and statuses are
-            auto-taggable; anything else has no path and returns False.
+        label_kind: The label's kind - only tags, categories and statuses are auto-taggable; anything
+        else has no path and returns False.
 
     Returns:
         True when at least one auto-tagging path is available.
     """
-    # Only tags and categories: REData's suggestion service models "which of my
-    # labels describes this place", which statuses (visited, demolished) and
-    # people/media labels are not.
+    # Only tags and categories: REData's suggestion service models "which of my labels describes this place",
+    # which statuses (visited, demolished) and people/media labels are not.
     if label_kind not in {KIND_CATEGORY, KIND_TAG}:
         return False
     return bool(user_has_feature(user, SiteFeature.AUTO_TAGGING) and not profile.disable_auto_tagging)
@@ -346,16 +338,12 @@ def _parent_candidates(profile: Profile, kind: str, exclude_id: int | None = Non
 def _would_create_cycle(label: Label, proposed_parent_id: int) -> bool:
     """Return True if adding ``proposed_parent_id`` as a parent of ``label`` would create a cycle.
 
-    Thin wrapper kept for this module's many call sites (which check one
-    candidate at a time, in both the parent and the child direction). The
-    implementation now lives in ``services.labels.hierarchy`` so the external
-    API's label write paths can enforce the same guard - see that module for
-    why an unguarded ``parents`` write is a denial-of-service vector.
+    Thin wrapper kept for this module's many call sites (which check one candidate at a time, in both
+    the parent and the child direction).
 
     Args:
-        label: The label that would receive ``proposed_parent_id`` as a parent
-            (or, when checking a child assignment, the label being added as a
-            child - see call sites, which check both directions).
+        label: The label that would receive ``proposed_parent_id`` as a parent (or, when checking a
+        child assignment, the label being added as a child...
         proposed_parent_id: Primary key of the label proposed as a parent.
 
     Returns:
@@ -367,9 +355,9 @@ def _would_create_cycle(label: Label, proposed_parent_id: int) -> bool:
 def _rows_ctx(kind: str, profile: Profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
     """Build template context for organize_label_rows.html and standalone index pages."""
     cfg = _config(kind)
-    # Materialised before priming, and the same list is handed to the template:
-    # priming seeds a memo on each instance, so a queryset re-evaluated during
-    # rendering would discard it and quietly restore the per-label BFS.
+    # Materialised before priming, and the same list is handed to the template: priming seeds a memo on each
+    # instance, so a queryset re-evaluated during rendering would discard it and quietly restore the per-label
+    # BFS.
     label_list = list(_queryset_for_kind(kind, profile))
     Label.prime_total_pin_counts(label_list)
     ctx: dict = {
@@ -511,11 +499,9 @@ def _apply_bulk_fields(label: Label, payload: dict) -> list[str]:
 def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
     """Return the submitted custom-icon file, if any.
 
-    ``_icon_picker.html`` names its file input ``custom_icon-<picker_id>`` (scoped
-    per widget instance) rather than a bare ``custom_icon``, so that two icon
-    pickers rendered on the same page can never collide on field name even if a
-    future change nests them in the same form. Each submitted form only ever
-    contains one such field, so the first match is unambiguous.
+    ``_icon_picker.html`` names its file input ``custom_icon-<picker_id>`` (scoped per widget instance)
+    rather than a bare ``custom_icon``, so that two icon pickers rendered on the same page can never
+    collide on field name even if a future change nests them in the same form.
     """
     for field_name in request.FILES:
         if field_name == "custom_icon" or field_name.startswith("custom_icon-"):
@@ -526,21 +512,18 @@ def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
 def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
     """The submitted icon, checked and resized, or the reason it was refused.
 
-    **Every path that stores a label icon must go through this.** The edit view
-    validated its upload and the create view did not, so the same file that was
-    refused with a 400 on one URL was written to disk from the other - a
-    scripted SVG among them, since ``_resize_custom_icon`` deliberately returns
-    the file untouched when PIL cannot open it, and ``label_icons/`` is served
-    to any authenticated user with a Content-Type nginx derives from the
-    extension.
+    **Every path that stores a label icon must go through this.** The edit view validated its upload and
+    the create view did not, so the same file that was refused with a 400 on one URL was written to disk
+    from the other - a scripted SVG among them, since ``_resize_custom_icon`` deliberately returns the
+    file untouched when PIL cannot open it, and ``label_icons/`` is served to any authenticated user
+    with a Content-Type nginx derives from the extension.
 
     Args:
         request: The submitted request.
 
     Returns:
-        ``(icon, None)`` when there is a usable icon (or ``(None, None)`` when
-        none was submitted), or ``(None, message)`` when the upload failed a
-        size/content-type/malware check.
+        ``(icon, None)`` when there is a usable icon (or ``(None, None)`` when none was submitted), or
+        ``(None, message)`` when the upload...
     """
     custom_icon = _uploaded_custom_icon(request)
     if not custom_icon:
@@ -559,9 +542,8 @@ def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> tuple[bo
     """Update label custom_icon from POST (upload or clear).
 
     Returns:
-        A tuple of (whether custom_icon was actually touched, a user-facing
-        error message if the uploaded icon failed a size/content-type/malware
-        check - the icon is left unchanged in that case).
+        A tuple of (whether custom_icon was actually touched, a user-facing error message if the
+        uploaded icon failed a...
     """
     custom_icon, error = _validated_custom_icon(request)
     if error:
@@ -585,13 +567,10 @@ def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> boo
         return False
     label.kind = new_kind
     if new_kind in (KIND_STATUS, KIND_CATEGORY):
-        # Category, like Status, is always profile-scoped: _queryset_for_kind()
-        # looks categories up via .for_profile() (exact match, no global
-        # fallback), so a converted label left with profile=None would vanish
-        # from every Organize > Categories listing and become permanently
-        # un-editable (_can_modify_label() requires a non-None profile for
-        # any non-tag kind). Assign it to the requesting profile, matching how
-        # category labels are always created with a profile in LabelCreateView.
+        # Category, like Status, is always profile-scoped: _queryset_for_kind() looks categories up via
+        # .for_profile() (exact match, no global fallback), so a converted label left with profile=None would
+        # vanish from every Organize > Categories listing and become permanently un-editable
+        # (_can_modify_label() requires a non-None profile for any non-tag kind).
         label.profile = profile
     elif new_kind == KIND_TAG and label.profile is None:
         pass
@@ -670,9 +649,9 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         # not the IntegrityError the database would raise (a 500 to the user).
         conflict = find_conflicting_label(profile=profile, name=name, kind=self.kind)
         if conflict is not None:
-            # conflict.name is user-supplied (the colliding label's own name); this response is raw
-            # text/html, not a Template, so it isn't auto-escaped - escape() matches the pattern used
-            # for label.name elsewhere in this file (see LabelDeleteView, LabelBulkConvertView).
+            # conflict.name is user-supplied (the colliding label's own name); this response is raw text/html,
+            # not a Template, so it isn't auto-escaped - escape() matches the pattern used for label.name
+            # elsewhere in this file (see LabelDeleteView, LabelBulkConvertView).
             return HttpResponse(escape(label_conflict_message(conflict, singular_title=cfg.singular_title)), status=400)
 
         custom_icon, icon_error = _validated_custom_icon(request)
@@ -752,12 +731,10 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 "is_global": label.kind == KIND_TAG and label.profile is None,
                 "show_kind_toggle": cfg.show_kind_toggle,
                 "can_use_ai_features": can_use_ai_features,
-                # Auto-tagging toggle needs either path to actually be able to assign
-                # this label kind - the AI site feature plus the user's own master +
-                # per-kind AI settings, OR the user's own keyword-tagging master +
-                # per-kind settings (keyword matching needs no site feature/subscription).
-                # Otherwise the option is offering a behavior the user has explicitly
-                # turned off, or that isn't available to them at all.
+                # Auto-tagging toggle needs either path to actually be able to assign this label kind - the AI
+                # site feature plus the user's own master + per-kind AI settings, OR the user's own
+                # keyword-tagging master + per-kind settings (keyword matching needs no site
+                # feature/subscription).
                 "show_auto_tag_toggle": show_auto_tag_toggle,
             },
         )
@@ -770,9 +747,8 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
 
         profile = _request_profile(request)
         new_kind = request.POST.get("kind", self.kind)
-        # Kind conversion is only ever valid tag<->category<->status; a label
-        # whose OWN kind isn't one of those (people, media) must never be
-        # convertible via a crafted `kind` POST value, even though `new_kind`
+        # Kind conversion is only ever valid tag<->category<->status; a label whose OWN kind isn't one of those
+        # (people, media) must never be convertible via a crafted `kind` POST value, even though `new_kind`
         # alone might look like a valid organize kind.
         if new_kind not in _ORGANIZE_KINDS or self.kind not in _ORGANIZE_KINDS:
             new_kind = self.kind
@@ -780,10 +756,9 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         if new_kind != label.kind and label.is_protected:
             return HttpResponse("Protected statuses cannot be converted to another type.", status=403)
 
-        # Scoped to only the fields this form actually edits, so a bare save()
-        # never reverts a field changed concurrently by another request (e.g.
-        # the external API's LabelDetailView.patch, which can touch fields -
-        # keywords - this form has no control for at all).
+        # Scoped to only the fields this form actually edits, so a bare save() never reverts a field changed
+        # concurrently by another request (e.g. the external API's LabelDetailView.patch, which can touch fields
+        # - keywords - this form has no control for at all).
         changed_fields = ["description", "icon", "color", "order"]
 
         if not label.is_protected:
@@ -804,22 +779,19 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
             changed_fields.append("name")
 
         label.description = request.POST.get("description", "").strip() or None
-        # Through clean_icon, like the create path: truncating to the column width
-        # fixed the over-long-icon 500 but still let arbitrary free text be stored
-        # as an icon here while create rejected it.
+        # Through clean_icon, like the create path: truncating to the column width fixed the over-long-icon 500
+        # but still let arbitrary free text be stored as an icon here while create rejected it.
         label.icon = clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None
         label.color = clean_color(request.POST.get("color"))
         label.order = safe_int(request.POST.get("order"), label.order)
 
-        # allow_auto_tag can only be changed when the user actually has some auto-tagging
-        # path available for this label's kind (AI or keyword-based); and never on the
-        # protected "Visited" label.
+        # allow_auto_tag can only be changed when the user actually has some auto-tagging path available for
+        # this label's kind (AI or keyword-based); and never on the protected "Visited" label.
         if not label.is_protected:
             can_toggle_auto_tag = _auto_tag_available(request.user, profile, label.kind)
             if can_toggle_auto_tag:
-                # The form asks the question the other way round now: the
-                # control is "exclude this label", so its absence means the
-                # label participates.
+                # The form asks the question the other way round now: the control is "exclude this label", so
+                # its absence means the label participates.
                 label.allow_auto_tag = "disable_auto_tag" not in request.POST
                 changed_fields.append("allow_auto_tag")
 
@@ -898,19 +870,16 @@ class LabelReorderView(_LabelKindMixin, LoginRequiredMixin, View):
         # Later duplicates win, matching the per-row loop this replaces.
         desired = {label_id: total - i for i, label_id in enumerate(label_ids)}
 
-        # Filtering on profile/kind here is what keeps ids the caller does not own out
-        # of the write - the per-row form got that from re-filtering inside the loop.
-        # Only rows whose order actually moves are written or invalidated - the cache
-        # refresh below costs work per *pin* carrying the label, so re-sending an
-        # unchanged order would rebuild the whole map for nothing.
+        # Filtering on profile/kind here is what keeps ids the caller does not own out of the write - the
+        # per-row form got that from re-filtering inside the loop.
         labels = [label for label in Label.objects.filter(id__in=desired, profile=profile, kind=self.kind) if label.order != desired[label.pk]]
         for label in labels:
             label.order = desired[label.pk]
         if labels:
             Label.objects.bulk_update(labels, ["order"])
-            # order decides which label supplies a pin's map icon/colour
-            # (_winning_display_label sorts by -order), and bulk_update fires no
-            # post_save, so the usual label -> cache receiver never sees this write.
+            # order decides which label supplies a pin's map icon/colour (_winning_display_label sorts by
+            # -order), and bulk_update fires no post_save, so the usual label -> cache receiver never sees this
+            # write.
             touch_pins_for_labels([label.pk for label in labels])
         return JsonResponse({"ok": True})
 
@@ -1017,10 +986,8 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
                 is_protected=False,
             ).exclude(id=target_id)
 
-        # Merging *deletes* the source, so every guard that keeps a label from
-        # being deleted has to hold here too. The single-merge view refuses a
-        # protected source for every kind; this path only did for statuses,
-        # which let a protected tag/category/person/media label be merged away.
+        # Merging *deletes* the source, so every guard that keeps a label from being deleted has to hold here
+        # too.
         source_list = [label for label in sources if not label.is_protected]
         if not source_list:
             return HttpResponse(f"No valid source {self.kind}s.", status=400)
@@ -1093,9 +1060,8 @@ class LabelBulkEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 label.save(update_fields=update_fields)
 
         if payload["add_parent_ids"]:
-            # Scoped via _parent_candidates() (not a raw Label.objects.visible_to()
-            # query) so this bulk path enforces the same KIND_USER/KIND_MEDIA
-            # isolation as single create/edit.
+            # Scoped via _parent_candidates() (not a raw Label.objects.visible_to() query) so this bulk path
+            # enforces the same KIND_USER/KIND_MEDIA isolation as single create/edit.
             valid_parents = list(_parent_candidates(profile, self.kind).filter(id__in=payload["add_parent_ids"]))
             for label in labels:
                 safe_parents = [p for p in valid_parents if p.id != label.id and not _would_create_cycle(label, p.id)]
@@ -1151,14 +1117,8 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
         labels = list(Label.objects.filter(id__in=ids, profile=profile, kind=self.kind))
         if self.kind == KIND_STATUS:
             labels = [label for label in labels if not label.is_protected]
-        # Scoped via _parent_candidates() (not a raw Label.objects.visible_to()
-        # query) so this bulk path enforces the same KIND_USER/KIND_MEDIA
-        # isolation as single create/edit.
-        # Label is unique on (lower(name), profile, kind), so a name that already exists in
-        # the destination kind makes the save below a constraint violation - a 500 rather
-        # than the readable refusal the single-edit path gives for the same collision.
-        # Checked for the whole batch first: converting some and failing on others would
-        # leave the user to work out which half applied.
+        # Scoped via _parent_candidates() (not a raw Label.objects.visible_to() query) so this bulk path
+        # enforces the same KIND_USER/KIND_MEDIA isolation as single create/edit.
         conflicts = [label for label in labels if find_conflicting_label(profile=profile, name=label.name, kind=new_kind, exclude_pk=label.pk) is not None]
         if conflicts:
             names = ", ".join(sorted(f'"{escape(label.name)}"' for label in conflicts))
@@ -1231,9 +1191,8 @@ class LabelCustomizeView(_LabelKindMixin, LoginRequiredMixin, View):
 
         profile = _request_profile(request)
 
-        # Both branches nudge Pin.updated for this profile's pins - a
-        # customization changes how they render on the map without touching
-        # any Pin row, so the map cache's freshness check needs telling.
+        # Both branches nudge Pin.updated for this profile's pins - a customization changes how they render on
+        # the map without touching any Pin row, so the map cache's freshness check needs telling.
         if request.POST.get("action") == "clear":
             clear_label_customization(profile, label)
         else:
@@ -1290,12 +1249,8 @@ def _membership_panel_ctx(
     """Build template context for label_membership_panel.html.
 
     Args:
-        dialog_only: Skip the header and applied-labels chip list entirely,
-            rendering just the add-label dialog inside the (invisible)
-            ``panel_id`` wrapper - for call sites that only ever want the
-            dialog (e.g. the photo gallery's label icon swaps into a bare
-            slot div meant to hold nothing but the dialog) rather than a
-            persistent visible panel.
+        dialog_only: Skip the header and applied-labels chip list entirely, rendering just the add-label
+        dialog inside the (invisible) ``panel_id`` wrapper -...
     """
     ctx: dict = {
         "all_labels": labels_override if labels_override is not None else _all_labels(profile),
@@ -1323,9 +1278,9 @@ def _membership_label_id(request: HttpRequest) -> str | None:
 def _organize_label_from_create(request: HttpRequest, profile: Profile) -> Label | HttpResponse:
     """Create a personal tag from POSTed ``name``, or reuse the existing one of that name.
 
-    Mirrors ``LabelImageMembershipView._label_from_create`` for the pin/wiki "Add Labels"
-    dialogs, which offer no kind picker - a quick-created label is always a plain ``KIND_TAG``,
-    matching the model's own default.
+    Mirrors ``LabelImageMembershipView._label_from_create`` for the pin/wiki "Add Labels" dialogs, which
+    offer no kind picker - a quick-created label is always a plain ``KIND_TAG``, matching the model's
+    own default.
     """
     name = (request.POST.get("name") or "").strip()
     if not name:
@@ -1533,14 +1488,10 @@ class LabelLocationMembershipView(LoginRequiredMixin, View):
 class LabelImageMembershipView(LoginRequiredMixin, View):
     """Add or remove media labels on a photo/video/document (HTMX panel).
 
-    Unlike pin/location membership, this is scoped to the owner's own media
-    labels (kind='media') only - media labels help find the item in search,
-    they never apply to pins or wikis.
-
-    ``?embed=lightbox`` (or POST ``embed=lightbox``) renders the inline picker
-    used in the photo lightbox rather than the gallery's add-label dialog.
-    ``action=create_and_add`` creates a media label from ``name`` (or reuses
-    an existing one of that name) and applies it in one step.
+    Unlike pin/location membership, this is scoped to the owner's own media labels (kind='media') only -
+    media labels help find the item in search, they never apply to pins or wikis.
+    ``?embed=lightbox`` (or POST ``embed=lightbox``) renders the inline picker used in the photo
+    lightbox rather than the gallery's add-label dialog.
     """
 
     _LIGHTBOX = "dashboard/partials/labels/_lightbox_media_labels.html"

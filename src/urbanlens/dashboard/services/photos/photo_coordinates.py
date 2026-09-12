@@ -1,9 +1,5 @@
 """Turning anonymized SpotGuessr coordinate guesses into an estimated photo position.
-
-See ``services.spotguessr.photo_coordinates`` for where guesses actually get
-recorded; this module only turns the accumulated ``PhotoCoordinateGuess``
-rows for one photo into a single cached estimate on ``Image``.
-"""
+See ``services.spotguessr.photo_coordinates`` for where guesses actually get recorded; this module only turns the accumulated ``PhotoCoordinateGuess`` rows for one photo into a single cached estimate on ``Image``."""
 
 from __future__ import annotations
 
@@ -31,9 +27,7 @@ def recompute_estimated_coordinates(image_id: int) -> None:
     """Recompute and cache one photo's estimated position from its correct guesses so far.
 
     Args:
-        image_id: pk of the ``Image`` being estimated - not the object
-            itself, since callers already have just the id and this never
-            needs to touch the rest of the row until the final update."""
+        image_id: pk of the ``Image`` being estimated - not the object itself, since callers already have just the id and this never needs to touch the rest of the row until the final update."""
     # Read via the deserialized GEOS Point's own .y/.x rather than an ST_X/ST_Y annotation -
     # guess_point is a `geography` column, and PostGIS's X()/Y() functions expect `geometry`, not
     # `geography`.

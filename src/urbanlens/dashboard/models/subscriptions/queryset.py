@@ -40,12 +40,6 @@ class UserSubscriptionQuerySet(abstract.DashboardQuerySet):
     def not_revoked(self) -> UserSubscriptionQuerySet:
         """Subscriptions that haven't been explicitly revoked.
 
-        Deliberately does not check ``expires_at`` - unlike ``active()``, this
-        also includes grants that have quietly expired but were never
-        explicitly revoked (e.g. the site-admin "grants I've issued" list,
-        which wants to keep showing an admin's past grants even once they
-        lapse).
-
         Returns:
             Matching subscriptions.
         """

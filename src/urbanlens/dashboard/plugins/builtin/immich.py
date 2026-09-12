@@ -1,12 +1,5 @@
 """Immich plugin: rate-limit defaults for the per-user photo import integration.
-
-The integration itself (connect/disconnect, pin-detail search and import)
-lives in ``dashboard/services/apis/immich/``, ``dashboard/controllers/immich.py``,
-and ``dashboard/tasks.py``; every call runs against the requesting user's own
-self-hosted server using their stored API key. This plugin registers the
-service's rate-limit defaults so calls are throttled and logged like every
-other external API.
-"""
+This plugin registers the service's rate-limit defaults so calls are throttled and logged like every other external API."""
 
 from __future__ import annotations
 
@@ -29,10 +22,7 @@ class ImmichPlugin(UrbanLensPlugin):
         """Rate-limit defaults for the Immich API.
 
         Returns:
-            Defaults for the ``immich`` service key. Generous compared to
-            most integrations since every user's calls hit their own
-            self-hosted server rather than a shared third-party quota.
-        """
+            Defaults for the ``immich`` service key."""
         return {
             "immich": ServiceDefaults(
                 display_name="Immich",

@@ -43,9 +43,6 @@ def validate_started_exploring(value: date | None) -> str | None:
     return None
 
 
-#: Interaction-preference choice fields, each paired with a free-text
-#: "<field>_other" companion - see Profile.PREFERENCE_FIELDS for the same
-#: pairing used to display the answers on the public profile page.
 _PREFERENCE_SELECT_FIELDS = [field for field, _label in Profile.PREFERENCE_FIELDS]
 _PREFERENCE_OTHER_FIELDS = [f"{field}_other" for field in _PREFERENCE_SELECT_FIELDS]
 
@@ -53,10 +50,9 @@ _PREFERENCE_OTHER_FIELDS = [f"{field}_other" for field in _PREFERENCE_SELECT_FIE
 class ProfileForm(forms.ModelForm):
     """Bio, location, dates, and interaction preferences - social links are managed separately.
 
-    Every field here is public presentation: what other users see on this
-    profile's page, not a technical setting - see the module docstring on
-    ``external_api.serializers.ProfileUpdateSerializer`` for why that split
-    matters for the mobile API surface.
+    Every field here is public presentation: what other users see on this profile's page, not a
+    technical setting - see the module docstring on ``external_api.serializers.ProfileUpdateSerializer``
+    for why that split matters for the mobile API surface.
     """
 
     class Meta:
@@ -116,8 +112,8 @@ class DiscordHandleForm(forms.Form):
             The stripped handle, or an empty string when blank.
 
         Raises:
-            forms.ValidationError: When the handle contains disallowed characters
-                or falls outside the allowed length range.
+            forms.ValidationError: When the handle contains disallowed characters or falls outside the
+            allowed length range.
         """
         value = self.cleaned_data.get("discord", "").strip()
         if value and not _DISCORD_HANDLE_RE.match(value):

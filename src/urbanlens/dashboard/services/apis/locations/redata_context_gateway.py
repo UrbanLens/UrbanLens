@@ -1,5 +1,4 @@
-"""Shared REST client for REData's "near-a-coordinate" location-context endpoints.
-This module implements that shared contract exactly once; a domain-specific gateway (``RedataElevationGateway``, ``RedataWeatherGateway``, ...) subclasses it and adds only its own path, params, and typed accessors."""
+"""Shared REST client for REData's "near-a-coordinate" location-context endpoints."""
 
 from __future__ import annotations
 
@@ -33,11 +32,7 @@ class LocationContextUnavailableError(GatewayRequestError):
     """Raised when a REData location-context request fails or answers with a blackout.
 
     Attributes:
-        reason: One of the module's ``REASON_*`` constants, or REData's own
-            ``error`` code verbatim for a ``400`` (e.g. ``"invalid_coordinates"``,
-            ``"unknown_provider"``) - REData's fixed reason taxonomy for these
-            endpoints (see the module docstring).
-    """
+        reason: One of the module's ``REASON_*`` constants, or REData's own ``error`` code verbatim for a ``400`` (e.g. ``"invalid_coordinates"``, ``"unknown_provider"``) - REData's fixed reason taxonomy for these endpoints (see the module docstring)."""
 
     def __init__(self, reason: str, message: str) -> None:
         self.reason = reason
@@ -60,15 +55,9 @@ class LocationContextEnvelope:
 
     Attributes:
         count: Number of entries in ``results``.
-        complete: False when any source covering the coordinate failed to
-            answer (``unavailable``/``rate_limited`` in ``providers``) - the
-            results are a floor, not a total.
-        results: The provider-tagged result dicts - shape is endpoint-specific,
-            see each domain gateway's own accessor.
-        providers: Per-provider status entries (``provider``, ``status``,
-            ``count``, ``message``, ``radius_meters``) - empty for the few
-            endpoints with no provider registry behind them.
-    """
+        complete: False when any source covering the coordinate failed to answer (``unavailable``/``rate_limited`` in ``providers``) - the results are a floor, not a total.
+        results: The provider-tagged result dicts - shape is endpoint-specific, see each domain gateway's own accessor.
+        providers: Per-provider status entries (``provider``, ``status``, ``count``, ``message``, ``radius_meters``) - empty for the few endpoints with no provider registry behind them."""
 
     count: int
     complete: bool
@@ -111,28 +100,11 @@ class RedataLocationContextGateway(Gateway):
     ) -> LocationContextEnvelope:
         """GET a near-a-coordinate REData endpoint and parse its envelope.
 
-        Args:
-                path: Path relative to ``base_url`` (leading slash optional), e.g.
-                ``"/api/v1/hazards/"``.
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                radius_meters: Search radius in meters. Omit to let REData's
-                source(s) use their own natural default.
-                provider: Restrict which source(s) actually run - a single tag or
-                a repeatable list, per REData's ``?provider=`` semantics.
-                force_refresh: Bypass REData's cache and re-query live.
-                limit: Bounded positive integer (REData caps at 200 for most of
-                these endpoints).
-                extra_params: Any endpoint-specific query params beyond the shared
-                set above (e.g. hazards' ``min_magnitude``/``years``).
-
         Returns:
-                The parsed :class:`LocationContextEnvelope`.
+            The parsed :class:`LocationContextEnvelope`.
 
         Raises:
-                LocationContextUnavailableError: A total blackout (every source
-                covering the coordinate failed), a REData-side validation
-                error, or the request itself failed outright."""
+            LocationContextUnavailableError: A total blackout (every source covering the coordinate failed), a REData-side validation error, or the request itself failed outright."""
         params: dict[str, Any] = {"lat": latitude, "lng": longitude}
         if radius_meters is not None:
             params["radius_meters"] = radius_meters
@@ -150,17 +122,11 @@ class RedataLocationContextGateway(Gateway):
         """GET any REData endpoint outside the near-a-coordinate envelope and return its raw JSON body.
         Use :meth:`near_point` instead for anything shaped like REData's near-a-coordinate contract.
 
-        Args:
-                path: Path relative to ``base_url`` (leading slash optional).
-                params: Query-string parameters, if any.
-
         Returns:
-                The raw decoded JSON body (whatever type - object or array - the
-                endpoint actually returns).
+            The raw decoded JSON body (whatever type - object or array - the endpoint actually returns).
 
         Raises:
-                LocationContextUnavailableError: A REData-side validation error,
-                or the request itself failed outright."""
+            LocationContextUnavailableError: A REData-side validation error, or the request itself failed outright."""
         response = self._request(path, params or {})
         if response.status_code == 200:
             try:
@@ -173,16 +139,11 @@ class RedataLocationContextGateway(Gateway):
         """POST a JSON body to a REData endpoint and return its raw JSON response.
         ``POST /routes/``) that share this gateway's auth/error handling but take a body rather than query params.
 
-        Args:
-                path: Path relative to ``base_url`` (leading slash optional).
-                json_body: The JSON-serializable request body.
-
         Returns:
-                The raw decoded JSON body.
+            The raw decoded JSON body.
 
         Raises:
-                LocationContextUnavailableError: A REData-side validation error,
-                or the request itself failed outright."""
+            LocationContextUnavailableError: A REData-side validation error, or the request itself failed outright."""
         base_url = self.base_url
         if base_url is None:
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
@@ -237,9 +198,7 @@ class RedataLocationContextGateway(Gateway):
 
     def _raise_for_error_status(self, response: requests.Response, path: str) -> NoReturn:
         """Translate a non-200 REData response into a :class:`LocationContextUnavailableError`.
-
-        Always raises - callers reach this only once ``response.status_code != 200``.
-        """
+        Always raises - callers reach this only once ``response.status_code != 200``."""
         if response.status_code in (400, 503):
             try:
                 body = response.json()

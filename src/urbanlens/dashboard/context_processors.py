@@ -14,14 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
-    """Inject site-wide settings into every template context.
+    """Inject site-wide settings into template context.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with site_title, app_version, and public_costs_page_enabled available in
-        all templates.
+        dict with site_title, app_version, public_costs_page_enabled.
     """
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -43,14 +42,13 @@ def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
 
 
 def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
-    """Inject dev toolbar visibility and theme state into template context.
+    """Inject dev toolbar visibility and theme state.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``show_dev_toolbar``, ``dev_toolbar_theme_mode``, and
-        ``dev_toolbar_map_dark_mode``.
+        dict with show_dev_toolbar, theme and map dark modes.
     """
     show = False
     try:
@@ -78,15 +76,13 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
 
 
 def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
-    """Expose the active environment to every template for the non-production indicator banner.
+    """Expose the active environment for the non-production banner.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``env_indicator_type`` (lowercase environment value, e.g. ``"staging"``) and
-        ``env_indicator_label`` (human-readable label). Both are empty strings in production,
-        which templates use as the signal to hide the indicator.
+        dict with env_indicator_type and env_indicator_label (empty in prod).
     """
     from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
@@ -106,15 +102,10 @@ def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
 
 
 def add_demo_context(request: HttpRequest) -> dict[str, object]:
-    """Expose the demo flags to every template.
+    """Expose demo flags to templates.
 
-    Two separate facts, deliberately not one:
-
-    - ``demo_url`` is set on the **real** site and is where its "Try the demo"
-      button points. Empty means no demo has been provisioned, and the button
-      does not render - it cannot advertise a destination that does not exist.
-    - ``demo_mode`` is set on the **demo instance itself** and drives the
-      persistent banner. An instance should never have both.
+    ``demo_url`` lives on the real site (button target); ``demo_mode`` on the
+    demo instance itself (banner). Never both.
 
     Args:
         request: The current HttpRequest.
@@ -127,35 +118,28 @@ def add_demo_context(request: HttpRequest) -> dict[str, object]:
     return {
         "demo_url": app_settings.demo_url,
         "demo_mode": app_settings.demo_mode,
-        # Where the demo's banner sends someone who wants the real thing. Empty
-        # unless the demo instance has been told the real site's address, since
-        # the demo's own /signup/ would just make another throwaway account on
-        # the instance that is about to delete it.
+        # Banner link to the real site; empty hides it.
         "demo_signup_url": app_settings.demo_real_site_url,
     }
 
 
-#: URL-name prefixes that belong to a nav-bar section other than their own, e.g.
-#: Private Pin pages (``pin.*``) are reached from the map and should keep "Map" active.
+#: Nav aliases for sections reached from another page (e.g. pin.* keeps Map active).
 _NAV_SECTION_ALIASES = {"pin": "map", "spotguessr": "games", "trivia": "games"}
 
 
 def add_page_name(request: HttpRequest) -> dict[str, str]:
-    """Expose the current page and nav-bar section to every template.
+    """Expose the current page and nav section to templates.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``page_name`` (the resolved URL name, sanitized for use as a
-        CSS class) and ``nav_section`` (the URL name's leading ``section.``
-        segment, used by the nav bar to highlight the active link).
+        dict with ``page_name`` (CSS-safe URL name) and ``nav_section``.
     """
     resolver_match = request.resolver_match
     if resolver_match is None:
         return {"page_name": "", "nav_section": ""}
     url_name = resolver_match.url_name or ""
-    # This will be a className, so replace anything that would trip up css
     page_name = re.sub(r"[^a-zA-Z0-9]", "-", url_name)
     section = url_name.split(".", 1)[0] if url_name else ""
     nav_section = _NAV_SECTION_ALIASES.get(section, section)
@@ -163,17 +147,13 @@ def add_page_name(request: HttpRequest) -> dict[str, str]:
 
 
 def add_distance_units(request: HttpRequest) -> dict[str, str]:
-    """Expose the viewer's effective distance unit to every template.
-
-    Templates render distances (stored internally in kilometres) in this unit via
-    the ``distance`` filter, e.g. ``{{ value_km|distance:distance_units }}``.
+    """Expose the viewer's distance unit to templates.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``distance_units`` ("km" or "mi"), defaulting to "km" for
-        anonymous users or when the profile is unavailable.
+        dict with ``distance_units`` ("km"/"mi"), defaulting to "km".
     """
     from urbanlens.dashboard.models.profile.meta import DistanceUnit
 
@@ -187,19 +167,13 @@ def add_distance_units(request: HttpRequest) -> dict[str, str]:
 
 
 def add_keyboard_shortcuts(request: HttpRequest) -> dict[str, dict[str, str]]:
-    """Expose the viewer's keyboard shortcut overrides to every template.
-
-    base.html renders this via ``json_script`` as ``window.UL_HOTKEYS``, which
-    ``frontend/ts/shared/hotkeys.ts``'s ``loadHotkeys()`` merges over the
-    built-in defaults - see ``Profile.keyboard_shortcuts`` for the storage
-    shape.
+    """Expose the viewer's shortcut overrides to templates.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``keyboard_shortcuts`` (the profile's override mapping, or
-        ``{}`` for an anonymous request or one with no profile yet).
+        dict with ``keyboard_shortcuts`` (profile overrides, or ``{}``).
     """
     if isinstance(request.user, User):
         try:
@@ -210,14 +184,13 @@ def add_keyboard_shortcuts(request: HttpRequest) -> dict[str, dict[str, str]]:
 
 
 def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
-    """Expose the current user's pending-deletion state for the site-wide warning banner.
+    """Expose pending-deletion state for the warning banner.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``pending_account_deletion`` (bool), ``account_deletion_date``
-        (datetime or None), and ``account_deletion_days_left`` (int or None).
+        dict with pending flag, date, and days left.
     """
     if isinstance(request.user, User):
         try:
@@ -234,21 +207,15 @@ def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
 
 
 def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
-    """Expose whether the navbar messages icon should render for this user.
+    """Expose whether the navbar messages icon should render.
 
-    The icon appears once the user has ever sent or received a direct
-    message, OR has ever had an accepted friend (even if that friend was
-    later removed) - users with no way to reach the feature don't get an
-    extra navbar icon competing for attention, but the icon stays visible
-    once it's been relevant at all rather than flickering away.
+    Shown once the feature has been relevant; stays visible afterwards.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``show_messages_icon`` (bool) and ``e2ee_needs_oauth_enroll``
-        (bool - True for passwordless accounts with no key bundle yet, which
-        base.html enrolls transparently in the background).
+        dict with ``show_messages_icon`` and ``e2ee_needs_oauth_enroll``.
     """
     if isinstance(request.user, User):
         try:

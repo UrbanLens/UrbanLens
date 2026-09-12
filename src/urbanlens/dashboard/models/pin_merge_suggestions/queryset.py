@@ -16,10 +16,7 @@ if TYPE_CHECKING:
 
 def _default_survivor(pin_a: Pin, pin_b: Pin) -> Pin:
     """Recommend which pin should survive a merge, absent an origin-specific choice.
-
-    More visit history wins (a pin with more logged visits has more of the
-    user's data riding on its identity); tie-broken by more photos; tie-broken
-    by older creation date. Always overridable by the user at accept time.
+    More visit history wins (a pin with more logged visits has more of the user's data riding on its identity); tie-broken by more photos; tie-broken by older creation date.
 
     Args:
         pin_a: One candidate.
@@ -85,13 +82,7 @@ class PinMergeSuggestionManager(abstract.DashboardManager.from_queryset(PinMerge
         suggested_survivor: Pin | None = None,
     ) -> PinMergeSuggestion:
         """Find-or-create a pending suggestion for this pair of pins.
-
-        The pair is looked up order-independently - a pending suggestion for
-        ``(pin_b, pin_a)`` counts as already covering ``(pin_a, pin_b)`` - so a
-        trigger that re-fires on the same collision (e.g. a repeated re-import
-        run) never creates duplicate rows. Only a PENDING row dedupes; once a
-        suggestion has been accepted or rejected, a fresh occurrence of the
-        same collision creates a new one.
+        The pair is looked up order-independently - a pending suggestion for ``(pin_b, pin_a)`` counts as already covering ``(pin_a, pin_b)`` - so a trigger that re-fires on the same collision (e.g. a repeated re-import run) never creates duplicate rows.
 
         Args:
             profile: Owner of both pins.

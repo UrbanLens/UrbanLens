@@ -12,16 +12,15 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
-#: Ceiling on how many scans one payload carries, matching the ``[:20]`` the
-#: HTML panel applies. TNM can return well over a hundred products for a
-#: heavily-surveyed quadrangle, and every one of them is another thumbnail a
-#: client would try to load.
+#: Ceiling on how many scans one payload carries, matching the ``[:20]`` the HTML panel applies.
+#: TNM can return well over a hundred products for a heavily-surveyed quadrangle, and every one of
+#: them is another thumbnail a client would try to load.
 _MAX_MAPS = 20
 
-#: Attribution string on each map's media item. Spelled out rather than reusing
-#: the panel ``title``, because a media item is shown detached from its panel
-#: (in a merged gallery) where "USGS Historical Topo Maps" alone reads as a
-#: section heading rather than as the source of that particular scan.
+#: Attribution string on each map's media item.
+#: Spelled out rather than reusing the panel ``title``, because a media item is shown detached from
+#: its panel (in a merged gallery) where "USGS Historical Topo Maps" alone reads as a section heading
+#: rather than as the source of that particular scan.
 _MEDIA_SOURCE_LABEL = "USGS Historical Topographic Map Collection"
 
 #: Where the full collection is browsable. Doubles as the panel's footer link
@@ -38,10 +37,10 @@ class UsgsTopoPanelSource(LocationCachePanelSource):
     section_id = "usgs-topo-section"
     icon = "terrain"
     title = "USGS Historical Topo Maps"
-    # Genuinely both shapes, which is exactly what the web panel already is: a
-    # summary header plus a grid of thumbnails linking to scans. A client that
-    # only lays out information cards still gets the count and the TopoView
-    # link; one with a gallery gets the scans themselves.
+    # Genuinely both shapes, which is exactly what the web panel already is: a summary header plus a
+    # grid of thumbnails linking to scans.
+    # A client that only lays out information cards still gets the count and the TopoView link; one
+    # with a gallery gets the scans themselves.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO, PanelApiKind.MEDIA})
 
     def fetch(self, pin: Pin) -> None:
@@ -57,20 +56,8 @@ class UsgsTopoPanelSource(LocationCachePanelSource):
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The nearby historical topo scans, as both a summary card and media items.
 
-        Field names (``downloadURL``, ``previewGraphicURL``,
-        ``publicationDate``, ``extent``) are TNM's own camelCase and are read
-        here exactly as ``pin_usgs_topo.html`` reads them - they are not
-        renamed on the way out of the cache, so the two surfaces can't drift
-        into disagreeing about which key holds what.
-
-        Args:
-            pin: The pin whose panel is being read.
-
         Returns:
-            ``{"info": {...}, "media": [...]}``, or None when nothing has
-            landed yet or the search area contains no scanned maps (the same
-            condition the web panel 204s on).
-        """
+            ``{"info": {...}, "media": [...]}``, or None when nothing has landed yet or the search area contains no scanned maps (the same condition the web panel 204s on)."""
         data = self.cached_data(pin)
         if data is None:
             return None
@@ -101,20 +88,10 @@ class UsgsTopoPanelSource(LocationCachePanelSource):
     @staticmethod
     def _caption(topo_map: dict[str, Any]) -> str:
         """Title plus survey year for one scanned map.
-
-        The year is what actually distinguishes two otherwise identically-named
-        editions of the same quadrangle, so it is folded into the caption
-        rather than left as a separate field the media contract has no room
-        for. ``publicationDate`` is an ISO date string; only its year is
-        meaningful at this granularity.
-
-        Args:
-            topo_map: One TNM HTMC product record.
+        The year is what actually distinguishes two otherwise identically-named editions of the same quadrangle, so it is folded into the caption rather than left as a separate field the media contract has no room for.
 
         Returns:
-            A caption like ``"Poughkeepsie, NY (1893)"``, possibly without the
-            parenthetical when TNM reported no publication date.
-        """
+            A caption like ``"Poughkeepsie, NY (1893)"``, possibly without the parenthetical when TNM reported no publication date."""
         title = topo_map.get("title") or "Untitled map"
         year = (topo_map.get("publicationDate") or "")[:4]
         return f"{title} ({year})" if year else title

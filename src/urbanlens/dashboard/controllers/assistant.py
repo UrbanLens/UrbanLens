@@ -41,17 +41,15 @@ _SESSION_KEY = "assistant_chat"
 _MESSAGES_PARTIAL = "dashboard/partials/assistant/_messages.html"
 _BUBBLE_PARTIAL = "dashboard/partials/assistant/_bubble.html"
 _PROPOSAL_PARTIAL = "dashboard/partials/assistant/_proposal.html"
-#: Every reply the web tier itself can produce without ever reaching the
-#: task - the task's own equivalents (services.ai.tasks) are separate
-#: strings so the two layers stay decoupled.
+#: Every reply the web tier itself can produce without ever reaching the task - the task's own equivalents
+#: (services.ai.tasks) are separate strings so the two layers stay decoupled.
 _UNAVAILABLE_REPLY = "AI features are currently turned off for your account or this site."
 _BUSY_MESSAGE = "Still working on your last message - hold on a moment."
 _QUEUE_FAILED_REPLY = "Couldn't reach the assistant just now. Please try again."
 _EXPIRED_REPLY = "This request expired before it finished. Please try again."
 _GAVE_UP_REPLY = "This is taking longer than expected. Please try again in a moment."
-#: How long a resolved turn's consume-gate marker lives - only needs to
-#: outlast two browser tabs racing to render the same poll response, not the
-#: turn record itself.
+#: How long a resolved turn's consume-gate marker lives - only needs to outlast two browser tabs racing to
+#: render the same poll response, not the turn record itself.
 _CONSUME_GATE_TTL_SECONDS = 900
 
 
@@ -91,9 +89,9 @@ def _poll_attempt(request: HttpRequest) -> int:
 def _resolve_turn(request: HttpRequest, turn_id: str, final_entry: dict[str, Any]) -> dict[str, Any]:
     """Write ``final_entry`` into session history in place of the pending marker for ``turn_id``, once.
 
-    Consume-gated (``cache.add``) so two browser tabs polling the same turn
-    both render the same final content, but only the first to arrive here
-    appends it to history - the second is a no-op past the gate.
+    Consume-gated (``cache.add``) so two browser tabs polling the same turn both render the same final
+    content, but only the first to arrive here appends it to history - the second is a no-op past the
+    gate.
 
     Args:
         request: The current request (its session is what gets mutated).
@@ -101,11 +99,8 @@ def _resolve_turn(request: HttpRequest, turn_id: str, final_entry: dict[str, Any
         final_entry: The entry to store in place of the pending marker.
 
     Returns:
-        ``final_entry`` with ``turn_id`` set - the caller's own render needs
-        it too (a proposal's confirm button builds its URL from
-        ``entry.turn_id``), not just the session copy, and the pending
-        marker's own ``turn_id`` would otherwise be lost the moment
-        ``entry.clear()`` wipes it below.
+        ``final_entry`` with ``turn_id`` set - the caller's own render needs it too (a proposal's
+        confirm button builds its URL from...
     """
     final_entry = {**final_entry, "turn_id": turn_id}
     if not cache.add(f"ulai:turn:{turn_id}:consumed", 1, _CONSUME_GATE_TTL_SECONDS):
@@ -123,11 +118,8 @@ def _resolve_turn(request: HttpRequest, turn_id: str, final_entry: dict[str, Any
 def _finished_result(task_id: str, turn_id: str) -> dict[str, Any] | None:
     """This turn's task result if it has finished, else ``None`` (still running).
 
-    Reads the turn-result cache first so a repeat poll never depends on the
-    Celery backend, which the first poll to see a finished turn deliberately
-    clears - see ``services.ai.turns.store_turn_result``. A failed or revoked
-    task resolves to :data:`~services.ai.turns.FAILED_TURN_RESULT` rather
-    than ``None``, so the caller can tell "failed" from "not done yet".
+    Reads the turn-result cache first so a repeat poll never depends on the Celery backend, which the
+    first poll to see a finished turn deliberately clears - see ``services.ai.turns.store_turn_result``.
     """
     cached = read_turn_result(turn_id)
     if cached is not None:
@@ -151,10 +143,9 @@ def _finished_result(task_id: str, turn_id: str) -> dict[str, Any] | None:
 def _session_proposals(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The session-visible shape of a turn's proposals - never ``args``.
 
-    ``args`` only ever needs to be read back by the confirm view, from the
-    cache-backed store (``store_turn_proposals``) - the session copy exists
-    purely to render a confirm button (or its resolved state) and has no
-    reason to carry it.
+    ``args`` only ever needs to be read back by the confirm view, from the cache-backed store
+    (``store_turn_proposals``) - the session copy exists purely to render a confirm button (or its
+    resolved state) and has no reason to carry it.
     """
     return [{"n": proposal["n"], "tool": proposal["tool"], "confirm_label": proposal["confirm_label"], "status": "pending"} for proposal in proposals]
 
@@ -197,12 +188,11 @@ class AssistantView(LoginRequiredMixin, View):
 class AssistantOverlayBodyView(LoginRequiredMixin, View):
     """Lazily-loaded body of the global assistant overlay dialog (see themes/base.html).
 
-    The overlay's ``<dialog>`` is only rendered server-side for an enabled
-    profile, so this is only ever fetched by one - re-checked here anyway
-    (defense in depth: an entitlement can be revoked mid-session) rather than
-    trusted from that earlier render.
-
     GET /assistant/overlay/
+
+    The overlay's ``<dialog>`` is only rendered server-side for an enabled profile, so this is only ever
+    fetched by one - re-checked here anyway (defense in depth: an entitlement can be revoked
+    mid-session) rather than trusted from that earlier render.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -241,10 +231,9 @@ class AssistantMessageView(LoginRequiredMixin, View):
 
         lock_token = acquire_turn_lock(profile)
         if lock_token is None:
-            # A turn is already in flight for this profile - the message is
-            # dropped rather than queued behind it (see turns.py's own
-            # single-flight docstring); the pending bubble already in
-            # history keeps polling on its own regardless.
+            # A turn is already in flight for this profile - the message is dropped rather than queued behind it
+            # (see turns.py's own single-flight docstring); the pending bubble already in history keeps polling
+            # on its own regardless.
             response = render(request, _MESSAGES_PARTIAL, _messages_context(request))
             response["HX-Trigger"] = json.dumps({"showToast": {"level": "info", "message": _BUSY_MESSAGE}})
             return response
@@ -253,10 +242,8 @@ class AssistantMessageView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.ai.page_context import page_object_to_dict, resolve_page_context
         from urbanlens.dashboard.services.ai.tasks import run_assistant_turn_task
 
-        # Prior turns only - the new message is a separate argument to the
-        # task, matching run_assistant_turn's own (history, user_message)
-        # split. Pending markers carry no "content" and would corrupt the
-        # transcript the task builds.
+        # Prior turns only - the new message is a separate argument to the task, matching run_assistant_turn's
+        # own (history, user_message) split.
         history_for_task = [{"role": entry["role"], "content": entry["content"]} for entry in history if not entry.get("pending")]
         page_path = request.POST.get("page_path") or ""
         page_context = resolve_page_context(page_path, profile) if page_path else None
@@ -288,9 +275,8 @@ class AssistantTurnPollView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         record = read_turn_record(turn_id)
         if record is None or record.get("profile_id") != profile.pk:
-            # Unknown to this cache, or someone else's turn - identical
-            # response either way, so a guessed turn_id can't distinguish
-            # "expired" from "not yours".
+            # Unknown to this cache, or someone else's turn - identical response either way, so a guessed
+            # turn_id can't distinguish "expired" from "not yours".
             raise Http404
 
         attempt = _poll_attempt(request)
@@ -317,12 +303,8 @@ class AssistantTurnPollView(LoginRequiredMixin, View):
         response = render(request, _BUBBLE_PARTIAL, {"entry": entry})
         client_actions = result.get("client_actions") or []
         if client_actions:
-            # Transient, never stored in session history - a reopened
-            # explainer/tour is a one-time UI nudge, not something a
-            # reloaded transcript should replay. Re-sent on a repeat poll of
-            # the same turn deliberately: that is a *second client* (another
-            # tab) resolving this turn for the first time, and it needs the
-            # nudge as much as the first one did.
+            # Transient, never stored in session history - a reopened explainer/tour is a one-time UI nudge, not
+            # something a reloaded transcript should replay.
             response["HX-Trigger"] = json.dumps({"ulAssistantAction": {"actions": client_actions}})
         return response
 
@@ -330,14 +312,13 @@ class AssistantTurnPollView(LoginRequiredMixin, View):
 class AssistantProposalConfirmView(LoginRequiredMixin, View):
     """Confirm (and actually run) one write-tool proposal from a resolved turn.
 
-    The write itself never ran inside the turn loop - it ran on ai-worker,
-    where ``registry.execute()`` refuses every write outright, and even
-    off ai-worker the loop always calls ``execute(..., confirmed=False)``.
-    This view is that write's only real execution path: it runs here, on
-    the ordinary web process, only once the user has explicitly clicked
-    confirm.
-
     POST /assistant/turn/<turn_id>/confirm/<n>/
+
+    The write itself never ran inside the turn loop - it ran on ai-worker, where ``registry.execute()``
+    refuses every write outright, and even off ai-worker the loop always calls ``execute(...,
+    confirmed=False)``.
+    This view is that write's only real execution path: it runs here, on the ordinary web process, only
+    once the user has explicitly clicked confirm.
     """
 
     def post(self, request: HttpRequest, turn_id: str, n: int) -> HttpResponse:
@@ -353,14 +334,8 @@ class AssistantProposalConfirmView(LoginRequiredMixin, View):
             raise Http404
 
         if not claim_turn_proposal(turn_id, n):
-            # Already confirmed (a double click, a retried request) - render
-            # whatever the earlier confirm already recorded, never run twice.
-            # Only trust that stored copy once it's actually resolved: the
-            # winner claims first and only writes "done"/"error" back to the
-            # session *after* execute() returns, so a loser arriving in that
-            # gap would otherwise re-render a still-"pending" proposal here -
-            # with no ``entry`` in this render's context, _proposal.html's
-            # confirm button would NoReverseMatch on an empty turn_id.
+            # Already confirmed (a double click, a retried request) - render whatever the earlier confirm
+            # already recorded, never run twice.
             history = _history(request)
             for entry in history:
                 if entry.get("turn_id") != turn_id:
@@ -387,12 +362,11 @@ class AssistantProposalConfirmView(LoginRequiredMixin, View):
 class AssistantResetView(LoginRequiredMixin, View):
     """Clear the conversation.
 
-    A display-only reset: any turn already in flight keeps running on
-    ai-worker and releases its own lock when it finishes - there is nothing
-    here to cancel, only a client-side log to clear (same as before this
-    view had anything async to worry about).
-
     POST /assistant/reset/
+
+    A display-only reset: any turn already in flight keeps running on ai-worker and releases its own
+    lock when it finishes - there is nothing here to cancel, only a client-side log to clear (same as
+    before this view had anything async to worry about).
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:

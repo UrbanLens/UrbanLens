@@ -1,5 +1,4 @@
-"""Trip comment visibility and mutation, shared by the panel and the REST API.
-The visible tree is built once, here, so both surfaces apply the same three independent gates in the same order:"""
+"""Trip comment visibility and mutation, shared by the panel and the REST API."""
 
 from __future__ import annotations
 
@@ -28,9 +27,6 @@ class TripReplyData(TypedDict):
     rendered_text: str
     reactions: dict[str, _ReactionData]
     can_delete: bool
-    #: True when this is a reply whose own parent was deleted (UL-219) - such a reply also has
-    #: parent=None and so queries identically to a genuine top-level comment; this distinguishes the
-    #: two for the template.
     #: Always False for a row still nested under its live parent's `replies` - by the time this
     parent_was_deleted: bool
 
@@ -63,8 +59,7 @@ def get_comment(trip: Trip, comment_id: int) -> TripComment:
         The comment.
 
     Raises:
-        TripNotFoundError: No such comment on this trip.
-    """
+        TripNotFoundError: No such comment on this trip."""
     comment = TripComment.objects.filter(id=comment_id, trip=trip).select_related("author__user", "markup_map").first()
     if comment is None:
         raise TripNotFoundError(COMMENT_NOT_FOUND)
@@ -80,8 +75,7 @@ def can_delete_comment(comment: TripComment, viewer: Profile, trip: Trip) -> boo
         trip: The comment's trip (for the creator override).
 
     Returns:
-        True for the comment's own author and for the trip's creator.
-    """
+        True for the comment's own author and for the trip's creator."""
     return viewer.id in {comment.author_id, trip.creator_id}
 
 
@@ -93,12 +87,7 @@ def build_comment_tree(trip: Trip, viewer: Profile) -> list[TripCommentData]:
         viewer: The profile reading them.
 
     Returns:
-        Top-level comments in creation order, each a dict with ``comment``,
-        ``rendered_text`` (mention-rendered HTML), ``reactions``
-        (``{emoji: {count, reacted_by}}``), ``can_delete`` and ``replies`` -
-        each reply carrying the same keys minus ``replies``. Comments the
-        viewer may not see are absent entirely.
-    """
+        Top-level comments in creation order, each a dict with ``comment``, ``rendered_text`` (mention-rendered HTML), ``reactions`` (``{emoji: {count, reacted_by}}``), ``can_delete`` and ``replies`` - each reply carrying the same keys minus ``replies``."""
     from urbanlens.dashboard.controllers.comments import _aggregate_reactions
     from urbanlens.dashboard.services.notifications.mentions import render_comment_text, viewer_pinned_uuids
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
@@ -201,10 +190,8 @@ def add_comment(
         actor: The commenting profile.
         text: The comment body; may be blank when an image or map is attached.
         parent_id: The id of a comment on this same trip to reply to.
-        image: A newly uploaded image file, validated and then scanned in the
-            background before other members can see the comment.
-        existing_image_id: The id of one of the actor's own already-uploaded
-            photos to attach instead of a fresh upload.
+        image: A newly uploaded image file, validated and then scanned in the background before other members can see the comment.
+        existing_image_id: The id of one of the actor's own already-uploaded photos to attach instead of a fresh upload.
         map_data: A parsed markup-map payload to materialize and attach.
 
     Returns:
@@ -212,10 +199,8 @@ def add_comment(
 
     Raises:
         TripPermissionError: The actor may not comment on this trip.
-        TripValidationError: Nothing was submitted, the text exceeds the
-            shared limit, or the image was rejected.
-        TripNotFoundError: ``parent_id`` is not a comment on this trip.
-    """
+        TripValidationError: Nothing was submitted, the text exceeds the shared limit, or the image was rejected.
+        TripNotFoundError: ``parent_id`` is not a comment on this trip."""
     from urbanlens.dashboard.controllers.comments import attach_existing_comment_image, comment_image_error, start_comment_image_scan
     from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 
@@ -267,9 +252,7 @@ def delete_comment(trip: Trip, actor: Profile, comment: TripComment) -> None:
         comment: The comment to delete.
 
     Raises:
-        TripPermissionError: The actor is neither the comment's author nor the
-            trip's creator.
-    """
+        TripPermissionError: The actor is neither the comment's author nor the trip's creator."""
     from urbanlens.dashboard.controllers.comments import _discard_comment_image
 
     if not can_delete_comment(comment, actor, trip):
@@ -322,10 +305,7 @@ def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, 
 
     Raises:
         TripValidationError: The emoji is not one of the allowed reactions.
-        TripNotFoundError: Any of the gates :func:`build_comment_tree` applies
-            hides this comment from the reacting profile. Reported as "not
-            found" rather than "forbidden" so reacting can't be used to probe
-            for comments the viewer was never shown."""
+        TripNotFoundError: Any of the gates :func:`build_comment_tree` applies hides this comment from the reacting profile."""
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if emoji not in ALLOWED_COMMENT_EMOJIS:

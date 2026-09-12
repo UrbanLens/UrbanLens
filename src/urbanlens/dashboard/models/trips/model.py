@@ -42,23 +42,13 @@ logger = logging.getLogger(__name__)
 
 class Trip(abstract.PublicDashboardModel):
     """A planned trip shared among one or more users.
-
-    The creator is the user who created the trip. Members includes the creator
-    plus any additional users added. Only members can view and edit the trip.
-
-    URLs identify a trip by ``slug`` rather than ``uuid`` or a sequential id -
-    trips are private, and a predictable/sequential identifier (e.g.
-    "detroit-5") would hint at how many other trips exist. The slug is derived
-    from the trip name with a random (not sequential) numeric suffix on
-    collision - see ``PublicDashboardModel._generate_slug``.
+    The creator is the user who created the trip.
+    Only members can view and edit the trip.
     """
 
-    # Global uniqueness (unlike Pin's per-profile slug) since a trip has no
-    # natural per-user namespace - it's shared among all its members.
-    #: Memoized/annotated effective dates. Declared (not assigned) so they stay
-    #: off the model's field list while still giving the properties below a real
-    #: type to return; populated either by ``TripQuerySet.for_list_page``'s
-    #: annotation or by the first read.
+    # Global uniqueness (unlike Pin's per-profile slug) since a trip has no natural per-user
+    # namespace - it's shared among all its members.
+    # Memoized/annotated effective dates.
     _eff_start: date | None
     _eff_end: date | None
 
@@ -126,10 +116,9 @@ class Trip(abstract.PublicDashboardModel):
         # page results - not a real field/annotation, just a per-request
         # shortcut to the viewing profile's own membership row (or None).
         viewer_membership: TripMembership | None
-        # Set by external_api.views._trip_detail_payload, in the same
-        # per-request-decoration spirit as viewer_membership above: the trip
-        # detail response bundles what this particular caller may do, their
-        # calendar-mirroring state, and the roster, none of which are fields.
+        # Set by external_api.views._trip_detail_payload, in the same per-request-decoration spirit
+        # as viewer_membership above: the trip detail response bundles what this particular caller
+        # may do, their calendar-mirroring state, and the roster, none of which are fields.
         viewer: dict[str, Any]
         calendar_sync: dict[str, Any]
         members: list[TripMembership]
@@ -142,18 +131,11 @@ class Trip(abstract.PublicDashboardModel):
     @property
     def effective_start_date(self) -> date | None:
         """``start_date`` if set, else the earliest scheduled activity's date.
-
-        Resolved from a ``_eff_start`` annotation when the queryset supplied one (see
-        ``TripQuerySet.for_list_page``), and otherwise computed once and remembered on
-        the instance. Both matter because this is not a cheap attribute: it falls back
-        to querying the trip's activities, and ``timeline_status`` and ``duration_days``
-        each read it *and* ``effective_end_date``, so one serialized trip used to cost
-        about five activity queries. The annotation makes a list of trips flat; the memo
-        makes a single trip cost one query however many times it is read.
+        Resolved from a ``_eff_start`` annotation when the queryset supplied one (see ``TripQuerySet.for_list_page``), and otherwise computed once and remembered on the instance.
         """
-        # try/except rather than a sentinel: None is a legitimate cached value
-        # here, so "absent" cannot be expressed as a default. The declared
-        # ``_eff_start`` attribute is what lets this return a real ``date | None``
+        # try/except rather than a sentinel: None is a legitimate cached value here, so "absent"
+        # cannot be expressed as a default.
+        # The declared ``_eff_start`` attribute is what lets this return a real ``date | None``
         # instead of the ``object`` a ``getattr(..., sentinel)`` widens to.
         try:
             return self._eff_start
@@ -367,11 +349,8 @@ class TripMembership(abstract.DashboardModel):
     ]
 
     # Whether an invited profile has consented to participate in trip planning.
-    # Separate from `rsvp` (are you actually coming?) - this instead gates
-    # whether the member can contribute at all (add/edit activities, comment,
-    # vote, add members). Defaults to "joined" so every pre-existing
-    # membership, and the creator's own row, stay fully functional; invite
-    # flows (TripCreateView, TripMembersView) set "invited" explicitly.
+    # Separate from `rsvp` (are you actually coming?) - this instead gates whether the member can
+    # contribute at all (add/edit activities, comment, vote, add members).
     STATUS_INVITED = "invited"
     STATUS_JOINED = "joined"
     STATUS_CHOICES = [
@@ -418,11 +397,8 @@ class TripMembership(abstract.DashboardModel):
 
 class TripActivityRSVP(abstract.DashboardModel):
     """A member's explicit RSVP override for one trip activity.
-
-    The absence of a row means the activity inherits the member's
-    :class:`TripMembership` RSVP. Keeping only overrides makes a later change
-    to the trip RSVP flow through automatically without overwriting deliberate
-    per-activity choices.
+    The absence of a row means the activity inherits the member's :class:`TripMembership` RSVP.
+    Keeping only overrides makes a later change to the trip RSVP flow through automatically without overwriting deliberate per-activity choices.
     """
 
     rsvp = CharField(max_length=20, choices=TripMembership.RSVP_CHOICES)
@@ -511,11 +487,10 @@ class TripComment(abstract.DashboardModel):
         null=True,
         blank=True,
     )
-    # Set by this model's own pre_delete signal (see signals.py) on every
-    # reply of a comment that's about to be deleted, before `parent` is
-    # nulled out by SET_NULL below. Without this, a reply to a deleted
-    # comment silently becomes an unexplained top-level comment - mirrors
-    # dashboard.Comment.parent_deleted (UL-219), ported here.
+    # Set by this model's own pre_delete signal (see signals.py) on every reply of a comment that's
+    # about to be deleted, before `parent` is nulled out by SET_NULL below.
+    # Without this, a reply to a deleted comment silently becomes an unexplained top-level comment -
+    # mirrors dashboard.Comment.parent_deleted (UL-219), ported here.
     parent_deleted = BooleanField(default=False)
 
     objects = TripCommentManager()
@@ -529,9 +504,7 @@ class TripComment(abstract.DashboardModel):
     @property
     def map_data(self) -> dict | None:
         """Client snapshot of the attached markup map, if any.
-
-        Kept as a property so templates and viewer JS that consumed the old
-        ``map_data`` JSON column keep working against the MarkupMap relation.
+        Kept as a property so templates and viewer JS that consumed the old ``map_data`` JSON column keep working against the MarkupMap relation.
 
         Returns:
             Snapshot dict or None when no map is attached.

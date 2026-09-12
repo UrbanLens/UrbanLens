@@ -34,10 +34,7 @@ def strip_metadata(data: bytes) -> bytes | None:
         data: The complete uploaded file.
 
     Returns:
-        The stripped bytes, or ``None`` when the format is not one this module
-        rewrites (HEIC, TIFF, GIF, anything unrecognised) or the stream does not
-        parse. ``None`` means "leave it to the re-encode", never "it was clean".
-    """
+        The stripped bytes, or ``None`` when the format is not one this module rewrites (HEIC, TIFF, GIF, anything unrecognised) or the stream does not parse."""
     try:
         if data[:2] == b"\xff\xd8":
             return _strip_jpeg(data)

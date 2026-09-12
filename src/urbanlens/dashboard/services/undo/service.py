@@ -12,7 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.undo import UNDO_RETENTION, UndoAction, UndoKind
-from urbanlens.dashboard.services.undo import handlers as _handlers  # noqa: F401 - importing the package is what registers every handler get_handler resolves
+from urbanlens.dashboard.services.undo import handlers as _handlers  # noqa: F401 - importing the package is what...
 from urbanlens.dashboard.services.undo.base import get_handler
 
 if TYPE_CHECKING:
@@ -35,11 +35,7 @@ class UndoExpiredError(Exception):
 
 class UndoAlreadyRestoredError(UndoExpiredError):
     """Raised when an UndoAction was already restored by another request.
-
-    Subclasses :class:`UndoExpiredError` so the existing callers - which all
-    answer "this undo is no longer available" - keep working unchanged, while
-    a caller that wants to tell the two apart still can.
-    """
+    Subclasses :class:`UndoExpiredError` so the existing callers - which all answer "this undo is no longer available" - keep working unchanged, while a caller that wants to tell the two apart still can."""
 
 
 class NothingToUndoError(Exception):
@@ -92,8 +88,7 @@ def stash_for_undo(model_label: str, instances: Sequence[Model], profile: Profil
         profile: The profile performing (and who may later undo) the delete.
 
     Returns:
-        The created UndoAction row, or None when called from inside an
-        undo/redo apply (the inverted write must not stash itself)."""
+        The created UndoAction row, or None when called from inside an undo/redo apply (the inverted write must not stash itself)."""
     if _APPLYING.get():
         return None
     handler = get_handler(model_label)
@@ -116,14 +111,11 @@ def stash_mutation(model_label: str, profile: Profile, *, payload: dict[str, Any
     Args:
         model_label: Registry key of the mutation handler to use.
         profile: The profile performing (and who may later undo) the change.
-        payload: JSON-safe dict the handler's ``undo_mutation``/``redo_mutation``
-            will apply.
+        payload: JSON-safe dict the handler's ``undo_mutation``/``redo_mutation`` will apply.
         description: Short label shown on the undo button and history list.
 
     Returns:
-        The created UndoAction row, or None when called from inside an
-        undo/redo apply.
-    """
+        The created UndoAction row, or None when called from inside an undo/redo apply."""
     if _APPLYING.get():
         return None
     get_handler(model_label)  # fail closed if the label is unregistered
@@ -194,7 +186,7 @@ def redo_undo_action(undo_action: UndoAction) -> None:
     """Re-apply an entry that was previously undone.
 
     Args:
-        undo_action: The entry to redo. Must have ``undone_at`` set.
+        undo_action: The entry to redo.
 
     Raises:
         UndoExpiredError: Past the retention window, or not currently undone."""

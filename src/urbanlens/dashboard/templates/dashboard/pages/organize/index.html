@@ -59,11 +59,7 @@
          data-standalone-mode="{{ standalone_mode|yesno:'1,' }}"
          data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# LABELS SECTION: Tags/Categories/Statuses/People/Display Order, all inside  #}
-    {# one visually distinct container so it doesn't read as a second subnav      #}
-    {# stacked under the page's own Labels|Lists|Filters tabs above.              #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# LABELS SECTION: Tags/Categories/Statuses/People/Display Order, all inside one visually distinct container so it doesn't read. #}
     <div class="organize-section-panel" id="panel-labels" role="tabpanel"
          {% if not standalone_mode and active_section != 'labels' %}hidden{% endif %}>
     <div class="organize-labels-container">
@@ -153,7 +149,6 @@
 
                 {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent pins with multiple labels." visual_template="dashboard/partials/ui/_priority_visual.html" %}
 
-                {# organize-priority.ts delegates its Sortable/click/afterSwap handlers to #panel-priority, not #priority-list, so it tolerates #priority-list not existing yet while this loads lazily. #}
                 <div id="priority-list-wrap">
                 {% if priority_deferred %}
                 <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading&hellip;</div>
@@ -161,22 +156,18 @@
                 {% include "dashboard/partials/labels/_priority_list.html" with priority_items=priority_items %}
                 {% endif %}
                 </div>
-            </div>{# end #panel-priority #}
+            </div>
             {% endif %}
 
             {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' label_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' labels=user_labels parent_items=people_parent_items rows_id='people-label-rows' rows_target='#people-label-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-label-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True rows_deferred=people_deferred %}
 
             {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='media' ns='media' form_id='new-media-form' filter_ns='media' label_url_kind='media' kind='media' singular_title='Media Label' plural_lower='labels' labels=media_labels parent_items=media_parent_items rows_id='media-label-rows' rows_target='#media-label-rows' select_class='media-sel-cb' select_data_name='media' edit_target='#media-label-edit-dialog-body' empty_icon='perm_media' name_placeholder='e.g. Interior, Drone Shot' desc_placeholder='What kind of media does this describe?' empty_message='No media labels yet. Create one to help you find your photos, videos, and documents in search.' selectable=True editable=True deletable=True rows_deferred=media_deferred %}
-        </div>{# end .organize-labels-container-body #}
-    </div>{# end .organize-labels-container #}
-    </div>{# end #panel-labels #}
+        </div>
+    </div>
+    </div>
 
     {% if not standalone_mode %}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# LISTS / FILTERS SECTIONS: lazy-loaded via HTMX the first time each tab is  #}
-    {# shown (see PinListsIndexView.get) - reuses the same content/JS that used   #}
-    {# to live at /lists/, which now redirects here for direct navigation.       #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# LISTS / FILTERS SECTIONS: lazy-loaded via HTMX the first time each tab is shown. #}
     <div class="organize-section-panel" id="panel-lists" role="tabpanel" {% if active_section != 'lists' %}hidden{% endif %}
          hx-get="{% url 'lists.list' %}?tab=lists" hx-trigger="revealed" hx-swap="innerHTML">
         <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading your lists&hellip;</div>
@@ -188,7 +179,7 @@
     </div>
     {% endif %}
 
-</div>{# end .organize-page #}
+</div>
 
 {# -- Floating bulk action toolbar ------------------------------------------- #}
 <div id="org-bulk-bar" class="org-bulk-bar" aria-live="polite">

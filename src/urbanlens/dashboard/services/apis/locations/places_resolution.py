@@ -1,5 +1,4 @@
-"""Resolves Google Places API calls to REData or direct Google, per call.
-REData owns Google Places API access and does its own cost optimization (permanent caching, Essentials/Pro-tier-only field selection - see ``google.redata_places_gateway``'s module docstring for exactly which fields that excludes: no rating, reviews, opening hours, price level, phone numbers, or website, ever, on this path). - REData not configured - assumed to be an install without access to it."""
+"""Resolves Google Places API calls to REData or direct Google, per call."""
 
 from __future__ import annotations
 
@@ -44,18 +43,10 @@ def search_nearby_landmarks(latitude: float, longitude: float, radius: float, in
         api_key: Google Places API key, used only on the Google fallback path.
 
     Returns:
-        A list of Places API (New)-shaped dicts (``id``, ``displayName.text``,
-        ``location.{latitude,longitude}``, ``shortFormattedAddress``,
-        ``types``, ``rating``, ``userRatingCount``) - the exact shape the
-        caller already parses. ``rating``/``userRatingCount`` are always
-        ``None`` on the REData path (Enterprise-tier fields REData never
-        fetches - see the module docstring).
+        A list of Places API (New)-shaped dicts (``id``, ``displayName.text``, ``location.{latitude,longitude}``, ``shortFormattedAddress``, ``types``, ``rating``, ``userRatingCount``) - the exact shape the caller already parses.
 
     Raises:
-        GatewayRequestError: The request to whichever provider answered
-            failed - callers already wrap this call in their own
-            exception handling (matching today's Google-only behavior).
-    """
+        GatewayRequestError: The request to whichever provider answered failed - callers already wrap this call in their own exception handling (matching today's Google-only behavior)."""
     if _redata_configured():
         results = RedataPlacesGateway().search_nearby(latitude, longitude, radius_meters=radius, included_types=included_types)
         return [
@@ -85,23 +76,10 @@ def get_place_details_full(place_id: str, *, api_key: str) -> dict[str, Any]:
         api_key: Google Places API key, used only on the Google fallback path.
 
     Returns:
-        A legacy-Google-Place-Details-shaped dict (``name``,
-        ``formatted_address``, ``rating``, ``editorial_summary``,
-        ``opening_hours``, ``website``, ``url``, ``photos``) - the exact
-        shape the caller already parses/caches. On the REData path,
-        ``rating``/``editorial_summary``/``opening_hours``/``website`` are
-        always ``None`` (Enterprise-tier fields REData never fetches) and
-        ``photos`` is always empty (nothing renders it today - see
-        ``google.redata_places_gateway``). An empty dict means "REData
-        confirmed no such place" - not a failure.
+        A legacy-Google-Place-Details-shaped dict (``name``, ``formatted_address``, ``rating``, ``editorial_summary``, ``opening_hours``, ``website``, ``url``, ``photos``) - the exact shape the caller already parses/caches.
 
     Raises:
-        GatewayRequestError: The request to whichever provider answered
-            failed outright (network error, non-2xx) - deliberately left
-            uncaught here so the existing caller-level exception handling
-            (which maps this to a 502 without caching it) keeps working
-            unchanged for both providers.
-    """
+        GatewayRequestError: The request to whichever provider answered failed outright (network error, non-2xx) - deliberately left uncaught here so the existing caller-level exception handling (which maps this to a 502 without caching it) keeps working unchanged for both..."""
     if _redata_configured():
         place = RedataPlacesGateway().get_place(place_id)
         if place is None:
@@ -128,27 +106,10 @@ def find_nearest_place_photos(latitude: float, longitude: float, *, api_key: str
         api_key: Google Places API key, used only on the Google fallback path.
 
     Returns:
-        Tuple of (place_id, photo identifiers) - up to 10 identifiers, each
-        an opaque string suitable for :func:`download_photo`. On the Google
-        path these are raw Places API (New) photo resource names
-        (``places/.../photos/...``); on the REData path they're composite
-        strings (``"redata:{place_id}:{record_id}"``) encoding REData's own
-        internal photo-record id, since REData's photo download endpoint is
-        keyed by that id, not Google's resource name. Either identifier form
-        round-trips opaquely through the caller's HMAC-signed proxy URL
-        scheme (``controllers.media_proxy``), which never inspects its
-        internal structure.
+        Tuple of (place_id, photo identifiers) - up to 10 identifiers, each an opaque string suitable for :func:`download_photo`.
 
     Raises:
-        GatewayRequestError: The request to whichever provider answered
-            failed outright - deliberately left uncaught here (unlike most
-            other functions in this module) so the panel-source framework's
-            own failure-skip/retry machinery handles it, matching
-            ``plugins.builtin.property_records``'s established precedent for
-            REData failures inside a panel-source fetch. Swallowing this to
-            an empty result here would instead get permanently cached as
-            "no photos found" on a merely transient REData outage.
-    """
+        GatewayRequestError: The request to whichever provider answered failed outright - deliberately left uncaught here (unlike most other functions in this module) so the panel-source framework's own failure-skip/retry machinery handles it, matching..."""
     if _redata_configured():
         gateway = RedataPlacesGateway()
         nearby = gateway.search_nearby(latitude, longitude, radius_meters=75, max_results=1)
@@ -171,12 +132,7 @@ def find_nearest_place_photos(latitude: float, longitude: float, *, api_key: str
 
 
 class PhotoNotFoundError(Exception):
-    """Confirmed no photo exists at this identifier, on whichever provider produced it.
-
-    Lets ``controllers.media_proxy`` tell "gone" (cache as expired, 404) apart
-    from "transient" (502, don't cache) - the same distinction it already
-    makes for Google's own 404s.
-    """
+    """Confirmed no photo exists at this identifier, on whichever provider produced it."""
 
 
 def download_photo(photo_identifier: str, *, api_key: str) -> tuple[bytes, str]:
@@ -184,20 +140,15 @@ def download_photo(photo_identifier: str, *, api_key: str) -> tuple[bytes, str]:
 
     Args:
         photo_identifier: An opaque identifier from :func:`find_nearest_place_photos`.
-        api_key: Google Places API key, used only when the identifier isn't
-            REData-prefixed.
+        api_key: Google Places API key, used only when the identifier isn't REData-prefixed.
 
     Returns:
         Tuple of (file bytes, content-type).
 
     Raises:
         PhotoNotFoundError: REData confirmed this photo no longer exists.
-        GatewayRequestError: A REData request failed outright (network error,
-            non-2xx other than a confirmed-gone 404).
-        requests.exceptions.RequestException: The direct Google request
-            failed - unchanged from today's behavior, since
-            ``GooglePlacesGateway.get_photo_media`` is called exactly as
-            before for a non-REData identifier.
+        GatewayRequestError: A REData request failed outright (network error, non-2xx other than a confirmed-gone 404).
+        requests.exceptions.RequestException: The direct Google request failed - unchanged from today's behavior, since ``GooglePlacesGateway.get_photo_media`` is called exactly as before for a non-REData identifier.
 
     Note:
         Dispatches on the identifier's own prefix, not on whether REData is *currently* configured - an identifier already encodes which provider produced it (it was persisted into ``LocationCache`` when first fetched), so a config change must not orphan already-cached identifiers."""
@@ -218,19 +169,10 @@ def autocomplete_predictions(query: str, *, api_key: str) -> list[dict[str, str]
         api_key: Google Places API key, used only on the Google fallback path.
 
     Returns:
-        A list of normalized ``{"place_id", "main_text", "secondary_text"}``
-        dicts, in either provider's own ranked order. A "query"-kind
-        suggestion (no resolvable place) comes back with ``place_id: ""` -
-        the caller's existing ``if not place_id: continue`` filter already
-        discards those unchanged.
+        A list of normalized ``{"place_id", "main_text", "secondary_text"}`` dicts, in either provider's own ranked order.
 
     Raises:
-        GatewayRequestError: The request to whichever provider answered
-            failed outright - deliberately left uncaught here so the
-            existing caller-level ``except Exception`` (which returns
-            whatever suggestions were already found, i.e. none) keeps
-            working unchanged for both providers.
-    """
+        GatewayRequestError: The request to whichever provider answered failed outright - deliberately left uncaught here so the existing caller-level ``except Exception`` (which returns whatever suggestions were already found, i.e. none) keeps working unchanged for both..."""
     if _redata_configured():
         predictions = RedataPlacesGateway().autocomplete(query)
         return [{"place_id": p.get("place_id") or "", "main_text": p.get("main_text") or "", "secondary_text": p.get("secondary_text") or ""} for p in predictions]
@@ -256,16 +198,10 @@ def resolve_place_coordinates(place_id: str, *, api_key: str) -> tuple[float | N
         api_key: Google Places API key, used only on the Google fallback path.
 
     Returns:
-        (latitude, longitude, name) - all may be None on failure or when the
-        place has no known coordinates.
+        (latitude, longitude, name) - all may be None on failure or when the place has no known coordinates.
 
     Raises:
-        GatewayRequestError: The request to whichever provider answered
-            failed outright - deliberately left uncaught here so the
-            existing caller-level ``except Exception`` (which falls back to
-            ``(None, None, None)``) keeps working unchanged for both
-            providers.
-    """
+        GatewayRequestError: The request to whichever provider answered failed outright - deliberately left uncaught here so the existing caller-level ``except Exception`` (which falls back to ``(None, None, None)``) keeps working unchanged for both providers."""
     if _redata_configured():
         place = RedataPlacesGateway().get_place(place_id)
         if place is None:

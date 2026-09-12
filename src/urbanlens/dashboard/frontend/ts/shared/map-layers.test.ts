@@ -1,9 +1,5 @@
 /**
- * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in
- * dashboard/models/markup/meta.py - it's the single place old cached
- * MarkupMap snapshots and pre-canonical layer-mode values get normalized
- * before every Leaflet map on the site picks a base layer. It has no Leaflet
- * or DOM dependency, so it's tested directly rather than through createMapLayers().
+ * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in dashboard/models/markup/meta.py.
  */
 import { describe, expect, test } from "bun:test";
 import { normalizeBase } from "./map-layers";

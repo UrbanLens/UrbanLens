@@ -1,18 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-Chip-based emergency contact picker. Friends are added as chips by clicking their
-avatar or by typing their name into the text input (autocompleted); email addresses
-are added as chips by typing them and pressing Enter. Reused for both check-in
-defaults and individual check-ins. Context: `contacts` (existing (contact_profile,
-email, name) tuples to prefill), `connections` (the profile's friends), and
-optionally `contact_status` (dict keyed by contact_profile.id or email -> {"label",
-"class"}, shown as a badge next to each chip - only passed on the check-in detail
-page, which is also the only caller that ever passes `locked=True`/`collapsible=True`),
-`locked` (drops the remove button/avatar-picker/input entirely once contacts have
-already been notified - see SafetyCheckin.contacts_locked), and `collapsible` (starts
-collapsed to a plain read-only chip list behind an "Edit" button rather than showing
-the add/remove controls inline right away - only meaningful when not `locked`).
-{% endcomment %}
+{% comment %}Chip-based emergency contact picker.{% endcomment %}
 <div class="safety-contact-picker card{% if collapsible and not locked %} safety-contact-picker--collapsible{% endif %}" data-role="contact-picker">
     <div class="card-header">
         <i class="material-symbols-outlined">contacts</i>

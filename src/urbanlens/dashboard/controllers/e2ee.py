@@ -91,19 +91,15 @@ def _json_body(request: HttpRequest | Request) -> dict[str, Any] | None:
 def _require_current_password_proof(user: Any, data: dict[str, Any]) -> Response | None:
     """Require proof of the current login credential for password accounts.
 
-    Load-bearing under credential authentication, not just for sessions: a
-    stolen ``messages:write`` OAuth2 token must not be enough on its own to
-    re-key someone's account. Enroll/Rewrap/Reset all re-derive or replace key
-    material, so each of them demands the account password as a second factor
-    the token itself never carries.
+    Load-bearing under credential authentication, not just for sessions: a stolen ``messages:write``
+    OAuth2 token must not be enough on its own to re-key someone's account.
 
     Args:
         user: The requesting ``User``.
         data: The parsed JSON body, which must carry ``current_password``.
 
     Returns:
-        A 403 response when the proof is missing or wrong, else None. Accounts
-        with no usable password (OAuth-only) have no proof to give and pass.
+        A 403 response when the proof is missing or wrong, else None.
     """
     if not user.has_usable_password():
         return None
@@ -128,8 +124,8 @@ class E2EELoginParamsView(APIView):
         """Return the auth mode and salt for one login identifier.
 
         Args:
-            request: The request; ``identifier`` query param holds the
-                username or email typed into the login form.
+            request: The request; ``identifier`` query param holds the username or email typed into the
+            login form.
 
         Returns:
             JSON ``{mode, auth_salt}``.
@@ -156,19 +152,16 @@ class E2EEEnrollView(DualAuthJsonView):
         """Create the caller's key bundle.
 
         Args:
-            request: JSON body with ``public_key``, ``recovery_wrapped_secret``,
-                optional ``password_wrapped_secret``/``password_wrap_salt``,
-                optional ``auth_key``/``auth_salt``/``current_password``, and
-                ``kdf_opslimit``/``kdf_memlimit``.
+            request: JSON body with ``public_key``, ``recovery_wrapped_secret``, optional
+            ``password_wrapped_secret``/``password_wrap_salt``, optional...
 
         Returns:
-            201 JSON on success; 400 on malformed blobs; 403 on bad password
-            proof; 409 when a bundle already exists.
+            201 JSON on success; 400 on malformed blobs; 403 on bad password proof; 409 when a bundle
+            already exists.
         """
         profile = _get_profile(request)
-        # profile.user is a concrete User (the permission classes guarantee an
-        # authenticated request); use it for the password operations below so
-        # the types stay narrow.
+        # profile.user is a concrete User (the permission classes guarantee an authenticated request); use it
+        # for the password operations below so the types stay narrow.
         user = profile.user
         data = _json_body(request)
         if data is None:
@@ -211,15 +204,7 @@ class E2EEEnrollView(DualAuthJsonView):
             kdf_memlimit = int(data.get("kdf_memlimit", 0))
         except (TypeError, ValueError):
             return Response({"error": "Invalid kdf parameters"}, status=400)
-        # A floor, not just "positive". These parameters decide how expensive it is
-        # to brute-force `password_wrapped_secret` offline, and the whole point of
-        # that blob is that whoever holds it - including this server - cannot open
-        # it. Accepting any positive value let a caller enrol its own account with
-        # Argon2 parameters weak enough to make the wrapped private key
-        # recoverable from the password. Stronger-than-default is still accepted,
-        # so a future client can raise them without a server change; the real
-        # client always sends exactly these (frontend `e2ee-crypto.KDF_OPSLIMIT`
-        # / `KDF_MEMLIMIT`, pinned to match), so nothing legitimate trips this.
+        # A floor, not just "positive".
         if kdf_opslimit < DEFAULT_KDF_OPSLIMIT or kdf_memlimit < DEFAULT_KDF_MEMLIMIT:
             return Response({"error": "Invalid kdf parameters"}, status=400)
 
@@ -240,11 +225,8 @@ class E2EEEnrollView(DualAuthJsonView):
                 AccountKdf.objects.set_auth_salt(user, auth_salt)
                 user.set_password(auth_key)
                 user.save(update_fields=["password"])
-                # Only meaningful for a browser session, whose auth hash would
-                # otherwise be invalidated by the password change and log the
-                # user straight out. A credential-authenticated caller has no
-                # session at all, and calling this unguarded would *create* an
-                # empty one for a client that will never send the cookie back.
+                # Only meaningful for a browser session, whose auth hash would otherwise be invalidated by the
+                # password change and log the user straight out.
                 if request.session.session_key:
                     update_session_auth_hash(request, user)
 
@@ -263,19 +245,19 @@ class E2EEOwnKeysView(DualAuthJsonView):
     def get(self, request: Request) -> Response:
         """Return the caller's bundle, or an "enrolled: false" body when not enrolled.
 
-        Not being enrolled yet is the common, expected state for most accounts
-        (checked unconditionally on every page load to render the encryption
-        status indicator), so it is reported as a normal 200 rather than a 404
-        - an HTTP error status here would show up as a spurious-looking error
-        in the browser console on essentially every page view for these
-        accounts, even though the client handles it gracefully.
+        Not being enrolled yet is the common, expected state for most accounts (checked unconditionally on
+        every page load to render the encryption status indicator), so it is reported as a normal 200 rather
+        than a 404
+
+        - an HTTP error status here would show up as a spurious-looking error in the browser console on
+          essentially every page view for these accounts, even though the...
 
         Args:
             request: The authenticated request.
 
         Returns:
-            JSON with every bundle field the client needs to unlock, or
-            ``{"enrolled": false}`` when the account has no bundle yet.
+            JSON with every bundle field the client needs to unlock, or ``{"enrolled": false}`` when the
+            account has no bundle yet.
         """
         from webauthn.helpers import bytes_to_base64url
 
@@ -283,11 +265,10 @@ class E2EEOwnKeysView(DualAuthJsonView):
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
             return Response({"enrolled": False})
-        # Wraps sealed to a superseded keypair are withheld (usable_for_bundle),
-        # not surfaced-and-flagged: a client that unwrapped one would silently
-        # adopt a dead identity. passkey_credentials lists every credential so
-        # the enrollment UI can offer "use an existing passkey" vs "create one"
-        # without a second endpoint - credential ids are public handles.
+        # Wraps sealed to a superseded keypair are withheld (usable_for_bundle), not surfaced-and-flagged: a
+        # client that unwrapped one would silently adopt a dead identity. passkey_credentials lists every
+        # credential so the enrollment UI can offer "use an existing passkey" vs "create one" without a second
+        # endpoint - credential ids are public handles.
         wraps = [
             {"credential_id": bytes_to_base64url(bytes(wrap.credential.credential_id)), "prf_input": wrap.prf_input, "wrapped_secret": wrap.wrapped_secret} for wrap in E2EEPasskeyWrap.objects.usable_for_bundle(bundle).select_related("credential")
         ]
@@ -335,8 +316,8 @@ class E2EEPartnerKeyView(DualAuthJsonView):
             profile_slug: The partner's profile slug.
 
         Returns:
-            JSON ``{public_key, version}``; 404 when the partner has no bundle
-            or no DM relationship is permitted in either direction.
+            JSON ``{public_key, version}``; 404 when the partner has no bundle or no DM relationship is
+            permitted in either direction.
         """
         profile = _get_profile(request)
         partner = get_object_or_404(Profile.objects.select_related("user"), slug=profile_slug)
@@ -367,16 +348,11 @@ class E2EEConversationKeyView(DualAuthJsonView):
             profile_slug: The partner's profile slug.
 
         Returns:
-            JSON ``{keys: [{version, wrapped_key}], latest}`` (``latest`` is 0
-            when no key exists yet).
+            JSON ``{keys: [{version, wrapped_key}], latest}`` (``latest`` is 0 when no key exists yet).
 
         Raises:
-            Http404: When no keys exist for the pair and no DM relationship is
-                permitted in either direction - identical to an unknown slug,
-                so this endpoint can't be used to probe which profile slugs
-                exist. Existing keys are always returned regardless of the
-                current relationship: a participant must stay able to decrypt
-                their history even after a block or privacy change.
+            Http404: Existing keys are always returned regardless of the current relationship: a participant
+            must stay able to decrypt their history even...
         """
         profile = _get_profile(request)
         partner = get_object_or_404(Profile, slug=profile_slug)
@@ -392,19 +368,17 @@ class E2EEConversationKeyView(DualAuthJsonView):
     def post(self, request: Request, profile_slug: str) -> Response:
         """Store the next conversation-key version for this pair.
 
-        The creating client generates the random key and seals it to both
-        participants' public keys; the server stores the two blobs it cannot
-        open. A concurrent-create race is resolved by returning the winner.
+        The creating client generates the random key and seals it to both participants' public keys; the
+        server stores the two blobs it cannot open.
 
         Args:
-            request: JSON body with ``version``, ``wrapped_for_me``,
-                ``wrapped_for_partner`` (the server maps them onto the
-                canonical low/high pair ordering).
+            request: JSON body with ``version``, ``wrapped_for_me``, ``wrapped_for_partner`` (the server
+            maps them onto the canonical low/high pair ordering).
             profile_slug: The partner's profile slug.
 
         Returns:
-            201 with the caller's wrapped copy on success; 200 with the
-            existing winner's copy when racing; 400/403/409 on invalid input.
+            201 with the caller's wrapped copy on success; 200 with the existing winner's copy when racing;
+            400/403/409 on invalid input.
         """
         profile = _get_profile(request)
         partner = get_object_or_404(Profile, slug=profile_slug)
@@ -455,9 +429,9 @@ class E2EEConversationKeyView(DualAuthJsonView):
 class E2EERewrapView(DualAuthJsonView):
     """POST: replace wrapped private-key copies (same key, new wrapping).
 
-    Used after a password reset (re-wrap under the new password, clearing the
-    stale flag) and when regenerating the recovery key. The private key itself
-    never changes here - only which secrets can unwrap it.
+    Used after a password reset (re-wrap under the new password, clearing the stale flag) and when
+    regenerating the recovery key.
+    The private key itself never changes here - only which secrets can unwrap it.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -476,9 +450,8 @@ class E2EERewrapView(DualAuthJsonView):
         """Update wrapped copies on the caller's bundle.
 
         Args:
-            request: JSON body with optional ``password_wrapped_secret`` +
-                ``password_wrap_salt`` (together) and/or
-                ``recovery_wrapped_secret``.
+            request: JSON body with optional ``password_wrapped_secret`` + ``password_wrap_salt`` (together)
+            and/or ``recovery_wrapped_secret``.
 
         Returns:
             JSON ``{ok: true}``; 400 on malformed blobs; 404 when not enrolled.
@@ -505,22 +478,7 @@ class E2EERewrapView(DualAuthJsonView):
         if not password_wrapped and not recovery_wrapped:
             return Response({"error": "Nothing to update"}, status=400)
 
-        # The KDF cost the *new* blob was wrapped under. Enroll accepts
-        # stronger-than-default parameters on purpose, but this endpoint never
-        # updated them - so a bundle enrolled above the floor kept advertising
-        # its old cost while the re-wrap stored a blob made with the client's
-        # pinned constants. Every later password unlock then derived a key from
-        # the wrong parameters and failed: a device holding the cached key looped
-        # re-wrapping, and a device without one lost the password path entirely
-        # and had to fall back to the recovery key. Permanent, and reachable
-        # through the public API by enrolling above the floor.
-        #
-        # Absent means the defaults rather than "leave them alone": the shipped
-        # client has always wrapped with its pinned `KDF_OPSLIMIT`/`KDF_MEMLIMIT`
-        # here (see the comment at the call site in e2ee-client.ts, which
-        # explains why it must not use the server-supplied values), and those are
-        # pinned to match these constants. So an older client that sends nothing
-        # is describing exactly this.
+        # The KDF cost the *new* blob was wrapped under.
         rewrap_opslimit, rewrap_memlimit = DEFAULT_KDF_OPSLIMIT, DEFAULT_KDF_MEMLIMIT
         if password_wrapped and ("kdf_opslimit" in data or "kdf_memlimit" in data):
             try:
@@ -532,19 +490,8 @@ class E2EERewrapView(DualAuthJsonView):
             # how expensive the stored blob is to attack offline.
             if rewrap_opslimit < DEFAULT_KDF_OPSLIMIT or rewrap_memlimit < DEFAULT_KDF_MEMLIMIT:
                 return Response({"error": "Invalid kdf parameters"}, status=400)
-        # Proof is required for *either* wrapped copy, not just the password
-        # one. Gating it on `password_wrapped` alone left the recovery-only
-        # rewrap unauthenticated beyond the bearer token: a stolen
-        # `messages:write` credential could post a `recovery_wrapped_secret`
-        # by itself and overwrite the victim's recovery-wrapped private key
-        # without knowing their password. The private key is unrecoverable
-        # once its last valid wrapping is replaced, so that is a silent,
-        # permanent destruction of the account's messages - the exact outcome
-        # the password proof on the other branch exists to prevent, reachable
-        # by simply omitting a field.
-        # Unconditional: the guard above already established that at least one
-        # wrapped copy is being replaced. (OAuth-only accounts have no password
-        # to prove and pass through - see the helper.)
+        # Proof is required for *either* wrapped copy, not just the password one. (OAuth-only accounts have no
+        # password to prove and pass through - see the helper.)
         proof_error = _require_current_password_proof(profile.user, data)
         if proof_error is not None:
             return proof_error
@@ -554,9 +501,8 @@ class E2EERewrapView(DualAuthJsonView):
             bundle.password_wrapped_secret = password_wrapped
             bundle.password_wrap_salt = password_wrap_salt
             bundle.password_wrap_stale = False
-            # Stored with the blob, never separately: the salt, the ciphertext
-            # and the cost parameters are one description of one wrapping, and
-            # the read path uses all three together.
+            # Stored with the blob, never separately: the salt, the ciphertext and the cost parameters are one
+            # description of one wrapping, and the read path uses all three together.
             bundle.kdf_opslimit = rewrap_opslimit
             bundle.kdf_memlimit = rewrap_memlimit
             update_fields += ["password_wrapped_secret", "password_wrap_salt", "password_wrap_stale", "kdf_opslimit", "kdf_memlimit"]
@@ -570,25 +516,11 @@ class E2EERewrapView(DualAuthJsonView):
 class _E2EEPasskeyWrapBase(DualAuthJsonView):
     """Shared credential lookup for the two passkey-wrap routes.
 
-    The blob these views store was wrapped client-side under an HKDF of the
-    WebAuthn ``prf`` output for one of the caller's own passkeys; the server
-    keeps what it cannot open, exactly like the password and recovery wraps.
-
-    Both routes demand the account-password proof on password-backed accounts,
-    same rationale as ``E2EERewrapView``: adding an unlock path - or destroying
-    one, which for an account whose recovery key was never saved is a data-loss
-    lever - must cost more than a bearer token.
-
-    **Why two view classes for one resource.** They were one class on two URLs,
-    and that cost twice. The published schema gained two operations per method,
-    whose ``operationId``s collided and which drf-spectacular resolved by
-    appending ``_2`` to whichever route it walked second - so adding an
-    unrelated route could rename a method in every generated client. And the
-    collection URL's DELETE reached a handler with a required ``credential_id``
-    and raised ``TypeError`` out of the dispatcher, i.e. a 500 on an
-    authenticated endpoint. Giving each method a view that defines only that
-    method lets DRF answer 405 for the two combinations that never existed, and
-    leaves each ``operationId`` claimed once.
+    The blob these views store was wrapped client-side under an HKDF of the WebAuthn ``prf`` output for
+    one of the caller's own passkeys; the server keeps what it cannot open, exactly like the password
+    and recovery wraps.
+    Giving each method a view that defines only that method lets DRF answer 405 for the two combinations
+    that never existed, and leaves each ``operationId`` claimed once.
     """
 
     def _resolve_credential(self, request: Request, credential_id_b64: str) -> WebAuthnCredential | None:
@@ -599,9 +531,8 @@ class _E2EEPasskeyWrapBase(DualAuthJsonView):
             credential_id_b64: The credential's rawId, base64url-encoded.
 
         Returns:
-            The credential, or None when malformed or not the caller's own -
-            indistinguishable on purpose, so this cannot probe which
-            credential ids exist.
+            The credential, or None when malformed or not the caller's own - indistinguishable on purpose,
+            so this cannot probe which credential ids...
         """
         from webauthn.helpers import base64url_to_bytes
 
@@ -635,14 +566,12 @@ class E2EEPasskeyWrapView(_E2EEPasskeyWrapBase):
         """Create or replace the wrap for one of the caller's passkeys.
 
         Args:
-            request: JSON body with ``credential_id`` (base64url), ``prf_input``
-                (base64 32-byte PRF evaluation input), ``wrapped_secret``, and
-                ``current_password`` on password-backed accounts.
+            request: JSON body with ``credential_id`` (base64url), ``prf_input`` (base64 32-byte PRF
+            evaluation input), ``wrapped_secret``, and...
 
         Returns:
-            201 JSON ``{ok: true}`` on create, 200 on replace; 400 on malformed
-            input or an unknown credential; 403 on bad proof; 404 when not
-            enrolled.
+            201 JSON ``{ok: true}`` on create, 200 on replace; 400 on malformed input or an unknown
+            credential; 403 on bad proof; 404 when not enrolled.
         """
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
@@ -679,9 +608,9 @@ class E2EEPasskeyWrapView(_E2EEPasskeyWrapBase):
 class E2EEPasskeyWrapItemView(_E2EEPasskeyWrapBase):
     """DELETE one passkey's wrap, addressed by credential id.
 
-    The passkey itself is untouched; deleting the passkey cascades to its wrap
-    separately. POST belongs to :class:`E2EEPasskeyWrapView`, the collection
-    route, so a POST here is a 405 from DRF rather than a hand-written one.
+    The passkey itself is untouched; deleting the passkey cascades to its wrap separately.
+    POST belongs to :class:`E2EEPasskeyWrapView`, the collection route, so a POST here is a 405 from DRF
+    rather than a hand-written one.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -699,13 +628,11 @@ class E2EEPasskeyWrapItemView(_E2EEPasskeyWrapBase):
         """Delete the wrap for one of the caller's passkeys.
 
         Args:
-            request: The authenticated request; JSON body may carry
-                ``current_password``.
+            request: The authenticated request; JSON body may carry ``current_password``.
             credential_id: The credential's rawId, base64url-encoded.
 
         Returns:
-            JSON ``{ok: true}``; 403 on bad proof; 404 for an unknown
-            credential or one with no wrap.
+            JSON ``{ok: true}``; 403 on bad proof; 404 for an unknown credential or one with no wrap.
         """
         profile = _get_profile(request)
         credential = self._resolve_credential(request, credential_id)
@@ -724,14 +651,12 @@ class E2EEPasskeyWrapItemView(_E2EEPasskeyWrapBase):
 class E2EEGroupKeyView(DualAuthJsonView):
     """GET/POST the wrapped group-key versions for one group chat.
 
-    GET returns only the caller's own envelopes (one per version they were a
-    member for), plus what a client needs to rotate: the latest version
-    number, whether that version still covers the group's current membership,
-    and - when every member is enrolled - each member's public key.
-
-    POST stores the next version: the creating client generates the random
-    key and seals it once per active member; the server verifies the envelope
-    set covers the active membership exactly and stores blobs it cannot open.
+    GET returns only the caller's own envelopes (one per version they were a member for), plus what a
+    client needs to rotate: the latest version number, whether that version still covers the group's
+    current membership, and - when every member is enrolled - each member's public key.
+    POST stores the next version: the creating client generates the random key and seals it once per
+    active member; the server verifies the envelope set covers the active membership exactly and stores
+    blobs it cannot open.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -747,8 +672,8 @@ class E2EEGroupKeyView(DualAuthJsonView):
             group_uuid: UUID of the group chat.
 
         Returns:
-            ``(profile, group, membership)`` or None when the caller isn't an
-            active member (indistinguishable from a nonexistent group).
+            ``(profile, group, membership)`` or None when the caller isn't an active member
+            (indistinguishable from a nonexistent group).
         """
         from urbanlens.dashboard.models.group_chats.model import GroupChat
 
@@ -780,13 +705,8 @@ class E2EEGroupKeyView(DualAuthJsonView):
             group_uuid: UUID of the group chat.
 
         Returns:
-            JSON ``{keys, latest, needs_rotation, members}`` - ``members`` is
-            a ``[{id, public_key}]`` list when every active member is enrolled
-            (so the caller can rotate), else null. ``id`` is an opaque
-            per-(group, member) token (see ``services.security.e2ee.group_member_token``)
-            - never a slug, which would hand every member the real identity of
-            members whose ``profile_visibility`` masks them elsewhere. 404 for
-            non-members and unknown groups.
+            JSON ``{keys, latest, needs_rotation, members}`` - ``members`` is a ``[{id, public_key}]`` list
+            when every active member is enrolled (so...
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
         from urbanlens.dashboard.services.security.e2ee import group_member_token
@@ -828,15 +748,13 @@ class E2EEGroupKeyView(DualAuthJsonView):
         """Store the next group-key version.
 
         Args:
-            request: JSON body with ``version`` and ``wrapped`` (a mapping of
-                each member's opaque rotation token - the ``id`` the GET
-                response issued - to that member's sealed blob; must cover the
-                active membership exactly).
+            request: JSON body with ``version`` and ``wrapped`` (a mapping of each member's opaque rotation
+            token - the ``id`` the GET response issued - to...
             group_uuid: UUID of the group chat.
 
         Returns:
-            201 with the caller's envelope on success; 200 with the existing
-            winner's envelope when racing; 400/404/409 on invalid input.
+            201 with the caller's envelope on success; 200 with the existing winner's envelope when racing;
+            400/404/409 on invalid input.
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
         from urbanlens.dashboard.services.security.e2ee import group_member_token
@@ -853,10 +771,8 @@ class E2EEGroupKeyView(DualAuthJsonView):
         if not isinstance(wrapped, dict) or not wrapped:
             return Response({"error": "Invalid wrapped envelopes"}, status=400)
 
-        # Keyed by opaque per-(group, member) tokens, recomputed here rather
-        # than decoded - the client just round-trips the ids the GET response
-        # issued. A stale client still keying by slug gets the same 409 as any
-        # other membership mismatch and retries after refetching.
+        # Keyed by opaque per-(group, member) tokens, recomputed here rather than decoded - the client just
+        # round-trips the ids the GET response issued.
         members_by_token = {group_member_token(group.uuid, membership.profile_id): membership.profile for membership in group.active_memberships().select_related("profile", "profile__user")}
         if set(wrapped) != set(members_by_token):
             return Response({"error": "Envelopes must cover the group's current members exactly."}, status=409)
@@ -895,47 +811,22 @@ class E2EEGroupKeyView(DualAuthJsonView):
 class E2EEChangePasswordView(LoginRequiredMixin, View):
     """POST: change (or, for OAuth accounts, set) the login password.
 
-    Always moves the account to derived auth: the client derives the new
-    credential (``new_auth_key``) and a fresh salt in the browser, so the raw
-    new password never reaches the server. Accounts that already have a
-    password must prove possession of the current one (``current_secret`` -
-    the raw password for legacy accounts, the derived authKey for derived
-    accounts; either way it's what ``check_password`` matches). OAuth-only
-    accounts with no usable password set one without a current secret.
-
-    When the device holds the decrypted private key, the client re-wraps it
-    under the new password and sends ``password_wrapped_secret``/
-    ``password_wrap_salt`` along; otherwise any existing password-wrapped
-    copy is flagged stale (the old password is gone).
-
-    Note:
-        **Deliberately NOT converted to a dual-auth endpoint**, unlike every
-        other view in this module. This is the one endpoint here that calls
-        ``user.set_password()`` against the account's *login* credential, so
-        exposing it to credential authentication would let a scoped messaging
-        token (``messages:write`` - granted for the ability to send chat
-        messages) rotate the password of the account that issued it. That is
-        account takeover, and it converts the compromise of a single narrow,
-        revocable token into the permanent loss of the whole account. Changing
-        a login password is a first-party, session-and-CSRF-protected action
-        that must require the browser's own authenticated session; a mobile
-        client needing this should send the user through the web flow. Keep
-        this a ``LoginRequiredMixin``/``View``: it is session-only by design,
-        not by omission.
+    Always moves the account to derived auth: the client derives the new credential (``new_auth_key``)
+    and a fresh salt in the browser, so the raw new password never reaches the server.
+    When the device holds the decrypted private key, the client re-wraps it under the new password and
+    sends ``password_wrapped_secret``/ ``password_wrap_salt`` along; otherwise any existing
+    password-wrapped copy is flagged stale (the old password is gone).
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
         """Rotate the account's password and reconcile its E2EE state.
 
         Args:
-            request: JSON body with ``current_secret`` (required when the
-                account has a usable password), ``new_auth_key``,
-                ``new_auth_salt``, and optional ``password_wrapped_secret``
-                + ``password_wrap_salt``.
+            request: JSON body with ``current_secret`` (required when the account has a usable password),
+            ``new_auth_key``, ``new_auth_salt``, and optional...
 
         Returns:
-            JSON ``{ok: true, had_password}``; 400 on malformed input; 403 on
-            a wrong current secret.
+            JSON ``{ok: true, had_password}``; 400 on malformed input; 403 on a wrong current secret.
         """
         profile = _get_profile(request)
         user = profile.user
@@ -987,12 +878,11 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
 class E2EERewrapAllView(DualAuthJsonView):
     """GET: every wrapped key copy addressed to the caller, for bulk re-wrap.
 
-    Used by the reset flow when the client still holds (or can unlock) the
-    OLD private key: it unseals each copy locally, re-seals it to the new
-    public key, and submits the results alongside the reset so the caller's
-    message history stays readable. Returns only blobs the caller could
-    already fetch one conversation/group at a time - this just avoids N
-    round trips.
+    Used by the reset flow when the client still holds (or can unlock) the OLD private key: it unseals
+    each copy locally, re-seals it to the new public key, and submits the results alongside the reset so
+    the caller's message history stays readable.
+    Returns only blobs the caller could already fetch one conversation/group at a time - this just
+    avoids N round trips.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1023,9 +913,8 @@ class E2EERewrapAllView(DualAuthJsonView):
         return Response({"conversation_keys": conversation_keys, "group_envelopes": group_envelopes})
 
 
-#: Upper bound on rewrapped-entry lists accepted by the reset endpoint. Far
-#: above any plausible real count (one entry per conversation-key version /
-#: group membership) - purely an abuse guard against giant request bodies.
+#: Upper bound on rewrapped-entry lists accepted by the reset endpoint. Far above any plausible real count (one
+#: entry per conversation-key version / group membership) - purely an abuse guard against giant request bodies.
 MAX_REWRAP_ENTRIES = 10_000
 
 
@@ -1036,8 +925,7 @@ def _parse_rewrap_entries(raw: Any) -> dict[int, str] | None:
         raw: The JSON value (expected: list of ``{id, wrapped_key}`` dicts).
 
     Returns:
-        Mapping of row id to the re-sealed blob, or None when the shape or
-        any blob is invalid.
+        Mapping of row id to the re-sealed blob, or None when the shape or any blob is invalid.
     """
     if raw is None:
         return {}
@@ -1058,12 +946,9 @@ def _parse_rewrap_entries(raw: Any) -> dict[int, str] | None:
 class E2EEResetView(DualAuthJsonView):
     """POST: replace the caller's keypair entirely (last resort).
 
-    When the client still holds the old private key it submits re-sealed
-    copies of every conversation/group key alongside the reset, and the
-    caller's message history stays readable under the new keypair. Without
-    them, old encrypted messages become permanently unreadable to the caller
-    (conversation partners keep their own copies - old ``ConversationKey``
-    versions are retained for them). Requires a typed confirmation string.
+    When the client still holds the old private key it submits re-sealed copies of every
+    conversation/group key alongside the reset, and the caller's message history stays readable under
+    the new keypair.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1082,19 +967,12 @@ class E2EEResetView(DualAuthJsonView):
         """Replace the caller's key bundle with brand-new key material.
 
         Args:
-            request: JSON body with ``confirm`` (must equal ``"RESET"``),
-                ``public_key``, ``recovery_wrapped_secret``, optional
-                ``password_wrapped_secret``/``password_wrap_salt``, and
-                optional ``rewrapped_conversation_keys``/
-                ``rewrapped_group_envelopes`` (lists of ``{id, wrapped_key}``
-                re-sealed to the NEW public key; ids must be the caller's own
-                rows). The bundle swap and every rewrap apply in one atomic
-                transaction - there is no partial state.
+            request: JSON body with ``confirm`` (must equal ``"RESET"``), ``public_key``,
+            ``recovery_wrapped_secret``, optional...
 
         Returns:
-            JSON ``{version, rewrapped}``; 400 on malformed input, missing
-            confirmation, or a rewrap id that isn't the caller's; 404 when
-            not enrolled.
+            JSON ``{version, rewrapped}``; 400 on malformed input, missing confirmation, or a rewrap id that
+            isn't the caller's; 404 when not enrolled.
         """
         from django.db.models import Q
 
@@ -1129,9 +1007,8 @@ class E2EEResetView(DualAuthJsonView):
         if rewrapped_conversations is None or rewrapped_envelopes is None:
             return Response({"error": "Invalid rewrapped key entries"}, status=400)
 
-        # Resolve every submitted id to a row the caller actually owns BEFORE
-        # writing anything - a single foreign/unknown id rejects the whole
-        # request rather than partially applying it.
+        # Resolve every submitted id to a row the caller actually owns BEFORE writing anything - a single
+        # foreign/unknown id rejects the whole request rather than partially applying it.
         conversation_rows = []
         if rewrapped_conversations:
             conversation_rows = list(
@@ -1146,13 +1023,8 @@ class E2EEResetView(DualAuthJsonView):
                 return Response({"error": "Unknown group envelope id"}, status=400)
 
         with transaction.atomic():
-            # The bundle was read before any of the rewrapping above, and the client
-            # computed every rewrap against *that* key. If a second reset landed in the
-            # meantime (a double-submitted or retried request is the realistic way),
-            # applying these rewraps now would seal some conversations to the superseded
-            # key while the bundle advertises the newer one - i.e. permanently
-            # undecryptable threads. Re-read under a row lock and refuse if it moved;
-            # the client can restart the reset against the current key.
+            # The bundle was read before any of the rewrapping above, and the client computed every rewrap
+            # against *that* key.
             locked_bundle = MessagingKeyBundle.objects.select_for_update().filter(pk=bundle.pk).first()
             if locked_bundle is None or locked_bundle.version != bundle.version:
                 return Response({"error": "Your key bundle changed while this reset was in progress. Please try again."}, status=409)
@@ -1171,11 +1043,8 @@ class E2EEResetView(DualAuthJsonView):
                 envelope.wrapped_key = rewrapped_envelopes[envelope.pk]
                 envelope.save(update_fields=["wrapped_key", "updated"])
 
-            # Passkey wraps encrypt the OLD private key - useless and
-            # misleading once the keypair rotates, so they die in the same
-            # transaction. The bundle_version stamp on each wrap is the
-            # backstop if one ever survives; clients re-enroll wraps from any
-            # device that unlocks under the new key.
+            # Passkey wraps encrypt the OLD private key - useless and misleading once the keypair rotates, so
+            # they die in the same transaction.
             E2EEPasskeyWrap.objects.filter(bundle=bundle).delete()
 
             bundle.public_key = public_key
@@ -1198,13 +1067,6 @@ class E2EEResetView(DualAuthJsonView):
 
         rewrapped_count = len(conversation_rows) + len(envelope_rows)
         # Counted after the swap, so it describes the state the caller is now in.
-        # A submitted payload only has to name rows the caller owns - it does not
-        # have to name all of them, which is correct (a user who lost their key
-        # cannot re-seal anything and resets to get a working account back). But
-        # the rows it left out are now sealed to a key that no longer exists,
-        # i.e. permanently unreadable, and the caller is the only one who can
-        # tell the user that. Reporting it is the difference between "your
-        # history is gone" and finding out months later.
         owned_conversations = ConversationKey.objects.filter(Q(profile_low=profile) | Q(profile_high=profile)).count()
         owned_envelopes = GroupKeyEnvelope.objects.filter(profile=profile).count()
         not_rewrapped = (owned_conversations + owned_envelopes) - rewrapped_count

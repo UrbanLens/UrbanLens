@@ -1,5 +1,4 @@
-"""Business logic for direct messages between users.
-Mirrors the safety check-in chat pipeline (``services.visits.safety.create_chat_message`` and its consumer/broadcast pattern): validation and persistence live here, both the WebSocket consumer (``DirectMessageConsumer``) and the no-JS HTTP fallback call the same ``create_direct_message``, and live delivery over the channel layer is strictly best-effort - a Valkey hiccup must never lose a message."""
+"""Business logic for direct messages between users."""
 
 from __future__ import annotations
 
@@ -29,8 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class DirectMessageValidationError(ValueError):
-    """A direct message could not be created or modified as submitted.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """A direct message could not be created or modified as submitted."""
 
 
 class DirectMessageTooLongError(DirectMessageValidationError):
@@ -81,15 +79,12 @@ class BlockedParticipantError(DirectMessagePermissionError):
 REACTION_PICKER_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉"]
 
 #: Maximum number of messages loaded per page of a conversation thread.
-#: Both the initial thread view (most recent page) and each "load older history" fetch pull this
-#: many at a time, so a years-long conversation never has to query and render its entire history
-#: just to open the thread.
 THREAD_PAGE_SIZE = 50
 
 #: Characters a reaction "emoji" must never contain.
 #: Reactions are broadcast verbatim to the other participant and rendered into their DOM, so a value
-#: carrying HTML/JS metacharacters (or plain letters that spell a tag/handler) is rejected outright
-#: - genuine emoji, including keycap digits like ``#`` and ``*``, use none of these.
+#: carrying HTML/JS metacharacters (or plain letters that spell a tag/handler) is rejected outright -
+#: genuine emoji, including keycap digits like ``#`` and ``*``, use none of these.
 _REACTION_EMOJI_FORBIDDEN = set("<>&\"'`=/\\{}") | set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 
@@ -100,9 +95,7 @@ def is_safe_reaction_emoji(emoji: str) -> bool:
         emoji: The candidate reaction string (already length-capped by the caller).
 
     Returns:
-        True when it is non-empty and contains no HTML/JS-significant characters
-        or ASCII letters; False otherwise.
-    """
+        True when it is non-empty and contains no HTML/JS-significant characters or ASCII letters; False otherwise."""
     return bool(emoji) and not any(character in _REACTION_EMOJI_FORBIDDEN for character in emoji)
 
 
@@ -192,10 +185,7 @@ def can_direct_message(sender: Profile, recipient: Profile) -> bool:
         recipient: The profile being messaged.
 
     Returns:
-        True when both profiles have community features enabled and the
-        recipient's ``direct_message_visibility`` setting (or the always-allowed
-        reply exception) permits the sender.
-    """
+        True when both profiles have community features enabled and the recipient's ``direct_message_visibility`` setting (or the always-allowed reply exception) permits the sender."""
     if sender.pk == recipient.pk:
         return False
     if not sender.community_enabled or not recipient.community_enabled:
@@ -212,9 +202,7 @@ def direct_message_images_visible_to(message: DirectMessage, viewer: Profile) ->
         viewer: The profile the payload is for.
 
     Returns:
-        True for the sender (their own images), and for a recipient who has
-        either allowed this sender outright or revealed this one message via
-        "Allow Once". False for anyone else, including third parties."""
+        True for the sender (their own images), and for a recipient who has either allowed this sender outright or revealed this one message via "Allow Once"."""
     if viewer.pk == message.sender_id:
         return True
     if viewer.pk != message.recipient_id:
@@ -237,9 +225,7 @@ def _serialize_images(message: DirectMessage, viewer: Profile | None) -> list[di
         viewer: The profile the payload is for, or None.
 
     Returns:
-        One dict per attachment, always with ``id``, and with ``url`` only when
-        this viewer is entitled to it.
-    """
+        One dict per attachment, always with ``id``, and with ``url`` only when this viewer is entitled to it."""
     images = list(message.images.all())
     include_urls = viewer is not None and direct_message_images_visible_to(message, viewer)
     return [{"id": image.pk, **({"url": image.image.url} if include_urls else {})} for image in images]
@@ -250,20 +236,10 @@ def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None =
 
     Args:
         message: The message to serialize.
-        viewer: The profile this payload will be delivered to. When given,
-            sender names are resolved through ``display_identity_for`` so a
-            live incoming message never reveals a name the server-rendered
-            thread would mask for that viewer (decision 2026-07-23:
-            "Per-recipient payloads" in docs/NOTES.md), and image URLs are withheld
-            unless that viewer has consented to see them. None keeps the raw
-            names and *omits every image URL* - a payload with no identified
-            viewer cannot be shown to have consent, so it fails closed.
+        viewer: The profile this payload will be delivered to.
 
     Returns:
-        A JSON-serializable dict; ``sender_slug``/``recipient_slug`` let the
-        frontend route the payload to the right open conversation. Each entry
-        in ``images`` always carries ``id``; ``url`` is present only when this
-        viewer may see it."""
+        A JSON-serializable dict; ``sender_slug``/``recipient_slug`` let the frontend route the payload to the right open conversation."""
 
     def _name_for(subject: Profile) -> str:
         if viewer is None or viewer.pk == subject.pk:
@@ -448,16 +424,13 @@ def _text_alert_debounce_key(sender_id: int, recipient_id: int) -> str:
 
 def is_email_debounced(sender_id: int, recipient_id: int) -> bool:
     """Return True if an email was already sent for this sender/recipient's current unread streak.
-    Checks and claims the debounce marker in one atomic ``cache.add`` - two Celery workers racing on the same (sender, recipient) delayed task can't both pass: only the first caller's ``cache.add`` succeeds (winning the right to send), and it sets the marker in that same step rather than in a later, separate ``cache.set`` inside ``send_message_email_now``, which would leave a plain check-then-act gap between the two.
 
     Args:
         sender_id: PK of the message sender.
         recipient_id: PK of the recipient.
 
     Returns:
-        True if an email for this streak already went out (or was just
-        claimed by a concurrent caller); False when this call just claimed
-        the marker and the caller should proceed to send."""
+        True if an email for this streak already went out (or was just claimed by a concurrent caller); False when this call just claimed the marker and the caller should proceed to send."""
     return not cache.add(_email_debounce_key(sender_id, recipient_id), value=True, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
 
 
@@ -469,9 +442,7 @@ def is_text_alert_debounced(sender_id: int, recipient_id: int) -> bool:
         recipient_id: PK of the recipient.
 
     Returns:
-        True if an alert for this streak already went out (or was just
-        claimed by a concurrent caller); False when this call just claimed
-        the marker and the caller should proceed to send."""
+        True if an alert for this streak already went out (or was just claimed by a concurrent caller); False when this call just claimed the marker and the caller should proceed to send."""
     return not cache.add(_text_alert_debounce_key(sender_id, recipient_id), value=True, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
 
 
@@ -645,29 +616,15 @@ def create_direct_message(
     Args:
         sender: The profile sending the message.
         recipient: The profile receiving it.
-        body: Plaintext message text. Must be blank when ``ciphertext`` is
-            given; may be blank if at least one attachment is given.
-        ciphertext: End-to-end encrypted body (base64), produced client-side
-            under the conversation key. Mutually exclusive with ``body``.
+        body: Plaintext message text.
+        ciphertext: End-to-end encrypted body (base64), produced client-side under the conversation key.
         nonce: Base64 nonce for ``ciphertext`` (required with it).
         key_version: ``ConversationKey.version`` that encrypted this message.
-        image_ids: PKs of the sender's own not-yet-attached ``Image`` rows
-            (uploaded separately beforehand) to attach to this message. Ids the
-            sender doesn't own, or that are already attached elsewhere, are
-            dropped; supplying only ineligible ids is an error rather than a
-            silently empty message.
+        image_ids: PKs of the sender's own not-yet-attached ``Image`` rows (uploaded separately beforehand) to attach to this message.
         markup_map_uuid: UUID of a ``MarkupMap`` owned by the sender to attach.
         reply_to_id: PK of an earlier message in this conversation to quote.
-        client_uuid: Caller-generated idempotency key. When a message from this
-            sender already carries it, that message is returned untouched
-            instead of a duplicate being created - so an offline outbox can
-            retry a send until it is acknowledged without the recipient seeing
-            the same message twice.
-        defer_broadcast: When True, skip the live WebSocket push - the caller
-            is attaching a ``DirectMessageShare`` to this message right after
-            and must call ``broadcast_direct_message`` once that's done, so
-            `serialize_direct_message`'s ``has_share`` flag is correct on the
-            wire instead of racing a second, duplicate "message" event.
+        client_uuid: Caller-generated idempotency key.
+        defer_broadcast: When True, skip the live WebSocket push - the caller is attaching a ``DirectMessageShare`` to this message right after and must call ``broadcast_direct_message`` once that's done, so `serialize_direct_message`'s ``has_share`` flag is correct on...
 
     Returns:
         The newly created DirectMessage.
@@ -676,13 +633,9 @@ def create_direct_message(
         DirectMessageTooLongError: ``body`` exceeds ``MAX_DIRECT_MESSAGE_LENGTH``.
         MixedPlaintextAndCiphertextError: Both ``body`` and ``ciphertext`` were given.
         MalformedCiphertextError: The ``ciphertext``/``nonce``/``key_version`` triple isn't valid.
-        NoEligibleAttachmentsError: ``image_ids`` was given but none resolve to
-            an unattached image owned by ``sender``.
-        EmptyDirectMessageError: Neither ``body``, ``ciphertext``, an eligible
-            attachment, nor ``markup_map_uuid`` was given.
-        RecipientNotAcceptingMessagesError: The recipient's privacy settings don't
-            permit the sender. Callers surface this as a 403 / socket error message.
-    """
+        NoEligibleAttachmentsError: ``image_ids`` was given but none resolve to an unattached image owned by ``sender``.
+        EmptyDirectMessageError: Neither ``body``, ``ciphertext``, an eligible attachment, nor ``markup_map_uuid`` was given.
+        RecipientNotAcceptingMessagesError: The recipient's privacy settings don't permit the sender."""
     from urbanlens.dashboard.services.security.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
 
     # Idempotent replay, checked before validation and before the permission gate: the message this
@@ -905,14 +858,10 @@ def reaction_summary(message: DirectMessage | GroupMessage, *, viewer: Profile |
 
     Args:
         message: The direct or group message whose reactions to summarize.
-        viewer: The group member the summary is being rendered for. Direct
-            messages ignore this because both participants already know each
-            other; group messages use it to blank masked reactor slugs.
+        viewer: The group member the summary is being rendered for.
 
     Returns:
-        A list of ``{"emoji", "count", "slugs"}`` dicts, one per distinct
-        emoji used. ``slugs`` lists the reacting profiles' slugs so the client
-        can tell whether the viewer is among them."""
+        A list of ``{"emoji", "count", "slugs"}`` dicts, one per distinct emoji used."""
     from urbanlens.dashboard.models.group_chats.model import GroupMessage
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
@@ -955,11 +904,8 @@ def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str
         ``"added"`` or ``"removed"``.
 
     Raises:
-        NotConversationParticipantError: If `profile` isn't a participant in
-            this message's conversation.
-        BlockedParticipantError: If `profile` and the message's other
-            participant have blocked each other.
-    """
+        NotConversationParticipantError: If `profile` isn't a participant in this message's conversation.
+        BlockedParticipantError: If `profile` and the message's other participant have blocked each other."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.models.reactions.model import Reaction
 
@@ -1008,9 +954,7 @@ def set_conversation_muted(viewer: Profile, partner: Profile, *, muted: bool) ->
         muted: The desired end state.
 
     Returns:
-        The resulting mute state, which is always ``muted`` - returned so
-        callers can echo the persisted truth rather than the value they asked
-        for."""
+        The resulting mute state, which is always ``muted`` - returned so callers can echo the persisted truth rather than the value they asked for."""
     from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
 
     if muted:
@@ -1024,18 +968,14 @@ def set_conversation_muted(viewer: Profile, partner: Profile, *, muted: bool) ->
 
 def display_identity_for(viewer: Profile, partner: Profile, *, visible_pks: set[int] | None = None) -> dict[str, Any]:
     """Return how `partner` should be displayed to `viewer` in a DM context right now.
-    A past conversation stays fully readable even after `partner`'s privacy settings or friendship status change to no longer permit `viewer` to view their profile - but their identity is anonymized everywhere it would otherwise be shown (name, avatar, profile link), since `viewer` no longer has standing access to know who they are.
 
     Args:
         viewer: The profile viewing the conversation.
         partner: The conversation partner whose identity is being displayed.
-        visible_pks: Pre-resolved output of ``Profile.visible_profile_pks`` when
-            several partners are being rendered together, so the visibility
-            queries run once for the list instead of once per row.
+        visible_pks: Pre-resolved output of ``Profile.visible_profile_pks`` when several partners are being rendered together, so the visibility queries run once for the list instead of once per row.
 
     Returns:
-        Dict with ``display_name``, ``display_avatar_url`` (str or None),
-        ``display_profile_url`` (str or None), and ``is_anonymized`` (bool)."""
+        Dict with ``display_name``, ``display_avatar_url`` (str or None), ``display_profile_url`` (str or None), and ``is_anonymized`` (bool)."""
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     identity = resolve_visible_identity(viewer, partner, placeholder="Former contact", visible_pks=visible_pks)
@@ -1049,17 +989,9 @@ def conversations_for(profile: Profile, *, only_unread: bool = False) -> list[di
     Args:
         profile: The profile whose inbox to build.
         only_unread: Build rows only for conversations with unread messages.
-            The aggregate below already knows each conversation's unread count,
-            so this narrows the work at the database rather than after it - which
-            is the difference that matters for the navbar dropdown, which shows
-            at most eight unread rows and was resolving every partner's identity,
-            last message and mute state for an entire inbox to find them.
 
     Returns:
-        A list of dicts with ``partner`` (Profile), ``last_message``
-        (DirectMessage), ``unread_count`` (int), and the
-        ``display_identity_for`` keys for rendering the partner's identity.
-    """
+        A list of dicts with ``partner`` (Profile), ``last_message`` (DirectMessage), ``unread_count`` (int), and the ``display_identity_for`` keys for rendering the partner's identity."""
     from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
@@ -1131,8 +1063,7 @@ def unread_conversations_for(profile: Profile) -> list[dict[str, Any]]:
         profile: The viewer.
 
     Returns:
-        Conversation dicts as :func:`all_conversations_for` returns them,
-        limited to those with a non-zero ``unread_count``."""
+        Conversation dicts as :func:`all_conversations_for` returns them, limited to those with a non-zero ``unread_count``."""
     from urbanlens.dashboard.services.messaging.group_chats import group_conversations_for
 
     merged = conversations_for(profile, only_unread=True) + [conv for conv in group_conversations_for(profile) if conv["unread_count"]]
@@ -1147,10 +1078,7 @@ def all_conversations_for(profile: Profile) -> list[dict[str, Any]]:
         profile: The profile whose inbox to build.
 
     Returns:
-        Dicts from :func:`conversations_for` (``kind="dm"``) and
-        :func:`~urbanlens.dashboard.services.messaging.group_chats.group_conversations_for`
-        (``kind="group"``), sorted by last activity.
-    """
+        Dicts from :func:`conversations_for` (``kind="dm"``) and :func:`~urbanlens.dashboard.services.messaging.group_chats.group_conversations_for` (``kind="group"``), sorted by last activity."""
     from urbanlens.dashboard.services.messaging.group_chats import group_conversations_for
 
     merged = conversations_for(profile) + group_conversations_for(profile)
@@ -1173,8 +1101,7 @@ def key_change_events_for(profile: Profile, partner: Profile) -> list[dict[str, 
         partner: The other participant.
 
     Returns:
-        Dicts with ``kind="key_change"``, ``created``, and ``version``, one
-        per rotation, oldest first."""
+        Dicts with ``kind="key_change"``, ``created``, and ``version``, one per rotation, oldest first."""
     from urbanlens.dashboard.models.e2ee.conversation_key import ConversationKey
 
     rows = ConversationKey.objects.between(profile, partner).filter(version__gt=1)
@@ -1183,19 +1110,15 @@ def key_change_events_for(profile: Profile, partner: Profile) -> list[dict[str, 
 
 def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = None, limit: int = THREAD_PAGE_SIZE) -> tuple[list[DirectMessage], bool]:
     """Return one page of a conversation, most recent messages first page by default.
-    Pages are keyed off ``id`` rather than ``created`` - equivalent ordering for this insert-only, auto-incrementing table, but ``id`` is what the "load older history" cursor (``before_id``) needs to filter on.
 
     Args:
         profile: One participant.
         partner: The other participant.
-        before_id: When given, only messages with a smaller pk are considered
-            (paginating further into the past); None loads the most recent page.
+        before_id: When given, only messages with a smaller pk are considered (paginating further into the past); None loads the most recent page.
         limit: Maximum number of messages to return.
 
     Returns:
-        A tuple of ``(messages, has_more_older)``: messages oldest-first,
-        ready to render in a timeline; ``has_more_older`` is True when at
-        least one older message exists beyond this page."""
+        A tuple of ``(messages, has_more_older)``: messages oldest-first, ready to render in a timeline; ``has_more_older`` is True when at least one older message exists beyond this page."""
     queryset = (
         DirectMessage.objects.between(profile, partner)
         .visible_to(profile)
@@ -1230,16 +1153,13 @@ def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = N
 
 def build_thread_timeline(messages: list[DirectMessage], key_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Merge messages and key-change notices into one chronological timeline.
-    Also annotates each message with ``is_grouped`` (see ``MESSAGE_GROUP_GAP_SECONDS``): True when it directly follows another message from the same sender, on the same day, with no key-change notice between them, *and* that previous message wasn't already read before this one was even sent - the template uses this to render message bursts tighter together instead of as a string of identical, evenly-spaced bubbles.
 
     Args:
-        messages: Thread messages, oldest first (mutated in place: each gets
-            an ``is_grouped`` attribute).
+        messages: Thread messages, oldest first (mutated in place: each gets an ``is_grouped`` attribute).
         key_events: Rows from ``key_change_events_for``.
 
     Returns:
-        Dicts ordered by ``created``, each either ``{"kind": "message",
-        "created", "message"}`` or a key-change dict from ``key_events``."""
+        Dicts ordered by ``created``, each either ``{"kind": "message", "created", "message"}`` or a key-change dict from ``key_events``."""
     items: list[dict[str, Any]] = [{"kind": "message", "created": message.created, "message": message} for message in messages]
     items.extend(key_events)
     items.sort(key=lambda item: item["created"])
@@ -1280,14 +1200,11 @@ DIRECT_MESSAGE_SEARCH_LIMIT = 25
 
 def message_search_queryset(profile: Profile, parsed: ParsedQuery, *, partner: Profile | None = None) -> QuerySet[DirectMessage]:
     """Build the filtered, ordered DirectMessage queryset for a parsed search query.
-    Shared by the global Ctrl+K search's ``DirectMessageSearchProvider`` and the Messages page's own "search this conversation" / "search all conversations" features, so visibility, date-range, and person-name rules can never drift between the two surfaces.
 
     Args:
-        profile: The searching profile; results are scoped to messages they
-            sent or received, minus anything they've deleted for themselves.
+        profile: The searching profile; results are scoped to messages they sent or received, minus anything they've deleted for themselves.
         parsed: The parsed query (free-text terms, date range, person name).
-        partner: Restrict to the conversation with this partner ("search this
-            conversation"); None searches every conversation.
+        partner: Restrict to the conversation with this partner ("search this conversation"); None searches every conversation.
 
     Returns:
         Matching messages, most recent first."""
@@ -1306,21 +1223,15 @@ def message_search_queryset(profile: Profile, parsed: ParsedQuery, *, partner: P
 
 def search_direct_messages(profile: Profile, raw_query: str, *, partner: Profile | None = None, limit: int = DIRECT_MESSAGE_SEARCH_LIMIT) -> list[dict[str, Any]]:
     """Search the profile's direct messages using the same NL parser as global search.
-    Understands the same phrasing global search does - "photos last week", "between june 1 and june 10", "from Alice" - by reusing :func:`~urbanlens.dashboard.services.global_search.parser.parse_query` and :func:`message_search_queryset` rather than a second, DM-page-specific parser.
 
     Args:
         profile: The searching profile.
         raw_query: The query exactly as typed.
-        partner: Restrict to one conversation ("search this conversation");
-            None searches every conversation ("search all conversations").
+        partner: Restrict to one conversation ("search this conversation"); None searches every conversation ("search all conversations").
         limit: Maximum number of hits to return.
 
     Returns:
-        Dicts with ``message`` (DirectMessage), ``partner`` (the other
-        participant on that message), ``snippet`` (excerpt around the match),
-        and ``url`` (link to the conversation, anchored to the message),
-        most recent match first. Empty when the query carries no usable
-        signal (blank, or below global search's minimum length/structure)."""
+        Dicts with ``message`` (DirectMessage), ``partner`` (the other participant on that message), ``snippet`` (excerpt around the match), and ``url`` (link to the conversation, anchored to the message), most recent match first."""
     from django.urls import reverse
 
     from urbanlens.dashboard.services.global_search.parser import parse_query

@@ -1,16 +1,6 @@
 """LinkExtraction - one AI run over one external link attached to a pin.
-
-Each row records a single "process this link with AI" request end to end:
-who asked, which pin and url, how the run ended, and the per-field results
-(what the AI proposed, what was actually applied, and why anything was
-skipped). The rows double as the per-user daily-limit ledger and as the
-data source for the unlinked review page.
-
-The AI's output never touches a Pin directly from here - values flow
-through the deterministic field registry in
-``services.ai.link_extraction`` (parse + sanitize + allowlisted apply),
-and this model only stores the already-sanitized display record of what
-happened.
+Each row records a single "process this link with AI" request end to end: who asked, which pin and url, how the run ended, and the per-field results (what the AI proposed, what was actually applied, and why anything was skipped).
+The AI's output never touches a Pin directly from here - values flow through the deterministic field registry in ``services.ai.link_extraction`` (parse + sanitize + allowlisted apply), and this model only stores the already-sanitized display record of what happened.
 """
 
 from __future__ import annotations

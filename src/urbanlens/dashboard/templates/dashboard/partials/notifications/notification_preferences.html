@@ -36,8 +36,7 @@
             <div class="notif-prefs__row">
                 <span class="notif-prefs__label">{{ title }}</span>
 
-                {# None - decorative checkbox; no name, so it is never submitted.       #}
-                {# Checked when no channel (site, email, WhatsApp, or SMS) is active.     #}
+                {# None - decorative checkbox; no name, so it is never submitted. #}
                 <label class="notif-prefs__cell">
                     <span class="notif-prefs__sr-only">{{ title }}: none</span>
                     <input type="checkbox"
@@ -99,9 +98,7 @@
 
     </form>
 
-    {# -- Browser (desktop) notifications. The permission lives in the browser,   #}
-    {# not the database, so there's nothing to submit - just request permission.  #}
-    {# Hidden entirely when the browser doesn't support the Notification API.     #}
+    {# Browser (desktop) notifications. #}
     <div class="notif-prefs__browser" id="notif-browser-prefs" hidden>
         <p class="settings-label notif-prefs__heading">Browser notifications</p>
         <p class="settings-help notif-prefs__intro">Show a desktop notification when something happens while UrbanLens is open in a background tab.</p>

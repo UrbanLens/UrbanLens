@@ -38,10 +38,7 @@ _SOURCE_PRIORITY = {
 
 class BoundaryVoteError(Exception):
     """A boundary vote could not be cast (bad candidate, wrong place...).
-
-    The message is for logs, not the response: an HTTP-facing catch site
-    should author its own user-facing text rather than relaying it.
-    """
+    The message is for logs, not the response: an HTTP-facing catch site should author its own user-facing text rather than relaying it."""
 
 
 def vote_weight(voted_at: datetime, now: datetime | None = None) -> float:
@@ -69,12 +66,10 @@ def boundary_options(place: Place | None) -> list[Boundary]:
     Only externally-sourced property candidates with actual geometry qualify: hand-drawn rows could claim an arbitrary match area, and building footprints have no competing sources.
 
     Args:
-        place: The place whose official boundary may be voted on; None (a
-            coordinate no provider knows) has nothing to vote on.
+        place: The place whose official boundary may be voted on; None (a coordinate no provider knows) has nothing to vote on.
 
     Returns:
-        Candidate Boundary rows, REData first; empty when the provider chain
-        hasn't produced per-source candidates for this place."""
+        Candidate Boundary rows, REData first; empty when the provider chain hasn't produced per-source candidates for this place."""
     if place is None:
         return []
     candidates = Boundary.objects.source_candidates_for_place(place).of_type(BoundaryType.PROPERTY).exclude(generated_polygon__isnull=True)
@@ -97,8 +92,7 @@ def winning_boundary(place: Place | None) -> Boundary | None:
         place: The place to resolve the winner for.
 
     Returns:
-        The winning candidate row, or None when the place has no
-        candidates at all."""
+        The winning candidate row, or None when the place has no candidates at all."""
     options = boundary_options(place)
     if not options:
         return None
@@ -138,8 +132,7 @@ def apply_winning_boundary(place: Place | None) -> Boundary | None:
         place: The place whose official boundary should be synced.
 
     Returns:
-        The winning candidate that was applied, or None when nothing changed
-        hands (no votes, no candidates, or no geometry)."""
+        The winning candidate that was applied, or None when nothing changed hands (no votes, no candidates, or no geometry)."""
     from urbanlens.dashboard.models.place.model import Place as PlaceModel
     from urbanlens.dashboard.services.places import resolution
 
@@ -173,8 +166,7 @@ def cast_boundary_vote(place: Place | None, profile: Profile, boundary_id: int) 
         The created or updated vote row.
 
     Raises:
-        BoundaryVoteError: The boundary isn't one of this place's votable
-            candidates."""
+        BoundaryVoteError: The boundary isn't one of this place's votable candidates."""
     options = {option.pk: option for option in boundary_options(place)}
     choice = options.get(boundary_id)
     if choice is None:
@@ -197,13 +189,7 @@ def boundary_vote_context(place: Place | None, profile: Profile | None, *, conce
         conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
-        None when fewer than two candidates exist (nothing to vote on - no
-        button, no dialog). Otherwise a dict with ``options`` (id, source,
-        label, GeoJSON polygon, whether it's the viewer's current choice),
-        ``my_vote_id``, ``has_votes``, ``has_consensus``, and ``auto_open``
-        (True only when nobody *else* has voted yet, per the spec - once other
-        people's votes exist the dialog stays behind the manual button).
-    """
+        None when fewer than two candidates exist (nothing to vote on - no button, no dialog)."""
     from urbanlens.dashboard.services.geo.geo import geometry_to_geojson
 
     options = boundary_options(place)

@@ -2,9 +2,7 @@
 @use 'variables' as *;
 
 // -- Standard button system ----------------------------------------------------
-// Prefer `.btn` + BEM modifiers for new markup. The button appearance is driven
-// by mixins in _mixins.scss so feature files can @include btn-primary/ghost/danger
-// without duplicating rules here.
+// Prefer `.btn` + BEM modifiers for new markup.
 
 @keyframes ul-spin {
 	to {
@@ -22,10 +20,7 @@
 	}
 
 	&:disabled {
-		// These exact colors (not the grey-* tokens) are what's actually been
-		// rendering here - Materialize's disabled-button rule used !important
-		// and always won, masking the token-based values above. Kept unchanged
-		// on purpose; revisit as a deliberate design decision, not in passing.
+		// These exact colors (not the grey-* tokens) are what's actually been rendering here.
 		background-color: var(--ul-grey-5);
 		border-color: var(--ul-grey-5b);
 		color: rgba(0, 0, 0, 0.75);
@@ -125,7 +120,7 @@
 			i.material-symbols-outlined,
 			i.material-icons {
 				color: $color-red-1300;
-			}		
+			}
 		}
 	}
 
@@ -186,7 +181,7 @@
 		background: var(--secondary-color);
 		color: #000;
 	}
-	
+
     &--yes {
         background: $color-green-100;
         color: $color-green-1100;
@@ -339,7 +334,7 @@ input[type="submit"] {
 	}
 }
 
-.btn-group {	
+.btn-group {
     display: flex;
     align-items: center;
     gap: .75rem;

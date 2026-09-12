@@ -18,20 +18,12 @@ def ingest_scan_upload(attributed_profile: Profile | None, *, client_session_uui
     """Persist one validated device-scan upload and its per-device entries/readings.
 
     Args:
-        attributed_profile: The profile to attribute this upload to, or None
-            for an anonymous upload (the caller has already applied
-            ``Profile.track_device_scans`` - this function does not
-            re-check it, so it can be tested independently of that policy).
+        attributed_profile: The profile to attribute this upload to, or None for an anonymous upload (the caller has already applied ``Profile.track_device_scans`` - this function does not re-check it, so it can be tested independently of that policy).
         client_session_uuid: Client-supplied idempotency/resume token, or "".
-        devices: Validated device entries from ``DeviceScanUploadSerializer``
-            - each a dict with ``mac_address``, optional ``device_name``/
-            ``device_type_guess``, ``detected``, ``estimated_latitude``/
-            ``estimated_longitude``, optional ``expected_marker_uuid``, and
-            an optional ``readings`` list.
+        devices: Validated device entries from ``DeviceScanUploadSerializer`` - each a dict with ``mac_address``, optional ``device_name``/ ``device_type_guess``, ``detected``, ``estimated_latitude``/ ``estimated_longitude``, optional ``expected_marker_uuid``,...
 
     Returns:
-        The created DeviceScanUpload, with its entries/readings already saved.
-    """
+        The created DeviceScanUpload, with its entries/readings already saved."""
     # Resolved in one query instead of one per device: an upload carries up to
     # MAX_DEVICES_PER_UPLOAD entries, so the per-device lookup this replaces was
     # up to 200 round-trips inside a single synchronous request.

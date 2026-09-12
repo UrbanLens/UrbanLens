@@ -1,10 +1,4 @@
-"""Normalize wireless-device MAC addresses to one canonical storage form.
-
-Every write path (the upload serializer, ``ScannedDevice.objects.get_or_create_for_mac``)
-must funnel through :func:`normalize_mac_address` - otherwise the same physical
-device submitted as ``aa:bb:cc:dd:ee:ff`` by one upload and ``AA-BB-CC-DD-EE-FF``
-by another would silently create two ``ScannedDevice`` rows.
-"""
+"""Normalize wireless-device MAC addresses to one canonical storage form."""
 
 from __future__ import annotations
 
@@ -16,25 +10,20 @@ _MAC_RE = re.compile(r"^[0-9A-Fa-f]{2}([:\-.]?[0-9A-Fa-f]{2}){5}$")
 
 
 class InvalidMacAddressError(ValueError):
-    """Raised when a string cannot be parsed as a 6-octet MAC address.
-    The message is for logs, not the response: a caller's HTTP-facing code should catch this and author its own user-facing text rather than relaying the message - that keeps a future edit to the raise site from being able to smuggle unreviewed text (including the caller-submitted raw value) into a response without review."""
+    """Raised when a string cannot be parsed as a 6-octet MAC address."""
 
 
 def normalize_mac_address(raw_mac_address: str) -> str:
     """Return *raw_mac_address* in canonical upper-case colon-separated form.
 
     Args:
-        raw_mac_address: A MAC address in any colon/hyphen/dot/no-separator
-            style, in either case.
+        raw_mac_address: A MAC address in any colon/hyphen/dot/no-separator style, in either case.
 
     Returns:
-        The address as 6 upper-case hex octets joined by colons, e.g.
-        ``"AA:BB:CC:DD:EE:FF"``.
+        The address as 6 upper-case hex octets joined by colons, e.g. ``"AA:BB:CC:DD:EE:FF"``.
 
     Raises:
-        InvalidMacAddressError: *raw_mac_address* does not parse as a 6-octet
-            MAC address.
-    """
+        InvalidMacAddressError: *raw_mac_address* does not parse as a 6-octet MAC address."""
     candidate = (raw_mac_address or "").strip()
     if not _MAC_RE.match(candidate):
         raise InvalidMacAddressError(f"{raw_mac_address!r} does not match the 6-octet MAC address pattern {_MAC_RE.pattern!r}.")

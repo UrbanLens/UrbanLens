@@ -26,13 +26,7 @@ def detect_location_history_format(data: dict) -> str | None:
     """Identify the Google Location History JSON variant.
 
     Args:
-        data: Parsed top-level JSON dict.
-
-    Returns:
-        ``'semantic'`` for Semantic Location History (``timelineObjects``),
-        ``'raw'`` for raw Records.json (``locations``),
-        ``None`` if neither pattern is found.
-    """
+        data: Parsed top-level JSON dict."""
     if "timelineObjects" in data:
         return "semantic"
     if "locations" in data:
@@ -44,13 +38,10 @@ def _parse_semantic(json_data: dict) -> Generator[dict[str, Any], None, None]:
     """Yield one visit dict per qualifying ``placeVisit`` in a timeline JSON.
 
     Args:
-        json_data: Parsed Semantic Location History dict containing
-            ``timelineObjects``.
+        json_data: Parsed Semantic Location History dict containing ``timelineObjects``.
 
     Yields:
-        Dict with keys: ``latitude``, ``longitude``, ``visited_at``
-        (tz-aware datetime), ``place_name`` (str), ``place_id`` (str|None),
-        ``confidence`` (int)."""
+        Dict with keys: ``latitude``, ``longitude``, ``visited_at`` (tz-aware datetime), ``place_name`` (str), ``place_id`` (str|None), ``confidence`` (int)."""
     for obj in json_data.get("timelineObjects", []):
         pv = obj.get("placeVisit")
         if not pv:
@@ -89,13 +80,12 @@ def import_location_history_streaming(
     r"""Stream SSE events while importing Google Takeout Semantic Location History.
 
     Args:
-        files: List of ``(filename, raw_bytes)`` pairs already extracted
-            from any archive by the caller.
+        files: List of ``(filename, raw_bytes)`` pairs already extracted from any archive by the caller.
         profile: The user profile whose pins are used for proximity matching.
         radius_m: Match radius in metres (default 100 m).
 
     Yields:
-        SSE-formatted strings (``data: {...}\\n\\n``)."""
+        SSE-formatted strings (``data: {...}\\\\n\\\\n``)."""
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
     from urbanlens.dashboard.services.visits.visits import find_nearest_pin, visit_logging_allowed
 
@@ -234,11 +224,7 @@ def _parse_iso_timestamp(value: str | None) -> datetime | None:
 
 def _activity_segment_points(segment: dict) -> Generator[Any, None, None]:
     """Yield RawTrackPoint entries for an activitySegment, preferring the timestamped path.
-
-    ``simplifiedRawPath.points`` carries a per-point timestamp when Google
-    recorded one; ``waypointPath.waypoints`` is a coarser fallback with only
-    coordinates, so points from it carry no timestamp.
-    """
+    ``simplifiedRawPath.points`` carries a per-point timestamp when Google recorded one; ``waypointPath.waypoints`` is a coarser fallback with only coordinates, so points from it carry no timestamp."""
     from urbanlens.dashboard.services.import_formats.gpx_tracks import RawTrackPoint
 
     simplified_points = (segment.get("simplifiedRawPath") or {}).get("points") or []
@@ -266,10 +252,7 @@ def _parse_activity_segments(json_data: dict) -> Generator[dict[str, Any], None,
         json_data: Parsed Semantic Location History dict containing ``timelineObjects``.
 
     Yields:
-        Dict with keys: ``points`` (list[RawTrackPoint]), ``started_at``,
-        ``ended_at`` (tz-aware datetime | None), ``distance_meters`` (float | None,
-        Google's own estimate - preferred over recomputing from sparse waypoints).
-    """
+        Dict with keys: ``points`` (list[RawTrackPoint]), ``started_at``, ``ended_at`` (tz-aware datetime | None), ``distance_meters`` (float | None, Google's own estimate - preferred over recomputing from sparse waypoints)."""
     for obj in json_data.get("timelineObjects", []):
         segment = obj.get("activitySegment")
         if not segment:

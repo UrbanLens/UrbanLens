@@ -129,7 +129,6 @@ def _queue_metadata_conflict(existing: Image, new_row: Image, incoming_caption: 
 
 def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: Profile, caption: str) -> Image:
     """Create a new Image row that reuses *existing*'s stored file.
-    Skipping the task means nothing else will ever clear it on this row directly - a still-pending *existing* means the shared stored file is still the uploader's raw bytes, and this new row would otherwise be immediately visible in its own (different) pin/wiki with ``pending_scan`` defaulting False, serving exactly the file the original's own pending state exists to hide.
 
     Args:
         existing: The earlier row with the same checksum.
@@ -191,8 +190,7 @@ def record_photo_upload_failure(
         filename: Original file name.
         error: User-facing explanation.
         pin: Pin they were uploading to, if any.
-        album: Album they were uploading into, if any.
-    """
+        album: Album they were uploading into, if any."""
     from urbanlens.dashboard.models.images.issues import PhotoUploadFailure
 
     PhotoUploadFailure.objects.create(profile=profile, filename=filename[:255], error=error, pin=pin, album=album)
@@ -203,12 +201,10 @@ def resolve_photo_metadata_conflict(conflict, choices: dict[str, int]) -> int:
 
     Args:
         conflict: A pending :class:`PhotoMetadataConflict`.
-        choices: Mapping of field name to ``0`` (keep the earlier value) or
-            ``1`` (use the later upload's value).
+        choices: Mapping of field name to ``0`` (keep the earlier value) or ``1`` (use the later upload's value).
 
     Returns:
-        How many ``Image`` rows were updated.
-    """
+        How many ``Image`` rows were updated."""
     from decimal import Decimal
 
     from django.utils.dateparse import parse_datetime
@@ -252,8 +248,7 @@ def _duplicate_scope(owner: Pin | Wiki | Profile) -> tuple[dict, str]:
         owner: The Pin, Wiki, or Profile (Vault) being uploaded to.
 
     Returns:
-        Tuple of (queryset filter kwargs, the word to use in "already uploaded
-        this photo to this <noun>")."""
+        Tuple of (queryset filter kwargs, the word to use in "already uploaded this photo to this <noun>")."""
     if isinstance(owner, Pin):
         return {"pin": owner}, "pin"
     if isinstance(owner, Profile):
@@ -272,16 +267,7 @@ def upload_photo_for_owner(owner: Pin | Wiki | Profile, profile: Profile, image_
         caption: Optional caption; blank becomes None.
 
     Returns:
-        The created :class:`Image`, or an :class:`UploadRejection` explaining
-        why it was refused. Callers are expected to branch on the type rather
-        than assume success.
-
-
-        **The caller must enqueue ``tasks.process_image_upload`` for a newly stored
-        row.** Deduplicated copies skip that task: they point at a file that is
-        already (or will be) processed on the original row. Enforced by a test
-        rather than by this function because the task dispatch belongs to the
-        request cycle; see ``test_photo_upload_dispatches_processing.py``."""
+        The created :class:`Image`, or an :class:`UploadRejection` explaining why it was refused."""
     # Scanned asynchronously instead: prepare_photo_upload below marks the row
     # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
     if (upload_error := image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)) is not None:

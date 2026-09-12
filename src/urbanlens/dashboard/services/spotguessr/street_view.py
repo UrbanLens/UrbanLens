@@ -1,8 +1,4 @@
-"""Street View imagery selection for Street View mode rounds.
-
-See ``docs/designs/drafts/spotguessr.md`` ("Street View mode") for the rules this
-encodes.
-"""
+"""Street View imagery selection for Street View mode rounds."""
 
 from __future__ import annotations
 
@@ -25,14 +21,9 @@ class StreetViewPanorama:
     """A candidate Street View panorama for a SpotGuessr round.
 
     Attributes:
-        latitude: The panorama's own resolved latitude - may differ slightly
-            from ``location``'s coordinates, since coverage lookup can widen
-            its search radius to find the nearest pano.
+        latitude: The panorama's own resolved latitude - may differ slightly from ``location``'s coordinates, since coverage lookup can widen its search radius to find the nearest pano.
         longitude: The panorama's own resolved longitude.
-        image: A base64 ``data:`` URI static image, kept as a fallback for
-            the client-side interactive panorama (``google.maps.StreetViewPanorama``)
-            to fall back to if it fails to load.
-    """
+        image: A base64 ``data:`` URI static image, kept as a fallback for the client-side interactive panorama (``google.maps.StreetViewPanorama``) to fall back to if it fails to load."""
 
     latitude: float
     longitude: float
@@ -40,8 +31,7 @@ class StreetViewPanorama:
 
 
 def candidate_street_view_for_location(location: Location) -> StreetViewPanorama | None:
-    """Fetch a Street View panorama for ``location``, or None if unavailable.
-    The returned panorama's coordinates are handed to the client so it can render an interactive ``google.maps.StreetViewPanorama`` there (pan/zoom/ walk between connected panos) - unlike the rest of a SpotGuessr round payload, this is a deliberate exception to "never reveal the answer before a guess": true client-side panning requires the browser to talk to Google directly, which is only possible if it knows where to look."""
+    """Fetch a Street View panorama for ``location``, or None if unavailable."""
     no_coverage = SlideFetch([], from_cache=False)
     try:
         # Indexed rather than attribute-read: `call_with_deadline` may return

@@ -22,9 +22,8 @@ def apply_trip_visibility_filter(
     """Populate *hidden_out* with the IDs of activities whose location the viewer may not see, based on each adder's trip_pin_location_visibility setting.
 
     Args:
-        sensitive: Activities already filtered to non-ANYONE visibility and
-            non-owner viewer.
-        viewer:    The profile viewing the trip.
+        sensitive: Activities already filtered to non-ANYONE visibility and non-owner viewer.
+        viewer: The profile viewing the trip.
         hidden_out: Mutable set to add hidden activity IDs into."""
     from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
     from urbanlens.dashboard.models.pin.model import Pin

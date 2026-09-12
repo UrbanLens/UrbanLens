@@ -65,9 +65,7 @@ describe("copyFloorContents", () => {
     });
 
     test("no source uuid survives anywhere in the copy", () => {
-        // The server matches items to rows by uuid and deletes by omission, so
-        // a carried-over uuid would move the source floor's rows rather than
-        // duplicate them - emptying the floor that was copied from.
+        // The server matches items to rows by uuid and deletes by omission, so a carried-over uuid would move the source floor's rows rather.
         const source = floorWithContents();
         const copy = copyFloorContents(source, { rooms: true, markers: true, connectors: true });
 
@@ -105,9 +103,7 @@ describe("copyFloorContents", () => {
     });
 
     test("a copied item cites the same photos through a list of its own", () => {
-        // The pool is per-plan, so a copy citing the same rows is right. The
-        // list holding those citations is not shared: spreading the item hands
-        // both copies the same array, and a push on one would reach the other.
+        // The pool is per-plan, so a copy citing the same rows is right.
         const source = floorWithContents();
         const copy = copyFloorContents(source);
 
@@ -173,10 +169,7 @@ describe("newConnectorId", () => {
     });
 
     test("ids are not the per-session counter", () => {
-        // The counter restarts at one on every page load. That is fine for item
-        // uuids, which the server replaces on save, and wrong for a connector
-        // id, which is stored exactly as sent - two shafts drawn in two sessions
-        // both came out "local-3" and read as one staircase.
+        // The counter restarts at one on every page load.
         expect(newConnectorId()).not.toMatch(/^local-\d+$/);
         expect(nextLocalId()).toMatch(/^local-\d+$/);
     });

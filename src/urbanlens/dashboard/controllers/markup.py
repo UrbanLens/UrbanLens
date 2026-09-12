@@ -55,18 +55,12 @@ _INDICATOR_TO_FIELD: dict[str, str] = {
 def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
     """Upgrade the matching security field on *owner* to at least 'some'.
 
-    *owner* is either a Pin or a Wiki - both expose the same security
-    fields via ``abstract.SecurityModel``. Only upgrades from unknown/no;
-    never downgrades an existing value.
+    Only upgrades from unknown/no; never downgrades an existing value.
     """
     field = _INDICATOR_TO_FIELD.get(indicator)
     if not field:
         return
-    # The real row, for the read as much as the write. A concealed projection
-    # reports every indicator as UNKNOWN by rule, so reading one would turn this
-    # never-downgrade rule into a downgrade - a place surveyed as EVERYWHERE
-    # quietly reduced to SOME - and then the save would raise on the projection
-    # anyway, as a 500 only concealed accounts receive.
+    # The real row, for the read as much as the write.
     from urbanlens.dashboard.services.wiki.concealment import writable_wiki
 
     if isinstance(owner, Wiki):
@@ -80,9 +74,9 @@ def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
 def _notify_linked_checkins(markup_map: MarkupMap, message: str) -> None:
     """Re-notify emergency contacts of check-ins whose route map just changed.
 
-    Editing the route markup after contacts were already alerted is exactly
-    the kind of plan change they need to hear about; ``notify_contacts_of_update``
-    itself rate-limits and no-ops for non-escalated check-ins.
+    Editing the route markup after contacts were already alerted is exactly the kind of plan change they
+    need to hear about; ``notify_contacts_of_update`` itself rate-limits and no-ops for non-escalated
+    check-ins.
 
     Args:
         markup_map: The map that was edited.
@@ -105,9 +99,8 @@ _GEOMETRY_TYPES = {
 def _sanitize_text_box_corner(geometry: dict) -> None:
     """Drop ``geometry["box_corner"]`` if it isn't a valid [lng, lat] pair.
 
-    A drag-created text label stores the opposite corner of the box the user
-    dragged out alongside its anchor point, so the frontend can size/wrap the
-    label to fit it. Mutates *geometry* in place.
+    A drag-created text label stores the opposite corner of the box the user dragged out alongside its
+    anchor point, so the frontend can size/wrap the label to fit it.
     """
     corner = geometry.get("box_corner")
     if corner is None:
@@ -133,14 +126,9 @@ def _resolve_owner(
 ) -> tuple[Pin | Wiki | MarkupMap, QuerySet[PinMarkup]]:
     """Resolve the markup owner (Pin, Wiki, or MarkupMap) from URL kwargs.
 
-    Exactly one of *pin_slug* / *location_slug* / *map_uuid* is expected to
-    be set, matching the three URL patterns these views are mounted under -
-    personal markup under a pin's own map, shared/community markup on a wiki
-    map, or a standalone MarkupMap (safety check-in routes, comment/visit
-    maps). Pin-scoped and map-scoped markup both require the caller to own
-    the parent; Wiki-scoped markup is shared data any profile with a pin at
-    that location may edit (see ``resolve_visible_wiki``), matching the
-    existing community detail-pin permission model.
+    Exactly one of *pin_slug* / *location_slug* / *map_uuid* is expected to be set, matching the three
+    URL patterns these views are mounted under - personal markup under a pin's own map, shared/community
+    markup on a wiki map, or a standalone MarkupMap (safety check-in routes, comment/visit maps).
 
     Args:
         request: The current HttpRequest (used for the ownership checks).
@@ -160,13 +148,7 @@ def _resolve_owner(
     if location_slug is None:
         raise Http404
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-    # Filtered by who drew it, not hidden outright. The reason to hide community
-    # markup is that a hand-drawn entrance route says other people have been
-    # inside and compared notes - and that reason does not cover the viewer's
-    # own drawings, which tell them nothing they did not already know. Showing
-    # someone their own work back is also the only option that does not announce
-    # the concealment: a marker you placed yourself and cannot find afterwards
-    # is a malfunction, and a malfunction only some accounts get is a tell.
+    # Filtered by who drew it, not hidden outright.
     from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
     return wiki, visible_rows(PinMarkup.objects.for_wiki(wiki), wiki, profile)
@@ -175,9 +157,9 @@ def _resolve_owner(
 def _owner_layer_kwargs(owner: Pin | Wiki | MarkupMap) -> dict:
     """Return the CustomLayer filter kwargs (parent_pin/parent_wiki) for *owner*.
 
-    A MarkupMap owner (standalone maps have no custom layers) yields kwargs
-    that can never match any real CustomLayer, so a layer lookup against it
-    always resolves to None rather than needing a special case at each call site.
+    A MarkupMap owner (standalone maps have no custom layers) yields kwargs that can never match any
+    real CustomLayer, so a layer lookup against it always resolves to None rather than needing a special
+    case at each call site.
     """
     if isinstance(owner, Pin):
         return {"parent_pin": owner}
@@ -189,13 +171,11 @@ def _owner_layer_kwargs(owner: Pin | Wiki | MarkupMap) -> dict:
 def _resolve_visible_layer(layer_uuid: str | None, owner: Pin | Wiki | MarkupMap, profile: Profile, owner_kwargs: dict) -> CustomLayer | None:
     """Resolve a posted ``layer_uuid`` to a layer this profile may actually assign an item to.
 
-    Scoped by owner exactly as before (a layer belonging to a different pin/
-    wiki, or any value on the map_uuid route, resolves to None); additionally
-    scoped by ``visible_rows`` on a wiki owner, so a concealed viewer's own
-    write can't file an item under a stranger's layer - the layer they'd have
-    no way to see reflected back (the read side already nulls layer_uuid for
-    exactly this case; refusing it here keeps the write side consistent with
-    what the read side shows).
+    Scoped by owner exactly as before (a layer belonging to a different pin/ wiki, or any value on the
+    map_uuid route, resolves to None); additionally scoped by ``visible_rows`` on a wiki owner, so a
+    concealed viewer's own write can't file an item under a stranger's layer - the layer they'd have no
+    way to see reflected back (the read side already nulls layer_uuid for exactly this case; refusing it
+    here keeps the write side consistent with what the read side shows).
 
     Args:
         layer_uuid: The posted layer uuid, or a falsy value for "no layer".
@@ -219,11 +199,8 @@ def _resolve_visible_layer(layer_uuid: str | None, owner: Pin | Wiki | MarkupMap
 def _current_layer_is_visible(layer_id: int, owner: Pin | Wiki | MarkupMap, profile: Profile) -> bool:
     """Whether *profile* could see the CustomLayer *layer_id* under *owner*.
 
-    Always True off a wiki - concealment is a wiki-only concept, so a Pin's
-    or MarkupMap's own layers are never filtered. Used only on the "clear
-    this item's layer" write path, to tell a deliberate clear apart from a
-    concealed viewer's edit-panel echoing back the None their own read side
-    substituted for a layer they cannot see.
+    Always True off a wiki - concealment is a wiki-only concept, so a Pin's or MarkupMap's own layers
+    are never filtered.
     """
     if not isinstance(owner, Wiki):
         return True
@@ -250,20 +227,10 @@ class MarkupJsonView(LoginRequiredMixin, View):
             map_uuid: UUID of the parent MarkupMap (standalone-map route).
 
         Returns:
-            JsonResponse with ``markup_items`` list, plus ``view`` (centre,
-            zoom, layer_mode, show_borders, title) on the map route. On the
-            pin/wiki route, ``?children=1`` additionally includes markup belonging
-            to every descendant child pin/wiki, each item annotated with the owning
-            child's name (``owner_name``).
+            JsonResponse with ``markup_items`` list, plus ``view`` (centre, zoom, layer_mode, show_borders,
+            title) on the map route.
         """
         owner, items = _resolve_owner(request, pin_slug, location_slug, map_uuid)
-        # Wiki-scoped concealment needs the requester's profile below in two
-        # places - the children=1 subtree filter and the layer-visibility
-        # computation - so it's resolved once here rather than twice.
-        # isinstance(owner, Wiki) already implies a wiki-route request (only
-        # location_slug resolves to a Wiki owner), matching the narrower
-        # `location_slug is not None and isinstance(owner, Wiki)` check the
-        # layer-visibility block below used to gate this on.
         profile: Profile | None = None
         if isinstance(owner, Wiki):
             profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -284,13 +251,9 @@ class MarkupJsonView(LoginRequiredMixin, View):
                 profile,
             )
 
-        # A visible item can still be filed under a layer this viewer cannot
-        # see - wiki-scoped layer assignment isn't restricted to the item's
-        # own author, so "my own drawing" and "the layer I put it in" are
-        # independent visibility questions. Reusing the exact set
-        # custom_layers._resolve_layer_owner would return keeps the two
-        # surfaces from drifting: this is a no-op when concealment is off,
-        # since visible_rows then returns every layer unfiltered.
+        # A visible item can still be filed under a layer this viewer cannot see - wiki-scoped layer assignment
+        # isn't restricted to the item's own author, so "my own drawing" and "the layer I put it in" are
+        # independent visibility questions.
         visible_layer_ids: set[int] | None = None
         if location_slug is not None and isinstance(owner, Wiki):
             from urbanlens.dashboard.services.wiki.concealment import visible_rows
@@ -301,9 +264,8 @@ class MarkupJsonView(LoginRequiredMixin, View):
         for m in items.select_related("layer").order_by("created"):
             entry = m.to_json()
             if visible_layer_ids is not None and m.layer_id is not None and m.layer_id not in visible_layer_ids:
-                # Ungroup rather than reference a layer this viewer cannot
-                # list - the item itself stays visible (own/friend markup is
-                # never hidden), it just renders as if filed under no layer.
+                # Ungroup rather than reference a layer this viewer cannot list - the item itself stays visible
+                # (own/friend markup is never hidden), it just renders as if filed under no layer.
                 entry["layer_uuid"] = None
             if include_children and m.parent_pin_id is not None and m.parent_pin_id != owner.pk and m.parent_pin is not None:
                 entry["owner_name"] = m.parent_pin.effective_name
@@ -326,12 +288,6 @@ class MarkupJsonView(LoginRequiredMixin, View):
 class SafetyContactMarkupJsonView(View):
     """Read-only markup JSON for the public, token-gated safety contact portal.
 
-    Deliberately not ``LoginRequiredMixin`` - an emergency contact has no
-    account to log into, only the magic-link ``token`` mailed to them, so
-    this mirrors the token-based auth already used by
-    ``SafetyContactPortalView``/``SafetyContactMarkSafeView`` instead of the
-    owner-only ``MarkupJsonView``.
-
     GET /safety/contact/<uuid:token>/markup/json/
     """
 
@@ -347,9 +303,9 @@ class SafetyContactMarkupJsonView(View):
         """
         contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin__markup_map").by_token(token))
         checkin = contact.checkin
-        # Mirrors the plan/message/photo gate in SafetyContactPortalView's template - the
-        # route is part of the trip plan, so it must not be reachable before an incident
-        # either, even by a caller hitting this JSON endpoint directly.
+        # Mirrors the plan/message/photo gate in SafetyContactPortalView's template - the route is part of the
+        # trip plan, so it must not be reachable before an incident either, even by a caller hitting this JSON
+        # endpoint directly.
         if checkin.escalated_at is None:
             return JsonResponse({"markup_items": []})
         markup_map = checkin.markup_map
@@ -362,16 +318,14 @@ class SafetyContactMarkupJsonView(View):
 def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | None:
     """Resolve the optional Pin/Wiki a standalone-map creation is scoped to.
 
-    Lets the "take a screenshot" toolbar buttons on the pin detail and wiki
-    pages tell the server which pin/wiki they were opened from, purely for
-    ``default_markup_map_title()`` purposes - unlike the personal/community
-    markup routes, ownership is never enforced against this (a new MarkupMap
-    is always its own thing, owned by the caller).
+    Lets the "take a screenshot" toolbar buttons on the pin detail and wiki pages tell the server which
+    pin/wiki they were opened from, purely for ``default_markup_map_title()`` purposes - unlike the
+    personal/community markup routes, ownership is never enforced against this (a new MarkupMap is
+    always its own thing, owned by the caller).
 
     Args:
         request: HttpRequest (used to scope the pin lookup to its owner).
-        body: Parsed request body, optionally carrying ``pin_slug`` or
-            ``location_slug``.
+        body: Parsed request body, optionally carrying ``pin_slug`` or ``location_slug``.
 
     Returns:
         The matching Pin or Wiki, or None when neither slug was given/found.
@@ -392,43 +346,37 @@ def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | Non
 class MarkupMapCreateView(LoginRequiredMixin, View):
     """Create a new standalone MarkupMap - either a draft, or a fully-drawn one.
 
+    POST /markup-maps/new/
+
     Used two ways:
 
-    - As a lazy draft, by pages that let the user draw a map before its host
-      object exists (e.g. the safety check-in creation page) - no ``markup``/
-      ``shapes`` key is sent, so only the initial viewport is applied.
-    - As a one-shot save, by the shared map composer's standalone mode (the
-      "take a screenshot" toolbar buttons) - a ``markup`` (or ``shapes``) list
-      is sent alongside the viewport, so the map is fully populated and
-      immediately browsable (e.g. from Memories > Maps) without needing a
-      host object to attach to at all.
-
-    POST /markup-maps/new/
+    - As a lazy draft, by pages that let the user draw a map before its host object exists (e.g. the
+      safety check-in creation page) - no ``markup``/ ``shapes`` key...
+    - As a one-shot save, by the shared map composer's standalone mode (the "take a screenshot" toolbar
+      buttons) - a ``markup`` (or ``shapes``) list is sent alongs...
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
         """Create a MarkupMap owned by the caller, optionally fully populated.
 
         Accepts optional JSON body fields ``center_lat``/``center_lng``/
-        ``zoom``/``layer_mode``/``show_borders``/``title`` for the initial
-        viewport, plus ``pin_slug``/``location_slug`` (used only to pick a
-        sensible default title) and ``markup``/``shapes`` (a full snapshot's
-        markup list, which switches this into the one-shot save mode).
+        ``zoom``/``layer_mode``/``show_borders``/``title`` for the initial viewport, plus
+        ``pin_slug``/``location_slug`` (used only to pick a sensible default title) and
+        ``markup``/``shapes`` (a full snapshot's markup list, which switches this into the one-shot save
+        mode).
 
         Args:
             request: HttpRequest.
 
         Returns:
-            JsonResponse with ``ok`` and the new map's ``uuid``, or a 400 with
-            ``ok: False`` when a submitted snapshot fails validation.
+            JsonResponse with ``ok`` and the new map's ``uuid``, or a 400 with ``ok: False`` when a
+            submitted snapshot fails validation.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         body = _parse_body(request)
         context = _resolve_title_context(request, body)
-        # When created from a specific pin's page (e.g. the pin-share dialog's
-        # "New map" flow), associate the map with that pin immediately - see
-        # MarkupMap.pin. _resolve_title_context() already scopes the Pin
-        # lookup to the requesting profile.
+        # When created from a specific pin's page (e.g. the pin-share dialog's "New map" flow), associate the
+        # map with that pin immediately - see MarkupMap.pin.
         pin_for_map = context if isinstance(context, Pin) else None
         markup_map = MarkupMap.objects.create(profile=profile, title=default_markup_map_title(context), pin=pin_for_map)
 
@@ -482,13 +430,12 @@ def _apply_view_state(markup_map: MarkupMap, body: dict) -> None:
 class MarkupMapSnapshotView(LoginRequiredMixin, View):
     """Return a MarkupMap's full snapshot (viewport + markup) as JSON.
 
-    Unlike ``MarkupJsonView`` (which returns each item's compact Leaflet-edit
-    shape), this returns the same ``{center_lat, ..., markup: [{latlngs, ...}]}``
-    format ``to_snapshot()`` embeds server-side for read-only thumbnails - the
-    DM composer fetches it client-side to render a live preview of a map the
-    caller is about to attach, before the message is sent.
-
     GET /markup-maps/<map_uuid>/snapshot/
+
+    Unlike ``MarkupJsonView`` (which returns each item's compact Leaflet-edit shape), this returns the
+    same ``{center_lat, ..., markup: [{latlngs, ...}]}`` format ``to_snapshot()`` embeds server-side for
+    read-only thumbnails - the DM composer fetches it client-side to render a live preview of a map the
+    caller is about to attach, before the message is sent.
     """
 
     def get(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
@@ -499,8 +446,7 @@ class MarkupMapSnapshotView(LoginRequiredMixin, View):
             map_uuid: UUID of the map to read.
 
         Returns:
-            JsonResponse with the snapshot fields, or 404 if the caller
-            doesn't own that map.
+            JsonResponse with the snapshot fields, or 404 if the caller doesn't own that map.
         """
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
         return JsonResponse(markup_map.to_snapshot())
@@ -509,10 +455,10 @@ class MarkupMapSnapshotView(LoginRequiredMixin, View):
 class MarkupMapViewStateView(LoginRequiredMixin, View):
     """Persist a MarkupMap's viewport (centre/zoom/layer/borders) and title.
 
-    Autosaved by the map widget on move/zoom/layer changes, so a re-opened
-    map restores exactly how the user left it.
-
     POST /markup-maps/<map_uuid>/view/
+
+    Autosaved by the map widget on move/zoom/layer changes, so a re-opened map restores exactly how the
+    user left it.
     """
 
     def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
@@ -531,15 +477,14 @@ class MarkupMapViewStateView(LoginRequiredMixin, View):
 
 
 class PinMarkupMapsView(LoginRequiredMixin, View):
-    """ "Markup Maps" panel for the Private Pin page (loaded via HTMX).
-
-    Lists MarkupMaps directly associated with the pin (``MarkupMap.pin`` -
-    e.g. created via the pin-share dialog's "New map" flow). Most pins have
-    none, so this returns 204 in that case; the page's shared
-    ``htmx:afterOnLoad`` handler removes the placeholder card entirely (same
-    pattern as the external-data panels).
+    """"Markup Maps" panel for the Private Pin page (loaded via HTMX).
 
     GET /map/pin/<slug:pin_slug>/markup-maps/
+
+    Lists MarkupMaps directly associated with the pin (``MarkupMap.pin`` - e.g. created via the
+    pin-share dialog's "New map" flow).
+    Most pins have none, so this returns 204 in that case; the page's shared ``htmx:afterOnLoad``
+    handler removes the placeholder card entirely (same pattern as the external-data panels).
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
@@ -563,15 +508,9 @@ class PinMarkupMapsView(LoginRequiredMixin, View):
 class MarkupMapDeleteView(LoginRequiredMixin, View):
     """Delete a standalone MarkupMap (and, via cascade, its items).
 
-    Host models reference maps with ``on_delete=SET_NULL``, so deleting a map
-    that is still attached simply detaches it from its host - the host's own
-    text/content is untouched. A ``pre_delete`` signal on ``MarkupMap`` (see
-    ``models.markup.signals``) additionally flags every Comment/TripComment/
-    DirectMessage referencing this map (``map_removed``), so those hosts can
-    keep showing a "map removed" notice instead of silently losing all trace
-    that one was ever attached.
-
-    POST/DELETE /markup-maps/<map_uuid>/delete/
+    A ``pre_delete`` signal on ``MarkupMap`` (see ``models.markup.signals``) additionally flags every
+    Comment/TripComment/ DirectMessage referencing this map (``map_removed``), so those hosts can keep
+    showing a "map removed" notice instead of silently losing all trace that one was ever attached.
     """
 
     def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
@@ -605,9 +544,8 @@ class MarkupMapDeleteView(LoginRequiredMixin, View):
 def _map_visible_to(profile: Profile, markup_map: MarkupMap) -> Profile | None:
     """Return whoever sent ``markup_map`` to ``profile`` through a legitimate channel, if any.
 
-    Checks the three ways a map can become visible to someone other than its
-    owner: a DM attachment, a standalone :class:`MarkupMapShare`, or an
-    attachment on an explicit :class:`PinShare`.
+    Checks the three ways a map can become visible to someone other than its owner: a DM attachment, a
+    standalone :class:`MarkupMapShare`, or an attachment on an explicit :class:`PinShare`.
 
     Args:
         profile: The prospective recipient.
@@ -642,8 +580,8 @@ class MarkupMapCloneView(LoginRequiredMixin, View):
             map_uuid: UUID of the map to clone.
 
         Returns:
-            Redirect to Memories > Maps on success, 400 if the caller already
-            owns the map, or 404 if it was never shared with them.
+            Redirect to Memories > Maps on success, 400 if the caller already owns the map, or 404 if it was
+            never shared with them.
         """
         recipient, _ = Profile.objects.get_or_create(user=request.user)
         source = get_object_or_404(MarkupMap, uuid=map_uuid)
@@ -717,12 +655,10 @@ class MarkupView(LoginRequiredMixin, View):
         else:
             owner_kwargs = {"parent_wiki": owner}
 
-        # CustomLayer only ever attaches to a Pin or Wiki (never a standalone
-        # MarkupMap), so owner_kwargs' parent_pin/parent_wiki double as the
-        # exact filter needed here - a layer_uuid belonging to a different
-        # pin/wiki (or any value on the map_uuid route) silently resolves to
-        # None rather than erroring, matching this view's existing lenient
-        # validation style (see security_indicator above).
+        # CustomLayer only ever attaches to a Pin or Wiki (never a standalone MarkupMap), so owner_kwargs'
+        # parent_pin/parent_wiki double as the exact filter needed here - a layer_uuid belonging to a different
+        # pin/wiki (or any value on the map_uuid route) silently resolves to None rather than erroring, matching
+        # this view's existing lenient validation style (see security_indicator above).
         layer = None
         if map_uuid is None:
             layer = _resolve_visible_layer(body.get("layer_uuid"), owner, profile, owner_kwargs)
@@ -758,9 +694,9 @@ class MarkupView(LoginRequiredMixin, View):
 class MarkupEditView(LoginRequiredMixin, View):
     """Update or delete a single markup item.
 
-    POST/DELETE /map/pin/<pin_slug>/markup/<markup_uuid>/
-    POST/DELETE /location/<location_slug>/wiki/markup/<markup_uuid>/
-    POST/DELETE /markup-maps/<map_uuid>/markup/<markup_uuid>/
+    POST/DELETE /map/pin/<pin_slug>/markup/<markup_uuid>/ POST/DELETE
+    /location/<location_slug>/wiki/markup/<markup_uuid>/ POST/DELETE
+    /markup-maps/<map_uuid>/markup/<markup_uuid>/
     """
 
     def _get_item(self, request, pin_slug, location_slug, markup_uuid, map_uuid=None) -> tuple[Pin | Wiki | MarkupMap, PinMarkup]:
@@ -811,20 +747,13 @@ class MarkupEditView(LoginRequiredMixin, View):
             if layer_uuid:
                 item.layer = _resolve_visible_layer(layer_uuid, owner, profile, _owner_layer_kwargs(owner))
             elif item.layer_id is None or _current_layer_is_visible(item.layer_id, owner, profile):
-                # A genuine clear: nothing to clear, or the layer being
-                # cleared was one this viewer could see and could
-                # therefore have deliberately chosen to remove.
+                # A genuine clear: nothing to clear, or the layer being cleared was one this viewer could see
+                # and could therefore have deliberately chosen to remove.
                 item.layer = None
-            # else: item.layer_id names a layer this viewer cannot see - a
-            # concealed wiki hides that layer from the picker and nulls its
-            # layer_uuid on read (MarkupJsonView.get), so an empty
-            # layer_uuid here is indistinguishable from that display value
-            # being echoed straight back by an edit to some other field.
-            # Leaving the real assignment untouched is the only option that
-            # doesn't destroy it - the same class of bug as the wiki
-            # suggest-edit data loss fixed earlier this round (see
-            # docs/PROBLEMS.md's "forms post every field" entry): a display
-            # value must never be diffed/written back as the viewer's intent.
+            # else: item.layer_id names a layer this viewer cannot see - a concealed wiki hides that layer from
+            # the picker and nulls its layer_uuid on read (MarkupJsonView.get), so an empty layer_uuid here is
+            # indistinguishable from that display value being echoed straight back by an edit to some other
+            # field.
         if "security_indicator" in body:
             indicator = body.get("security_indicator") or ""
             item.security_indicator = indicator if indicator in _ALLOWED_SECURITY_INDICATORS else ""

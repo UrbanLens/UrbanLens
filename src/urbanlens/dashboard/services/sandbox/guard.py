@@ -42,19 +42,10 @@ class ProcessRole(StrEnum):
         WORKER: The general-purpose Celery worker.
         PANELS: The external-data panel-fetch worker.
         BEAT: The Celery scheduler.
-        SANDBOX: The isolated media/parsing worker. The only role allowed to
-            hand untrusted bytes to a parser.
-        AI: The Celery worker draining the AI tool-loop queue. Holds DB and
-            encryption-key credentials (it reads encrypted content) but no
-            REData/OAuth/provider credentials - see
-            ``docs/AI_PIPELINE.md`` and :func:`check_direct_inference`.
-        INFERENCE: The Django-free ``ai-inference`` service. Never runs
-            Django, so this value is never actually read via
-            :func:`current_role` - it exists so ``UL_PROCESS_ROLE=inference``
-            in that service's compose entry documents itself against the
-            same enum every other role is named from.
-        UNSPECIFIED: No ``UL_PROCESS_ROLE`` was set - a local checkout, a
-            management command, or a container that predates this setting."""
+        SANDBOX: The isolated media/parsing worker.
+        AI: The Celery worker draining the AI tool-loop queue.
+        INFERENCE: The Django-free ``ai-inference`` service.
+        UNSPECIFIED: No ``UL_PROCESS_ROLE`` was set - a local checkout, a management command, or a container that predates this setting."""
 
     WEB = "web"
     WEBSOCKET = "websocket"
@@ -71,13 +62,9 @@ class UntrustedParsePolicy(StrEnum):
     """How strictly the sandbox boundary is enforced in this process.
 
     Attributes:
-        ALLOW: No enforcement. What pytest runs under, since the test suite
-            calls the parsers directly.
-        WARN: Log a warning naming the operation and the offending role, then
-            proceed. For a deployment that wants to find violations before it
-            starts failing on them.
-        DENY: Raise :class:`UnsandboxedParseError`.
-    """
+        ALLOW: No enforcement.
+        WARN: Log a warning naming the operation and the offending role, then proceed.
+        DENY: Raise :class:`UnsandboxedParseError`."""
 
     ALLOW = "allow"
     WARN = "warn"
@@ -86,20 +73,14 @@ class UntrustedParsePolicy(StrEnum):
 
 class UnsandboxedParseError(RuntimeError):
     """An untrusted-parse operation was attempted outside the sandbox worker.
-
-    Raised rather than logged so the violation surfaces where it was introduced.
-    If the call is genuinely safe - the bytes are this server's own, not a
-    user's - wrap it in :func:`allow_untrusted_parse` with a reason.
-    """
+    Raised rather than logged so the violation surfaces where it was introduced."""
 
 
 class DirectInferencePolicy(StrEnum):
     """How strictly a direct, in-process AI provider call is enforced.
-    Mirrors :class:`UntrustedParsePolicy` for the same reason: the boundary is "provider API keys live only in the ``ai-inference`` process", and :class:`~urbanlens.dashboard.services.ai.inference_client.LocalInferenceClient` - the one thing this policy gates - is a deliberate escape hatch for local development, not a code path any deployed container should reach.
 
     Attributes:
-        ALLOW: No enforcement. What pytest and a bare local checkout run
-            under - there is no ``ai-inference`` container to talk to.
+        ALLOW: No enforcement.
         WARN: Log a warning naming the role that made the call, then proceed.
         DENY: Raise :class:`DirectInferenceError`."""
 
@@ -109,20 +90,14 @@ class DirectInferencePolicy(StrEnum):
 
 
 class DirectInferenceError(RuntimeError):
-    """A direct, in-process AI provider call was attempted from a deployed role.
-    Raised rather than logged so the violation surfaces where it was introduced: a role-tagged container reaching this path almost always means ``UL_AI_INFERENCE_URL`` was left unset, and the alternative is a provider API key silently loaded into a container that was never meant to hold one."""
+    """A direct, in-process AI provider call was attempted from a deployed role."""
 
 
 def current_role() -> ProcessRole:
     """The role of the process making this call.
 
     Returns:
-        The ``UL_PROCESS_ROLE`` value, or :attr:`ProcessRole.UNSPECIFIED` when
-        it is unset or not a role this version knows about. An unrecognised
-        value is *not* an error: rolling a new role name out to compose before
-        the code that understands it should degrade to "some other container",
-        not crash the container.
-    """
+        The ``UL_PROCESS_ROLE`` value, or :attr:`ProcessRole.UNSPECIFIED` when it is unset or not a role this version knows about."""
     raw = str(getattr(settings, "UL_PROCESS_ROLE", "") or "").strip().lower()
     try:
         return ProcessRole(raw)
@@ -134,17 +109,7 @@ def current_policy() -> UntrustedParsePolicy:
     """How this process should react to an out-of-sandbox parse.
 
     Returns:
-        :attr:`UntrustedParsePolicy.DENY` unconditionally under
-        :attr:`ProcessRole.AI`, regardless of ``UL_UNTRUSTED_PARSE_POLICY`` -
-        the AI worker's compose env sets that variable to ``deny`` too, but
-        the tool loop calls arbitrary, registry-dispatched handlers on
-        user-influenced input, so this is a second, code-level rail that
-        doesn't depend on the env var being set correctly. Otherwise the
-        configured policy, defaulting to :attr:`UntrustedParsePolicy.WARN`
-        for an unset or unrecognised value - the setting is a safety rail, and
-        a typo in it should not silently disable the rail *or* take the site
-        down.
-    """
+        :attr:`UntrustedParsePolicy.DENY` unconditionally under :attr:`ProcessRole.AI`, regardless of ``UL_UNTRUSTED_PARSE_POLICY`` - the AI worker's compose env sets that variable to ``deny`` too, but the tool loop calls arbitrary, registry-dispatched..."""
     if current_role() is ProcessRole.AI:
         return UntrustedParsePolicy.DENY
     raw = str(getattr(settings, "UL_UNTRUSTED_PARSE_POLICY", "") or "").strip().lower()
@@ -158,10 +123,7 @@ def current_direct_inference_policy() -> DirectInferencePolicy:
     """How this process should react to a direct, in-process AI provider call.
 
     Returns:
-        The configured policy, defaulting to :attr:`DirectInferencePolicy.WARN`
-        for an unset or unrecognised value - same rationale as
-        :func:`current_policy`.
-    """
+        The configured policy, defaulting to :attr:`DirectInferencePolicy.WARN` for an unset or unrecognised value - same rationale as :func:`current_policy`."""
     raw = str(getattr(settings, "UL_DIRECT_INFERENCE_POLICY", "") or "").strip().lower()
     try:
         return DirectInferencePolicy(raw)
@@ -173,8 +135,7 @@ def check_direct_inference() -> None:
     """Enforce that a direct, in-process AI provider call only happens outside a deployed role.
 
     Raises:
-        DirectInferenceError: The policy is ``deny`` and this process has a
-            real ``UL_PROCESS_ROLE``."""
+        DirectInferenceError: The policy is ``deny`` and this process has a real ``UL_PROCESS_ROLE``."""
     policy = current_direct_inference_policy()
     if policy is DirectInferencePolicy.ALLOW:
         return
@@ -196,10 +157,7 @@ def allow_untrusted_parse(reason: str) -> Iterator[None]:
     For the cases where a parser is pointed at bytes the server itself produced - a thumbnail this app encoded, a test fixture - rather than at something a user uploaded.
 
     Args:
-        reason: Why these bytes are not untrusted. Written into the log line.
-
-    Yields:
-        None."""
+        reason: Why these bytes are not untrusted."""
     token = _exempt.set(reason)
     try:
         yield
@@ -211,13 +169,10 @@ def check_untrusted_parse(operation: str) -> None:
     """Enforce the sandbox boundary for one operation, without decorating it.
 
     Args:
-        operation: What is about to be parsed, e.g. ``"image.decode"``. Used in
-            the log line and the exception message, so name the *parser*, not
-            the caller.
+        operation: What is about to be parsed, e.g. ``"image.decode"``.
 
     Raises:
-        UnsandboxedParseError: The policy is ``deny`` and this process is not
-            the sandbox worker."""
+        UnsandboxedParseError: The policy is ``deny`` and this process is not the sandbox worker."""
     if (exemption := _exempt.get()) is not None:
         logger.debug("Untrusted-parse exemption used for %s: %s", operation, exemption)
         return
@@ -248,9 +203,7 @@ def untrusted_parse(operation: str) -> Callable[[Callable[P, R]], Callable[P, R]
     Decorated functions run only in the sandbox worker (or under an explicit :func:`allow_untrusted_parse` block).
 
     Args:
-        operation: A stable dotted name for the parse, e.g. ``"image.exif"``,
-            ``"video.probe"``, ``"archive.zip"``. Grouped by parser so a log
-            search can answer "what is still decoding in gunicorn".
+        operation: A stable dotted name for the parse, e.g. ``"image.exif"``, ``"video.probe"``, ``"archive.zip"``.
 
     Returns:
         A decorator preserving the wrapped function's signature."""

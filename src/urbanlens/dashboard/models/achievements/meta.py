@@ -6,11 +6,7 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 class ActivityKind(TextChoices):
     """The daily actions a streak can be built from.
-
-    Each value is one row per profile per calendar day in
-    :class:`~urbanlens.dashboard.models.achievements.model.ProfileActivityDay`,
-    which is what makes streaks idempotent: uploading thirty photos in one day
-    is still a single day of the "photos" streak.
+    Each value is one row per profile per calendar day in :class:`~urbanlens.dashboard.models.achievements.model.ProfileActivityDay`, which is what makes streaks idempotent: uploading thirty photos in one day is still a single day of the "photos" streak.
     """
 
     LOGIN = "login", "Logged in"
@@ -20,11 +16,10 @@ class ActivityKind(TextChoices):
     COMMENT = "comment", "Left a comment"
 
 
-#: Metric keys are declared by the metric registry in
-#: ``services.achievements.metrics`` rather than here, because a metric is a
-#: query over other models and the registry is the only place that knows how to
-#: run one. These constants exist so signal handlers and the streak recorder can
-#: name a metric without importing the registry.
+#: Metric keys are declared by the metric registry in ``services.achievements.metrics`` rather than
+#: here, because a metric is a query over other models and the registry is the only place that knows
+#: how to run one.
+#: These constants exist so signal handlers and the streak recorder can name a metric without
 METRIC_STREAK_PREFIX = "streak_"
 
 

@@ -32,8 +32,7 @@
         <input type="file" id="documents-file-input" accept=".pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.odp" multiple hidden
                onchange="documentsHandleFiles(this.files); this.value='';">
 
-        {# -- Upload dropzone (compact - the whole page is still a drop target, #}
-        {# see the page-wide dragenter/drop listeners below) ------------------ #}
+        {# Upload dropzone (compact - the whole page is still a drop target, see the page-wide dragenter/drop listeners below) #}
         <label for="documents-file-input" class="photos-dropzone" id="documents-dropzone"
                title="Drag &amp; drop anywhere on this page, or click to upload. PDF, Word, Excel, PowerPoint, and plain text.">
             <i class="material-symbols-outlined">cloud_upload</i>

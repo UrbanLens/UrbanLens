@@ -1,10 +1,5 @@
 """Resolving the address a request actually came from.
-
-One implementation, because every caller is making a security decision with the
-answer - per-IP rate limiting on login and passphrase suggestions, and the
-network allowlist on ``/metrics``. A second copy that counted proxy hops
-differently would be a hole in whichever caller got it wrong.
-"""
+One implementation, because every caller is making a security decision with the answer - per-IP rate limiting on login and passphrase suggestions, and the network allowlist on ``/metrics``."""
 
 from __future__ import annotations
 
@@ -30,9 +25,7 @@ def client_ip(request: HttpRequest) -> str:
         request: The incoming HTTP request.
 
     Returns:
-        A string address, or ``"unknown"`` when the socket address is missing.
-        Suitable for use as a cache-key fragment; parse with
-        :func:`parse_ip` before comparing it to a network."""
+        A string address, or ``"unknown"`` when the socket address is missing."""
     remote_addr = request.META.get("REMOTE_ADDR") or "unknown"
     hops = settings.TRUSTED_PROXY_COUNT
     if hops <= 0:
@@ -50,11 +43,7 @@ def parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None
         value: The address string to parse.
 
     Returns:
-        The parsed address, or ``None`` when it is not one - ``"unknown"``, or
-        an ``X-Forwarded-For`` entry a client filled with arbitrary text. A
-        caller comparing against an allowlist must treat ``None`` as "not
-        allowed" rather than as an error to report.
-    """
+        The parsed address, or ``None`` when it is not one - ``"unknown"``, or an ``X-Forwarded-For`` entry a client filled with arbitrary text."""
     # A port suffix is not part of the XFF grammar but appears in the wild from
     # proxies that append one; IPv6 arrives bracketed when it does.
     candidate = value.strip()
@@ -75,14 +64,9 @@ def parse_networks(raw: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Netw
 
     Args:
         raw: Comma-separated CIDRs, e.g. ``"10.2.0.0/24, 127.0.0.1/32"``.
-            Blank entries are skipped so a trailing comma is harmless.
 
     Returns:
-        The networks that parsed, as a tuple - immutable because it is shared
-        between every caller that passes the same string. An unparseable entry
-        is logged and dropped rather than raising: this list gates access, so a
-        typo must narrow what is reachable, never widen it or take the process
-        down at import time."""
+        The networks that parsed, as a tuple - immutable because it is shared between every caller that passes the same string."""
     networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
     for entry in raw.split(","):
         candidate = entry.strip()
@@ -103,9 +87,7 @@ def address_in_networks(address: str, networks: Sequence[ipaddress.IPv4Network |
         networks: Networks to test against.
 
     Returns:
-        ``True`` only when the address parses *and* falls inside one of the
-        networks. An address that does not parse is not in any network.
-    """
+        ``True`` only when the address parses *and* falls inside one of the networks."""
     parsed = parse_ip(address)
     if parsed is None:
         return False

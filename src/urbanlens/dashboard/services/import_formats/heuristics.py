@@ -1,5 +1,4 @@
-"""Best-effort name/description extraction from an arbitrary attribute bag.
-GeoJSON properties, Shapefile attribute columns, and OSM tags all pose the same problem: the caller does not control the key names (a county GIS portal names its "description" column differently than an Overpass export names its tags), so a single fixed lookup can't cover every producer."""
+"""Best-effort name/description extraction from an arbitrary attribute bag."""
 
 from __future__ import annotations
 
@@ -23,14 +22,13 @@ DEFAULT_LONGITUDE_KEYS: tuple[str, ...] = ("longitude", "lng", "lon", "long")
 
 def normalize_header_key(key: Any) -> str:
     r"""Normalize a CSV/attribute header for case-insensitive lookup.
-    Excel's "CSV UTF-8" export prefixes a BOM that ``csv.DictReader`` leaves glued to the first column name - without stripping it, a file whose first header is ``latitude`` is seen as ``\ufefflatitude`` and fails coordinate matching.
+    Excel's "CSV UTF-8" export prefixes a BOM that ``csv.DictReader`` leaves glued to the first column name - without stripping it, a file whose first header is ``latitude`` is seen as ``\\ufefflatitude`` and fails coordinate matching.
 
     Args:
         key: Raw header from a CSV row, GeoJSON property map, etc.
 
     Returns:
-        Lowercased header string safe for equality checks against the
-        ``DEFAULT_*_KEYS`` tuples."""
+        Lowercased header string safe for equality checks against the ``DEFAULT_*_KEYS`` tuples."""
     return str(key).strip().lstrip("\ufeff").lower()
 
 
@@ -44,19 +42,13 @@ def pick_name_and_description(
     """Guess a pin name and description from an arbitrary attribute mapping.
 
     Args:
-        properties: Attribute bag to inspect (GeoJSON properties, a Shapefile
-            attribute row, or flattened OSM tags).
-        name_keys: Candidate keys tried, in order, for the name. Matched
-            case-insensitively.
-        desc_keys: Candidate keys tried, in order, for the description. Matched
-            case-insensitively.
+        properties: Attribute bag to inspect (GeoJSON properties, a Shapefile attribute row, or flattened OSM tags).
+        name_keys: Candidate keys tried, in order, for the name.
+        desc_keys: Candidate keys tried, in order, for the description.
         fallback_name: Value returned when no candidate name key has a usable value.
 
     Returns:
-        A ``(name, description)`` tuple. When no description key matches, the
-        description is built by joining every remaining property (excluding
-        whichever key supplied the name) as ``"key: value"`` pairs.
-    """
+        A ``(name, description)`` tuple."""
     lowered = {normalize_header_key(key): value for key, value in properties.items()}
 
     name_key = _first_matching_key(lowered, name_keys)
@@ -84,13 +76,11 @@ def pick_latlon(
 
     Args:
         row: Attribute bag to inspect, e.g. a CSV ``DictReader`` row.
-        lat_keys: Candidate keys tried, in order, for latitude. Matched case-insensitively.
-        lng_keys: Candidate keys tried, in order, for longitude. Matched case-insensitively.
+        lat_keys: Candidate keys tried, in order, for latitude.
+        lng_keys: Candidate keys tried, in order, for longitude.
 
     Returns:
-        A ``(latitude, longitude)`` float tuple, or ``None`` when either value is
-        missing or cannot be parsed as a float.
-    """
+        A ``(latitude, longitude)`` float tuple, or ``None`` when either value is missing or cannot be parsed as a float."""
     lowered = {normalize_header_key(key): value for key, value in row.items() if key is not None}
 
     lat_key = _first_matching_key(lowered, lat_keys)

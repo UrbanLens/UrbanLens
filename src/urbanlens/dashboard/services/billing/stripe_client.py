@@ -1,5 +1,4 @@
-"""Thin wrapper around the Stripe SDK for checkout, pledge updates, and the billing portal.
-Every checkout/pledge-update uses ``price_data`` inline (never a pre-created Stripe ``Price``) against a lazily-created Stripe ``Product`` per role - this lets an admin freely edit ``SubscriptionRole.monthly_price_cents`` without needing to archive/recreate Stripe ``Price`` objects, and lets a pay-what-you-want pledge be any amount."""
+"""Thin wrapper around the Stripe SDK for checkout, pledge updates, and the billing portal."""
 
 from __future__ import annotations
 
@@ -97,14 +96,12 @@ def create_checkout_session(user: User, role: SubscriptionRole, amount_cents: in
     Args:
         user: The subscribing user.
         role: The role being subscribed to.
-        amount_cents: The monthly amount to charge, in cents (the role's fixed price, or
-            a user-chosen pay-what-you-want amount).
+        amount_cents: The monthly amount to charge, in cents (the role's fixed price, or a user-chosen pay-what-you-want amount).
         success_url: Where Stripe redirects on successful checkout.
         cancel_url: Where Stripe redirects if the user abandons checkout.
 
     Returns:
-        The created Checkout Session (redirect the browser to ``.url``).
-    """
+        The created Checkout Session (redirect the browser to ``.url``)."""
     _ensure_configured()
     customer = ensure_customer(user)
     product_id = ensure_product(role)
@@ -192,8 +189,7 @@ def create_billing_portal_session(user: User, return_url: str) -> str:
         The portal session URL to redirect the browser to.
 
     Raises:
-        BillingCustomer.DoesNotExist: When the user has no Stripe customer yet.
-    """
+        BillingCustomer.DoesNotExist: When the user has no Stripe customer yet."""
     _ensure_configured()
     customer = BillingCustomer.objects.get(user=user)
     session = stripe.billing_portal.Session.create(customer=customer.stripe_customer_id, return_url=return_url)

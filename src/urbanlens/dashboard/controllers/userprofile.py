@@ -144,9 +144,8 @@ class ViewProfileView(LoginRequiredMixin, View):
     def _can_view_profile(self, request: HttpRequest, profile: Profile) -> bool:
         """Return True if the requesting user is allowed to view this profile.
 
-        Delegates to :meth:`Profile.can_view_profile` so all relationship
-        checks (friends, common pin/friend/trip, anything-in-common) live in
-        one place.
+        Delegates to :meth:`Profile.can_view_profile` so all relationship checks (friends, common
+        pin/friend/trip, anything-in-common) live in one place.
         """
         if request.user == profile.user:
             return True
@@ -170,10 +169,7 @@ class ViewProfileView(LoginRequiredMixin, View):
 
         common_ids = common_pin_location_ids([my_profile, profile])
 
-        # Locations both profiles have visited. `PinQuerySet.visited()` owns the predicate
-        # ("has a last_visited timestamp or carries the profile's Visited status label") and
-        # its docstring asks callers to build on it rather than re-derive the Q, which this
-        # did - one of four inline copies that had to stay in step by hand.
+        # Locations both profiles have visited.
         their_visited_ids = set(
             Pin.objects.filter(profile=profile, location__isnull=False).visited().values_list("location_id", flat=True),
         )
@@ -182,16 +178,13 @@ class ViewProfileView(LoginRequiredMixin, View):
         )
         shared_visited_ids = their_visited_ids & my_visited_ids
 
-        # common_pin_count itself must be gated the same as the detail-page link -
-        # otherwise a profile that opted out of sharing common-pin data (or a
-        # viewer who hasn't opted in themselves) still had the count rendered on
-        # the stats row, just without a clickable link to the detail page.
+        # common_pin_count itself must be gated the same as the detail-page link - otherwise a profile that
+        # opted out of sharing common-pin data (or a viewer who hasn't opted in themselves) still had the count
+        # rendered on the stats row, just without a clickable link to the detail page.
         common_pins_permitted = profile.can_view_common_pins_with(my_profile)
         context["common_pin_count"] = len(common_ids) if common_pins_permitted else None
         context["can_view_common_pins"] = bool(common_ids) and common_pins_permitted
-        # Gated on the same mutual permission as common_pin_count above. A shared
-        # *visit* discloses more than a shared pin - that both people were actually
-        # there - so it cannot be shown to a viewer the common-pins setting refuses.
+        # Gated on the same mutual permission as common_pin_count above.
         context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).select_related("wiki").order_by("wiki__name", "official_name") if shared_visited_ids and common_pins_permitted else Location.objects.none()
 
         # Friendship relationship
@@ -203,17 +196,12 @@ class ViewProfileView(LoginRequiredMixin, View):
         # FriendshipStatus values are capitalized ("Accepted", "Requested"), so normalize here.
         context["friendship_status"] = friendship.status.lower() if friendship else None
         context["friends_since"] = friendship.updated if friendship and friendship.status == FriendshipStatus.ACCEPTED else None
-        # Resolved here rather than in the template: mute is stored one column
-        # per side of the shared row, so "is this muted" only has an answer
-        # once you say whose view is being rendered - and a template cannot
+        # Resolved here rather than in the template: mute is stored one column per side of the shared row, so
+        # "is this muted" only has an answer once you say whose view is being rendered - and a template cannot
         # pass the viewer.
         context["viewer_muted"] = bool(friendship and friendship.is_muted_by(my_profile))
         # Only the profile that *placed* a block may lift it (see
-        # ``services.social.friendship.unblock_profile``). Both parties see the
-        # "Blocked" chip, because ``Friendship.objects.between`` matches either
-        # direction, so without this flag the blocked party is offered an
-        # Unblock button that now correctly answers 404 - an action the UI
-        # promises and the server refuses.
+        # ``services.social.friendship.unblock_profile``).
         context["viewer_placed_block"] = bool(friendship and friendship.status == FriendshipStatus.BLOCKED and friendship.from_profile_id == my_profile.pk)
 
         # Trips in common
@@ -272,11 +260,9 @@ class PhotoAttachmentPointsView(LoginRequiredMixin, View):
     """GET: where one of the requesting user's own photo-strip photos is attached.
 
     Owner-only, same shape as PhotoCustomFieldsView (controllers/custom_fields.py)
-    - shown in the profile photo strip's lightbox side panel so the owner can
-    see at a glance which wiki(s)/conversation(s) a photo is shared through.
-    Never used to determine whether anyone else can *see* the photo - that's
-    services.profile.profile_photos.strip_photos_visible_to's job, applied before an
-    image ever reaches this view's caller.
+
+    - shown in the profile photo strip's lightbox side panel so the owner can see at a glance which
+      wiki(s)/conversation(s) a photo is shared through. Never used t...
     """
 
     def get(self, request: HttpRequest, image_id: int) -> HttpResponse:
@@ -295,14 +281,7 @@ class PhotoAttachmentPointsView(LoginRequiredMixin, View):
 
 
 class CommonPinsView(LoginRequiredMixin, View):
-    """List + map of the pins the viewer has in common with another profile.
-
-    Gated on ``Profile.can_view_common_pins_with`` - mutual, so a 404 covers
-    both "the other profile opted out" and "you haven't opted in yourself",
-    matching how ``ViewProfileView`` already 404s on a failed privacy check
-    rather than rendering an empty/error page that would confirm the profile
-    exists.
-    """
+    """List + map of the pins the viewer has in common with another profile."""
 
     def get(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
         if not isinstance(request.user, User):
@@ -317,9 +296,8 @@ class CommonPinsView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.pins.common_pins import common_pin_location_ids
 
         common_ids = common_pin_location_ids([viewer, other])
-        # Only ever read the viewer's own Pin rows for display - the other
-        # profile's private pin data (custom name, notes, icon) must never
-        # leak through this page, per the feature's own privacy requirement.
+        # Only ever read the viewer's own Pin rows for display - the other profile's private pin data (custom
+        # name, notes, icon) must never leak through this page, per the feature's own privacy requirement.
         my_pins = Pin.objects.filter(profile=viewer, location_id__in=common_ids).select_related("location", "location__wiki").order_by("name")
 
         context = {
@@ -335,9 +313,9 @@ class CommonPinsView(LoginRequiredMixin, View):
 class ProfilePreviewStartView(LoginRequiredMixin, View):
     """Start previewing your own profile as a selected type of user.
 
-    Stores the preview state in the session and redirects to the public
-    profile URL; ``ProfilePreviewMiddleware`` then renders that page as a
-    simulated user with the chosen relationship.
+    Stores the preview state in the session and redirects to the public profile URL;
+    ``ProfilePreviewMiddleware`` then renders that page as a simulated user with the chosen
+    relationship.
     """
 
     def post(self, request: HttpRequest, mode: str) -> HttpResponse:
@@ -348,8 +326,7 @@ class ProfilePreviewStartView(LoginRequiredMixin, View):
             mode: A ``VisibilityChoice`` value selecting the simulated viewer.
 
         Returns:
-            Redirect to the previewed profile page (or back to the profile
-            when the mode is unknown).
+            Redirect to the previewed profile page (or back to the profile when the mode is unknown).
         """
         from django.urls import reverse
 
@@ -359,10 +336,9 @@ class ProfilePreviewStartView(LoginRequiredMixin, View):
             return redirect("profile.view")
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        # `ensure_slug`, not `save()`: this needs one column and `Profile` is the
-        # most-written row in the app (66 modules), so a whole-row write from
-        # this instance can lose whatever another writer set between the load
-        # above and here. `ensure_slug` writes `update_fields=["slug"]`.
+        # `ensure_slug`, not `save()`: this needs one column and `Profile` is the most-written row in the app
+        # (66 modules), so a whole-row write from this instance can lose whatever another writer set between the
+        # load above and here.
         if not profile.ensure_slug():
             return redirect("profile.view")
 
@@ -401,9 +377,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
     _PROFILE_DATES = frozenset({"birth_date", "started_exploring"})
     _USER_FIELDS = frozenset({"first_name", "last_name"})
 
-    #: Interaction-preference choice fields, mapped to the TextChoices class
-    #: that validates them - see Profile.PREFERENCE_FIELDS for the same set
-    #: paired with its display label instead.
+    #: Interaction-preference choice fields, mapped to the TextChoices class that validates them - see
+    #: Profile.PREFERENCE_FIELDS for the same set paired with its display label instead.
     _PROFILE_PREFERENCE_CHOICES: dict[str, type[TextChoices]] = {
         "photo_taking_preference": PhotoTakingPreference,
         "photo_sharing_preference": PhotoSharingPreference,
@@ -485,10 +460,9 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             file = request.FILES.get("file_value")
             if not file:
                 return JsonResponse({"error": "No file provided."}, status=400)
-            # Routed through ``set_profile_avatar`` rather than assigned onto
-            # the model directly: that helper is what applies the size cap,
-            # magic-byte sniffing and antivirus scan, and it is the same path
-            # the hero card's form takes.
+            # Routed through ``set_profile_avatar`` rather than assigned onto the model directly: that helper is
+            # what applies the size cap, magic-byte sniffing and antivirus scan, and it is the same path the
+            # hero card's form takes.
             try:
                 set_profile_avatar(profile, file)
             except AvatarTooLargeError as exc:
@@ -602,7 +576,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         """Generate and store an emoji avatar from the inline picker.
 
         Args:
-            request: The HTTP request. POST params: ``animal``, ``color``.
+            request: The HTTP request.
             profile: The requesting user's own profile.
 
         Returns:
@@ -701,11 +675,9 @@ class EditProfileView(LoginRequiredMixin, View):
         form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
             form.save()
-            # Truncated to the column width, matching how every other free-text field
-            # here is handled (e.g. albums' name). These two are assigned straight from
-            # POST rather than through the form above, so nothing else bounds them, and
-            # User.first_name/last_name are max_length=150 - an over-long name reached
-            # the database and came back as a 500.
+            # These two are assigned straight from POST rather than through the form above, so nothing else
+            # bounds them, and User.first_name/last_name are max_length=150 - an over-long name reached the
+            # database and came back as a 500.
             name_limit = User._meta.get_field("first_name").max_length  # noqa: SLF001 - _meta is public API
             request.user.first_name = request.POST.get("first_name", "").strip()[:name_limit]
             request.user.last_name = request.POST.get("last_name", "").strip()[:name_limit]
@@ -819,9 +791,8 @@ class EditProfileView(LoginRequiredMixin, View):
                 from urbanlens.dashboard.models.email_log.model import EmailType
                 from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent
 
-                # An arbitrary-address send path, so it takes the same
-                # per-profile ledger caps as invites - without them this is
-                # unbounded.
+                # An arbitrary-address send path, so it takes the same per-profile ledger caps as invites -
+                # without them this is unbounded.
                 limit_error = email_rate_limit_error(profile)
                 if limit_error:
                     email_error = limit_error
@@ -876,13 +847,8 @@ class EditProfileView(LoginRequiredMixin, View):
 class SocialLinkVerifyView(LoginRequiredMixin, View):
     """Verify that a just-saved social-link URL resolves to a valid profile page.
 
-    Called automatically by HTMX after a new link is added.  Returns 204 when
-    the link looks fine; returns 200 with an ``HX-Trigger`` toast payload when
-    the remote server indicates the profile does not exist or is unreachable.
-
-    Only verifiable platforms (see ``VERIFIABLE_PLATFORMS``) are checked; the
-    view silently returns 204 for anything else so the client never has to
-    guard against unrecognised platforms.
+    Only verifiable platforms (see ``VERIFIABLE_PLATFORMS``) are checked; the view silently returns 204
+    for anything else so the client never has to guard against unrecognised platforms.
     """
 
     _TIMEOUT_SECONDS = 5
@@ -892,11 +858,10 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
         """Verify the platform+handle pair and return an optional toast trigger.
 
         Args:
-            request: The HTTP request.  Query params: ``platform``, ``handle``.
+            request: The HTTP request.
 
         Returns:
             204 when the link appears valid or cannot be determined.
-            200 with ``HX-Trigger`` when the link is demonstrably broken.
         """
         from urbanlens.dashboard.services.profile.social_links import (
             PLATFORM_URL_TEMPLATE,
@@ -928,7 +893,6 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
 
         Returns:
             204 when the URL resolves successfully.
-            200 with ``HX-Trigger`` when a problem is detected.
         """
         import requests
         from requests.exceptions import RequestException
@@ -994,9 +958,9 @@ def _send_profile_email_verification(request: HttpRequest, secondary_email: Prof
 class ProfileEmailVerifyView(View):
     """Click-through from a secondary-email confirmation link (no login required).
 
-    Anyone holding the emailed link can confirm ownership of that inbox, the
-    same way the initial signup verification link works - the visitor may not
-    be logged in as the owning profile at the time they click it.
+    Anyone holding the emailed link can confirm ownership of that inbox, the same way the initial signup
+    verification link works - the visitor may not be logged in as the owning profile at the time they
+    click it.
     """
 
     def get(self, request: HttpRequest, token) -> HttpResponse:
@@ -1016,9 +980,8 @@ class ProfileEmailVerifyView(View):
             except IntegrityError:
                 messages.error(request, "That email address is already verified on another account.")
             else:
-                # Deliver any friend requests + visit suggestions that were
-                # waiting on this address (visit participants tagged by email
-                # before this account claimed it).
+                # Deliver any friend requests + visit suggestions that were waiting on this address (visit
+                # participants tagged by email before this account claimed it).
                 from urbanlens.dashboard.services.visits.visit_invites import process_pending_visit_invites
 
                 process_pending_visit_invites(secondary_email.profile.user, email=secondary_email.email)
@@ -1029,10 +992,8 @@ class ProfileEmailVerifyView(View):
 def _authenticated_profile(request: HttpRequest) -> Profile:
     """Return the authenticated user's Profile.
 
-    LoginRequiredMixin guarantees this path is only reached by authenticated
-    users, but mypy sees request.user as User | AnonymousUser.  The isinstance
-    guard here makes that explicit and raises PermissionDenied (→ 403) for the
-    theoretically-unreachable anonymous case.
+    LoginRequiredMixin guarantees this path is only reached by authenticated users, but mypy sees
+    request.user as User | AnonymousUser.
     """
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -1123,8 +1084,7 @@ class ProfileTrustView(LoginRequiredMixin, View):
         """Apply a trust rating, or clear it when the value is out of range.
 
         Args:
-            request: The HTTP request. POST param: ``rating`` (1-5, or 0/absent
-                to clear).
+            request: The HTTP request.
             profile_slug: Slug of the profile being rated.
 
         Returns:
@@ -1174,7 +1134,7 @@ class ProfileNicknameView(LoginRequiredMixin, View):
         """Set the nickname, or clear it when the submitted value is blank.
 
         Args:
-            request: The HTTP request. POST param: ``nickname``.
+            request: The HTTP request.
             profile_slug: Slug of the profile being nicknamed.
 
         Returns:

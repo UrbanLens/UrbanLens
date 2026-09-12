@@ -1,37 +1,5 @@
 """Reference documents nearby plugin: Wikipedia articles and Wikidata claims near a pin, via REData.
-
-Wires up REData's ``GET /api/v1/reference-documents/`` (``../REData/docs/api-reference.md``,
-"GET /reference-documents/ - archival material about a coordinate") - distinct from
-``/reference-documents/search/``, which the Media gallery's four name-searched archives
-(Smithsonian, Library of Congress, Internet Archive, Digital Commonwealth) already consume
-through ``plugins.builtin.media_archives`` and share
-``services.apis.locations.redata_reference_documents_gateway`` with this panel, but never
-touch the near-a-coordinate half of that module.
-
-Two providers, both geosearchable so neither needs a place name:
-
-- ``wikipedia`` - an article's intro extract, prose someone chose to write.
-- ``wikidata`` - structured claims about the same kind of entity: what it *is*, when it was
-  built, who designed it, its architectural style and heritage designation. Per REData's own
-  docs this is "frequently the more useful half for property research" - it is genuinely
-  novel data no other panel in this app surfaces, since the state/city inventories behind
-  ``redata_historic_registers`` cover only places some body has formally designated, and
-  Wikidata's claims cover anything anyone has bothered to catalogue.
-
-Only the *nearest* article and the *nearest* claims-bearing entity are shown, mirroring
-``WikipediaPanelSource``'s own "best match, not every match" choice - a coordinate can
-return several unrelated Wikidata entities (a building, a nearby statue, a transit stop),
-and averaging or listing all of them would say less than picking the one actually at this
-point.
-
-**Gated behind ``SiteFeature.PLACES``** (decided 2026-09-08): unlike a panel about the pin's
-own place, a near-a-coordinate search is inherently about *something else nearby* - the
-Wikipedia article and Wikidata entity are their own thing, not necessarily the pin's subject.
-Reuses the flag that already gates the map's Places layer for this same provider
-(``places_wikipedia_enabled`` in ``services.profile.profile_settings``), rather than
-``NEARBY_RESEARCH``: this is the same Wikipedia data by the same product concept, just shown
-on the pin page instead of as a map marker.
-"""
+Two providers, both geosearchable so neither needs a place name:"""
 
 from __future__ import annotations
 
@@ -93,14 +61,7 @@ class ReferenceDocumentsNearbyPanelSource(RedataInfoPanelSource):
         return RedataReferenceDocumentsGateway().get_reference_documents(latitude, longitude)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """The nearest article's title/link plus the nearest claims-bearing entity's facts.
-
-        A Wikidata entity with no claims at all (its enrichment query degraded - see
-        ``RedataReferenceDocumentsGateway.get_reference_documents``, or the entity simply
-        has none of the properties this panel tracks) contributes nothing here rather than
-        an empty-valued row; the card still renders on the Wikipedia half alone in that
-        case, and on neither only when both are truly empty.
-        """
+        """The nearest article's title/link plus the nearest claims-bearing entity's facts."""
         documents = (data or {}).get(self.payload_key) or []
         article = _nearest(documents, "wikipedia")
         entity = _nearest(documents, "wikidata")
@@ -120,14 +81,7 @@ class ReferenceDocumentsNearbyPanelSource(RedataInfoPanelSource):
         return {"heading_name": heading_name, "chips": chips, "meta": meta, "footer_link": footer_link}
 
     def api_info(self, pin: Pin, data: dict) -> dict[str, Any] | None:
-        """The rendered card, plus the nearest Wikipedia article's intro extract as ``description``.
-
-        ``description`` isn't part of ``render_context``'s contract - the web template
-        (``_simple_info_panel.html``) has no slot for a paragraph of prose, and the
-        existing ``wikipedia`` panel already shows the extract there - so it is added here
-        rather than threaded through ``render_context``, matching how ``NpsPanelSource``
-        adds fields the shared web template can't use.
-        """
+        """The rendered card, plus the nearest Wikipedia article's intro extract as ``description``."""
         context = self.render_context(pin, data)
         if context is None:
             return None
@@ -148,23 +102,10 @@ class ReferenceDocumentsNearbyPlugin(UrbanLensPlugin):
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for REData's reference-documents endpoints.
-
-        Shared with the Media gallery's four archive-search providers
-        (``plugins.builtin.media_archives``): both this panel's near-a-coordinate calls and
-        their name searches go through the same ``RedataReferenceDocumentsGateway`` class,
-        whose ``service_key`` (and so its rate-limit budget) is one value regardless of
-        which of its two endpoints is called - see that module's docstring. This is the
-        first plugin to declare it; without a declaration it would silently fall back to
-        the generic 20/min-500/day default with no notes.
-        """
+        """Rate-limit defaults for REData's reference-documents endpoints."""
         return {
             "redata_reference_documents": ServiceDefaults(
                 display_name="REData Reference Documents",
-                # Shares REData's single 1,000 req/hour "lookup" pool with geocode/weather/
-                # historical-features/etc. (see REData's own api-reference.md, "Rate
-                # limiting") - one call per pin-detail panel render, the same low-volume
-                # shape as the sibling redata_historical_features panel.
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes=(

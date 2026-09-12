@@ -53,11 +53,7 @@ class UnresolvedMergeConflictError(ValueError):
     """
 
     def __init__(self, keys: list[str]) -> None:
-        """Store the unresolved keys and build a descriptive message.
-
-        Args:
-            keys: The conflict keys missing a resolution.
-        """
+        """Store the unresolved keys and build a descriptive message."""
         self.keys = keys
         super().__init__(f"Unresolved merge conflicts: {', '.join(keys)}")
 
@@ -68,10 +64,7 @@ class PinMergeCollisionError(ValueError):
 
 class SurvivorRelocationCollisionError(PinMergeCollisionError):
     """The survivor is one of loser's direct children and must move to loser's own parent - avoiding being deleted with it - but another top-level pin already occupies that location.
-
-    Only possible when loser's parent is None, i.e. the survivor would become
-    a new top-level pin.
-    """
+    Only possible when loser's parent is None, i.e. the survivor would become a new top-level pin."""
 
 
 class ChildDetachCollisionError(PinMergeCollisionError):
@@ -118,8 +111,7 @@ def _conflict_data(pins: Sequence[Pin]) -> dict[int, _PinConflictData]:
     The dict-per-pin collapse is safe because both relations are unique per key - ``boundary_unique_pin`` over ``(pin, boundary_type)`` and ``db_cfv_unique_pin`` over ``(field, pin)`` - which is the assumption the comparison already made.
 
     Args:
-        pins: The pins to fetch for. Duplicates collapse; an unsaved pin gets
-            no entry, which :func:`_conflicts_between` reads as ``_NOTHING``.
+        pins: The pins to fetch for.
 
     Returns:
         One entry per distinct saved pin id."""
@@ -151,8 +143,7 @@ def _conflicts_between(pin_a: Pin, pin_b: Pin, data: dict[int, _PinConflictData]
         data: Output of :func:`_conflict_data` covering both pins.
 
     Returns:
-        The conflicts between them.
-    """
+        The conflicts between them."""
     conflicts: list[MergeFieldConflict] = []
     # An unsaved pin has no entry, and correctly has no conflicts: it can hold none of the three
     # relations.
@@ -203,8 +194,7 @@ def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
         pin_b: The other pin under consideration.
 
     Returns:
-        Conflicts the accepting user must resolve before ``merge_pins`` will
-        merge these two pins - empty when nothing needs a decision."""
+        Conflicts the accepting user must resolve before ``merge_pins`` will merge these two pins - empty when nothing needs a decision."""
     return _conflicts_between(pin_a, pin_b, _conflict_data([pin_a, pin_b]))
 
 
@@ -216,23 +206,20 @@ def plan_merge_conflicts_bulk(pairs: Sequence[tuple[Pin, Pin]]) -> dict[tuple[in
         pairs: ``(pin_a, pin_b)`` pairs, in any order.
 
     Returns:
-        Conflicts keyed by ``(pin_a.pk, pin_b.pk)``. The key is ordered, so a
-        mirrored pair keeps its own summaries rather than overwriting them."""
+        Conflicts keyed by ``(pin_a.pk, pin_b.pk)``."""
     data = _conflict_data([pin for pair in pairs for pin in pair])
     return {(pin_a.pk, pin_b.pk): _conflicts_between(pin_a, pin_b, data) for pin_a, pin_b in pairs}
 
 
 def _save_within_savepoint(instance: Model, update_fields: list[str]) -> bool:
     """Save a row that may collide with a uniqueness constraint, recoverably.
-    Postgres aborts the *whole* transaction on a failed statement, so catching ``IntegrityError`` there and carrying on makes the next query raise ``TransactionManagementError`` instead - which turned each of this module's "drop the duplicate and continue" recoveries into a merge that failed outright.
 
     Args:
         instance: The model instance being reassigned onto the survivor.
         update_fields: Fields to write, passed straight to ``save()``.
 
     Returns:
-        True when the row was written; False when it collided and the caller
-        should apply its own dedup rule."""
+        True when the row was written; False when it collided and the caller should apply its own dedup rule."""
     try:
         with transaction.atomic():
             instance.save(update_fields=update_fields)
@@ -242,8 +229,7 @@ def _save_within_savepoint(instance: Model, update_fields: list[str]) -> bool:
 
 
 def _reparent_children(survivor: Pin, loser: Pin) -> None:
-    """Re-parent loser's child pins onto survivor, skipping any that would create a cycle.
-    A child that would create a cycle (survivor sits somewhere beneath that child already) is detached to root instead of just left alone - leaving it pointed at ``loser`` would let ``loser.delete()``'s ``CASCADE`` on ``parent_pin`` destroy that child, and everything nested beneath it, survivor included."""
+    """Re-parent loser's child pins onto survivor, skipping any that would create a cycle."""
     for child in list(loser.detail_pins.all()):
         if child.pk == survivor.pk:
             survivor.parent_pin = loser.parent_pin
@@ -486,20 +472,13 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         survivor: The pin that will remain, absorbing loser's data.
         loser: The pin that will be deleted once its data has moved.
         profile: The profile both pins must belong to.
-        resolutions: Maps each :class:`MergeFieldConflict` key (from
-            :func:`plan_merge_conflicts`) to the pin id whose value should be
-            kept. Every key returned by ``plan_merge_conflicts(survivor, loser)``
-            at call time must be present, or this raises
-            :class:`UnresolvedMergeConflictError` - the caller should recompute
-            the conflict list fresh and re-prompt rather than guess, since pin
-            state may have changed since the form was rendered.
+        resolutions: Maps each :class:`MergeFieldConflict` key (from :func:`plan_merge_conflicts`) to the pin id whose value should be kept.
 
     Returns:
         The survivor pin (refreshed by the merge).
 
     Raises:
-        ValueError: survivor and loser are the same pin, or either doesn't
-            belong to profile.
+        ValueError: survivor and loser are the same pin, or either doesn't belong to profile.
         UnresolvedMergeConflictError: a real conflict has no resolution supplied."""
     if survivor.pk == loser.pk:
         raise ValueError("Cannot merge a pin into itself")

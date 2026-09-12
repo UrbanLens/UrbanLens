@@ -1,13 +1,4 @@
-{% comment %}
-One write-tool proposal from a resolved turn - a live confirm button, or its
-resolved (done/error) state. Rendered both inline from _bubble.html (a
-still-pending proposal, which needs entry.turn_id to build its confirm URL)
-and as AssistantProposalConfirmView's own outerHTML swap response (always
-already resolved by then, so entry is never needed there).
-
-Context: proposal ({"n", "confirm_label"?, "status", "message"?}), and -
-only for a still-pending one - entry (for entry.turn_id).
-{% endcomment %}
+{% comment %}One write-tool proposal from a resolved turn - a live confirm button, or its resolved (done/error) state.{% endcomment %}
 {% if proposal.status == "done" %}
 <div class="assistant-proposal assistant-proposal--done">
     <i class="material-symbols-outlined">check_circle</i>

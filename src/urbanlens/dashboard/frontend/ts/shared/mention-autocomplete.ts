@@ -1,16 +1,5 @@
 /**
  * ``@`` autocomplete for comment boxes.
- *
- * Two kinds of mention share the trigger, chosen by what follows the ``@``:
- * a numeric fragment inside a trip comment offers that trip's numbered activities
- * and inserts ``@act:N``; anything else searches locations and inserts the markup
- * link form ``@[Name](loc:uuid)``.
- *
- * Delegated from ``document`` rather than bound per textarea: comment forms arrive
- * via HTMX swaps throughout the page's life, and a per-element binding would miss
- * every one that appeared after load.
- *
- * Ported out of ``base.html``'s inline script unchanged.
  */
 
 export interface MentionItem {
@@ -74,8 +63,7 @@ function showDropdown(ta: HTMLTextAreaElement, items: MentionItem[], onSelect: (
 function insert(ta: HTMLTextAreaElement, start: number, text: string): void {
     const pos = ta.selectionStart;
     const after = ta.value.substring(pos);
-    // A trailing space separates the mention from what follows, but only when there
-    // is not already one there - inserting mid-sentence used to leave a double space.
+    // A trailing space separates the mention from what follows, but only when there is not already one there.
     const separator = /^\s/.test(after) ? "" : " ";
     ta.value = `${ta.value.substring(0, start)}${text}${separator}${after}`;
     const cursor = start + text.length + 1;
@@ -85,11 +73,6 @@ function insert(ta: HTMLTextAreaElement, start: number, text: string): void {
 
 /**
  * Whether a response is still wanted by the time it lands.
- *
- * Debouncing alone does not make lookups safe: two can still be outstanding at
- * once, and the network decides which finishes last. Without this the dropdown
- * could offer results for a fragment the box no longer contains, and picking one
- * would insert a location the user never searched for.
  */
 function stillCurrent(ta: HTMLTextAreaElement, query: string): boolean {
     return currentQuery(ta)?.query === query;

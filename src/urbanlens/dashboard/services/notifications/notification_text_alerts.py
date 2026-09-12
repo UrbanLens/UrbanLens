@@ -1,4 +1,4 @@
-"""Delayed WhatsApp/SMS alerts for site notifications, driven by the per-type toggles. * Scheduling hooks in centrally (a ``post_save`` signal on ``NotificationLog`` - see ``models/notifications/signals.py``) rather than at each of the many notification-creating call sites, so every current and future notification type with a toggle pair is covered automatically. * Delivery is delayed (:data:`ALERT_DELAY_SECONDS`) and re-checked: a user who reads the notification on-site in the meantime never gets a text. * Sends are debounced per (recipient, type) so a burst (ten pins shared at once) costs one billed text, not ten. * The text body is the notification's ``title`` only - titles carry recipient-masked identity where relevant (baked in at creation time), and the body may contain more detail than belongs on a third-party carrier."""
+"""Delayed WhatsApp/SMS alerts for site notifications, driven by the per-type toggles. * Scheduling hooks in centrally (a ``post_save`` signal on ``NotificationLog`` - see ``models/notifications/signals.py``) rather than at each of the many..."""
 
 from __future__ import annotations
 
@@ -55,16 +55,13 @@ def _debounce_key(profile_id: int, notification_type: str) -> str:
 
 def is_text_alert_debounced(profile_id: int, notification_type: str) -> bool:
     """Whether a recent same-type text already went to this recipient.
-    Checks and claims the debounce marker in one atomic ``cache.add`` - two Celery workers racing on the same (recipient, type) within the window can't both pass: only the first caller's ``cache.add`` succeeds (winning the right to send), and it sets the marker in that same step so every other racing caller sees it immediately rather than in a later, separate ``cache.set``.
 
     Args:
         profile_id: The recipient profile's pk.
         notification_type: The NotificationType value.
 
     Returns:
-        True when a text for this (recipient, type) already fired within the
-        window (or just got claimed by a concurrent caller); False when this
-        call just claimed the marker and should proceed to send."""
+        True when a text for this (recipient, type) already fired within the window (or just got claimed by a concurrent caller); False when this call just claimed the marker and should proceed to send."""
     return not cache.add(_debounce_key(profile_id, notification_type), value=True, timeout=DEBOUNCE_TTL_SECONDS)
 
 
@@ -75,9 +72,7 @@ def _enabled_channels(notification: NotificationLog) -> tuple[bool, bool]:
         notification: The notification whose recipient's preferences to read.
 
     Returns:
-        Tuple of booleans; (False, False) when the type has no toggle pair or
-        the recipient has no preference row.
-    """
+        Tuple of booleans; (False, False) when the type has no toggle pair or the recipient has no preference row."""
     if notification.notification_type not in TEXT_ALERTABLE_TYPES or notification.profile is None:
         return False, False
     try:

@@ -20,44 +20,28 @@ from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_
 
 logger = logging.getLogger(__name__)
 
-# DEFAULT_ROOT is src/, but .env lives one level up at the project root.
-# List both so either location works; later entry wins if both exist.
+# .env lives at repo root; also check src/ so either location works.
 _ENV_FILE_PATHS = [
     Path(DEFAULT_ROOT, ".env"),
     Path(DEFAULT_ROOT.parent, ".env"),
 ]
 
-#: Environments where a working ``.env`` is a local-checkout convenience.
-#: Everywhere else the process is configured entirely from real environment
-#: variables (compose's ``env_file:``) and ``.env`` is deliberately kept out
-#: of the image - see ``bin/init.py``'s ``copy_sample_env``, which reached
-#: this same allow-list after treating a missing .env as needing action took
-#: staging down on 2026-08-17. Kept in sync with that one by hand: this
-#: module cannot import ``bin/init.py`` (a standalone, Django-free script
-#: that must run before Django is even configured) without creating the
-#: layering violation it exists to avoid.
+#: Where a `.env` is just a checkout convenience; elsewhere env vars rule and `.env` stays out of the image.
 _ENV_FILE_ENVIRONMENTS = frozenset({EnvironmentTypes.LOCAL, EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.TESTING})
 
-#: Floors enforced on ``field_encryption_key`` (see ``_reject_weak_encryption_keys``).
-#: 32 characters is well below the 64 the documented generator produces, so it
-#: rejects hand-typed keys without failing a legitimately generated one. The
-#: alphabet floor is set against the distribution of random output rather than
-#: against any particular bad key: a random 32-character urlsafe-base64 string
-#: has ~26 distinct characters on average and falls below 16 only very rarely,
-#: while degenerate input (repeated characters, a short string concatenated with
-#: itself) lands under it immediately.
+#: Floors for field_encryption_key; rejects hand-typed keys, accepts generated ones.
 MIN_FIELD_ENCRYPTION_KEY_LENGTH = 32
 MIN_FIELD_ENCRYPTION_KEY_ALPHABET = 16
 
 
 def _encryption_key_weakness(key: str) -> str | None:
-    """Describe why a field-encryption key is too weak to encrypt under, if it is.
+    """Describe why a key is too weak, if it is.
 
     Args:
         key: The candidate key.
 
     Returns:
-        An operator-facing explanation, or None when the key clears both floors.
+        Operator-facing explanation, or None when acceptable.
     """
     if len(key) < MIN_FIELD_ENCRYPTION_KEY_LENGTH:
         return (

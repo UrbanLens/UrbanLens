@@ -22,9 +22,9 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
     """Accept or reject a suggested visit entry from the notification dropdown.
 
     POST /visit-suggestions/<int:suggestion_id>/respond/
-    Body: action=accept|reject for a first-time suggestion, or
-          action=add_participants|new_entry|reject when suggestion.offers_merge
-          (suggested_to already has a visit logged for this place and date).
+
+    Body: action=accept|reject for a first-time suggestion, or action=add_participants|new_entry|reject
+    when suggestion.offers_merge (suggested_to already has a visit logged for this place and date).
     """
 
     def post(self, request: HttpRequest, suggestion_id: int) -> HttpResponse:
@@ -35,8 +35,8 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
             suggestion_id: Primary key of the VisitSuggestion being responded to.
 
         Returns:
-            Empty body (inbox row removal), re-rendered history row, or pin
-            visit-history partial - depending on ``surface`` / ``context``.
+            Empty body (inbox row removal), re-rendered history row, or pin visit-history partial -
+            depending on ``surface`` / ``context``.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         suggestion = get_object_or_404(
@@ -59,10 +59,6 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
             elif action == "reject":
                 reject_visit_suggestion(suggestion)
 
-        # Built once and applied to whichever response is returned: the pin-context
-        # branch below used to return before the `blocked` toast was attached, so a
-        # response the user had explicitly asked for silently did nothing when visit
-        # logging was off.
         extra_triggers: dict = {}
         if blocked:
             extra_triggers["showToast"] = {

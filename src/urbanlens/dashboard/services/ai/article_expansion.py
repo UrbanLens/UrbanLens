@@ -35,9 +35,6 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _MD_IMAGE = re.compile(r"!\[[^\]]*]\([^)]*\)")
 _MD_LINK = re.compile(r"\[([^\]]*)]\([^)]*\)")
 _MD_HEADING = re.compile(r"(?m)^\s{0,3}#{1,6}\s+")
-# Paired-marker emphasis stripping (keeps the enclosed text, drops only the markers) so stray,
-# non-markdown uses of these characters - "~500 degrees", "Foo_Bar Mill", "5*3=15" - survive
-# untouched.
 # Order matters: longer/more specific markers first so "**bold**" isn't left as a mangled "*bold*".
 _MD_STRIKETHROUGH = re.compile(r"~~(.+?)~~", re.DOTALL)
 _MD_BOLD = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
@@ -138,7 +135,6 @@ def append_to_article(
     edit_summary: str = EDIT_SUMMARY_EXPANDED_FROM_LINK,
 ) -> tuple[bool, str]:
     """Append sanitized text to a host article when room remains.
-    Shared by every caller that appends AI-drafted plain text to a pin/wiki article (this module's own link-based expansion, and ``services.trivia.wiki_incorporation``'s upvoted-question incorporation) so the dedupe/length-budget/persistence rules stay identical regardless of where the text came from.
 
     Args:
         editor: Profile credited on the revision.
@@ -280,10 +276,7 @@ def expand_articles_from_page(extraction: LinkExtraction, page_text: str) -> lis
         page_text: Visible text already fetched for field extraction.
 
     Returns:
-        Zero or more result rows for ``LinkExtraction.results``. Returns ``[]``
-        when article expansion or safety features are disabled (caller should
-        treat that as a silent skip). Never raises.
-    """
+        Zero or more result rows for ``LinkExtraction.results``."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.services.ai.article_safety import classify_article_text
     from urbanlens.dashboard.services.ai.factory import get_gateway

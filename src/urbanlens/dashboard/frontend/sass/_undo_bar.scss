@@ -1,29 +1,16 @@
 @use 'variables' as *;
 
-// Floating undo/redo, bottom-right of the viewport. Hidden entirely when
-// neither action is possible. --ul-undo-offset-y is set by undo-bar.ts when
-// another floating control (saved filters, floorplan floors, toasts) already
-// occupies this corner.
+// Floating undo/redo, bottom-right of the viewport.
 .ul-undo-bar {
     position: fixed;
     // Above map toolbars (1000) and the sticky page footer (9999); below toasts (10070).
     z-index: 10050;
     right: 10px;
     bottom: 10px;
-    // #ul-undo-bar is a <nav> element (for the landmark role) - without its own
-    // explicit sizing here it inherits three unrelated generic `nav {}` reset
-    // rules meant for real in-flow header/subnav bars (width:100%, height:56px
-    // or 4rem depending on which wins the cascade). Since position:fixed makes
-    // width:100% resolve against the viewport, that pushed this box toward the
-    // left edge instead of hugging its own content, bottom-right. `width: auto`
-    // and `height: auto` opt this out - matching how .ul-assistant-fab (a
-    // <button>, not a <nav>) never had the problem in the first place.
+    // #ul-undo-bar is a <nav> element (for the landmark role).
     width: auto;
     height: auto;
-    // line-height is inherited (unlike width/height), so the same leaked `nav`
-    // reset rules also pushed a 56px line box down onto every descendant,
-    // ballooning the icon buttons below to match. Reset it here rather than on
-    // each descendant, so nothing further down has to know about the leak.
+    // line-height is inherited (unlike width/height), so the same leaked `nav` reset rules also pushed a 56px line box down onto every.
     line-height: normal;
     display: flex;
     flex-direction: row;
@@ -56,10 +43,7 @@
         cursor: pointer;
         transition: background-color .15s ease, color .15s ease;
 
-        // Undo _reset.scss's `nav i` block-icon rule (display:block, 56px
-        // height/line-height) so the glyph sits centered instead of forcing
-        // this whole button tall - see .ul-subnav-tab in _page_hero.scss for
-        // the same fix against the same leak.
+        // Undo _reset.scss's `nav i` block-icon rule (display:block, 56px height/line-height) so the glyph sits centered instead of forcing this.
         .material-symbols-outlined {
             display: inline-flex;
             align-items: center;

@@ -50,26 +50,15 @@ class SearchResult:
     Attributes:
         type: A ``RESULT_TYPES`` slug.
         title: Primary line.
-        url: Where clicking the result navigates *in the web UI*. Never send
-            this to an API client - see the class docstring.
+        url: Where clicking the result navigates *in the web UI*.
         subtitle: Secondary context line (place, participants, ...).
         snippet: Short excerpt showing why the item matched.
         icon: Material Symbols ligature; defaults to the type's icon.
         image_url: Optional thumbnail (photos, cover images).
         date: The item's most user-meaningful timestamp, for display.
         score: Relevance used to order results within a section.
-        object_slug: The slug this result (or the resource that hosts it) is
-            addressed by - a pin's slug for a pin, visit or pin comment, a
-            location's slug for a wiki, wiki article or wiki comment, a trip's
-            slug, a check-in's slug, the counterpart's profile slug for a direct
-            message. ``""`` when the type is addressed by uuid alone (photos) or
-            has no addressable host (a standalone markup map).
-        object_uuid: The matched row's own uuid as a string, or None for the few
-            models that carry none (``Article``, ``DirectMessage``,
-            ``TripComment`` all extend the plain ``DashboardModel``). Present
-            *alongside* ``object_slug`` rather than instead of it because a pin
-            or trip whose slug has not been generated yet is still addressable by
-            uuid - the API's ``<str:pin_slug>`` segment accepts either."""
+        object_slug: The slug this result (or the resource that hosts it) is addressed by - a pin's slug for a pin, visit or pin comment, a location's slug for a wiki, wiki article or wiki comment, a trip's slug, a check-in's slug, the counterpart's profile slug for...
+        object_uuid: The matched row's own uuid as a string, or None for the few models that carry none (``Article``, ``DirectMessage``, ``TripComment`` all extend the plain ``DashboardModel``)."""
 
     type: str
     title: str
@@ -98,9 +87,7 @@ def excerpt(text: str | None, terms: list[str], *, radius: int = 45) -> str:
         radius: Characters of context kept on each side of the match.
 
     Returns:
-        A trimmed excerpt with ellipses, or the leading slice of the text when
-        no term matches, or "" for empty text.
-    """
+        A trimmed excerpt with ellipses, or the leading slice of the text when no term matches, or "" for empty text."""
     if not text:
         return ""
     lowered = text.lower()

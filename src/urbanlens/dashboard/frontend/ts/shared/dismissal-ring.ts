@@ -1,16 +1,5 @@
 /**
- * The client's own record of recently-dismissed page explainers and
- * onboarding-tour cards (plan §10, batch 4) - a capped sessionStorage ring,
- * never a server-side registry. `_page_explainer_script.html`'s `collapse()`
- * (a plain inline `<script>`, not a bundled module) and `onboarding-tour.ts`'s
- * `dismiss()` both push here; the assistant composer sends the ring's
- * contents with every turn (`_composer.html`) so `recent_dismissals()` /
- * `reopen_explainer()` can answer from what the user's own page just
- * rendered, never anything invented.
- *
- * Exposed on `window.ulDismissalRing` (installed from `entries-classic/core.ts`,
- * which loads before the inline explainer script - see themes/base.html) so
- * that non-module script can call it without an import.
+ * The client's own record of recently-dismissed page explainers and onboarding-tour cards (plan §10, batch 4).
  */
 
 const STORAGE_KEY = "ul_explainer_recent";
@@ -40,9 +29,6 @@ function readRing(): DismissalEntry[] {
 
 /**
  * Record a dismissal at the front of the ring, capped at {@link MAX_ENTRIES}.
- *
- * Re-dismissing the same id/kind moves it to the front instead of adding a
- * second entry - the ring is "what's recent", not a full dismissal log.
  */
 export function pushDismissal(kind: DismissalEntry["kind"], id: string, heading: string, body: string, prefix?: string): void {
     try {
@@ -70,7 +56,7 @@ export function clearDismissalRingForTests(): void {
     try {
         sessionStorage.removeItem(STORAGE_KEY);
     } catch {
-        /* ignore */
+
     }
 }
 

@@ -94,18 +94,15 @@ def _wants_json(request: HttpRequest) -> bool:
 def _default_corners(owner: Pin | Wiki) -> list[list[float]] | None:
     """A small box around the pin/wiki, used when the client did not seed corners.
 
-    The manage dialog normally fills the hidden ``corners`` field from the
-    current map viewport just before submit. Keyboard-submit, a missed hook,
-    or the lightbox (which has no live map) used to fail with nothing on the
-    map - this lands the overlay on the property instead, where dragging the
-    corners is a small adjustment.
+    The manage dialog normally fills the hidden ``corners`` field from the current map viewport just
+    before submit.
 
     Args:
         owner: The Pin or Wiki the overlay will belong to.
 
     Returns:
-        Four ``[lat, lng]`` pairs around the location, or None when the
-        owner has no coordinates to seed from.
+        Four ``[lat, lng]`` pairs around the location, or None when the owner has no coordinates to seed
+        from.
     """
     location = _owner_location(owner)
     if location is None or location.latitude is None or location.longitude is None:
@@ -127,19 +124,16 @@ def _default_corners(owner: Pin | Wiki) -> list[list[float]] | None:
 def _overlay_picker_images(owner: Pin | Wiki, viewer: Profile):
     """Photos the manage-overlays picker (and ``image_id`` POST) may offer.
 
-    Matches the pin/wiki gallery's notion of "this page's photos", including
-    a pin's child-pin uploads and visit-attached photos, without the gallery's
-    page size or the old 60-row cap that hid older uploads behind newer ones.
-
-    Videos and documents are excluded: an overlay is drawn as an ``<img>``.
+    Matches the pin/wiki gallery's notion of "this page's photos", including a pin's child-pin uploads
+    and visit-attached photos, without the gallery's page size or the old 60-row cap that hid older
+    uploads behind newer ones.
 
     Args:
         owner: The Pin or Wiki whose photos to list.
         viewer: The profile looking at the picker (visibility filtering).
 
     Returns:
-        Photos newest first, including a pin's child-pin and visit-attached
-        uploads.
+        Photos newest first, including a pin's child-pin and visit-attached uploads.
     """
     if isinstance(owner, Pin):
         subtree = Pin.objects.filter(pk=owner.pk).with_descendants()
@@ -153,13 +147,11 @@ def _parse_corners(raw: str | None) -> list[list[float]] | None:
     """Parse a posted ``corners`` JSON array into four ``[lat, lng]`` pairs.
 
     Args:
-        raw: The raw request value, expected to be a JSON array of four
-            two-element arrays.
+        raw: The raw request value, expected to be a JSON array of four two-element arrays.
 
     Returns:
-        The parsed corners, or None when the value is absent or malformed -
-        callers treat None as "leave the existing georeferencing alone" rather
-        than writing a half-parsed position.
+        The parsed corners, or None when the value is absent or malformed - callers treat None as "leave
+        the existing georeferencing alone"...
     """
     if not raw:
         return None
@@ -177,10 +169,9 @@ def _parse_corners(raw: str | None) -> list[list[float]] | None:
             latitude, longitude = float(entry[0]), float(entry[1])
         except (TypeError, ValueError):
             return None
-        # Out-of-range coordinates would render as an invisible overlay
-        # somewhere off the world rather than failing loudly, so they are
-        # rejected here instead of being clamped into a position the user
-        # never chose.
+        # Out-of-range coordinates would render as an invisible overlay somewhere off the world rather than
+        # failing loudly, so they are rejected here instead of being clamped into a position the user never
+        # chose.
         if not (-90.0 <= latitude <= 90.0) or not (-180.0 <= longitude <= 180.0):
             return None
         corners.append([latitude, longitude])
@@ -208,11 +199,9 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
     """
     from urbanlens.dashboard.services.media.previews import is_web_safe
 
-    # An existing photo already on this pin/wiki, picked from the dialog's own
-    # media grid - reused directly rather than re-downloaded/materialized like
-    # a transient provider item below, since it is already a real, owned Image.
-    # Scoped to the same queryset the picker lists, so a child-pin photo the
-    # picker offered is actually usable, not a silent "could not be found".
+    # An existing photo already on this pin/wiki, picked from the dialog's own media grid - reused directly
+    # rather than re-downloaded/materialized like a transient provider item below, since it is already a real,
+    # owned Image.
     image_id = (request.POST.get("image_id") or "").strip()
     if image_id:
         image = _overlay_picker_images(owner, profile).filter(pk=image_id).first()
@@ -225,11 +214,10 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
         from urbanlens.dashboard.services.media.images import compute_checksum
         from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
 
-        # The canonical upload service, not a raw Image.objects.create: it
-        # owns the quota check + per-profile lock (without which N concurrent
-        # uploads all pass the check), checksum dedupe, file_size (without
-        # which the sheet never counts against quota), and the async EXIF/
-        # keyword ingestion every other upload gets.
+        # The canonical upload service, not a raw Image.objects.create: it owns the quota check + per-profile
+        # lock (without which N concurrent uploads all pass the check), checksum dedupe, file_size (without
+        # which the sheet never counts against quota), and the async EXIF/ keyword ingestion every other upload
+        # gets.
         try:
             image = upload_photo(
                 profile,
@@ -238,10 +226,7 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
                 **({"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}),
             )
         except PhotoUploadError as exc:
-            # Re-uploading a file already in the gallery used to fail with a
-            # toast event nothing listened for, so the dialog just reset and
-            # looked like a no-op. Reuse the existing row instead - the user
-            # asked to overlay this image, not to store a second copy.
+            # Reuse the existing row instead - the user asked to overlay this image, not to store a second copy.
             logger.info("overlay upload rejected for profile %s: %s", profile.pk, exc.message)
             if exc.status != 409:
                 return None, "", exc.generic_message
@@ -252,10 +237,7 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
             return image, "", None
         return image, "", None
 
-    # A Media-gallery pick. The gallery renders provider results live and
-    # persists nothing per item, so the chosen one is downloaded into a real
-    # Image here - referencing the provider URL directly would leave the
-    # overlay broken as soon as that URL rotted.
+    # A Media-gallery pick.
     media_url = (request.POST.get("media_url") or "").strip()
     if media_url:
         from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
@@ -275,14 +257,8 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
             return None, "", "Couldn't use that photo for an overlay."
         return image, "", None
 
-    # A pasted external URL, materialized rather than referenced - the same
-    # treatment a Media-gallery pick gets directly above, and for a stronger
-    # reason than link rot. A stored foreign URL is handed to every viewer's
-    # browser as an <img src>, so on a wiki - which anyone who can see the
-    # place can add an overlay to, not just its author - it becomes a beacon:
-    # the planter's server learns the IP, User-Agent and timing of everyone
-    # who opens that specific page. Downloading it here means the column can
-    # only ever hold a URL under our own MEDIA_URL.
+    # A pasted external URL, materialized rather than referenced - the same treatment a Media-gallery pick gets
+    # directly above, and for a stronger reason than link rot.
     external_url = (request.POST.get("image_url") or "").strip()
     if external_url:
         from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
@@ -318,21 +294,14 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
 def overlay_payload(qs: MapImageOverlayQuerySet, visible_layer_ids: set[int] | None = None) -> list[dict]:
     """Serialize an owner's renderable overlays for the map.
 
-    Shared with the pin-detail and wiki page controllers, which embed the
-    same list on first render - so a page load and a later HTMX refresh
-    hand the renderer identical shapes.
+    Shared with the pin-detail and wiki page controllers, which embed the same list on first render - so
+    a page load and a later HTMX refresh hand the renderer identical shapes.
 
     Args:
-        qs: An owner-scoped ``MapImageOverlay`` queryset, already narrowed to
-            what this viewer may see (see ``_resolve_owner``).
-        visible_layer_ids: The ``CustomLayer`` pks this viewer may list, when
-            the owner is a wiki - wiki-scoped layer assignment isn't
-            restricted to an overlay's own author, so an otherwise-visible
-            overlay can still reference a layer this viewer cannot see. An
-            overlay filed under one is reported as unlayered instead. None
-            (the default) leaves every overlay's ``layer_uuid`` alone, which
-            is correct for a pin-scoped owner - concealment never applies
-            there, so every layer is always visible.
+        qs: An owner-scoped ``MapImageOverlay`` queryset, already narrowed to what this viewer may see
+        (see ``_resolve_owner``).
+        visible_layer_ids: The ``CustomLayer`` pks this viewer may list, when the owner is a wiki -
+        wiki-scoped layer assignment isn't restricted to an overlay's...
 
     Returns:
         One ``to_json()`` dict per overlay that still has an image.
@@ -354,10 +323,8 @@ def _visible_layer_ids(owner: Pin | Wiki, request: HttpRequest) -> set[int] | No
         request: The current request, for the viewer.
 
     Returns:
-        None for a pin-scoped owner (concealment never applies there, so
-        callers should leave layer references untouched); otherwise the set
-        of layer pks this viewer may list - every layer's pk when
-        concealment is off, since ``visible_rows`` is then a no-op.
+        None for a pin-scoped owner (concealment never applies there, so callers should leave layer
+        references untouched); otherwise the set of...
     """
     if isinstance(owner, Pin):
         return None
@@ -377,24 +344,22 @@ def _render_overlay_list(
 ) -> HttpResponse:
     """Render the manage-overlays list, with an ``HX-Trigger`` for the map JS.
 
-    Action URLs are built here by positional ``args`` (rather than reversed
-    in-template) so the pin-vs-wiki URL-name difference stays invisible to the
-    template - the same approach ``custom_layers._render_layer_list`` takes.
+    Action URLs are built here by positional ``args`` (rather than reversed in-template) so the
+    pin-vs-wiki URL-name difference stays invisible to the template - the same approach
+    ``custom_layers._render_layer_list`` takes.
 
     Args:
         request: The current request.
         owner: The Pin or Wiki the overlays belong to.
         qs: That owner's overlay queryset.
         error: Message to surface as a toast and inline, if the last action failed.
-        toast: Optional ``(message, level)`` for a non-error toast (e.g. a
-            successful add). Ignored when ``error`` is set.
-        align: Overlay uuid the map should immediately show corner handles for
-            - a newly added sheet, so the user can warp it without hunting
-            for the Align button.
+        toast: Optional ``(message, level)`` for a non-error toast (e.g. a successful add).
+        align: Overlay uuid the map should immediately show corner handles for - a newly added sheet, so
+        the user can warp it without hunting for the...
 
     Returns:
-        The rendered partial, carrying ``ul:map-overlays-changed`` with the
-        fresh overlay list so the map re-renders without a page reload.
+        The rendered partial, carrying ``ul:map-overlays-changed`` with the fresh overlay list so the
+        map re-renders without a page reload.
     """
     is_pin = isinstance(owner, Pin)
     url_prefix = "pin.overlays" if is_pin else "location.wiki.overlays"
@@ -410,9 +375,8 @@ def _render_overlay_list(
         }
         for overlay in overlays
     ]
-    # The layer picker in this dialog offers the same set _resolve_layer_owner
-    # would list for this viewer - a concealed viewer must not be offered a
-    # stranger's layer name to file an overlay under, any more than
+    # The layer picker in this dialog offers the same set _resolve_layer_owner would list for this viewer - a
+    # concealed viewer must not be offered a stranger's layer name to file an overlay under, any more than
     # controllers.custom_layers would list it in the layers panel.
     layers_qs = CustomLayer.objects.filter(**_owner_kwargs(owner)).order_by("order", "id")
     if visible_layer_ids is not None:
@@ -423,10 +387,7 @@ def _render_overlay_list(
         {
             "rows": rows,
             "create_url": reverse(url_prefix, args=[owner_slug]),
-            # "This page's own media", for the picker - already-uploaded photos,
-            # not the multi-provider gallery. The historical-maps section lives
-            # outside this swapped fragment now (see _map_annotations_panels.html/
-            # editor.html), so it isn't re-fetched from REData on every edit here.
+            # "This page's own media", for the picker - already-uploaded photos, not the multi-provider gallery.
             "gallery_json_url": reverse(f"{url_prefix}.media", args=[owner_slug]),
             "layers": layers_qs,
             "at_limit": len(overlays) >= MAX_OVERLAYS_PER_MAP,
@@ -440,9 +401,8 @@ def _render_overlay_list(
     triggers: dict = {"ul:map-overlays-changed": changed}
     notice = (error, "error") if error else toast
     if notice:
-        # showToast is the site-wide HX-Trigger the base template listens for.
-        # ul:toast was a private name nobody handled, so add failures looked
-        # like a silent no-op.
+        # showToast is the site-wide HX-Trigger the base template listens for. ul:toast was a private name
+        # nobody handled, so add failures looked like a silent no-op.
         triggers["showToast"] = {"message": notice[0], "level": notice[1]}
     response["HX-Trigger"] = json.dumps(triggers)
     return response
@@ -456,8 +416,8 @@ def _created_overlay_json(owner: Pin | Wiki, overlay: MapImageOverlay) -> JsonRe
         overlay: The overlay that was created or already existed.
 
     Returns:
-        ``ok``, the overlay uuid, and (for a pin) the floorplan editor URL
-        with ``?align=`` so the editor opens already in warp mode.
+        ``ok``, the overlay uuid, and (for a pin) the floorplan editor URL with ``?align=`` so the
+        editor opens already in warp mode.
     """
     payload: dict = {"ok": True, "uuid": str(overlay.uuid), "floorplan_url": ""}
     if isinstance(owner, Pin):
@@ -468,27 +428,18 @@ def _created_overlay_json(owner: Pin | Wiki, overlay: MapImageOverlay) -> JsonRe
 class OverlayMediaPickerView(LoginRequiredMixin, View):
     """This pin's/wiki's own already-uploaded photos, for the manage-overlays dialog's picker.
 
-    Deliberately not ``pin.gallery.json``/``location.wiki.gallery.json``: those
-    feed the pin's own photo *map layer*, so they filter to images that already
-    have coordinates - which would hide every photo not yet geolocated,
-    including one just uploaded here for use as an overlay.
-
+    Deliberately not ``pin.gallery.json``/``location.wiki.gallery.json``: those feed the pin's own photo
+    *map layer*, so they filter to images that already have coordinates - which would hide every photo
+    not yet geolocated, including one just uploaded here for use as an overlay.
     ``GET pin/<slug>/overlays/media/`` and the wiki counterpart.
     """
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
         """List this owner's images, most recent first."""
         owner, _qs = _resolve_owner(request, pin_slug, location_slug)
-        # visible_to for the same reason the wiki gallery uses it: contributing a
-        # photo to a wiki does not withdraw what its uploader said about who may
-        # see their photos, and this picker was the one wiki photo surface that
-        # did not ask. On the pin branch it costs nothing - _resolve_owner has
-        # already scoped that to the viewer's own pin, and visible_to always
-        # includes the viewer's own images.
-        # get_or_create, not request.user.profile: the reverse accessor raises
-        # RelatedObjectDoesNotExist for a user whose profile row was never made,
-        # and it is typed against an anonymous user this LoginRequired view can
-        # never actually receive. Same resolution every other view uses.
+        # visible_to for the same reason the wiki gallery uses it: contributing a photo to a wiki does not
+        # withdraw what its uploader said about who may see their photos, and this picker was the one wiki photo
+        # surface that did not ask.
         viewer, _ = Profile.objects.get_or_create(user=request.user)
         images = _overlay_picker_images(owner, viewer)
         return JsonResponse({"images": [{"id": image.pk, "url": request.build_absolute_uri(image.image.url), "caption": image.caption or ""} for image in images]})
@@ -521,10 +472,7 @@ class MapOverlayListView(LoginRequiredMixin, View):
         posted_corners = request.POST.get("corners")
         corners = _parse_corners(posted_corners)
         if corners is None:
-            # Empty/missing is a client that skipped the viewport hook (Enter
-            # in the name field, the lightbox). Garbage is not: placing a
-            # half-parsed sheet somewhere the user didn't choose is worse than
-            # refusing.
+            # Empty/missing is a client that skipped the viewport hook (Enter in the name field, the lightbox).
             if posted_corners:
                 return fail("Could not read where to place the overlay on the map.")
             corners = _default_corners(owner)
@@ -589,11 +537,9 @@ class MapOverlayEditView(LoginRequiredMixin, View):
 
         layer_uuid = (request.POST.get("layer") or "").strip()
         if layer_uuid:
-            # Scoped to this owner's own layers (so a posted uuid can't
-            # attach the overlay to some other pin's or wiki's layer) and,
-            # on a wiki, to visible_rows - the dialog's own <select> only
-            # ever offers visible options, so a posted uuid outside that set
-            # can only be a stale or crafted request.
+            # Scoped to this owner's own layers (so a posted uuid can't attach the overlay to some other pin's
+            # or wiki's layer) and, on a wiki, to visible_rows - the dialog's own <select> only ever offers
+            # visible options, so a posted uuid outside that set can only be a stale or crafted request.
             layer_qs = CustomLayer.objects.filter(**_owner_kwargs(owner), uuid=layer_uuid)
             if isinstance(owner, Wiki):
                 from urbanlens.dashboard.services.wiki.concealment import visible_rows
@@ -604,14 +550,10 @@ class MapOverlayEditView(LoginRequiredMixin, View):
         elif overlay.layer_id is None or not isinstance(owner, Wiki):
             overlay.layer = None
         else:
-            # The form always posts this field, and the <select> that fills
-            # it only ever lists visible_layer_ids - so an empty value here
-            # is indistinguishable from a concealed viewer's own read side
-            # having nulled a real, invisible layer assignment for display
-            # (see overlay_payload's visible_layer_ids parameter) and echoed
-            # straight back by editing some other field. Only treat this as
-            # a deliberate clear when the layer being cleared was one this
-            # viewer could actually see and choose to remove.
+            # The form always posts this field, and the <select> that fills it only ever lists visible_layer_ids
+            # - so an empty value here is indistinguishable from a concealed viewer's own read side having
+            # nulled a real, invisible layer assignment for display (see overlay_payload's visible_layer_ids
+            # parameter) and echoed straight back by editing some other field.
             visible_ids = _visible_layer_ids(owner, request)
             if visible_ids is None or overlay.layer_id in visible_ids:
                 overlay.layer = None
@@ -623,10 +565,9 @@ class MapOverlayEditView(LoginRequiredMixin, View):
 class MapOverlayCornersView(LoginRequiredMixin, View):
     """POST new corner coordinates after the user drags a handle.
 
-    Kept apart from :class:`MapOverlayEditView` because it fires on every
-    drag-end while a user is aligning a sheet: it writes eight float columns
-    and answers a small JSON body, rather than re-rendering the whole
-    manage-overlays list on each nudge.
+    Kept apart from :class:`MapOverlayEditView` because it fires on every drag-end while a user is
+    aligning a sheet: it writes eight float columns and answers a small JSON body, rather than
+    re-rendering the whole manage-overlays list on each nudge.
     """
 
     def post(self, request: HttpRequest, overlay_uuid: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
@@ -650,10 +591,9 @@ class MapOverlayCornersView(LoginRequiredMixin, View):
 class MapOverlayDeleteView(LoginRequiredMixin, View):
     """DELETE one overlay.
 
-    The backing ``Image`` is deliberately left alone: an uploaded sheet also
-    lives in the pin's or wiki's own gallery, and a materialized gallery pick
-    may be shared with the wiki - deleting the overlay is about the map, not
-    about discarding the photo.
+    The backing ``Image`` is deliberately left alone: an uploaded sheet also lives in the pin's or
+    wiki's own gallery, and a materialized gallery pick may be shared with the wiki - deleting the
+    overlay is about the map, not about discarding the photo.
     """
 
     def delete(self, request: HttpRequest, overlay_uuid: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
@@ -663,16 +603,13 @@ class MapOverlayDeleteView(LoginRequiredMixin, View):
         return _render_overlay_list(request, owner, qs)
 
 
-#: Georeference transformations whose ``rmse_meters`` is not an accuracy figure.
-#: A thin-plate spline interpolates its control points by construction, so its
-#: residual is ~0 whatever the fit is actually like - reporting that as "±0 m"
-#: would advertise a perfect placement for what may be the worst one in the
-#: list. REData's own model docstring says so; this is the consumer honouring it.
+#: Georeference transformations whose ``rmse_meters`` is not an accuracy figure. A thin-plate spline
+#: interpolates its control points by construction, so its residual is ~0 whatever the fit is actually like -
+#: reporting that as "±0 m" would advertise a perfect placement for what may be the worst one in the list.
 _UNINFORMATIVE_RMSE_TRANSFORMS = frozenset({"thinPlateSpline"})
 
-#: Above this, a georeference is placing the sheet by metres rather than
-#: centimetres and the user should know before drawing a building on it. Below
-#: it, the number is noise on a scanned historical map.
+#: Above this, a georeference is placing the sheet by metres rather than centimetres and the user should know
+#: before drawing a building on it. Below it, the number is noise on a scanned historical map.
 _NOTABLE_RMSE_METERS = 25.0
 
 
@@ -680,13 +617,12 @@ def georeference_accuracy(georeference: dict) -> str:
     """A short honest note about how well a sheet is placed, or ``""``.
 
     Args:
-        georeference: REData's ``georeference`` block - ``transformation``,
-            ``rmse_meters``, ``gcp_count``.
+        georeference: REData's ``georeference`` block - ``transformation``, ``rmse_meters``,
+        ``gcp_count``.
 
     Returns:
-        Something like ``"±40 m (6 control points)"``, or ``""`` when the
-        figure would be absent, meaningless, or too small to be worth the
-        pixels.
+        Something like ``"±40 m (6 control points)"``, or ``""`` when the figure would be absent,
+        meaningless, or too small to be worth the pixels.
     """
     if str(georeference.get("transformation") or "") in _UNINFORMATIVE_RMSE_TRANSFORMS:
         return ""
@@ -701,16 +637,9 @@ def georeference_accuracy(georeference: dict) -> str:
 def historical_map_row(match: dict) -> dict | None:
     """One picker row from a REData historical-map match, or None to skip it.
 
-    Split out of the view because the POST path re-queries the same endpoint
-    and has to agree with the list the user picked from.
-
-    Reads three fields the picker previously cached and ignored. The thumbnail
-    matters most: choosing between a dozen scanned sheets of one neighbourhood
-    is a visual task, and a list of titles ("Sanborn Map of ...", eleven times)
-    is not a way to do it. ``thumbnail_url`` and ``landing_page_url`` are the
-    *institution's* own public URLs, not REData-authenticated ones, so they can
-    be linked directly - unlike the tile template, which is proxied precisely
-    because REData's key must not reach the browser.
+    ``thumbnail_url`` and ``landing_page_url`` are the *institution's* own public URLs, not
+    REData-authenticated ones, so they can be linked directly - unlike the tile template, which is
+    proxied precisely because REData's key must not reach the browser.
 
     Args:
         match: One entry from ``RedataHistoricalMapsGateway.get_maps_covering``.
@@ -738,15 +667,8 @@ def historical_map_row(match: dict) -> dict | None:
 class HistoricalMapBrowseView(LoginRequiredMixin, View):
     """Browse REData's georeferenced historical maps covering this pin/wiki, and add one as an overlay.
 
-    ``GET pin/<slug>/overlays/historical/`` (and the wiki counterpart) lists
-    sheets whose georeferenced footprint covers or nears the location - fire
-    insurance plans, cadastral atlases, panoramic views - already placed by
-    real control points, so no corner-dragging is needed. ``POST`` with a
-    ``georeference_uuid`` from that list creates a tile overlay for it.
-
-    The overlay's ``tile_url_template`` points at UrbanLens's own tile proxy
-    (``map.historical_tiles``) rather than REData's template - REData's API
-    key must never reach the browser.
+    The overlay's ``tile_url_template`` points at UrbanLens's own tile proxy (``map.historical_tiles``)
+    rather than REData's template - REData's API key must never reach the browser.
     """
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
@@ -789,9 +711,8 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
 
         georeference_uuid = (request.POST.get("georeference_uuid") or "").strip()
         location = _owner_location(owner)
-        # Re-query REData rather than trusting posted bounds/titles: the uuid
-        # must actually be a sheet covering this location, and the canonical
-        # metadata comes back with it.
+        # Re-query REData rather than trusting posted bounds/titles: the uuid must actually be a sheet covering
+        # this location, and the canonical metadata comes back with it.
         try:
             matches = RedataHistoricalMapsGateway().get_maps_covering(float(location.latitude), float(location.longitude), radius_meters=2000, limit=25)
         except LocationContextUnavailableError:
@@ -804,9 +725,8 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
         sheet = match.get("sheet") or {}
         min_lon, min_lat, max_lon, max_lat = bounds
 
-        # reverse() can't emit literal {z}/{x}/{y}, so build with sentinels and
-        # substitute - keeping the stored template tied to URL routing rather
-        # than a hardcoded path prefix.
+        # reverse() can't emit literal {z}/{x}/{y}, so build with sentinels and substitute - keeping the stored
+        # template tied to URL routing rather than a hardcoded path prefix.
         tile_template = reverse("map.historical_tiles", args=[georeference_uuid, 0, 0, 0]).replace("/0/0/0.png", "/{z}/{x}/{y}.png")
 
         name_parts = [part for part in (sheet.get("title"), sheet.get("date_text")) if part]

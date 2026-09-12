@@ -62,8 +62,8 @@ class HaveIBeenPwnedValidator:
     """Reject passwords that appear in Have I Been Pwned breach data.
 
     Uses the k-anonymity range API so the full password never leaves the server.
-    If the API is unreachable the check is skipped (fail-open) so signup/reset
-    is not blocked by a third-party outage; a warning is logged instead.
+    If the API is unreachable the check is skipped (fail-open) so signup/reset is not blocked by a
+    third-party outage; a warning is logged instead.
     """
 
     def validate(self, password: str, user: AbstractBaseUser | None = None) -> None:

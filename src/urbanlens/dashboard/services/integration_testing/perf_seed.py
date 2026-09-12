@@ -15,13 +15,9 @@ from urbanlens.dashboard.models.profile.model import Profile
 
 #: Pins created per `bulk_create` round trip. Large enough that 20,000 rows is a
 #: score of statements rather than thousands, small enough that one statement's
-#: parameter list stays well inside Postgres' 65,535 bound.
 BATCH_SIZE = 1_000
 
 #: Degrees between seeded pins, in both axes.
-#: Chosen against the importer's own matching behaviour rather than against the unique constraint:
-#: 0.0001 degrees (~11m) is unique but is treated as the same place, so a seed at that spacing
-#: reports a row count it did not create.
 COORDINATE_STEP = 0.01
 
 #: Where the seeded block starts. Mid-Pacific on purpose - far from any real
@@ -82,8 +78,7 @@ def _grid(index: int) -> tuple[str, str]:
         index: Which pin, zero-based.
 
     Returns:
-        ``(latitude, longitude)`` as strings, since the columns are decimals and
-        a float would round differently on the way in."""
+        ``(latitude, longitude)`` as strings, since the columns are decimals and a float would round differently on the way in."""
     latitude = ORIGIN_LATITUDE + (index // GRID_SIDE) * COORDINATE_STEP
     longitude = ORIGIN_LONGITUDE + (index % GRID_SIDE) * COORDINATE_STEP
     return f"{latitude:.6f}", f"{longitude:.6f}"
@@ -97,8 +92,7 @@ def _precompute_map_center(profile: Profile, total: int) -> tuple[float, float] 
         total: How many pins it now has.
 
     Returns:
-        The stored ``(latitude, longitude)``, or None when there was nothing to
-        average."""
+        The stored ``(latitude, longitude)``, or None when there was nothing to average."""
     if total <= 0:
         return None
     points = [_grid(index) for index in range(total)]
@@ -119,34 +113,19 @@ def seed_heavy_account(
     labels_per_pin: int = 1,
 ) -> dict[str, Any]:
     """Give *profile* *pins* root pins, all carrying one shared label.
-    Idempotent in the sense that matters for a fixture: it counts what the profile already has and creates only the difference, so re-running against a seeded account is fast and does not double it.
 
     Args:
         profile: The account to seed.
         pins: How many root pins it should end up with.
-        analyze: Refresh planner statistics afterwards. Only turn this off to
-            demonstrate what skipping it costs.
-        labels_per_pin: How many labels each pin carries. The first is always the
-            shared heavy label the load harness edits; the rest are a rotating
-            window over `VOCABULARY`, so neighbouring pins differ. One is the
-            cheapest case for every payload measurement, so raise it to measure
-            anything that scales with a pin's label count.
-        precompute_map_center: Store the map centre directly instead of leaving
-            the first page load to derive it. On by default because deriving it
-            was P108, which is fixed - turn this off to have the centre
-            computed the way a real first page load computes it.
+        analyze: Refresh planner statistics afterwards.
+        labels_per_pin: How many labels each pin carries.
+        precompute_map_center: Store the map centre directly instead of leaving the first page load to derive it.
 
     Raises:
         ValueError: ``pins`` is larger than the coordinate scheme can lay out.
 
     Returns:
-        What was done, for the provisioning manifest: the final pin count, how
-        many were created now, the shared label's id and name, whether `ANALYZE`
-        ran, and how long it took. The manifest carries `analyzed` so a run
-        against an unanalysed account is visible in its own output rather than
-        inferred later from a strange number, and `label_id` because the load
-        harness edits that label by id - looking it up by name would break the
-        moment a run renamed it."""
+        What was done, for the provisioning manifest: the final pin count, how many were created now, the shared label's id and name, whether `ANALYZE` ran, and how long it took."""
     if pins > MAX_SEEDED_PINS:
         raise ValueError(f"{pins} pins would run the grid past the north pole; this coordinate scheme tops out at {MAX_SEEDED_PINS}.")
     # One short of the vocabulary, so the window can rotate: a pin that took every
@@ -247,9 +226,7 @@ def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> l
         One `Location` per coordinate, in the same order.
 
     Raises:
-        RuntimeError: A coordinate was neither found nor created, which would
-            mean the grid produced a value the database rounded differently -
-            silently pairing pins with the wrong places."""
+        RuntimeError: A coordinate was neither found nor created, which would mean the grid produced a value the database rounded differently - silently pairing pins with the wrong places."""
     Location.objects.bulk_create(
         [Location(latitude=lat, longitude=lng, official_name=f"Perf Place {first_index + offset}") for offset, (lat, lng) in enumerate(coordinates)],
         ignore_conflicts=True,
@@ -270,8 +247,7 @@ def _analyze() -> bool:
     """Refresh planner statistics for the tables the seed wrote to.
 
     Returns:
-        Whether it ran. False on a non-PostgreSQL backend, which no deployment
-        uses but a developer's sqlite experiment might."""
+        Whether it ran."""
     if connection.vendor != "postgresql":
         return False
     with connection.cursor() as cursor:

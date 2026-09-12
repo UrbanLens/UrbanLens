@@ -25,8 +25,7 @@
             <p class="wikipedia-description">{{ article.description }}</p>
             {% endif %}
             {% if article.extract %}
-            {# article.extract is server-sanitized HTML (WikipediaGateway._clean_and_trim_extract) #}
-            {# - real headings/paragraphs/lists, already capped server-side. #}
+            {# article.extract is server-sanitized HTML (WikipediaGateway._clean_and_trim_extract) real headings/paragraphs/lists, already capped. #}
             <div class="wikipedia-extract">{{ article.extract|safe }}</div>
             {% endif %}
             {% include "dashboard/partials/pins/_ai_extract_button.html" with url=article.url %}

@@ -29,10 +29,7 @@ class VisitSuggestionQuerySet(abstract.DashboardQuerySet):
 
     def for_place(self, *, location: Location | None, latitude: Decimal | float | None, longitude: Decimal | float | None) -> Self:
         """Filter to suggestions for a specific place.
-
-        Matches on the shared Location when one is given, otherwise falls back
-        to an exact latitude/longitude match (mirrors how ``find_pin_at``
-        resolves a profile's own pin for a place with no Location).
+        Matches on the shared Location when one is given, otherwise falls back to an exact latitude/longitude match (mirrors how ``find_pin_at`` resolves a profile's own pin for a place with no Location).
 
         Args:
             location: Shared Location identifying the place, if one exists.

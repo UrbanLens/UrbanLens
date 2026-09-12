@@ -21,8 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class LabelMergeError(Exception):
-    """A merge was refused.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """A merge was refused."""
 
 
 class NoSourceLabelsError(LabelMergeError):
@@ -43,11 +42,7 @@ class LabelKindMismatchError(LabelMergeError):
 
 class UnownedSourceLabelError(LabelMergeError):
     """A source isn't owned by the profile requesting the merge.
-
-    Global labels (``profile=None``) always trip this too: they're shared by
-    every user, so consuming one as a merge source would destroy other
-    people's data - a user who wants one gone can only stop using it.
-    """
+    Global labels (``profile=None``) always trip this too: they're shared by every user, so consuming one as a merge source would destroy other people's data - a user who wants one gone can only stop using it."""
 
 
 class ProtectedSourceLabelError(LabelMergeError):
@@ -60,14 +55,8 @@ class LabelMergeResult:
 
     Attributes:
         target_id: Primary key of the surviving label.
-        merged_ids: Primary keys of the labels that were consumed and deleted,
-            in the order they were processed.
-        pins_moved: How many distinct pins gained the target label as a result.
-            Pins that already carried the target are not counted, so this
-            reports newly-created attachments rather than the sources' total
-            pin count. Always 0 for the user and media kinds, which attach to
-            profiles and images rather than pins.
-    """
+        merged_ids: Primary keys of the labels that were consumed and deleted, in the order they were processed.
+        pins_moved: How many distinct pins gained the target label as a result."""
 
     target_id: int
     merged_ids: list[int]
@@ -88,8 +77,7 @@ def _validate(target: Label, sources: Sequence[Label], profile: Profile) -> None
         SelfMergeError: The target is also among the sources.
         LabelKindMismatchError: A source's kind doesn't match the target's.
         UnownedSourceLabelError: A source isn't owned by this profile.
-        ProtectedSourceLabelError: A source is protected.
-    """
+        ProtectedSourceLabelError: A source is protected."""
     from urbanlens.dashboard.models.labels.model import Label as LabelModel
 
     if not sources:
@@ -132,20 +120,18 @@ def _reparent_children(target: Label, source: Label) -> None:
 
 @transaction.atomic
 def merge_labels(*, target: Label, sources: Sequence[Label], profile: Profile) -> LabelMergeResult:
-    """Merge every label in *sources* into *target*, then delete the sources. - ``KIND_USER`` - ``ProfileLabelAssignment`` rows are reassigned to the target via ``get_or_create``, so an author/subject pair already carrying the target is not duplicated. - ``KIND_MEDIA`` - the sources' images. - everything else (tag, category, status) - the sources' pins *and* wikis.
+    """Merge every label in *sources* into *target*, then delete the sources. - ``KIND_USER`` - ``ProfileLabelAssignment`` rows are reassigned to the target via ``get_or_create``, so an author/subject pair already carrying the target is not duplicated....
 
     Args:
         target: The label that survives.
-        sources: The labels to consume. Must all share ``target.kind``, be
-            owned by *profile*, and not be protected.
+        sources: The labels to consume.
         profile: The profile on whose behalf the merge runs.
 
     Returns:
         A :class:`LabelMergeResult` describing the merge.
 
     Raises:
-        LabelMergeError: If the merge is refused - see :func:`_validate` for
-            the specific subclass raised for each condition."""
+        LabelMergeError: If the merge is refused - see :func:`_validate` for the specific subclass raised for each condition."""
     _validate(target, sources, profile)
 
     merged_ids: list[int] = []

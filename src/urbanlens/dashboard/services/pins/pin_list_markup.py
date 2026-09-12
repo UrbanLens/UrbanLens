@@ -1,10 +1,4 @@
-"""Build a markup-map snapshot from a PinList's pins.
-
-Reuses the exact snapshot schema/materialization the rest of the app's
-markup maps speak (``dashboard.services.map.map_snapshot.materialize_markup_map``)
-so a list's markup map is a fully standard MarkupMap, editable through the
-same shared composer as every other one.
-"""
+"""Build a markup-map snapshot from a PinList's pins."""
 
 from __future__ import annotations
 
@@ -21,9 +15,7 @@ def build_list_markup_snapshot(pin_list: PinList) -> dict | None:
         pin_list: The list to snapshot.
 
     Returns:
-        A snapshot dict (see ``services.map.map_snapshot``), or None when the
-        list has no pins with resolvable coordinates.
-    """
+        A snapshot dict (see ``services.map.map_snapshot``), or None when the list has no pins with resolvable coordinates."""
     items = list(pin_list.items.select_related("pin__location").order_by("order"))
     located = [item for item in items if item.pin.location and item.pin.location.latitude is not None and item.pin.location.longitude is not None]
     if not located:

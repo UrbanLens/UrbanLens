@@ -1,9 +1,4 @@
-{# Pin/wiki article: an always-editable canvas, Notion-style - there is no #}
-{# separate read-only mode to click an "Edit" button out of. The Markdown #}
-{# textarea below is the real form field (article-wysiwyg.ts mirrors into #}
-{# it); the WYSIWYG canvas mounts over it and is what the user actually sees #}
-{# and types into. Swapped into the Article tab; also the target of #}
-{# Save/Cancel and of "articleChanged" (fired by History > Restore). #}
+{# Pin/wiki article: an always-editable canvas, Notion-style - there is no separate read-only mode to click an "Edit" button out of. #}
 <div id="article-panel" class="article-panel" data-article-editor
      hx-trigger="articleChanged from:body"
      hx-get="{{ scope.urls.view }}"
@@ -39,13 +34,7 @@
         {% endif %}
 
         <div class="article-editor-toolbar" role="toolbar" aria-label="Formatting">
-            {# This whole toolbar is only visible in Source mode - the WYSIWYG #}
-            {# canvas gets its formatting from the selection bubble menu and "/" #}
-            {# block menu instead (see article-wysiwyg.ts), so it doesn't read as #}
-            {# a markdown editor with a toolbar bolted on. See #}
-            {# [data-editor-mode="wysiwyg"] in _article.scss for the hide rule - #}
-            {# the Source/Visual switch itself lives outside this toolbar (see #}
-            {# above) so it stays visible in both modes. #}
+            {# This whole toolbar is only visible in Source mode. #}
             <div class="article-toolbar-format-group">
                 <button type="button" class="article-tool" data-md-action="bold" title="Bold (Ctrl+B)"><i class="material-symbols-outlined">format_bold</i></button>
                 <button type="button" class="article-tool" data-md-action="italic" title="Italic (Ctrl+I)"><i class="material-symbols-outlined">format_italic</i></button>
@@ -86,9 +75,7 @@
             {% endif %}
 
             <div class="article-editor-split">
-                {# WYSIWYG canvas (frontend/ts/entries/article-wysiwyg.ts) - mounts here and #}
-                {# takes over as the primary editing surface once it loads; the textarea below #}
-                {# stays the actual form field and source of truth either way. #}
+                {# WYSIWYG canvas (frontend/ts/entries/article-wysiwyg.ts) - mounts here and takes over as the primary editing surface once it loads. #}
                 <div class="article-editor-canvas" data-article-canvas hidden></div>
                 <textarea name="content" class="article-editor-textarea" data-article-textarea
                           rows="22" maxlength="{{ max_length }}"
@@ -125,11 +112,7 @@
             <p>Select text to format it, or type <code>/</code> on a new line to insert a heading, list, table, image, and more.</p>
         </details>
 
-        {# Hidden until the user actually edits something (root's data-dirty, #}
-        {# set by article-editor.js's input listener - see the #}
-        {# [data-dirty="1"] rule in _article.scss), then appears as a fixed #}
-        {# bar at the bottom of the viewport rather than taking up in-page #}
-        {# space the rest of the time. #}
+        {# Hidden until the user actually edits something. #}
         <div class="article-editor-footer">
             <input type="text" name="edit_summary" class="article-summary-input" maxlength="255"
                    placeholder="Briefly describe your changes (optional){% if not scope.is_private %} - shown in the edit history{% endif %}">
@@ -148,9 +131,6 @@
             </div>
         </div>
 
-        {# Source/Clear live in the pin-detail actions menu now, not a #}
-        {# floating toolbar of their own - see _hierarchy_actions_fab.html. #}
-        {# article-wysiwyg.ts's click handler resolves this panel as the #}
-        {# page's one mounted editor regardless of where those buttons live. #}
+        {# Source/Clear live in the pin-detail actions menu now, not a floating toolbar of their own. #}
     </form>
 </div>

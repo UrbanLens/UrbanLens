@@ -1,10 +1,4 @@
-{% comment %}
-One group chat thread: header, message bubbles, composer. Context comes from
-controllers.group_chats._group_thread_context. Swapped into #dm-thread-pane by
-HTMX; the page's WebSocket JS reads the data attributes off #dm-thread (the
-same element id the 1:1 thread uses, so all delegated handlers keep working)
-to route live messages and fall back to the plain POST endpoint.
-{% endcomment %}
+{% comment %}One group chat thread: header, message bubbles, composer.{% endcomment %}
 {% load dashboard_tags %}
 <div class="dm-thread dm-thread--group" id="dm-thread"
      data-group-uuid="{{ group.uuid }}"

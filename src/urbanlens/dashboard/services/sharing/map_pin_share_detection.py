@@ -1,5 +1,4 @@
-"""Geometry-based detection of which pins a MarkupMap effectively shares.
-When one profile sends a MarkupMap to another (a DM attachment, a standalone map share, or a map attached to an explicit pin share), the map's viewport and markup may reveal the location of one or more of the sender's own pins even though the sender never used the explicit share-a-pin dialog."""
+"""Geometry-based detection of which pins a MarkupMap effectively shares."""
 
 from __future__ import annotations
 
@@ -38,8 +37,6 @@ ARROW_BEARING_TOLERANCE_DEGREES = 35.0
 
 #: Below this tail-to-target separation (in degrees) the tail-to-target bearing is numerically
 #: meaningless, so "does the arrow point at it" has no answer.
-#: A boundary centroid computed for a pin sitting exactly on an arrow's tail lands ~1e-14 degrees
-#: away from it through ordinary float error, and ``bearing_degrees`` happily turns that into a
 _DEGENERATE_TAIL_SEPARATION_DEGREES = 1e-7
 
 #: When zoomed out, how far beyond the viewport bounds a candidate pin may
@@ -49,8 +46,8 @@ CANDIDATE_RADIUS_MULTIPLIER = 5
 
 #: How much of a zoomed-in frame counts as "what this map is aimed at", as a fraction of its width
 #: and height about the centre.
-#: Whole-frame containment was the old rule and it is far too coarse to mean anything: at the
-#: default threshold zoom the frame spans roughly 9 x 7 km, so sending a map of one building
+#: Whole-frame containment was the old rule and it is far too coarse to mean anything: at the default
+#: threshold zoom the frame spans roughly 9 x 7 km, so sending a map of one building
 AIMED_AT_VIEWPORT_FRACTION = 0.25
 
 #: The boundary type used for pin-share detection matching.
@@ -69,24 +66,15 @@ class MapBounds:
     def contains_point(self, lat: float, lng: float) -> bool:
         """Whether ``(lat, lng)`` falls within this box.
 
-        Args:
-            lat: Latitude to test.
-            lng: Longitude to test.
-
         Returns:
-            True if the point is inside (inclusive of the edges).
-        """
+            True if the point is inside (inclusive of the edges)."""
         return self.south <= lat <= self.north and self.west <= lng <= self.east
 
     def expanded(self, factor: float) -> MapBounds:
         """Return a copy of this box scaled about its own center.
 
-        Args:
-            factor: Scale factor (e.g. 5 returns a box 5x as wide/tall).
-
         Returns:
-            The expanded box.
-        """
+            The expanded box."""
         lat_pad = (self.north - self.south) * (factor - 1) / 2
         lng_pad = (self.east - self.west) * (factor - 1) / 2
         return MapBounds(self.south - lat_pad, self.west - lng_pad, self.north + lat_pad, self.east + lng_pad)
@@ -96,15 +84,11 @@ def is_zoomed_in(zoom: float | None, *, threshold: float | None = None) -> bool:
     """Whether a saved viewport counts as "zoomed in" for detection purposes.
 
     Args:
-        zoom: ``MarkupMap.zoom`` (Leaflet zoom level; higher = more zoomed in,
-            a smaller geographic area visible). None (never saved) is treated
-            as not zoomed in.
-        threshold: Override for testing; defaults to
-            ``settings.UL_MAP_SHARE_ZOOM_THRESHOLD``.
+        zoom: ``MarkupMap.zoom`` (Leaflet zoom level; higher = more zoomed in, a smaller geographic area visible).
+        threshold: Override for testing; defaults to ``settings.UL_MAP_SHARE_ZOOM_THRESHOLD``.
 
     Returns:
-        True when ``zoom >= threshold``.
-    """
+        True when ``zoom >= threshold``."""
     if zoom is None:
         return False
     effective = threshold if threshold is not None else settings.UL_MAP_SHARE_ZOOM_THRESHOLD
@@ -175,8 +159,7 @@ def bearing_degrees(from_lat: float, from_lng: float, to_lat: float, to_lng: flo
         to_lng: Destination longitude.
 
     Returns:
-        Bearing in degrees, ``0 <= bearing < 360``, where 0 is north and 90 is east.
-    """
+        Bearing in degrees, ``0 <= bearing < 360``, where 0 is north and 90 is east."""
     phi1 = math.radians(from_lat)
     phi2 = math.radians(to_lat)
     dlambda = math.radians(to_lng - from_lng)
@@ -194,11 +177,7 @@ def arrow_points_toward(item: PinMarkup, target: Point, *, tolerance_degrees: fl
         tolerance_degrees: Allowed deviation either side of the exact bearing.
 
     Returns:
-        True if the tail-to-head bearing is within tolerance of the
-        tail-to-target bearing. False when the target sits on the tail, where
-        that bearing is undefined (see
-        ``_DEGENERATE_TAIL_SEPARATION_DEGREES``) - an arrow drawn *from* a pin
-        is not an arrow pointing *at* it."""
+        True if the tail-to-head bearing is within tolerance of the tail-to-target bearing."""
     coords = (item.geometry or {}).get("coordinates") or []
     if len(coords) < 2:
         return False
@@ -239,8 +218,7 @@ def _item_matches_pin(item: PinMarkup, boundary: GEOSGeometry) -> bool:
 
 
 def _candidate_pins(sender: Profile, bounds: MapBounds):
-    """Sender's own root pins within a bounding box, prefiltered on plain numeric fields.
-    ``select_related`` covers every relation :func:`_boundaries_for_pins` dereferences per pin (``location``, the pin's own ``wiki``, and its location's ``wiki`` fallback) so resolving boundaries for the whole candidate set costs a handful of bulk queries rather than several per pin."""
+    """Sender's own root pins within a bounding box, prefiltered on plain numeric fields."""
     from urbanlens.dashboard.models.pin.model import Pin
 
     return Pin.objects.filter(
@@ -257,14 +235,11 @@ def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSG
     This instead fetches each of those in one bulk query for the whole batch and resolves every pin's polygon from the resulting dicts.
 
     Args:
-        pins: Candidate pins to resolve (already ``select_related`` for
-            ``location``, ``location__wiki``, and ``wiki`` - see
-            :func:`_candidate_pins`).
+        pins: Candidate pins to resolve (already ``select_related`` for ``location``, ``location__wiki``, and ``wiki`` - see :func:`_candidate_pins`).
         boundary_type: A ``BoundaryType`` value.
 
     Returns:
-        Dict mapping pin id to its effective boundary polygon; pins with no
-        applicable boundary (including no fallback circle) are omitted."""
+        Dict mapping pin id to its effective boundary polygon; pins with no applicable boundary (including no fallback circle) are omitted."""
     from urbanlens.dashboard.models.boundary.model import Boundary
     from urbanlens.dashboard.models.boundary.queryset import circle_for_coordinates
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -328,16 +303,11 @@ def detect_shared_pins(markup_map: MarkupMap, sender: Profile) -> list[Pin]:
     """Evaluate ``sender``'s own pins against ``markup_map`` and return matches.
 
     Args:
-        markup_map: The map being shared. Callers are responsible for
-            confirming this is (or was) ``sender``'s own map.
-        sender: Whose pins are evaluated - always the map's effective owner
-            at send time, never the recipient.
+        markup_map: The map being shared.
+        sender: Whose pins are evaluated - always the map's effective owner at send time, never the recipient.
 
     Returns:
-        Distinct list of ``sender``'s Pin instances "shared" by this map, per
-        the aimed-at/markup rules described in the module docstring. Empty if
-        the map has no saved viewport.
-    """
+        Distinct list of ``sender``'s Pin instances "shared" by this map, per the aimed-at/markup rules described in the module docstring."""
     if markup_map.center_latitude is None or markup_map.center_longitude is None or markup_map.zoom is None:
         return []
 
@@ -375,9 +345,7 @@ def sync_pin_inferences(markup_map: MarkupMap) -> list[Pin]:
         markup_map: The map to (re)sync.
 
     Returns:
-        The freshly-detected list of pins (so callers like
-        :func:`~urbanlens.dashboard.services.sharing.map_sharing.share_markup_map_with_profile`
-        that need the current set don't have to run detection twice)."""
+        The freshly-detected list of pins (so callers like :func:`~urbanlens.dashboard.services.sharing.map_sharing.share_markup_map_with_profile` that need the current set don't have to run detection twice)."""
     pins = detect_shared_pins(markup_map, markup_map.profile)
     markup_map.inferred_pins.set(pins)
     return pins

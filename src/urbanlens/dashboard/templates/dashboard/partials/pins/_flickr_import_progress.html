@@ -1,8 +1,4 @@
-{% comment %}
-Flickr import progress fragment - returned by PinFlickrImportView and polled by
-PinFlickrImportProgressView. Same shape as _immich_import_progress.html.
-Context: pin, task_id, state, percent, message, error
-{% endcomment %}
+{% comment %}Flickr import progress fragment - returned by PinFlickrImportView and polled by PinFlickrImportProgressView.{% endcomment %}
 
 {% if state == "SUCCESS" %}
 <div class="immich-import-progress" id="flickr-import-progress">

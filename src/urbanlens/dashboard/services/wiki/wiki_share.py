@@ -52,23 +52,11 @@ class WikiShareService:
     ) -> tuple[Wiki, bool]:
         """Create (or fetch) the Wiki for a pin's Location and link the pin to it.
 
-        Args:
-                pin: The pin whose Location gets a community wiki.
-                include_fields: Subset of :data:`SEEDABLE_FIELDS` the user chose to
-                copy from their pin into the new wiki. Ignored when the wiki
-                is already official (never overwrite community content with
-                personal data) - a still-unofficial draft is fair game, since
-                nobody has edited it yet.
-                alias_ids: PKs of the pin's own (non-official) aliases to copy in
-                as wiki aliases, on top of official ones (always copied).
-                image_ids: PKs of the pin's own photos to also attach to the wiki.
-
         Returns:
-                Tuple of (Wiki, shared) - `shared` is whether the caller chose
-                anything to contribute.
+            Tuple of (Wiki, shared) - `shared` is whether the caller chose anything to contribute.
 
         Raises:
-                ValueError: If the pin has no Location to attach a wiki to."""
+            ValueError: If the pin has no Location to attach a wiki to."""
         if pin.location_id is None:
             raise ValueError("Cannot create a wiki for a pin without a Location")
 
@@ -117,13 +105,7 @@ class WikiShareService:
         return wiki, shared
 
     def _name_from_pin(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:
-        """Name a newly-created wiki after the place, not its postal address.
-        ``claim_for_location`` names a wiki ``location.official_name``, which for a reverse-geocoded location is a street address - so creating a wiki from a pin called "HRSH", having explicitly chosen the aliases "Hudson Heritage" and "Hudson River State Hospital", produced a wiki titled "83 Hudson View Dr, Poughkeepsie, NY 12601, USA".
-
-        Args:
-                pin: The pin the wiki is being created from.
-                wiki: The freshly-claimed wiki.
-                alias_ids: The aliases the user selected in the dialog."""
+        """Name a newly-created wiki after the place, not its postal address."""
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
         candidates = []
@@ -176,9 +158,7 @@ def seedable_field_values(pin: Pin) -> list[dict]:
         pin: The pin whose fields are candidates for seeding.
 
     Returns:
-        List of dicts with ``field``, ``label`` and a short display ``value``,
-        one per seedable field that actually has content on this pin.
-    """
+        List of dicts with ``field``, ``label`` and a short display ``value``, one per seedable field that actually has content on this pin."""
     candidates: list[dict] = []
     if pin.danger:
         candidates.append({"field": "danger", "label": "Danger", "value": f"{pin.danger} / 5"})
@@ -189,10 +169,7 @@ def seedable_field_values(pin: Pin) -> list[dict]:
 
 def seedable_aliases(pin: Pin) -> list[PinAlias]:
     """Every alias on the pin, for the create-wiki dialog's per-alias picker.
-
-    Official aliases are included so the dialog can show them (always copied,
-    not deselectable); the template distinguishes them via ``alias.kind``.
-    """
+    Official aliases are included so the dialog can show them (always copied, not deselectable); the template distinguishes them via ``alias.kind``."""
     return list(pin.aliases.all())
 
 

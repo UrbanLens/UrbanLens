@@ -22,19 +22,16 @@ def charge_message(identity: str) -> None:
     """Charge one message send against *identity*.
 
     Args:
-        identity: Who to charge, from :func:`sender_identity` or one of the
-            per-feature builders below.
+        identity: Who to charge, from :func:`sender_identity` or one of the per-feature builders below.
 
     Raises:
-        MessageRateLimitedError: The budget for this window is spent.
-    """
+        MessageRateLimitedError: The budget for this window is spent."""
     if not _budget().consume(identity):
         raise MessageRateLimitedError(f"message budget spent for identity={identity!r}")
 
 
 def refund_message(identity: str) -> None:
     """Give back a charge for a message that turned out not to exist.
-    The idempotency guard in ``create_direct_message``/``create_group_message`` reads before it writes, so two requests carrying the same ``client_uuid`` can both miss it, both charge, and then have one of them lose the unique constraint and return the row the other created.
 
     Args:
         identity: The key that was charged."""

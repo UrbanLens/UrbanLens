@@ -50,13 +50,8 @@ class GooglePlaceService:
     ) -> GooglePlace | None:
         """Return an existing GooglePlace row for coordinates, if any.
 
-        Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-
         Returns:
-            Matching GooglePlace or None.
-        """
+            Matching GooglePlace or None."""
         lat = normalize_coordinate(latitude)
         lon = normalize_coordinate(longitude)
         return GooglePlace.objects.filter(latitude=lat, longitude=lon).first()
@@ -72,15 +67,8 @@ class GooglePlaceService:
     ) -> GooglePlace:
         """Return the shared GooglePlace row for a coordinate pair.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                place_name: Optional pre-resolved place name to store.
-                cid: Optional Google Maps CID to store.
-                fetch_if_missing: When True, call Google if no cached name is available.
-
         Returns:
-                The existing or newly created GooglePlace instance."""
+            The existing or newly created GooglePlace instance."""
         lat = normalize_coordinate(latitude)
         lon = normalize_coordinate(longitude)
         existing = self.get_for_coordinates(lat, lon)
@@ -108,16 +96,8 @@ class GooglePlaceService:
     def ensure_linked(self, location: Location, *, fetch_if_missing: bool = True) -> GooglePlace:
         """Attach entity.google_place to the shared row for its coordinates.
 
-        Args:
-            entity: A Location or Pin with latitude and longitude set.
-            fetch_if_missing: When True, call Google if no cached name is
-                available for these coordinates. Pass False for bulk paths
-                (e.g. import) that must not block on a live API call per row -
-                the name resolves lazily the next time the location is viewed.
-
         Returns:
-            Linked GooglePlace, or None when coordinates are invalid.
-        """
+            Linked GooglePlace, or None when coordinates are invalid."""
         if location.google_place is not None:
             return location.google_place
 
@@ -131,16 +111,8 @@ class GooglePlaceService:
     def set_cid_for_entity(self, location: Location, cid: int | Decimal, *, fetch_if_missing: bool = True) -> GooglePlace:
         """Store a Google Maps CID on the shared row for an entity's coordinates.
 
-        Args:
-            entity: Location or Pin whose coordinates identify the cache row.
-            cid: Google Maps CID extracted from an import URL.
-            fetch_if_missing: When True, call Google if no cached name is
-                available for these coordinates. Pass False for bulk paths
-                (e.g. import) that must not block on a live API call per row.
-
         Returns:
-            The GooglePlace row that now holds the CID.
-        """
+            The GooglePlace row that now holds the CID."""
         google_place = self.ensure_linked(location, fetch_if_missing=fetch_if_missing)
         if google_place.cid is None:
             google_place.cid = cid
@@ -151,12 +123,8 @@ class GooglePlaceService:
         """Attach entity.google_place using a Google Place ID string.
         Stores the ``place_id`` on the shared GooglePlace row and links the entity, so future views can skip an additional Places API call.
 
-        Args:
-                entity: A Location or Pin with latitude and longitude set.
-                place_id: Google Places API ``place_id`` string.
-
         Returns:
-                The linked GooglePlace, or None when coordinates are missing."""
+            The linked GooglePlace, or None when coordinates are missing."""
         google_place = self.get_or_create_for_coordinates(
             location.latitude,
             location.longitude,
@@ -173,12 +141,8 @@ class GooglePlaceService:
     def resolve_place_name(self, google_place: GooglePlace) -> str:
         """Return a cached or freshly fetched place name for a GooglePlace row.
 
-        Args:
-            google_place: Row to read or populate.
-
         Returns:
-            Resolved place name, or the sentinel ``No Information Available``.
-        """
+            Resolved place name, or the sentinel ``No Information Available``."""
         if google_place.cached_place_name:
             return google_place.cached_place_name
         name = self._resolve_name(float(google_place.latitude), float(google_place.longitude))

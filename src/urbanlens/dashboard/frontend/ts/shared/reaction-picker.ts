@@ -1,15 +1,5 @@
 /**
  * Emoji reaction picker for comments, and its most-recently-used list.
- *
- * The picker's full emoji grid is rendered server-side into each comment's
- * ``.reaction-picker-popup``. This adds a "Recent" row on top, built by cloning the
- * matching buttons out of that grid rather than constructing new ones - the clones
- * carry the server's ``hx-post`` attributes with them, so a recent emoji posts the
- * reaction through exactly the same endpoint as the original. That is why each clone
- * is handed to ``htmx.process``: attributes copied via ``cloneNode`` are inert until
- * htmx is told about them.
- *
- * Ported out of ``base.html``'s inline script unchanged.
  */
 
 const RECENT_KEY = "urbanlens.recentReactionEmojis";

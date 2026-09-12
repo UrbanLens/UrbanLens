@@ -1,12 +1,7 @@
 @use 'variables' as *;
 
 // -- Global search dialog (.gs-*) ---------------------------------------------
-// Opened from the navbar search icon (or Ctrl+K / "/"). A native <dialog> (see
-// dialog-backdrop.ts for the shared backdrop-click-to-close handler every
-// dialog on the site uses) styled as a top-anchored command palette rather
-// than the centered .ul-dialog shell every feature dialog gets - deliberately
-// narrower/shorter, and anchored near the top so a long result list grows
-// downward instead of the whole dialog recentering as it fills.
+// Opened from the navbar search icon (or Ctrl+K / "/").
 
 @keyframes gs-fade-in {
     from { opacity: 0; }
@@ -21,9 +16,7 @@
 .gs-dialog {
     position: fixed;
     top: clamp(2rem, 9vh, 7rem);
-    // Horizontal centering via left/right/auto-margin rather than
-    // left:50%+translateX(-50%), so gs-pop-in's own transform (below) can
-    // animate the vertical pop without a competing horizontal one to reset.
+    // Horizontal centering via left/right/auto-margin rather than left:50%+translateX(-50%), so gs-pop-in's own transform (below) can.
     left: 0;
     right: 0;
     bottom: auto;
@@ -400,9 +393,7 @@
     }
 }
 
-// Shown briefly while gs-hints's own hx-get verifies which candidates
-// actually return results (see search.hints) - each hint button is a real
-// search, so it loads in after the rest of the dialog rather than blocking it.
+// Shown briefly while gs-hints's own hx-get verifies which candidates actually return results.
 .gs-hints-loading {
     display: inline-flex;
     color: var(--ul-grey-5);

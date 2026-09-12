@@ -64,11 +64,7 @@ MODEL_LABEL = "wiki"
 
 @register
 class WikiUndoHandler(UndoHandler):
-    """Restores a wiki's own fields, hierarchy position, and labels - not its cascade children.
-
-    Comments, aliases, edit history, and photos are gone the instant the
-    wiki is deleted and are not restored.
-    """
+    """Restores a wiki's own fields, hierarchy position, and labels - not its cascade children."""
 
     model_label = MODEL_LABEL
     model = Wiki
@@ -105,12 +101,7 @@ class WikiUndoHandler(UndoHandler):
         """Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and labels.
 
         Raises:
-            UndoExpiredError: If the location, creator profile, or any label
-                this batch referenced was independently deleted during the
-                retention window, or the location has acquired a new wiki since,
-                since recreating the row would otherwise fail with an uncaught
-                IntegrityError.
-        """
+            UndoExpiredError: If the location, creator profile, or any label this batch referenced was independently deleted during the retention window, or the location has acquired a new wiki since, since recreating the row would otherwise fail with an uncaught IntegrityError."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
@@ -171,11 +162,7 @@ class WikiUndoHandler(UndoHandler):
     @classmethod
     def redo_delete(cls, payload: dict[str, Any]) -> None:
         """Re-delete the wikis ``restore`` recreated, and re-take what it re-granted.
-        The inherited implementation only deletes the rows.
-
-        Args:
-                payload: Wrapped stash of the form
-                ``{"entries": [...], "restored_pks": [...]}``."""
+        The inherited implementation only deletes the rows."""
         for entry in payload.get("entries") or []:
             regranted = entry.get("regranted_image_ids") or []
             if regranted:

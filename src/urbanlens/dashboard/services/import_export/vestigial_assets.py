@@ -47,12 +47,7 @@ _MANAGED_ARTIFACT_DIRS = {
 
 
 def cleanup_vestigial_assets(*, now: datetime | None = None) -> VestigialAssetCleanupResult:
-    """Delete stale managed artifacts left behind after one-off cleanup failures.
-
-    Export and import jobs schedule per-job deletion after their TTL expires. This
-    sweep is a safety net for cases where that delayed Celery task could not be
-    enqueued or failed after the artifact was already eligible for deletion.
-    """
+    """Delete stale managed artifacts left behind after one-off cleanup failures."""
     reference_time = now or datetime.now(UTC)
     media_root = Path(django_settings.MEDIA_ROOT).resolve()
     scanned = deleted = skipped = errors = 0

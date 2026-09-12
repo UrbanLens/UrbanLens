@@ -1,10 +1,5 @@
 /**
- * Pure (no DOM/Leaflet dependency) formatting and small decision logic for
- * spotguessr.ts, pulled out specifically so it's unit-testable - mirrors why
- * map-layers.ts's normalizeBase() lives where it does (see that module's own
- * docstring). spotguessr.ts is an `entries/` file that runs top-level side
- * effects (DOM lookups, a WebSocket connect attempt) the moment it's
- * imported, so it can't be imported directly by a test the way this module can.
+ * Pure (no DOM/Leaflet dependency) formatting and small decision logic for spotguessr.ts, pulled out specifically so it's unit-testable.
  */
 
 export type PanelName = "settings" | "lobby" | "game" | "summary" | "empty";
@@ -18,9 +13,7 @@ export function panelVisibility(active: PanelName): Record<PanelName, boolean> {
     return visibility;
 }
 
-// e.g. "+750 bonus (country, state, city)" - the exact per-tier point values
-// live server-side (services.spotguessr.geo_bonus) to avoid drift; the
-// client just reports the total and which tiers matched.
+// e.g.
 export function bonusSuffix(bonusPoints: number, bonusTiers: string[]): string {
     return bonusPoints ? ` (+${bonusPoints} bonus: ${bonusTiers.join(", ")})` : "";
 }
@@ -53,10 +46,7 @@ export function formatCountdown(remainingSeconds: number): string {
     return minutes > 0 ? `${minutes}:${String(seconds).padStart(2, "0")}` : `${seconds}s`;
 }
 
-// Animation math - shared by the points count-up (animateCountUp()) and the
-// reveal distance line "drawing itself in" (animateLineDrawIn()), both in
-// spotguessr.ts. Kept here, not there, purely so the math is unit-testable
-// without a DOM/Leaflet/requestAnimationFrame environment.
+// Animation math - shared by the points count-up (animateCountUp()) and the reveal distance line "drawing itself in".
 
 /** Decelerating ease - starts fast, settles gently into the final value. */
 export function easeOutQuad(progress: number): number {
@@ -75,9 +65,7 @@ export function interpolateLatLng(from: [number, number], to: [number, number], 
     return [from[0] + (to[0] - from[0]) * eased, from[1] + (to[1] - from[1]) * eased];
 }
 
-// Minimal shape spotguessr.ts's real SummaryParticipant satisfies - kept
-// local (rather than imported from the entry file) so this module has no
-// dependency on it either.
+// Minimal shape spotguessr.ts's real SummaryParticipant satisfies.
 export interface SummaryParticipantLike {
     profile_id: number;
     username: string;

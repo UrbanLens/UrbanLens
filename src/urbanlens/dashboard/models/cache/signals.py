@@ -12,23 +12,7 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 @receiver(post_save, sender=LocationCache, dispatch_uid="location_cache_seed_articles_from_wikipedia")
 def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance: LocationCache, created: bool = False, **kwargs) -> None:
     """Seed articles and add the matched Wikipedia link whenever a location's Wikipedia match is (re)cached.
-
-    Fires on every write to a location's "wikipedia" LocationCache row, since
-    ``LocationCache.set`` always upserts via ``update_or_create`` regardless
-    of whether a row already existed - but the per-pin seeding loop below
-    only runs when ``created`` is True, i.e. the first time this location's
-    Wikipedia match is cached. Every pin on a popular location has already
-    been seeded by that first run, so re-walking all of them (an unbounded,
-    O(pins) loop) on every later re-fetch/refresh would be pure waste; the
-    per-pin seeding (``seed_pin_article_from_wikipedia``) and link adding
-    (``add_pin_link``) are themselves idempotent, but that doesn't help when
-    the loop itself, not any individual seed call, is the cost.
-
-    The single, O(1) wiki-level calls (``seed_wiki_article_from_wikipedia``,
-    ``add_wiki_link``) stay unconditional - they aren't the flagged
-    unbounded cost, and a wiki can be created for the location after its
-    Wikipedia cache row already exists, in which case a later re-fetch is
-    exactly what lets ``add_wiki_link`` finally attach the link.
+    Fires on every write to a location's "wikipedia" LocationCache row, since ``LocationCache.set`` always upserts via ``update_or_create`` regardless of whether a row already existed - but the per-pin seeding loop below only runs when ``created`` is True, i.e. the first time this location's Wikipedia match is cached.
 
     Args:
         sender: The model class.

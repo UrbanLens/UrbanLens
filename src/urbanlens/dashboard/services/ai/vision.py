@@ -66,7 +66,6 @@ def _parse_keyword_text(text: str) -> list[str]:
 
 def _vision_target() -> tuple[Provider, str]:
     """The ``(provider, model)`` the site's AI settings select for a vision call.
-    Mirrors the provider dispatch every other AI feature does through ``services.ai.factory``, but resolved here: this module talks to the inference client directly rather than through an ``LLMGateway``, because there is no conversation for a gateway to manage.
 
     Returns:
         The provider name and model identifier to send this call to."""
@@ -88,8 +87,7 @@ def _openai_cost(model: str, input_tokens: int | None, output_tokens: int | None
         output_tokens: Provider-reported completion tokens, or None.
 
     Returns:
-        The estimated dollar cost of the call.
-    """
+        The estimated dollar cost of the call."""
     from urbanlens.dashboard.services.ai.openai import OpenAIGateway
 
     fallback_sent, fallback_received = _OPENAI_VISION_FALLBACK_TOKENS
@@ -109,8 +107,7 @@ def _describe(image_bytes: bytes, prompt: str, *, service_key: str, max_tokens: 
         max_tokens: Response budget.
 
     Returns:
-        The model's raw text answer, or None when the call failed (logged).
-    """
+        The model's raw text answer, or None when the call failed (logged)."""
     from urbanlens.dashboard.services.ai.inference_client import ImagePart, InferenceError, InferenceRequest, Message, TextPart, get_inference_client
 
     provider, model = _vision_target()

@@ -1,15 +1,4 @@
-{% comment %}
-Friend list for the lightbox's "Share with a friend" picker - trimmed down
-from pin_share_dialog.html's connections-picker markup (no place/review
-step needed for a single-photo DM share). Filtered client-side by the shared
-picker dialog's own search input (window._lightboxOpenSharePicker), so this
-partial carries no search box of its own. See PhotoShareFriendsView and
-window._lightboxPickFriend in _photo_lightbox.html.
-
-Context:
-  friends  - list[Profile], the viewer's accepted connections
-  image_id - PK of the photo being shared (unused here - kept for parity)
-{% endcomment %}
+{% comment %}Friend list for the lightbox's "Share with a friend" picker.{% endcomment %}
 <ul class="photo-share-friend-list">
     {% for friend in friends %}
     <li class="photo-share-friend-item" data-search="{{ friend.username|lower }}">

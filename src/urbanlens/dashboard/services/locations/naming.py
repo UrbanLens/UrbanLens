@@ -313,13 +313,10 @@ def _parse_house_number_range(text: str) -> tuple[int, int] | None:
     """Extract a leading house number, or a hyphenated range of them, from free text.
 
     Args:
-        text: Free-text address-like string, e.g. "1050 Main St" or
-            "1030-1060 Main St".
+        text: Free-text address-like string, e.g. "1050 Main St" or "1030-1060 Main St".
 
     Returns:
-        ``(low, high)`` (equal when there's no range), or None when the text
-        doesn't start with a number at all.
-    """
+        ``(low, high)`` (equal when there's no range), or None when the text doesn't start with a number at all."""
     match = _HOUSE_NUMBER_RANGE_PATTERN.match(text.strip())
     if not match:
         return None
@@ -364,8 +361,7 @@ def is_address_derived_name(name: str, location: Location) -> bool:
         location: The location whose address components the name is checked against.
 
     Returns:
-        True when the name is address-derived and should not be saved as an
-        official name."""
+        True when the name is address-derived and should not be saved as an official name."""
     normalized = normalize_name_for_comparison(name)
     if not normalized:
         return False
@@ -398,7 +394,6 @@ def is_address_derived_name(name: str, location: Location) -> bool:
 
 def sanitize_name(value: str | None) -> str | None:
     """Sanitize a user-supplied or externally-sourced place/pin/wiki name.
-    Names are reused verbatim in several risky contexts - external API query strings (Google, Wikipedia, Brave), AI prompts, and page templates - so this normalizes to a strict allowlisted character set rather than only blocking a few known-bad characters.
 
     Args:
         value: Raw name text, or ``None``.
@@ -441,9 +436,7 @@ def external_name_candidates_for_location(
 
     Args:
         location: The location to gather candidates for.
-        extra_candidates: Optional ``(source, raw_value)`` pairs to consider
-            ahead of plugin-provided candidates (e.g. freshly fetched data not
-            yet visible in the cache).
+        extra_candidates: Optional ``(source, raw_value)`` pairs to consider ahead of plugin-provided candidates (e.g. freshly fetched data not yet visible in the cache).
 
     Returns:
         Cleaned candidates in arrival order."""
@@ -486,14 +479,11 @@ def best_external_name_for_location(
 
     Args:
         location: The location to name.
-        extra_candidates: Optional ``(source, raw_value)`` pairs considered
-            ahead of plugin candidates.
-        profile: The profile whose action triggered this resolution, if any -
-            see :func:`default_name_resolver`.
+        extra_candidates: Optional ``(source, raw_value)`` pairs considered ahead of plugin candidates.
+        profile: The profile whose action triggered this resolution, if any - see :func:`default_name_resolver`.
 
     Returns:
-        ``(name, source)`` for the winning candidate, or None when no
-        acceptable candidate exists."""
+        ``(name, source)`` for the winning candidate, or None when no acceptable candidate exists."""
     from urbanlens.dashboard.services.locations.name_resolution import default_name_resolver
 
     candidates = external_name_candidates_for_location(location, extra_candidates=extra_candidates)
@@ -507,8 +497,7 @@ def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
     """Persist external name candidates as official WikiAlias rows.
 
     Args:
-        wiki: The wiki to attach aliases to; skipped when None or unsaved
-            (wikis are created lazily and this honours that).
+        wiki: The wiki to attach aliases to; skipped when None or unsaved (wikis are created lazily and this honours that).
         candidates: Cleaned candidates to persist.
 
     Returns:
@@ -539,8 +528,7 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
     A Location can have several Pins (one per user who's pinned it), so this attaches the same candidate set to each of them independently.
 
     Args:
-        location: The location whose pins should receive aliases; skipped
-            when unsaved (no pins can exist yet).
+        location: The location whose pins should receive aliases; skipped when unsaved (no pins can exist yet).
         candidates: Cleaned candidates to persist.
 
     Returns:
@@ -586,7 +574,6 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
 
 def persist_official_aliases_for_location(location: Location) -> bool:
     """Backfill official aliases for a location's wiki and pins from cached candidates.
-    Reads only already-cached candidates - no network calls - and records them as official aliases.
 
     Args:
         location: The location whose wiki and pins should receive official aliases.
@@ -617,11 +604,9 @@ def update_location_name_from_external_sources(
 
     Args:
         location: The location to refresh.
-        extra_candidates: Optional ``(source, raw_value)`` pairs considered
-            ahead of plugin candidates.
+        extra_candidates: Optional ``(source, raw_value)`` pairs considered ahead of plugin candidates.
         save: Whether to persist the changes; False computes without writing.
-        profile: The profile whose action triggered this refresh, if any - see
-            :func:`~urbanlens.dashboard.services.locations.name_resolution.default_name_resolver`.
+        profile: The profile whose action triggered this refresh, if any - see :func:`~urbanlens.dashboard.services.locations.name_resolution.default_name_resolver`.
 
     Returns:
         True when the location name, wiki name, or alias list changed."""

@@ -1,4 +1,4 @@
-"""AI link extraction - read an external page and fill supported pin fields. * Only keys in :data:`EXTRACTABLE_FIELDS` (the allowlist registry) are ever read from the response - unknown keys are silently ignored, and values are never applied via ``setattr`` from AI-controlled names. * Each registry entry owns a ``parse`` step (strict type/bounds/charset validation that raises ``ValueError`` on anything suspect) and an ``apply`` step (the only code path that writes to the pin's data). * Applies are deliberately non-destructive: a field the user already filled in is never overwritten - the proposal is recorded as skipped instead, and the whole run is reviewable on the (unlinked) AI review page."""
+"""AI link extraction - read an external page and fill supported pin fields. * Only keys in :data:`EXTRACTABLE_FIELDS` (the allowlist registry) are ever read from the response - unknown keys are silently ignored, and values are never applied via..."""
 
 from __future__ import annotations
 
@@ -73,8 +73,7 @@ def _parse_date(raw: Any) -> date:
         The parsed date (a bare year becomes January 1st of that year).
 
     Raises:
-        ValueError: On anything that isn't a plausible historical date.
-    """
+        ValueError: On anything that isn't a plausible historical date."""
     text = _clean_text(raw, 32)
     if re.fullmatch(r"\d{4}", text):
         parsed = date(int(text), 1, 1)
@@ -92,14 +91,13 @@ def _parse_price(raw: Any) -> Decimal:
     """Parse an AI-supplied sale price, tolerating currency punctuation.
 
     Args:
-        raw: The raw JSON value (number or string like ``"$1,250,000"``).
+        raw: The raw JSON value.
 
     Returns:
         A non-negative Decimal within the model column's bounds.
 
     Raises:
-        ValueError: When it isn't a plausible price.
-    """
+        ValueError: When it isn't a plausible price."""
     if isinstance(raw, (int, float)) and not isinstance(raw, bool):
         text = str(raw)
     else:
@@ -113,9 +111,7 @@ def _parse_price(raw: Any) -> Decimal:
     return price.quantize(Decimal("0.01"))
 
 
-# ---------------------------------------------------------------------------
 # Field registry
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -123,18 +119,11 @@ class ExtractableField:
     """One pin field the AI may propose a value for.
 
     Attributes:
-        key: Stable identifier - the JSON key requested from (and read back
-            from) the model, and the ``key`` stored in run results.
+        key: Stable identifier - the JSON key requested from (and read back from) the model, and the ``key`` stored in run results.
         label: Human-readable name for the review page.
         prompt_hint: One-line description handed to the model for this key.
-        parse: Strict validator turning the raw JSON value into a typed value;
-            must raise ``ValueError`` on anything unacceptable.
-        apply: Writes the parsed value to the pin. Receives a per-run
-            ``context`` dict for cross-field coupling (e.g. attaching a company
-            name to the owner created earlier in the same run). Returns
-            ``(applied, note)`` - ``note`` explains a skip or summarizes the
-            write.
-    """
+        parse: Strict validator turning the raw JSON value into a typed value; must raise ``ValueError`` on anything unacceptable.
+        apply: Writes the parsed value to the pin."""
 
     key: str
     label: str
@@ -230,8 +219,7 @@ def _parse_aliases(raw: Any) -> list[str]:
         Deduplicated, sanitized, meaningful alias names (may be empty).
 
     Raises:
-        ValueError: When the value isn't a list at all.
-    """
+        ValueError: When the value isn't a list at all."""
     from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 
     if not isinstance(raw, list):
@@ -332,9 +320,7 @@ def _require(value: str, label: str) -> str:
     return value
 
 
-# ---------------------------------------------------------------------------
 # Availability & limits
-# ---------------------------------------------------------------------------
 
 
 def link_extraction_available(user, profile: Profile) -> bool:
@@ -383,8 +369,7 @@ def recently_requested_urls(pin: Pin, *, within_days: int = RECENT_EXTRACTION_CO
         within_days: Cooldown window in days.
 
     Returns:
-        The set of recently-requested URLs, exactly as submitted (matched
-        against the button's own ``url`` verbatim - no normalization)."""
+        The set of recently-requested URLs, exactly as submitted (matched against the button's own ``url`` verbatim - no normalization)."""
     from datetime import timedelta
 
     from django.utils import timezone
@@ -395,7 +380,6 @@ def recently_requested_urls(pin: Pin, *, within_days: int = RECENT_EXTRACTION_CO
 
 def ai_extract_button_context(user, profile: Profile, pin: Pin) -> dict[str, Any]:
     """Shared context for every AI-extract-button render site.
-    Single source of truth for both keys ``_ai_extract_button.html`` reads (``can_ai_extract`` and ``recently_extracted_urls``), so every call site stays consistent by construction instead of by convention.
 
     Args:
         user: The authenticated user (subscription features hang off User).
@@ -403,9 +387,7 @@ def ai_extract_button_context(user, profile: Profile, pin: Pin) -> dict[str, Any
         pin: The pin whose links are being rendered.
 
     Returns:
-        ``{"can_ai_extract": bool, "recently_extracted_urls": frozenset[str]}``.
-        The URL set is only computed when extraction is available at all -
-        the button never renders otherwise, so the query would be wasted."""
+        ``{"can_ai_extract": bool, "recently_extracted_urls": frozenset[str]}``."""
     available = link_extraction_available(user, profile)
     return {
         "can_ai_extract": available,
@@ -419,7 +401,6 @@ class LinkExtractionError(Exception):
 
 def _validate_extraction_url(url: str) -> str:
     """Validate a user-submitted extraction target url.
-    Enforces http(s), a length cap, and rejects loopback/private/link-local/ reserved hosts via the shared :func:`url_safety.ensure_public_http_url` guard - the fetch runs from inside the server's network, so without this a user could point the extractor at internal services (SSRF), including via a hostname whose DNS they control.
 
     Args:
         url: The submitted url.
@@ -451,9 +432,7 @@ def start_link_extraction(user, profile: Profile, pin: Pin, url: str) -> LinkExt
         The created (pending) LinkExtraction row.
 
     Raises:
-        LinkExtractionError: When the feature is unavailable, the daily limit
-            is exhausted, or the url is rejected.
-    """
+        LinkExtractionError: When the feature is unavailable, the daily limit is exhausted, or the url is rejected."""
     from django.db import transaction
 
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
@@ -481,9 +460,7 @@ def start_link_extraction(user, profile: Profile, pin: Pin, url: str) -> LinkExt
     return extraction
 
 
-# ---------------------------------------------------------------------------
 # Fetch + AI + apply pipeline (runs inside the Celery task)
-# ---------------------------------------------------------------------------
 
 
 _SCRIPT_STYLE = re.compile(r"<(script|style|noscript|template)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
@@ -522,8 +499,7 @@ def fetch_page_text(url: str) -> str:
         The page's visible text (bounded).
 
     Raises:
-        LinkExtractionError: On network failure, a non-success status, a
-            non-text body, an empty page, or a rejected/too-deep redirect."""
+        LinkExtractionError: On network failure, a non-success status, a non-text body, an empty page, or a rejected/too-deep redirect."""
     import requests
 
     from urbanlens.dashboard.services.media.media_materialize import fetch_with_revalidated_redirects

@@ -1,11 +1,4 @@
-{% comment %}
-One page of a pin list's item rows. Included for page 1 (from _items_panel.html)
-and returned directly for later pages (PinListItemsPageView) - the trailing
-sentinel <div> lazy-loads the next page via HTMX when scrolled into view,
-same pattern as _photo_grid.html's gallery pagination.
-Context: pin_list, items (PinListItem page slice, already ordered), page_obj
-(the Django Page - has_next/next_page_number drive the sentinel below).
-{% endcomment %}
+{% comment %}One page of a pin list's item rows.{% endcomment %}
 {% for item in items %}
 <div class="pin-list-item" data-id="{{ item.id }}">
     <span class="pin-list-item-drag-handle" title="Drag to reorder">

@@ -27,19 +27,11 @@ export interface OnboardingTourConfig {
 }
 
 /**
- * Dismissible onboarding-card tour, shared by organize/location/wiki/trip
- * pages (each previously carried its own byte-identical copy differing only
- * in the prefix/host/cards/retry-event below).
+ * Dismissible onboarding-card tour, shared by organize/location/wiki/trip pages.
  */
 export function initOnboardingTour(config: OnboardingTourConfig): void {
     const sessionKey = `${config.prefix}_later`;
-    // The card currently on screen, if any - tracked so a tab change (or any
-    // other retryEvent) can tell whether it's still relevant, not just
-    // whether *a* card happens to be showing. Without this, a card whose
-    // target lives on one Organize tab (e.g. "drag-priority", anchored to
-    // #priority-list) stayed on screen after switching to an unrelated tab,
-    // since tryShow() used to bail out early whenever any card was visible,
-    // never re-checking that specific card's own ready() after the switch.
+    // The card currently on screen, if any - tracked so a tab change (or any other retryEvent) can tell whether it's still relevant, not.
     let activeCard: OnboardingCard | null = null;
 
     function dismissed(id: string): boolean {
@@ -73,13 +65,7 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         }
     }
     function isCardTargetVisible(card: OnboardingCard): boolean {
-        // A card's target selector often stays present in the DOM even on an
-        // unrelated tab (tab switching just toggles a panel's `hidden`
-        // attribute rather than removing its content), so ready()'s plain
-        // existence check alone can't tell a truly-gone target apart from one
-        // that's merely off-screen right now. offsetParent is null for any
-        // element that (or whose ancestor) has display:none - a reliable,
-        // cheap "is this actually rendered" signal.
+        // A card's target selector often stays present in the DOM even on an unrelated tab.
         const el = document.querySelector<HTMLElement>(card.target);
         return !!el && el.offsetParent !== null;
     }
@@ -88,15 +74,7 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         document.querySelectorAll(".onboarding-focus").forEach((el) => el.classList.remove("onboarding-focus"));
         activeCard = null;
     }
-    // Which elements already have their auto-dismiss listener, across
-    // however many times registerAutoDismiss() re-runs - an HTMX swap can
-    // replace a card's watchSelector target with a fresh element at any
-    // time, so binding once at init only worked until the first such swap:
-    // the user could perform the watched action on the new element forever
-    // and dismiss() would never fire, leaving the card to keep reappearing
-    // as "not yet dismissed". Re-running on every htmx:afterSettle (below)
-    // picks up new elements; this set is what keeps that from stacking a
-    // second listener onto one that survived the swap unchanged.
+    // Which elements already have their auto-dismiss listener, across however many times registerAutoDismiss() re-runs.
     const autoDismissBound = new WeakSet<Element>();
     function registerAutoDismiss(card: OnboardingCard): void {
         if (dismissed(card.id) || !card.watchSelector) return;
@@ -144,10 +122,7 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
     }
     function tryShow(): void {
         if (laterSet()) return;
-        // Re-validate the card already on screen (if any) instead of just
-        // leaving it up indefinitely - its target may no longer apply after
-        // whatever triggered this call (e.g. switching Organize tabs away
-        // from the one its target lives on).
+        // Re-validate the card already on screen (if any) instead of just leaving it up indefinitely.
         if (activeCard && (!activeCard.ready() || !isCardTargetVisible(activeCard))) clear();
         if (document.querySelector(".page-onboarding-card")) return;
         const card = config.cards.find((c) => c.ready() && isCardTargetVisible(c) && !dismissed(c.id));
@@ -159,12 +134,7 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         setTimeout(tryShow, 250);
     }
 
-    // Fired by assistant-overlay.ts when the model calls reopen_explainer for
-    // a kind:"tour" dismissal. Un-dismisses only the requested card, not the
-    // whole tour - with several cards sharing one prefix (e.g. Organize's
-    // three), clearing all of them would let tryShow() surface whichever
-    // *other* card is earliest in config.cards instead of the one the user
-    // actually asked to see again.
+    // Fired by assistant-overlay.ts when the model calls reopen_explainer for a kind:"tour" dismissal.
     function restart(id: string): void {
         try {
             localStorage.removeItem(`${config.prefix}_${id}_dismissed`);
@@ -180,11 +150,7 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
 
     registerAllAutoDismiss();
     setTimeout(tryShow, config.initialDelayMs ?? 900);
-    // retryEvent is documented as firing *in addition to* htmx:afterSettle,
-    // not instead of it - Organize's own retryEvent (tab switching) is a
-    // plain custom event, not an HTMX one, so an if/else here meant any
-    // HTMX-driven update on that page (editing a label, a list refresh)
-    // never re-checked or re-bound anything at all.
+    // retryEvent is documented as firing *in addition to* htmx:afterSettle, not instead of it.
     document.body.addEventListener("htmx:afterSettle", onRetrigger);
     if (config.retryEvent) {
         document.addEventListener(config.retryEvent, onRetrigger);

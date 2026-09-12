@@ -1,30 +1,6 @@
-{% comment %}
-Links list for a pin or wiki - chips with a remove button, styled like the
-other detail-item rows. On the pin details page this lives in its own
-standalone card (see pin_overview_partial.html's Links card, which is
-always visible with its own "Add a link" header button) rather than nested
-inside the Details card. The Location wiki page nests it inline among its
-own detail rows instead, so it renders its own trigger button here.
-
-Usage: rendered via PinLinksView/LocationLinksView, which supply `links`,
-`delete_url_name`, `row_id`, `owner_slug` (the url's first argument), and
-either `pin` or `wiki` for display purposes. Both routes add a link through
-the shared _pin_link_add_dialog.html - never an inline form.
-
-dialog_id: id of the add-link <dialog> to open when this row's own trigger
-button is clicked. Omit when the caller supplies its own trigger elsewhere
-(the pin page's standalone Links card header) - the row then renders no
-trigger of its own.
-
-show_label/show_badge: the pin page's Links card already carries a "Links"
-card-header title and its own header count badge, so its row passes
-neither; the wiki page's row is one field among several with no title or
-badge of its own, so it passes show_label=True.
-{% endcomment %}
+{% comment %}Links list for a pin or wiki - chips with a remove button, styled like the other detail-item rows.{% endcomment %}
 {% if show_badge %}
-{# Keeps the standalone Links card's header count in sync with this row - #}
-{# see pin_overview_partial.html's badge, and label_membership_panel.html's #}
-{# organization-count-badge for the same OOB-swap-a-header-badge pattern.  #}
+{# Keeps the standalone Links card's header count in sync with this row see pin_overview_partial.html's badge,. #}
 <span class="badge" id="pin-links-count-badge" hx-swap-oob="true"{% if not links %} hidden{% endif %}>{{ links|length }}</span>
 {% endif %}
 <div class="detail-item detail-item--links full-width" id="{{ row_id }}">

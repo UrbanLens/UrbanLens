@@ -1,15 +1,5 @@
 /**
  * Floorplan editor: draw walls, get rooms.
- *
- * Walls are the only thing the user draws and the only geometry stored. Rooms
- * are *derived* - the enclosed regions of the wall graph - and a room's name
- * lives on a seed point that binds to whichever region contains it, so moving a
- * wall renames nothing and deletes nothing. Doors and windows are intervals
- * along a wall rather than objects in their own right, because they cannot
- * exist without one and must move with it.
- *
- * Geometry is authored in plan-local metres (see shared/floorplan/coords.ts)
- * and projected to WGS-84 only to hand coordinates to Leaflet.
  */
 
 import { safeColor } from "../shared/markup-engine";
@@ -61,9 +51,7 @@ import { createMapLayers } from "../shared/map-layers";
 
 declare const L: typeof import("leaflet");
 
-// @types/leaflet has no idea leaflet-rotate (loaded after leaflet.js in
-// editor.html) exists - it patches L.Map in place rather than exporting its
-// own types, so its additions are declared here rather than left as `any`.
+// @types/leaflet has no idea leaflet-rotate (loaded after leaflet.js in editor.html) exists.
 declare module "leaflet" {
     interface MapOptions {
         rotate?: boolean;
@@ -89,14 +77,10 @@ type SelectionItem =
 /** Marker kinds that can join floors together. */
 
 const WALL_STYLE: Record<string, { color: string; weight: number; dashArray?: string }> = {
-    // Same blue as a building's boundary on the Private Pin page - it plays
-    // the same role here: the building's own outline, not a property line
-    // (that's "fence", below) and not a partition (that's "interior").
+    // Same blue as a building's boundary on the Private Pin page - it plays the same role here.
     exterior: { color: "#1d4ed8", weight: 5 },
     interior: { color: "#546e7a", weight: 3 },
-    // Finely dotted and warmer than the greys: a boundary, drawn as something
-    // other than the building. Distinct from virtual's long dashes and
-    // collapsed's gapped ones at a glance.
+    // Finely dotted and warmer than the greys: a boundary, drawn as something other than the building.
     fence: { color: "#8d6e63", weight: 2, dashArray: "1 4" },
     virtual: { color: "#90a4ae", weight: 2, dashArray: "6 6" },
     collapsed: { color: "#a1887f", weight: 3, dashArray: "2 6" },
@@ -104,10 +88,6 @@ const WALL_STYLE: Record<string, { color: string; weight: number; dashArray?: st
 
 /**
  * The key that arms the marker tool with each kind already chosen.
- *
- * Declared beside the kinds rather than only inside the keydown handler, so the
- * options panel can say which key does what instead of leaving it to whoever
- * already knows.
  */
 const MARKER_KEYS: Record<MarkerKind, string> = { hazard: "h", stair: "s", elevator: "e" };
 
@@ -124,27 +104,16 @@ const MARKER_COLOR: Record<MarkerKind, string> = {
     elevator: "#6b7280",
 };
 
-// A white base once the exterior is drawn, so the plan reads as a real floor
-// rather than a translucent overlay on the map beneath it. Rooms tint that
-// base rather than replacing it, so named and unbound space both stay legible
-// against a desaturated backdrop (see `.floorplan-map.has-plan` in the SCSS).
+// A white base once the exterior is drawn, so the plan reads as a real floor rather than a translucent overlay on the map beneath it.
 const ROOM_FILL = { color: "#00897b", weight: 1, fillColor: "#eef6f4", fillOpacity: 0.94 };
 const UNBOUND_FILL = { color: "#b0bec5", weight: 1, dashArray: "4 4", fillColor: "#ffffff", fillOpacity: 0.92 };
 
 /**
- * A marker icon, styled like the site's detail-pin markers elsewhere
- * (map-annotations.ts's `detailIcon()`): a colored glyph on a solid
- * background circle, for contrast against whatever is under it - a bare
- * glyph blended into the map beneath it.
+ * A marker icon, styled like the site's detail-pin markers elsewhere (map-annotations.ts's `detailIcon()`).
  */
-// A marker's icon/color prefer its linked detail pin's own customizations
-// (set via the Private Pin page's detail-pin dialog - see Marker.icon/color)
-// over the kind-based defaults, the same priority detailIcon() in
-// map-annotations.ts gives a plain detail pin.
+// A marker's icon/color prefer its linked detail pin's own customizations.
 function markerIcon(marker: Marker, selected: boolean): L.DivIcon {
-    // Validated here as well as on write: this is interpolated into a divIcon's
-    // `html`, and a stored value predating the column's own coercion would
-    // otherwise still render.
+    // Validated here as well as on write: this is interpolated into a divIcon's `html`, and a stored value predating the column's own.
     const color = safeColor(marker.color, MARKER_COLOR[marker.kind] || "#2563eb");
     const glyph = marker.icon || MARKER_ICON[marker.kind] || "place";
     const size = 22;
@@ -166,9 +135,7 @@ function markerPopupContent(marker: Marker): HTMLElement {
     const title = document.createElement("strong");
     title.textContent = marker.name || marker.kind;
     wrap.appendChild(title);
-    // Only when the name says something the kind doesn't already - a marker
-    // left at its default ("Elevator") has nothing more to add by repeating
-    // "elevator" underneath it.
+    // Only when the name says something the kind doesn't already.
     if (marker.name && marker.name.trim().toLowerCase() !== marker.kind.toLowerCase()) {
         const kind = document.createElement("p");
         kind.className = "floorplan-marker-popup__kind";
@@ -183,11 +150,8 @@ function markerPopupContent(marker: Marker): HTMLElement {
     return wrap;
 }
 
-/** Reveals the "map didn't load" state and stands the editor down.
- *
- * Nothing below boot()'s guard has run at this point, so no handler is wired and
- * no autosave can fire - the plan on the server cannot be overwritten by the blank
- * document on screen.
+/**
+ * Reveals the "map didn't load" state and stands the editor down.
  */
 function showMapUnavailable(): void {
     // Otherwise the "Draw the walls" prompt, which the server renders visible and
@@ -200,10 +164,7 @@ function showMapUnavailable(): void {
 }
 
 function boot(): void {
-    // Leaflet and leaflet-rotate are CDN scripts (see editor.html), so they are
-    // absent whenever that request does not land - and every line below is built on
-    // L.map(). Unguarded, the entry threw on the first Leaflet call and left a blank
-    // rectangle: no map, no message, and no sign that the saved plan was fine.
+    // Leaflet and leaflet-rotate are CDN scripts, so they are absent whenever that request does not land.
     if (typeof L === "undefined") {
         showMapUnavailable();
         return;
@@ -226,32 +187,14 @@ function boot(): void {
     const lat = parseFloat(mapEl.dataset.lat || "0");
     const lng = parseFloat(mapEl.dataset.lng || "0");
 
-    // attributionControl: false - required attribution renders in the page
-    // footer instead (show_map_footer=True; see createMapLayers' onAttribution below).
-    // boxZoom: false - shift+drag is the constrain modifier for every drag in
-    // this editor, and Leaflet's default zoom-to-rectangle would fire on the
-    // same press. Zoom-to-rectangle has no use on a plan you have fitted to the
-    // screen anyway.
-    // leaflet-rotate is a second CDN request, so it can be missing on its own
-    // while Leaflet itself loaded - one request succeeding and the other not is
-    // an ordinary outcome, not a corner case. It patches L.Map in place, so its
-    // own method is the honest test for it. View rotation is a convenience;
-    // losing it degrades, while calling setBearing() without it threw partway
-    // through loading the document and took the rest of the editor with it.
+    // attributionControl: false - required attribution renders in the page footer instead.
     const canRotateView = typeof (L.Map.prototype as { setBearing?: unknown }).setBearing === "function";
     // A tool that cannot do anything should not be on the toolbar offering to.
     if (!canRotateView) (document.querySelector('[data-tool="rotate"]') as HTMLElement | null)?.remove();
 
-    // rotate/touchRotate/shiftKeyRotate/rotateControl (leaflet-rotate, loaded
-    // in editor.html): lets a building that isn't square to true north be
-    // turned to face the screen - two-finger twist on mobile, shift+wheel or
-    // the rotate control's arrow on desktop. shiftKeyRotate is shift+*wheel*,
-    // not shift+drag, so it does not collide with the constrain modifier.
+    // rotate/touchRotate/shiftKeyRotate/rotateControl (leaflet-rotate, loaded in editor.html).
     const map = L.map("floorplan-map", {
-        // Leaflet's own default top-left zoom control, left exactly as every
-        // other map on the site renders it (same corner, same classes) - the
-        // floor strip that once collided with it there is bottom-right at
-        // every breakpoint now, so this corner is free.
+        // Leaflet's own default top-left zoom control, left exactly as every other map on the site renders it (same corner, same classes).
         doubleClickZoom: false,
         attributionControl: false,
         boxZoom: false,
@@ -261,18 +204,10 @@ function boot(): void {
         rotateControl: canRotateView && { position: "topright", closeOnZeroBearing: false },
     }).setView([lat, lng], 20);
 
-    // leaflet-rotate's own control is removed rather than re-homed. Reparenting
-    // it into the toolbar made it *look* like one more tool while still
-    // behaving like nothing else on the page: you had to press and drag on the
-    // little arrow itself. Rotating is now a tool like the others - arm it, drag
-    // anywhere, press Escape to leave - and the wheel gesture (shift+wheel,
-    // untouched) stays as the shortcut for people who know it.
+    // leaflet-rotate's own control is removed rather than re-homed.
     map.getContainer().querySelector(".leaflet-control-rotate")?.remove();
 
-    // Declared before createMapLayers below: its "underlay" custom toggle
-    // reads state.showUnderlay synchronously while the panel builds its
-    // initial button states, and a `const` referenced before its own
-    // declaration line throws (temporal dead zone), not just "reads undefined".
+    // Declared before createMapLayers below: its "underlay" custom toggle reads state.showUnderlay synchronously while the panel builds its.
     const state = {
         doc: emptyDocument({ lat, lng }),
         floorIndex: 0,
@@ -286,13 +221,9 @@ function boot(): void {
         /** Every currently selected item (ctrl+click or box-select can grow this past one). */
         multi: [] as SelectionItem[],
         markerKind: "hazard" as MarkerKind,
-        /** What the wall tool draws next. Starts "exterior" (not "interior") to
-         * match the onboarding copy ("trace the building's outline") and the
-         * other two wall-seeding paths (seedFromOutline, "start from a
-         * rectangle") - room/opening/box tools stay disabled until a wall
-         * closes a loop with at least one exterior segment (see
-         * updateToolAvailability), so drawing interior-first silently blocks
-         * them with no explanation. */
+        /**
+ * What the wall tool draws next.
+ */
         wallKind: "exterior" as Wall["kind"],
         /** What the opening tool cuts next - this is where windows live. */
         openingKind: "door" as Opening["kind"],
@@ -316,17 +247,8 @@ function boot(): void {
     };
 
     /**
-     * The backdrop to trace over, via the same shared layers engine and panel
-     * every other map on the site uses (satellite/street/topographic, plus
-     * weather/borders overlays). Aerial by default: it shows the building's
-     * footprint whichever storey is being drawn, which is exactly the part
-     * that stays constant, so it remains the best available reference above
-     * ground rather than a ground-floor-only aid. A georeferenced blueprint
-     * overlay is better still where one exists (see "Image Overlays" in the
-     * layers panel, wired to this pin's own overlay manager) and simply
-     * renders on top - overlays live in their own imageOverlayPane, not the
-     * tilePane the desaturation below dims, so a traced blueprint stays crisp.
-     */
+ * The backdrop to trace over, via the same shared layers engine and panel every other map on the site uses.
+ */
     // Created for its side effect - it registers the basemap and overlay
     // layers on the map - and nothing here holds on to the result.
     createMapLayers(map, {
@@ -357,18 +279,11 @@ function boot(): void {
 
     const outline = readJson<Array<[number, number]>>("floorplan-outline") || [];
     /**
-     * This pin's own photos, offered for attaching to walls, doors and locks.
-     *
-     * Attaching one cites an existing image; it does not move it, geotag it or
-     * read its EXIF. The open question about a photo's coordinates - whether a
-     * position someone sets can coexist with what the EXIF reported - is about
-     * *writing* to an image, and nothing here writes to one.
-     */
+ * This pin's own photos, offered for attaching to walls, doors and locks.
+ */
     const pinPhotos = readJson<Array<{ uuid: string; url: string; caption: string }>>("floorplan-photos") || [];
     const overlayCornersTemplate = mapEl.dataset.overlayCornersUrlTemplate || "";
-    // Always created, even with zero overlays at load time: the manage-overlays
-    // dialog can add the pin's first one later, and without a live control to
-    // sync() against, it would need a full page reload to actually appear.
+    // Always created, even with zero overlays at load time.
     const overlayControl = createMapImageOverlays(L, map, {
         cornersUrl: (uuid) => overlayCornersTemplate.replace("00000000-0000-0000-0000-000000000000", uuid),
         csrfToken: getCsrfToken(),
@@ -390,10 +305,7 @@ function boot(): void {
     }
 
     let projection = new PlanProjection({ lat, lng });
-    // First, so it always paints beneath everything else - it depends only
-    // on the viewport and the drawing axis, never on state.doc, so it is
-    // redrawn on pan/zoom/rotate (see renderGrid()) rather than on every
-    // render().
+    // First, so it always paints beneath everything else.
     const gridLayer = L.layerGroup().addTo(map);
     const wallLayer = L.layerGroup().addTo(map);
     const roomLayer = L.layerGroup().addTo(map);
@@ -415,14 +327,8 @@ function boot(): void {
     const toLocal = (latlng: L.LatLng): Pt => projection.toLocal({ lat: latlng.lat, lng: latlng.lng });
 
     /**
-     * Whether snapping is off right now.
-     *
-     * Two controls, deliberately: a switch for someone tracing something that
-     * genuinely is not square, and a held key for the one point in a drawing
-     * that has to sit off the grid. Neither can express the other's case - a
-     * toggle you must remember to turn back on is a trap, and a key you must
-     * hold for ten minutes is not a setting.
-     */
+ * Whether snapping is off right now.
+ */
     const snapOff = (): boolean => state.suspendSnap || !state.snapEnabled;
 
     /** Snap tolerances in metres, derived from the fixed pixel tolerances. */
@@ -441,13 +347,8 @@ function boot(): void {
     }
 
     /**
-     * How many drags are in flight.
-     *
-     * A drag re-renders the whole plan on every frame, and handles are pure
-     * overhead while one is running: nothing can be grabbed that is not already
-     * grabbed, and a joint handle per corner is a DOM node per corner rebuilt
-     * per frame.
-     */
+ * How many drags are in flight.
+ */
     let activeDrags = 0;
 
     /** What a drag handler is told on every move. */
@@ -461,31 +362,8 @@ function boot(): void {
     }
 
     /**
-     * Attach a drag to a rendered layer.
-     *
-     * Bound in *pointer* events rather than mouse events, and on the layer's
-     * own element rather than on the map. Both matter:
-     *
-     * - A finger drag emits no mouse events at all, so every drag in this
-     *   editor except the Leaflet-native marker one was unreachable on a
-     *   phone. Pointer events cover mouse, touch and pen through one path, so
-     *   there is no second implementation to drift.
-     * - Listeners on the element die with the element. Leaflet rebuilds these
-     *   layers on every render, and render runs on every frame of every drag,
-     *   so map-level listeners accumulated in their hundreds.
-     *
-     * ``setPointerCapture`` keeps the gesture attached to the thing that was
-     * grabbed even when the pointer leaves it, which is what makes dragging a
-     * 3px wall possible at all.
-     *
-     * Args:
-     *     element: The layer's DOM node; nothing is bound when it is absent.
-     *     handlers: ``start`` may return false to decline the gesture, leaving
-     *         the press to the map (which is how pressing an unselected room
-     *         still pans). ``move`` is called only once the pointer has
-     *         travelled far enough to count as a drag. ``end`` is told whether
-     *         it ever did.
-     */
+ * Attach a drag to a rendered layer.
+ */
     function bindDrag(
         element: Element | undefined | null,
         handlers: {
@@ -501,22 +379,10 @@ function boot(): void {
             // Left button only for a mouse; any contact for touch or pen.
             if (event.pointerType === "mouse" && event.button !== 0) return;
             if (handlers.start?.(event) === false) return;
-            // Nothing is done to this press until it has travelled far enough
-            // to be a drag. Stopping propagation or disabling the map's own
-            // dragging here - on a press that may well turn out to be a click -
-            // stops Leaflet delivering the click at all, and clicking a wall to
-            // select it is most of what anyone does with this editor. The cost
-            // is that Leaflet may pan by up to the slop distance before the
-            // drag takes over, which is what the mouse-event version did too.
+            // Nothing is done to this press until it has travelled far enough to be a drag.
             activeDrags += 1;
 
-            // The press identifies *what* was grabbed, but the rest of the
-            // gesture is tracked on the map container, which outlives it.
-            // render() runs on every frame of a drag and clears every layer,
-            // so the element under the pointer is destroyed by the drag's own
-            // first move - taking its listeners, and its pointer capture, with
-            // it. Watching the element instead would end every drag after one
-            // frame.
+            // The press identifies *what* was grabbed, but the rest of the gesture is tracked on the map container, which outlives it. render() runs.
             const surface = map.getContainer();
             const gesture = new DragGesture({ x: event.clientX, y: event.clientY }, modifiersOf(event), handlers.slopPx);
             let moved = false;
@@ -532,12 +398,7 @@ function boot(): void {
                     // the gesture is certainly a drag and not a click.
                     map.dragging.disable();
                     try {
-                        // Capture retargets pointerup to whatever holds it, and
-                        // the browser fires click at the common ancestor of the
-                        // press and the release - so capturing on the press
-                        // moves the click off the wall and selection stops
-                        // working entirely. Taken here, the click is already
-                        // moot because this is a drag.
+                        // Capture retargets pointerup to whatever holds it, and the browser fires click at the common ancestor of the press and the release.
                         surface.setPointerCapture(event.pointerId);
                     } catch {
                         // Best effort: it keeps a pointer that wanders off the
@@ -561,24 +422,14 @@ function boot(): void {
                 activeDrags = Math.max(0, activeDrags - 1);
                 if (moved) {
                     map.dragging.enable();
-                    // The release of a real drag still reads as a click on
-                    // whatever lies underneath, which would otherwise re-select
-                    // or deselect the thing that was just moved.
+                    // The release of a real drag still reads as a click on whatever lies underneath, which would otherwise re-select or deselect the thing.
                     suppressNextClick = true;
                 }
-                // Queued before the handler runs, not after: the drag
-                // suppressed the room labels and the joint handles, and only a
-                // render with activeDrags back at zero puts them back - but
-                // most end handlers already render synchronously, and render()
-                // cancels a pending frame as its first act. Scheduling first
-                // means whichever happens is the only one that happens.
+                // Queued before the handler runs, not after.
                 if (moved) renderSoon();
                 handlers.end?.(moved);
             };
-            // On window rather than the map: a pointer released outside the map
-            // still has to end the gesture, or the listeners stay and panning
-            // stays disabled. Capture above normally retargets these to the
-            // container anyway; this is what makes the failure case survivable.
+            // On window rather than the map: a pointer released outside the map still has to end the gesture, or the listeners stay and panning.
             window.addEventListener("pointermove", onMove);
             window.addEventListener("pointerup", onFinish);
             window.addEventListener("pointercancel", onFinish);
@@ -587,14 +438,8 @@ function boot(): void {
     }
 
     /**
-     * Snap a rigid translation against this floor, minus what the drag itself
-     * rewrites.
-     *
-     * Args:
-     *     moved: The carried points, at their pre-drag positions.
-     *     delta: The translation asked for, in plan-local metres.
-     *     exclude: Wall ids this drag mutates, which cannot be its own targets.
-     */
+ * Snap a rigid translation against this floor, minus what the drag itself rewrites.
+ */
     function snapDragTranslation(moved: readonly Pt[], delta: Pt, exclude: ReadonlySet<string>): Pt {
         if (snapOff()) return delta;
         const others = wallSegments(floor()).filter((segment) => !exclude.has(segment.wallId));
@@ -637,11 +482,8 @@ function boot(): void {
     /** The last save attempt failed and the document is still unsaved. */
     let saveFailed = false;
     /**
-     * Backoff for retries, in milliseconds. A save fails for reasons that
-     * usually clear on their own - a dropped connection, a restarting server -
-     * so giving up after one attempt strands work the user cannot see is at
-     * risk. The last delay repeats indefinitely rather than escalating.
-     */
+ * Backoff for retries, in milliseconds.
+ */
     const RETRY_DELAYS = [2000, 5000, 15000, 60000] as const;
     let retryAttempt = 0;
 
@@ -656,18 +498,12 @@ function boot(): void {
      * every edit is expected to reach the server on its own, a little after
      * the user stops making them. */
     function queueAutosave(delay = 1200): void {
-        // The single funnel every edit reaches, so one guard here is enough:
-        // what is on screen after a failed load is a blank document, not the
-        // plan, and persisting it would replace the real one. The same applies
-        // once another tab has saved over this version - a retry is exactly how
-        // their work would get destroyed.
+        // The single funnel every edit reaches, so one guard here is enough.
         if (state.loadFailed || state.superseded) return;
         updateSaveStatus();
         if (autosaveTimer !== null) clearTimeout(autosaveTimer);
         const attempt = (): void => {
-            // A save from a moment ago is still in flight (slow network,
-            // fast edits) - wait for it rather than firing a second
-            // concurrent request that could land out of order.
+            // A save from a moment ago is still in flight (slow network, fast edits).
             if (saving) {
                 autosaveTimer = setTimeout(attempt, 400);
                 return;
@@ -713,13 +549,8 @@ function boot(): void {
     const history = new History<FloorplanDocument>(cloneDocument);
 
     /**
-     * Record the document as it stands, so the edit about to happen becomes one
-     * undo step. Call before mutating, at the start of a gesture.
-     *
-     * Args:
-     *     group: Collapses a run of related edits - successive keystrokes in
-     *         one name field - into a single step.
-     */
+ * Record the document as it stands, so the edit about to happen becomes one undo step.
+ */
     function checkpoint(group: string | null = null): void {
         history.checkpoint(state.doc, group);
         updateHistoryButtons();
@@ -732,13 +563,8 @@ function boot(): void {
     }
 
     /**
-     * Show a delete control on the canvas whenever something is selected.
-     *
-     * There is one in the sidebar already, and under 900px the sidebar stacks
-     * below a map that is 72vh tall - so on a phone the commonest correction
-     * there is sits below the fold, and the keyboard's Delete key does not
-     * exist. Same reasoning that put undo and the floor strip here.
-     */
+ * Show a delete control on the canvas whenever something is selected.
+ */
     function updateDeleteButton(): void {
         const button = document.getElementById("floorplan-delete") as HTMLButtonElement | null;
         if (!button) return;
@@ -752,15 +578,8 @@ function boot(): void {
     }
 
     /**
-     * Disable tools that have nothing to work with on a boundary-less floor.
-     *
-     * A room can only be generated from enclosed geometry, an opening only
-     * cuts into a wall, and a box selection has nothing to select - offering
-     * them before there is a single exterior wall is what made a first
-     * floorplan confusing to start. Disabled rather than removed (contrast
-     * the rotate tool above, which never becomes usable and is removed
-     * outright): these three do become usable, as soon as a boundary exists.
-     */
+ * Disable tools that have nothing to work with on a boundary-less floor.
+ */
     function updateToolAvailability(current: Floor): void {
         const hasBoundary = current.walls.some((wall) => wall.kind === "exterior");
         for (const tool of ["room", "opening", "box"] as const) {
@@ -797,9 +616,7 @@ function boot(): void {
     function applyHistoryState(doc: FloorplanDocument): void {
         state.doc = doc;
         clearSelection();
-        // The restored floors array may be shorter than the one being viewed
-        // (undoing a floor deletion's own inverse: adding one back works the
-        // same way, via floorIndex clamping in floor() below).
+        // The restored floors array may be shorter than the one being viewed.
         state.floorIndex = Math.min(state.floorIndex, Math.max(state.doc.floors.length - 1, 0));
         showPlanFields();
         renderSidebar();
@@ -827,9 +644,7 @@ function boot(): void {
     }
 
     document.getElementById("floorplan-retry-save")?.addEventListener("click", () => {
-        // Straight to a save rather than re-arming the debounce: the user is
-        // asking for it now, and waitForSaveSlot() inside save() already keeps
-        // it from overlapping a retry that is mid-flight.
+        // Straight to a save rather than re-arming the debounce.
         retryAttempt = 0;
         void save(false);
     });
@@ -865,18 +680,11 @@ function boot(): void {
     }
 
     /**
-     * Click-select one item, honoring ctrl/cmd for additive multi-select.
-     *
-     * A plain click replaces the selection with just this item; a ctrl/cmd
-     * click toggles it in place, so building up (or trimming) a multi-select
-     * one item at a time works the same way it does everywhere else.
-     */
+ * Click-select one item, honoring ctrl/cmd for additive multi-select.
+ */
     /**
-     * Args:
-     *     item: What to select.
-     *     event: The click that did it, when there was one. Null for a menu
-     *         action, which is never additive.
-     */
+ * Args: item: What to select. event: The click that did it, when there was one.
+ */
     function selectItem(item: SelectionItem, event: L.LeafletMouseEvent | null): void {
         const original = event?.originalEvent as MouseEvent | undefined;
         const additive = Boolean(original && (original.ctrlKey || original.metaKey));
@@ -892,21 +700,14 @@ function boot(): void {
         }
         renderSidebar();
         render();
-        // A marker's own click handler and Leaflet's default bindPopup click
-        // handling fire on the same native click that got us here - but
-        // render() just tore down and rebuilt the whole marker layer, which
-        // silently destroys whatever popup Leaflet opened in the meantime.
-        // Reopen it on the freshly rebuilt node so it actually reaches the
-        // screen.
+        // A marker's own click handler and Leaflet's default bindPopup click handling fire on the same native click that got us here.
         if (item.kind === "marker") markerNodes.get(item.marker)?.openPopup();
     }
 
     // ---------------------------------------------------------------- render
 
     function render(): void {
-        // A coalesced frame may still be queued - a drag's final markDirty()
-        // renders synchronously, and letting the pending one land afterwards
-        // would rebuild every layer a second time for no change.
+        // A coalesced frame may still be queued - a drag's final markDirty() renders synchronously, and letting the pending one land afterwards.
         if (renderFrame !== null) {
             cancelAnimationFrame(renderFrame);
             renderFrame = null;
@@ -917,34 +718,16 @@ function boot(): void {
         handleLayer.clearLayers();
 
         const current = floor();
-        // Drawing a frame must never edit the document. planar.ts bridges a
-        // near-miss with a virtual edge so the region still closes while the
-        // authored coordinates stay exactly as drawn; acting on that note by
-        // welding the real endpoints destroyed geometry it had no mandate to
-        // touch, and did it from inside the draw path where undo could not
-        // see it. Seeds left orphaned by a deletion are pruned by whoever
-        // did the deleting (see pruneOrphanedSeeds).
+        // Drawing a frame must never edit the document. planar.ts bridges a near-miss with a virtual edge so the region still closes while.
         const derived = deriveFaces(wallSegments(current));
         state.faces = derived.faces;
 
-        // Once there's an exterior to read as "the building", the basemap
-        // recedes (desaturated, in the tile pane only - an image overlay
-        // renders in its own separate imageOverlayPane, so a traced blueprint
-        // stays crisp) and the plan itself becomes the thing in focus.
+        // Once there's an exterior to read as "the building", the basemap recedes.
         mapEl.classList.toggle("has-plan", current.walls.some((wall) => wall.kind === "exterior"));
 
-        // Each seed asked once which face is *its* room, rather than each face
-        // asking every seed whether it is inside. Both give the same answer -
-        // faceForSeed picks the smallest containing face, which is what stops a
-        // hall wearing the name of a cupboard inside it - but asked the other
-        // way round it is a face-squared scan, re-run on every frame of every
-        // drag, since render() is what a drag calls.
+        // Each seed asked once which face is *its* room, rather than each face asking every seed whether it is inside.
         //
-        // First seed wins where two land in the same face, which happens when
-        // the partition between two named rooms is deleted and they become one
-        // region. The other name is dormant rather than lost - it comes back
-        // with the wall, or with an undo - and one label on one region is the
-        // right thing to draw meanwhile.
+        // First seed wins where two land in the same face, which happens when the partition between two named rooms is deleted and they become.
         const seedForFace = new Map<Face, RoomSeed>();
         for (const room of current.rooms) {
             const bound = faceForSeed({ x: room.x, y: room.y }, derived.faces);
@@ -957,33 +740,18 @@ function boot(): void {
         for (const face of derived.faces) {
             const seed = seedForFace.get(face);
             const roomSelected = seed ? isSelected({ kind: "room", room: seed }) : false;
-            // A thicker border in a color one shade off the default teal read
-            // as nearly the same room at a glance - a tinted fill on top of
-            // it is what actually reads as "this one, selected" rather than
-            // "this one, ever so slightly different."
+            // A thicker border in a color one shade off the default teal read as nearly the same room at a glance.
             const polygon = L.polygon(face.ring.map(toLatLng), {
                 className: "floorplan-room",
                 ...(seed ? ROOM_FILL : UNBOUND_FILL),
                 ...(roomSelected ? { color: "#f57c00", weight: 4, fillColor: "#f57c00", fillOpacity: 0.16 } : {}),
             }).addTo(roomLayer);
-            // An un-subdivided outline gets no label. It is the building, and
-            // captioning it "Unnamed room" is the same wrong claim as letting a
-            // click turn it into one - it just makes the claim unprompted.
+            // An un-subdivided outline gets no label.
             //
-            // Nor does anything while a drag is running. A label is a permanent
-            // Leaflet tooltip, which is a DOM node Leaflet positions itself,
-            // and render() rebuilds every one of them on every frame: measured
-            // on a 12x12 grid of rooms, that is 229ms per move against 58ms
-            // without them - four frames a second, on a plan smaller than a
-            // real survey. They come back on release, which is the same bargain
-            // the joint handles already make a few lines below.
+            // Nor does anything while a drag is running.
             if (!activeDrags && (seed || !isBuildingShell(face, wallsById))) {
                 const label = seed ? seed.name || "Unnamed" : "Unnamed room";
-                // Permanent, not on hover: a room appearing and naming its own
-                // area the instant a loop closes is what teaches the wall-first
-                // model, and a badge nobody sees teaches nothing.
-                // The area reads as secondary metadata, not part of the name
-                // itself - a subtler line underneath rather than run in beside it.
+                // Permanent, not on hover: a room appearing and naming its own area the instant a loop closes is what teaches the wall-first model,.
                 polygon.bindTooltip(`<span class="floorplan-room-label__name">${escHtml(label)}</span><span class="floorplan-room-label__area">${face.area.toFixed(1)} m²</span>`, {
                     direction: "center",
                     className: "floorplan-room-label",
@@ -993,14 +761,9 @@ function boot(): void {
             }
             if (seed && roomSelected && state.multi.length === 1) renderRoomRotateGrip(seed, face);
             polygon.on("click", (event) => {
-                // Checked before stopping propagation: a room fill covers a
-                // large area, and a stop here regardless of tool silently
-                // swallowed every wall/marker click landing inside a room -
-                // exactly where someone is likeliest to want to add one.
+                // Checked before stopping propagation: a room fill covers a large area, and a stop here regardless of tool silently swallowed every.
                 if (state.tool !== "select") return;
-                // An un-subdivided outline is the building, not a room inside
-                // it. Clicking one used to mint a room seed, which is how a plan
-                // came to contain a room that was the whole building.
+                // An un-subdivided outline is the building, not a room inside it.
                 if (!seed && isBuildingShell(face)) return;
                 L.DomEvent.stop(event);
                 const bound = seed || addSeedAt(interiorPoint(face.ring));
@@ -1009,10 +772,7 @@ function boot(): void {
             polygon.on("contextmenu", (event) => {
                 if (state.tool !== "select") return;
                 if (!seed && isBuildingShell(face)) {
-                    // Still nameable, but deliberately: the context menu offers
-                    // it rather than a stray click doing it. Stopped, or the
-                    // map's own contextmenu handler runs next and rebuilds the
-                    // menu without the offer.
+                    // Still nameable, but deliberately: the context menu offers it rather than a stray click doing it.
                     L.DomEvent.stop(event);
                     pendingShellFace = face;
                     showContextMenu(event, null);
@@ -1021,15 +781,7 @@ function boot(): void {
                 const bound = seed || addSeedAt(interiorPoint(face.ring));
                 showContextMenu(event, { kind: "room", room: bound });
             });
-            // Dragging an already-selected room moves it as a whole: its own
-            // unique walls translate rigidly together, and any wall it merely
-            // borders (a shared partition, the exterior) stretches to follow
-            // the corner it shares with this room while its own far end - not
-            // part of this room at all - stays put. A plain click still only
-            // selects first; this only engages on an actual drag of a room
-            // that's already the selection. Shift no longer excuses it: that
-            // used to hand the press to a shift+drag box-select, which is what
-            // made the constrain modifier unreachable here.
+            // Dragging an already-selected room moves it as a whole.
             let roomDrag: {
                 local: Pt;
                 boundary: RoomBoundary;
@@ -1042,9 +794,7 @@ function boot(): void {
             bindDrag(polygon.getElement(), {
                 start: (event) => {
                     if (state.tool !== "select" || !seed) return false;
-                    // A plain press only selects; dragging a room you have not
-                    // selected yet would move the building out from under a
-                    // gesture that meant to pan.
+                    // A plain press only selects; dragging a room you have not selected yet would move the building out from under a gesture that meant.
                     if (!isSelected({ kind: "room", room: seed })) return false;
                     const boundary = roomBoundaryWalls(seed);
                     if (!boundary) return false;
@@ -1059,19 +809,12 @@ function boot(): void {
                         const boundary = roomBoundaryWalls(bound);
                         if (!boundary) return;
                         checkpoint();
-                        // A wall this room only borders (see splitRoomBoundary)
-                        // never moves, so it is already safe to drag against.
-                        // A wall classified as this room's own can still be a
-                        // neighbouring room's only wall on that side - detach a
-                        // copy for the move so the original, and the neighbour
-                        // it still bounds, stay exactly where they were.
+                        // A wall this room only borders never moves, so it is already safe to drag against.
                         const detached = detachSharedWalls(current, boundary, state.faces);
                         const moving: RoomBoundary = { face: boundary.face, unique: detached, shared: boundary.shared };
                         const origins = new Map<Wall, { ax: number; ay: number; bx: number; by: number }>();
                         for (const wall of [...moving.unique, ...moving.shared]) origins.set(wall, { ax: wall.ax, ay: wall.ay, bx: wall.bx, by: wall.by });
-                        // Anchored against the original (pre-detach) boundary -
-                        // detaching only swaps which wall object a corner moves
-                        // with, not where that corner rests at gesture start.
+                        // Anchored against the original (pre-detach) boundary.
                         roomDrag = { local, boundary: moving, origins, anchors: cornerAnchors(boundary), seedOrigin: { x: bound.x, y: bound.y }, lastSafe: { x: 0, y: 0 } };
                     }
                     const { boundary, origins, seedOrigin } = roomDrag;
@@ -1082,12 +825,7 @@ function boot(): void {
                         dx = squared.x;
                         dy = squared.y;
                     }
-                    // Only the room's own walls are excluded, because only they
-                    // move. The shell stays put, which makes it exactly what
-                    // this drag wants to snap against - lining a closet up with
-                    // the wall it sits against is most of what moving one is
-                    // for. (A wall the drag rewrites cannot be its own snap
-                    // target; see the wall-body drag for what that costs.)
+                    // Only the room's own walls are excluded, because only they move.
                     const carried = new Set(boundary.unique.map((item) => wallId(item)));
                     const corners: Pt[] = [];
                     for (const item of boundary.unique) {
@@ -1097,20 +835,9 @@ function boot(): void {
                     const snapped = snapDragTranslation(corners, { x: dx, y: dy }, carried);
                     dx = snapped.x;
                     dy = snapped.y;
-                    // A room's own walls can still swing into a room that was
-                    // never adjacent to begin with (dragged clean across a
-                    // hall). Freeze at the last translation that did not land
-                    // inside another already-occupied room, rather than let
-                    // one room's area cover another's.
+                    // A room's own walls can still swing into a room that was never adjacent to begin with (dragged clean across a hall).
                     //
-                    // A freshly detached wall starts exactly on the boundary
-                    // it used to share, which a plain point-in-polygon test
-                    // cannot reliably call either way - so each candidate
-                    // corner is nudged a hair toward the room's own moving
-                    // seed before testing, which reads a touching wall as
-                    // "still this room's side" and a wall that has actually
-                    // crossed the line as inside the neighbour, same as it
-                    // would look either a frame earlier or a frame later.
+                    // A freshly detached wall starts exactly on the boundary it used to share, which a plain point-in-polygon test cannot reliably call.
                     const drag = roomDrag;
                     const candidate: Pt[] = [];
                     for (const corner of corners) candidate.push(anchoredMove(corner, dx, dy, drag));
@@ -1175,11 +902,7 @@ function boot(): void {
             const a = wallStart(wall);
             const b = wallEnd(wall);
             const along = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
-            // A door/doorway/hatch renders as an actual break in the wall -
-            // one solid segment per interval left once its openings are cut
-            // out - rather than a colored line sitting on top of a wall that
-            // reads as unbroken; a window stays an overlay on a continuous
-            // wall, since it does not let anyone through (see renderOpenings).
+            // A door/doorway/hatch renders as an actual break in the wall - one solid segment per interval left once its openings are cut out.
             for (const [s0, s1] of wallSolidIntervals(wall)) {
                 const line = L.polyline([toLatLng(along(s0)), toLatLng(along(s1))], {
                     className: "floorplan-wall",
@@ -1195,20 +918,7 @@ function boot(): void {
                     if (state.tool !== "select") return;
                     showContextMenu(event, { kind: "wall", wall });
                 });
-                // Dragging the wall's body moves the whole wall, not just one
-                // endpoint (see renderWallHandles for that). Three modes, in
-                // the editor's one modifier vocabulary:
-                //   - default: this wall moves, and every other wall sharing
-                //     one of its original endpoints stretches to follow that
-                //     corner - its own other, unshared endpoint stays put.
-                //   - Ctrl/Cmd ("take more"): the whole connected network -
-                //     every wall reachable through a shared corner - moves
-                //     together, rigidly.
-                //   - Alt ("take less"): only this wall moves, detaching it;
-                //     neighbours keep their original points entirely.
-                // The mode is latched at the press and frozen for the gesture.
-                // Read fresh on every move, as it used to be, one drag could
-                // pass through all three and finish in a state matching none.
+                // Dragging the wall's body moves the whole wall, not just one endpoint.
                 bindDrag(line.getElement(), {
                     start: (event) => {
                         if (state.tool !== "select") return false;
@@ -1235,13 +945,7 @@ function boot(): void {
                             dx = squared.x;
                             dy = squared.y;
                         }
-                        // Everything this drag rewrites, not just the wall under
-                        // the cursor. A stretched neighbour's shared corner is
-                        // moved to follow the wall on every frame, so leaving it
-                        // in the candidate set means the wall is always within
-                        // snapping distance of the endpoint it dragged there a
-                        // frame ago - which pulls the delta back and freezes the
-                        // drag after its first move.
+                        // Everything this drag rewrites, not just the wall under the cursor.
                         const carried = modifiers.more
                             ? links.network.map((link) => link.wall)
                             : modifiers.less
@@ -1299,8 +1003,6 @@ function boot(): void {
         }
 
         // After the walls, so a joint sits on top of the lines it belongs to.
-        // Not while dragging: they are one DOM node per corner, and whatever is
-        // being dragged has already been grabbed.
         if (state.tool === "select" && !activeDrags) {
             renderJointHandles(current);
             renderMidpointHandles(current);
@@ -1311,10 +1013,7 @@ function boot(): void {
             const selected = isSelected({ kind: "marker", marker });
             const node = L.marker(toLatLng({ x: marker.x, y: marker.y }), { icon: markerIcon(marker, selected), draggable: state.tool === "select" }).addTo(markerLayer);
             markerNodes.set(marker, node);
-            // Built when the popup opens, not when the marker is drawn. render()
-            // runs on every frame of a drag, and markerPopupContent assembles a
-            // real DOM subtree - so an eager call is one subtree per marker per
-            // frame, for a panel almost none of them will be asked to show.
+            // Built when the popup opens, not when the marker is drawn. render() runs on every frame of a drag, and markerPopupContent assembles.
             node.bindPopup(() => markerPopupContent(marker), { closeButton: true });
             node.on("popupopen", () => {
                 node.getPopup()?.getElement()?.querySelector(".floorplan-marker-popup__delete")?.addEventListener("click", () => {
@@ -1352,18 +1051,8 @@ function boot(): void {
     let renderFrame: number | null = null;
 
     /**
-     * Render at most once per displayed frame.
-     *
-     * A drag re-derives the whole planar subdivision on every render, and
-     * pointermove fires as fast as the device reports - which on a high-rate
-     * pointer is well past the refresh rate. Rendering per event therefore
-     * spends most of its work on frames nobody sees, and on a large plan the
-     * events queue faster than they can be served, so the drag lags further
-     * behind the finger the longer it goes on.
-     *
-     * The cost is that geometry is at most one frame stale, which is not
-     * visible; the alternative was work that was entirely invisible.
-     */
+ * Render at most once per displayed frame.
+ */
     function renderSoon(): void {
         if (renderFrame !== null) return;
         renderFrame = requestAnimationFrame(() => {
@@ -1375,13 +1064,8 @@ function boot(): void {
     let labelFitFrame: number | null = null;
 
     /**
-     * Re-fit the room labels once per frame at most.
-     *
-     * ``render()`` runs on every mousemove of every drag, and the fit pass
-     * reads ``offsetWidth``, which forces a synchronous layout. Calling it
-     * straight from render would put a reflow per room into every frame of
-     * every drag.
-     */
+ * Re-fit the room labels once per frame at most.
+ */
     function scheduleRoomLabelFit(): void {
         if (labelFitFrame !== null) return;
         labelFitFrame = requestAnimationFrame(() => {
@@ -1391,17 +1075,8 @@ function boot(): void {
     }
 
     /**
-     * Hide a room's name once it no longer fits inside the room.
-     *
-     * A permanent centred label is what teaches the wall-first model - a room
-     * naming itself the instant a loop closes - but zoomed out far enough the
-     * name is wider than the room it belongs to, and a row of names sprawling
-     * across each other's rooms obscures the very geometry they annotate.
-     *
-     * Hidden with ``visibility``, not ``display``: a label removed from layout
-     * measures zero, would always "fit", and would flicker back on the next
-     * pass.
-     */
+ * Hide a room's name once it no longer fits inside the room.
+ */
     function updateRoomLabelFit(): void {
         // Every measurement first, every write second. Toggling a class between
         // reads invalidates layout and forces a reflow per label.
@@ -1420,10 +1095,7 @@ function boot(): void {
                 minY = Math.min(minY, pixel.y);
                 maxY = Math.max(maxY, pixel.y);
             }
-            // The screen-space bounding box, which for a concave room is more
-            // generous than the room itself - deliberately, since the cost of
-            // hiding a name that would have fitted is higher than the cost of
-            // keeping one that slightly overhangs.
+            // The screen-space bounding box, which for a concave room is more generous than the room itself.
             const fits = element.offsetWidth <= maxX - minX && element.offsetHeight <= maxY - minY;
             decisions.push({ element, fits });
         }
@@ -1431,27 +1103,11 @@ function boot(): void {
     }
 
     /**
-     * The parts of a wall's centreline still solid, once its door/doorway/
-     * hatch openings are cut out of it.
-     *
-     * A window stays out of this: it reads as a break in the wall's own
-     * *use* (you can walk through a door, not a window), so it renders as an
-     * overlay on an otherwise-continuous wall instead - see renderOpenings().
-     */
+ * The parts of a wall's centreline still solid, once its door/doorway/ hatch openings are cut out of it.
+ */
     /**
-     * The wall nearest a point, within grabbing distance.
-     *
-     * Reports the distance as well as the wall, because callers deciding
-     * whether to move something onto it need to know it is a real improvement
-     * and not merely a different answer.
-     *
-     * Args:
-     *     point: Where the pointer is, in plan-local metres.
-     *
-     * Returns:
-     *     The nearest wall whose body is within the on-wall tolerance, with
-     *     how far away it is, or null when the pointer is out in the open.
-     */
+ * The wall nearest a point, within grabbing distance.
+ */
     function wallNear(point: Pt): { wall: Wall; distance: number } | null {
         const tolerance = tolerances().wall;
         let best: { wall: Wall; distance: number } | null = null;
@@ -1465,9 +1121,7 @@ function boot(): void {
 
     function wallSolidIntervals(wall: Wall): Array<[number, number]> {
         const gaps = wall.openings
-            // A window is the exception: you cannot walk through one, so it
-            // draws over an unbroken wall rather than cutting it. A gate can
-            // be walked through, so it reads as a real break like a door.
+            // A window is the exception: you cannot walk through one, so it draws over an unbroken wall rather than cutting it.
             .filter((opening) => opening.kind !== "window")
             .map((opening): [number, number] => [opening.t_start, opening.t_end])
             .sort((a, b) => a[0] - b[0]);
@@ -1493,17 +1147,9 @@ function boot(): void {
         const at = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
         for (const opening of wall.openings) {
             const openingSelected = isSelected({ kind: "opening", wall, opening });
-            // A window stays a colored line over an otherwise-continuous
-            // wall - it doesn't let anyone through, so a break would be the
-            // wrong signal. A door/doorway/hatch already reads as a break in
-            // the wall itself (see wallSolidIntervals()), so this only needs
-            // to stay clickable there, not draw attention a second time -
-            // opacity alone, not weight, so the actual hit/drag target stays
-            // just as easy to grab as before.
+            // A window stays a colored line over an otherwise-continuous wall - it doesn't let anyone through, so a break would be the wrong signal.
             const isWindow = opening.kind === "window";
-            // The plan symbol for a door: the leaf at its open position and the
-            // quarter it sweeps. Drawn before the opening's own line so the
-            // draggable target stays on top of it.
+            // The plan symbol for a door: the leaf at its open position and the quarter it sweeps.
             for (const leaf of doorLeaves(wall, opening)) {
                 L.polyline(leaf.map(toLatLng), {
                     className: "floorplan-door-swing",
@@ -1521,9 +1167,7 @@ function boot(): void {
             })
                 .bindTooltip(opening.kind, { direction: "top" })
                 .addTo(wallLayer);
-            // Selectable independently of its wall, so an opening can be
-            // clicked and deleted (keyboard Delete, like every other
-            // selectable item) without selecting the wall it sits in first.
+            // Selectable independently of its wall, so an opening can be clicked and deleted (keyboard Delete, like every other selectable item).
             line.on("click", (event) => {
                 if (state.tool !== "select") return;
                 L.DomEvent.stop(event);
@@ -1533,13 +1177,7 @@ function boot(): void {
                 if (state.tool !== "select") return;
                 showContextMenu(event, { kind: "opening", wall, opening });
             });
-            // Dragging the line itself slides the opening along its wall,
-            // keeping its width fixed - on the same layer as the click
-            // handler above rather than a separate overlay, so there is only
-            // ever one target under the cursor to resolve a click against.
-            // A plain click (no real movement) falls through to that click
-            // handler exactly as before; this only acts once a real drag is
-            // detected.
+            // Dragging the line itself slides the opening along its wall, keeping its width fixed.
             let slide: { startT: number; width: number; originalStart: number; host: Wall } | null = null;
             bindDrag(line.getElement(), {
                 start: () => state.tool === "select",
@@ -1548,30 +1186,17 @@ function boot(): void {
                         slide = { startT: projectOnSegment(local, a, b).t, width: opening.t_end - opening.t_start, originalStart: opening.t_start, host: wall };
                         checkpoint();
                     }
-                    // Dragged onto another wall, the opening goes with it - a
-                    // door put on the wrong side of a room was otherwise a
-                    // delete and a redraw. Alt ("take less") pins it to the wall
-                    // it started on, for working into a corner where two walls
-                    // are both within reach.
+                    // Dragged onto another wall, the opening goes with it - a door put on the wrong side of a room was otherwise a delete and a redraw.
                     const host = slide.host;
                     const hostAway = projectOnSegment(local, { x: host.ax, y: host.ay }, { x: host.bx, y: host.by }).distance;
                     const nearest = modifiers.less ? null : wallNear(local);
-                    // Strictly closer, not merely different. Near a corner both
-                    // walls are within reach, so "the nearest wall that is not
-                    // the one I am on" is a different answer every frame and the
-                    // opening ping-pongs between them for as long as the pointer
-                    // sits there.
+                    // Strictly closer, not merely different.
                     const target = nearest && nearest.wall !== host && nearest.distance < hostAway ? nearest.wall : null;
                     if (target) {
                         const targetA = { x: target.ax, y: target.ay };
                         const targetB = { x: target.bx, y: target.by };
                         const along = projectOnSegment(local, targetA, targetB).t;
-                        // A wall with no length refuses the move. Taking the
-                        // answer rather than assuming it: the branch below
-                        // re-points the selection and the slide's host at the
-                        // target, which for a refused move would leave both
-                        // naming a wall the opening is not in. It falls through
-                        // to the ordinary same-wall slide instead.
+                        // A wall with no length refuses the move.
                         if (rehostOpening(opening, host, target, along * wallLength(target))) {
                             slide = { startT: along, width: opening.t_end - opening.t_start, originalStart: opening.t_start, host: target };
                             if (isSelected({ kind: "opening", wall: host, opening })) {
@@ -1595,24 +1220,14 @@ function boot(): void {
                     if (moved) markDirty();
                 },
             });
-            // The opening's own selection, not the wall's - selecting a door
-            // replaces the whole selection with {kind: "opening", ...}, which
-            // does not also count as its wall being selected, so gating this
-            // on `selected` (the wall) meant these handles could only ever
-            // appear if the wall happened to be selected too, which selecting
-            // an opening directly never does.
+            // The opening's own selection, not the wall's - selecting a door replaces the whole selection with {kind.
             if (openingSelected) renderOpeningHandles(wall, opening, at);
         }
     }
 
     /**
-     * Draggable ends for one opening, shown only while its wall is selected.
-     *
-     * An opening is an interval along its wall, so a handle drags in *t*
-     * rather than in space: the cursor is projected back onto the wall and the
-     * parameter clamped so the two ends cannot cross or leave the wall. That
-     * is what keeps a door on its door frame when the wall is later moved.
-     */
+ * Draggable ends for one opening, shown only while its wall is selected.
+ */
     function renderOpeningHandles(wall: Wall, opening: Opening, at: (t: number) => Pt): void {
         const MIN_WIDTH = 0.02; // as a fraction of the wall, so ends stay grabbable
         for (const end of ["t_start", "t_end"] as const) {
@@ -1647,20 +1262,13 @@ function boot(): void {
     }
 
     /**
-     * The floor below drawn faintly beneath the current one.
-     *
-     * Aligning a stairwell across storeys is otherwise guesswork, and this is
-     * the cheapest way to make it possible: no new concepts, just the walls
-     * you already drew, shown as context. Non-interactive so it can never be
-     * selected or dragged by accident.
-     */
+ * The floor below drawn faintly beneath the current one.
+ */
     function renderUnderlay(): void {
         underlayLayer.clearLayers();
         const current = floor();
         const below = state.doc.floors.filter((item) => item.level < current.level).sort((x, y) => y.level - x.level)[0];
-        // Offering "Floor below" when there is none to show is worse than no
-        // toggle at all - it looks like the feature is broken rather than
-        // inapplicable.
+        // Offering "Floor below" when there is none to show is worse than no toggle at all.
         document.querySelector<HTMLElement>('#floorplan-layers [data-map-layer="underlay"]')?.toggleAttribute("hidden", !below);
         if (!state.showUnderlay || !below) return;
         for (const wall of below.walls) {
@@ -1685,20 +1293,13 @@ function boot(): void {
     }
 
     /**
-     * The visible measurement grid, squared to the plan's own drawing axis.
-     *
-     * Depends only on the viewport and the axis, never on state.doc, so it
-     * is regenerated on pan/zoom/rotate rather than inside render() - a wall
-     * moving does not change where the grid falls, and rebuilding it on
-     * every drag frame would be pure waste.
-     */
+ * The visible measurement grid, squared to the plan's own drawing axis.
+ */
     function renderGrid(): void {
         gridLayer.clearLayers();
         if (!state.showGrid) return;
         const axisRadians = (state.doc.rotation_degrees * Math.PI) / 180;
-        // Into axis-space before finding the extent, so the grid squares to
-        // the drawing axis rather than to true north - the same reasoning
-        // snapToAngle (and now snapToGrid) uses for right angles.
+        // Into axis-space before finding the extent, so the grid squares to the drawing axis rather than to true north.
         const corners = [map.getBounds().getNorthWest(), map.getBounds().getNorthEast(), map.getBounds().getSouthEast(), map.getBounds().getSouthWest()].map((ll) =>
             rotate(toLocal(ll), -axisRadians),
         );
@@ -1707,9 +1308,7 @@ function boot(): void {
         const minY = Math.min(...corners.map((p) => p.y));
         const maxY = Math.max(...corners.map((p) => p.y));
 
-        // Coarsen rather than draw thousands of lines when zoomed out far
-        // enough to see a whole neighbourhood - the grid stays useful as a
-        // scale reference instead of either vanishing or freezing the tab.
+        // Coarsen rather than draw thousands of lines when zoomed out far enough to see a whole neighbourhood.
         let spacing = GRID_SPACING_METERS;
         const MAX_LINES = 400;
         while ((maxX - minX) / spacing + (maxY - minY) / spacing > MAX_LINES) spacing *= 2;
@@ -1725,18 +1324,8 @@ function boot(): void {
     }
 
     /**
-     * A handle for turning a selected room.
-     *
-     * The room tool builds rectangles squared to the plan's own axis, which is
-     * the right default and the wrong answer for a building that is not quite
-     * square: the new room cannot be joined to walls sitting a degree or two
-     * off. Rotating it is the missing move, and the grip lives on the room
-     * rather than in a mode - there is nothing to arm and nothing to leave.
-     *
-     * Only the room's own walls turn. A wall it shares with a neighbour is
-     * carried at the corner they have in common and no further, exactly as
-     * moving the room already does, because the neighbour has an equal claim.
-     */
+ * A handle for turning a selected room.
+ */
     function renderRoomRotateGrip(seed: RoomSeed, face: Face): void {
         const boundary = roomBoundaryWalls(seed);
         if (!boundary || !boundary.unique.length) return;
@@ -1760,14 +1349,9 @@ function boot(): void {
                     checkpoint();
                 }
                 const now = Math.atan2(local.y - pivot.y, local.x - pivot.x);
-                // Suspending snap gives a free angle; otherwise it steps, since
-                // turning a room by hand is an attempt to line it up with
-                // something and the last half-degree is unhittable freehand.
+                // Suspending snap gives a free angle; otherwise it steps, since turning a room by hand is an attempt to line it up with something.
                 const angle = snapOff() ? now - turning.start : snapRotation(now - turning.start);
-                // A corner resting on a wall the room does not own stays on it,
-                // sliding rather than dragging: the shell is the building's,
-                // and a partition that simply detached from it would leave the
-                // room unenclosed the moment it was turned.
+                // A corner resting on a wall the room does not own stays on it, sliding rather than dragging.
                 const turned = (corner: Pt): Pt => {
                     const moved = rotate(corner, angle, pivot);
                     const resting = (turning as NonNullable<typeof turning>).anchors.get(cornerKey(corner));
@@ -1783,9 +1367,7 @@ function boot(): void {
                     wall.bx = b.x;
                     wall.by = b.y;
                 }
-                // The seed turns with the room, so the region keeps the name it
-                // was given rather than rebinding to whatever now sits over the
-                // point it used to occupy.
+                // The seed turns with the room, so the region keeps the name it was given rather than rebinding to whatever now sits over the point it.
                 const movedSeed = rotate(turning.seedAt, angle, pivot);
                 seed.x = movedSeed.x;
                 seed.y = movedSeed.y;
@@ -1816,13 +1398,8 @@ function boot(): void {
     }
 
     /**
-     * Every (wall, end) reachable from `seed`'s own two endpoints by following
-     * shared corners - the whole rigid network a body-drag can carry with it
-     * under ALT (see the wall body's own mousedown handler). Captured once at
-     * drag start, with each endpoint's *original* coordinates, so applying a
-     * uniform delta later doesn't compound across ticks or double-move a
-     * point reachable two different ways.
-     */
+ * Every (wall, end) reachable from `seed`'s own two endpoints by following shared corners.
+ */
     function connectedNetwork(current: Floor, seed: Wall): Array<{ wall: Wall; end: "a" | "b"; origX: number; origY: number }> {
         const visitedPoints = new Set<string>();
         const key = (p: Pt): string => `${p.x},${p.y}`;
@@ -1850,37 +1427,16 @@ function boot(): void {
     }
 
     /**
-     * Whether a region is the building's own shell rather than a room in it.
-     *
-     * A region is derived from whatever walls enclose it, so an outline nobody
-     * has subdivided yet encloses exactly as validly as a room does - there is
-     * no geometric difference between "a shed, which really is one room" and
-     * "a building I have not put partitions in yet". What separates them is
-     * that a room has at least one wall which is not the outside of the
-     * building.
-     *
-     * It matters because clicking a region is how one gets named, and a plan
-     * whose only region is its own outline should not acquire a room because
-     * someone clicked the middle of it to look at something. Naming the shell
-     * stays possible; it just has to be meant.
-     *
-     * Args:
-     *     face: The derived region.
-     *
-     * Returns:
-     *     True when every wall bounding it is exterior.
-     */
+ * Whether a region is the building's own shell rather than a room in it.
+ */
     /** This floor's walls by id, so a per-face lookup is not a per-face scan. */
     function wallIndex(current: Floor = floor()): Map<string, Wall> {
         return new Map(current.walls.map((wall) => [wallId(wall), wall] as const));
     }
 
     /**
-     * Args:
-     *     face: The derived region.
-     *     byId: This floor's walls by id. Built once by the caller when this
-     *         runs per face - render() does, on every frame of a drag.
-     */
+ * Args: face: The derived region. byId: This floor's walls by id.
+ */
     function isBuildingShell(face: Face, byId: Map<string, Wall> = wallIndex()): boolean {
         let seen = 0;
         for (const id of face.wallIds) {
@@ -1899,20 +1455,8 @@ function boot(): void {
     const cornerKey = (p: Pt): string => `${p.x},${p.y}`;
 
     /**
-     * Find, for each of the room's own corners, the wall it is sitting on.
-     *
-     * A room's partitions meet the building's shell somewhere, and that meeting
-     * point is the thing a move or a turn has to preserve: the shell is not the
-     * room's to reshape, but a partition that simply detaches from it leaves
-     * the room unenclosed. The corner slides along the wall instead.
-     *
-     * Args:
-     *     boundary: The room's split boundary.
-     *
-     * Returns:
-     *     Corner key to the wall it rests against. Corners resting on nothing
-     *     are absent.
-     */
+ * Find, for each of the room's own corners, the wall it is sitting on.
+ */
     function cornerAnchors(boundary: RoomBoundary): CornerAnchors {
         const anchors: CornerAnchors = new Map();
         if (!boundary.shared.length) return anchors;
@@ -1929,17 +1473,8 @@ function boot(): void {
     }
 
     /**
-     * Translate one of the room's corners, keeping it on whatever it rests on.
-     *
-     * Args:
-     *     corner: Where the corner was when the gesture started.
-     *     dx: Horizontal translation.
-     *     dy: Vertical translation.
-     *     held: The gesture's state, for the anchors it recorded.
-     *
-     * Returns:
-     *     Where the corner should now be.
-     */
+ * Translate one of the room's corners, keeping it on whatever it rests on.
+ */
     function anchoredMove(corner: Pt, dx: number, dy: number, held: { anchors: CornerAnchors }): Pt {
         const moved = { x: corner.x + dx, y: corner.y + dy };
         const resting = held.anchors.get(cornerKey(corner));
@@ -1948,19 +1483,8 @@ function boot(): void {
     }
 
     /**
-     * Every distinct corner on a floor, with the wall ends that meet there.
-     *
-     * Walls store their own endpoints, so a corner shared by three walls is
-     * three coordinate pairs that happen to be equal. Grouping them is what
-     * turns "an endpoint" into "a joint" - the thing a user actually thinks
-     * they are grabbing.
-     *
-     * Args:
-     *     current: The floor to read.
-     *
-     * Returns:
-     *     One entry per corner, keyed by its exact coordinates.
-     */
+ * Every distinct corner on a floor, with the wall ends that meet there.
+ */
     function wallJoints(current: Floor): Map<string, { point: Pt; ends: Array<{ wall: Wall; end: "a" | "b" }> }> {
         const joints = new Map<string, { point: Pt; ends: Array<{ wall: Wall; end: "a" | "b" }> }>();
         const add = (point: Pt, wall: Wall, end: "a" | "b"): void => {
@@ -1977,15 +1501,8 @@ function boot(): void {
     }
 
     /**
-     * Draw every joint on the floor, and let each one be dragged.
-     *
-     * Moving a joint moves exactly the walls that meet there and nothing else,
-     * which is the one thing the wall-body drags cannot express. It already
-     * worked, but only after selecting exactly one wall, so nobody found it -
-     * and a capability nobody can find is not one the editor has. They are
-     * drawn small so a plan does not turn into a field of dots, and the ones
-     * belonging to the current selection are drawn large enough to aim at.
-     */
+ * Draw every joint on the floor, and let each one be dragged.
+ */
     function renderJointHandles(current: Floor): void {
         const selectedWalls = new Set(state.multi.filter((item) => item.kind === "wall").map((item) => wallId(item.wall)));
         for (const joint of wallJoints(current).values()) {
@@ -2010,9 +1527,7 @@ function boot(): void {
                 contextMenuEl = menu;
             });
 
-            // Captured on the first move: the ends are read off the geometry as
-            // it stands now, and re-reading them mid-drag would pick up walls
-            // that have just been dragged onto this corner.
+            // Captured on the first move: the ends are read off the geometry as it stands now, and re-reading them mid-drag would pick up walls that.
             let moving: Array<{ wall: Wall; end: "a" | "b" }> | null = null;
             bindDrag(handle.getElement(), {
                 start: () => state.tool === "select",
@@ -2025,10 +1540,7 @@ function boot(): void {
                     // can be what it snaps to.
                     const carried = new Set(moving.map((entry) => wallId(entry.wall)));
                     const others = wallSegments(current).filter((segment) => !carried.has(segment.wallId));
-                    // Shift locks the corner to one axis of the plan, the same
-                    // thing it does to a wall body and to a room. A modifier
-                    // that works on two of the three drags is worse than one
-                    // that works on none.
+                    // Shift locks the corner to one axis of the plan, the same thing it does to a wall body and to a room.
                     let aimed = local;
                     if (modifiers.constrain) {
                         const squared = constrainToAxis({ x: local.x - joint.point.x, y: local.y - joint.point.y }, (state.doc.rotation_degrees * Math.PI) / 180);
@@ -2055,22 +1567,8 @@ function boot(): void {
     }
 
     /**
-     * A handle at a selected wall's own middle - dragging it splits the
-     * wall in two, so a bend can be added to a straight run without
-     * redrawing it.
-     *
-     * Selected walls only, not every wall on the floor: the handle sits
-     * exactly at the wall's own midpoint, which is also the most natural
-     * place to click the wall itself - drawing it unconditionally stole
-     * that click from every unselected wall's ordinary selection. Requiring
-     * a select first costs one extra click on the rare "split it right
-     * away" path and avoids that on every other click near a wall's middle.
-     *
-     * A wall with an opening is skipped: an opening is stored as a fraction
-     * along its wall, and deciding what a split does to one that straddles
-     * the cut is a design question nobody asked for here - remove the
-     * opening first.
-     */
+ * A handle at a selected wall's own middle - dragging it splits the wall in two, so a bend can be added to a straight run without.
+ */
     function renderMidpointHandles(current: Floor): void {
         for (const wall of current.walls) {
             if (wall.openings.length) continue;
@@ -2085,9 +1583,7 @@ function boot(): void {
                 className: "floorplan-handle floorplan-wall-midpoint",
             }).addTo(handleLayer);
 
-            // Set on the first move: the wall is split right there, and every
-            // move after that is an ordinary two-wall joint drag on the
-            // corner the split just created.
+            // Set on the first move: the wall is split right there, and every move after that is an ordinary two-wall joint drag on the corner.
             let split: { near: Wall; far: Wall } | null = null;
             bindDrag(handle.getElement(), {
                 start: () => state.tool === "select",
@@ -2124,13 +1620,7 @@ function boot(): void {
 
     // ------------------------------------------------------------ popups
 
-    // A click that lands elsewhere on the map while a marker's popup is open
-    // closes that popup (Leaflet's own default) - without this, the very
-    // same click also reached the "marker" tool's placement branch below and
-    // dropped a second, unwanted marker right where the user only meant to
-    // dismiss the popup. Snapshotted on mousedown, in the capture phase, so
-    // it reads the state before Leaflet's own close-on-click-away logic (or
-    // anything else reacting to this same mousedown) has run.
+    // A click that lands elsewhere on the map while a marker's popup is open closes that popup (Leaflet's own default).
     let popupOpenCount = 0;
     map.on("popupopen", () => {
         popupOpenCount++;
@@ -2138,9 +1628,7 @@ function boot(): void {
     map.on("popupclose", () => {
         popupOpenCount = Math.max(0, popupOpenCount - 1);
     });
-    // pointerdown, not mousedown: a finger never fires mousedown, so on touch
-    // this read false and a tap whose only job was to dismiss a popup went on
-    // to act on the map underneath it as well.
+    // pointerdown, not mousedown: a finger never fires mousedown, so on touch this read false and a tap whose only job was to dismiss.
     let popupOpenAtPointerDown = false;
     map.getContainer().addEventListener(
         "pointerdown",
@@ -2155,10 +1643,7 @@ function boot(): void {
     let boxStart: L.Point | null = null;
     let boxActive = false;
     let boxRectEl: HTMLDivElement | null = null;
-    // A box-select's mouseup still reaches map.on("click") below (Leaflet's
-    // own drag-vs-click suppression only engages for its own panning, which
-    // this never triggers since map.dragging stays disabled throughout) -
-    // this flag swallows exactly that one synthetic click.
+    // A box-select's mouseup still reaches map.on("click") below.
     let suppressNextClick = false;
 
     function drawBoxRect(from: L.Point, to: L.Point): void {
@@ -2173,13 +1658,7 @@ function boot(): void {
 
     /** Items fully enclosed by the box, in plan-space regardless of screen rotation. */
     function itemsInBox(from: L.Point, to: L.Point): SelectionItem[] {
-        // Tested in screen pixels, not in latitude and longitude. The user drew
-        // a rectangle on the screen, and a lat/lng box built from its corners is
-        // only the same shape while the map faces north - which is exactly what
-        // this editor does not do, since turning the plan to face its building
-        // is the first thing anyone does. Rotated, the two diverge and the
-        // selection quietly takes in things outside the rectangle and misses
-        // things inside it.
+        // Tested in screen pixels, not in latitude and longitude.
         const minX = Math.min(from.x, to.x);
         const maxX = Math.max(from.x, to.x);
         const minY = Math.min(from.y, to.y);
@@ -2219,41 +1698,24 @@ function boot(): void {
 
     // Box select is the Box tool's gesture, and only its gesture.
     //
-    // Shift+drag used to start one from the Select tool as well, over anything
-    // including a wall - which is why the wall-body and room drags declined
-    // whenever shift was held at the press. Modifiers are latched at the press
-    // (see DragGesture), so between them those two facts made `constrain`
-    // unreachable on the two drags whose own comments advertised it: holding
-    // shift meant the drag never started, and pressing shift afterwards was
-    // never read.
+    // Shift+drag used to start one from the Select tool as well, over anything including a wall.
     //
-    // One meaning per modifier is worth more than a second way in to a tool
-    // that already has its own button. Shift constrains a drag to an axis,
-    // everywhere; box select is a tool you arm.
+    // One meaning per modifier is worth more than a second way in to a tool that already has its own button.
     map.getContainer().addEventListener("mousedown", (event: MouseEvent) => {
         if (state.tool !== "box" || event.button !== 0) return;
         const target = event.target as HTMLElement;
-        // Ordinary wall/room/marker shapes are NOT excluded here - only
-        // things with their own competing drag behavior are: draggable
-        // markers and the wall/opening endpoint handles.
+        // Ordinary wall/room/marker shapes are NOT excluded here - only things with their own competing drag behavior are.
         if (target.closest(".leaflet-marker-icon, .floorplan-handle, .leaflet-popup, .leaflet-control, .floorplan-context-menu")) return;
         map.dragging.disable();
         boxStart = map.mouseEventToContainerPoint(event);
         boxActive = false;
     });
-    // On window, not the container. A rectangle dragged to the edge is released
-    // over whatever floats above the canvas - the tool pill, the options panel -
-    // or outside the map altogether, and those are siblings of the map rather
-    // than children, so the container never hears the release. The gesture then
-    // never finishes: nothing is selected, the rectangle stays on screen, and
-    // panning is left disabled.
+    // On window, not the container.
     window.addEventListener("mousemove", (event: MouseEvent) => {
         if (!boxStart) return;
         const current = map.mouseEventToContainerPoint(event);
         if (!boxActive) {
-            // A few pixels of slop before committing to box-select, so an
-            // ordinary click on empty space (which still starts here, since
-            // it might become a drag) doesn't spuriously draw a rectangle.
+            // A few pixels of slop before committing to box-select, so an ordinary click on empty space.
             if (boxStart.distanceTo(current) < 6) return;
             boxActive = true;
             map.dragging.disable();
@@ -2278,12 +1740,7 @@ function boot(): void {
         boxActive = false;
     });
 
-    // Click-and-drag draws a single wall directly, instead of the map just
-    // panning underneath the gesture (which is what happened before, since
-    // nothing disabled map.dragging for this tool) - the existing click-
-    // click-click chain for several connected walls still works unchanged,
-    // since this only engages once real movement is detected, and only when
-    // no chain is already in progress.
+    // Click-and-drag draws a single wall directly.
     let wallDragStartPixel: L.Point | null = null;
     let wallDragStartLocal: Pt | null = null;
     let wallDragActive = false;
@@ -2301,9 +1758,7 @@ function boot(): void {
         if (!wallDragStartPixel || !wallDragStartLocal) return;
         const current = map.mouseEventToContainerPoint(event);
         if (!wallDragActive) {
-            // A few pixels of slop so an ordinary click that starts the
-            // click-click chain (which also begins here, since it might
-            // become a drag) doesn't spuriously draw a zero-length wall.
+            // A few pixels of slop so an ordinary click that starts the click-click chain (which also begins here, since it might become a drag).
             if (wallDragStartPixel.distanceTo(current) < 6) return;
             wallDragActive = true;
         }
@@ -2390,11 +1845,7 @@ function boot(): void {
         }
 
         if (item.kind === "wall") {
-            // One entry per kind rather than a single "Add opening" that always
-            // made a door. The type could only be changed on an opening that
-            // already existed, so the word "window" appeared nowhere in the UI
-            // until you had made a door and gone looking - which is why Jess
-            // reported windows as unsupported when they have always been a kind.
+            // One entry per kind rather than a single "Add opening" that always made a door.
             for (const kind of ["door", "window", "gate"] as const) {
                 addAction(`Add ${kind}`, () => {
                     checkpoint();
@@ -2428,16 +1879,8 @@ function boot(): void {
     }
 
     /**
-     * Remove a corner where exactly two walls meet, merging them into one.
-     *
-     * Only the simple case is offered: three or more walls, or a wall's own
-     * free end, has no single "the point" to remove without also deciding
-     * what happens to the others. An opening would need to move onto the
-     * merged wall or be dropped outright - a decision nobody asked for here,
-     * so it is refused rather than guessed at, the same as the midpoint
-     * handle that creates a joint like this one refuses to split a wall that
-     * already has one.
-     */
+ * Remove a corner where exactly two walls meet, merging them into one.
+ */
     function removeJoint(joint: { point: Pt; ends: Array<{ wall: Wall; end: "a" | "b" }> }): void {
         if (joint.ends.length !== 2) {
             toast.info("This point can only be removed where exactly two walls meet.");
@@ -2488,15 +1931,8 @@ function boot(): void {
     document.addEventListener("click", () => closeContextMenu());
 
     /**
-     * Fly to whatever is already known, instead of opening on a fixed zoom
-     * around the pin's coordinate.
-     *
-     * Preferred order: this floor's own geometry (walls, then room seeds and
-     * markers if a floor somehow has those without walls), else the building
-     * outline, else the fixed fallback `setView` already gave on construction
-     * - a floor with nothing drawn and no known footprint has nothing to fit
-     * to.
-     */
+ * Fly to whatever is already known, instead of opening on a fixed zoom around the pin's coordinate.
+ */
     function fitToContent(): void {
         const current = floor();
         const points: Pt[] = [];
@@ -2509,20 +1945,8 @@ function boot(): void {
     }
 
     /**
-     * Lay the building's real footprint down as exterior walls.
-     *
-     * A storey's outer wall is the one part already known from survey data, so
-     * asking someone to trace around a shape the map is already showing them
-     * is busywork. Seeded per floor rather than shared, because upper storeys
-     * genuinely differ - a setback or a demolished wing is then an edit rather
-     * than a fight with something immovable.
-     *
-     * Args:
-     *     target: The floor to lay walls on. Untouched if it already has any.
-     *
-     * Returns:
-     *     Whether walls were added.
-     */
+ * Lay the building's real footprint down as exterior walls.
+ */
     function seedFromOutline(target: Floor): boolean {
         if (target.walls.length || outline.length < 3) return false;
         const points = outline.map(([outlineLat, outlineLng]) => projection.toLocal({ lat: outlineLat, lng: outlineLng }));
@@ -2545,12 +1969,8 @@ function boot(): void {
     }
 
     /**
-     * Args:
-     *     point: Where the seed goes, in plan-local metres.
-     *     record: Whether this is a gesture of its own. False when the caller
-     *         has already checkpointed, so placing a whole room is one undo
-     *         step rather than two.
-     */
+ * Args: point: Where the seed goes, in plan-local metres. record: Whether this is a gesture of its own.
+ */
     function addSeedAt(point: Pt, record = true): RoomSeed {
         if (record) checkpoint();
         const seed: RoomSeed = { uuid: nextLocalId(), name: "", x: point.x, y: point.y };
@@ -2566,16 +1986,8 @@ function boot(): void {
     type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
 
     /**
-     * Learn a room size from this floor's own already-enclosed rooms - the
-     * more that exist, the closer a fresh guess tracks what this plan
-     * actually looks like. Falls back to a plausible default (a small
-     * bedroom) the first time, with nothing yet to learn from.
-     *
-     * `containerFace` - the face the new room's own center point already sits
-     * inside, if any - is excluded: it is whatever the user is subdividing
-     * (often the whole exterior shell), not a peer of the room being added,
-     * and averaging it in would make every new room balloon to that size.
-     */
+ * Learn a room size from this floor's own already-enclosed rooms.
+ */
     function learnedRoomSize(current: Floor, containerFace: Face | null): { width: number; height: number } {
         const DEFAULT_WIDTH = 4;
         const DEFAULT_HEIGHT = 3.5;
@@ -2595,11 +2007,8 @@ function boot(): void {
     }
 
     /**
-     * Which compass side of its own room's bounding box a wall's midpoint
-     * falls on - a shared vocabulary for "the same side" that works across
-     * differently-shaped and differently-sized rooms. A wall near a corner
-     * still reads as belonging to whichever axis it runs furthest out on.
-     */
+ * Which compass side of its own room's bounding box a wall's midpoint falls.
+ */
     function sideOfRoom(wall: Wall, bounds: Bounds): RoomSide {
         const midX = (wall.ax + wall.bx) / 2;
         const midY = (wall.ay + wall.by) / 2;
@@ -2636,22 +2045,11 @@ function boot(): void {
     }
 
     /**
-     * Click-once room generation: a rectangle sized from this floor's own
-     * rooms (or a sensible default), its corners snapped onto whatever
-     * existing geometry sits nearby so it joins up rather than floating free,
-     * with a door on whichever side existing doors tend to favor (or a random
-     * one, the first time). Everything this creates is an ordinary wall or
-     * opening afterward - dragging a corner, the wall's body, or the door
-     * works exactly as it would for anything hand-drawn, and reusing an
-     * exactly-coincident existing wall (rather than drawing a duplicate on
-     * top of it) is what "joined with the nearest other walls" means here.
-     */
+ * Click-once room generation: a rectangle sized from this floor's own rooms (or a sensible default), its corners snapped onto whatever.
+ */
     function placeRoomAt(center: Pt): void {
         const current = floor();
-        // Whatever the click landed inside, before anything new is added -
-        // usually nothing yet (open floor), sometimes the whole exterior
-        // shell if it was already clicked into once. Either way it is being
-        // subdivided, not matched.
+        // Whatever the click landed inside, before anything new is added.
         const containerFace = faceForSeed(center, state.faces);
         const { width, height } = learnedRoomSize(current, containerFace);
         const angle = (state.doc.rotation_degrees * Math.PI) / 180;
@@ -2673,12 +2071,7 @@ function boot(): void {
         const snapTolerance = tolerances();
         const corners = rawCorners.map((corner) => snapPoint(corner, segments, snapTolerance, { suspended: snapOff() }).point);
 
-        // The rectangle above is sized and snapped from nearby geometry, but
-        // nothing so far stops it landing on top of a room that already
-        // exists elsewhere on the floor - refuse rather than lay two rooms'
-        // worth of area on top of each other. The face being subdivided
-        // (usually the open shell, or the room already clicked into once) is
-        // not a blocker; every other already-bound room is.
+        // The rectangle above is sized and snapped from nearby geometry, but nothing so far stops it landing on top of a room that already.
         const blockers = occupiedFaces(current, state.faces)
             .filter((entry) => entry.face !== containerFace)
             .map((entry) => entry.face);
@@ -2712,9 +2105,7 @@ function boot(): void {
         }
 
         if (perimeterWalls.length) {
-            // Whichever of this room's own walls best matches the learned
-            // side - not necessarily doorSide exactly, since a corner snap
-            // can shrink a side to nothing or merge it into a reused wall.
+            // Whichever of this room's own walls best matches the learned side.
             let target = perimeterWalls[0] as Wall;
             for (const wall of perimeterWalls) {
                 if (sideOfRoom(wall, bounds) === doorSide) {
@@ -2745,9 +2136,7 @@ function boot(): void {
                 if (distance(a, b) < 1e-6) continue;
                 floor().walls.push({
                     uuid: nextLocalId(),
-                    // The first wall on an empty floor is the shell whatever the
-                    // panel says - nobody starts a plan with an interior
-                    // partition - and after that the panel decides.
+                    // The first wall on an empty floor is the shell whatever the panel says - nobody starts a plan with an interior partition.
                     kind: floor().walls.length === 0 ? "exterior" : kind,
                     thickness: "normal",
                     ax: a.x,
@@ -2788,11 +2177,8 @@ function boot(): void {
     }
 
     /**
-     * Move the wall tool's preview to wherever the pointer is.
-     *
-     * Args:
-     *     latlng: The pointer position on the map.
-     */
+ * Move the wall tool's preview to wherever the pointer is.
+ */
     function aimWallPreview(latlng: L.LatLng): void {
         if (state.tool !== "wall") return;
         const raw = toLocal(latlng);
@@ -2808,50 +2194,28 @@ function boot(): void {
         drawGhost();
     }
 
-    // Pointer events rather than Leaflet's mousemove, which a finger never
-    // emits: drawing on a phone showed no rubber band, no snap readout and no
-    // length at all, so every corner was placed blind.
+    // Pointer events rather than Leaflet's mousemove, which a finger never emits.
     //
-    // A finger has no hover, so pointermove only arrives while it is down -
-    // which turns out to be the useful gesture anyway: press near a corner,
-    // slide to aim while watching the length, lift to place it.
+    // A finger has no hover, so pointermove only arrives while it is down - which turns out to be the useful gesture anyway.
     for (const type of ["pointerdown", "pointermove"] as const) {
         map.getContainer().addEventListener(type, (raw) => {
             const event = raw as PointerEvent;
             if (state.tool !== "wall") return;
-            // Mouse already gets a continuous pointermove while it hovers, so
-            // pointerdown adds nothing for it - and redrawing the ghost layer
-            // there was the bug: tearing down and rebuilding its SVG elements
-            // mid-mousedown broke the browser's click synthesis for the very
-            // point that mousedown was placing, so every corner after the
-            // first silently failed to add. Touch has no hover - pointerdown
-            // is the only event that arrives before a finger has moved, so it
-            // still needs to aim there.
+            // Mouse already gets a continuous pointermove while it hovers, so pointerdown adds nothing for it.
             if (type === "pointerdown" && event.pointerType === "mouse") return;
             aimWallPreview(map.mouseEventToLatLng(event));
         });
     }
 
-    // ...but that lift has to place the corner itself. A finger that slides
-    // before it lifts is a pan gesture as far as the browser is concerned, so
-    // it fires no click at all - verified in the browser test, where an
-    // aim-then-lift added no wall. One finger aims and draws while the wall
-    // tool is armed; a second finger cancels the placement and hands the
-    // gesture to Leaflet's pinch handler, which is how the map is panned and
-    // zoomed mid-drawing.
+    // ...but that lift has to place the corner itself.
     let touchAim: { id: number; cancelled: boolean; wasDraggable: boolean } | null = null;
 
     map.getContainer().addEventListener("pointerdown", (raw) => {
         const event = raw as PointerEvent;
-        // A suppression only ever applies to the click of the gesture that
-        // asked for it. Without this reset, a touch placement that fires no
-        // click leaves the flag standing and eats the next real one.
+        // A suppression only ever applies to the click of the gesture that asked for it.
         suppressNextClick = false;
         if (event.pointerType === "mouse" || state.tool !== "wall") return;
-        // Leaflet's controls sit inside the map container and stop their own
-        // click from reaching the map - but they stop "click", not
-        // "pointerdown", so without this a tap on zoom-in placed a corner
-        // underneath the button. Same exclusion list as the drag handlers.
+        // Leaflet's controls sit inside the map container and stop their own click from reaching the map.
         if ((event.target as Element | null)?.closest?.(".leaflet-marker-icon, .floorplan-handle, .leaflet-popup, .leaflet-control, .floorplan-context-menu")) return;
         if (touchAim) {
             touchAim.cancelled = true;
@@ -2868,9 +2232,7 @@ function boot(): void {
         touchAim = null;
         if (wasDraggable) map.dragging.enable();
         if (cancelled || !place) return;
-        // A lift that did not move still fires a click, and that click would
-        // otherwise run the whole thing a second time - set before the popup
-        // branch below, so it holds whichever way this ends.
+        // A lift that did not move still fires a click, and that click would otherwise run the whole thing a second time.
         suppressNextClick = true;
         if (popupOpenAtPointerDown) {
             popupOpenAtPointerDown = false;
@@ -2884,11 +2246,8 @@ function boot(): void {
     window.addEventListener("pointercancel", (raw) => endTouchAim(raw as PointerEvent, false));
 
     /**
-     * Act on a tap at a map position: place, cut, or select, per the armed tool.
-     *
-     * Args:
-     *     latlng: Where the tap landed on the map.
-     */
+ * Act on a tap at a map position: place, cut, or select, per the armed tool.
+ */
     function tapMap(latlng: L.LatLng): void {
         const raw = toLocal(latlng);
         if (state.tool === "wall") {
@@ -2907,11 +2266,7 @@ function boot(): void {
                 commitChain();
                 return;
             }
-            // Clicking the chain's own last point again finishes it open-ended
-            // (no closing segment) - the same thing double-click already
-            // does, offered as a second click on the same spot too, since
-            // that is an easy thing to reach for without the map having
-            // registered it as an actual double-click.
+            // Clicking the chain's own last point again finishes it open-ended (no closing segment).
             const last = state.drawing[state.drawing.length - 1];
             if (last && state.drawing.length >= 2 && distance(snapped.point, last) < closeTolerance) {
                 commitChain();
@@ -2933,9 +2288,7 @@ function boot(): void {
             }
             checkpoint();
             const length = wallLength(near.wall);
-            // A fixed 0.9m, not a fixed fraction of the wall: a door is a door
-            // whether it is in a 2m partition or a 12m elevation, and the
-            // fraction that used to be hardcoded made it neither.
+            // A fixed 0.9m, not a fixed fraction of the wall.
             const width = Math.min(0.9, length * 0.9) / length;
             const centre = projectOnSegment(raw, { x: near.wall.ax, y: near.wall.ay }, { x: near.wall.bx, y: near.wall.by }).t;
             const [start, end] = clampOpening(centre - width / 2, centre + width / 2);
@@ -2948,13 +2301,7 @@ function boot(): void {
             return;
         }
         if (state.tool === "marker") {
-            // Select what was just placed: naming it, or linking a stair to the
-            // floor below, is almost always the next thing wanted, and making
-            // the user hunt for and click their own new marker to do it is a
-            // step with no purpose.
-            // Pre-filled with the type as text - almost always exactly what
-            // someone wants ("Hazard"), and cheaper to edit than to type from
-            // scratch when it is not.
+            // Select what was just placed: naming it, or linking a stair to the floor below, is almost always the next thing wanted, and making.
             checkpoint();
             const placed: Marker = { uuid: nextLocalId(), kind: state.markerKind, x: raw.x, y: raw.y, name: titleCase(state.markerKind) };
             floor().markers.push(placed);
@@ -2970,11 +2317,7 @@ function boot(): void {
     }
 
     map.on("click", (event: L.LeafletMouseEvent) => {
-        // A box-select drag ends in a mouseup that Leaflet still reads as a
-        // click (map.dragging was never engaged, so its usual after-a-drag
-        // click suppression never kicks in) - without this the box-select
-        // result would be immediately wiped by the "click empty space
-        // deselects" branch inside tapMap.
+        // A box-select drag ends in a mouseup that Leaflet still reads as a click.
         if (suppressNextClick) {
             suppressNextClick = false;
             return;
@@ -2997,16 +2340,7 @@ function boot(): void {
         showContextMenu(event, null);
     });
 
-    // The same value drives wall angle-snapping (see the wall tool's
-    // mousemove/click handlers above) and the map's own visual rotation, so
-    // turning the map to face a building also squares the snap grid to it -
-    // rotating and drawing stay in agreement instead of one silently
-    // fighting the other. No render() here: leaflet-rotate already
-    // repositions every existing layer itself; redrawing would just be
-    // wasted work on every frame of a drag or two-finger twist.
-    // Dragging anywhere while the rotate tool is armed turns the view. Bound on
-    // the container rather than a layer: the whole canvas is the handle, which
-    // is the entire difference from the control this replaced.
+    // The same value drives wall angle-snapping and the map's own visual rotation, so turning the map to face a building also squares.
     map.getContainer().addEventListener("pointerdown", (raw) => {
         const event = raw as PointerEvent;
         if (state.tool !== "rotate" || !canRotateView) return;
@@ -3040,9 +2374,7 @@ function boot(): void {
             window.removeEventListener("pointerup", onFinish);
             window.removeEventListener("pointercancel", onFinish);
             map.dragging.enable();
-            // The release reads as a click on the canvas, which would otherwise
-            // fall through to "clicked empty space" and drop the selection -
-            // so turning the plan to look at something would deselect it.
+            // The release reads as a click on the canvas, which would otherwise fall through to "clicked empty space" and drop the selection.
             if (turned) suppressNextClick = true;
         };
         window.addEventListener("pointermove", onMove);
@@ -3053,19 +2385,12 @@ function boot(): void {
     // A zoom changes what fits without changing anything worth re-rendering.
     map.on("zoomend", () => scheduleRoomLabelFit());
 
-    // The grid depends only on the viewport and the axis, both of which
-    // these three events cover between them - never on state.doc, so it is
-    // not part of render()'s own document-driven redraw.
+    // The grid depends only on the viewport and the axis, both of which these three events cover between them.
     map.on("moveend zoomend rotate", renderGrid);
 
     map.on("rotate", () => {
         const bearing = map.getBearing();
-        // Also fires for the load-time setBearing() that restores a saved
-        // plan's rotation - a degrees-to-radians-and-back round trip through
-        // Leaflet's own storage can perturb the value by float noise even
-        // when nothing really changed, so this compares loosely rather than
-        // with ===, which would mark a freshly-loaded plan dirty before any
-        // real edit happened.
+        // Also fires for the load-time setBearing() that restores a saved plan's rotation.
         if (Math.abs(bearing - state.doc.rotation_degrees) < 1e-6) return;
         checkpoint("rotate");
         state.doc.rotation_degrees = bearing;
@@ -3074,25 +2399,14 @@ function boot(): void {
 
     document.addEventListener("keydown", (event) => {
         const target = event.target as HTMLElement | null;
-        // Every hotkey below is a bare letter (mnemonics: W for Wall, and so
-        // on) - without this, typing a room name like "Waiting room" fires
-        // the Wall tool on its own "w". The old 1/2/3 keys never had this
-        // problem (plan names rarely contain a digit), which is presumably
-        // why it went unnoticed until letters were added alongside them.
+        // Every hotkey below is a bare letter (mnemonics: W for Wall, and so on).
         const typing = isTypingTarget(target);
 
-        // Backtick, not Alt: Alt now means "take less" for a drag, and a key
-        // that both detaches a wall and disables snapping is a key whose effect
-        // nobody can predict. Bare, so it works mid-drag - snapping is not
-        // latched, only the mode is.
-        // `code` too: on layouts where the grave key is a dead/compose key or
-        // shifts to a different character, `.key` alone never sees a backtick.
+        // Backtick, not Alt: Alt now means "take less" for a drag, and a key that both detaches a wall and disables snapping is a key whose.
         if (event.key === "`" || event.code === "Backquote") state.suspendSnap = true;
         const onCanvas = document.activeElement === mapEl || mapEl.contains(document.activeElement);
 
-        // Tab steps through the plan while the canvas has focus. Taking Tab is
-        // only defensible because Escape gives it straight back: it blurs the
-        // canvas, so the page's own focus order is never a trap.
+        // Tab steps through the plan while the canvas has focus.
         if (event.key === "Tab" && onCanvas && !typing) {
             const items = selectableItems();
             if (items.length) {
@@ -3111,17 +2425,9 @@ function boot(): void {
                 mapEl.blur();
                 return;
             }
-            // Finishes the chain rather than throwing it away. Drawing tools
-            // are split on this - AutoCAD and SketchUp cancel, Illustrator's pen
-            // ends the path and keeps it - and keeping it is the recoverable
-            // direction: a wall nobody wanted is one Ctrl+Z away, and there is a
-            // checkpoint before the chain for exactly that, whereas a discarded
-            // chain is gone. Two presses is "finish the wall, then leave the
-            // tool", which is what "back out one level" means here.
+            // Finishes the chain rather than throwing it away.
             if (state.drawing.length) commitChain();
-            // Escape leaves a tool before it clears a selection: an armed tool
-            // is the more surprising state to be stuck in, and it is the one a
-            // user reaches for Escape to get out of.
+            // Escape leaves a tool before it clears a selection.
             else if (state.tool !== "select") setTool("select");
             else {
                 clearSelection();
@@ -3136,15 +2442,7 @@ function boot(): void {
         }
         if (typing) return;
         const key = event.key.toLowerCase();
-        // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z / Ctrl+Y are handled by the shared
-        // undo bar (see undo-bar.ts), which also drives the floating buttons.
-        // One letter per tool, and the letter each tool's own tooltip names.
-        // There used to be digits alongside - 1 select, 2 wall, 3 marker - from
-        // when those were the only three tools. Seven tools later they covered
-        // three of them, in an order the toolbar no longer had: 2 armed the
-        // wall while the second button was box select, and 4 through 7 did
-        // nothing. A partial scheme that contradicts what is on screen is worse
-        // than no scheme.
+        // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z / Ctrl+Y are handled by the shared undo bar, which also drives the floating buttons.
         if (key === "v") setTool("select");
         if (key === "b") setTool("box");
         if (key === "d") setTool("opening");
@@ -3165,16 +2463,9 @@ function boot(): void {
     // Arrow keys, taken on the canvas in the capture phase so this runs before
     // Leaflet's own keydown listener on the same element.
     //
-    // Leaflet pans the map with the arrows. This used to be handled on the
-    // document, which bubbles - so Leaflet had already panned by the time the
-    // nudge ran, and its preventDefault() was far too late. Both happened: a
-    // tenth of a metre of nudge and 80px of map sliding out from under it.
+    // Leaflet pans the map with the arrows.
     //
-    // Stopping propagation here rather than disabling Leaflet's handler,
-    // because that handler only listens while it believes the container is
-    // focused, and re-enabling it does not restore that belief until the
-    // element is focused again. With nothing selected this declines and the
-    // arrows pan, which is what they should do when there is nothing to nudge.
+    // Stopping propagation here rather than disabling Leaflet's handler, because that handler only listens while it believes the container.
     mapEl.addEventListener(
         "keydown",
         (raw) => {
@@ -3201,11 +2492,7 @@ function boot(): void {
     document.addEventListener("keyup", (event) => {
         if (event.key === "`" || event.code === "Backquote") state.suspendSnap = false;
     });
-    // A held key whose keyup lands on somebody else - alt-tab, a system
-    // shortcut, the browser's own find bar - never reaches the keyup above, and
-    // the mode stays latched. The editor then quietly stops snapping with
-    // nothing on screen to say why, which reaches anyone else as "snapping
-    // stopped working" and nothing to reproduce it from.
+    // A held key whose keyup lands on somebody else - alt-tab, a system shortcut, the browser's own find bar.
     window.addEventListener("blur", () => {
         state.suspendSnap = false;
     });
@@ -3228,9 +2515,7 @@ function boot(): void {
             if (target.kind === "opening") target.wall.openings = target.wall.openings.filter((o) => o !== target.opening);
         }
         if (walls.size) pruneOrphanedSeeds(current, boundBefore);
-        // Whatever went took its citations with it, and a pool row nothing
-        // cites any more has to go too - the same rule as detaching a photo by
-        // hand, applied to the larger way citations disappear.
+        // Whatever went took its citations with it, and a pool row nothing cites any more has to go too.
         pruneUnusedReferences();
         clearSelection();
         renderSidebar();
@@ -3238,29 +2523,8 @@ function boot(): void {
     }
 
     /**
-     * Drop the room seeds a deletion has just orphaned.
-     *
-     * Two seeds can both be unbound and mean opposite things. One was placed
-     * in a region the author has not closed yet: that is a promise to finish,
-     * and it is shown as a hint. The other belonged to a room that existed
-     * until its walls were deleted a moment ago: nothing is coming back for
-     * it, and leaving it behind puts a dot on the map labelled with a room
-     * that is gone.
-     *
-     * The difference is not visible in the seed - only in what just happened -
-     * so it has to be decided here, against the set that was bound before the
-     * deletion.
-     *
-     * Landing in a *different* face is not orphaned. Deleting one wall of a
-     * room inside a building merges it with its surroundings, and the seed then
-     * names the merged region: still a room, still somewhere, so the name
-     * stays. Only a seed that lands in no face at all has nothing left to name.
-     *
-     * Args:
-     *     current: The floor whose seeds should be reconsidered.
-     *     boundBefore: The seeds that were part of an enclosed room when the
-     *         gesture started.
-     */
+ * Drop the room seeds a deletion has just orphaned.
+ */
     function pruneOrphanedSeeds(current: Floor, boundBefore: ReadonlySet<RoomSeed>): void {
         if (!current.rooms.length) return;
         const faces = deriveFaces(wallSegments(current)).faces;
@@ -3276,21 +2540,11 @@ function boot(): void {
     }
 
     /**
-     * What the armed tool will do next, shown beside the tools.
-     *
-     * The alternative is modifier keys, and modifiers cannot be seen, cannot be
-     * discovered and do not exist on a phone at all. Everything here is a
-     * visible control first; the keyboard shortcuts are accelerators for these,
-     * not the only way to reach them.
-     */
+ * What the armed tool will do next, shown beside the tools.
+ */
     /**
-     * Everything on this floor that can be selected, in a stable order.
-     *
-     * Walls first, then the rooms they enclose, then markers - the order
-     * someone would read the plan in, and one that does not reshuffle as
-     * geometry moves, so stepping through it twice visits things twice in the
-     * same order.
-     */
+ * Everything on this floor that can be selected, in a stable order.
+ */
     function selectableItems(): SelectionItem[] {
         const current = floor();
         const items: SelectionItem[] = [];
@@ -3304,15 +2558,8 @@ function boot(): void {
     }
 
     /**
-     * Move the selection one step, in reading order.
-     *
-     * The canvas had no keyboard path to anything at all: geometry could be
-     * drawn, moved and deleted only with a pointer, so the whole editor was
-     * unusable without one.
-     *
-     * Args:
-     *     step: 1 to go forward, -1 to go back.
-     */
+ * Move the selection one step, in reading order.
+ */
     function stepSelection(step: number): void {
         const items = selectableItems();
         if (!items.length) return;
@@ -3326,12 +2573,8 @@ function boot(): void {
     }
 
     /**
-     * Say what is selected, for anyone who cannot see the highlight.
-     *
-     * The sidebar already describes the selection, but it is somewhere else on
-     * the page and nothing directs attention to it when the selection changes
-     * from the keyboard.
-     */
+ * Say what is selected, for anyone who cannot see the highlight.
+ */
     function announceSelection(): void {
         const live = document.getElementById("floorplan-live");
         if (!live) return;
@@ -3342,9 +2585,7 @@ function boot(): void {
         }
         const labels = floorLabels();
         const where = labels.get(floor()) || String(floor().level);
-        // Position in the list, because the description on its own does not
-        // identify anything: four sides of a square are four identical
-        // sentences, and stepping between them would announce no change at all.
+        // Position in the list, because the description on its own does not identify anything.
         const items = selectableItems();
         const at = items.findIndex((candidate) => itemKey(candidate) === itemKey(item)) + 1;
         const place = at > 0 ? `${at} of ${items.length}` : "";
@@ -3360,18 +2601,12 @@ function boot(): void {
     }
 
     /**
-     * Nudge whatever is selected.
-     *
-     * Args:
-     *     dx: Steps east, in metres.
-     *     dy: Steps north, in metres.
-     */
+ * Nudge whatever is selected.
+ */
     function nudgeSelection(dx: number, dy: number): boolean {
         const item = state.selection;
         if (!item) return false;
-        // Whether this can move at all is decided before anything is recorded:
-        // a room bounded entirely by shell has nothing to nudge, and taking a
-        // checkpoint for it leaves an undo step that undoes nothing.
+        // Whether this can move at all is decided before anything is recorded.
         const roomBoundary = item.kind === "room" ? roomBoundaryWalls(item.room) : null;
         if (item.kind === "room" && (!roomBoundary || !roomBoundary.unique.length)) return false;
         checkpoint(`nudge:${itemKey(item)}`);
@@ -3394,13 +2629,7 @@ function boot(): void {
             item.room.x += dx;
             item.room.y += dy;
         } else {
-            // An opening lives along its wall, so a nudge slides it rather than
-            // moving it off into space - and which way along it is the arrow's
-            // own direction projected onto the wall, not dx plus dy. Adding the
-            // two ignores which way the wall was drawn, so on a wall running
-            // right-to-left the right arrow slid the door left. A wall square
-            // to the arrow does not move, which is the honest answer: the
-            // arrow points somewhere the door cannot go.
+            // An opening lives along its wall, so a nudge slides it rather than moving it off into space.
             const length = wallLength(item.wall) || 1;
             const forward = { x: (item.wall.bx - item.wall.ax) / length, y: (item.wall.by - item.wall.ay) / length };
             const along = (dx * forward.x + dy * forward.y) / length;
@@ -3421,14 +2650,8 @@ function boot(): void {
         host.replaceChildren();
 
         /**
-         * One row of mutually exclusive choices for the armed tool.
-         *
-         * Args:
-         *     label: What the row is choosing.
-         *     options: The choices, optionally each naming a shortcut key.
-         *     current: Which one is in force.
-         *     onPick: Called with the chosen value.
-         */
+ * One row of mutually exclusive choices for the armed tool.
+ */
         const group = <T extends string>(
             label: string,
             options: ReadonlyArray<{ value: T; label: string; key?: string }>,
@@ -3447,13 +2670,9 @@ function boot(): void {
                 button.className = `btn btn--sm${option.value === current ? " btn--primary" : " btn--ghost"}`;
                 button.textContent = option.label;
                 button.setAttribute("aria-pressed", String(option.value === current));
-                // Where a choice has an accelerator, it says so - the same way
-                // each tool's own tooltip names its letter. An unadvertised
-                // shortcut helps whoever already knows it and nobody else.
+                // Where a choice has an accelerator, it says so - the same way each tool's own tooltip names its letter.
                 //
-                // data-tooltip, not title: the site's tooltip is delegated from
-                // the document, so it reaches buttons built here, and a native
-                // title beside it would be the only unstyled tip in the editor.
+                // data-tooltip, not title: the site's tooltip is delegated from the document, so it reaches buttons built here, and a native title.
                 if (option.key) {
                     button.setAttribute("data-tooltip", `${option.label} (${option.key.toUpperCase()})`);
                     button.setAttribute("data-tooltip-float", "true");
@@ -3497,9 +2716,7 @@ function boot(): void {
             toggle.type = "button";
             toggle.className = `btn btn--sm${state.snapEnabled ? " btn--primary" : " btn--ghost"}`;
             toggle.setAttribute("aria-pressed", String(state.snapEnabled));
-            // The toggle is the setting; the backtick is a momentary suspend
-            // for one drag. Two related things, and the tooltip on the setting
-            // is where somebody goes looking for the other one.
+            // The toggle is the setting; the backtick is a momentary suspend for one drag.
             toggle.setAttribute("data-tooltip", "Snap to walls and angles \u00b7 hold ` to suspend for one drag");
             toggle.setAttribute("data-tooltip-float", "true");
             toggle.innerHTML = '<i class="material-symbols-outlined">grid_on</i> Snap';
@@ -3516,18 +2733,11 @@ function boot(): void {
 
     function setTool(tool: Tool): void {
         if (state.drawing.length) commitChain();
-        // A marker's popup auto-opens when it's placed and stays open across
-        // a tool switch. Without closing it here, the first click after
-        // switching to e.g. the wall tool is read as "dismiss that popup"
-        // (see popupOpenAtPointerDown below) and silently drops the corner
-        // the click was meant to place.
+        // A marker's popup auto-opens when it's placed and stays open across a tool switch.
         map.closePopup();
         popupOpenAtPointerDown = false;
         state.tool = tool;
-        // [data-tool], not every button: the collapse toggle and the
-        // one-shot "copy this floor" action live in the same row but are
-        // not tools, and stamping aria-pressed="false" on a non-toggle
-        // button announces it as an unpressed toggle to a screen reader.
+        // [data-tool], not every button: the collapse toggle and the one-shot "copy this floor" action live in the same row but are not tools,.
         for (const button of document.querySelectorAll<HTMLButtonElement>("#floorplan-tools button[data-tool]")) {
             button.classList.toggle("is-active", button.dataset.tool === tool);
             button.setAttribute("aria-pressed", String(button.dataset.tool === tool));
@@ -3556,28 +2766,15 @@ function boot(): void {
         }
         renderToolOptions();
         renderSidebar();
-        // Joint and midpoint handles only ever show in select mode, and
-        // nothing else re-renders the canvas on a tool switch by itself - so
-        // without this, switching to select left them absent until some
-        // unrelated edit happened to redraw the floor.
+        // Joint and midpoint handles only ever show in select mode, and nothing else re-renders the canvas on a tool switch by itself.
         render();
     }
 
     // ------------------------------------------------------------- sidebar
 
     /**
-     * Editable fields for whichever floor is showing.
-     *
-     * Two fields rather than one, sitting under the strip where they can be
-     * seen: a floor's code and its nickname are different facts, and the
-     * previous single prompt could only ever set one of them - which is how
-     * naming a floor came to destroy the record of which storey it was.
-     *
-     * The code field is left blank when the label is derived, with the derived
-     * value as its placeholder. That way an empty box reads as "this follows
-     * the stack", and clearing a code goes back to following it, without
-     * either state needing a caption.
-     */
+ * Editable fields for whichever floor is showing.
+ */
     function renderFloorFields(host: HTMLElement, item: Floor): void {
         const labels = floorLabels();
         const row = document.createElement("div");
@@ -3594,10 +2791,7 @@ function boot(): void {
             item.designation = code.value.trim().slice(0, 8);
             markDirtyQuiet();
         });
-        // The strip carries this storey's label and every label derived above it,
-        // so it redraws on commit rather than per keystroke - rebuilding it under
-        // the cursor would take the focus along. keepFields, because the commit
-        // fires on the way out of one of these fields and into the next.
+        // The strip carries this storey's label and every label derived above it, so it redraws on commit rather than per keystroke.
         code.addEventListener("change", () => {
             renderFloorTabs(true);
             // Left out of that redraw, and this placeholder is the derived label,
@@ -3622,11 +2816,6 @@ function boot(): void {
         host.appendChild(row);
 
         // Floor-to-ceiling, and the walking surface's height above sea level.
-        // Both are stored per storey, but neither is needed to draw a floor,
-        // so they sit in the sidebar's one "Add more details" disclosure
-        // (editor.html) alongside the plan's own name/date/versions, rather
-        // than behind a second disclosure of their own - two collapsed
-        // sections for "more detail" read as one too many.
         const key = `floor:${item.uuid || item.level}`;
         const advancedHost = document.getElementById("floorplan-floor-advanced-fields");
         if (advancedHost) {
@@ -3645,22 +2834,8 @@ function boot(): void {
     }
 
     /**
-     * Add a storey, optionally copying another floor's walls and rooms onto
-     * it.
-     *
-     * Args:
-     *     where: With no copy source, "above" puts it over the highest
-     *         floor and "below" makes a basement under the lowest - the
-     *         whole stack's own top/bottom, there being no floor for "above"
-     *         to be relative to. With a copy source, relative to *that*
-     *         floor instead: a copy belongs next to what it came from, not
-     *         necessarily at the top of the building.
-     *     copyFrom: A floor to copy the full layout from, or null for a
-     *         blank one. Half a storey off its source's level, because
-     *         normaliseFloors renumbers the whole stack contiguously by
-     *         sorted level straight afterwards, landing the copy between its
-     *         source and whatever used to sit on the chosen side of it.
-     */
+ * Add a storey, optionally copying another floor's walls and rooms onto it.
+ */
     function addFloor(where: "above" | "below", copyFrom: Floor | null): void {
         checkpoint();
         let level: number;
@@ -3677,9 +2852,7 @@ function boot(): void {
             added.rooms = copied.rooms;
         }
         state.doc.floors.push(added);
-        // Renumbers the stack and makes the new floor the active one. A
-        // basement does not shift the storey anyone calls the ground: the datum
-        // is whichever floor is nearest it, which the new one is not.
+        // Renumbers the stack and makes the new floor the active one.
         normaliseFloors(added);
         markDirty();
         renderSidebar();
@@ -3687,20 +2860,8 @@ function boot(): void {
     }
 
     /**
-     * Build and show the "add a floor" dialog, resolving once it is
-     * dismissed.
-     *
-     * Args:
-     *     prefill: A floor to preselect as the copy source - the active
-     *         floor, when opened from the toolbar's "Copy this floor" tool.
-     *         Left unset for the floor strip's own "Add floor" button, which
-     *         defaults to a blank floor: a silent, automatic copy read as the
-     *         floor doing nothing when clicked, which is what asking for this
-     *         dialog in the first place was about.
-     *
-     * Returns:
-     *     The choice, or null if the dialog was cancelled.
-     */
+ * Build and show the "add a floor" dialog, resolving once it is dismissed.
+ */
     function pickNewFloor(prefill: Floor | null): Promise<{ where: "above" | "below"; copyFrom: Floor | null } | null> {
         return new Promise((resolve) => {
             const dialog = document.createElement("dialog");
@@ -3801,9 +2962,7 @@ function boot(): void {
         // A whole storey's worth of citations just went.
         pruneUnusedReferences();
         state.floorIndex = Math.min(state.floorIndex, state.doc.floors.length - 1);
-        // Otherwise the stack reads "1, 2, 4": the storey above a deleted one
-        // keeps a level nothing sits below any more, and "the floor below"
-        // starts meaning a storey two down.
+        // Otherwise the stack reads "1, 2, 4": the storey above a deleted one keeps a level nothing sits below any more, and "the floor below".
         normaliseFloors(state.doc.floors[state.floorIndex] as Floor | undefined || null);
         clearSelection();
         renderSidebar();
@@ -3811,19 +2970,8 @@ function boot(): void {
     }
 
     /**
-     * Keep the stack ordered by level, contiguous, and pointing at the same
-     * storey it was before.
-     *
-     * Everything structural reads adjacency off ``level``: the floor-below
-     * underlay, connector linking, and the server's own ordering. A gap left
-     * by deleting a middle floor makes "the floor below" mean a storey that
-     * is two down, so the repair happens at every mutation rather than being
-     * left for someone to notice.
-     *
-     * Args:
-     *     keep: The floor that should still be selected afterwards. Defaults
-     *         to whichever is selected now.
-     */
+ * Keep the stack ordered by level, contiguous, and pointing at the same storey it was before.
+ */
     function normaliseFloors(keep: Floor | null = null): void {
         const active = keep || (state.doc.floors[state.floorIndex] as Floor | undefined) || null;
         const repaired = contiguousLevels(state.doc.floors);
@@ -3839,26 +2987,16 @@ function boot(): void {
     }
 
     /**
-     * Ghost text for the blank floor-code input.
-     *
-     * Everywhere else, "G" is the right label for the ground datum. But as
-     * placeholder text in a field labelled "Floor number or code", a bare
-     * letter reads as broken rather than as a hint - so an empty ground floor
-     * illustrates with a number instead. Leaving the field blank still
-     * resolves to "G" once saved; only the hint text differs.
-     */
+ * Ghost text for the blank floor-code input.
+ */
     function designationPlaceholder(item: Floor, labels: Map<Floor, string>): string {
         const label = labels.get(item) || "";
         return label === GROUND_LABEL ? "1" : label;
     }
 
     /**
-     * Redraw the floor strip, and the current floor's fields beneath it.
-     *
-     * Args:
-     *     keepFields: Leave the fields alone. Set by the fields' own commit
-     *         handlers, which fire as the focus leaves one for the next.
-     */
+ * Redraw the floor strip, and the current floor's fields beneath it.
+ */
     function renderFloorTabs(keepFields = false): void {
         const host = document.getElementById("floorplan-floors");
         if (!host) return;
@@ -3873,8 +3011,6 @@ function boot(): void {
             button.type = "button";
             button.className = `btn btn--sm${index === state.floorIndex ? " btn--primary" : " btn--ghost"}`;
             // The designation always shows, even for a floor with a nickname.
-            // Renaming a storey used to replace the only thing that said which
-            // storey it was, so a plan of renamed floors could not be read.
             const chip = document.createElement("span");
             chip.className = "floorplan-floor-tab__chip";
             chip.textContent = labels.get(item) || String(item.level);
@@ -3894,11 +3030,7 @@ function boot(): void {
                 fitToContent();
             });
             tab.appendChild(button);
-            // Only the floor you are on offers to delete itself. One X per row
-            // put a destructive control on every floor in the building at once,
-            // which is a lot of red for a strip you mostly use to change floors -
-            // and the one you are least likely to mean is the one furthest from
-            // the floor you are looking at.
+            // Only the floor you are on offers to delete itself.
             if (state.doc.floors.length > 1 && index === state.floorIndex) {
                 const remove = document.createElement("button");
                 remove.type = "button";
@@ -3913,10 +3045,7 @@ function boot(): void {
             }
             host.appendChild(tab);
         });
-        // One button rather than the previous above/below/duplicate three:
-        // which end of the stack, and whether to start from another floor's
-        // layout, are both asked in the dialog it opens instead of being
-        // guessed from which of three icons got clicked.
+        // One button rather than the previous above/below/duplicate three.
         const add = document.createElement("button");
         add.type = "button";
         add.className = "btn btn--sm btn--ghost floorplan-floor-tab__add";
@@ -3927,10 +3056,7 @@ function boot(): void {
         add.addEventListener("click", () => void promptAddFloor(null));
         host.appendChild(add);
 
-        // Left alone when the redraw was asked for by one of these fields: the
-        // commit fires on the way out of one and into the next, so replacing them
-        // here throws away the element the user is moving to. Their own values are
-        // already current - it is the strip above that was stale.
+        // Left alone when the redraw was asked for by one of these fields.
         const fieldsHost = keepFields ? null : document.getElementById("floorplan-floor-fields");
         if (fieldsHost) {
             fieldsHost.replaceChildren();
@@ -3948,23 +3074,8 @@ function boot(): void {
     }
 
     /**
-     * A labelled metres input.
-     *
-     * Blank means "not known", which is not the same as zero and has to stay
-     * null rather than becoming one: "not known" and "at floor level" are
-     * different answers about a window's sill.
-     *
-     * Args:
-     *     label: Shown beside the input, and part of the undo group so a run of
-     *         keystrokes in one field collapses to a single step.
-     *     value: What is stored now.
-     *     placeholder: What the number means, in words.
-     *     key: Identifies the item being edited, for that undo group.
-     *     apply: Given the parsed value, or null when the field is cleared.
-     *
-     * Returns:
-     *     The label element, ready to append.
-     */
+ * A labelled metres input.
+ */
     function metresField(label: string, value: number | null | undefined, placeholder: string, key: string, apply: (next: number | null) => void): HTMLLabelElement {
         const input = document.createElement("input");
         input.type = "number";
@@ -4001,47 +3112,14 @@ function boot(): void {
     }
 
     /**
-     * The fields every item has, whatever kind of thing it is.
-     *
-     * Walls, openings, rooms and markers all inherit the same surface on the
-     * server - description, condition, an open attribute bag - and none of it
-     * was reachable. It is one shared block rather than four per-type forms so
-     * that a field added here appears everywhere at once, which is the whole
-     * reason the model puts them on a common base.
-     *
-     * Folded away by default. Most of the time someone is drawing walls, not
-     * annotating them, and a form that is always open makes the common case
-     * read as the unusual one.
-     *
-     * Args:
-     *     host: Where to append.
-     *     item: The selected item, mutated in place as fields change.
-     *     key: Stable identity for the item, so a run of keystrokes in one
-     *         field collapses into a single undo step.
-     */
+ * The fields every item has, whatever kind of thing it is.
+ */
     /**
-     * The pin's photos, offered as attachments for one item.
-     *
-     * The plan keeps a reference pool so one photo exists once however many
-     * walls, doors and locks cite it, and an item holds pool uuids rather than
-     * images. A photo the plan has not cited before joins the pool here; the
-     * server creates the row and resolves the client-side id in the same save,
-     * which is what the pool's payload `uuid` is for.
-     *
-     * Nothing here writes to an image. Attaching cites one - it does not
-     * geotag it, move it or read its EXIF, which is the open question this was
-     * mistakenly parked behind.
-     *
-     * Args:
-     *     host: The details block to append to.
-     *     item: The wall, opening, room, marker or lock being edited.
-     */
+ * The pin's photos, offered as attachments for one item.
+ */
     /**
-     * Every reference-pool uuid some item on the plan still cites.
-     *
-     * Returns:
-     *     The uuids in use, across every floor.
-     */
+ * Every reference-pool uuid some item on the plan still cites.
+ */
     function citedReferences(): Set<string> {
         const cited = new Set<string>();
         const take = (details: ItemDetails): void => {
@@ -4072,11 +3150,7 @@ function boot(): void {
     function renderReferences(host: HTMLElement, item: ItemDetails): void {
         const pool = (state.doc.reference_pool ??= []);
         const citedRows = (item.references ?? []).map((uuid) => pool.find((entry) => entry.uuid === uuid)).filter((entry): entry is Reference => Boolean(entry));
-        // A citation whose photo is gone: the image was deleted from the owner's
-        // media, and the reference deliberately survived it (FloorplanReference.image
-        // is SET_NULL). Nothing in the strip below can draw it, because the strip is
-        // built from photos that still exist - so without this it is attached,
-        // invisible, and impossible to remove.
+        // A citation whose photo is gone: the image was deleted from the owner's media, and the reference deliberately survived it.
         const orphans = citedRows.filter((entry) => !entry.image_uuid || !pinPhotos.some((photo) => photo.uuid === entry.image_uuid));
         if (!pinPhotos.length && !orphans.length) return;
         const cited = new Set(item.references ?? []);
@@ -4112,10 +3186,7 @@ function boot(): void {
                 const existing = rowFor(photo.uuid);
                 if (attached && existing?.uuid) {
                     item.references = (item.references ?? []).filter((uuid) => uuid !== existing.uuid);
-                    // A pool row nothing cites any more goes with the last
-                    // citation. The server deletes by omission, so leaving it
-                    // in the payload keeps it alive forever - every attach and
-                    // detach would silt the pool up with rows no item mentions.
+                    // A pool row nothing cites any more goes with the last citation.
                     pruneUnusedReferences();
                 } else {
                     const target = existing ?? { uuid: nextLocalId(), kind: "photo", title: photo.caption || "", image_uuid: photo.uuid };
@@ -4185,12 +3256,7 @@ function boot(): void {
             item.condition = next;
         });
 
-        // Stored on every item and never asked for until now. A date input
-        // rather than free text because the column is a DateField and the
-        // serializer parses it strictly: "1897" would not be stored as a fuzzy
-        // date, it would refuse the whole save. A year on its own - which is
-        // usually all anyone knows about a derelict building - belongs in the
-        // notes below until the column can hold one.
+        // Stored on every item and never asked for until now.
         const built = document.createElement("input");
         built.type = "date";
         built.className = "form-input";
@@ -4220,20 +3286,8 @@ function boot(): void {
     }
 
     /**
-     * Show the shared icon and colour controls for the selected marker.
-     *
-     * The controls are server-rendered once in the page and moved into view
-     * rather than rebuilt per selection: the icon set and the palette live in
-     * Python, and a copy of either here would be a second list to keep in step
-     * with the Private Pin page - which is the thing this is meant to prevent.
-     *
-     * Appearance is stored on the marker's linked detail pin, not on the
-     * marker, so a marker styled here and the same pin styled from the pin page
-     * are editing one value.
-     *
-     * Args:
-     *     marker: The selected marker, or null to hide the controls.
-     */
+ * Show the shared icon and colour controls for the selected marker.
+ */
     function renderMarkerAppearance(marker: Marker | null): void {
         const host = markerAppearance;
         if (!host) return;
@@ -4250,10 +3304,7 @@ function boot(): void {
             };
         }
 
-        // The site's shared colour picker, same as the labels and pin dialogs
-        // use, rather than a set of swatches of this editor's own: its onclick
-        // handlers are the global pickColor(), so all this does is show which
-        // one is current and listen for the change it now announces.
+        // The site's shared colour picker, same as the labels and pin dialogs use, rather than a set of swatches of this editor's own.
         const colourInput = document.getElementById("color-value-floorplan-marker") as HTMLInputElement | null;
         if (colourInput) {
             const current = marker.color || "";
@@ -4270,15 +3321,8 @@ function boot(): void {
     }
 
     /**
-     * The icon and colour pickers, server-rendered once and shown per marker.
-     *
-     * This node lives in two places: its slot in the template, and inside the
-     * form when a marker is selected, so it reads beside the label it
-     * describes. Both the node and the slot are held because the form is
-     * rebuilt with replaceChildren() - putting it back first is what keeps it
-     * in the document at all times, so anything looking it up by id still
-     * finds it.
-     */
+ * The icon and colour pickers, server-rendered once and shown per marker.
+ */
     const markerAppearance = document.getElementById("floorplan-marker-appearance");
     /** Where it lives when no marker is selected. */
     const markerAppearanceHome = markerAppearance?.parentElement ?? null;
@@ -4294,9 +3338,7 @@ function boot(): void {
         renderMarkerAppearance(selection && selection.kind === "marker" && state.multi.length === 1 ? selection.marker : null);
         if (!selection) return;
 
-        // More than one item selected: a per-kind edit form doesn't apply,
-        // so offer only what makes sense in bulk - a shared "Type" for an
-        // all-walls selection, and delete, which always applies.
+        // More than one item selected: a per-kind edit form doesn't apply, so offer only what makes sense in bulk.
         if (state.multi.length > 1) {
             const heading = document.createElement("h3");
             heading.textContent = `${state.multi.length} items selected`;
@@ -4452,10 +3494,7 @@ function boot(): void {
                     ),
                 ),
             );
-            // What it looks like, beside what it is. The pickers are static
-            // template markup because the icon set lives in Python, and they
-            // sat after the details block by accident of where the template put
-            // them - several fields below the label they describe.
+            // What it looks like, beside what it is.
             if (markerAppearance) host.appendChild(markerAppearance);
             if (CONNECTOR_KINDS.has(marker.kind)) renderConnectorControls(host, marker);
         }
@@ -4490,9 +3529,7 @@ function boot(): void {
                     ),
                 );
             }
-            // How high its bottom edge sits above the floor. The practical
-            // question a plan of a derelict building is asked about a window is
-            // whether anyone can get through it, and that is this number.
+            // How high its bottom edge sits above the floor.
             host.appendChild(
                 metresField("Sill height", opening.sill_meters, "Metres above the floor", `opening:${opening.uuid}`, (next) => {
                     opening.sill_meters = next;
@@ -4502,14 +3539,7 @@ function boot(): void {
             renderLockControls(host, opening);
         }
 
-        // Not for a room: a room seed is a name attached to a region, so
-        // deleting it removes the name and leaves every wall standing, which
-        // reads as a delete that did not work. Removing a room for real is
-        // renderRoomDeleteControl's job, and it says what it will take.
-        // Appended once for whatever is selected, rather than inside each of
-        // the per-kind branches above: these fields come from a base class that
-        // every item shares, so a form that had to remember to include them
-        // would eventually forget for one kind.
+        // Not for a room: a room seed is a name attached to a region, so deleting it removes the name and leaves every wall standing, which.
         const details: ItemDetails | null =
             selection.kind === "wall"
                 ? selection.wall
@@ -4534,22 +3564,11 @@ function boot(): void {
     }
 
     /**
-     * Link a stair or lift to its counterpart on an adjacent floor.
-     *
-     * Two markers sharing a ``connector_id`` are the same physical shaft. The
-     * id is authored here rather than derived from position because a
-     * switchback stair genuinely lands somewhere else on the floor above, so
-     * proximity would be wrong exactly when it mattered.
-     */
+ * Link a stair or lift to its counterpart on an adjacent floor.
+ */
     /**
-     * A room's boundary walls, split into the room's own and the rest.
-     *
-     * A room with no unique walls at all is one whose every side is shared with
-     * a neighbour. There is nothing for a move or a delete to act on, and both
-     * callers check for it rather than running a gesture that does nothing.
-     *
-     * Returns null for an unbound seed (no face, so no boundary to gather).
-     */
+ * A room's boundary walls, split into the room's own and the rest.
+ */
     function roomBoundaryWalls(room: RoomSeed): RoomBoundary | null {
         const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
         if (!face) return null;
@@ -4557,13 +3576,8 @@ function boot(): void {
     }
 
     /**
-     * Every already-bound room on this floor, one entry per occupied face.
-     *
-     * `faces` is a parameter rather than always reading `state.faces` because
-     * a caller mid-drag (one frame stale, same tradeoff render() already
-     * documents) needs a consistent snapshot rather than whatever the next
-     * render happens to recompute.
-     */
+ * Every already-bound room on this floor, one entry per occupied face.
+ */
     function occupiedFaces(current: Floor, faces: readonly Face[]): Array<{ room: RoomSeed; face: Face }> {
         const seen = new Set<Face>();
         const result: Array<{ room: RoomSeed; face: Face }> = [];
@@ -4578,17 +3592,8 @@ function boot(): void {
     }
 
     /**
-     * Nudge each point of a ring slightly toward its own centroid.
-     *
-     * A corner snapped flush onto a neighbour's wall sits exactly on that
-     * neighbour's boundary - sometimes exactly on one of its vertices - and a
-     * plain point-in-polygon test is not reliable there; ray casting can call
-     * a point on an edge or at a vertex either way. Eroding the ring first
-     * moves every point a few centimetres into its own interior, so two
-     * rooms that only join at a shared wall no longer read as overlapping,
-     * while a genuine overlap (which reaches well past the boundary) still
-     * does.
-     */
+ * Nudge each point of a ring slightly toward its own centroid.
+ */
     function eroded(ring: readonly Pt[]): Pt[] {
         const EROSION_METERS = 0.05;
         const cx = ring.reduce((sum, p) => sum + p.x, 0) / ring.length;
@@ -4611,18 +3616,8 @@ function boot(): void {
     }
 
     /**
-     * Split off this room's own copy of any wall it merely shares with a
-     * neighbouring room, so a move drags only the moving room's geometry.
-     *
-     * splitRoomBoundary classifies every non-exterior boundary wall as this
-     * room's "unique" - correct for delete, where removing a shared partition
-     * legitimately merges the neighbour in. A move is different: dragging the
-     * room must not tear that same wall out from under the room next door, so
-     * whichever of the room's own walls also bounds another already-occupied
-     * face (not just open, unenclosed space) is cloned here. The clone
-     * travels with this room; the original stays exactly where it was,
-     * still bounding the neighbour.
-     */
+ * Split off this room's own copy of any wall it merely shares with a neighbouring room, so a move drags only the moving room's geometry.
+ */
     function detachSharedWalls(current: Floor, boundary: RoomBoundary, faces: readonly Face[]): Wall[] {
         const neighbours = occupiedFaces(current, faces)
             .filter((entry) => entry.face !== boundary.face)
@@ -4637,14 +3632,8 @@ function boot(): void {
     }
 
     /**
-     * Offer to delete a whole room at once - its seed and the walls that are
-     * only ever this room's - rather than one wall at a time.
-     *
-     * Nothing is offered when the room has no walls of its own to lose - every
-     * side shared with a neighbour, or the building's own. The room is still a
-     * room; there is simply no destructive action that would mean anything, and
-     * a button that only cleared its name was read as a delete that had failed.
-     */
+ * Offer to delete a whole room at once - its seed and the walls that are only ever this room's - rather than one wall at a time.
+ */
     function renderRoomDeleteControl(host: HTMLElement, room: RoomSeed): void {
         const boundary = roomBoundaryWalls(room);
         if (!boundary) return;
@@ -4663,26 +3652,10 @@ function boot(): void {
     }
 
     /**
-     * The locks fitted to one opening.
-     *
-     * "Is this door locked" is close to the most useful thing a plan of a
-     * derelict building can tell anyone, and it was modelled, stored and served
-     * without ever being reachable. A door may carry several - a padlock, a
-     * deadbolt and a chain are three separate answers - so this is a list
-     * rather than a field.
-     *
-     * Only the engagement axis is asked here. Whether a lock is broken, seized
-     * or missing belongs in its condition, which the shared item fields already
-     * offer: a broken lock may be hanging open or rusted shut, and "broken"
-     * alone does not say whether the door opens.
-     *
-     * Args:
-     *     host: The sidebar element to append to.
-     *     opening: The opening whose locks these are.
-     */
+ * The locks fitted to one opening.
+ */
     function renderLockControls(host: HTMLElement, opening: Opening): void {
-        // A window does not have a lock worth recording for getting in, and a
-        // doorway is the hole where a door used to be.
+        // A window does not have a lock worth recording for getting in, and a doorway is the hole where a door used to be.
         if (!swings(opening.kind) && opening.kind !== "hatch") return;
         const wrap = document.createElement("div");
         wrap.className = "floorplan-locks";
@@ -4728,11 +3701,7 @@ function boot(): void {
             });
             row.appendChild(remove);
 
-            // What opens it, in whatever shape the recorder used - the model
-            // keeps this free-form on purpose, because what identifies a key
-            // (bitting, keyway, brand, "the one on the ring in the office")
-            // differs per building and per person recording it. One note field
-            // rather than a schema, for the same reason.
+            // What opens it, in whatever shape the recorder used.
             const key = document.createElement("input");
             key.className = "form-input floorplan-lock__key";
             key.value = String((lock.key_attributes as Record<string, unknown> | undefined)?.note ?? "");
@@ -4752,12 +3721,7 @@ function boot(): void {
             entry.className = "floorplan-lock-entry";
             entry.appendChild(row);
             entry.appendChild(key);
-            // A lock is a floorplan item like any other, so it gets the same
-            // description/condition/material block everything else does. Whether
-            // one is broken, seized or missing belongs in its condition rather
-            // than in the state above, which asks only whether the door is
-            // presently secured - and that distinction is worth nothing if the
-            // field it points at has nowhere to be written.
+            // A lock is a floorplan item like any other, so it gets the same description/condition/material block everything else does.
             renderItemDetails(entry, lock, `lock:${lock.uuid || index}`);
             wrap.appendChild(entry);
         });
@@ -4813,10 +3777,7 @@ function boot(): void {
             none.textContent = "Add a stair or lift on another floor to link them.";
             wrap.appendChild(none);
         } else {
-            // Nearest storey first, so in the ordinary case the right one is
-            // the first button. The rest are a click away rather than a wall
-            // of them: a tall building can hold a lot of stairs, and only the
-            // near ones are plausibly the same shaft.
+            // Nearest storey first, so in the ordinary case the right one is the first button.
             const NEAR = 4;
             const shown = state.connectorsExpanded ? candidates : candidates.slice(0, NEAR);
             for (const candidate of shown) {
@@ -4827,9 +3788,7 @@ function boot(): void {
                 button.textContent = `Link to ${candidate.marker.name || candidate.marker.kind} on ${where}`;
                 button.addEventListener("click", () => {
                     checkpoint();
-                    // Adopt the counterpart's id when it already has one, so a
-                    // third floor joins the same shaft rather than starting a
-                    // parallel one.
+                    // Adopt the counterpart's id when it already has one, so a third floor joins the same shaft rather than starting a parallel one.
                     const shared = candidate.marker.connector_id || newConnectorId();
                     candidate.marker.connector_id = shared;
                     marker.connector_id = shared;
@@ -4854,12 +3813,8 @@ function boot(): void {
     }
 
     /**
-     * Square the drawing axis to a wall the user picks.
-     *
-     * Angle snapping works in 45-degree steps around this axis. Buildings sit
-     * at arbitrary angles to true north, so without this "right angle" means
-     * right-angle-to-the-equator and fights every wall on screen.
-     */
+ * Square the drawing axis to a wall the user picks.
+ */
     function renderAxisControl(host: HTMLElement, wall: Wall): void {
         const button = document.createElement("button");
         button.type = "button";
@@ -4897,10 +3852,9 @@ function boot(): void {
 
     // ------------------------------------------------------------ persistence
 
-    /** Whether this document is something other than the viewer's own saved
-     * work - a wiki-published plan, or (once REData floorplans exist)
-     * upstream data - so editing it should say so before anyone draws over
-     * it. Saving always forks the viewer's own local copy either way. */
+    /**
+ * Whether this document is something other than the viewer's own saved work.
+ */
     function renderOriginBanner(): void {
         const banner = document.getElementById("floorplan-origin-banner");
         if (!banner) return;
@@ -4934,10 +3888,7 @@ function boot(): void {
             const button = document.createElement("button");
             button.type = "button";
             button.className = "btn btn--ghost";
-            // An unnamed version is labelled by the thing that actually tells it
-            // apart from its siblings - the date it came into force. The floor's
-            // designation would read the same for every version of the same plan,
-            // which is the one job this list has to do.
+            // An unnamed version is labelled by the thing that actually tells it apart from its siblings - the date it came into force.
             const shown = version.name || version.valid_from || "Original";
             button.textContent = isCurrent ? `${shown} (current)` : shown;
             button.setAttribute("data-tooltip", version.valid_from ? `In force from ${version.valid_from}` : "The original baseline");
@@ -4954,9 +3905,7 @@ function boot(): void {
         const anchor = state.doc.plan_origin || { lat, lng };
         state.doc.plan_origin = anchor;
         projection = new PlanProjection(anchor);
-        // Restores a saved plan already turned to face its building -
-        // fitToContent() below then fits bounds against the rotated view,
-        // not the unrotated one.
+        // Restores a saved plan already turned to face its building.
         if (canRotateView) map.setBearing(state.doc.rotation_degrees || 0);
         showPlanFields();
         // A brand-new plan starts from the real footprint when one is known, so
@@ -4964,16 +3913,10 @@ function boot(): void {
         const fresh = !state.loadFailed && state.doc.floors.length === 1 && !(state.doc.floors[0] as Floor).walls.length;
         if (fresh && seedFromOutline(state.doc.floors[0] as Floor)) state.dirty = true;
         else state.dirty = false;
-        // A switch away from the version that was selected/mid-drag leaves
-        // stale references into a document that no longer exists.
-        // Sparse or colliding levels arrive from a mid-stack delete by an older
-        // client, and from third-party imports. Repaired without marking the
-        // document dirty: the next real edit persists it.
+        // A switch away from the version that was selected/mid-drag leaves stale references into a document that no longer exists.
         normaliseFloors(state.doc.floors[0] as Floor | undefined || null);
         clearSelection();
-        // An undo snapshot outliving the document it was taken from is not a
-        // safety net: applying it writes the *previous* version's contents,
-        // carrying that version's uuid, over the one now open.
+        // An undo snapshot outliving the document it was taken from is not a safety net.
         clearHistory();
         state.floorIndex = 0;
         setTool("select");
@@ -4999,12 +3942,7 @@ function boot(): void {
                 if (!state.doc.floors?.length) state.doc.floors = emptyDocument({ lat, lng }).floors;
                 state.versions = body.versions || [];
             } else {
-                // Neither branch above matched, so state.doc is still the
-                // blank document state was initialised with. Left unflagged,
-                // the seeding and autosave at the end of
-                // finishLoadingDocument() would persist that blank as a new
-                // version - which then wins the most-recent tie-break and
-                // reads as though the real plan had been deleted.
+                // Neither branch above matched, so state.doc is still the blank document state was initialised with.
                 state.loadFailed = true;
                 toast.error("Could not load this floorplan. Reload to try again.");
             }
@@ -5018,13 +3956,9 @@ function boot(): void {
     /** Switch to another saved version, the way "Save as new version" implies
      * one can be switched back to - see renderVersions(). */
     async function switchVersion(uuid: string): Promise<void> {
-        // Nothing prompts before switching - autosave already means the user
-        // never explicitly asked to "save", so flush whatever is pending
-        // instead of discarding it the way abandoning the page might.
+        // Nothing prompts before switching - autosave already means the user never explicitly asked to "save", so flush whatever is pending.
         if (state.dirty) await save(false);
-        // A save for the version being left could still be in flight; letting
-        // its response land after the switch would overwrite state.doc.uuid
-        // (by then the *new* version's) back to the one just left.
+        // A save for the version being left could still be in flight.
         await waitForSaveSlot();
         try {
             const response = await fetch(`${jsonUrl}?version=${encodeURIComponent(uuid)}`, { headers: { Accept: "application/json" } });
@@ -5044,29 +3978,12 @@ function boot(): void {
     }
 
     /**
-     * Persist the current document.
-     *
-     * Called automatically a little after each edit (see queueAutosave()),
-     * and directly for the two deliberate actions in the "more" menu -
-     * asNewVersion forks a dated version instead of overwriting this one,
-     * which is not something autosave should ever do on its own.
-     */
+ * Persist the current document.
+ */
     async function save(asNewVersion = false): Promise<void> {
-        // Two overlapping saves would each overwrite state.doc.uuid from
-        // their own response when they resolve, regardless of which request
-        // was sent first - whichever *resolves* last wins, which can silently
-        // revert a just-forked "new version" back to the one it forked from.
+        // Two overlapping saves would each overwrite state.doc.uuid from their own response when they resolve, regardless of which request was.
         await waitForSaveSlot();
         // Both fields are already on state.doc, written there as they were typed.
-        // Stored exactly as typed, blank included: defaulting a blank name to the
-        // floor's wrote a derived value into the column, so the placeholder stopped
-        // applying once saved and renaming the floor left the plan on the old name.
-        // renderVersions() applies a default at display time, where it stays live.
-        // Every marker's WGS-84 position, freshly computed here rather than
-        // kept live at each edit site (placement, drag) - x/y is the single
-        // source of truth, and this is the one place that has to convert it
-        // for the server, which needs real coordinates to place this
-        // marker's detail-pin twin (see services.floorplans.serialization).
         for (const item of state.doc.floors) {
             for (const marker of item.markers) {
                 const world = toLatLng({ x: marker.x, y: marker.y });
@@ -5075,12 +3992,7 @@ function boot(): void {
             }
         }
         const payload: FloorplanDocument = { ...state.doc };
-        // Dropping the uuid is what makes the save fork a new dated version
-        // instead of overwriting the one that was loaded. A document that
-        // arrived from somewhere other than this user's own plans always
-        // forks: the banner promises "saving creates your own version", and
-        // an autosave firing a second after the page opened is nobody's
-        // decision to edit someone else's published work in place.
+        // Dropping the uuid is what makes the save fork a new dated version instead of overwriting the one that was loaded.
         if (asNewVersion || state.doc.origin !== "local") delete payload.uuid;
         delete payload.origin;
         delete payload.versions;
@@ -5097,11 +4009,7 @@ function boot(): void {
                 body: JSON.stringify(payload),
             });
             if (!response.ok) {
-                // The save view always answers errors as {ok, error} JSON -
-                // anything else (an nginx/proxy error page for a 502, a bare
-                // 500 with no body of its own) is not a message meant for a
-                // person, and toasting it raw once dumped a whole HTML error
-                // page - headings and all - into the toast.
+                // The save view always answers errors as {ok, error} JSON.
                 let message = `Could not save this floorplan. (${response.status})`;
                 try {
                     const body = (await response.json()) as { error?: string };
@@ -5110,9 +4018,7 @@ function boot(): void {
                     // Not JSON - keep the generic, status-coded message above.
                 }
                 if (response.status === 409) {
-                    // Not retried and not backed off: the other tab is not going
-                    // to un-save, so every attempt from here would either fail
-                    // the same way or overwrite them.
+                    // Not retried and not backed off: the other tab is not going to un-save, so every attempt from here would either fail the same way.
                     state.superseded = true;
                     toast.warning(message);
                     updateSaveStatus();
@@ -5122,22 +4028,12 @@ function boot(): void {
                 noteSaveFailure();
                 return;
             }
-            // The save view answers {ok, floorplan: <document>} - the uuid is
-            // nested, and picking it up is what makes the next save update
-            // this version instead of forking another one. Every nested
-            // item's own real uuid is in there too and has to come back the
-            // same way: the server matches an item to an existing row purely
-            // by uuid, so anything still carrying its client-only local id
-            // (every item created this session) would otherwise be unmatched
-            // on the *next* save, silently deleted as an "orphan" and
-            // recreated under a new identity - see applyServerIds().
+            // The save view answers {ok, floorplan: <document>}.
             const body = (await response.json()) as { ok?: boolean; floorplan?: FloorplanDocument };
             if (body.floorplan) {
                 state.doc.uuid = body.floorplan.uuid;
                 applyServerIds(sent, body.floorplan);
-                // The response reports where the saved row actually lives, so
-                // a document loaded as someone else's community plan becomes
-                // "local" here precisely because the save forked it.
+                // The response reports where the saved row actually lives, so a document loaded as someone else's community plan becomes "local" here.
                 state.doc.origin = body.floorplan.origin;
                 state.versions = body.floorplan.versions || [];
             }
@@ -5148,9 +4044,7 @@ function boot(): void {
             updateMoreMenu();
             renderOriginBanner();
             renderVersions();
-            // Autosave stays quiet - a toast for every keystroke-driven save
-            // would be constant noise. The two explicit "more" menu actions
-            // still confirm themselves; nothing else calls this with asNewVersion.
+            // Autosave stays quiet - a toast for every keystroke-driven save would be constant noise.
             if (asNewVersion) toast.success("Saved as a new version.");
         } catch {
             toast.warning("Could not save this floorplan.");
@@ -5203,12 +4097,7 @@ function boot(): void {
         if (event.key === "Escape") closeMoreMenu();
     });
 
-    // Written through on edit like every other field, rather than read out of the
-    // DOM at save time: that left them outside both autosave (nothing marked the
-    // document dirty, so a plan named and then left lost the name) and undo, which
-    // restores state.doc and cannot restore what was never in it. Grouped per
-    // field so a typed name is one undo entry rather than one per keystroke, and
-    // quiet because neither changes the geometry.
+    // Written through on edit like every other field, rather than read out of the DOM at save time.
     for (const id of ["floorplan-name", "floorplan-valid-from"]) {
         document.getElementById(id)?.addEventListener("input", () => {
             checkpoint(`plan-${id}`);
@@ -5229,11 +4118,7 @@ function boot(): void {
                 return;
             }
             if (state.dirty && !window.confirm("Publish the last saved version? Unsaved changes are not included.")) return;
-            // Shares the same in-flight flag as save() - both so this can't
-            // overlap an autosave (the same race a concurrent save() call
-            // could hit), and so it gets the same "Saving..." feedback for
-            // free instead of leaving the button looking inert during its
-            // own round trip.
+            // Shares the same in-flight flag as save() - both so this can't overlap an autosave (the same race a concurrent save() call could hit),.
             await waitForSaveSlot();
             saving = true;
             updateSaveStatus();
@@ -5278,11 +4163,7 @@ function boot(): void {
         else toast.info("No building outline is known for this place yet.");
     });
     document.getElementById("floorplan-start-rectangle")?.addEventListener("click", () => {
-        // Four exterior walls around the current view's middle third. This draws
-        // the *building*, not a room: an outline nothing subdivides is the
-        // shell, and the editor deliberately does not caption it as a room
-        // (see isBuildingShell). Subdividing it is the next step, and the one
-        // that does produce rooms.
+        // Four exterior walls around the current view's middle third.
         checkpoint();
         const bounds = map.getBounds();
         const a = toLocal(bounds.getSouthWest());

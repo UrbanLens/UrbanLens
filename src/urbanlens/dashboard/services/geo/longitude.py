@@ -14,16 +14,11 @@ def circular_mean_longitude(longitudes: Sequence[float], weights: Sequence[float
     """Average longitudes as directions rather than as numbers.
 
     Args:
-        longitudes: Degrees, each in [-180, 180]. Must not be empty.
-        weights: Optional per-longitude weights, same length. Defaults to equal
-            weighting. A total weight of zero falls back to equal weighting,
-            since a zero-weight set has no weighted answer.
+        longitudes: Degrees, each in [-180, 180].
+        weights: Optional per-longitude weights, same length.
 
     Returns:
-        The mean longitude in degrees, in [-180, 180]. When the inputs cancel
-        exactly - two antipodal readings have no midpoint - the first input is
-        returned rather than an invented value.
-    """
+        The mean longitude in degrees, in [-180, 180]."""
     if not longitudes:
         raise ValueError("circular_mean_longitude() requires at least one longitude")
 
@@ -46,9 +41,7 @@ def longitude_delta(a: float, b: float) -> float:
         b: Second longitude in degrees.
 
     Returns:
-        A value in [0, 180]. ``longitude_delta(179.99, -179.99)`` is 0.02, not
-        359.98.
-    """
+        A value in [0, 180]."""
     delta = abs(a - b) % 360.0
     return min(delta, 360.0 - delta)
 
@@ -61,12 +54,7 @@ def normalize_longitude(longitude: float) -> float:
         longitude: Degrees, possibly outside [-180, 180].
 
     Returns:
-        The same meridian expressed in [-180, 180]. A bound *on* the line keeps
-        its side: any positive input landing on the antimeridian returns +180,
-        any negative one returns -180. That has to be decided on the sign of the
-        input rather than by special-casing the literal 180, or the same meridian
-        normalises two different ways depending on how many times the client
-        wrapped it (180 and 540 are one meridian; folding gave +180 and -180)."""
+        The same meridian expressed in [-180, 180]."""
     folded = (longitude + 180.0) % 360.0 - 180.0
     if folded == -180.0 and longitude > 0.0:
         return 180.0
@@ -81,11 +69,10 @@ def split_at_antimeridian(geometry):
         geometry: A Polygon or MultiPolygon in SRID 4326.
 
     Returns:
-        The geometry unchanged when it lies within [-180, 180], otherwise a
-        MultiPolygon of its two halves.
+        The geometry unchanged when it lies within [-180, 180], otherwise a MultiPolygon of its two halves.
 
     Note:
-        A polygon whose vertices are already folded but which spans more than 180 degrees (179 to -179 written literally) is genuinely ambiguous - the coordinates say "the long way round" - and is left alone. Clients should send the unwrapped form for a region crossing the line."""
+        A polygon whose vertices are already folded but which spans more than 180 degrees (179 to -179 written literally) is genuinely ambiguous - the coordinates say "the long way round" - and is left alone."""
     from django.contrib.gis.geos import MultiPolygon, Polygon
 
     min_x, _min_y, max_x, _max_y = geometry.extent

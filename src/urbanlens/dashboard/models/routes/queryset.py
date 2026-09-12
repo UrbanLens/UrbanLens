@@ -45,9 +45,7 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet):
 
     def intersecting_bbox(self, min_lat: float, min_lng: float, max_lat: float, max_lng: float) -> Self:
         """Filter to routes whose path overlaps a lat/lng bounding box.
-
-        Uses the cheaper index-only ``bboverlaps`` lookup rather than a full
-        ``intersects`` test, since this is meant for coarse map-viewport scoping.
+        Uses the cheaper index-only ``bboverlaps`` lookup rather than a full ``intersects`` test, since this is meant for coarse map-viewport scoping.
 
         Args:
             min_lat: Southern boundary.
@@ -64,10 +62,7 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet):
 
     def passing_within(self, point: Point, distance: Distance) -> Self:
         """Filter to routes whose path passes within ``distance`` of ``point``.
-
-        Named distinctly from ``PinQuerySet.near_point`` (a different signature -
-        a bare ``radius_km: float`` rather than a ``Distance``) so the two are
-        never mistaken for interchangeable proximity helpers.
+        Named distinctly from ``PinQuerySet.near_point`` (a different signature - a bare ``radius_km: float`` rather than a ``Distance``) so the two are never mistaken for interchangeable proximity helpers.
 
         Args:
             point: The coordinate to test proximity against (SRID 4326).

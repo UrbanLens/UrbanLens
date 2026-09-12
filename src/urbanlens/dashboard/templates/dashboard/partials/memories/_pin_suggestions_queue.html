@@ -1,16 +1,4 @@
-{% comment %}
-The batch-scan pin suggestion queue. Re-fetched via the `refreshQueue` event
-after an accept/reject action so the list stays in sync.
-
-Pagination targets the dedicated `memories.locations.queue` URL rather than
-`request.path` (the shared partial's default) since this same template is also
-rendered directly inside the full page (`memories.locations`) - a next-page
-click there must not swap a full HTML document into the grid.
-
-Context:
-  suggestions - the current page's pending PinSuggestion rows, newest first
-  page_obj    - the Django Page for this slice
-{% endcomment %}
+{% comment %}The batch-scan pin suggestion queue.{% endcomment %}
 {% if suggestions %}
 <div class="pin-suggestions-grid" id="pin-suggestions-grid">
     {% for suggestion in suggestions %}

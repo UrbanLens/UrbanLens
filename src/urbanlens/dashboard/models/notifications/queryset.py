@@ -26,17 +26,8 @@ class NotificationQuerySet(abstract.DashboardQuerySet):
 
     def for_display(self) -> Self:
         """Select every relation the notification templates actually read.
-
-        ``notification_item.html`` decides whether to offer Accept/Decline (a
-        shared pin) or the three-way merge choice (a suggested visit) by
-        reading the ``pin_share``/``visit_suggestion`` reverse OneToOnes, and
-        names the sender via ``source_profile``. Without them selected, each
-        rendered row costs two extra queries - and the miss is silent, because
-        an absent reverse OneToOne raises ``ObjectDoesNotExist``, which Django
-        templates swallow rather than surface.
-
-        Every list that renders that partial should go through this, so the
-        relation set stays in one place as the template grows.
+        ``notification_item.html`` decides whether to offer Accept/Decline (a shared pin) or the three-way merge choice (a suggested visit) by reading the ``pin_share``/``visit_suggestion`` reverse OneToOnes, and names the sender via ``source_profile``.
+        Without them selected, each rendered row costs two extra queries - and the miss is silent, because an absent reverse OneToOne raises ``ObjectDoesNotExist``, which Django templates swallow rather than surface.
         """
         return self.select_related("source_profile", "pin_share", "visit_suggestion")
 
@@ -69,23 +60,7 @@ class NotificationManager(abstract.DashboardManager.from_queryset(NotificationQu
 
     def notify(self, *, muted_recipients: MutedRecipients | None = None, **fields) -> NotificationLog | None:
         """Create a notification unless its recipient has muted its source.
-
-        **The sanctioned way to raise a notification.** ``create()`` still
-        works and is what this calls, but it applies no preference at all, so
-        anything reaching for it bypasses mute silently -
-        ``bin/check_notification_choke_point.py`` fails the build for a
-        production call site that does. That check exists because the previous
-        arrangement had no choke point: every producer would have had to
-        remember the rule independently, and the result was that
-        ``Friendship``'s mute flag was written faithfully by two UI surfaces
-        and read by nothing for months.
-
-        Delivery to every other channel follows from the row: the live
-        WebSocket toast, the WhatsApp/SMS alert and the native push all hang
-        off ``post_save`` on ``NotificationLog`` (see
-        ``models.notifications.signals``), so not writing it is what actually
-        produces silence. Emails sent directly by a producer alongside its
-        notification are *not* covered - they never passed through here.
+        Delivery to every other channel follows from the row: the live WebSocket toast, the WhatsApp/SMS alert and the native push all hang off ``post_save`` on ``NotificationLog`` (see ``models.notifications.signals``), so not writing it is what actually produces silence. **The sanctioned way to raise a notification.** ``create()`` still works and is what this calls, but it applies no preference at all, so anything reaching for it bypasses mute silently - ``bin/check_notification_choke_point.py`` fails the build for a production call site that does.
 
         Args:
             muted_recipients: Pre-resolved answer for callers notifying a

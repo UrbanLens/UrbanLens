@@ -27,12 +27,8 @@ class DismissalEntry:
         kind: ``"explainer"`` or ``"tour"``.
         heading: The dismissed panel's heading text, as rendered.
         body: The dismissed panel's body text, as rendered - may be empty.
-        page: The path the dismissal happened on (``location.pathname``) -
-            not necessarily the current turn's page.
-        prefix: The tour's ``localStorage`` key prefix - set only for
-            ``kind="tour"``; ``reopen_explainer`` needs it to restart the
-            right tour. Always ``None`` for ``kind="explainer"``.
-    """
+        page: The path the dismissal happened on (``location.pathname``) - not necessarily the current turn's page.
+        prefix: The tour's ``localStorage`` key prefix - set only for ``kind="tour"``; ``reopen_explainer`` needs it to restart the right tour."""
 
     id: str
     kind: str

@@ -191,9 +191,7 @@
     position: fixed;
     right: 10px;
     bottom: 10px;
-    // Above map toolbars (1000) and the sticky page footer (9999); below the
-    // undo bar (10050, which lifts above this one when both are visible -
-    // see undo-bar.ts's COLLIDERS) and toasts (10070).
+    // Above map toolbars (1000) and the sticky page footer (9999).
     z-index: 10045;
     width: 3rem;
     height: 3rem;

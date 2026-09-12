@@ -21,14 +21,10 @@ def acquire_lock(key: str, timeout: int) -> str | None:
 
     Args:
         key: Cache key identifying the sweep.
-        timeout: Lock TTL in seconds. Should sit just under the task's beat
-            interval, so a tick is never skipped by a lock the previous run has
-            already finished with.
+        timeout: Lock TTL in seconds.
 
     Returns:
-        An opaque token to hand to :func:`release_lock`, or ``None`` if another
-        run holds the lock - in which case the caller must not do the work.
-    """
+        An opaque token to hand to :func:`release_lock`, or ``None`` if another run holds the lock - in which case the caller must not do the work."""
     token = uuid4().hex
     return token if cache.add(key, token, timeout) else None
 
@@ -38,9 +34,7 @@ def release_lock(key: str, token: str | None) -> None:
 
     Args:
         key: The same key passed to :func:`acquire_lock`.
-        token: The token it returned. ``None`` is a no-op, so callers that did
-            not acquire can release unconditionally.
-    """
+        token: The token it returned."""
     if token is None:
         return
     holder = cache.get(key)

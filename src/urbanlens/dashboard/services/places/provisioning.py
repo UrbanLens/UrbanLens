@@ -28,16 +28,7 @@ def geometry_stale(place: Place) -> bool:
         place: The place to check.
 
     Returns:
-        True when the result is older than ``SiteSettings.boundary_cache_days``,
-        or when the provider chain has never run for this place at all.
-
-        A null timestamp means the latter and nothing else: ``upsert_place``
-        stamps one on both its branches, so the only rows carrying a null are
-        those ``0027_places_backfill`` created from pre-places location
-        boundaries. Treating those as fresh pinned them to that geometry
-        permanently - no provider was ever asked, so a better parcel (REData's,
-        say) could only ever be recorded as a losing candidate.
-    """
+        True when the result is older than ``SiteSettings.boundary_cache_days``, or when the provider chain has never run for this place at all."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     if place.geometry_generated_at is None:
@@ -53,16 +44,10 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
         polygon: The candidate geometry.
         provider: Provider key namespace (e.g. ``"redata"``).
         provider_key: The provider's stable id for this record, when it has one.
-        exclude_pk: A place to never match, however well its geometry fits -
-            for a parcel being split, its own (still-``CURRENT`` until the
-            split transaction commits) centroid very often lands inside one
-            of its own successors, and without this a successor's upsert
-            would alias straight back onto the parcel it is splitting *from*
-            instead of becoming a distinct child.
+        exclude_pk: A place to never match, however well its geometry fits - for a parcel being split, its own (still-``CURRENT`` until the split transaction commits) centroid very often lands inside one of its own successors, and without this a successor's upsert...
 
     Returns:
-        The matching place, or None when this is genuinely new.
-    """
+        The matching place, or None when this is genuinely new."""
     if provider and provider_key:
         if existing := Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).exclude(pk=exclude_pk).first():
             return existing
@@ -101,25 +86,16 @@ def upsert_place(
 
     Args:
         kind: The :class:`PlaceKind` to create.
-        polygon: Official geometry. None creates a geometry-less place, which
-            keeps identity and lineage (and can hold a wiki) without ever
-            being resolved onto - right for a building nobody has a footprint
-            for.
+        polygon: Official geometry.
         provider: Provider key namespace.
         provider_key: The provider's stable id, when it has one.
         name: Admin-facing label.
         parent: The containing or aggregating place.
         relation: How it attaches to ``parent``.
-        exclude_pk: Passed through to :func:`find_matching_place` - a place
-            that must never be matched, however well its geometry fits. See
-            its docstring; ``services.places.splits.process_split`` is the
-            one caller that needs this, to stop a successor from aliasing
-            back onto the still-``CURRENT`` parcel it is splitting from.
+        exclude_pk: Passed through to :func:`find_matching_place` - a place that must never be matched, however well its geometry fits.
 
     Returns:
-        The place, or None when there is neither geometry nor a provider key
-        to identify it by.
-    """
+        The place, or None when there is neither geometry nor a provider key to identify it by."""
     if polygon is None and not provider_key:
         return None
 
@@ -155,12 +131,10 @@ def ensure_place_for_location(location: Location, *, name: str | None = None, fo
     Args:
         location: The Location to place.
         name: Optional place-name hint forwarded to name-aware providers.
-        force: Re-run the provider chain even when the coordinate already
-            resolves onto a fresh place.
+        force: Re-run the provider chain even when the coordinate already resolves onto a fresh place.
 
     Returns:
-        The resolved place, or None when no provider knows this coordinate.
-    """
+        The resolved place, or None when no provider knows this coordinate."""
     if location.latitude is None or location.longitude is None:
         return None
 
@@ -216,8 +190,7 @@ def provision_places_for_coordinate(location: Location, *, name: str | None = No
 
 
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
-    """Retire the parcel this coordinate used to be on, if it has been divided.
-    Only the shrink case is detected from a single coordinate: the provider now returns a much smaller parcel here than the one on record, which means the rest of the old parcel became something else.
+    """Only the shrink case is detected from a single coordinate: the provider now returns a much smaller parcel here than the one on record, which means the rest of the old parcel became something else.
 
     Args:
         location: The coordinate whose refresh triggered this.
@@ -249,8 +222,7 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
     It keeps identity, lineage, and the ability to hold its own wiki, and can never be resolved onto - which is the right answer for a structure we know exists but cannot locate precisely.
 
     Args:
-        parcel: The parcel these buildings stand on; None skips the whole step,
-            since a building place with no parcel has no domain to join.
+        parcel: The parcel these buildings stand on; None skips the whole step, since a building place with no parcel has no domain to join.
         buildings: Cached building records (see ``plugins.builtin.parcel_buildings``).
         provider: Provider namespace for stable-id matching.
 

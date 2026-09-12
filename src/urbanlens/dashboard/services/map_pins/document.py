@@ -36,8 +36,6 @@ CONTENT_TYPE = "application/x-ndjson"
 #: Pins serialized per database round trip while streaming.
 BATCH_SIZE = 1_000
 
-#: Bytes accumulated before a chunk is yielded, so a 20,000-line document is not 20,000 socket
-#: writes each with its own chunked-encoding frame.
 #: Precautionary: Django's test client consumes the generator directly and never writes to a socket,
 #: so the suite cannot measure this either way.
 CHUNK_BYTES = 64 * 1024
@@ -82,13 +80,10 @@ def stream(
         query: The profile's root pins, already scoped.
         etag: The identity to declare in the head line.
         total: How many pins the head line should promise.
-        decorate: Applied to each batch before encoding, for the request-layer
-            fields the payload service does not know about. The paged endpoint
-            applies the same function, which is what keeps the two agreeing.
+        decorate: Applied to each batch before encoding, for the request-layer fields the payload service does not know about.
 
     Yields:
-        Chunks of whole NDJSON lines, each line ending in a newline.
-    """
+        Chunks of whole NDJSON lines, each line ending in a newline."""
     service = MapPinPayloadService(profile)
     # The whole label vocabulary up front, so a pin line can name its labels by
     # id and the client can resolve them the moment it reads one.
@@ -185,12 +180,8 @@ class MapDocumentCache:
     def key(self, etag: str) -> str:
         """Where one version of this profile's document lives.
 
-        Args:
-            etag: The document's identity.
-
         Returns:
-            The Valkey key.
-        """
+            The Valkey key."""
         return f"{self.PREFIX}:{FORMAT_VERSION}:{self.profile_id}:{etag}"
 
     @staticmethod
@@ -206,23 +197,15 @@ class MapDocumentCache:
     def _decoded(stored: Any) -> bytes:
         """Normalise whatever the client returned into bytes.
 
-        Args:
-            stored: A value read back from the cache.
-
         Returns:
-            The stored bytes.
-        """
+            The stored bytes."""
         return stored.encode("latin-1") if isinstance(stored, str) else bytes(stored)
 
     def get(self, etag: str) -> bytes | None:
         """The stored document for this exact version, if there is one.
 
-        Args:
-            etag: The document's identity.
-
         Returns:
-            Gzipped NDJSON, or None on a miss or any cache failure.
-        """
+            Gzipped NDJSON, or None on a miss or any cache failure."""
         if not self.client or self.ttl() <= 0:
             return None
         try:
@@ -234,11 +217,11 @@ class MapDocumentCache:
         return self._decoded(stored)
 
     def claim_build(self) -> bool:
-        """Whether this caller should be the one to enqueue a build. Keyed on the account rather than the version for that reason.
+        """Whether this caller should be the one to enqueue a build.
+        Keyed on the account rather than the version for that reason.
 
         Returns:
-                True at most once per account per window, and True whenever there is
-                no cache to co-ordinate through - one task is better than none."""
+            True at most once per account per window, and True whenever there is no cache to co-ordinate through - one task is better than none."""
         if not self.client or self.ttl() <= 0:
             return True
         try:
@@ -249,13 +232,8 @@ class MapDocumentCache:
     def set(self, etag: str, body: bytes) -> bool:
         """Store a built document, if nobody else already did.
 
-        Args:
-            etag: The document's identity.
-            body: Gzipped NDJSON.
-
         Returns:
-            Whether this call was the one that stored it.
-        """
+            Whether this call was the one that stored it."""
         if not self.client or self.ttl() <= 0:
             return False
         try:

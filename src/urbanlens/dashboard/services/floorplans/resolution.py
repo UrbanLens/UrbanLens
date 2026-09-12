@@ -22,14 +22,11 @@ def resolve_document(place: Place, *, profile: Profile | None = None, on_date: d
 
     Args:
         place: The building.
-        profile: Whose plans to consider local. None looks at no local plans
-            at all (a caller with no user in hand gets the upstream answer).
+        profile: Whose plans to consider local.
         on_date: Resolve the plan as of this date; None for current.
 
     Returns:
-        The document with an ``origin`` key (``"local"`` or ``"redata"``), or
-        None when neither side has a plan - the overwhelmingly common case,
-        answered by one indexed query and, at most, one upstream call."""
+        The document with an ``origin`` key (``"local"`` or ``"redata"``), or None when neither side has a plan - the overwhelmingly common case, answered by one indexed query and, at most, one upstream call."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.services.floorplans.serialization import document_for
 
@@ -50,8 +47,7 @@ def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_da
 
     Args:
         place: The building.
-        profile: Whose plans to consider local, and whose wiki access to
-            check for the community fallback. None resolves nothing.
+        profile: Whose plans to consider local, and whose wiki access to check for the community fallback.
         on_date: Resolve the plan as of this date; None for current.
 
     Returns:
@@ -68,11 +64,7 @@ def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_da
 
 def _community_plan(place: Place, profile: Profile | None, on_date: datetime.date | None):
     """The published plan for this building, when the user can see its wiki.
-
-    Community plans follow the wiki's own visibility rule rather than
-    inventing a second one: a user sees the wiki (and so its floorplan) once
-    they have discovered the place - see ``services.wiki.wiki_access``.
-    """
+    Community plans follow the wiki's own visibility rule rather than inventing a second one: a user sees the wiki (and so its floorplan) once they have discovered the place - see ``services.wiki.wiki_access``."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
 
@@ -190,21 +182,16 @@ def floorplan_for_editing(
     Args:
         place: The building, or None for a plan not tied to one.
         profile: The editing user.
-        pin: The pin the plan belongs to. Required when *place* is None.
+        pin: The pin the plan belongs to.
         version_uuid: The plan version the document came from, if any.
         on_date: ``valid_from`` for a newly created version.
-        allow_community: Whether the caller may write a wiki-owned row in
-            place. Off by default: a whole-document save deletes by omission,
-            and the ordinary save path is reached by a debounced autosave that
-            nobody explicitly asked for. Without it a community plan forks
-            into the saver's own version instead of being overwritten.
+        allow_community: Whether the caller may write a wiki-owned row in place.
 
     Returns:
         A saved local ``Floorplan`` row the caller may write into.
 
     Raises:
-        ValueError: If neither a place nor a pin is given, which would leave
-            the plan unreachable."""
+        ValueError: If neither a place nor a pin is given, which would leave the plan unreachable."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
 
     if place is None and pin is None:

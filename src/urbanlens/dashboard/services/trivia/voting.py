@@ -1,10 +1,4 @@
-"""Trivia question vote recording and scoring.
-
-Mirrors ``services.spotguessr.relevance`` (recording) + ``services.media.media_relevance``
-(weighted scoring), collapsed into one module: Trivia has a single vote table
-as its only signal, unlike SpotGuessr's photo relevance which blends an
-in-game event log with a separate wiki-vote table.
-"""
+"""Trivia question vote recording and scoring."""
 
 from __future__ import annotations
 

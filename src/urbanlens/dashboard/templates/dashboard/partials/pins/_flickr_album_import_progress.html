@@ -1,11 +1,4 @@
-{% comment %}
-Flickr album import progress fragment - returned by PinFlickrAlbumImportView/
-WikiFlickrAlbumImportView and polled by their *ImportProgressView counterparts.
-Same shape as _flickr_import_progress.html, except the polling URL is passed
-in directly (progress_url) since this fragment is shared between a pin and a
-wiki target rather than always building a pin-scoped {% url %}.
-Context: progress_url, state, percent, message, error
-{% endcomment %}
+{% comment %}Flickr album import progress fragment - returned by PinFlickrAlbumImportView/ WikiFlickrAlbumImportView and polled by their.{% endcomment %}
 
 {% if state == "SUCCESS" %}
 <div class="immich-import-progress" id="flickr-album-import-progress">

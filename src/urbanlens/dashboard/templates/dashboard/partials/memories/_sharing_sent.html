@@ -1,17 +1,4 @@
-{% comment %}
-The "Shared by you" half of Memories > Sharing: pins first, then maps, each a
-page of places rather than every share the account has ever made.
-
-Rendered inline by the page (it is the half the toggle opens on) and by
-`MemoriesSharingSentView` for a pagination click, so the pagination bars name
-that view's URL rather than `request.path`.
-
-Context:
-  share_groups        - this page's pin-share groups, newest share first
-  sent_pins_page_obj  - the Django Page for those groups
-  map_share_groups    - this page's map-share groups
-  sent_maps_page_obj  - the Django Page for those
-{% endcomment %}
+{% comment %}The "Shared by you" half of Memories > Sharing.{% endcomment %}
 <h2 class="memories-sharing-section-title">Pins</h2>
 {% if share_groups %}
 <div class="memories-sharing-list">

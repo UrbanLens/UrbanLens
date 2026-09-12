@@ -29,9 +29,6 @@ function albumPanel(): HTMLElement | null {
 
 /**
  * POST JSON, throwing the server's own sentence on a refusal.
- *
- * Every caller catches and toasts that message itself, so this opts out of
- * base.html's generic net rather than letting one refusal be announced twice.
  */
 async function postJson(url: string, payload: unknown): Promise<Record<string, unknown>> {
     return ((await sendJson<Record<string, unknown>>(url, "POST", payload, { reportsItsOwnErrors: true })) ?? {}) as Record<string, unknown>;

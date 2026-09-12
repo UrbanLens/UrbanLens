@@ -1,19 +1,5 @@
 /**
- * Beta "time slider" overlay: lets a user scrub a pin's/wiki's map through
- * years and see OpenHistoricalMap (OHM) vector features - roads, buildings,
- * land use that existed at that date - drawn over the live basemap.
- *
- * This is a direct integration against OHM's public Overpass API, standing in
- * ahead of REData's own future temporal-imagery endpoints (not built yet).
- * See plugins/builtin/satellite_imagery.py's module docstring for the same
- * pattern already established elsewhere in this codebase: a swappable
- * Gateway/PanelSource boundary that gets retired once REData ships the
- * equivalent, without this module needing to change.
- *
- * Server-side counterpart: controllers/temporal_imagery.py's
- * TemporalImageryFeaturesView, whose URL template (with the placeholder year
- * 9999) and the location's available years arrive via #map-annotations-config
- * (see entries/map-annotations.ts's readConfig()).
+ * Beta "time slider" overlay: lets a user scrub a pin's/wiki's map through years and see OpenHistoricalMap (OHM) vector features.
  */
 
 // Leaflet is loaded via a CDN <script> tag on map pages (see map-layers.ts for
@@ -51,13 +37,6 @@ export function formatYearLabel(year: number, maxYear: number): string {
 
 /**
  * Substitutes the TEMPORAL_YEAR_PLACEHOLDER (9999) in a server-built URL template with the chosen year.
- *
- * Anchored to the trailing "9999/" rather than a plain first-occurrence
- * replace: the placeholder is always the URL's final path segment, but a
- * pin/location slug slugified from a user-provided name can itself contain
- * "9999" (e.g. a location named "9999 Elm Street Warehouse") earlier in the
- * same URL - a plain `.replace("9999", ...)` would corrupt that slug instead
- * of substituting the year, leaving the real placeholder unresolved.
  */
 export function temporalFeaturesUrl(urlTemplate: string, year: number): string {
     return urlTemplate.replace(/9999\/$/, `${year}/`);
@@ -78,11 +57,7 @@ interface TemporalFeaturesResponse {
     geojson: GeoJSON.FeatureCollection;
 }
 
-// Dashed amber/orange stroke - visually distinct from the live basemap and
-// from this file's sibling modules' own accent colors (map-image-overlays.ts's
-// handles, markup-toolbar.ts's shapes), reusing the same orange already used
-// as an accent elsewhere in this page's own map (see map-annotations.ts's
-// building-import hoverStyle) rather than inventing a new one.
+// Dashed amber/orange stroke - visually distinct from the live basemap and from this file's sibling modules' own accent colors.
 const OHM_OVERLAY_STYLE: L.PathOptions = {
     color: "#f97316",
     weight: 2.5,
@@ -92,15 +67,10 @@ const OHM_OVERLAY_STYLE: L.PathOptions = {
 };
 
 /**
- * Wires the compact below-the-map time slider to a Leaflet map: dragging it
- * swaps in an OHM GeoJSON overlay for the chosen year, or reverts to the live
- * basemap at the "Today" (max) position.
- *
+ * Wires the compact below-the-map time slider to a Leaflet map.
  * @param map - The Leaflet map to overlay OHM features on.
  * @param options - See {@link TemporalImagerySliderOptions}.
  * @returns The slider's control instance, or null when there are no years to
- *   show (the server already omits the whole partial in that case - this is
- *   defense in depth for any caller that constructs options itself).
  */
 export function createTemporalImagerySlider(map: L.Map, options: TemporalImagerySliderOptions): TemporalImagerySliderInstance | null {
     const { container, years, urlTemplate, onError } = options;
@@ -109,9 +79,7 @@ export function createTemporalImagerySlider(map: L.Map, options: TemporalImagery
     const inputEl = container.querySelector<HTMLInputElement>("#temporal-imagery-slider-input");
     const labelEl = container.querySelector<HTMLElement>("#temporal-imagery-slider-label");
     if (!inputEl || !labelEl) return null;
-    // Rebound to plain, definitely-non-null consts: TS's null narrowing above
-    // doesn't survive into the nested closures below, which all close over
-    // these two elements repeatedly.
+    // Rebound to plain, definitely-non-null consts.
     const input = inputEl;
     const label = labelEl;
 
@@ -125,10 +93,7 @@ export function createTemporalImagerySlider(map: L.Map, options: TemporalImagery
     const cache = new Map<number, GeoJSON.FeatureCollection>();
     let activeLayer: L.GeoJSON | null = null;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    // Reference-counted rather than a plain boolean: if the user scrubs to
-    // year A and then year B before A's fetch resolves, both are in flight
-    // at once, and A settling first must not clear the loading state B still
-    // needs - only dropping to zero in-flight fetches should.
+    // Reference-counted rather than a plain boolean.
     let pendingFetches = 0;
 
     function setLoading(loading: boolean): void {
@@ -159,9 +124,7 @@ export function createTemporalImagerySlider(map: L.Map, options: TemporalImagery
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = (await response.json()) as TemporalFeaturesResponse;
             cache.set(year, data.geojson);
-            // The user may have already scrubbed elsewhere while this was in
-            // flight - don't clobber what they're now looking at with a
-            // response for a year they've since left.
+            // The user may have already scrubbed elsewhere while this was in flight.
             if (Number(input.value) === year) showOverlay(data.geojson);
         } catch {
             onError?.("Couldn't load historical map data for that year.");

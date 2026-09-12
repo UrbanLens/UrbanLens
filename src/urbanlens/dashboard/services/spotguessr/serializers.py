@@ -1,5 +1,4 @@
-"""JSON-shape builders shared by the HTTP controller and the WebSocket consumer.
-Promoted out of ``controllers.spotguessr`` (Phase 1 kept these private to the view) because UL-392's real-time broadcasts need the exact same shapes the HTTP endpoints return - one source of truth, not two copies to keep in sync."""
+"""JSON-shape builders shared by the HTTP controller and the WebSocket consumer."""
 
 from __future__ import annotations
 
@@ -26,11 +25,7 @@ if TYPE_CHECKING:
 
 def _geo_bounds_bbox(session: GameSession) -> list[list[float]] | None:
     """The session's configured ``geo_bounds``, as a Leaflet-ready ``[[south, west], [north, east]]`` bbox.
-
-    Lets the frontend zoom the guess map to the configured area (see
-    ``docs/designs/drafts/spotguessr.md``'s eligibility rule 3) instead of always
-    opening on a fixed default view. None when no area was configured.
-    """
+    Lets the frontend zoom the guess map to the configured area (see ``docs/designs/drafts/spotguessr.md``'s eligibility rule 3) instead of always opening on a fixed default view."""
     geo_bounds_geojson = (session.config or {}).get("geo_bounds_geojson")
     if not geo_bounds_geojson:
         return None
@@ -58,12 +53,7 @@ def serialize_round(round_: GameRound) -> dict[str, Any]:
 
 
 def _round_expires_at(round_: GameRound) -> str | None:
-    """When this round's configured timer runs out, ISO-formatted - None for untimed play.
-
-    Computed from ``round_.created`` (no dedicated column needed) - see
-    ``GameConfig.round_time_limit_seconds`` and
-    ``controllers.spotguessr.SpotGuessrRoundTimeoutView`` for who reads this.
-    """
+    """When this round's configured timer runs out, ISO-formatted - None for untimed play."""
     time_limit = (round_.session.config or {}).get("round_time_limit_seconds")
     if not time_limit:
         return None
@@ -77,14 +67,8 @@ def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str]
     Args:
         round_: The round just guessed.
         guess: The saved guess.
-        bonus_tiers: Which country/state/city tiers this guess matched (see
-            ``services.spotguessr.session.submit_guess``'s return value) -
-            not persisted on ``Guess``, so only available right here.
-        rating_change: This guesser's own Glicko-2 rating change, if the
-            round completed on this very guess (see
-            ``services.spotguessr.session.submit_guess``'s return value) -
-            None when the reveal is still withheld, or a rating couldn't be
-            computed for some other reason."""
+        bonus_tiers: Which country/state/city tiers this guess matched (see ``services.spotguessr.session.submit_guess``'s return value) - not persisted on ``Guess``, so only available right here.
+        rating_change: This guesser's own Glicko-2 rating change, if the round completed on this very guess (see ``services.spotguessr.session.submit_guess``'s return value) - None when the reveal is still withheld, or a rating couldn't be computed for some other reason."""
     data: dict[str, Any] = {
         "round_id": round_.pk,
         "distance_meters": guess.distance_meters,
@@ -114,9 +98,7 @@ def _image_caption(round_: GameRound) -> str | None:
         round_: The round whose photo to describe.
 
     Returns:
-        The stored caption, or None for a round with no image (Named Place,
-        Street View) or an image that never had one.
-    """
+        The stored caption, or None for a round with no image (Named Place, Street View) or an image that never had one."""
     if round_.image_id and round_.image is not None:
         return round_.image.caption or None
     return None
@@ -127,12 +109,7 @@ def serialize_round_reveal(round_: GameRound, rating_changes: dict[int, RatingCh
 
     Args:
         round_: The just-completed round.
-        rating_changes: Each guesser's own Glicko-2 rating change from this
-            round (``services.spotguessr.ratings.apply_round_ratings``'s
-            return value), keyed by profile id - None (or a missing key, for
-            a force-revealed round's non-guessing participants) renders as no
-            ``rating_delta`` for that result.
-    """
+        rating_changes: Each guesser's own Glicko-2 rating change from this round (``services.spotguessr.ratings.apply_round_ratings``'s return value), keyed by profile id - None (or a missing key, for a force-revealed round's non-guessing participants) renders as no..."""
     location = round_.location
     guesses = Guess.objects.for_round(round_).select_related("profile__user")
     rating_changes = rating_changes or {}

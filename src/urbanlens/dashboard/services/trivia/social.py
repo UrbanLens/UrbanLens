@@ -1,7 +1,4 @@
-"""Ratings visibility: your own rating + friends' ratings with opt-out.
-
-Mirrors ``services.spotguessr.social``.
-"""
+"""Ratings visibility: your own rating + friends' ratings with opt-out."""
 
 from __future__ import annotations
 
@@ -18,10 +15,7 @@ def visible_friend_ratings(profile: Profile) -> list[dict]:
     """Friends' Trivia ratings, excluding anyone who has opted out.
 
     Returns:
-        A list of ``{"profile": Profile, "rating": PlayerTriviaRating | None}``
-        dicts, one per visible friend - friends who haven't played yet still
-        appear, with ``rating=None``, since the opt-out is about visibility,
-        not about hiding the fact that a friend hasn't played."""
+        A list of ``{"profile": Profile, "rating": PlayerTriviaRating | None}`` dicts, one per visible friend - friends who haven't played yet still appear, with ``rating=None``, since the opt-out is about visibility, not about hiding the fact that a friend hasn't played."""
     friends = list(get_connections(profile))
     if not friends:
         return []

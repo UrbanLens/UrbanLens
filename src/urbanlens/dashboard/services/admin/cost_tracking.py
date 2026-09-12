@@ -1,9 +1,5 @@
 """Cost tracking calculations: admin-defined hardware/operating costs plus tracked API spend.
-
-Every function accepts an optional ``as_of`` so callers (and tests) can evaluate the
-numbers at a specific point in time instead of always "now" - useful for reconstructing
-historical series without needing to mock the clock.
-"""
+Every function accepts an optional ``as_of`` so callers (and tests) can evaluate the numbers at a specific point in time instead of always "now" - useful for reconstructing historical series without needing to mock the clock."""
 
 from __future__ import annotations
 
@@ -66,9 +62,7 @@ def effective_monthly_cost(as_of: datetime.datetime | None = None) -> CostBreakd
         as_of: Point in time to evaluate "currently active" against; defaults to now.
 
     Returns:
-        A CostBreakdown with hardware (amortized components), operating (recurring
-        operating costs), and api (trailing-30-day actual API spend) figures.
-    """
+        A CostBreakdown with hardware (amortized components), operating (recurring operating costs), and api (trailing-30-day actual API spend) figures."""
     as_of = as_of or timezone.now()
 
     hardware = sum(
@@ -142,7 +136,6 @@ def average_monthly_expense(as_of: datetime.datetime | None = None) -> Decimal |
 
 def active_user_count(as_of: datetime.datetime | None = None) -> int:
     """Return the number of "active" users, for cost-per-user calculations.
-    An active user is one who logged in within the trailing 30 days *and* has placed at least 2 (root) pins - a one-time signup who created an account and never returned would otherwise dilute the per-user figure and understate the real cost of an engaged user.
 
     Args:
         as_of: Point in time to evaluate the 30-day login window against; defaults to now.
@@ -214,8 +207,7 @@ def monthly_cost_series(months: int = 12, as_of: datetime.datetime | None = None
         as_of: The "current" month to count backward from; defaults to now.
 
     Returns:
-        ``{"labels": [...], "hardware": [...], "operating": [...], "api": [...]}``,
-        one entry per month, oldest first."""
+        ``{"labels": [...], "hardware": [...], "operating": [...], "api": [...]}``, one entry per month, oldest first."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     as_of = as_of or timezone.now()
@@ -262,9 +254,7 @@ def api_spend_summary_30d() -> dict[str, list | int | Decimal | None]:
     ``unpriced_service_count`` keeps its original meaning - services that produced no cost at all, because they are free, not priced here yet, or priced in a way that doesn't reduce to a number per call.
 
     Returns:
-        ``{"priced_services": [{"display_name": str, "cost_30d": Decimal}, ...],
-        "unpriced_service_count": int, "total_cost_30d": Decimal | None}``, with
-        ``priced_services`` sorted by cost descending."""
+        ``{"priced_services": [{"display_name": str, "cost_30d": Decimal}, ...], "unpriced_service_count": int, "total_cost_30d": Decimal | None}``, with ``priced_services`` sorted by cost descending."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
     from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
 

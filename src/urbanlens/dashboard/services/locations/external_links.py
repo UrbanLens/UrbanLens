@@ -1,5 +1,4 @@
-"""Shared helper for auto-adding a provider-discovered external link to a Pin/Wiki.
-Several integrations (Nominatim, EPA ECHO, Wikipedia, ...) each independently discover one confidently-matched external URL for a pin's location and want to add it to that pin's (and its wiki's) Links list automatically - without duplicating an existing entry or resurrecting a link the user deliberately removed (see ``PinAutoRemoval``/``WikiAutoRemoval``'s tombstone mechanism)."""
+"""Shared helper for auto-adding a provider-discovered external link to a Pin/Wiki."""
 
 from __future__ import annotations
 

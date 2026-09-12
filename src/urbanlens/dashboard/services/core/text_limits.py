@@ -43,10 +43,7 @@ def column_max_length(model: type[Model], field_name: str) -> int:
         The field's ``max_length``.
 
     Raises:
-        TypeError: If the named field has no ``max_length`` - a reverse relation,
-            or a column with no declared width. Callers use the result as a
-            truncation bound, so returning ``None`` would silently become "no
-            limit" at the call site."""
+        TypeError: If the named field has no ``max_length`` - a reverse relation, or a column with no declared width."""
     field = model._meta.get_field(field_name)  # noqa: SLF001 - Model._meta is Django's documented metadata API
     max_length = getattr(field, "max_length", None)
     if not isinstance(max_length, int):
@@ -78,8 +75,7 @@ def text_length_error(value: str | None, max_length: int, field_label: str) -> s
         field_label: Human-readable field name to use in the error message.
 
     Returns:
-        An error string if `value` is too long, otherwise `None`.
-    """
+        An error string if `value` is too long, otherwise `None`."""
     if value and len(value) > max_length:
         return f"{field_label} must be {max_length:,} characters or fewer (got {len(value):,})."
     return None

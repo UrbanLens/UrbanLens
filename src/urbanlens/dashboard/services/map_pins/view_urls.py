@@ -1,9 +1,5 @@
 """A pin payload's link to its own page.
-
-Lives beside the payload rather than in the controller because the map document
-is also built by a Celery task, and a task importing a controller to serialize a
-pin is the wrong way round.
-"""
+Lives beside the payload rather than in the controller because the map document is also built by a Celery task, and a task importing a controller to serialize a pin is the wrong way round."""
 
 from __future__ import annotations
 

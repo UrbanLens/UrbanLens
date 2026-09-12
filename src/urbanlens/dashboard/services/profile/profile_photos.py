@@ -1,5 +1,4 @@
-"""Photo-strip queries for the profile page - which of a profile's uploaded photos are safe to surface outside their original context.
-A photo attached only to a private pin (the overwhelming default - pins are never visible to anyone but their owner; PinShare copies a photo onto a brand new Image row for the recipient rather than granting access to the original, see controllers.pin_sharing._create_pin_from_share) is never eligible for the strip, even on the owner's own profile - "not fully private" specifically means the photo is *already* reachable through some other path a second person could use: a wiki (anyone who's pinned that location), or a direct message (the recipient, once actually granted permission to see it - see strip_photos_visible_to's docstring for why that second case is deliberately NOT extended to a second viewer here)."""
+"""Photo-strip queries for the profile page - which of a profile's uploaded photos are safe to surface outside their original context."""
 
 from __future__ import annotations
 
@@ -30,10 +29,7 @@ def strip_photos_for_owner(profile: Profile) -> QuerySet[Image]:
         profile: The profile whose own page is being viewed.
 
     Returns:
-        Up to `STRIP_LIMIT` of the profile's own photos that are attached to
-        a wiki or a direct message - never a bare/pin-only upload, which
-        stays fully private.
-    """
+        Up to `STRIP_LIMIT` of the profile's own photos that are attached to a wiki or a direct message - never a bare/pin-only upload, which stays fully private."""
     return Image.objects.filter(profile=profile, media_type=MediaKind.PHOTO).filter(_not_fully_private()).select_related("wiki__location").order_by("-created")[:STRIP_LIMIT]
 
 
@@ -46,9 +42,7 @@ def strip_photos_visible_to(profile: Profile, viewer: Profile) -> QuerySet[Image
         viewer: The profile viewing the page.
 
     Returns:
-        Up to `STRIP_LIMIT` wiki-attached photos of profile's that viewer
-        has pinned the location for (and whose upload/viewer photo-
-        visibility settings otherwise permit - see `ImageQuerySet.visible_to`)."""
+        Up to `STRIP_LIMIT` wiki-attached photos of profile's that viewer has pinned the location for (and whose upload/viewer photo- visibility settings otherwise permit - see `ImageQuerySet.visible_to`)."""
     from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
     visible_location_ids = visible_wiki_location_ids(viewer)
@@ -61,15 +55,10 @@ def attachment_points_for_image(image: Image) -> list[dict]:
     """Describe where one of the owner's own photos is attached, for the lightbox side panel.
 
     Args:
-        image: The image to describe. Caller must have already confirmed
-            this is the requesting profile's own photo (see
-            `PhotoAttachmentPointsView`) - this function does no visibility
-            checking of its own.
+        image: The image to describe.
 
     Returns:
-        Dicts with `icon`/`label`/`url`, one per real attachment - empty if
-        the photo isn't attached anywhere a second person could reach it.
-    """
+        Dicts with `icon`/`label`/`url`, one per real attachment - empty if the photo isn't attached anywhere a second person could reach it."""
     from django.urls import reverse
 
     points: list[dict] = []

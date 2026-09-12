@@ -1,36 +1,13 @@
 """External-facing wiki endpoints: community pages, articles, comments, reviews.
 
-**The invariant this whole module is built around.**
-
-Every wiki-scoped handler's first statement is::
-
-    location, wiki, profile = resolve_visible_wiki(request, location_slug)
-
-That call is the only way a Wiki is ever loaded here - never
-``Wiki.objects.get()``, never a permission check that returns something other
-than a 404. It raises a bare ``Http404`` for all three of:
+That call is the only way a Wiki is ever loaded here - never ``Wiki.objects.get()``, never a
+permission check that returns something other than a 404.
+The pin-scoped comment and review endpoints use ``pins:read``/``pins:write`` instead, because they
+are private per-pin data on the caller's own pin rather than shared community content.
 
 - a ``location_slug`` that matches nothing,
 - a real Location that has no Wiki, and
 - a real Wiki the caller has not pinned.
-
-Combined with :mod:`.errors`, which renders every ``Http404`` as the constant
-body ``{"error": "Not found."}``, those three cases are indistinguishable down
-to the byte. That is the point: if a caller could tell "no such place" from
-"you can't see this place", the slug becomes an oracle for enumerating which
-locations other users have pinned, which is precisely the inference this app
-exists to prevent. A 403 here would leak; a friendlier message here would leak.
-
-The same reasoning extends to sub-resources. An edit id, alias id, link id,
-comment id or revision id is **always** looked up scoped to the
-already-resolved wiki (``get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)``).
-A bare lookup by id would make those integers globally enumerable across every
-wiki in the database - a smaller leak than the slug oracle, but the same kind.
-
-Scopes: everything wiki-shaped uses ``wiki:read``/``wiki:write``. The
-pin-scoped comment and review endpoints use ``pins:read``/``pins:write``
-instead, because they are private per-pin data on the caller's own pin rather
-than shared community content.
 """
 
 from __future__ import annotations
@@ -130,18 +107,16 @@ logger = logging.getLogger(__name__)
 class WikiApiView(ExternalApiView):
     """Base for every wiki endpoint: uniform errors plus the visibility gate.
 
-    The ``{"error": ...}`` envelope is inherited, not opted into: since
-    ``ExternalApiView`` itself mixes in ``ErrorEnvelopeMixin`` ahead of
-    ``APIView``, naming the mixin again here would only restate the MRO the base
-    already guarantees - and a second name for one behaviour is how the two
-    drift apart later.
+    The ``{"error": ...}`` envelope is inherited, not opted into: since ``ExternalApiView`` itself mixes
+    in ``ErrorEnvelopeMixin`` ahead of ``APIView``, naming the mixin again here would only restate the
+    MRO the base already guarantees - and a second name for one behaviour is how the two drift apart
+    later.
     """
 
     def resolve(self, request: Request, location_slug: str) -> tuple[Any, Any, Profile]:
         """Resolve the Location/Wiki/Profile for *location_slug*, or 404.
 
-        Every handler in this module calls this as its first statement. See the
-        module docstring for why nothing else may load a Wiki.
+        Every handler in this module calls this as its first statement.
 
         Args:
             request: The authenticated request.
@@ -151,8 +126,8 @@ class WikiApiView(ExternalApiView):
             Tuple of (Location, Wiki, requesting Profile).
 
         Raises:
-            Http404: Indistinguishably, for "no such location", "no wiki
-                here", and "you haven't pinned this place".
+            Http404: Indistinguishably, for "no such location", "no wiki here", and "you haven't pinned this
+            place".
         """
         return resolve_visible_wiki(request, location_slug)
 
@@ -160,8 +135,8 @@ class WikiApiView(ExternalApiView):
 def _own_pin_or_404(view: OwnedPinMixin, request: Request, pin_slug: str) -> Pin:
     """Resolve one of the caller's own pins, or raise the uniform 404.
 
-    Delegates to ``OwnedPinMixin.get_owned_pin`` so pin lookup (slug-or-uuid,
-    ownership filter, select_related set) stays defined in exactly one place.
+    Delegates to ``OwnedPinMixin.get_owned_pin`` so pin lookup (slug-or-uuid, ownership filter,
+    select_related set) stays defined in exactly one place.
 
     Args:
         view: The calling view instance.
@@ -172,8 +147,7 @@ def _own_pin_or_404(view: OwnedPinMixin, request: Request, pin_slug: str) -> Pin
         The caller's matching pin.
 
     Raises:
-        Http404: No such pin, or it belongs to someone else - deliberately the
-            same response for both.
+        Http404: No such pin, or it belongs to someone else - deliberately the same response for both.
     """
     pin = view.get_owned_pin(request, pin_slug)
     if pin is None:
@@ -185,8 +159,8 @@ def _serialize_comment(item: Any, profile: Profile) -> dict[str, Any]:
     """Render one gated comment (and its replies) for the API.
 
     Args:
-        item: A ``services.comments.comments.VisibleComment`` that has already passed
-            every visibility gate.
+        item: A ``services.comments.comments.VisibleComment`` that has already passed every visibility
+        gate.
         profile: The requesting profile.
 
     Returns:
@@ -195,9 +169,8 @@ def _serialize_comment(item: Any, profile: Profile) -> dict[str, Any]:
     comment = item.comment
     return {
         "id": comment.pk,
-        # Raw storage format plus resolved mentions rather than HTML: by the
-        # time a comment reaches here it has passed the mention gate, so the
-        # viewer has provably pinned every location it names.
+        # Raw storage format plus resolved mentions rather than HTML: by the time a comment reaches here it has
+        # passed the mention gate, so the viewer has provably pinned every location it names.
         "text": comment.text,
         "mentions": comment_mentions(comment.text),
         "author": masked_editor_name(comment.profile, profile),
@@ -214,11 +187,9 @@ def _serialize_comment(item: Any, profile: Profile) -> dict[str, Any]:
 class WikiDetailApiView(WikiApiView):
     """GET the community wiki for a place; PATCH its editable fields.
 
-    PATCH applies a community edit through the same
-    ``services.wiki.wiki_edits.apply_wiki_edit`` the dashboard's "Suggest edits"
-    form uses, and records the identical ``WikiEdit`` audit row - including its
-    rejections: an unrecognized security level or an unparseable date is a 400
-    on both paths.
+    PATCH applies a community edit through the same ``services.wiki.wiki_edits.apply_wiki_edit`` the
+    dashboard's "Suggest edits" form uses, and records the identical ``WikiEdit`` audit row - including
+    its rejections: an unrecognized security level or an unparseable date is a 400 on both paths.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -241,10 +212,7 @@ class WikiDetailApiView(WikiApiView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Flatten the nested security object into the {field: value} mapping
-        # apply_wiki_edit consumes. The nesting is an external-API shape
-        # decision (matching the pin detail read shape); the service and the
-        # audit trail stay flat, as the internal view already recorded them.
+        # Flatten the nested security object into the {field: value} mapping apply_wiki_edit consumes.
         changes: dict[str, Any] = {key: value for key, value in data.items() if key != "security"}
         changes.update(data.get("security") or {})
         # Dates arrive as date objects from DateField; the service writes them
@@ -273,9 +241,9 @@ class WikiHistoryView(PaginatedListMixin, WikiApiView):
     def get(self, request: Request, location_slug: str) -> Response:
         """Return one page of the wiki's edit history."""
         _location, wiki, profile = self.resolve(request, location_slug)
-        # Both halves of what the HTML history page does: the rows this viewer
-        # may see, and then the "from" side stripped - it carries the pre-edit
-        # value, which for the viewer's own edit is whatever a stranger wrote.
+        # Both halves of what the HTML history page does: the rows this viewer may see, and then the "from" side
+        # stripped - it carries the pre-edit value, which for the viewer's own edit is whatever a stranger
+        # wrote.
         conceal = concealment_active(wiki, profile)
         edits = visible_rows(wiki.edits.select_related("editor__user"), wiki, profile).order_by("-created", "-pk")
         rows = [
@@ -303,9 +271,8 @@ class WikiRevertView(WikiApiView):
     def post(self, request: Request, location_slug: str, edit_id: int) -> Response:
         """Revert one edit, recording the reversal as a new edit."""
         location, wiki, profile = self.resolve(request, location_slug)
-        # Scoped to this wiki *and* to this viewer: a bare id lookup would make
-        # WikiEdit ids enumerable across every wiki in the database, and a
-        # wiki-only one would confirm the existence of - and let this account
+        # Scoped to this wiki *and* to this viewer: a bare id lookup would make WikiEdit ids enumerable across
+        # every wiki in the database, and a wiki-only one would confirm the existence of - and let this account
         # revert - an edit concealment decided it must not see.
         target_edit = get_object_or_404(visible_rows(WikiEdit.objects.filter(wiki=wiki), wiki, profile), id=edit_id)
 
@@ -394,10 +361,9 @@ class WikiStatVoteApiView(WikiApiView):
 class WikiAliasesView(WikiApiView):
     """GET the wiki's alternate names; POST to add one.
 
-    The list includes the wiki's current name - the alias list is defined as
-    every name the place is known by - so each row carries ``is_current`` to say
-    which one that is. The wiki is handed to the serializer as context so
-    computing that flag costs no per-row query.
+    The list includes the wiki's current name - the alias list is defined as every name the place is
+    known by - so each row carries ``is_current`` to say which one that is.
+    The wiki is handed to the serializer as context so computing that flag costs no per-row query.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -433,16 +399,14 @@ class WikiAliasesView(WikiApiView):
 class WikiAliasUseView(WikiApiView):
     """POST: make one of the wiki's aliases its current community name.
 
-    The wiki counterpart of ``PinAliasUseView``, and shaped identically:
-    no request body, and the full wiki detail in the response rather than the
-    alias, so a client applies the rename (and everything derived from it -
-    the alias list's ``is_current`` flags, the edit history's new entry) from
-    the same payload ``GET wikis/{location_slug}/`` already hands it.
-
+    The wiki counterpart of ``PinAliasUseView``, and shaped identically: no request body, and the full
+    wiki detail in the response rather than the alias, so a client applies the rename (and everything
+    derived from it - the alias list's ``is_current`` flags, the edit history's new entry) from the same
+    payload ``GET wikis/{location_slug}/`` already hands it.
     Unlike the pin version this is a *community* edit, so it goes through
-    ``services.wiki.wiki_aliases.promote_wiki_alias_to_name`` and lands in the wiki's
-    edit history alongside every other wiki edit - a rename nobody can see or
-    revert is the failure mode that matters on shared content.
+    ``services.wiki.wiki_aliases.promote_wiki_alias_to_name`` and lands in the wiki's edit history
+    alongside every other wiki edit - a rename nobody can see or revert is the failure mode that matters
+    on shared content.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -453,13 +417,12 @@ class WikiAliasUseView(WikiApiView):
     def post(self, request: Request, location_slug: str, alias_id: int) -> Response:
         """Promote one alias to the wiki's name and return the updated wiki.
 
-        Promoting the alias that is already the name answers 200 with the
-        unchanged wiki, not 400: "use this name" is an idempotent statement of
-        intent, and a client retrying a request whose response it never saw
-        would otherwise get an error for successfully doing nothing.
+        Promoting the alias that is already the name answers 200 with the unchanged wiki, not 400: "use this
+        name" is an idempotent statement of intent, and a client retrying a request whose response it never
+        saw would otherwise get an error for successfully doing nothing.
 
         Args:
-            request: The authenticated request. No body is read.
+            request: The authenticated request.
             location_slug: The Location slug or uuid from the URL.
             alias_id: The alias to promote, scoped to this wiki.
 
@@ -467,13 +430,11 @@ class WikiAliasUseView(WikiApiView):
             The full wiki detail payload, built after the save.
 
         Raises:
-            Http404: The wiki is not visible to this caller, or *alias_id* is
-                not an alias of it.
+            Http404: The wiki is not visible to this caller, or *alias_id* is not an alias of it.
         """
         location, wiki, profile = self.resolve(request, location_slug)
-        # Scoped to this wiki: a bare id lookup would turn alias ids into an
-        # oracle for the names on wikis this caller cannot see - the same leak
-        # the module docstring describes for edit and comment ids, and worse
+        # Scoped to this wiki: a bare id lookup would turn alias ids into an oracle for the names on wikis this
+        # caller cannot see - the same leak the module docstring describes for edit and comment ids, and worse
         # here because an alias *is* content rather than just a handle.
         alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
 
@@ -482,12 +443,7 @@ class WikiAliasUseView(WikiApiView):
         with transaction.atomic():
             promote_wiki_alias_to_name(target, profile, alias)
 
-        # Built strictly after the save. Wiki.save() sanitizes ``name`` to a
-        # restricted character set, so a payload assembled from ``alias.name``
-        # beforehand can report a name the database does not actually hold -
-        # and the client would then cache and display a value that disagrees
-        # with every subsequent read. `target`, for the same reason: the rename
-        # went through it, so the projection resolve returned predates it.
+        # Built strictly after the save.
         return Response(build_wiki_detail(target, location, profile))
 
 
@@ -505,9 +461,9 @@ class WikiAliasDetailView(WikiApiView):
 
         _location, wiki, profile = self.resolve(request, location_slug)
         alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
-        # Tombstone first, matching LocationAliasDeleteView (controllers/aliases.py) -
-        # without it, the external name-provider sync or the pin<->wiki alias-mirror
-        # signal recreates this exact name the moment either one next runs.
+        # Tombstone first, matching LocationAliasDeleteView (controllers/aliases.py) - without it, the external
+        # name-provider sync or the pin<->wiki alias-mirror signal recreates this exact name the moment either
+        # one next runs.
         WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.ALIAS, value=alias.name)
         alias.delete()
         return Response(status=204)
@@ -516,10 +472,9 @@ class WikiAliasDetailView(WikiApiView):
 class WikiAliasToggleNicknameView(WikiApiView):
     """POST: flip one of the wiki's aliases between nickname-only and a plain alternate name.
 
-    Nickname-only aliases are excluded from external name-provider queries but
-    still shown in the wiki's own alias list - toggling this is a display
-    preference on shared data, not a rename, so unlike :class:`WikiAliasUseView`
-    it is not recorded in the wiki's edit history, matching the internal
+    Nickname-only aliases are excluded from external name-provider queries but still shown in the wiki's
+    own alias list - toggling this is a display preference on shared data, not a rename, so unlike
+    :class:`WikiAliasUseView` it is not recorded in the wiki's edit history, matching the internal
     ``LocationAliasToggleNicknameView`` it wraps.
     """
 
@@ -532,7 +487,7 @@ class WikiAliasToggleNicknameView(WikiApiView):
         """Flip one alias's nickname flag and return it.
 
         Args:
-            request: The authenticated request. No body is read.
+            request: The authenticated request.
             location_slug: The Location slug or uuid from the URL.
             alias_id: The alias to toggle, scoped to this wiki.
 
@@ -540,8 +495,7 @@ class WikiAliasToggleNicknameView(WikiApiView):
             The updated alias.
 
         Raises:
-            Http404: The wiki is not visible to this caller, or *alias_id* is
-                not an alias of it.
+            Http404: The wiki is not visible to this caller, or *alias_id* is not an alias of it.
         """
         _location, wiki, profile = self.resolve(request, location_slug)
         alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
@@ -552,12 +506,10 @@ class WikiAliasToggleNicknameView(WikiApiView):
 class WikiBoundaryApiView(WikiApiView):
     """GET the wiki page map's typed boundaries; POST to save or clear the community drawing of one.
 
-    Thin wrapper over ``controllers.boundary.WikiBoundaryView`` - same
-    resolution chain, same polling contract (``pending``/``refreshing``), and
-    the same rule that a community drawing lives on a wiki-keyed ``Boundary``
-    row, never on the shared location-default row that API-generated geometry
-    occupies, so a community edit can never influence point-to-location
-    matching.
+    Thin wrapper over ``controllers.boundary.WikiBoundaryView`` - same resolution chain, same polling
+    contract (``pending``/``refreshing``), and the same rule that a community drawing lives on a
+    wiki-keyed ``Boundary`` row, never on the shared location-default row that API-generated geometry
+    occupies, so a community edit can never influence point-to-location matching.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -569,15 +521,11 @@ class WikiBoundaryApiView(WikiApiView):
         """Build the boundary payload, mirroring ``controllers.boundary._wiki_boundary_payload``.
 
         Args:
-            wiki: The wiki whose boundaries to resolve - may be a concealed
-                projection.
+            wiki: The wiki whose boundaries to resolve - may be a concealed projection.
             pending: Whether provider generation is still running.
             refreshing: Whether a stale generated boundary is being refreshed.
-            just_drawn: ``(boundary_type_value, polygon)`` for a boundary this
-                same request just saved, or None - see
-                ``controllers.boundary._wiki_boundary_payload`` for why
-                concealment must not hide this request's own write from its
-                own response.
+            just_drawn: ``(boundary_type_value, polygon)`` for a boundary this same request just saved, or
+            None - see...
         """
         boundaries = {}
         for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
@@ -659,12 +607,8 @@ class WikiBoundaryApiView(WikiApiView):
 class WikiCoverPhotoApiView(WikiApiView):
     """PUT to set the wiki's hero-banner cover photo; DELETE to clear it.
 
-    Wraps ``controllers.image_gallery.WikiCoverPhotoView``. Any profile with a
-    pin at the wiki's location may set it - the wiki is community content
-    editable by everyone who can see it, the same rule comments, markup and
-    aliases already share. The photo must already be in the wiki's own
-    gallery (resolved by ``image_uuid``, matching the addressing every other
-    photo route in this module uses) rather than accepted as an ad-hoc upload.
+    The photo must already be in the wiki's own gallery (resolved by ``image_uuid``, matching the
+    addressing every other photo route in this module uses) rather than accepted as an ad-hoc upload.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -680,9 +624,8 @@ class WikiCoverPhotoApiView(WikiApiView):
         serializer = WikiCoverPhotoUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # uuid filter first - `visible_to` eagerly resolves the uploader set of
-        # the queryset it is given, so the unfiltered manager would cost a
-        # site-wide uploader walk to answer about one image.
+        # uuid filter first - `visible_to` eagerly resolves the uploader set of the queryset it is given, so the
+        # unfiltered manager would cost a site-wide uploader walk to answer about one image.
         image = get_object_or_404(Image.objects.filter(uuid=serializer.validated_data["image_uuid"]).visible_to(profile))
         if image.wiki_id != wiki.pk and image.location_id != location.pk:
             raise Http404
@@ -704,16 +647,10 @@ class WikiCoverPhotoApiView(WikiApiView):
 class WikiOwnershipView(PaginatedListMixin, WikiApiView):
     """GET the wiki's shared Ownership card: current and past owners of this place.
 
-    Read-only this pass - see ``docs/notes/mobile_app_notes.md`` Part 7 for why
-    the write side (adding/editing/unlinking an owner) is deferred rather than
-    built here.
-
-    Officially-sourced owner identity/contact details are gated behind
-    ``SiteFeature.PROPERTY_OWNERS`` the same way the web UI's Ownership panel
-    is - see ``services.property.owner_access``. Filtering happens here,
-    server-side, before serialization, matching that module's own
-    requirement that a withheld record never reach a template (or, here, a
-    response body) at all.
+    Read-only this pass - see ``docs/notes/mobile_app_notes.md`` Part 7 for why the write side
+    (adding/editing/unlinking an owner) is deferred rather than built here.
+    Filtering happens here, server-side, before serialization, matching that module's own requirement
+    that a withheld record never reach a template (or, here, a response body) at all.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -734,8 +671,7 @@ class WikiPropertySalesView(PaginatedListMixin, WikiApiView):
     """GET the wiki's shared Sale History tab, newest first.
 
     Read-only this pass, for the same reason as :class:`WikiOwnershipView`.
-    Party names are filtered by the same subscriber gate - see that class's
-    docstring.
+    Party names are filtered by the same subscriber gate - see that class's docstring.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -751,9 +687,8 @@ class WikiPropertySalesView(PaginatedListMixin, WikiApiView):
 
         location, wiki, profile = self.resolve(request, location_slug)
         sales = visible_rows(WikiPropertySale.objects.for_location(location), wiki, profile).prefetch_related("previous_owners", "new_owners")
-        # A plain SimpleNamespace per row, not a mutated model instance -
-        # `sale.previous_owners.set(...)` would persist the filtered owner
-        # list to the database instead of just shaping this one response.
+        # A plain SimpleNamespace per row, not a mutated model instance - `sale.previous_owners.set(...)` would
+        # persist the filtered owner list to the database instead of just shaping this one response.
         rows = [
             SimpleNamespace(
                 id=sale.id,
@@ -794,9 +729,8 @@ class WikiLinksView(WikiApiView):
         data = serializer.validated_data
 
         try:
-            # Wikis are edited concurrently by many people, so a duplicate url is
-            # an ordinary client outcome, not a server fault - the unique
-            # constraint decides and this reports 400 rather than 500.
+            # Wikis are edited concurrently by many people, so a duplicate url is an ordinary client outcome,
+            # not a server fault - the unique constraint decides and this reports 400 rather than 500.
             with transaction.atomic():
                 link = WikiLink.objects.create(wiki=wiki, name=data.get("name", ""), url=data["url"], created_by=profile)
         except IntegrityError:
@@ -818,9 +752,8 @@ class WikiLinkDetailView(WikiApiView):
 
         _location, wiki, profile = self.resolve(request, location_slug)
         link = get_object_or_404(visible_rows(WikiLink.objects.filter(wiki=wiki), wiki, profile), id=link_id)
-        # Tombstone first, matching LocationLinkDeleteView (controllers/links.py) -
-        # without it, a plugin panel (Nominatim, EPA) recreates this exact link
-        # the next time its cache goes stale.
+        # Tombstone first, matching LocationLinkDeleteView (controllers/links.py) - without it, a plugin panel
+        # (Nominatim, EPA) recreates this exact link the next time its cache goes stale.
         WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LINK, value=link.url)
         link.delete()
         return Response(status=204)
@@ -829,15 +762,15 @@ class WikiLinkDetailView(WikiApiView):
 def _gallery_row(image: Image) -> dict[str, Any]:
     """Shape one gallery image into its API payload.
 
-    A module-level function rather than an inline comprehension so it can be
-    handed to ``paginated_response`` as a ``row_builder`` and therefore run on
-    the requested page only - see that method's docstring.
+    A module-level function rather than an inline comprehension so it can be handed to
+    ``paginated_response`` as a ``row_builder`` and therefore run on the requested page only - see that
+    method's docstring.
 
     Args:
         image: A wiki gallery image with a non-empty file.
 
     Returns:
-        The serializable row for :class:`GalleryImageSerializer`.
+        The serializable row for: class:`GalleryImageSerializer`.
     """
     return {
         "id": image.pk,
@@ -866,24 +799,10 @@ class WikiGalleryView(PaginatedListMixin, WikiApiView):
     def get(self, request: Request, location_slug: str) -> Response:
         """Return one page of gallery images the caller may see."""
         _location, wiki, profile = self.resolve(request, location_slug)
-        # visible_to applies the uploader's photo-visibility setting and the
-        # viewer's own photo filter - a wiki being visible does not make every
-        # photo on it visible.
-        #
-        # `exclude(image="")` is pushed into the queryset rather than filtered
-        # out in Python so the page the paginator slices is the page that gets
-        # returned; a Python-side `if image.image` would make pages short and
-        # the count wrong.
-        # Most-likely-relevant first (REData's cached confidence - see
-        # services.photos.redata_relevance), falling back to upload order for
-        # a photo REData hasn't scored yet.
+        # visible_to applies the uploader's photo-visibility setting and the viewer's own photo filter - a wiki
+        # being visible does not make every photo on it visible.
         images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).visible_to(profile).exclude(image="").order_by(F("redata_confidence").desc(nulls_last=True), "-created", "-pk")
         # The queryset is paginated, then rows are built for the page only.
-        # Building rows first materialized the *entire* visible gallery and
-        # resolved a storage URL per image on every request before the
-        # paginator sliced the resulting list - so the page-size limit bounded
-        # only the response body, while the work behind it grew with the whole
-        # gallery.
         return self.paginated_response(images, GalleryImageSerializer, request, row_builder=_gallery_row)
 
 
@@ -899,10 +818,7 @@ class WikiArticleView(WikiApiView):
     def get(self, request: Request, location_slug: str) -> Response:
         """Return the wiki's article, body included."""
         _location, wiki, profile = self.resolve(request, location_slug)
-        # Concealed the same way the HTML tab is: the newest revision this
-        # viewer may see, or nothing. `get_article` fetches by primary key, so
-        # without this the API hands back the live body in full while every
-        # field beside it is concealed.
+        # Concealed the same way the HTML tab is: the newest revision this viewer may see, or nothing.
         article = conceal_article(get_article(wiki=wiki), wiki, profile)
         if article is None:
             raise Http404
@@ -939,9 +855,8 @@ class WikiArticleView(WikiApiView):
                     viewer=profile,
                 )
         except ArticleConflictError as exc:
-            # Mirrors the internal editor's conflict handling exactly: nothing
-            # is written, and the client is told which revision is current so
-            # it can show the other edit and re-base.
+            # Mirrors the internal editor's conflict handling exactly: nothing is written, and the client is
+            # told which revision is current so it can show the other edit and re-base.
             return Response(
                 {"error": "This article changed while you were editing.", "conflict": True, "current_revision_id": exc.current_revision_id},
                 status=409,
@@ -996,16 +911,9 @@ class WikiArticleRevisionsView(PaginatedListMixin, WikiApiView):
 class WikiArticleRevisionDetailView(WikiApiView):
     """GET one article revision, with its diff against the preceding one. DELETE to scrub it from history.
 
-    Deletion is self-service, restricted to the revision's own
-    ``editor`` - this is a contributor removing something they personally
-    wrote (an accidentally-shared private detail, say), not moderation of
-    someone else's edit. It never touches the article's *current* text:
-    ``Article.content`` is its own denormalized field, not derived live from
-    the newest revision, so deleting even the newest revision only removes it
-    from the history list. A revision that some other, later restore points
-    back at (``ArticleRevision.restored_from``) is left with that link set to
-    null by the FK's own ``on_delete=SET_NULL`` - no extra handling needed
-    here for the dangling reference.
+    It never touches the article's *current* text: ``Article.content`` is its own denormalized field,
+    not derived live from the newest revision, so deleting even the newest revision only removes it from
+    the history list.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1021,11 +929,7 @@ class WikiArticleRevisionDetailView(WikiApiView):
         if article is None:
             raise Http404
 
-        # Scoped to this wiki's article - a bare id would expose revisions of
-        # every article in the database.
-        # Scoped to the viewer, not just the article: an unfiltered by-id
-        # lookup answers "does revision N exist here" and then hands over its
-        # full text and diff, for revisions concealment already ruled out.
+        # Scoped to this wiki's article - a bare id would expose revisions of every article in the database.
         visible = visible_rows(article.revisions.all(), wiki, profile)
         revision = get_object_or_404(visible, id=revision_id)
         previous = visible.filter(created__lt=revision.created).order_by("-created", "-pk").first()
@@ -1049,11 +953,8 @@ class WikiArticleRevisionDetailView(WikiApiView):
     def delete(self, request: Request, location_slug: str, revision_id: int) -> Response:
         """Permanently remove one revision the caller themselves wrote.
 
-        A 404, not a 403, when the revision exists but belongs to someone
-        else - matching every other lookup miss in this module. A caller who
-        cannot see the wiki learns nothing beyond "no such revision" either
-        way, so telling apart "wrong author" from "wrong wiki" would be a
-        needless extra disclosure.
+        A caller who cannot see the wiki learns nothing beyond "no such revision" either way, so telling
+        apart "wrong author" from "wrong wiki" would be a needless extra disclosure.
 
         Args:
             request: The authenticated request.
@@ -1061,9 +962,8 @@ class WikiArticleRevisionDetailView(WikiApiView):
             revision_id: The revision to delete, scoped to this wiki's article.
 
         Returns:
-            204 on success, or the uniform 404 when the revision does not
-            exist, belongs to a different article, or was not authored by
-            the caller.
+            204 on success, or the uniform 404 when the revision does not exist, belongs to a different
+            article, or was not authored by the caller.
         """
         _location, wiki, profile = self.resolve(request, location_slug)
         article = get_article(wiki=wiki)
@@ -1126,9 +1026,8 @@ class _CommentListMixin(PaginatedListMixin):
             A paginated envelope of serialized comments.
         """
         top_level = list(top_level_comment_queryset(comments_qs))
-        # Every visibility decision - including the @location mention gate that
-        # drops a comment entirely rather than redacting it - happens here, in
-        # the same call the internal comment panel makes.
+        # Every visibility decision - including the @location mention gate that drops a comment entirely rather
+        # than redacting it - happens here, in the same call the internal comment panel makes.
         visible = visible_comment_tree(top_level, profile)
         rows = [_serialize_comment(item, profile) for item in visible]
         return self.paginated_response(rows, CommentSerializer, request)
@@ -1151,18 +1050,10 @@ class _CommentListMixin(PaginatedListMixin):
 
         parent: CommentModel | None = None
         if data.get("parent_id") is not None:
-            # Scoped to the same host, so a comment id from another pin/wiki
-            # can't be used to graft a reply across threads - and gated by the
-            # same visibility rules the list applies, so a parent the caller
-            # was never shown reads as "no such comment" rather than accepting
-            # the reply. Without the second check a guessed sequential id
-            # confirmed its own existence *and* created a reply the author
-            # could never retrieve, since visible_comment_tree omits a hidden
-            # parent together with everything under it.
-            # parent__isnull=True: replies render one level deep
-            # (visible_comment_tree never walks a reply's own .replies), so a
-            # reply-to-a-reply would persist but never appear anywhere -
-            # refuse it the same way an unaddressable id already is.
+            # Without the second check a guessed sequential id confirmed its own existence *and* created a reply
+            # the author could never retrieve, since visible_comment_tree omits a hidden parent together with
+            # everything under it. parent__isnull=True: replies render one level deep (visible_comment_tree
+            # never walks a reply's own .replies), so a reply-to-a-reply would persist but never appear anywhere
             scope = {"pin": pin} if pin is not None else {"wiki": wiki}
             parent = get_object_or_404(Comment.objects.select_related("profile"), id=data["parent_id"], parent__isnull=True, **scope)
             if not comment_is_visible(parent, profile):
@@ -1174,22 +1065,15 @@ class _CommentListMixin(PaginatedListMixin):
             logger.info("comment creation rejected: %s", exc)
             return Response({"error": "Comment text can't be empty."}, status=400)
         except InvalidCommentHostError as exc:
-            # Defensive: this view always calls create_comment with exactly one
-            # of pin/wiki, so reaching this means the caller wiring above it is
-            # broken, not that the requester did anything wrong.
+            # Defensive: this view always calls create_comment with exactly one of pin/wiki, so reaching this
+            # means the caller wiring above it is broken, not that the requester did anything wrong.
             logger.warning("comment creation rejected: %s", exc)
             return Response({"error": "That comment couldn't be created."}, status=400)
 
-        # The freshly created comment never passes through visible_comment_tree,
-        # so its mentions are resolved here without the gate that call would
-        # have applied. comment_mentions performs a *global* location lookup:
-        # fed a crafted `@[name](loc:<uuid>)` token for a location the author
-        # has not pinned, it answers with the real slug when that uuid exists
-        # and echoes the submitted uuid when it doesn't - turning comment
-        # creation into exactly the location-existence oracle the mention gate
-        # is built to prevent. Serializing through the same gate the list uses
-        # closes it; a comment whose own author cannot see it is refused
-        # outright rather than persisted invisibly.
+        # The freshly created comment never passes through visible_comment_tree, so its mentions are resolved
+        # here without the gate that call would have applied. comment_mentions performs a *global* location
+        # lookup: fed a crafted `@[name](loc:<uuid>)` token for a location the author has not pinned, it answers
+        # with the real slug when that uuid exists and echoes the submitted uuid when it doesn't - turning
         if not comment_is_visible(comment, profile):
             comment.delete()
             return Response({"error": "That comment mentions a location you haven't pinned."}, status=400)
@@ -1258,12 +1142,12 @@ class WikiCommentDetailView(WikiApiView):
 class WikiCommentReactionView(_ReactionMixin, WikiApiView):
     """PUT to add an emoji reaction to a wiki comment; DELETE to remove it.
 
-    Nothing but configuration: the idempotent toggle, the emoji check, the
-    ``{"reactions": ...}`` envelope and the 400/404 discipline all live in
-    :class:`~urbanlens.dashboard.external_api.mixins._ReactionMixin`, shared
-    with the pin-comment and group-message reaction endpoints. The schema
-    annotations move to ``extend_schema_view`` because the handlers themselves
-    are inherited and there is no local ``put``/``delete`` to decorate.
+    Nothing but configuration: the idempotent toggle, the emoji check, the ``{"reactions": ...}``
+    envelope and the 400/404 discipline all live in
+    :class:`~urbanlens.dashboard.external_api.mixins._ReactionMixin`, shared with the pin-comment and
+    group-message reaction endpoints.
+    The schema annotations move to ``extend_schema_view`` because the handlers themselves are inherited
+    and there is no local ``put``/``delete`` to decorate.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1279,33 +1163,21 @@ class WikiCommentReactionView(_ReactionMixin, WikiApiView):
     def resolve_reaction_target(self, request: Request, **kwargs: Any) -> tuple[CommentModel, Profile]:
         """Resolve the wiki comment being reacted to, or 404.
 
-        Every gate is a lookup rather than a permission branch: ``self.resolve``
-        404s unless the caller has pinned the location (see the module
-        docstring), ``wiki=wiki`` keeps a comment id from another wiki - or
-        from a wiki this caller cannot see - from being reachable by guessing
-        integers, and :func:`comment_is_visible` applies the same per-comment
-        gates the thread listing does.
-
-        That third check is not redundant with the second. Wiki scope alone
-        left every comment on a wiki the caller can see reachable by its
-        sequential id, including the ones ``visible_comment_tree`` drops for
-        this viewer: hidden by the author's comment-visibility, awaiting a
-        malware scan, or naming a location the caller has not pinned. Reacting
-        to one returned its reaction summary (confirming the id exists) and
-        notified an author whose comments this caller is not allowed to read.
+        Every gate is a lookup rather than a permission branch: ``self.resolve`` 404s unless the caller has
+        pinned the location (see the module docstring), ``wiki=wiki`` keeps a comment id from another wiki -
+        or from a wiki this caller cannot see - from being reachable by guessing integers, and
+        :func:`comment_is_visible` applies the same per-comment gates the thread listing does.
 
         Args:
-            request: The authenticated request.
-            **kwargs: URL keyword arguments; ``location_slug`` and
-                ``comment_id`` are read here.
+            request: The authenticated request. **kwargs: URL keyword arguments; ``location_slug`` and
+            ``comment_id`` are read here.
 
         Returns:
             Tuple of (the comment, the requesting profile).
 
         Raises:
-            Http404: Unknown location, invisible wiki, a comment id that is not
-                on that wiki, or a comment this caller was never shown - all
-                indistinguishable.
+            Http404: Unknown location, invisible wiki, a comment id that is not on that wiki, or a comment
+            this caller was never shown - all indistinguishable.
         """
         _location, wiki, profile = self.resolve(request, kwargs["location_slug"])
         comment = get_object_or_404(visible_rows(Comment.objects.select_related("profile").filter(wiki=wiki), wiki, profile), id=kwargs["comment_id"])
@@ -1317,9 +1189,8 @@ class WikiCommentReactionView(_ReactionMixin, WikiApiView):
 class PinCommentsView(OwnedPinMixin, _CommentListMixin, ExternalApiView):
     """GET the caller's own comments on their pin; POST to add one.
 
-    Uses ``pins:*`` rather than ``wiki:*``: a pin's comment thread is the
-    owner's own private annotation of their own pin, not shared community
-    content.
+    Uses ``pins:*`` rather than ``wiki:*``: a pin's comment thread is the owner's own private annotation
+    of their own pin, not shared community content.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {

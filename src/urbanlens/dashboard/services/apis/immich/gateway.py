@@ -36,8 +36,7 @@ class MapMarker:
 
 @dataclass(frozen=True, slots=True)
 class SearchAsset:
-    """One asset returned by ``POST /api/search/metadata``.
-    ``lat``/``lon``/``city`` come from the same ``exifInfo`` block ``map/markers`` and ``taken_at`` already draw from, so a single paginated sweep of this endpoint (see ``iter_library_assets``) is enough to recover location + capture date together without a second API call per asset."""
+    """One asset returned by ``POST /api/search/metadata``."""
 
     id: str
     taken_at: datetime.datetime | None = None
@@ -73,15 +72,11 @@ class ImmichGateway(Gateway):
     def _get(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         """Perform an authenticated GET and return the decoded JSON body.
 
-        Args:
-                path: API path beginning with ``/`` (e.g. ``/server/ping``).
-                params: Optional query parameters.
-
         Returns:
-                The decoded JSON response body.
+            The decoded JSON response body.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         try:
             response = self.session.get(f"{self._base_url}{path}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:
@@ -94,16 +89,11 @@ class ImmichGateway(Gateway):
     def _get_binary(self, path: str, *, params: dict[str, Any] | None = None) -> tuple[bytes, str, str]:
         """Perform an authenticated GET and return the raw response body.
 
-        Args:
-                path: API path beginning with ``/``.
-                params: Optional query parameters.
-
         Returns:
-                Tuple of (content bytes, content-type, filename derived from the
-                response's Content-Disposition header, or the asset id when absent).
+            Tuple of (content bytes, content-type, filename derived from the response's Content-Disposition header, or the asset id when absent).
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         try:
             response = self.session.get(f"{self._base_url}{path}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:
@@ -118,15 +108,11 @@ class ImmichGateway(Gateway):
     def _post(self, path: str, *, json: dict[str, Any]) -> Any:
         """Perform an authenticated POST and return the decoded JSON body.
 
-        Args:
-                path: API path beginning with ``/`` (e.g. ``/search/metadata``).
-                json: The JSON request body.
-
         Returns:
-                The decoded JSON response body.
+            The decoded JSON response body.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         try:
             response = self.session.post(f"{self._base_url}{path}", json=json, headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:
@@ -151,44 +137,33 @@ class ImmichGateway(Gateway):
     def get_map_markers(self, *, is_archived: bool = False) -> list[MapMarker]:
         """Return every geolocated asset in the user's library.
 
-        Args:
-                is_archived: When False (default), excludes archived/trashed assets.
-
         Returns:
-                One MapMarker per geolocated asset. Assets without GPS coordinates
-                are never returned by this endpoint, so no filtering is needed here.
+            One MapMarker per geolocated asset.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         markers = self._get("/map/markers", params={"isArchived": is_archived})
         return [MapMarker(id=marker["id"], lat=float(marker["lat"]), lon=float(marker["lon"]), city=marker.get("city")) for marker in markers if marker.get("lat") is not None and marker.get("lon") is not None]
 
     def library_asset_count(self) -> int:
         """Return the true total number of assets in the user's library.
-        ``POST /search/metadata``'s own ``assets.total`` field is deprecated and, on current Immich servers, actually mirrors the current page's item count rather than a library-wide total - so it must never be used as a progress-bar denominator (see ``iter_library_assets``, which yields it unchanged for pagination bookkeeping only, not for display).
 
         Returns:
-                Total matching assets, or 0 if the endpoint errors.
+            Total matching assets, or 0 if the endpoint errors.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         body = self._post("/search/statistics", json={})
         return int(body.get("total") or 0)
 
     def _search_metadata_page(self, filters: dict[str, Any], *, page: Any = None, size: int = _DEFAULT_RECENT_LIMIT) -> tuple[list[SearchAsset], Any, int]:
         """Run one page of a ``POST /api/search/metadata`` query.
 
-        Args:
-                filters: Immich metadata-search filters (e.g. ``takenAfter``/``takenBefore``).
-                page: Pagination token from a previous page's response, or None for the first page.
-                size: Maximum number of assets to return in this page.
-
         Returns:
-                Tuple of (assets on this page, the token to request the next page - falsy
-                when this was the last page, total assets matching the filter).
+            Tuple of (assets on this page, the token to request the next page - falsy when this was the last page, total assets matching the filter).
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         # withExif=True is required to get GPS coordinates back at all - without it
         # Immich omits exifInfo entirely, so _parse_asset's lat/lon always come back
         # None even for photos with real GPS EXIF data.
@@ -203,15 +178,11 @@ class ImmichGateway(Gateway):
     def _search_metadata(self, filters: dict[str, Any], *, size: int = _DEFAULT_RECENT_LIMIT) -> list[SearchAsset]:
         """Run one ``POST /api/search/metadata`` query and parse the results.
 
-        Args:
-                filters: Immich metadata-search filters (e.g. ``takenAfter``/``takenBefore``).
-                size: Maximum number of assets to return (a single page).
-
         Returns:
-                Matching assets, most recently taken first (Immich's default order).
+            Matching assets, most recently taken first (Immich's default order).
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         assets, _next_page, _total = self._search_metadata_page(filters, size=size)
         return assets
 
@@ -219,17 +190,11 @@ class ImmichGateway(Gateway):
         """Page through every asset in the user's library, yielding one page at a time.
         Used for a full-library location sweep, where downloading every asset would be far too expensive - this only fetches the lightweight metadata (id, GPS, capture date, city) already present in the search response.
 
-        Args:
-                page_size: Assets requested per page.
-
         Yields:
-                One (assets on this page, total assets in the library) tuple per
-                page, in Immich's default (most recent first) order. Stops when
-                Immich reports no further page, or after ``_MAX_LIBRARY_PAGES`` as
-                a runaway-loop guard.
+            One (assets on this page, total assets in the library) tuple per page, in Immich's default (most recent first) order.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         page: Any = None
         for _ in range(_MAX_LIBRARY_PAGES):
             assets, next_page, total = self._search_metadata_page({}, page=page, size=page_size)
@@ -242,14 +207,11 @@ class ImmichGateway(Gateway):
     def search_by_dates(self, dates: Sequence[datetime.date]) -> list[SearchAsset]:
         """Return the user's own assets taken on any of the given calendar dates.
 
-        Args:
-                dates: Calendar dates to search, in the account's local time.
-
         Returns:
-                Matching assets, deduplicated by id, most recently taken first.
+            Matching assets, deduplicated by id, most recently taken first.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         seen: dict[str, SearchAsset] = {}
         for day in dates:
             start = datetime.datetime.combine(day, datetime.time.min, tzinfo=datetime.UTC)
@@ -261,41 +223,32 @@ class ImmichGateway(Gateway):
     def list_recent(self, limit: int = _DEFAULT_RECENT_LIMIT) -> list[SearchAsset]:
         """Return the user's most recently taken assets, with no filter applied.
 
-        Args:
-                limit: Maximum number of assets to return (a single page).
-
         Returns:
-                Up to ``limit`` assets, most recently taken first.
+            Up to ``limit`` assets, most recently taken first.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         return self._search_metadata({}, size=limit)
 
     def get_asset_thumbnail(self, asset_id: str) -> tuple[bytes, str]:
         """Return a preview-sized image for one asset.
 
-        Args:
-                asset_id: The Immich asset id.
-
         Returns:
-                Tuple of (image bytes, content-type).
+            Tuple of (image bytes, content-type).
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         content, content_type, _filename = self._get_binary(f"/assets/{asset_id}/thumbnail", params={"size": "thumbnail"})
         return content, content_type
 
     def get_asset_original(self, asset_id: str) -> tuple[bytes, str, str]:
         """Return the full-resolution original file for one asset.
 
-        Args:
-                asset_id: The Immich asset id.
-
         Returns:
-                Tuple of (file bytes, filename, content-type).
+            Tuple of (file bytes, filename, content-type).
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         content, content_type, filename = self._get_binary(f"/assets/{asset_id}/original")
         return content, filename, content_type
 
@@ -307,9 +260,7 @@ def _parse_taken_at(item: dict[str, Any]) -> datetime.datetime | None:
         item: One raw asset object from the search response.
 
     Returns:
-        The parsed ``exifInfo.dateTimeOriginal`` (falling back to
-        ``fileCreatedAt``), or None when neither is present or parseable.
-    """
+        The parsed ``exifInfo.dateTimeOriginal`` (falling back to ``fileCreatedAt``), or None when neither is present or parseable."""
     value = (item.get("exifInfo") or {}).get("dateTimeOriginal") or item.get("fileCreatedAt")
     if not value:
         return None

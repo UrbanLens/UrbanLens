@@ -36,9 +36,7 @@ def find_matching_pin(profile: Profile, latitude: Decimal | float, longitude: De
         longitude: WGS-84 longitude of the photo.
 
     Returns:
-        The closest matching Pin, or None when the profile has no pin within
-        ``PHOTO_PIN_MATCH_RADIUS_M`` metres of the point.
-    """
+        The closest matching Pin, or None when the profile has no pin within ``PHOTO_PIN_MATCH_RADIUS_M`` metres of the point."""
     point = Point(float(longitude), float(latitude), srid=4326)
     return (
         Pin.objects.filter(profile=profile)
@@ -72,21 +70,11 @@ def classify_photo(image: Image, pending_image_ids: set[int] | None = None) -> P
     """Return the organize state of an uploaded photo.
 
     Args:
-        image: The Image to classify (``visit``, coordinates, and
-            ``organize_dismissed`` are read).
-        pending_image_ids: Precomputed output of
-            :func:`pending_suggestion_image_ids`. Callers classifying a *list*
-            should pass it, otherwise this issues a suggestion-exists query per
-            photo. Passed explicitly rather than read off a prefetch attribute
-            so that forgetting it costs queries rather than silently returning
-            the wrong state.
+        image: The Image to classify (``visit``, coordinates, and ``organize_dismissed`` are read).
+        pending_image_ids: Precomputed output of :func:`pending_suggestion_image_ids`.
 
     Returns:
-        - ``"filed"``: already tied to a visit, or dismissed - no action needed.
-        - ``"suggested"``: has a pending photo-origin VisitSuggestion to confirm.
-        - ``"needs_pin"``: geotagged but no matching pin - offer create-pin.
-        - ``"needs_location"``: no coordinates - offer manual pin search.
-    """
+        - ``"filed"``: already tied to a visit, or dismissed - no action needed. - ``"suggested"``: has a pending photo-origin VisitSuggestion to confirm. - ``"needs_pin"``: geotagged but no matching pin - offer create-pin. - ``"needs_location"``: no..."""
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 
     if image.visit_id or image.organize_dismissed:
@@ -114,8 +102,7 @@ def _resuggest_nearby_unfiled_photos(profile: Profile, pin: Pin, *, exclude_imag
     Args:
         profile: The photos' owner (also the new pin's owner).
         pin: The pin that was just created or reused.
-        exclude_image_id: The photo already handled by the caller - skipped
-            here since it's already filed."""
+        exclude_image_id: The photo already handled by the caller - skipped here since it's already filed."""
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
@@ -155,21 +142,13 @@ def create_pin_and_log_visit(
     name: str | None = None,
 ) -> tuple[Pin, PinVisit | None]:
     """Create a pin for a geotagged photo and log a visit there in one step.
-    The shared Location is resolved first so an existing pin at that exact place can be reused instead of colliding with ``db_pin_unique_location_per_profile`` - this happens when another photo from the same batch already created a pin here (see ``_resuggest_nearby_unfiled_photos``, which is meant to catch this first, but a race or an out-of-order confirm-dialog submission can still reach this path).
 
     Args:
         profile: The owner the new pin and visit belong to.
-        image: The geotagged photo. Its coordinates are used unless ``latitude``
-            and ``longitude`` are supplied.
+        image: The geotagged photo.
         latitude: Optional latitude to place the pin at (defaults to the photo's).
         longitude: Optional longitude to place the pin at (defaults to the photo's).
-        name: Optional user-provided pin name; left unset to fall back to the
-            Location's canonical name via ``Pin.effective_name``.
-
-    Returns:
-        The Pin (new or reused), and the new PinVisit - or None if profile has
-        turned off visit-history tracking (the pin/photo association still
-        happens; only the visit row is skipped).
+        name: Optional user-provided pin name; left unset to fall back to the Location's canonical name via ``Pin.effective_name``.
 
     Raises:
         ValueError: If neither an override nor the image supplies coordinates."""
@@ -212,11 +191,7 @@ def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit | Non
     Args:
         profile: The owner the visit belongs to (also the pin owner).
         image: The photo to file.
-        pin: The pin to log the visit against.
-
-    Returns:
-        The newly created PinVisit, or None if profile has turned off
-        visit-history tracking (the photo is still attached to the pin)."""
+        pin: The pin to log the visit against."""
     visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO) if visit_logging_allowed(profile) else None
     update_fields = ["pin", "visit", "updated"]
     image.pin = pin

@@ -1,14 +1,5 @@
 {% load humanize %}
-{% comment %}
-Navbar banner shown site-wide for each of the profile's active (unresolved)
-safety check-ins - a profile may have several at once, one per (profile, trip)
-scope (see services.safety.get_active_checkins). Loaded via HTMX from
-partials/layout/header.html.
-
-Context: checkins (queryset/list of SafetyCheckin, possibly empty - renders an
-empty placeholder when there are none, so the hx-swap target still exists for
-the next poll/reload).
-{% endcomment %}
+{% comment %}Navbar banner shown site-wide for each of the profile's active (unresolved) safety check-ins.{% endcomment %}
 <div id="safety-active-banner">
     {% for checkin in checkins %}
     <div class="safety-active-banner" id="safety-active-banner-{{ checkin.uuid }}">

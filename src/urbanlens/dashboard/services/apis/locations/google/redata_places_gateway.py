@@ -1,5 +1,4 @@
-"""Gateway for REData's Google Places API (New) endpoints.
-Only Essentials/Pro-tier fields are ever requested or stored on REData's end: **no rating, reviews, opening hours, price level, phone numbers, or website URL exist anywhere in this API** - those sit in Google's pricier Enterprise/Enterprise+Atmosphere SKU tiers, which REData deliberately never fetches."""
+"""Gateway for REData's Google Places API (New) endpoints."""
 
 from __future__ import annotations
 
@@ -67,20 +66,11 @@ class RedataPlacesGateway(Gateway):
     def _request(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         """GET one REData endpoint and return the raw ``requests.Response``.
 
-        Args:
-                path: Path relative to ``base_url`` (leading slash optional).
-                params: Query-string parameters, if any.
-
         Returns:
-                The raw ``requests.Response`` - callers interpret their own
-                endpoint's status codes, since 404 means "confirmed nothing here"
-                on some endpoints (``get_place``/``download_photo``) but would be
-                a routing bug on others (the search/autocomplete endpoints).
+            The raw ``requests.Response`` - callers interpret their own endpoint's status codes, since 404 means "confirmed nothing here" on some endpoints (``get_place``/``download_photo``) but would be a routing bug on others (the search/autocomplete endpoints).
 
         Raises:
-                GatewayRequestError: The request itself could not be made (network
-                failure) - never raised for a completed HTTP response,
-                regardless of status code."""
+            GatewayRequestError: The request itself could not be made (network failure) - never raised for a completed HTTP response, regardless of status code."""
         base_url = self.base_url
         if base_url is None:
             # __post_init__ already validates this for the normal construction
@@ -94,15 +84,8 @@ class RedataPlacesGateway(Gateway):
     def _error_for(self, response: Any, message: str) -> GatewayRequestError:
         """Build the exception a failed ``response`` should raise.
 
-        Args:
-            response: The non-success ``requests.Response`` being reported.
-            message: The exception message.
-
         Returns:
-            :class:`~urbanlens.dashboard.services.core.gateway.GatewayRateLimitedError`
-            when REData's body identifies its own exhausted request budget,
-            else the plain, less specific ``GatewayRequestError``.
-        """
+            :class:`~urbanlens.dashboard.services.core.gateway.GatewayRateLimitedError` when REData's body identifies its own exhausted request budget, else the plain, less specific ``GatewayRequestError``."""
         try:
             body = response.json()
         except ValueError:
@@ -114,21 +97,11 @@ class RedataPlacesGateway(Gateway):
     def get_place(self, place_id: str) -> dict[str, Any] | None:
         """Fetch (and, on REData's end, permanently cache) one place's full details.
 
-        Args:
-                place_id: Google's own ``place_id``.
-
         Returns:
-                The place dict (see ``api-reference.md`` for the full field list -
-                flat ``latitude``/``longitude``, ``formatted_address``,
-                ``google_maps_uri``, ``types``, ``photos`` metadata, and
-                ``photo_records`` for :meth:`download_photo`), or None when
-                Google has confirmed this ``place_id`` doesn't resolve to a place
-                (a permanent, cached-forever "not found", not a transient error).
+            The place dict (see ``api-reference.md`` for the full field list - flat ``latitude``/``longitude``, ``formatted_address``, ``google_maps_uri``, ``types``, ``photos`` metadata, and ``photo_records`` for :meth:`download_photo`), or None when Google...
 
         Raises:
-                GatewayRequestError: The request failed outright, or REData
-                reported a transient failure (rate-limited, unreachable
-                Google, or REData's own API key not configured)."""
+            GatewayRequestError: The request failed outright, or REData reported a transient failure (rate-limited, unreachable Google, or REData's own API key not configured)."""
         response = self._request(f"/api/v1/places/{place_id}/")
         if response.status_code == 200:
             return dict(response.json())
@@ -140,22 +113,11 @@ class RedataPlacesGateway(Gateway):
     def search_nearby(self, latitude: float, longitude: float, radius_meters: float = 200, included_types: list[str] | None = None, max_results: int = 20) -> list[dict[str, Any]]:
         """Search places near a coordinate via REData.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                radius_meters: Search radius in meters.
-                included_types: Google place-type taxonomy filter; omit to search
-                every type.
-                max_results: Capped by Google at 20 (no pagination beyond one page).
-
         Returns:
-                A list of lightweight place-projection dicts (``place_id``,
-                ``name``, ``formatted_address``, ``latitude``, ``longitude``,
-                ``types``, ``primary_type``, ``business_status``,
-                ``google_maps_uri``) - possibly empty.
+            A list of lightweight place-projection dicts (``place_id``, ``name``, ``formatted_address``, ``latitude``, ``longitude``, ``types``, ``primary_type``, ``business_status``, ``google_maps_uri``) - possibly empty.
 
         Raises:
-                GatewayRequestError: The request failed outright."""
+            GatewayRequestError: The request failed outright."""
         params: dict[str, Any] = {"latitude": latitude, "longitude": longitude, "radius_meters": radius_meters, "max_results": max_results}
         if included_types:
             params["included_type"] = list(included_types)
@@ -168,18 +130,11 @@ class RedataPlacesGateway(Gateway):
     def search_text(self, query: str, latitude: float | None = None, longitude: float | None = None, radius_meters: float = 200, max_results: int = 20) -> list[dict[str, Any]]:
         """Free-text place search via REData.
 
-        Args:
-                query: Free text - an address, business name, or "coffee near Main St".
-                latitude: Optional bias center.
-                longitude: Optional bias center.
-                radius_meters: Only meaningful with latitude/longitude.
-                max_results: Capped by Google at 20.
-
         Returns:
-                Same shape as :meth:`search_nearby` - possibly empty.
+            Same shape as :meth:`search_nearby` - possibly empty.
 
         Raises:
-                GatewayRequestError: The request failed outright."""
+            GatewayRequestError: The request failed outright."""
         params: dict[str, Any] = {"query": query, "radius_meters": radius_meters, "max_results": max_results}
         if latitude is not None:
             params["latitude"] = latitude
@@ -194,19 +149,11 @@ class RedataPlacesGateway(Gateway):
     def autocomplete(self, query: str, latitude: float | None = None, longitude: float | None = None, radius_meters: float = 200) -> list[dict[str, Any]]:
         """Predictions-as-you-type via REData.
 
-        Args:
-                query: The partial text typed so far.
-                latitude: Optional bias center.
-                longitude: Optional bias center.
-                radius_meters: Only meaningful with latitude/longitude.
-
         Returns:
-                A list of flattened prediction dicts (``kind``, ``place_id``,
-                ``text``, ``main_text``, ``secondary_text``, ``types``) -
-                ``place_id`` is ``""`` for a ``"query"``-kind suggestion.
+            A list of flattened prediction dicts (``kind``, ``place_id``, ``text``, ``main_text``, ``secondary_text``, ``types``) - ``place_id`` is ``""`` for a ``"query"``-kind suggestion.
 
         Raises:
-                GatewayRequestError: The request failed outright."""
+            GatewayRequestError: The request failed outright."""
         params: dict[str, Any] = {"query": query, "radius_meters": radius_meters}
         if latitude is not None:
             params["latitude"] = latitude
@@ -221,19 +168,11 @@ class RedataPlacesGateway(Gateway):
     def download_photo(self, place_id: str, photo_record_id: int) -> tuple[bytes, str] | None:
         """Download one photo's actual image bytes via REData.
 
-        Args:
-                place_id: The place's Google ``place_id``.
-                photo_record_id: REData's own internal id for this photo (from
-                the place's ``photo_records`` - see :meth:`get_place`), not
-                Google's own photo resource name.
-
         Returns:
-                Tuple of (file bytes, content-type), or None when REData has
-                confirmed this photo is no longer available.
+            Tuple of (file bytes, content-type), or None when REData has confirmed this photo is no longer available.
 
         Raises:
-                GatewayRequestError: The request failed outright, or REData
-                reported a transient failure."""
+            GatewayRequestError: The request failed outright, or REData reported a transient failure."""
         response = self._request(f"/api/v1/places/{place_id}/photos/{photo_record_id}/download/")
         if response.status_code == 200:
             return response.content, response.headers.get("Content-Type", "image/jpeg")

@@ -1,5 +1,4 @@
-"""Notifications raised by activity on a comment thread - replies and reactions.
-A service importing a controller means the business rule is only reachable by first loading a view layer, so the next caller that cannot do that - a Celery task, a management command, the external API - grows its own copy instead, and the copies drift."""
+"""Notifications raised by activity on a comment thread - replies and reactions."""
 
 from __future__ import annotations
 
@@ -26,11 +25,7 @@ def comment_url(comment: Any) -> str:
         comment: A ``Comment`` (pin or wiki) or a ``TripComment``.
 
     Returns:
-        The absolute path to the comment's page including its anchor, or an
-        empty string when no route could be built. An empty URL is deliberate:
-        a notification with no link is degraded but harmless, whereas raising
-        would abort the reply or reaction that triggered it - the user's actual
-        action - over a broken link."""
+        The absolute path to the comment's page including its anchor, or an empty string when no route could be built."""
     anchor = f"#comment-{comment.id}"
     try:
         if getattr(comment, "trip_id", None):
@@ -48,13 +43,10 @@ def _recipient_of(comment: Any) -> Profile | None:
     """Return the profile that authored *comment*, whichever field holds it.
 
     Args:
-        comment: A ``Comment`` (which names its author ``profile``) or a
-            ``TripComment`` (which names it ``author``).
+        comment: A ``Comment`` (which names its author ``profile``) or a ``TripComment`` (which names it ``author``).
 
     Returns:
-        The authoring profile, or None when the comment has no author (trip
-        comments keep their row when the author is removed).
-    """
+        The authoring profile, or None when the comment has no author (trip comments keep their row when the author is removed)."""
     if hasattr(comment, "profile"):
         return comment.profile
     return getattr(comment, "author", None)
@@ -68,11 +60,7 @@ def _preference(recipient: Profile, field: str) -> DeliveryPreference:
         field: The attribute name on ``notification_preferences`` to read.
 
     Returns:
-        The stored preference, or ``DeliveryPreference.SITE`` when the profile
-        has no preferences row yet. Defaulting to SITE rather than NONE keeps a
-        user who never opened their settings from silently losing every
-        notification.
-    """
+        The stored preference, or ``DeliveryPreference.SITE`` when the profile has no preferences row yet."""
     try:
         return getattr(recipient.notification_preferences, field)
     except AttributeError:
@@ -88,9 +76,7 @@ def _actor_names(recipient: Profile, actor: Profile) -> tuple[str, str]:
         actor: The profile that replied or reacted.
 
     Returns:
-        ``(name, handle)`` - the handle is ``@name`` only when the recipient may
-        actually see who *actor* is; "@Member 2" reads like a real mention and is
-        not one."""
+        ``(name, handle)`` - the handle is ``@name`` only when the recipient may actually see who *actor* is; "@Member 2" reads like a real mention and is not one."""
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     identity = resolve_visible_identity(recipient, actor)
@@ -104,9 +90,7 @@ def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None
     Args:
         actor: The profile that posted the reply.
         parent_comment: The comment that was replied to.
-        reply: The new reply, used for the deep link so the notification lands
-            on the reply itself. Falls back to *parent_comment* when omitted.
-    """
+        reply: The new reply, used for the deep link so the notification lands on the reply itself."""
     recipient = _recipient_of(parent_comment)
     if recipient is None or recipient == actor:
         return

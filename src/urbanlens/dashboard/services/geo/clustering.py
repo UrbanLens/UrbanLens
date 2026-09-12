@@ -38,19 +38,14 @@ def densest_cluster_centroid(points: Sequence[Point], radius_km: float) -> Point
     """Centre of the largest concentration of points within ``radius_km``.
 
     Args:
-        points: ``(latitude, longitude)`` pairs in degrees. May be empty.
-        radius_km: How far apart two points can be and still count as part of
-            the same concentration. Must be positive.
+        points: ``(latitude, longitude)`` pairs in degrees.
+        radius_km: How far apart two points can be and still count as part of the same concentration.
 
     Returns:
-        The concentration's ``(latitude, longitude)`` centroid, or None when
-        ``points`` is empty. Latitude is averaged arithmetically and longitude
-        as a direction, so a cluster straddling the antimeridian centres on the
-        cluster rather than in the Atlantic.
+        The concentration's ``(latitude, longitude)`` centroid, or None when ``points`` is empty.
 
     Raises:
-        ValueError: If ``radius_km`` is not positive.
-    """
+        ValueError: If ``radius_km`` is not positive."""
     if radius_km <= 0:
         raise ValueError(f"radius_km must be positive, got {radius_km}")
     if not points:
@@ -83,9 +78,7 @@ def _densest_block(points: Sequence[Point], cells: Sequence[tuple[int, int, int]
         cells: Each point's cell index, in the same order.
 
     Returns:
-        Every point in the winning block. Never empty, since the winning cell
-        is one that holds at least one point.
-    """
+        Every point in the winning block."""
     occupancy = Counter(cells)
     # Tie-break on the cell index, so row order cannot change the answer.
     best = max(occupancy, key=lambda cell: (_block_total(occupancy, cell), cell))
@@ -134,9 +127,7 @@ def _chord_length(radius_km: float) -> float:
         radius_km: Surface distance in kilometres.
 
     Returns:
-        The corresponding chord on a unit sphere, capped at 2 (the diameter),
-        which is what a radius past the far side of the planet amounts to.
-    """
+        The corresponding chord on a unit sphere, capped at 2 (the diameter), which is what a radius past the far side of the planet amounts to."""
     angle = min(radius_km / EARTH_RADIUS_KM, math.pi)
     return 2.0 * math.sin(angle / 2.0)
 
@@ -145,11 +136,10 @@ def _centroid(points: Iterable[Point]) -> Point:
     """Average a set of points, treating longitude as a direction.
 
     Args:
-        points: ``(latitude, longitude)`` pairs. Must not be empty.
+        points: ``(latitude, longitude)`` pairs.
 
     Returns:
-        The average ``(latitude, longitude)``.
-    """
+        The average ``(latitude, longitude)``."""
     collected = list(points)
     latitude = sum(point[0] for point in collected) / len(collected)
     return latitude, circular_mean_longitude([point[1] for point in collected])

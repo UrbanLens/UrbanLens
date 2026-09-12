@@ -122,11 +122,10 @@ class ConsensusFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Start a new session - solo (immediately active) or competitive (a lobby to invite friends into).
 
-    POST /games/consensus/start/   body: ``total_rounds``, optional ``invite_profile_ids`` (repeated).
+    POST /games/consensus/start/ body: ``total_rounds``, optional ``invite_profile_ids`` (repeated).
 
-    A solo start for a profile with no visited pins never creates a
-    ``ConsensusSession`` - responds with ``{"error_code": "no_eligible_wikis"}``
-    instead, matching ``SpotGuessrStartView``'s convention.
+    A solo start for a profile with no visited pins never creates a ``ConsensusSession`` - responds with
+    ``{"error_code": "no_eligible_wikis"}`` instead, matching ``SpotGuessrStartView``'s convention.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -443,11 +442,11 @@ class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Upload a photo of the spot during a round - reuses the Memories upload pipeline.
 
-    POST /games/consensus/session/<session_id>/round/<round_id>/photo/   body: an ``image`` file
+    POST /games/consensus/session/<session_id>/round/<round_id>/photo/ body: an ``image`` file
 
-    Attaches the photo to the round's wiki directly (an explicit "share this
-    with the wiki" action, unlike an ordinary private pin-gallery upload) and
-    awards a small bonus for helping a wiki that's short on photos.
+    Attaches the photo to the round's wiki directly (an explicit "share this with the wiki" action,
+    unlike an ordinary private pin-gallery upload) and awards a small bonus for helping a wiki that's
+    short on photos.
     """
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:

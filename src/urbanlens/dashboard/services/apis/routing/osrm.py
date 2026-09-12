@@ -34,16 +34,8 @@ class OSRMGateway(Gateway):
     def get_route(self, waypoints: list[tuple[float, float]], *, profile: OsrmProfile = "driving") -> dict[str, Any] | None:
         """Return the routed distance/duration between an ordered list of waypoints.
 
-        Args:
-            waypoints: Ordered ``(latitude, longitude)`` pairs, at least two.
-            profile: Routing profile - ``"driving"``, ``"walking"``, or ``"cycling"``.
-
         Returns:
-            Dict with ``distance_meters``, ``duration_seconds``, and
-            ``geometry`` (``None`` here since overview geometry isn't
-            requested), or None when routing failed (e.g. no road network
-            connects the points, or the request failed).
-        """
+            Dict with ``distance_meters``, ``duration_seconds``, and ``geometry`` (``None`` here since overview geometry isn't requested), or None when routing failed (e.g. no road network connects the points, or the request failed)."""
         if len(waypoints) < 2:
             raise ValueError("get_route requires at least two waypoints")
 
@@ -67,12 +59,6 @@ class OSRMGateway(Gateway):
     def get_route_between(self, origin: tuple[float, float], destination: tuple[float, float], *, profile: OsrmProfile = "driving") -> dict[str, Any] | None:
         """Convenience wrapper around :meth:`get_route` for a single origin/destination pair.
 
-        Args:
-            origin: ``(latitude, longitude)`` of the starting point.
-            destination: ``(latitude, longitude)`` of the destination.
-            profile: Routing profile - ``"driving"``, ``"walking"``, or ``"cycling"``.
-
         Returns:
-            Same shape as :meth:`get_route`.
-        """
+            Same shape as :meth:`get_route`."""
         return self.get_route([origin, destination], profile=profile)

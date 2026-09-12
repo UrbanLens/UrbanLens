@@ -1,13 +1,4 @@
-{% comment %}
-Shared footer for emails sent to an emergency CONTACT (never the check-in owner) - the
-three one-click opt-out links. Included by safety_checkin_overdue.html, the other-contacts
-branch of safety_checkin_resolved.html, and safety_checkin_plan_updated.html. Expects
-optout_checkin_url/optout_owner_url/optout_global_url (built by services.safety._optout_urls).
-
-Each link is a GET to a confirmation page, not the opt-out action itself - a bare GET is
-exactly what an email client's link-scanner prefetches, which would otherwise silently
-unsubscribe a real emergency contact.
-{% endcomment %}
+{% comment %}Shared footer for emails sent to an emergency CONTACT (never the check-in owner) - the three one-click opt-out links.{% endcomment %}
 <tr>
   <td style="padding:20px 32px;border-top:1px solid #f1f5f9;background:#fafafa">
     <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;text-align:center">

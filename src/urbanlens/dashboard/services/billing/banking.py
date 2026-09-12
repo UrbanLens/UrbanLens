@@ -1,5 +1,4 @@
-"""Banked pay-what-you-want access: a running usage ledger on RoleSubscription that can keep granting access after a subscription stops being actively billed.
-The ledger tracks two running totals - ``total_paid_cents`` (everything ever paid) and ``amount_used_cents`` (cost "spent" from that total so far) - and walks forward one fixed-length billing period at a time, pricing each period at the role's pay-what-you-want threshold *as of that period's start*, not today's threshold."""
+"""Banked pay-what-you-want access: a running usage ledger on RoleSubscription that can keep granting access after a subscription stops being actively billed."""
 
 from __future__ import annotations
 
@@ -27,7 +26,6 @@ _PERIOD = timedelta(days=30)
 @contextmanager
 def _locked(role_subscription: RoleSubscription) -> Iterator[RoleSubscription]:
     """Hold a row lock on this subscription for the body of the block.
-    Every ledger mutation is a read-modify-write of running totals, and Stripe delivers concurrently: two partial refunds on one charge, or a payment landing beside a refund, otherwise read the same ``total_paid_cents``, subtract independently, and the second write erases the first.
 
     Args:
         role_subscription: The subscription to lock.
@@ -45,8 +43,7 @@ def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.da
     """Advance a pay-what-you-want subscription's usage ledger as of *as_of*.
 
     Args:
-        role_subscription: The subscription to advance. Reads role_subscription.role, so
-            callers should have it select_related.
+        role_subscription: The subscription to advance.
         as_of: Point in time to advance as of; defaults to now."""
     as_of = as_of or timezone.now()
     # Locked here, not only by callers: ``advance_pwyw_usage_ledgers`` sweeps every
@@ -82,8 +79,7 @@ def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, a
     """Record a successful pay-what-you-want charge and advance its usage ledger.
 
     Args:
-        role_subscription: The subscription to credit. Reads role_subscription.role, so
-            callers should have it select_related.
+        role_subscription: The subscription to credit.
         amount_paid_cents: The invoice's actual amount paid, in cents.
         as_of: Point in time the payment is being processed; defaults to now."""
     if not role_subscription.role.pay_what_you_want or amount_paid_cents <= 0:
@@ -102,8 +98,7 @@ def apply_refund(role_subscription: RoleSubscription, amount_refunded_cents: int
     Policy: the refunded amount comes straight out of ``total_paid_cents`` (clamped at zero), so future periods simply stop being affordable.
 
     Args:
-        role_subscription: The subscription to debit. Reads role_subscription.role, so
-            callers should have it select_related.
+        role_subscription: The subscription to debit.
         amount_refunded_cents: The amount refunded or lost to a dispute, in cents."""
     if not role_subscription.role.pay_what_you_want or amount_refunded_cents <= 0:
         return

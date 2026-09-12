@@ -143,9 +143,7 @@ def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None =
             ]
         return []
 
-    # Imported here rather than at module scope: this pulls in django-storages
-    # and boto3, and a filesystem deployment - which is every self-host - should
-    # not pay that import to run `manage.py check`.
+    # Deferred import: django-storages/boto3 only needed for s3 backends.
     from django.core.files.storage import default_storage
 
     from urbanlens.dashboard.services.media.object_storage import GatedS3Storage

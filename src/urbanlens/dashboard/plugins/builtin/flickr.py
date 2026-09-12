@@ -1,15 +1,5 @@
 """Flickr plugin: rate-limit defaults for all three Flickr integrations.
-
-Three integrations share this one ``flickr`` service key and rate-limit
-budget: one user's own OAuth1-connected library (search/import on a pin's
-Media tab), unauthenticated import of any public Flickr album/photoset by URL
-(pin or wiki Media), and an unauthenticated, required-operator public search
-that contributes a Media gallery tab like Wikimedia/Smithsonian/LOC. The first
-two live under ``dashboard/controllers/flickr.py`` and ``dashboard/tasks.py``;
-the third is ``services/apis/flickr/search.py``. This plugin registers the
-shared rate-limit defaults so calls are throttled and logged like every other
-external API, and contributes the search provider's panel source.
-"""
+This plugin registers the shared rate-limit defaults so calls are throttled and logged like every other external API, and contributes the search provider's panel source."""
 
 from __future__ import annotations
 
@@ -52,14 +42,7 @@ class FlickrPlugin(UrbanLensPlugin):
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the public Flickr search Media gallery provider.
-
-        Uses the full-text ``flickr.photos.search`` API when a Flickr API key
-        is configured, or falls back to Flickr's keyless public tags feed
-        otherwise (weaker recall - see ``services.apis.flickr.search``'s
-        module docstring). Re-checked on every fetch, so the provider
-        upgrades to the API-backed one transparently the moment a key is
-        added, with no restart or code change needed.
-        """
+        Uses the full-text ``flickr.photos.search`` API when a Flickr API key is configured, or falls back to Flickr's keyless public tags feed otherwise (weaker recall - see ``services.apis.flickr.search``'s module docstring)."""
         from urbanlens.dashboard.services.apis.flickr.oauth import is_configured
         from urbanlens.dashboard.services.apis.flickr.search import FlickrFeedSearchGateway, FlickrMediaPanelSource, FlickrSearchGateway
 

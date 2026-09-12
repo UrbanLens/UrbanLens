@@ -80,16 +80,8 @@ class ProvisionResult:
         """The JSON document ``UL_E2E_ACCOUNTS_FILE`` points at.
         Keys are snake_case to match the rest of this codebase; the TypeScript loader in ``tests/integration/lib/accounts.ts`` maps them to camelCase rather than having Python emit a foreign convention.
 
-        Args:
-                site_url: Absolute URL the accounts were provisioned on.
-                environment: ``UL_ENVIRONMENT`` of the provisioning instance.
-                seeds: What was seeded into which role, keyed by role name. The
-                load harness reads label ids and row counts out of here, so a
-                run against an unseeded target can say so rather than measuring
-                an empty account and passing.
-
         Returns:
-                A JSON-serialisable manifest."""
+            A JSON-serialisable manifest."""
         return {
             "generated_at": timezone.now().isoformat(),
             "site_url": site_url,
@@ -156,9 +148,6 @@ def provision_account(role: str, *, password: str, with_api_keys: bool = True, e
         password: Plaintext password to set.
         with_api_keys: Whether to mint external-API keys as well.
         external_apis: Whether to leave outbound providers and AI enabled.
-            False by default because every provider outside REData bills per
-            call and this account is driven hard; turn it on only for a run
-            that is specifically exercising the enrichment panels.
 
     Returns:
         Tuple of the provisioned account and whether the user row was created."""
@@ -208,13 +197,12 @@ def provision(roles: Sequence[str] = DEFAULT_ROLES, *, password: str | None = No
 
     Args:
         roles: Role names to provision.
-        password: Shared plaintext password. Generated when omitted.
+        password: Shared plaintext password.
         with_api_keys: Whether to mint external-API keys.
         external_apis: Whether to leave outbound providers and AI enabled.
 
     Returns:
-        The accounts, plus which roles were newly created.
-    """
+        The accounts, plus which roles were newly created."""
     shared_password = password or generate_password()
     result = ProvisionResult()
     for role in roles:
@@ -252,12 +240,7 @@ def purge() -> list[str]:
 
 
 def _mark_email_verified(user: User) -> None:
-    """Ensure the account has a verified ``EmailVerification`` row.
-
-    ``CustomLoginView.form_invalid`` looks for this row to tell an unverified
-    account apart from a wrong password, and an unverified one is refused at
-    login with an offer to resend an email nobody can receive.
-    """
+    """Ensure the account has a verified ``EmailVerification`` row."""
     EmailVerification.objects.update_or_create(user=user, defaults={"verified_at": timezone.now()})
 
 

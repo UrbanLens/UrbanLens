@@ -25,10 +25,7 @@ def pin_type_for_place(place: Place | None) -> str | None:
         place: The resolved place, or None.
 
     Returns:
-        A :class:`~urbanlens.dashboard.models.pin.model.PinType` value, or
-        None when the place carries no scope signal and the caller should fall
-        back to its own heuristics.
-    """
+        A :class:`~urbanlens.dashboard.models.pin.model.PinType` value, or None when the place carries no scope signal and the caller should fall back to its own heuristics."""
     from urbanlens.dashboard.models.pin.model import PinType
 
     if place is None:
@@ -50,9 +47,7 @@ def place_polygon(place: Place | None, boundary_type: str) -> MultiPolygon | Non
         boundary_type: A :class:`~urbanlens.dashboard.models.boundary.model.BoundaryType` value.
 
     Returns:
-        The polygon to draw, or None when this place has nothing to say about
-        that boundary type.
-    """
+        The polygon to draw, or None when this place has nothing to say about that boundary type."""
     from urbanlens.dashboard.models.boundary.model import BoundaryType
 
     if place is None:
@@ -82,8 +77,7 @@ def parcel_polygon_for_location(location) -> MultiPolygon | None:
         location: The location to look up; None is tolerated.
 
     Returns:
-        The parcel's official geometry, or None when the coordinate is on no
-        known parcel."""
+        The parcel's official geometry, or None when the coordinate is on no known parcel."""
     if location is None or not location.place_id or location.place is None:
         return None
     parcel = location.place.parcel
@@ -111,10 +105,7 @@ def scope_badge(target: Pin | Wiki) -> dict[str, str]:
         target: The pin or wiki being rendered.
 
     Returns:
-        A dict with ``scope_type``, ``scope_label`` and ``scope_help``, or an
-        empty dict for the neutral default (an ordinary property, where
-        "parcel" and "building" describe the same thing).
-    """
+        A dict with ``scope_type``, ``scope_label`` and ``scope_help``, or an empty dict for the neutral default (an ordinary property, where "parcel" and "building" describe the same thing)."""
     scope = effective_pin_type(target)
     entry = SCOPE_BADGES.get(scope)
     if entry is None:

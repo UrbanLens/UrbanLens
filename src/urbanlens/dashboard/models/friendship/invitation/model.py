@@ -29,21 +29,17 @@ class FriendInvitation(abstract.DashboardModel):
         related_name="sent_invitations",
     )
     email = EmailField(db_index=True)
-    # Canonical form of `email` (lowercased, Gmail dots/+suffix stripped - see
-    # normalize_email) kept in sync in save() below, mirroring
-    # Profile.primary_email_normalized. `email` itself stays as typed since it's
-    # still the literal send-target/display value; every cross-account
-    # match (signup auto-accept, re-invite dedup) must go through this field
-    # instead, or a Gmail variant of an already-invited address silently
-    # misses both.
+    # Canonical form of `email` (lowercased, Gmail dots/+suffix stripped - see normalize_email) kept
+    # in sync in save() below, mirroring Profile.primary_email_normalized.
+    # `email` itself stays as typed since it's still the literal send-target/display value; every
+    # cross-account match (signup auto-accept, re-invite dedup) must go through this field instead,
     email_normalized = CharField(max_length=254, blank=True, default="", db_index=True)
     token = UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = DateTimeField()
     accepted_at = DateTimeField(null=True, blank=True)
     # Optional note the inviter attached, shown in the join-invite email.
-    # Encrypted: user-authored text about a person who does not yet have an
-    # account, only ever read as an attribute. `email` above cannot follow -
-    # it is indexed and exact-matched at signup to find open invitations.
+    # Encrypted: user-authored text about a person who does not yet have an account, only ever read
+    # as an attribute.
     message = EncryptedTextField(
         null=True,
         blank=True,
@@ -78,12 +74,7 @@ class FriendInvitation(abstract.DashboardModel):
 
     def mark_accepted(self) -> bool:
         """Claim the invitation with a conditional write, without a full-model save.
-
-        The ``accepted_at__isnull=True`` condition makes this a write-time
-        claim: of any number of concurrent redemptions of the same invitation
-        (e.g. a double-clicked verification link), exactly one caller sees
-        ``True``. Callers must run this *before* the acceptance side effects
-        and skip them when it returns ``False``.
+        The ``accepted_at__isnull=True`` condition makes this a write-time claim: of any number of concurrent redemptions of the same invitation (e.g. a double-clicked verification link), exactly one caller sees ``True``.
 
         Returns:
             True when this call transitioned the invitation to accepted;
@@ -93,10 +84,9 @@ class FriendInvitation(abstract.DashboardModel):
         claimed = FriendInvitation.objects.filter(pk=self.pk, accepted_at__isnull=True).update(accepted_at=now) == 1
         if claimed:
             self.accepted_at = now
-            # Recorded here rather than by a post_save subscription: this
-            # transition is a queryset update() precisely so it is an atomic
-            # compare-and-set, and update() fires no signal. A rule subscribed
-            # to FriendInvitation saves would never see an acceptance.
+            # Recorded here rather than by a post_save subscription: this transition is a queryset
+            # update() precisely so it is an atomic compare-and-set, and update() fires no signal.
+            # A rule subscribed to FriendInvitation saves would never see an acceptance.
             from urbanlens.dashboard.services.reputation.scoring import record_event
 
             record_event(self.inviter_id, "invite_accepted", target=self)

@@ -42,9 +42,7 @@ def demo_username(seed: str, index: int) -> str:
         index: 0 for the login account, 1+ for personas.
 
     Returns:
-        A username carrying :data:`DEMO_USERNAME_PREFIX`, which is what the
-        purge selects on and what the signup validator refuses.
-    """
+        A username carrying :data:`DEMO_USERNAME_PREFIX`, which is what the purge selects on and what the signup validator refuses."""
     return f"{DEMO_USERNAME_PREFIX}{seed}-{index}"
 
 
@@ -121,20 +119,12 @@ def _pin_pool(profile: Profile, locations: list) -> list[Pin]:
 
 def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str = "", locations: list[Location] | None = None) -> User:
     """Create one demo login account, its personas, and their content.
-    Pin, Friendship, Comment and several others fire ``achievements.signals`` on ``post_save``, which defers to ``transaction.on_commit`` rather than calling ``safely_enqueue_task`` immediately; that deferred call runs whatever the *current* function is at commit time, not whatever it was when it was registered.
 
     Args:
         ttl_hours: How long before the account may be purged.
-        username: Username for the login account, or "" for the generated
-            ``demo-<token>-0`` form. Only that form is selected by
-            ``purge_demo_accounts``, so a caller naming its own account is also
-            opting out of the purge - which is what a dev environment wants and
-            what the public demo instance must not do.
+        username: Username for the login account, or "" for the generated ``demo-<token>-0`` form.
         password: Password for the login account, or "" for a random one.
         locations: Locations to pin, or None to read the configured manifest.
-            Passed explicitly by callers that just imported a catalog into an
-            instance with no manifest path configured, where
-            :func:`~.locations.pool_locations` would find nothing.
 
     Returns:
         The login account's user."""
@@ -234,8 +224,7 @@ def ensure_location_pool() -> tuple[list[Location], str]:
     The gap between "the seeder works" and "a fresh environment has content": the pool comes from an imported catalog, and a database nobody has imported into has none, so seeding succeeds and produces zero pins.
 
     Returns:
-        ``(locations, note)`` - the Locations to pin (possibly empty) and a
-        human-readable account of where they came from or why there are none."""
+        ``(locations, note)`` - the Locations to pin (possibly empty) and a human-readable account of where they came from or why there are none."""
     from urbanlens.dashboard.services.demo.locations import import_location_entries, merge_into_manifest, redata_demo_locations
 
     existing = pool_locations()
@@ -284,13 +273,10 @@ def seed_landmark_pin(profile: Profile, landmark: dict[str, str] | None = None) 
 
     Args:
         profile: Owner of the pin.
-        landmark: Coordinates and address components, defaulting to
-            :data:`HUDSON_RIVER_STATE_HOSPITAL`.
+        landmark: Coordinates and address components, defaulting to :data:`HUDSON_RIVER_STATE_HOSPITAL`.
 
     Returns:
-        The pin, existing or created - re-running never gives one profile two
-        pins on the same place.
-    """
+        The pin, existing or created - re-running never gives one profile two pins on the same place."""
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -322,20 +308,15 @@ def seed_dev_environment(*, username: str = "demo", password: str, ttl_hours: in
     A freshly created environment (the `infrastructure` repo's ``bin/dev_env.py``) has an empty database, so every page it serves is an empty state and nothing about the product can be seen without first building an account and content by hand.
 
     Args:
-        username: Login account name. Deliberately outside
-            :data:`~urbanlens.dashboard.services.demo.DEMO_USERNAME_PREFIX`, so
-            ``purge_demo_accounts`` cannot delete the account somebody was given.
+        username: Login account name.
         password: Login password, chosen by the caller so it can be reported.
-        ttl_hours: Nominal account lifetime. Nothing purges this account; it is
-            recorded for parity with the demo seeder.
+        ttl_hours: Nominal account lifetime.
 
     Returns:
-        A JSON-safe summary: the credentials, what was seeded, and the catalog's
-        own account of itself.
+        A JSON-safe summary: the credentials, what was seeded, and the catalog's own account of itself.
 
     Raises:
-        RuntimeError: Called in staging or production, where this would write
-            real coordinates and a shared-password account into real data."""
+        RuntimeError: Called in staging or production, where this would write real coordinates and a shared-password account into real data."""
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     environment = str(app_settings.environment_name).lower()

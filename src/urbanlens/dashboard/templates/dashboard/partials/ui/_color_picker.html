@@ -1,11 +1,4 @@
-{# Shared colour swatch picker. Same markup, classes and pickColor() call as   #}
-{# the label and pin dialogs, so a colour is chosen the same way everywhere -  #}
-{# the floorplan editor grew its own set of swatches before this existed.      #}
-{#                                                                             #}
-{# picker_id     - unique per instance; ids are derived from it                #}
-{# field_name    - hidden input's name, for form posts (optional)              #}
-{# current_color - hex to start selected, "" for none                          #}
-{# color_choices - (hex, name) pairs from the view                             #}
+{# Shared colour swatch picker. #}
 <div class="color-picker" id="color-picker-{{ picker_id }}">
     <input type="hidden" name="{{ field_name|default:'color' }}" id="color-value-{{ picker_id }}" value="{{ current_color|default:'' }}">
     {% for hex, color_name in color_choices %}

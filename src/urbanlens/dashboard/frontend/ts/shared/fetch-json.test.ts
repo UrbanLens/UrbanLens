@@ -101,10 +101,7 @@ describe("a rejected request", () => {
         await expect(fetchJson("/x/")).rejects.toThrow("HTTP 400");
     });
 
-    // Many of this project's views answer a refused write with a bare
-    // HttpResponse("...", status=400) rather than JSON. Discarding those as
-    // "not JSON" turned the one sentence explaining the refusal into "HTTP 400"
-    // - so a user selecting 600 pins was told "Update failed." with no reason.
+    // Many of this project's views answer a refused write with a bare HttpResponse("...", status=400) rather than JSON.
     test("a plain-text refusal is the message", async () => {
         stub({ status: 400, body: "Select at most 500 pins at a time." });
         await expect(fetchJson("/x/")).rejects.toThrow("Select at most 500 pins at a time.");
@@ -194,18 +191,6 @@ describe("sendJson", () => {
 
 /**
  * The marker is a contract with a template, held together by a string.
- *
- * `themes/base.html` wraps `window.fetch` and toasts a generic "Request failed
- * (HTTP 503)." for every non-2xx - the net under the ~90 raw `fetch()` call
- * sites that have not moved yet. `fetchJson` reports the server's own sentence
- * instead, so it opts out by setting `__ulReported` on the init object the
- * wrapper reads.
- *
- * Neither side can see the other: the template is inline JS that `tsc` does not
- * read, and this module is bundled. Rename the flag on one side and the failure
- * is two toasts for one refusal - which nobody would file a bug about and
- * everybody would find slightly annoying. Same shape as
- * `pin-cache.contract.test.ts`, and that contract has already drifted once.
  */
 describe("the __ulReported contract with base.html", () => {
     const template = readFileSync(join(import.meta.dir, "../../../templates/dashboard/themes/base.html"), "utf8");
@@ -222,10 +207,7 @@ describe("the __ulReported contract with base.html", () => {
     });
 
     test("an ordinary caller keeps the net", async () => {
-        // The regression this replaced: setting the marker inside fetchJson for
-        // everyone turned the generic toast into silence on every page that had
-        // not been migrated - including the map's cold-start pin load, whose only
-        // handler is a console.warn.
+        // The regression this replaced: setting the marker inside fetchJson for everyone turned the generic toast into silence on every page.
         const inits: RequestInit[] = [];
         const real = globalThis.fetch;
         globalThis.fetch = (async (_url: string, init: RequestInit) => {
@@ -268,9 +250,6 @@ describe("the __ulReported contract with base.html", () => {
 
 describe("an endpoint that answers with markup", () => {
     // Organize's bulk delete/edit/merge answer with the re-rendered row list.
-    // They could not use fetchJson at all, so each grew its own wrapper with
-    // its own idea of what a failed request looks like - which is the
-    // duplication this pair exists to stop.
     test("fetchText returns the body verbatim rather than parsing it", async () => {
         stub({ body: "<li class=\"tag-card\">Bridges</li>" });
         expect(await fetchText("/rows/")).toBe('<li class="tag-card">Bridges</li>');
@@ -311,11 +290,7 @@ describe("an endpoint that answers with markup", () => {
 });
 
 describe("a body that stalls after the headers arrive", () => {
-    // A real Response rejects its body read when the signal aborts. Clearing
-    // the timer as soon as the status was known left that read with nothing to
-    // abort it, so the promise hung forever: no toast, no rejection, nothing in
-    // the console. The only other timeout test stalls inside `fetch` itself,
-    // which is a different phase and stayed covered throughout.
+    // A real Response rejects its body read when the signal aborts.
     function stallingBody(): void {
         globalThis.fetch = ((_url: string, init: RequestInit) => {
             const body = <T>() =>

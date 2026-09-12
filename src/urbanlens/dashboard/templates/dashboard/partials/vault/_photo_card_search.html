@@ -1,9 +1,4 @@
-{% comment %}
-Reusable "search your pins" input + results box for a photo card.
-
-Context:
-  image - the Image being filed (its pk scopes the results container)
-{% endcomment %}
+{% comment %}Reusable "search your pins" input + results box for a photo card.{% endcomment %}
 <input type="search" class="photo-pin-search-input" placeholder="Search your pins by name…"
        aria-label="Search your pins"
        hx-get="{% url 'vault.photos.pin_search' %}"

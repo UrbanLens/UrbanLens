@@ -1,10 +1,4 @@
-"""Per-upload processing: classify devices, match wikis, update markers.
-
-Called from ``dashboard.tasks.process_device_scan_upload`` - kept separate
-from the task itself so the actual logic is independently testable without
-Celery's task machinery, matching how every other background job in this app
-splits a thin ``tasks.py`` wrapper from its real work in ``services/``.
-"""
+"""Per-upload processing: classify devices, match wikis, update markers."""
 
 from __future__ import annotations
 
@@ -16,12 +10,9 @@ if TYPE_CHECKING:
 
 def process_scan_upload(upload: DeviceScanUpload) -> None:
     """Classify every device in *upload* and update its wiki marker(s).
-    For each entry: resolve the device's type (trusting a client guess, otherwise a heuristic - see ``type_guessing.resolve_device_type``); a positive (``detected=True``) reading of a security-relevant type (camera/sensor/tracker) triggers a marker recompute on every wiki whose boundary contains it, while a negative (``detected=False``) reading feeds the matched marker's absence streak.
 
     Args:
-        upload: The upload to process. Callers should have its ``entries``
-            (and each entry's ``device``/``expected_marker``) prefetched to
-            avoid an N+1 query pattern."""
+        upload: The upload to process."""
     from urbanlens.dashboard.models.device_scan.model import SECURITY_RELEVANT_TYPES, WikiDeviceMarker
     from urbanlens.dashboard.services.device_scan.clustering import MERGE_DISTANCE_METERS, recompute_wiki_device_markers, record_absence_report
     from urbanlens.dashboard.services.device_scan.type_guessing import resolve_device_type

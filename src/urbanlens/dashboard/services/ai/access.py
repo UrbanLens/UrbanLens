@@ -34,9 +34,7 @@ def assistant_available(profile: Profile) -> bool:
         profile: The profile asking for the assistant.
 
     Returns:
-        Whether the assistant's own worker is deployed *and* this profile may
-        use AI features generally.
-    """
+        Whether the assistant's own worker is deployed *and* this profile may use AI features generally."""
     from django.conf import settings
 
     if not getattr(settings, "UL_AI_WORKER_ENABLED", False):

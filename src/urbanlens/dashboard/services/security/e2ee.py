@@ -1,10 +1,5 @@
 """Server-side helpers for direct-message end-to-end encryption.
-
-The server's entire role in the E2EE scheme is storing opaque blobs and
-answering "which mode does this account authenticate in" - all cryptography
-happens in the browser (see ``frontend/ts/shared/e2ee-crypto.ts`` and
-``docs/designs/e2ee.md``). Everything here is bookkeeping around that storage.
-"""
+The server's entire role in the E2EE scheme is storing opaque blobs and answering "which mode does this account authenticate in" - all cryptography happens in the browser (see ``frontend/ts/shared/e2ee-crypto.ts`` and ``docs/designs/e2ee.md``)."""
 
 from __future__ import annotations
 
@@ -70,8 +65,7 @@ def valid_blob(value: Any, max_length: int, *, required: bool = True) -> bool:
         required: When False, empty/missing values pass.
 
     Returns:
-        True when the value is acceptable to store.
-    """
+        True when the value is acceptable to store."""
     if not value:
         return not required
     return isinstance(value, str) and len(value) <= max_length and is_base64(value)
@@ -95,7 +89,6 @@ def fake_auth_salt(identifier: str) -> str:
 
 def group_member_token(group_uuid: Any, profile_id: int) -> str:
     """Opaque per-(group, member) identifier for the key-rotation API.
-    This token is deterministic (the client round-trips it between GET and POST, and the server just recomputes the mapping - nothing is decoded), scoped to one group by the uuid in the HMAC input (so tokens can't correlate a member across groups), and reveals nothing about the member.
 
     Args:
         group_uuid: The group chat's UUID.
@@ -139,9 +132,7 @@ def login_params_for_identifier(identifier: str) -> dict[str, str]:
         identifier: The username or email from the login form.
 
     Returns:
-        Dict with ``mode`` (``legacy``/``derived``) and ``auth_salt`` (real for
-        enrolled accounts, deterministic decoy otherwise).
-    """
+        Dict with ``mode`` (``legacy``/``derived``) and ``auth_salt`` (real for enrolled accounts, deterministic decoy otherwise)."""
     user = resolve_login_user(identifier)
     if user is not None:
         kdf = AccountKdf.objects.for_user(user).first()

@@ -51,9 +51,7 @@ def get_forecast_slots(latitude: float, longitude: float) -> list[ForecastSlot]:
         longitude: WGS-84 longitude.
 
     Returns:
-        Normalized ``ForecastSlot`` entries, oldest first - empty when every
-        provider (REData included) has nothing.
-    """
+        Normalized ``ForecastSlot`` entries, oldest first - empty when every provider (REData included) has nothing."""
     results = _redata_results(latitude, longitude)
     if results is not None:
         entry = _pick_entry(results, _FORECAST_PROVIDER_PREFERENCE, key="forecast")
@@ -86,7 +84,6 @@ def get_forecast_slots(latitude: float, longitude: float) -> list[ForecastSlot]:
 
 def get_raw_forecast_slots(latitude: float, longitude: float) -> list[ForecastSlot]:
     """Return the finest-grained forecast slots available, for matching against a specific time.
-    Unlike :func:`get_forecast_slots` (which OpenWeatherMap's own path filters to a morning/evening strip - see ``OpenWeatherMapGateway.filter_forecast``), this returns every slot REData/OpenWeatherMap published, so a caller can find the single closest slot to an arbitrary timestamp (e.g. a trip activity's scheduled time - see ``controllers.trip._build_activity_forecasts``).
 
     Args:
         latitude: WGS-84 latitude.

@@ -1,17 +1,11 @@
 """Load a public-location export into a demo instance.
 
-Run on the **demo** instance, against the JSON ``export_public_locations``
-produced on the real site. Refuses to run anywhere else: the export is a set of
-real coordinates, and importing it into a database that also holds real user
-pins would silently merge the two - ``get_exact_or_create`` matches on stored
-coordinates, so an imported row would attach itself to whatever real Location
+Refuses to run anywhere else: the export is a set of real coordinates, and importing it into a
+database that also holds real user pins would silently merge the two - ``get_exact_or_create``
+matches on stored coordinates, so an imported row would attach itself to whatever real Location
 already sits at that point.
-
-Idempotent: re-running updates names and tops up aliases rather than duplicating
-anything, so a demo instance can be refreshed from a newer export on a schedule.
-Companion to ``import_redata_public_locations`` - both write into the same
-manifest via ``services.demo.locations.merge_into_manifest``, so running either
-(in any order, any number of times) never erases what the other contributed.
+Idempotent: re-running updates names and tops up aliases rather than duplicating anything, so a demo
+instance can be refreshed from a newer export on a schedule.
 """
 
 from __future__ import annotations
@@ -67,11 +61,7 @@ class Command(BaseCommand):
         created, updated = import_location_entries(entries)
         self.stdout.write(f"Imported {len(entries)} public location(s): {created} created, {updated} updated.")
 
-        # The manifest is what seeding reads to decide which places every new
-        # demo account gets pinned. Written after the import rather than before,
-        # so it can only ever name locations that exist here - a manifest entry
-        # with no Location behind it would seed a pin whose detail page has
-        # nothing to show, which is the failure this whole path avoids.
+        # The manifest is what seeding reads to decide which places every new demo account gets pinned.
         written = merge_into_manifest(entries)
         if written is None:
             self.stdout.write(

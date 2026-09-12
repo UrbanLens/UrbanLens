@@ -1,10 +1,7 @@
 import Sortable from "sortablejs";
 
 /**
- * Parent/child relationship chip picker used by organize's create/edit/bulk-edit
- * dialogs (dashboard/partials/labels/*). Templates call this via inline
- * onclick attributes, so it stays a window global - see icon-picker.ts for
- * the same rationale.
+ * Parent/child relationship chip picker used by organize's create/edit/bulk-edit dialogs (dashboard/partials/labels/*).
  */
 type RelType = "parent" | "child";
 

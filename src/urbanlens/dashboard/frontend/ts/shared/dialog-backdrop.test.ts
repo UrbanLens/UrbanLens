@@ -1,10 +1,5 @@
 /**
  * These drive the press-then-click sequencing, which is the real logic here.
- *
- * They cannot assert the geometry: happy-dom reports getBoundingClientRect as all
- * zeros, so "outside the dialog box" degenerates to "any non-zero coordinate".
- * That is enough to steer the two branches deterministically - which is what makes
- * the drag-out case testable - but a rect-comparison bug would not be caught here.
  */
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";

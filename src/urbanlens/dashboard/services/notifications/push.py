@@ -32,8 +32,7 @@ DISPATCH_TIMEOUT_SECONDS = 5
 
 
 class PushRegistrationError(ValueError):
-    """Raised when a submitted device registration can't be accepted.
-    The message is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """Raised when a submitted device registration can't be accepted."""
 
 
 class MissingAddressError(PushRegistrationError):
@@ -54,11 +53,7 @@ class EndpointResolutionError(PushRegistrationError):
 
 class EndpointUnreachableError(PushRegistrationError):
     """The UnifiedPush endpoint resolves to a private/loopback/link-local/CGNAT address.
-
-    Distinct from :class:`EndpointResolutionError` so callers can tell "we
-    don't know where this points" apart from "we know exactly where this
-    points, and it's the SSRF guard's job to refuse it".
-    """
+    Distinct from :class:`EndpointResolutionError` so callers can tell "we don't know where this points" apart from "we know exactly where this points, and it's the SSRF guard's job to refuse it"."""
 
 
 def _validate_unifiedpush_endpoint(address: str) -> None:
@@ -71,9 +66,7 @@ def _validate_unifiedpush_endpoint(address: str) -> None:
         InvalidEndpointUrlError: The URL is malformed or uses a non-HTTP scheme.
         EndpointCredentialsError: The URL carries a username/password.
         EndpointResolutionError: The hostname doesn't resolve.
-        EndpointUnreachableError: The hostname resolves to a private/loopback/
-            link-local/CGNAT address.
-    """
+        EndpointUnreachableError: The hostname resolves to a private/loopback/ link-local/CGNAT address."""
     parts = urlsplit(address)
     if parts.scheme not in ("https", "http") or not parts.hostname:
         raise InvalidEndpointUrlError(f"UnifiedPush endpoint scheme/hostname invalid: scheme={parts.scheme!r} hostname={parts.hostname!r}")
@@ -92,7 +85,6 @@ def _validate_unifiedpush_endpoint(address: str) -> None:
 
 def register_device(profile: Profile, *, transport: str, address: str, name: str = "") -> PushDevice:
     """Register (or re-activate) a push destination for a profile.
-    Idempotent on ``(profile, address)``: re-registering an address the profile already has updates its transport/name, clears any revocation, and resets the failure count - an app re-registering after reinstall or endpoint rotation must never be told "already exists".
 
     Args:
         profile: The owning profile.
@@ -132,14 +124,11 @@ def unregister_device(profile: Profile, device_uuid: UUID | str) -> bool:
     """Revoke one of the profile's devices, if it exists.
 
     Args:
-        profile: The owning profile - another profile's device uuid is
-            indistinguishable from a nonexistent one.
+        profile: The owning profile - another profile's device uuid is indistinguishable from a nonexistent one.
         device_uuid: The device's public uuid.
 
     Returns:
-        True when a device was revoked; False when nothing matched (already
-        revoked devices count as matched, keeping the call idempotent).
-    """
+        True when a device was revoked; False when nothing matched (already revoked devices count as matched, keeping the call idempotent)."""
     return PushDevice.objects.for_profile(profile).filter(uuid=device_uuid).update(revoked_at=timezone.now()) > 0
 
 
@@ -149,8 +138,7 @@ def send_push_to_profile(profile_id: int, payload: dict) -> int:
 
     Args:
         profile_id: Primary key of the recipient profile.
-        payload: JSON-serializable notification payload (see
-            ``models.notifications.signals.as_push_payload``).
+        payload: JSON-serializable notification payload (see ``models.notifications.signals.as_push_payload``).
 
     Returns:
         Number of devices successfully delivered to."""

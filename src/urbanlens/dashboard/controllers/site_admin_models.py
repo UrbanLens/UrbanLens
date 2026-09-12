@@ -1,23 +1,12 @@
 """Site-admin view: what REData's two models are, and how well they score.
 
-Two questions this deployment could not previously answer about itself:
+The scrubbing below enforces that at the boundary rather than trusting the upstream shape to stay
+aggregate.
 
-- Is a *trained model* answering, or the hand-weighted heuristic? Both are
-  legitimate - REData promotes a model only when it beats the incumbent and
-  the heuristic on the same held-out split - but they are calibrated
-  differently, and auto-tagging applies suggestions above a fixed confidence
-  floor without distinguishing them. "Why is auto-tagging suggesting nonsense?"
-  is unanswerable without knowing which ranker produced the number.
-- How good is the thing that is answering? REData reports holdout metrics
-  against the baselines the promotion decision was made on, which is the
-  comparison worth seeing rather than an absolute score in isolation.
-
-**Nothing here is about a person.** Both endpoints report on the models
-themselves. REData's per-contributor endpoint (``GET /photos/reputation/``)
-is deliberately not consumed anywhere in this codebase: a reputation score for
-an individual is not something this application has a use for. The scrubbing
-below enforces that at the boundary rather than trusting the upstream shape to
-stay aggregate.
+- Is a *trained model* answering, or the hand-weighted heuristic? Both are legitimate - REData
+  promotes a model only when it beats the incumbent and the heuris...
+- How good is the thing that is answering? REData reports holdout metrics against the baselines the
+  promotion decision was made on, which is the comparison wor...
 """
 
 from __future__ import annotations
@@ -37,10 +26,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Keys refused from any upstream model payload before it reaches a template.
-#: None of these appear in the documented response - the point is that if a
-#: future REData grows a per-person field, it stops here rather than being
-#: rendered because nobody re-read the contract.
+#: Keys refused from any upstream model payload before it reaches a template. None of these appear in the
+#: documented response - the point is that if a future REData grows a per-person field, it stops here rather
+#: than being rendered because nobody re-read the contract.
 _PERSONAL_KEYS = frozenset(
     {
         "contributor",
@@ -63,11 +51,9 @@ _PERSONAL_KEYS = frozenset(
 def scrub_personal_keys(value: Any) -> Any:
     """Recursively drop anything that could identify a person.
 
-    Applied to model metadata that should be aggregate by construction, so in
-    normal operation this removes nothing. It exists because "aggregate" is a
-    property of the current upstream shape rather than something this codebase
-    can enforce upstream, and a diagnostics page is a poor place to discover
-    that the shape changed.
+    It exists because "aggregate" is a property of the current upstream shape rather than something this
+    codebase can enforce upstream, and a diagnostics page is a poor place to discover that the shape
+    changed.
 
     Args:
         value: A decoded JSON fragment.
@@ -90,10 +76,10 @@ def _model_summary(fetch: Callable[[], dict[str, Any]], label: str) -> dict[str,
         label: Human name for the model, used in the error line.
 
     Returns:
-        A dict carrying ``available``, plus either the scrubbed payload or a
-        ``message`` saying what went wrong. An unreachable REData is reported
-        rather than raised: a diagnostics page that 500s when the thing it
-        diagnoses is down is the least useful moment to lose it.
+        A dict carrying ``available``, plus either the scrubbed payload or a ``message`` saying what
+        went wrong.
+        rather than raised: a diagnostics page that 500s when the thing it diagnoses is down is the
+        least useful moment to lose it.
     """
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
@@ -101,26 +87,21 @@ def _model_summary(fetch: Callable[[], dict[str, Any]], label: str) -> dict[str,
     try:
         payload = scrub_personal_keys(fetch() or {})
     except (GatewayRequestError, RequestCancelledError) as exc:
-        # RequestCancelledError covers this side's own rate limiter refusing or
-        # the service being switched off in admin - neither is a gateway error,
-        # and letting them through would 500 the page that exists to report on
-        # exactly that kind of problem.
+        # RequestCancelledError covers this side's own rate limiter refusing or the service being switched off
+        # in admin - neither is a gateway error, and letting them through would 500 the page that exists to
+        # report on exactly that kind of problem.
         logger.info("REData %s model metadata unavailable: %s", label, exc)
         return {"available": False, "message": str(exc)}
 
-    # The metrics live on the serialized model version, not at the top level -
-    # the envelope is {active, ranker|scorer, feature_schema_fingerprint,
-    # features, recent_versions}.
+    # The metrics live on the serialized model version, not at the top level - the envelope is {active,
+    # ranker|scorer, feature_schema_fingerprint, features, recent_versions}.
     active = payload.get("active")
-    # Defensive about the shape as well as the content: this page exists to
-    # report on REData, so an unexpected payload has to render as "no model"
-    # rather than as a 500 that hides what it was trying to say.
+    # Defensive about the shape as well as the content: this page exists to report on REData, so an unexpected
+    # payload has to render as "no model" rather than as a 500 that hides what it was trying to say.
     if not isinstance(active, dict):
         active = {}
-    # REData states which ranker answered rather than leaving it to be inferred
-    # from `active`; the field is named `ranker` for labels and `scorer` for
-    # photo relevance. Inferring instead would disagree with REData the moment
-    # the two can differ.
+    # REData states which ranker answered rather than leaving it to be inferred from `active`; the field is
+    # named `ranker` for labels and `scorer` for photo relevance.
     ranker = payload.get("ranker") or payload.get("scorer") or ("model" if active else "heuristic")
     return {
         "available": True,

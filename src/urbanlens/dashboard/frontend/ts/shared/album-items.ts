@@ -1,11 +1,5 @@
 /**
- * Album panel interactions: browser history, drag-to-reorder, add/remove,
- * uploading into an album, and the photo map toggle.
- *
- * The panel is server-rendered and HTMX-swapped, so everything here
- * re-initialises after each swap rather than binding once on load. Clicks are
- * handled by delegation off `document` for the same reason - the buttons are
- * replaced wholesale on every swap.
+ * Album panel interactions: browser history, drag-to-reorder, add/remove, uploading into an album, and the photo map toggle.
  */
 
 import Sortable from "sortablejs";
@@ -23,9 +17,6 @@ const UPLOAD_TIMEOUT_MS = 600000;
 
 /**
  * How long to wait before re-rendering after the server queues a download.
- * Long enough for a typical provider fetch to land, short enough that the
- * photo doesn't feel lost. A miss is harmless - the next panel render picks
- * it up either way.
  */
 const QUEUED_REFRESH_DELAY_MS = 4000;
 
@@ -46,9 +37,6 @@ function albumPanel(): HTMLElement | null {
 
 /**
  * POST JSON, throwing the server's own sentence on a refusal.
- *
- * Every caller catches and toasts that message itself, so this opts out of
- * base.html's generic net rather than letting one refusal be announced twice.
  */
 async function postJson(url: string, payload: unknown): Promise<Record<string, unknown>> {
     return ((await sendJson<Record<string, unknown>>(url, "POST", payload, { reportsItsOwnErrors: true })) ?? {}) as Record<string, unknown>;
@@ -67,11 +55,7 @@ function refreshPanel(): void {
 }
 
 // -- Browser history -----------------------------------------------------------
-// Opening an album is a navigation as far as the user is concerned, so it gets
-// its own history entry. The album is carried in a query parameter rather than
-// the hash because the hash already addresses the page's tab (see
-// static/js/page-tabs.js), and the tab system preserves the query string when
-// it rewrites the hash.
+// Opening an album is a navigation as far as the user is concerned, so it gets its own history entry.
 
 /** The album slug in the current URL, or null on the album list. */
 function albumFromUrl(): string | null {
@@ -95,11 +79,6 @@ function urlForAlbum(slug: string | null): string {
 
 /**
  * Sync the address bar with whichever view the panel is now showing.
- *
- * Pushes a new entry when the album actually changed, so Back returns to the
- * previous view; replaces otherwise, so a plain re-render (after an add, a
- * remove, a reorder) doesn't stack duplicate entries the user has to click
- * through.
  */
 function syncHistoryToPanel(): void {
     if (restoringFromHistory) return;
@@ -158,10 +137,7 @@ export function initAlbumSortable(): void {
     const grid = document.getElementById("album-items-grid");
     if (!grid || grid.dataset.albumSortable !== "1") return;
 
-    // Captured on drag start, not derived from oldIndex/newIndex on end: two
-    // rapid drags can each fire a save while the earlier one is still in
-    // flight, and restoring a snapshot taken *before this specific drag*
-    // is what makes a failed save undo only its own change.
+    // Captured on drag start, not derived from oldIndex/newIndex on end.
     let dragStartOrder: HTMLElement[] = [];
     albumSortable = new Sortable(grid, {
         animation: 150,
@@ -205,10 +181,7 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 /**
- * Lightbox "show on the map" talks to window.gallerySetPhotoMapHidden. Pin/wiki
- * gallery pages already define it; albums-only views (or a gallery that hasn't
- * rendered yet) get this fallback, which posts to the album panel's reposition
- * endpoint.
+ * Lightbox "show on the map" talks to window.gallerySetPhotoMapHidden.
  */
 function ensureMapHiddenHandler(): void {
     if (typeof window.gallerySetPhotoMapHidden === "function") return;
@@ -240,9 +213,7 @@ function ensureMapHiddenHandler(): void {
 function reportUploadFailure(filename: string, error: string): void {
     const url = albumPanel()?.dataset.failureUrl;
     if (!url) return;
-    // Background telemetry the user never asked for: a failure here is not
-    // theirs to see, and without opting out of base.html's generic net it
-    // would toast "Request failed (HTTP 500)" over the real upload error.
+    // Background telemetry the user never asked.
     void sendJson(url, "POST", { filename, error }, { reportsItsOwnErrors: true }).catch(() => undefined);
 }
 
@@ -277,11 +248,6 @@ function bindThumbLoadGuard(root: ParentNode): void {
 
 /**
  * Upload files straight into the open album.
- *
- * Each file is one request, matching the pin/wiki gallery upload contract, so a
- * single rejected file (duplicate, over quota, wrong type) doesn't discard the
- * rest of the batch. Tiles are appended in place so a second drop isn't lost
- * behind an HTMX swap of the first batch.
  */
 async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
     const panel = albumPanel();
@@ -302,9 +268,7 @@ async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
         try {
             let data: Record<string, unknown>;
             try {
-                // A longer ceiling than fetchJson's two-minute default, which a
-                // large photo on a slow uplink can legitimately exceed. There
-                // was no ceiling at all before, so an upload could hang forever.
+                // A longer ceiling than fetchJson's two-minute default, which a large photo on a slow uplink can legitimately exceed.
                 data = (await fetchJson<Record<string, unknown>>(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body, timeoutMs: UPLOAD_TIMEOUT_MS, reportsItsOwnErrors: true })) ?? {};
             } catch (err) {
                 // Reported to the server before rethrowing, which is what the
@@ -487,11 +451,6 @@ function initPhotoGrids(): void {
 
 /**
  * Show the drop overlay only for a real file drag from outside the page.
- *
- * Dragging a thumbnail within the page also carries the image file, so treating
- * every drag as an upload would re-upload photos that are already here. An
- * in-page drag always fires `dragstart` first, which is what distinguishes them
- * (same rule the pin gallery's overlay uses).
  */
 let internalDrag = false;
 let dragDepth = 0;
@@ -525,11 +484,7 @@ document.addEventListener("dragend", () => {
 document.addEventListener("dragenter", (event) => {
     if (!albumPanel()?.dataset.uploadUrl || !isFileDrag(event)) return;
     dragDepth += 1;
-    // The pin gallery installs its own document-level drag overlay (see
-    // partials/pins/_photo_gallery.html), which uploads to the pin rather than
-    // to this album. Both listeners are on document and the gallery's is
-    // registered by a later HTMX swap, so its overlay is suppressed on the next
-    // frame - by then both handlers have run and ours wins.
+    // The pin gallery installs its own document-level drag overlay, which uploads to the pin rather than to this album.
     window.requestAnimationFrame(() => {
         if (!dragDepth) return;
         const galleryOverlay = document.getElementById("gallery-drop-overlay");
@@ -759,11 +714,7 @@ document.addEventListener("click", (event) => {
 
 // -- "Add from this place" picker -------------------------------------------
 //
-// Its photos arrive a page at a time when the dialog opens, rather than being
-// rendered into a closed dialog on every album page view: for a Vault album
-// that list is every photo the profile has ever uploaded (P69). Paginated
-// rather than capped, because "find the photo from last year" is half of what
-// this picker is for and a newest-first slice removes exactly that.
+// Its photos arrive a page at a time when the dialog opens, rather than being rendered into a closed dialog on every album page view.
 
 /** How many eligible photos to fetch per request. */
 const ELIGIBLE_PAGE_SIZE = 60;
@@ -804,10 +755,7 @@ function renderEligibleTile(tile: { id: number; thumbUrl: string; caption: strin
 
 /**
  * Fetch the next page of addable photos into the picker.
- *
  * @param more - True for a "show more" click; false for the first open, which
- *   is a no-op once the grid already holds something (reopening the dialog must
- *   not re-fetch page one on top of what is there).
  */
 async function loadEligiblePage(more: boolean): Promise<void> {
     const grid = pickerGrid();
@@ -877,11 +825,6 @@ document.addEventListener("mouseout", (event) => syncHoverToMap(event, false));
 
 /**
  * Add an external Media-gallery item to an album.
- *
- * Exposed globally because the Media gallery tiles are rendered by a different
- * (server-rendered, inline-JS) surface than this module owns. Marking the item
- * relevant and caching it locally happens server-side - see
- * services.media.media_relevance.record_relevant_and_cache.
  */
 window.albumAddExternalMedia = async (addUrl, media) => {
     toast.info("Saving photo...");
@@ -931,10 +874,7 @@ function onPanelRendered(panel: HTMLElement): void {
 }
 
 /**
- * The panel node as of the last render, so an unrelated HTMX swap elsewhere on
- * the page (these pages are full of them) doesn't tear down and rebuild the
- * album map. Comparing node identity is more reliable than reading the swap
- * event's target, which for an outerHTML swap refers to the replaced node.
+ * The panel node as of the last render, so an unrelated HTMX swap elsewhere on the page (these pages are full of them) doesn't tear down.
  */
 let lastPanel: HTMLElement | null = null;
 

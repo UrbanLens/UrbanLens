@@ -26,11 +26,7 @@ def read_manifest() -> list[dict[str, Any]]:
     """The location entries a demo account should be given pins on.
 
     Returns:
-        Entries as written by ``import_public_locations``. Empty when no
-        manifest is configured, the file is absent, or it cannot be parsed - a
-        demo instance must still come up and serve when its manifest has not
-        been delivered yet.
-    """
+        Entries as written by ``import_public_locations``."""
     path = manifest_path()
     if path is None or not path.is_file():
         return []
@@ -51,7 +47,6 @@ def _entry_key(entry: dict[str, Any]) -> tuple[Any, Any] | None:
 
 def merge_into_manifest(entries: list[dict[str, Any]]) -> Path | None:
     """Add ``entries`` to the manifest that seeding reads, keyed on coordinates.
-    Merges rather than overwrites: two independent importers (``import_public_locations`` for this site's own public pins, ``import_redata_public_locations`` for REData's catalog) both write here, and each must be able to run - in either order, any number of times - without erasing what the other already contributed.
 
     Args:
         entries: Location entries to add, in export format.
@@ -73,11 +68,9 @@ def merge_into_manifest(entries: list[dict[str, Any]]) -> Path | None:
 
 def import_location_entries(entries: list[dict[str, Any]]) -> tuple[int, int]:
     """Create or refresh a Location (and its Wiki) for each entry, in one transaction.
-    Shared by ``import_public_locations`` and ``import_redata_public_locations`` - both hand it entries in the same export shape, so the actual write logic (and its idempotency: re-running tops up rather than duplicates) lives in exactly one place regardless of which catalog an entry came from.
 
     Args:
-        entries: Entries in export format (``latitude``, ``longitude``,
-            ``official_name``, ``wiki``).
+        entries: Entries in export format (``latitude``, ``longitude``, ``official_name``, ``wiki``).
 
     Returns:
         ``(created, updated)`` location counts."""
@@ -125,8 +118,7 @@ def redata_demo_locations() -> list[dict[str, Any]]:
     """Public demo locations published by REData's ``/public-locations/`` catalog.
 
     Returns:
-        Entries in export format (``latitude``, ``longitude``,
-        ``official_name``, ``wiki``) - possibly empty."""
+        Entries in export format (``latitude``, ``longitude``, ``official_name``, ``wiki``) - possibly empty."""
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
     from urbanlens.dashboard.services.apis.locations.redata_public_locations_gateway import RedataPublicLocationsGateway
 

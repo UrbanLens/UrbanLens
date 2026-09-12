@@ -1,8 +1,4 @@
-"""Read-side queries for consumers of Facts: AI writing agents and Consensus's recheck-round selection.
-
-See ``services.facts.evidence`` for the write path and
-``services.facts.confidence`` for how ``confidence``/``status`` are derived.
-"""
+"""Read-side queries for consumers of Facts: AI writing agents and Consensus's recheck-round selection."""
 
 from __future__ import annotations
 
@@ -37,8 +33,7 @@ def get_trusted_facts(
         min_confidence: Minimum confidence to include.
 
     Returns:
-        Matching facts, most confident first.
-    """
+        Matching facts, most confident first."""
     facts = Fact.objects.min_confidence(min_confidence)
     if wiki is not None:
         facts = facts.for_wiki(wiki)

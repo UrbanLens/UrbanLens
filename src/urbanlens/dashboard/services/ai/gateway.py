@@ -84,8 +84,7 @@ class LLMGateway(ABC):
         """Number of tokens for sentences in the LLMGateway instance.
 
         Returns:
-                int:
-                The number of tokens for sentences in the LLMGateway instance."""
+            int: The number of tokens for sentences in the LLMGateway instance."""
         return self._token_count["sent"]
 
     @property
@@ -93,8 +92,7 @@ class LLMGateway(ABC):
         """Number of received tokens.
 
         Returns:
-                int:
-                The number of received tokens."""
+            int: The number of received tokens."""
         return self._token_count["received"]
 
     @property
@@ -102,11 +100,7 @@ class LLMGateway(ABC):
         """Total number of tokens, calculated as the sum of tokens sent and tokens received.
 
         Returns:
-                int:
-                The total number of tokens.
-
-            Examples::
-                If self._token_count is {'sent': 100, 'received': 50}, calling tokens will return 150."""
+            int: The total number of tokens."""
         return self._token_count["sent"] + self._token_count["received"]
 
     @property
@@ -114,15 +108,7 @@ class LLMGateway(ABC):
         """Calculates the total cost for the tokens sent and received based on the model's costs per thousand tokens.
 
         Returns:
-                Decimal:
-                The total cost for the tokens sent and received.
-
-            Examples::
-                >>> doc_gen = LLMGateway(...)
-                >>> doc_gen.send_tokens(100)
-                >>> doc_gen.receive_tokens(50)
-                >>> doc_gen.cost
-                Decimal('0.15')"""
+            Decimal: The total cost for the tokens sent and received."""
         costs = self.MODEL_COSTS.get(self.model)
         if costs is None:
             logger.warning("Model not recognized (%s). Using default costs.", self.model)
@@ -135,72 +121,44 @@ class LLMGateway(ABC):
 
     @singledispatchmethod
     def send_tokens(self, count: Any):
-        """Annotates the number of tokens sent and updates the token count accordingly.
-
-        Args:
-                count (Any):
-                The number of tokens to be sent."""
+        """Annotates the number of tokens sent and updates the token count accordingly."""
         raise NotImplementedError
 
     @send_tokens.register
     def _(self, count: int):
-        """Annotates the number of tokens sent and updates the token count accordingly.
-
-        Args:
-                count (int):
-                The number of tokens to be sent."""
+        """Annotates the number of tokens sent and updates the token count accordingly."""
         self._token_count["sent"] += count
         logger.debug("Sent %s tokens. Total sent: %s", count, self._token_count["sent"])
 
     @send_tokens.register
     def _(self, prompt: str):
-        """Processes the prompt to calculate and send tokens.
-
-        Args:
-                prompt (str):
-                The prompt for which tokens are to be calculated and sent."""
+        """Processes the prompt to calculate and send tokens."""
         count = self.calculate_tokens(prompt)
         self._token_count["sent"] += count
         logger.debug("Sent %s tokens. Total sent: %s", count, self._token_count["sent"])
 
     @send_tokens.register
     def _(self, messages: MessageQueue):
-        """Processes the messages to calculate and send tokens.
-
-        Args:
-                messages (MessageQueue):
-                The messages to be processed for token calculation and sent."""
+        """Processes the messages to calculate and send tokens."""
         count = self.calculate_combined_tokens(messages)
         self._token_count["sent"] += count
         logger.debug("Sent %s tokens. Total sent: %s", count, self._token_count["sent"])
 
     @singledispatchmethod
     def receive_tokens(self, count: int):
-        """Updates the count of received tokens and logs the information.
-
-        Args:
-                count (int):
-                The number of tokens received."""
+        """Updates the count of received tokens and logs the information."""
         self._token_count["received"] += count
         logger.debug("Received %s tokens. Total received: %s", count, self._token_count["received"])
 
     @receive_tokens.register
     def _(self, prompt: str):
-        """Process the prompt to calculate tokens and update the token count accordingly.
-
-        Args:
-                prompt (str):
-                The text prompt for which tokens are to be calculated."""
+        """Process the prompt to calculate tokens and update the token count accordingly."""
         count = self.calculate_tokens(prompt)
         self._token_count["received"] += count
         logger.debug("Received %s tokens. Total received: %s", count, self._token_count["received"])
 
     def setup(self, **kwargs):
-        """
-        Perform any necessary setup for the AI model.
-
-        This method can be overridden by child classes to perform any necessary setup for the AI model.
-        """
+        """Perform any necessary setup for the AI model."""
         logger.debug("LLMGateway setup not defined in subclass")
 
     def _lookup_model(self, model_name: str | None) -> str | None:
@@ -212,12 +170,8 @@ class LLMGateway(ABC):
     def calculate_tokens(self, prompt: str) -> int:
         """Calculate the exact number of tokens in a given text prompt using the tokenizer from the transformers library.
 
-        Args:
-                prompt (str):
-                The text prompt to calculate token count for.
-
         Returns:
-                int: The exact token count."""
+            int: The exact token count."""
         try:
             encoding = tiktoken.encoding_for_model(self.model)
             tokens = encoding.encode(prompt)
@@ -231,13 +185,8 @@ class LLMGateway(ABC):
     def calculate_combined_tokens(self, messages: MessageQueue | list[dict[str, str]]) -> int:
         """Calculate the exact number of tokens in a combined prompt.
 
-        Args:
-                messages (dict):
-                A dictionary of messages to be used for chat completion.
-
         Returns:
-                int:
-                The exact token count for the given prompt."""
+            int: The exact token count for the given prompt."""
         prompt = "\n\n".join([message["content"] for message in messages])
         return self.calculate_tokens(prompt)
 
@@ -245,8 +194,7 @@ class LLMGateway(ABC):
         """Prepare a text prompt for the AI model to use as the system prompt.
 
         Returns:
-                str:
-                The prepared text prompt."""
+            str: The prepared text prompt."""
         prompt = self.project_description
         if self.formatting:
             prompt += f"\n\n<FORMATTING>{self.formatting}</FORMATTING>"
@@ -257,13 +205,8 @@ class LLMGateway(ABC):
     def construct_messages(self, prompt: str) -> MessageQueue:
         """Construct a list of messages to be used for chat completion.
 
-        Args:
-                prompt (str):
-                The text prompt to be used for chat completion.
-
         Returns:
-                list[dict]:
-                A list of messages to be used for chat completion."""
+            list[dict]: A list of messages to be used for chat completion."""
         queue = MessageQueue()
         system_prompt = self.prepare_system_prompt()
 
@@ -271,7 +214,6 @@ class LLMGateway(ABC):
         system_budget = self.max_tokens - SHORTEST_MESSAGE * 2
         system_tokens = queue.estimate_tokens(system_prompt)
         if system_tokens > system_budget:
-            # ~4 chars per token as a rough estimate
             system_prompt = system_prompt[: system_budget * 4]
             logger.warning("System prompt truncated to fit token budget (was ~%d tokens)", system_tokens)
 
@@ -295,12 +237,8 @@ class LLMGateway(ABC):
         """Send a prompt to the AI model and return the answer within its response.
         If a high-confidence injection is detected (risk score >= 0.3) the sanitized version is used instead and a warning is logged.
 
-        Args:
-                prompt (str): The prompt to send to the AI model.
-                kwargs: Additional keyword arguments that may be used for specific implementations.
-
         Returns:
-                str | None: The answer from the AI model."""
+            str | None: The answer from the AI model."""
         from urbanlens.dashboard.services.ai.scanner import scan as _scan_injection
 
         scan_result = _scan_injection(prompt, source="user")
@@ -333,17 +271,8 @@ class LLMGateway(ABC):
     def _get_response(self, message_queue: MessageQueue, *, tools: list[ToolSpec] | None = None) -> InferenceResponse | None:
         """Send the message queue to the inference service and return its response, unmodified.
 
-        Args:
-                message_queue (MessageQueue):
-                The message queue to send.
-                tools:
-                Provider-native tools the model may call this turn, or
-                None for the ordinary no-tools call every other AI
-                feature makes. See :meth:`send_with_tools`.
-
         Returns:
-                InferenceResponse | None:
-                The normalized response, or None if the call failed."""
+            InferenceResponse | None: The normalized response, or None if the call failed."""
         system_prompt = ""
         messages: list[Message] = []
         for msg in message_queue.messages:
@@ -361,11 +290,7 @@ class LLMGateway(ABC):
             return None
 
     def _record_received_tokens(self, response: InferenceResponse) -> None:
-        """Prefer the provider's own reported usage; fall back to a tiktoken estimate.
-
-        Args:
-            response: The normalized inference response.
-        """
+        """Prefer the provider's own reported usage; fall back to a tiktoken estimate."""
         if response.usage.output_tokens is not None:
             self.receive_tokens(response.usage.output_tokens)
         else:
@@ -374,12 +299,8 @@ class LLMGateway(ABC):
     def _parse_answer(self, message_content: str) -> str | None:
         """Parse the first <ANSWER> tag from the response body.
 
-        Args:
-            message_content: The content of the message to parse.
-
         Returns:
-            The first extracted answer, or None.
-        """
+            The first extracted answer, or None."""
         answers = self._parse_answers(message_content)
         if answers:
             return answers[0]
@@ -389,12 +310,8 @@ class LLMGateway(ABC):
     def _parse_answers(self, message_content: str) -> list[str]:
         """Parse all <ANSWER>...</ANSWER> tags from the response body.
 
-        Args:
-            message_content: The content of the message to parse.
-
         Returns:
-            List of extracted answer strings (stripped), may be empty.
-        """
+            List of extracted answer strings (stripped), may be empty."""
         try:
             return [
                 m.strip()
@@ -416,12 +333,8 @@ class LLMGateway(ABC):
     def send_prompt_list(self, prompt: str, *, max_results: int | None = None, **kwargs) -> list[str]:
         """Like send_prompt but returns every ANSWER tag as a list.
 
-        Args:
-                prompt: The user prompt to send.
-                max_results: Optional cap on the number of answers returned.
-
         Returns:
-                List of answer strings (may be empty)."""
+            List of answer strings (may be empty)."""
         from urbanlens.dashboard.services.ai.scanner import scan as _scan_injection
 
         scan_result = _scan_injection(prompt, source="user")
@@ -454,18 +367,9 @@ class LLMGateway(ABC):
 
     def send_with_tools(self, prompt: str, tools: list[ToolSpec]) -> InferenceResponse | None:
         """Send a prompt with provider-native tools available, and return the raw response.
-        This method ignores whatever ``formatting`` the gateway was constructed with - the ``<ANSWER>`` wrapping instruction is specific to that text protocol and would only confuse a model being offered real tools instead, so it is never worth sending here regardless of what a caller passed to ``__init__``.
-
-        Args:
-                prompt: The full prompt for this round - the caller owns
-                whatever transcript/tool-result text it has accumulated so
-                far and passes it fresh each call, same as :meth:`send_prompt`.
-                tools: The tools available this round, already converted to the
-                wire schema (``services.ai.tools.registry.ToolSpec`` is a
-                different type - the caller converts).
 
         Returns:
-                The raw response, or None if the call failed or returned no content."""
+            The raw response, or None if the call failed or returned no content."""
         from urbanlens.dashboard.services.ai.scanner import scan as _scan_injection
 
         scan_result = _scan_injection(prompt, source="user")

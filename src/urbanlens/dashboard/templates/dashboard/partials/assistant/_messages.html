@@ -1,9 +1,4 @@
-{% comment %}
-The assistant chat log. Assistant entries may carry an ``actions`` list -
-human-readable labels of the tools it ran for that turn - or, while a turn
-is still running on ai-worker, be a pending entry that self-polls (see
-_bubble.html, which renders each one).
-{% endcomment %}
+{% comment %}The assistant chat log.{% endcomment %}
 <div id="assistant-messages" class="assistant-messages">
     {% if not messages_history %}
     <div class="assistant-empty">

@@ -1,10 +1,4 @@
-"""Creating, editing, and deleting the trip record itself.
-
-Shared by the internal HTMX controllers and the external REST API so the
-upcoming-trip quota, the generated-name fallback, the description length
-limit, and the Undo History stash all apply identically whichever surface a
-trip was created or destroyed from.
-"""
+"""Creating, editing, and deleting the trip record itself."""
 
 from __future__ import annotations
 
@@ -56,31 +50,20 @@ def create_trip(
     """Create a trip, join its creator, and invite any chosen friends.
 
     Args:
-        creator: The profile creating the trip, joined automatically with an
-            RSVP of yes.
-        name: Trip name. Blank or omitted gets a generated one, so a
-            "just start planning" flow needn't invent a title up front.
+        creator: The profile creating the trip, joined automatically with an RSVP of yes.
+        name: Trip name.
         description: Optional free-text description.
         start_date: Optional start date.
         end_date: Optional end date.
-        invite_profile_ids: Profile ids to invite. Filtered to the creator's
-            accepted friends - arbitrary submitted ids are never trusted - and
-            truncated to whatever room ``max_trip_members`` leaves.
-        client_uuid: A caller-generated uuid making the create idempotent, in
-            the same shape ``services.pins.pin_creation.create_pin_for_profile``
-            uses: when a trip with this uuid already exists *and the caller is
-            its creator*, that trip is returned with ``created`` False instead
-            of a duplicate being made. Offline clients retry creates until
-            acknowledged, so the same submission may legitimately arrive twice.
+        invite_profile_ids: Profile ids to invite.
+        client_uuid: A caller-generated uuid making the create idempotent, in the same shape ``services.pins.pin_creation.create_pin_for_profile`` uses: when a trip with this uuid already exists *and the caller is its creator*, that trip is returned with ``created``...
 
     Returns:
         The ``(trip, created)`` pair; ``created`` is False for an idempotent replay.
 
     Raises:
-        TripValidationError: The description exceeds the shared text limit, or
-            ``client_uuid`` already belongs to somebody else's trip.
-        TripQuotaError: The creator is already at ``max_upcoming_trips_per_user``.
-    """
+        TripValidationError: The description exceeds the shared text limit, or ``client_uuid`` already belongs to somebody else's trip.
+        TripQuotaError: The creator is already at ``max_upcoming_trips_per_user``."""
     if client_uuid is not None:
         existing = Trip.objects.filter(uuid=client_uuid).first()
         if existing is not None:
@@ -148,13 +131,10 @@ def invite_members(trip: Trip, inviter: Profile, invite_profile_ids: Sequence[An
     Args:
         trip: The trip to invite to.
         inviter: The inviting profile.
-        invite_profile_ids: Candidate profile ids - anything that isn't one of
-            the inviter's accepted friends is silently dropped rather than
-            trusted.
+        invite_profile_ids: Candidate profile ids - anything that isn't one of the inviter's accepted friends is silently dropped rather than trusted.
 
     Returns:
-        How many new invitations were actually created.
-    """
+        How many new invitations were actually created."""
     if not invite_profile_ids:
         return 0
 
@@ -214,7 +194,6 @@ def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Tr
 
 def delete_trip(trip: Trip, actor: Profile) -> None:
     """Delete a trip, stashing it for Undo History first.
-    The stash is not optional: a trip delete cascades to its activities, comments, memberships and calendar links, and Undo History is the only way any of that comes back.
 
     Args:
         trip: The trip to delete.
@@ -238,19 +217,14 @@ def set_trip_permissions(trip: Trip, actor: Profile, *, changes: Mapping[str, An
     Args:
         trip: The trip to configure.
         actor: The profile making the change.
-        changes: Any subset of :data:`TRIP_PERMISSION_FIELDS`, each valued with
-            one of ``Trip.PERM_NONE``/``PERM_ORGANIZERS``/``PERM_EVERYONE``.
-            Unrelated keys are ignored, so a caller may hand this the whole
-            submitted form (``request.POST.dict()``) unfiltered.
+        changes: Any subset of :data:`TRIP_PERMISSION_FIELDS`, each valued with one of ``Trip.PERM_NONE``/``PERM_ORGANIZERS``/``PERM_EVERYONE``.
 
     Returns:
-        The saved trip. Unchanged, and not written at all, when *changes*
-        names none of the permission fields.
+        The saved trip.
 
     Raises:
         TripPermissionError: The actor is neither the creator nor an organizer.
-        TripValidationError: A submitted field carries a level that is not one
-            of the three the model defines."""
+        TripValidationError: A submitted field carries a level that is not one of the three the model defines."""
     from urbanlens.dashboard.services.trips.trip_access import is_organizer
 
     if not is_organizer(actor, trip):

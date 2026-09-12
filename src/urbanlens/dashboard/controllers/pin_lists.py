@@ -45,10 +45,9 @@ _BULK_ADD_CONFIRM_THRESHOLD = 100
 _ITEMS_PANEL_TEMPLATE = "dashboard/partials/pin_lists/_items_panel.html"
 _ITEMS_ROWS_TEMPLATE = "dashboard/partials/pin_lists/_items_rows.html"
 
-#: Rows rendered per page of the items list - matches the height-based
-#: "revealed" HTMX pagination the Vault gallery uses (see
-#: controllers.vault_photos.VaultPhotosView/_GALLERY_PAGE_SIZE), reused here
-#: rather than inventing a second pagination scheme for the same page shape.
+#: Rows rendered per page of the items list - matches the height-based "revealed" HTMX pagination the Vault
+#: gallery uses (see controllers.vault_photos.VaultPhotosView/_GALLERY_PAGE_SIZE), reused here rather than
+#: inventing a second pagination scheme for the same page shape.
 _ITEMS_PAGE_SIZE = 50
 
 #: Cap on markers drawn for the list's overview map, matching
@@ -59,11 +58,7 @@ _MAP_PIN_LIMIT = 500
 def _get_pin_list_or_404(list_slug: str, profile: Profile) -> PinList:
     """Resolve a PinList by slug, falling back to uuid for pre-slug/legacy links.
 
-    Mirrors ``PinController``'s slug-then-uuid lookup for Pin - see
-    ``pin.py``. New URLs are always built from ``pin_list.slug`` (minted on
-    save), but old bookmarked/shared ``/lists/<uuid>/`` links must keep
-    working since the ``slug`` path converter's character class also matches
-    a uuid string.
+    Mirrors ``PinController``'s slug-then-uuid lookup for Pin - see ``pin.py``.
     """
     try:
         return PinList.objects.get(slug=list_slug, profile=profile)
@@ -84,10 +79,8 @@ def _default_trip_name_for_list(pin_list: PinList) -> str:
         pin_list: The list the trip is being created from.
 
     Returns:
-        "Trip from the "[name]" list" unless the list's own name already
-        contains the word "list", in which case that would read redundantly
-        (e.g. "Trip from the "My Bucket List" list"), so it falls back to
-        "Trip from [name]".
+        "Trip from the "[name]" list" unless the list's own name already contains the word "list", in
+        which case that would read redundantly...
     """
     if "list" in pin_list.name.lower():
         return f"Trip from {pin_list.name}"
@@ -97,28 +90,9 @@ def _default_trip_name_for_list(pin_list: PinList) -> str:
 def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
     """Ordered list items with their pin's labels prefetched (icon/color/tag chips need these).
 
-    Matches the same prefetch shape the main map's bulk pin endpoints use
-    (see maps.py) so ``Pin.effective_icon``/``effective_color`` and the tag
-    chip list resolve without N+1 queries.
-
-    ``pin__location__wiki`` and ``pin__reviews`` are part of that shape:
-    ``_pin_map_marker_data`` reads ``Pin.effective_name`` (which falls through to
-    ``Location.display_name``, and that reads the linked ``Wiki``) and
-    ``Pin.rating`` (which reads ``reviews``). Both model properties document the
-    prefetch they need in their own docstrings.
-
-    Returned as a queryset (not materialized), so a caller that only needs
-    one page of rows (``PinListItemsPageView``) can paginate it at the
-    database level instead of always pulling every item on the list.
-
-    Ordered on more than ``order`` because ``order`` is not unique within a
-    list: ``add_pins_to_list`` numbers new items from the *current row count*
-    rather than from ``max(order) + 1``, so removing an item and adding another
-    hands the new one a number an existing item already has. That was harmless
-    while every caller materialized this once and sliced in Python; a caller
-    taking two different slices in SQL gets no promise that tied rows keep the
-    same relative order across two executions, and a tie straddling a slice
-    boundary can then put a row in both or neither.
+    Returned as a queryset (not materialized), so a caller that only needs one page of rows
+    (``PinListItemsPageView``) can paginate it at the database level instead of always pulling every
+    item on the list.
     """
     return (
         pin_list.items.select_related("pin", "pin__location", "pin__location__wiki")
@@ -133,12 +107,8 @@ def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
 def _pin_map_marker_data(pin: Pin) -> dict[str, Any]:
     """Serialize a pin for the list-detail overview map's label-icon markers/popups.
 
-    Mirrors the field shapes the main map's markers already expect (icon,
-    tags_data, rating, last_visited as "Never" or "YYYY-MM-DD", etc. - see
-    maps.py's post-processing of ``Pin.to_json()``) so the same marker/popup
-    look carries over here. Reads ``pin.labels.all()`` (not ``.filter()``) so
-    the ``pin__labels`` prefetch in ``_list_items_queryset`` is reused
-    instead of triggering a query per pin.
+    Reads ``pin.labels.all()`` (not ``.filter()``) so the ``pin__labels`` prefetch in
+    ``_list_items_queryset`` is reused instead of triggering a query per pin.
     """
     tags = [{"id": b.id, "name": b.name, "color": b.effective_color, "icon": b.effective_icon} for b in pin.labels.all() if b.kind == "tag"]
     return {
@@ -162,18 +132,7 @@ def _items_map_data(items: Iterable[PinListItem]) -> list[dict[str, Any]]:
 
 
 def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[str, Any]:
-    """Build the items/page_obj/items_map_data context shared by the detail page and items panel.
-
-    ``items_map_data`` deliberately ignores which page of rows is rendered -
-    the overview map is about the whole list - but it is capped, matching the
-    ``_PREVIEW_MAP_PIN_LIMIT`` the near-identical saved-filter preview map has
-    always had. Past a few hundred markers the map is an unreadable blob
-    anyway, and each marker here carries far more than that one does: name,
-    address, description, rating, last-visited and every tag chip.
-
-    Both the page of rows and the map's slice are taken at the database level.
-    This used to materialize every item on the list to serve either.
-    """
+    """Build the items/page_obj/items_map_data context shared by the detail page and items panel."""
     items = _list_items_queryset(pin_list)
     page_obj = get_page(request, items, _ITEMS_PAGE_SIZE)
     return {
@@ -181,9 +140,9 @@ def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[st
         "page_obj": page_obj,
         "items_map_data": _items_map_data(items[:_MAP_PIN_LIMIT]),
         "map_pin_limit": _MAP_PIN_LIMIT,
-        # The count is the list's, not the map's: a pin with no coordinates is
-        # not plotted either way, and saying "showing the first 500" on a list
-        # of 600 where 200 have no coordinates is closer to true than silence.
+        # The count is the list's, not the map's: a pin with no coordinates is not plotted either way, and
+        # saying "showing the first 500" on a list of 600 where 200 have no coordinates is closer to true than
+        # silence.
         "items_map_truncated": page_obj.paginator.count > _MAP_PIN_LIMIT,
     }
 
@@ -221,10 +180,9 @@ class PinListsIndexView(LoginRequiredMixin, View):
 
     GET /lists/?tab=lists|filters
 
-    Direct browser navigation (no ``HX-Request`` header) redirects to the
-    equivalent Organize tab - this URL now only serves the HTMX fragment that
-    Organize's Lists/Filters tabs lazy-load into themselves the first time
-    they're shown (see organize/index.html and organize.py's ``active_section``).
+    Direct browser navigation (no ``HX-Request`` header) redirects to the equivalent Organize tab - this
+    URL now only serves the HTMX fragment that Organize's Lists/Filters tabs lazy-load into themselves
+    the first time they're shown (see organize/index.html and organize.py's ``active_section``).
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -313,11 +271,8 @@ class PinListDetailView(LoginRequiredMixin, View):
                 "saved_filters": saved_filters,
                 "trips": trips,
                 **profile.get_map_center_template_context(),
-                # The pins overview map uses the shared layers component, whose
-                # base layer (and therefore attribution) can change at runtime -
-                # see the footer partial's show_map_footer doc comment. The
-                # boundary-drawing mini-map stays on a fixed OSM layer, which
-                # happens to match that component's own default attribution.
+                # The pins overview map uses the shared layers component, whose base layer (and therefore
+                # attribution) can change at runtime - see the footer partial's show_map_footer doc comment.
                 "show_map_footer": True,
             },
         )
@@ -328,35 +283,23 @@ class PinListEditView(LoginRequiredMixin, View):
 
     POST /lists/<uuid>/edit/ → JSON ``{"ok": true}``
 
-    Accepts a JSON body with any subset of ``name``, ``description``,
-    ``is_smart``, ``saved_filter_uuid`` (copies that SavedFilter's criteria
-    into ``smart_filter``; empty string clears it), and ``smart_boundary``
-    (a GeoJSON Polygon/MultiPolygon geometry, or ``null`` to clear it - same
-    payload shape as the pin/wiki boundary editor).
-
-    Changing ``saved_filter_uuid``/``smart_boundary`` always resyncs
-    membership immediately, so matching pins appear as soon as a rule is
-    picked - independent of ``is_smart``, which only controls whether *future*
-    pin/label edits keep re-triggering that sync.
-
-    Setting ``saved_filter_uuid`` also records which ``SavedFilter`` the copy
-    came from (``PinList.source_saved_filter``), so later edits to that
-    SavedFilter (``SavedFilterEditView``) can find and resync this list too -
-    without that link, ``smart_filter`` would silently drift out of sync with
-    its source the moment the user tweaks the filter from the Filters tab
-    instead of from this list.
+    Changing ``saved_filter_uuid``/``smart_boundary`` always resyncs membership immediately, so matching
+    pins appear as soon as a rule is picked - independent of ``is_smart``, which only controls whether
+    *future* pin/label edits keep re-triggering that sync.
+    Setting ``saved_filter_uuid`` also records which ``SavedFilter`` the copy came from
+    (``PinList.source_saved_filter``), so later edits to that SavedFilter (``SavedFilterEditView``) can
+    find and resync this list too - without that link, ``smart_filter`` would silently drift out of sync
+    with its source the moment the user tweaks the filter from the Filters tab instead of from this
+    list.
     """
 
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
         body = _parse_body(request)
-        # A bare save() writes every column from this request's snapshot,
-        # silently reverting any field a concurrent request (another tab, or
-        # the external API's own PATCH endpoint further down this file - two
+        # A bare save() writes every column from this request's snapshot, silently reverting any field a
+        # concurrent request (another tab, or the external API's own PATCH endpoint further down this file - two
         # separate implementations editing the same row) changed in between.
-        # Scoped the same way services.wiki.wiki_edits.save_edited_fields
-        # already does for exactly this reason on a comparably shared model.
         changed_fields: set[str] = set()
 
         name = (body.get("name") or "").strip()
@@ -374,13 +317,9 @@ class PinListEditView(LoginRequiredMixin, View):
             pin_list.description = description
             changed_fields.add("description")
 
-        # Rule changes (which filter/boundary is active) always resync a fresh
-        # snapshot immediately, even before the list is marked "smart" - the
-        # user should see matching pins as soon as they pick a filter, not only
-        # after also flipping "keep this list in sync automatically". Turning
-        # is_smart on (without also changing the rules) likewise takes a fresh
-        # snapshot to catch up on anything that changed while it was off;
-        # turning it off alone leaves current membership untouched.
+        # Rule changes (which filter/boundary is active) always resync a fresh snapshot immediately, even before
+        # the list is marked "smart" - the user should see matching pins as soon as they pick a filter, not only
+        # after also flipping "keep this list in sync automatically".
         rules_changed = False
         is_smart_turned_on = False
         if "is_smart" in body:
@@ -456,10 +395,9 @@ class PinListItemsPageView(LoginRequiredMixin, View):
 
     GET /lists/<uuid>/items/page/?page=N
 
-    Unlike :class:`PinListItemsView` (which re-renders the whole panel, map
-    data included), this paginates ``_list_items_queryset`` directly at the
-    database level - the "load more" sentinel only needs more rows, not a
-    fresh map sync, so it never re-fetches the full, unpaginated list.
+    Unlike :class:`PinListItemsView` (which re-renders the whole panel, map data included), this
+    paginates ``_list_items_queryset`` directly at the database level - the "load more" sentinel only
+    needs more rows, not a fresh map sync, so it never re-fetches the full, unpaginated list.
     """
 
     def get(self, request: HttpRequest, list_slug: str) -> HttpResponse:
@@ -474,14 +412,8 @@ class PinListAddPinsView(LoginRequiredMixin, View):
 
     POST /lists/<uuid>/items/add/
 
-    Accepts either a ``pin_ids`` list (explicit selection - the pin-detail
-    "add to list" flow sends a single id) or, when no ``pin_ids`` are given,
-    ``SearchForm``-shaped POST fields (the map sidebar's "Add these pins to
-    a list" flow, replaying whatever filters are currently active against
-    the profile's full, unpaginated pin set). ``pin_slugs`` is also accepted
-    (the list detail page's own pin search, which only has slugs on hand).
-    Adding more than 100 new pins at once requires a follow-up POST with
-    ``confirmed=true``.
+    ``pin_slugs`` is also accepted (the list detail page's own pin search, which only has slugs on
+    hand).
     """
 
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
@@ -489,16 +421,14 @@ class PinListAddPinsView(LoginRequiredMixin, View):
         pin_list = _get_pin_list_or_404(list_slug, profile)
 
         pin_id_values = request.POST.getlist("pin_ids")
-        # Coerce to ints up front and silently drop anything non-numeric
-        # (matches PinListReorderView's isdigit()-filtered id parsing below) -
-        # Q(pk__in=...) against raw, unvalidated POST strings raises an
-        # uncaught ValueError (500) at query-execution time on a non-numeric
-        # entry, since pk is an integer field.
+        # Coerce to ints up front and silently drop anything non-numeric (matches PinListReorderView's
+        # isdigit()-filtered id parsing below) - Q(pk__in=...) against raw, unvalidated POST strings raises an
+        # uncaught ValueError (500) at query-execution time on a non-numeric entry, since pk is an integer
+        # field.
         pin_ids = [int(value) for value in pin_id_values if str(value).isdigit()]
-        # The shared location-search engine identifies pins by slug, falling back to
-        # the uuid when a pin has no slug (see AutocompleteResult.pin_slug) - split
-        # out anything that parses as a uuid so Pin.uuid (also a valid identifier
-        # here) is matched too, instead of only Pin.slug.
+        # The shared location-search engine identifies pins by slug, falling back to the uuid when a pin has no
+        # slug (see AutocompleteResult.pin_slug) - split out anything that parses as a uuid so Pin.uuid (also a
+        # valid identifier here) is matched too, instead of only Pin.slug.
         pin_slug_values = request.POST.getlist("pin_slugs")
         slug_values: list[str] = []
         uuid_values: list[str] = []
@@ -524,9 +454,8 @@ class PinListAddPinsView(LoginRequiredMixin, View):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             pins = list(Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria))
 
-        # Counted here rather than left to add_pins_to_list because the
-        # confirmation handshake below has to happen *before* anything is
-        # written - the service dedupes against the same set again, which is
+        # Counted here rather than left to add_pins_to_list because the confirmation handshake below has to
+        # happen *before* anything is written - the service dedupes against the same set again, which is
         # idempotent and costs one query.
         existing_pin_ids = set(pin_list.items.values_list("pin_id", flat=True))
         new_pins = [pin for pin in pins if pin.pk not in existing_pin_ids]
@@ -639,9 +568,8 @@ class PinListMarkupMapView(LoginRequiredMixin, View):
 
         markup_map = materialize_markup_map(profile, snapshot, existing_map=pin_list.markup_map, context=pin_list)
         if markup_map is None:
-            # materialize_markup_map only returns None when the snapshot itself is
-            # None (map removed) - unreachable here since we already checked above,
-            # but handled explicitly rather than assumed.
+            # materialize_markup_map only returns None when the snapshot itself is None (map removed) -
+            # unreachable here since we already checked above, but handled explicitly rather than assumed.
             return JsonResponse({"ok": False, "error": "Unable to create markup map."}, status=500)
 
         if pin_list.markup_map_id != markup_map.pk:
@@ -654,9 +582,10 @@ class PinListMarkupMapView(LoginRequiredMixin, View):
 class PinListExportView(LoginRequiredMixin, View):
     """Download every pin on a list as GeoJSON/KML/GPX/CSV (UL-377).
 
-    POST /lists/<slug>/export/  body: ``format=...`` (plain form POST, not
-    JSON - matches ``PinBulkExportView``, see ``controllers/pin_bulk.py``,
-    which this reuses for the actual file writers).
+    POST /lists/<slug>/export/ body: ``format=...`` (plain form POST, not
+
+    JSON - matches ``PinBulkExportView``, see ``controllers/pin_bulk.py``, which this reuses for the
+    actual file writers).
     """
 
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:

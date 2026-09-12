@@ -52,10 +52,8 @@ def _current_profile(request: HttpRequest) -> Profile:
 def _participant_session(profile: Profile, session_id: int) -> GameSession:
     """The session, only if ``profile`` participates in it (any status) - 404 otherwise.
 
-    404 (not 403) mirrors the boundary-vote endpoint's convention: a session
-    another profile is playing shouldn't even reveal that it exists. Any
-    status (INVITED or JOINED) can view - an invitee should see the lobby
-    fill up before deciding to accept.
+    404 (not 403) mirrors the boundary-vote endpoint's convention: a session another profile is playing
+    shouldn't even reveal that it exists.
     """
     participant = GameSessionParticipant.objects.filter(session_id=session_id, profile=profile).select_related("session").first()
     if participant is None:
@@ -67,8 +65,8 @@ def _joined_participant(profile: Profile, session: GameSession) -> GameSessionPa
     """The profile's participant row, only if they've actually joined (not just been invited).
 
     Raises:
-        Http404: if there's no participant row at all (shouldn't happen if
-            called after ``_participant_session``).
+        Http404: if there's no participant row at all (shouldn't happen if called after
+        ``_participant_session``).
     """
     participant = GameSessionParticipant.objects.filter(session=session, profile=profile).first()
     if participant is None:
@@ -80,9 +78,8 @@ def _parse_geo_bounds(geo_bounds_raw: str | None) -> tuple[dict | None, JsonResp
     """Parse+validate an optional ``geo_bounds`` GeoJSON string.
 
     Returns:
-        ``(geojson, None)`` on success, or ``(None, error_response)`` on
-        failure - the caller should return ``error_response`` immediately
-        when it's not None.
+        ``(geojson, None)`` on success, or ``(None, error_response)`` on failure - the caller should
+        return ``error_response`` immediately when...
     """
     try:
         geo_bounds_geojson = json.loads(geo_bounds_raw) if geo_bounds_raw else None
@@ -91,9 +88,9 @@ def _parse_geo_bounds(geo_bounds_raw: str | None) -> tuple[dict | None, JsonResp
 
     config = spotguessr_session.GameConfig(geo_bounds_geojson=geo_bounds_geojson)
     try:
-        # GameConfig.geo_bounds only parses the GeoJSON lazily on access -
-        # force it now so a malformed-but-valid-JSON payload 400s here,
-        # rather than surfacing as a 500 later inside round generation.
+        # GameConfig.geo_bounds only parses the GeoJSON lazily on access - force it now so a
+        # malformed-but-valid-JSON payload 400s here, rather than surfacing as a 500 later inside round
+        # generation.
         _ = config.geo_bounds
     except (GEOSException, GDALException, ValueError, TypeError):
         return None, JsonResponse({"error": "Invalid geo_bounds - must be a valid GeoJSON polygon."}, status=400)
@@ -103,15 +100,14 @@ def _parse_geo_bounds(geo_bounds_raw: str | None) -> tuple[dict | None, JsonResp
 def _validate_label_id(raw_label_id: str | None, profile: Profile) -> tuple[int | None, JsonResponse | None]:
     """Parse+validate an optional ``label_id`` - must name a label ``profile`` can actually use.
 
-    Mirrors ``_parse_geo_bounds``'s shape. Scoped to ``Label.objects.location_labels().visible_to(profile)``
-    (the same visibility rule the map's label filter uses) so a profile can't probe for the
-    existence of another profile's private label via the game-start endpoint - an id that
-    doesn't resolve is reported identically whether it's malformed, someone else's personal
-    label, or simply doesn't exist.
+    Scoped to ``Label.objects.location_labels().visible_to(profile)`` (the same visibility rule the
+    map's label filter uses) so a profile can't probe for the existence of another profile's private
+    label via the game-start endpoint - an id that doesn't resolve is reported identically whether it's
+    malformed, someone else's personal label, or simply doesn't exist.
 
     Returns:
-        ``(label_id, None)`` on success (``label_id`` is None when omitted), or
-        ``(None, error_response)``.
+        ``(label_id, None)`` on success (``label_id`` is None when omitted), or ``(None,
+        error_response)``.
     """
     if not raw_label_id:
         return None, None
@@ -166,23 +162,20 @@ def _config_from_request(request: HttpRequest, profile: Profile) -> tuple[spotgu
     return config, None
 
 
-#: Placeholder ids reversed into the URL templates handed to the frontend -
-#: large and distinctive enough that a literal-string ``.replace()`` in JS
-#: is unambiguous, since it always runs against a string this function
+#: Placeholder ids reversed into the URL templates handed to the frontend - large and distinctive enough that a
+#: literal-string ``.replace()`` in JS is unambiguous, since it always runs against a string this function
 #: itself produced, never against arbitrary data.
 _SESSION_ID_SENTINEL = 999999999
 _ROUND_ID_SENTINEL = 888888888
 
 
 def _url_templates() -> dict[str, str]:
-    """Every SpotGuessr endpoint the frontend needs, with numeric-id placeholders for the parameterized ones.
+    """Every SpotGuessr endpoint the frontend needs, with numeric-id placeholders for the parameterized
+    ones.
 
-    ``{% url %}`` can't emit a template directly (its ``<int:...>`` path
-    converters require a real integer) - reversing with sentinel ids here
-    and letting the frontend substitute them is the simplest exact
-    alternative. (A prior version of the frontend hardcoded these paths
-    without the ``/dashboard/`` prefix the app is actually mounted under -
-    this is also the fix for that.)
+    ``{% url %}`` can't emit a template directly (its ``<int:...>`` path converters require a real
+    integer) - reversing with sentinel ids here and letting the frontend substitute them is the simplest
+    exact alternative.
     """
     session_kwargs = {"session_id": _SESSION_ID_SENTINEL}
     return {
@@ -207,9 +200,9 @@ def _url_templates() -> dict[str, str]:
     }
 
 
-#: Presentation metadata for the 3 mode-selection cards on the overview page -
-#: keyed by SpotGuessrMode value so the template can loop over SpotGuessrMode.choices
-#: instead of hardcoding 3 cards (stays correct if a mode is ever added/removed).
+#: Presentation metadata for the 3 mode-selection cards on the overview page - keyed by SpotGuessrMode value so
+#: the template can loop over SpotGuessrMode.choices instead of hardcoding 3 cards (stays correct if a mode is
+#: ever added/removed).
 _MODE_CARD_META: dict[str, dict[str, str]] = {
     SpotGuessrMode.PHOTOS: {"icon": "photo_camera", "description": "Guess where a photo was taken.", "accent": "photos"},
     SpotGuessrMode.NAMED_PLACE: {"icon": "signpost", "description": "Guess a place from its name or alias.", "accent": "named_place"},
@@ -239,31 +232,23 @@ class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _current_profile(request)
         preference = spotguessr_overview.get_preference(profile)
-        # Whichever mode the player most recently played, not hardcoded to
-        # Photos - a rating for a Named Place/Street View-only player was
-        # updating correctly all along, the homepage chip just never looked
-        # at the right row (see git history for the report - it predates the
-        # convention of filing these in docs/PROBLEMS.md and has no entry there).
-        # Shared with the external API's overview endpoint via
-        # ``services.spotguessr.overview`` so the two can't answer differently.
+        # Whichever mode the player most recently played, not hardcoded to Photos - a rating for a Named
+        # Place/Street View-only player was updating correctly all along, the homepage chip just never looked at
+        # the right row (see git history for the report - it predates the convention of filing these in
+        # docs/PROBLEMS.md and has no entry there).
         own_rating = spotguessr_overview.most_recent_rating(profile)
 
-        # An invite notification links here with ?session=<id> (there's no
-        # dedicated per-session page - this single-page view holds all
-        # client-side session state) - only honored when the profile is
-        # actually a participant, same 404-shaped silence as everywhere else.
+        # An invite notification links here with ?session=<id> (there's no dedicated per-session page - this
+        # single-page view holds all client-side session state) - only honored when the profile is actually a
+        # participant, same 404-shaped silence as everywhere else.
         initial_session_id = None
         raw_session_id = request.GET.get("session")
         if raw_session_id and GameSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
             initial_session_id = raw_session_id
 
-        # Best-effort speculative prewarm of the round a solo player is most
-        # likely to start next (see services.spotguessr.prewarm) - skipped
-        # when this load is actually resuming a specific session, since
-        # they're not about to start a fresh one. Guessing wrong (a
-        # different mode/config, or multiplayer instead) just means the
-        # prewarm sits unused until it expires - never a correctness issue,
-        # only a missed optimization.
+        # Best-effort speculative prewarm of the round a solo player is most likely to start next (see
+        # services.spotguessr.prewarm) - skipped when this load is actually resuming a specific session, since
+        # they're not about to start a fresh one.
         if initial_session_id is None:
             guessed_mode = own_rating.mode if own_rating is not None else SpotGuessrMode.PHOTOS
             _prewarm_solo_start(profile.pk, guessed_mode, preference.last_config)
@@ -291,9 +276,6 @@ class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
                 "urls": _url_templates(),
                 "my_profile_id": profile.pk,
                 "initial_session_id": initial_session_id,
-                # Client-side key for the Street View mode's interactive panorama
-                # (google.maps.StreetViewPanorama) - the public/browser-restricted
-                # key, not the unrestricted server-side one used to fetch imagery.
                 "google_maps_api_key": settings.google_public_api_key,
             },
         )
@@ -328,16 +310,14 @@ class SpotGuessrFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View)
 class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
 
-    POST /spotguessr/start/   body: ``mode``, ``total_rounds``, difficulty/toggle fields,
-    optional ``invite_profile_ids`` (repeated) to start a multiplayer lobby instead of solo play.
+    POST /spotguessr/start/ body: ``mode``, ``total_rounds``, difficulty/toggle fields,
 
-    A solo start whose config has no eligible locations at all (e.g. the
-    profile hasn't pinned anything yet, or a chosen ``geo_bounds`` excludes
-    every pin) never creates a ``GameSession`` - it responds with
-    ``{"error_code": "no_eligible_locations"}`` instead, so the frontend can
-    show a dedicated empty-state screen rather than a fake "game over."
-    Multiplayer can't be pre-checked this way (invitees haven't joined yet
-    to know their pins) - see ``SpotGuessrBeginView`` for that case.
+    optional ``invite_profile_ids`` (repeated) to start a multiplayer lobby instead of solo play.
+    A solo start whose config has no eligible locations at all (e.g. the profile hasn't pinned anything
+    yet, or a chosen ``geo_bounds`` excludes every pin) never creates a ``GameSession`` - it responds
+    with ``{"error_code": "no_eligible_locations"}`` instead, so the frontend can show a dedicated
+    empty-state screen rather than a fake "game over." Multiplayer can't be pre-checked this way
+    (invitees haven't joined yet to know their pins) - see ``SpotGuessrBeginView`` for that case.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -370,17 +350,15 @@ class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
                 logger.info("spotguessr multiplayer start by %s rejected: %s", profile.pk, exc)
                 return JsonResponse({"error": "You can only invite friends."}, status=400)
             except (spotguessr_session.NotSessionHostForInviteError, spotguessr_session.LobbyClosedForInviteError) as exc:
-                # Unreachable today (the session is freshly created with this
-                # profile as host and status LOBBY right before this loop
-                # runs) - kept so a future change to start_multiplayer_session
-                # can't silently turn this into an unhandled 500.
+                # Unreachable today (the session is freshly created with this profile as host and status LOBBY
+                # right before this loop runs) - kept so a future change to start_multiplayer_session can't
+                # silently turn this into an unhandled 500.
                 logger.warning("spotguessr multiplayer start by %s hit an unexpected invite error: %s", profile.pk, exc)
                 return JsonResponse({"error": "That session couldn't be started."}, status=400)
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
-        # The whole create-then-verify-then-clean-up sequence lives in the
-        # service (``start_solo_playthrough``) so the external API runs the
-        # identical one rather than a second copy that could drift into leaving
+        # The whole create-then-verify-then-clean-up sequence lives in the service (``start_solo_playthrough``)
+        # so the external API runs the identical one rather than a second copy that could drift into leaving
         # unplayable ACTIVE sessions behind.
         try:
             result = spotguessr_session.start_solo_playthrough(profile, mode, config, total_rounds=total_rounds)
@@ -461,12 +439,11 @@ class SpotGuessrBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     POST /spotguessr/session/<session_id>/begin/
 
-    Unlike solo start, the joined roster's combined eligibility can't be
-    checked before this point (invitees may not have joined yet). If
-    locking the roster reveals there's nothing eligible for this group,
-    the response is ``{"finished": false, "no_eligible_locations": true}``
-    rather than a completed summary - the session is left ACTIVE (not
-    marked COMPLETED) since it never actually played anything.
+    Unlike solo start, the joined roster's combined eligibility can't be checked before this point
+    (invitees may not have joined yet).
+    If locking the roster reveals there's nothing eligible for this group, the response is
+    ``{"finished": false, "no_eligible_locations": true}`` rather than a completed summary - the session
+    is left ACTIVE (not marked COMPLETED) since it never actually played anything.
     """
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
@@ -498,11 +475,11 @@ class SpotGuessrEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
     POST /spotguessr/session/<session_id>/end/
 
-    Unlike waiting out the stall-sweep Celery task (``tasks.sweep_stalled_spotguessr_sessions``),
-    this lets the host end the game the moment they decide it's not going
-    anywhere - see the SpotGuessr audit's "no host ability to end the game"
-    finding. Any in-flight round is revealed first with whatever guesses
-    already exist (see ``services.spotguessr.session.end_session_now``).
+    Unlike waiting out the stall-sweep Celery task (``tasks.sweep_stalled_spotguessr_sessions``), this
+    lets the host end the game the moment they decide it's not going anywhere - see the SpotGuessr
+    audit's "no host ability to end the game" finding.
+    Any in-flight round is revealed first with whatever guesses already exist (see
+    ``services.spotguessr.session.end_session_now``).
     """
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
@@ -525,9 +502,9 @@ class SpotGuessrRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     GET /spotguessr/session/<session_id>/round/
 
-    Same ``no_eligible_locations`` distinction as ``SpotGuessrBeginView`` -
-    a session that ran out of eligible locations before playing any round
-    at all is reported that way instead of as a completed game.
+    Same ``no_eligible_locations`` distinction as ``SpotGuessrBeginView`` - a session that ran out of
+    eligible locations before playing any round at all is reported that way instead of as a completed
+    game.
     """
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
@@ -591,16 +568,14 @@ class SpotGuessrRoundTimeoutView(LoginRequiredMixin, AlphaFeatureRequiredMixin, 
 
     POST /spotguessr/session/<session_id>/round/<round_id>/timeout/
 
-    The authoritative check is server-side (``round_.created`` + the
-    session's own ``round_time_limit_seconds``, never trusting the client's
-    clock) - this just gives a client that's still connected a fast path to
-    ``expire_round_timer``, which treats "time's up" as an ordinary round
-    outcome rather than a stall (unlike the stall-sweep Celery task's
-    ``force_reveal_round``, which is the much slower safety net for a client
-    that's disappeared entirely - see both functions' docstrings). A no-op
-    (200, not an error) if the round is already revealed or the timer
-    genuinely hasn't expired yet - a late/duplicate/clock-skewed call is
-    harmless either way.
+    The authoritative check is server-side (``round_.created`` + the session's own
+    ``round_time_limit_seconds``, never trusting the client's clock) - this just gives a client that's
+    still connected a fast path to ``expire_round_timer``, which treats "time's up" as an ordinary round
+    outcome rather than a stall (unlike the stall-sweep Celery task's ``force_reveal_round``, which is
+    the much slower safety net for a client that's disappeared entirely - see both functions'
+    docstrings).
+    A no-op (200, not an error) if the round is already revealed or the timer genuinely hasn't expired
+    yet - a late/duplicate/clock-skewed call is harmless either way.
     """
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
@@ -620,14 +595,10 @@ class SpotGuessrRoundTimeoutView(LoginRequiredMixin, AlphaFeatureRequiredMixin, 
 class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Thumbs up/down, or report, the photo a Photos-mode round just showed.
 
-    POST /spotguessr/session/<session_id>/round/<round_id>/feedback/   body: ``kind`` (thumbs_up/thumbs_down/reported)
+    POST /spotguessr/session/<session_id>/round/<round_id>/feedback/ body: ``kind``
 
-    Feeds ``services.media.media_relevance.effective_relevance`` at a reduced
-    weight (or, for a report, full weight against "not relevant") - see
-    ``services.spotguessr.relevance`` for exactly how. A no-op for a round
-    with no photo (Named Place/Street View) or one this profile never
-    guessed on - there's no "reaction to a photo you weren't shown" case to
-    support.
+    A no-op for a round with no photo (Named Place/Street View) or one this profile never guessed on -
+    there's no "reaction to a photo you weren't shown" case to support.
     """
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
@@ -668,11 +639,11 @@ class SpotGuessrPinsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     GET /spotguessr/pins/
 
-    Solo play's eligibility is exactly "the player's own pinned locations"
-    (see ``services.spotguessr.eligibility``), so this is simply every pin
-    the profile has - no separate query needed to match what a round could
-    possibly be. (Named Place mode never shows this input at all - see the
-    frontend - but the endpoint itself doesn't need to know that.)
+    Solo play's eligibility is exactly "the player's own pinned locations" (see
+    ``services.spotguessr.eligibility``), so this is simply every pin the profile has - no separate
+    query needed to match what a round could possibly be.
+    (Named Place mode never shows this input at all - see the frontend - but the endpoint itself doesn't
+    need to know that.)
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -700,9 +671,9 @@ class SpotGuessrAreaPinCountView(LoginRequiredMixin, AlphaFeatureRequiredMixin, 
 
     GET /spotguessr/area_pin_count/?geo_bounds=<geojson>
 
-    Lets the settings dialog show "N of your pins are in this area" the
-    moment a region is drawn/searched, instead of leaving the player to
-    guess whether their chosen area contains anything playable.
+    Lets the settings dialog show "N of your pins are in this area" the moment a region is
+    drawn/searched, instead of leaving the player to guess whether their chosen area contains anything
+    playable.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:

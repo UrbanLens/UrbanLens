@@ -1,10 +1,4 @@
-"""Auto-apply helpers for protected status labels that a plugin (not a user) sets.
-
-Mirrors ``services.visits.visits.add_visited_status`` for the "Demolished" status -
-also a protected label (``is_protected=True``, seeded alongside "Visited" in
-``models.labels.signals.create_default_tags``) that a plugin determines and
-applies automatically rather than the user picking it manually.
-"""
+"""Auto-apply helpers for protected status labels that a plugin (not a user) sets."""
 
 from __future__ import annotations
 
@@ -33,7 +27,6 @@ def add_demolished_status(pin: Pin) -> None:
 
 def add_demolished_status_to_wiki(wiki: Wiki) -> None:
     """Add the canonical global "Demolished" status label to the wiki if not already present.
-    Unlike a Pin, a Wiki has no owning profile - its ``labels`` are shared taxonomy visible to every user who can see the location - so this uses the one global (``profile=None``) "Demolished" label seeded by migration ``0087_seed_global_demolished_label`` rather than any one user's private copy.
 
     Args:
         wiki: Wiki instance whose statuses should be updated."""

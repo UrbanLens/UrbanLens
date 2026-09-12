@@ -1,5 +1,4 @@
-"""A floorplan's drawable items as GeoJSON, filtered by viewport, storey and kind.
-The projection mirrors ``frontend/ts/shared/floorplan/coords.ts`` exactly - same Earth radius, same equirectangular approximation about the plan origin - because the editor draws in local metres and the map draws these features, and a disagreement between the two would show up as a plan that shifts when you switch views."""
+"""A floorplan's drawable items as GeoJSON, filtered by viewport, storey and kind."""
 
 from __future__ import annotations
 
@@ -25,11 +24,7 @@ EARTH_RADIUS_M = 6371008.8
 
 
 class PlanProjection:
-    """Plan-local metres to WGS-84 for one plan origin.
-
-    The server-side twin of ``coords.ts``'s class of the same name; keep the
-    two in step.
-    """
+    """Plan-local metres to WGS-84 for one plan origin."""
 
     def __init__(self, origin_lat: float, origin_lng: float) -> None:
         self.origin_lat = origin_lat
@@ -90,20 +85,14 @@ def feature_collection(
 
     Args:
         floorplan: The plan version to read.
-        bbox: ``(min_lng, min_lat, max_lng, max_lat)`` in WGS-84; only items
-            overlapping it.
+        bbox: ``(min_lng, min_lat, max_lng, max_lat)`` in WGS-84; only items overlapping it.
         level: Restrict to one storey by its level number.
-        kind: Restrict walls to one :class:`FloorplanWallKind`, or markers to
-            one :class:`FloorplanMarkerKind`.
+        kind: Restrict walls to one :class:`FloorplanWallKind`, or markers to one :class:`FloorplanMarkerKind`.
         item_types: Which of wall/room/marker to include.
         limit: Hard cap on features returned.
 
     Returns:
-        A ``FeatureCollection`` dict, with ``truncated`` set on its top level
-        when the cap was reached - silence about a cut-off list reads as
-        "that's everything", which it would not be. Empty when the plan has no
-        origin, since nothing can be placed on a map without one.
-    """
+        A ``FeatureCollection`` dict, with ``truncated`` set on its top level when the cap was reached - silence about a cut-off list reads as "that's everything", which it would not be."""
     from urbanlens.dashboard.models.floorplans.model import FloorplanFloor, FloorplanMarker, FloorplanRoomSeed, FloorplanWall
 
     projection = _projection(floorplan)
@@ -236,9 +225,7 @@ def bounds_of(floorplan: Floorplan) -> list[float] | None:
         floorplan: The plan version.
 
     Returns:
-        ``[min_lng, min_lat, max_lng, max_lat]``, or None when the plan has no
-        origin or nothing placed.
-    """
+        ``[min_lng, min_lat, max_lng, max_lat]``, or None when the plan has no origin or nothing placed."""
     from urbanlens.dashboard.models.floorplans.model import FloorplanFloor, FloorplanMarker, FloorplanRoomSeed, FloorplanWall
 
     projection = _projection(floorplan)

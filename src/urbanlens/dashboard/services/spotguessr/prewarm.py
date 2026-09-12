@@ -48,9 +48,7 @@ def consume_for_session(session_id: int, sequence_index: int) -> _PickedRound | 
         sequence_index: The round's 0-based position within the session.
 
     Returns:
-        ``(location_id, content)``, or None if nothing was prewarmed (or it
-        already expired) - the caller should fall back to live generation.
-    """
+        ``(location_id, content)``, or None if nothing was prewarmed (or it already expired) - the caller should fall back to live generation."""
     key = _session_round_key(session_id, sequence_index)
     picked = cache.get(key)
     if picked is not None:
@@ -67,9 +65,7 @@ def consume_for_solo_start(profile_id: int, mode: str, config: GameConfig) -> _P
     """Pop a solo player's speculatively prewarmed first round, if the config matches exactly.
 
     Returns:
-        ``(location_id, content)``, or None on a miss (never prewarmed,
-        expired, or the config doesn't fingerprint-match what was prewarmed).
-    """
+        ``(location_id, content)``, or None on a miss (never prewarmed, expired, or the config doesn't fingerprint-match what was prewarmed)."""
     key = _solo_start_key(profile_id, mode, config)
     picked = cache.get(key)
     if picked is not None:

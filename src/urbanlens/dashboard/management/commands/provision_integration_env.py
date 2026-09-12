@@ -1,22 +1,7 @@
-r"""Provision (or remove) the accounts the on-demand integration suite runs as.
+"""Provision (or remove) the accounts the on-demand integration suite runs as.
 
-Run this on the deployment under test, then point the suite at what it prints::
-
-    python src/urbanlens/manage.py provision_integration_env --out /tmp/e2e.json
-    UL_E2E_ACCOUNTS_FILE=/tmp/e2e.json \
-        bin/run_integration_tests.sh --url https://s1.dev.urbanlens.org
-
-and afterwards, if the instance is shared::
-
-    python src/urbanlens/manage.py provision_integration_env --purge --execute
-
-Idempotent: re-running refreshes the same accounts (new password, new keys)
-rather than accumulating a new pair each time. See
-``services.integration_testing.accounts`` for what "refresh" has to mean for a
-headless browser to be able to sign in.
-
-**The output contains plaintext credentials.** ``--out`` writes them to a file
-so they do not end up in a terminal scrollback or a CI log by default.
+Idempotent: re-running refreshes the same accounts (new password, new keys) rather than accumulating
+a new pair each time.
 """
 
 from __future__ import annotations
@@ -34,9 +19,9 @@ from urbanlens.dashboard.services.integration_testing.accounts import DEFAULT_RO
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-#: Role the load harness drives as the noisy neighbour. Not in ``DEFAULT_ROLES``
-#: because provisioning it is cheap but *seeding* it is not, and every ordinary
-#: integration run would otherwise pay for a fixture only the perf suite uses.
+#: Role the load harness drives as the noisy neighbour. Not in ``DEFAULT_ROLES`` because provisioning it is
+#: cheap but *seeding* it is not, and every ordinary integration run would otherwise pay for a fixture only the
+#: perf suite uses.
 _HEAVY_ROLE = "heavy"
 
 
@@ -93,8 +78,8 @@ class Command(BaseCommand):
         """Provision or purge, after checking this is somewhere it may run.
 
         Raises:
-            CommandError: The environment is production and both locks were not
-                opened, or ``--purge`` was given without ``--execute``.
+            CommandError: The environment is production and both locks were not opened, or ``--purge`` was
+            given without ``--execute``.
         """
         self._check_environment(force=options["force"])
 
@@ -145,18 +130,15 @@ class Command(BaseCommand):
     def _seed(self, result, options: dict) -> dict[str, object]:
         """Seed the heavy account, if asked, and report what was made.
 
-        The report goes into the manifest rather than only to stdout because the
-        load harness reads the shared label's id out of it. Editing that label
-        is the phase that measures P102's fan-out, and finding it by name would
-        break the first time a run recoloured or renamed it.
+        The report goes into the manifest rather than only to stdout because the load harness reads the
+        shared label's id out of it.
 
         Args:
             result: What ``provision`` just produced.
             options: Parsed command options.
 
         Returns:
-            A mapping of role name to that role's seed report; empty when
-            nothing was seeded.
+            A mapping of role name to that role's seed report; empty when nothing was seeded.
 
         Raises:
             CommandError: ``--heavy-pins`` names a role that was not provisioned.
@@ -174,10 +156,8 @@ class Command(BaseCommand):
             raise CommandError(f"--heavy-pins asked to seed the '{role}' account, but only these were provisioned: {provisioned}. Add it to --roles.")
 
         profile = Profile.objects.get(user__username=account.username)
-        # Progress goes to stderr because stdout is a document: with --format
-        # json and no --out it is the manifest itself, and with --format text it
-        # is a block of shell exports. Either one stops parsing the moment a
-        # progress line lands in the middle of it.
+        # Progress goes to stderr because stdout is a document: with --format json and no --out it is the
+        # manifest itself, and with --format text it is a block of shell exports.
         self.stderr.write(f"Seeding {account.username} to {wanted} pins. This writes rows in bulk and can take a while at large sizes.")
         report = seed_heavy_account(profile, pins=wanted, analyze=not options["no_analyze"])
         self.stderr.write(
@@ -192,10 +172,9 @@ class Command(BaseCommand):
     def _check_environment(self, *, force: bool) -> None:
         """Refuse to run against production unless both locks are open.
 
-        Two locks rather than one because each covers a different mistake:
-        ``--force`` covers a command typed in the wrong terminal, and the
-        environment variable covers a script that has always carried ``--force``
-        being pointed somewhere new.
+        Two locks rather than one because each covers a different mistake: ``--force`` covers a command
+        typed in the wrong terminal, and the environment variable covers a script that has always carried
+        ``--force`` being pointed somewhere new.
 
         Args:
             force: Whether ``--force`` was passed.
@@ -217,9 +196,7 @@ class Command(BaseCommand):
         """Delete the provisioned accounts, or report what would be deleted.
 
         Args:
-            execute: Whether to actually delete. Without it this only reports,
-                which is the default because the alternative is a command that
-                destroys accounts on a typo.
+            execute: Whether to actually delete.
         """
         candidates = list(integration_users())
         if not candidates:

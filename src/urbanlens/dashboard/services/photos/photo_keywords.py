@@ -45,37 +45,27 @@ class PhotoKeywordProvider(ABC):
     def is_available_for(self, image: Image) -> bool:
         """Whether this provider should run for this image's uploader.
 
-        Args:
-                image: The freshly uploaded image (``profile`` is populated).
-
         Returns:
-                True when the provider can and may run."""
+            True when the provider can and may run."""
         return True
 
     @abstractmethod
     def generate(self, image: Image) -> list[KeywordResult]:
         """Produce keywords for one image.
 
-        Args:
-            image: The image to keyword; read its bytes via ``image.image``.
-
         Returns:
-            Keyword candidates (normalization/dedup happens in the pipeline).
-        """
+            Keyword candidates (normalization/dedup happens in the pipeline)."""
         raise NotImplementedError
 
 
 def analysis_jpeg_bytes(image: Image) -> bytes | None:
-    """The stored 512px JPEG copy of ``image``, for AI/classifier providers. Reads bytes; never parses them.
+    """Reads bytes; never parses them.
 
     Args:
         image: The Image row whose analysis copy to read.
 
     Returns:
-        JPEG bytes, or None when the row has no analysis copy yet or the file
-        cannot be read. A None here means "skip this photo", never "decode it
-        yourself": ``backfill_image_analysis_thumbnails`` writes the missing
-        copy and re-enqueues keywording."""
+        JPEG bytes, or None when the row has no analysis copy yet or the file cannot be read."""
     if not image.analysis_thumbnail:
         logger.info("Image %s has no analysis copy yet; skipping keyword generation until the backfill writes one", image.pk)
         return None

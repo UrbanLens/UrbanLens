@@ -24,9 +24,7 @@
   resize: vertical;
 }
 
-// Tab strip itself now uses the shared .card-tabs/.card-tab styling (see
-// _pin-detail.scss) instead of these bespoke lookalikes, so every tabbed
-// section on the pin/wiki pages looks the same.
+// Tab strip itself now uses the shared.card-tabs/.card-tab styling instead of these bespoke lookalikes, so every tabbed section.
 .po-tab-body {
   padding: .6rem .85rem .75rem;
 

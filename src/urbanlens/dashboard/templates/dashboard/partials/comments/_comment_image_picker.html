@@ -1,13 +1,4 @@
-{% comment %}
-Results fragment for the comment/Notes image-attach dialog's "Choose
-Existing" tab (base.html's #comment-image-composer) - rendered by
-CommentImagePickerView. Mirrors _map_picker.html's shape/behavior for the
-map composer's own "Choose Existing" tab; items are plain buttons (not
-hx-post) because picking one just records the id client-side (see
-base.html's #cip-existing-list click handler) until the comment is posted.
-
-Expects: candidates (queryset of Image, uploaded by the caller), query (str).
-{% endcomment %}
+{% comment %}Results fragment for the comment/Notes image-attach dialog's "Choose Existing" tab (base.html's #comment-image-composer).{% endcomment %}
 {% if candidates %}
 <ul class="cip-picker-grid">
     {% for candidate in candidates %}

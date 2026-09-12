@@ -1,53 +1,4 @@
-{% comment %}
-Reusable gradient hero banner for page tops (safety pages, Organize, Thanks &
-Credits, ...).
-
-Required (unless body_template is given):
-  title            - heading text, auto-escaped
-
-Optional:
-  icon                  - material-symbols-outlined icon shown before the title
-  title_suffix_template - path to a partial appended after icon+title (e.g. a
-                          page explainer anchor); rendered with the including
-                          template's full context; ignored if body_template is set
-  eyebrow               - small uppercase label shown above the title, auto-escaped
-  subtitle              - supporting text shown below the title, auto-escaped
-  subtitle_tooltip      - native title="" tooltip text for the subtitle element
-  body_template         - path to a partial that replaces the eyebrow/title/subtitle
-                          markup entirely (e.g. a status badge, a live-updating
-                          title span, or a subtitle with a link); rendered with
-                          the including template's full context
-  back_url              - if set, renders a back-link above the title (e.g. back
-                          to a section's home page)
-  back_label            - label for back_url; defaults to "Back"
-  modifier              - extra BEM modifier class: "wide" for a wider hero that
-                          doesn't need to bleed out of an ambient page padding,
-                          "top" when rendered in base.html's block hero (outside
-                          .container, right below the header) - see the
-                          .ul-page-subnav notes in _page_hero.scss - or
-                          "profile" for the Profile | Edit avatar+identity
-                          layout (also renders in block hero; see
-                          partials/profile/_profile_hero_body.html)
-  id                    - id attribute on the outer <section>, so a page whose
-                          hero content can change after load (e.g. an edit
-                          dialog) can target it for an out-of-band HTMX swap
-  oob                   - when True (with id set), adds hx-swap-oob="true" so
-                          this render can be concatenated onto another view's
-                          response as an out-of-band update
-
-Usage:
-  {% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="Safety" subtitle="..." %}
-  {% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_detail_hero_body.html" %}
-
-  Page with a subnav tab strip directly below the hero (see memories/*.html):
-    {% block hero %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="..." title="..." modifier="top" %}
-    {% endblock %}
-
-    {% block subnav %}
-    <div class="ul-page-subnav"><div class="ul-page-subnav__inner">...tabs...</div></div>
-    {% endblock %}
-{% endcomment %}
+{% comment %}Reusable gradient hero banner for page tops (safety pages, Organize, Thanks & Credits, ...).{% endcomment %}
 <section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}{% if hero_image_url %} ul-page-hero--cover{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if hero_image_url %} data-cover-hero-key="{{ hero_cover_key|default:'page' }}" style="background-image:url('{{ hero_image_url }}')"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %}>
     <div class="ul-page-hero__inner">
         {% if back_url %}
@@ -85,15 +36,7 @@ Usage:
 (function () {
     var hero = document.getElementById('{{ id|default:"" }}');
     if (!hero) return;
-    {% comment %}
-    firstof, not `pin.slug|default:wiki.location.slug`: a filter *argument* is
-    resolved with no failure tolerance, so naming a variable the current page
-    does not have raises VariableDoesNotExist straight out of the render. The
-    Private Pin page is the only include site that passes hero_image_url, and it
-    has no `wiki` - so it returned a 500 for every pin that had a cover photo.
-    firstof resolves each name with ignore_failures, and keeps the `wiki` branch
-    working for whichever page wires a cover image up next.
-    {% endcomment %}
+    {% comment %}firstof, not `pin.slug|default:wiki.location.slug`.{% endcomment %}
     var key = 'ul_cover_hero_' + (hero.dataset.coverHeroKey || '{{ hero_cover_key|default:"page" }}') + '_' + '{% firstof pin.slug wiki.location.slug "" %}';
     var toggle = hero.querySelector('[data-cover-adjust-toggle]');
     var controls = hero.querySelector('[data-cover-adjust-controls]');

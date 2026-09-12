@@ -1,22 +1,12 @@
 """Consume Celery's event stream and expose it as Prometheus metrics.
 
-Runs as its own long-lived service (``celery-metrics`` in docker-compose.yml).
-It has to be a separate process rather than a thread in an existing one: the web
-tier runs ``WEB_CONCURRENCY`` gunicorn workers and each would open its own
-receiver and triple-count every event, and the Celery workers themselves cannot
-be scraped - ``media-worker`` and ``media-worker-batch`` run ``cap_drop: ALL`` on
-an isolated network specifically so they have no inbound surface.
-
-Single process, so the default ``prometheus_client`` registry is correct here
-and multiprocess mode is deliberately not used - the counters live in this
-process's memory and are lost on restart, which is the normal and correct
-behaviour for a Prometheus counter (``rate()`` handles resets).
-
-Serves on a port that is *not* published to the host: only the compose network
-reaches it, and Alloy joins that network to scrape. The bearer-token gate is
-applied anyway, through the same
-:mod:`~urbanlens.dashboard.services.core.metrics_auth` the web endpoint uses -
-one implementation, two transports, so neither can quietly become the open one.
+It has to be a separate process rather than a thread in an existing one: the web tier runs
+``WEB_CONCURRENCY`` gunicorn workers and each would open its own receiver and triple-count every
+event, and the Celery workers themselves cannot be scraped - ``media-worker`` and
+``media-worker-batch`` run ``cap_drop: ALL`` on an isolated network specifically so they have no
+inbound surface.
+Serves on a port that is *not* published to the host: only the compose network reaches it, and Alloy
+joins that network to scrape.
 """
 
 from __future__ import annotations
@@ -60,15 +50,11 @@ class Command(BaseCommand):
         """Serve metrics and consume events until interrupted.
 
         Args:
-            *args: Unused.
-            **options: Parsed command-line options.
+            *args: Unused. **options: Parsed command-line options.
 
         Raises:
-            CommandError: If metrics are disabled, or enabled without a gate on
-                a deployed environment - the same condition
-                ``dashboard.E006`` raises for the web endpoint. Refusing to
-                start is better than binding an unguarded port and logging
-                about it.
+            CommandError: If metrics are disabled, or enabled without a gate on a deployed environment - the
+            same condition ``dashboard.E006`` raises for the web...
         """
         if not settings.UL_METRICS_ENABLED:
             raise CommandError("UL_METRICS_ENABLED is off; this exporter has nothing to serve. Enable it or do not deploy this service.")
@@ -96,26 +82,20 @@ class Command(BaseCommand):
     def _consume(self, metrics: CeleryEventMetrics) -> None:
         """Block on the Celery event stream, feeding events into metrics.
 
-        Reconnects on broker errors rather than exiting, because this service
-        losing its broker is a transient condition that restarting the container
-        would not fix any faster - and an exporter that dies on a blip takes the
-        metrics with it exactly when something is going wrong.
+        Reconnects on broker errors rather than exiting, because this service losing its broker is a
+        transient condition that restarting the container would not fix any faster - and an exporter that
+        dies on a blip takes the metrics with it exactly when something is going wrong.
 
         Args:
             metrics: The metric set to feed.
         """
-        # Bounded explicitly. This state exists only to answer "what task is
-        # uuid X?" between a task-received and its terminal event, but Celery
-        # retains 10_000 tasks by default, which is a lot of retained objects for
-        # a container sized for an exporter. Large enough that a long-running
-        # task's name survives everything that completes while it runs.
+        # Bounded explicitly.
         state = current_app.events.State(max_tasks_in_memory=STATE_TASK_LIMIT)
 
         def on_event(event: dict[str, Any]) -> None:
             state.event(event)
-            # Only task-received carries the task name; every later event for
-            # the same task refers to it by uuid, so the name is looked up in
-            # the state Celery maintains for exactly this reason.
+            # Only task-received carries the task name; every later event for the same task refers to it by
+            # uuid, so the name is looked up in the state Celery maintains for exactly this reason.
             task = state.tasks.get(event.get("uuid", ""))
             metrics.on_task_event(event, getattr(task, "name", None))
             metrics.on_worker_count(sum(1 for worker in state.workers.values() if worker.alive))
@@ -190,8 +170,7 @@ def _build_handler(metrics: CeleryEventMetrics) -> type[BaseHTTPRequestHandler]:
             """Route access logging to the app's logger instead of stderr.
 
             Args:
-                format: Printf-style format string.
-                *args: Format arguments.
+                format: Printf-style format string. *args: Format arguments.
             """
             logger.debug("celery-metrics %s", format % args)
 

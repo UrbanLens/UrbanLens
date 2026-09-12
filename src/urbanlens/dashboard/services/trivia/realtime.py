@@ -1,10 +1,5 @@
 """Broadcast helpers for TriviaSessionConsumer's channel-layer group.
-
-Binds ``services.core.session_realtime.SessionBroadcaster``, shared by every
-participant-session game. Kept as its own module so ``services.trivia.session`` and
-``services.trivia.chat`` can both use it without either depending on the other, and so
-existing import paths keep working.
-"""
+Binds ``services.core.session_realtime.SessionBroadcaster``, shared by every participant-session game."""
 
 from __future__ import annotations
 

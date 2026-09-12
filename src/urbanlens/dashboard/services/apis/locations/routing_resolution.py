@@ -1,5 +1,4 @@
-"""Resolves route-between-waypoints calls to REData or direct OSRM, per call.
-``POST /routes/`` with ``capability: "as_given"`` (visit waypoints in the given order - the only capability UrbanLens itself ever needs, see ``services.trips.trip_legs``). - REData not configured, or its request fails - falls back to the existing direct ``OSRMGateway`` (free, keyless, self-hostable), preserving today's behavior exactly."""
+"""Resolves route-between-waypoints calls to REData or direct OSRM, per call."""
 
 from __future__ import annotations
 
@@ -20,9 +19,7 @@ def get_route_between(origin: tuple[float, float], destination: tuple[float, flo
         destination: ``(latitude, longitude)`` of the destination.
 
     Returns:
-        ``{"distance_meters", "duration_seconds"}``, or None when no route
-        connects the points (or every provider failed).
-    """
+        ``{"distance_meters", "duration_seconds"}``, or None when no route connects the points (or every provider failed)."""
     if redata_configured():
         try:
             return RedataRoutingGateway().get_route([origin, destination], capability="as_given", profile="driving")

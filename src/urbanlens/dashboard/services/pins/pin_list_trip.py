@@ -1,9 +1,5 @@
 """Bulk-copy a PinList's pins into a Trip's activities.
-
-Used by both "Create a trip" (new trip) and "Add to trip" (existing trip).
-This is always a one-time copy - a list's smart-filter membership changes
-never propagate to a trip after the copy runs.
-"""
+This is always a one-time copy - a list's smart-filter membership changes never propagate to a trip after the copy runs."""
 
 from __future__ import annotations
 
@@ -20,13 +16,11 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
 
     Args:
         pin_list: Source list, copied in its current display order.
-        trip: Destination trip; new activities are appended after whatever
-            activities it already has.
+        trip: Destination trip; new activities are appended after whatever activities it already has.
         added_by: Profile recorded as the activities' creator.
 
     Returns:
-        Number of activities created.
-    """
+        Number of activities created."""
     from urbanlens.dashboard.models.trips.model import TripActivity
     from urbanlens.dashboard.models.trips.signals import queue_calendar_push
     from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares

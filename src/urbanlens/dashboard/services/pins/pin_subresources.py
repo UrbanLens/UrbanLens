@@ -1,5 +1,4 @@
-"""Write operations for a pin's notes, aliases, and links, shared by every caller.
-The HTMX controllers (``controllers.aliases``, ``controllers.links``, the ``PinNote`` views in ``controllers.pin_edit``) and the external API's sub-resource endpoints both go through here, so the two surfaces cannot drift."""
+"""Write operations for a pin's notes, aliases, and links, shared by every caller."""
 
 from __future__ import annotations
 
@@ -25,8 +24,7 @@ _validate_link_url = URLValidator(schemes=["http", "https"])
 
 
 class PinSubResourceError(Exception):
-    """Base for the recoverable failures these operations raise.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """Base for the recoverable failures these operations raise."""
 
 
 class AliasExistsError(PinSubResourceError):
@@ -34,18 +32,11 @@ class AliasExistsError(PinSubResourceError):
 
 
 class AliasIsCurrentNameError(PinSubResourceError):
-    """The alias being deleted is the pin's current name.
-
-    Removing it would leave the pin's own name absent from its alias list,
-    which the alias list is defined to always contain.
-    """
+    """The alias being deleted is the pin's current name."""
 
 
 class InvalidLinkError(PinSubResourceError):
-    """Base for a submitted link url failing validation - never raised directly.
-
-    See the subclasses below for the specific, mutually-exclusive reason.
-    """
+    """Base for a submitted link url failing validation - never raised directly."""
 
 
 class MissingLinkUrlError(InvalidLinkError):
@@ -77,14 +68,13 @@ def create_pin_note(pin: Pin, *, text: str) -> PinNote:
 
     Args:
         pin: The pin to attach the note to.
-        text: The note body. Leading/trailing whitespace is stripped.
+        text: The note body.
 
     Returns:
         The created note.
 
     Raises:
-        ValueError: *text* is empty once stripped.
-    """
+        ValueError: *text* is empty once stripped."""
     cleaned = (text or "").strip()
     if not cleaned:
         raise ValueError("Note text is required.")
@@ -109,7 +99,7 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
 
     Args:
         pin: The pin to attach the alias to.
-        name: The alternate name. Leading/trailing whitespace is stripped.
+        name: The alternate name.
         kind: An :class:`AliasType` value; defaults to a plain alternate name.
 
     Returns:
@@ -117,9 +107,7 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
 
     Raises:
         ValueError: *name* is empty once stripped.
-        AliasExistsError: The pin already has this name as an alias,
-            case-insensitively.
-    """
+        AliasExistsError: The pin already has this name as an alias, case-insensitively."""
     # Validate the value that will actually be stored: PinAlias.save() runs the name through
     # sanitize_name, so a name made only of dropped characters ("\U0001f389", "<>") passes a raw
     # non-empty check and then persists as an empty alias - a blank row that also consumes the pin's
@@ -204,17 +192,14 @@ def create_pin_link(pin: Pin, *, name: str, url: str) -> PinLink:
 
     Args:
         pin: The pin to attach the link to.
-        name: The link's display label. May be blank - ``PinLink.display_name``
-            falls back to the url's host. Sanitized by ``PinLink.save()``.
-        url: The link target. Must be a valid http(s) url.
+        name: The link's display label.
+        url: The link target.
 
     Returns:
         The created link.
 
     Raises:
-        InvalidLinkError: *url* is missing, over ``MAX_LINK_URL_LENGTH``, or
-            not a valid http(s) url.
-    """
+        InvalidLinkError: *url* is missing, over ``MAX_LINK_URL_LENGTH``, or not a valid http(s) url."""
     cleaned_url = (url or "").strip()
     cleaned_name = (name or "").strip()
     if not cleaned_url:

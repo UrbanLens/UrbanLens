@@ -38,10 +38,7 @@ DOCUMENT_EXTENSIONS = CONVERTIBLE_DOCUMENT_EXTENSIONS | {".pdf"}
 
 def soffice_path() -> str | None:
     """The absolute path to the LibreOffice headless binary, or None.
-
-    Resolved once here rather than left to `exec`'s own PATH walk - see the
-    note on `ffmpeg_path` in `videos.py` for what that does and does not buy.
-    """
+    Resolved once here rather than left to `exec`'s own PATH walk - see the note on `ffmpeg_path` in `videos.py` for what that does and does not buy."""
     return shutil.which("soffice")
 
 
@@ -59,10 +56,7 @@ def convert_to_pdf(image: Image) -> StoredFileReplacement | None:
         image: The Image row whose stored document to convert.
 
     Returns:
-        The replacement when the file was converted, else None. Its
-        ``superseded_name`` is still on disk; the caller deletes it once the row
-        names the PDF - see
-        :func:`~urbanlens.dashboard.services.media.images.discard_superseded_file`."""
+        The replacement when the file was converted, else None."""
     old_name = image.image.name
     if not old_name:
         return None

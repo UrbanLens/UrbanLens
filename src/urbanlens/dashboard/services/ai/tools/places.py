@@ -1,5 +1,4 @@
-"""The assistant's place-evidence tool - "does this place have tunnels?" and friends.
-A ``RedataUndergroundGateway`` exists (``plugins/builtin/redata_underground.py``, OSM-sourced mapped structures) and would answer this better than keyword matching - it is deliberately not used here, the same "no REData" bypass rationale as ``routing.py``/``weather.py``: the sandboxed AI worker must never depend on REData being reachable at all."""
+"""The assistant's place-evidence tool - "does this place have tunnels?" and friends."""
 
 from __future__ import annotations
 
@@ -20,17 +19,14 @@ _MAX_EVIDENCE_ITEMS = 3
 
 def _resolve_own_pin(context: ToolContext, pin_slug: str) -> Pin | None:
     """One of the requesting profile's own pins, with its location/place preloaded.
-
-    Never resolves any other profile's pin - see ``Pin.objects.by_profile``.
-    """
+    Never resolves any other profile's pin - see ``Pin.objects.by_profile``."""
     from urbanlens.dashboard.models.pin.model import Pin
 
     return Pin.objects.by_profile(context.profile).filter(slug=pin_slug.strip()).select_related("location", "location__place").first()
 
 
 def _floorplan_evidence(pin: Pin, context: ToolContext) -> str | None:
-    """A note about below-grade levels, from the plan the user would actually see for this place.
-    Reuses ``resolve_floorplan_row`` rather than re-deriving its profile/community fallback: the personal-plan-first, then-published-if-the-wiki-is-visible rule lives there once, and ``Floorplan.objects.at()`` itself must never be called without ``profile=``/``community=`` (it returns every profile's plans otherwise)."""
+    """A note about below-grade levels, from the plan the user would actually see for this place."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
 
     place = pin.location.place

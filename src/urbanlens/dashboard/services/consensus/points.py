@@ -1,10 +1,5 @@
 """Points, leveling, and point-award constants for Consensus.
-
-Consensus-only - not shared with SpotGuessr/Trivia's Glicko-2 ratings (see
-``models.consensus.model.ConsensusProfile``). Leveling uses a logarithmic
-cost-density curve (see ``points_required_for_level``) so leveling up never
-becomes free, but stays achievable even at high levels.
-"""
+Consensus-only - not shared with SpotGuessr/Trivia's Glicko-2 ratings (see ``models.consensus.model.ConsensusProfile``)."""
 
 from __future__ import annotations
 
@@ -55,11 +50,9 @@ MANUAL_EDIT_POINTS_CAP = 6
 
 def points_required_for_level(level: int) -> int:
     """Cumulative lifetime points required to advance from ``level`` to ``level + 1``.
-    ``threshold(n) = round(K * n * ln(n + 1))`` - absolute per-level cost keeps rising (leveling up never becomes free), but cost-*density* ``threshold(n) / n = K * ln(n + 1)`` grows only logarithmically, so going from level 10 to level 100 costs roughly 19x, not the ~100x a quadratic curve (or the unreachable multiple an exponential curve) would demand - "harder every level, but achievable even at high levels," per the design spec.
 
     Args:
-        level: The level being advanced *from* (1-indexed). Levels below 1
-            require no points - every profile starts at level 1 for free.
+        level: The level being advanced *from* (1-indexed).
 
     Returns:
         Points required, or 0 for ``level < 1``."""
@@ -69,11 +62,7 @@ def points_required_for_level(level: int) -> int:
 
 
 def level_for_points(points: int) -> int:
-    """The level ``points`` lifetime Consensus points corresponds to.
-
-    Every profile starts at level 1 (free); each subsequent level costs
-    ``points_required_for_level(current_level)`` more, per the curve above.
-    """
+    """The level ``points`` lifetime Consensus points corresponds to."""
     level = 1
     while level < MAX_LEVEL and points >= points_required_for_level(level):
         level += 1
@@ -87,9 +76,7 @@ def award_points(profile_id: int, amount: int, *, reason: str) -> bool:
     Args:
         profile_id: The profile earning points.
         amount: Points to add (may be 0, though callers shouldn't bother).
-        reason: A short machine-readable label for logging (e.g.
-            ``"solo_answer"``, ``"manual_wiki_edit"``) - not persisted
-            anywhere yet, just surfaced in the log line below.
+        reason: A short machine-readable label for logging (e.g. ``"solo_answer"``, ``"manual_wiki_edit"``) - not persisted anywhere yet, just surfaced in the log line below.
 
     Returns:
         True if this award pushed the profile to a new level."""
@@ -108,12 +95,7 @@ def award_points(profile_id: int, amount: int, *, reason: str) -> bool:
 
 
 def award_points_for_manual_edit(editor_id: int) -> None:
-    """Award the baseline out-of-game point value for a plain (non-Consensus) wiki edit.
-
-    Called by ``models.wiki_edit.signals`` for every ``WikiEdit`` not
-    produced by Consensus itself - see that signal's docstring for the
-    double-award guard.
-    """
+    """Award the baseline out-of-game point value for a plain (non-Consensus) wiki edit."""
     award_points(editor_id, MANUAL_EDIT_POINTS, reason="manual_wiki_edit")
 
 
@@ -140,7 +122,6 @@ def points_for_changes(changes: Mapping[str, object] | None) -> int:
 
 def points_for_wiki_edit(edit: WikiEdit) -> int:
     """What ``edit`` should pay its editor.
-    Zero for the four cases that must never earn: a revert (undoing somebody else's work is not a contribution, and paying for it means an edit war pays both sides on every pass), a Consensus-sourced edit (already paid, more, at round resolution), an edit whose editor row is gone, and an empty diff.
 
     Args:
         edit: The edit to value.
@@ -158,9 +139,7 @@ def _adjust_points(profile_id: int, delta: int, *, reason: str) -> None:
 
     Args:
         profile_id: The profile whose total moves.
-        delta: Signed points. Negative deltas clamp at zero - ``total_points``
-            is a ``PositiveIntegerField``, so a legacy row awarded under
-            different weights must not be able to drive it negative.
+        delta: Signed points.
         reason: Short machine-readable label, for the log line."""
     from urbanlens.dashboard.models.consensus.model import ConsensusProfile
 
@@ -176,7 +155,6 @@ def _adjust_points(profile_id: int, delta: int, *, reason: str) -> None:
 
 def record_wiki_edit_award(edit: WikiEdit) -> None:
     """Pay ``edit``'s editor and record on the row what was paid.
-    The amount is stored rather than left to be recomputed later because the weights above are expected to be retuned, and :func:`retract_wiki_edit_award` has to return exactly what this paid - not what the same diff would earn under whatever weights are current then.
 
     Args:
         edit: The freshly created edit."""
@@ -193,7 +171,6 @@ def record_wiki_edit_award(edit: WikiEdit) -> None:
 
 def retract_wiki_edit_award(edit: WikiEdit) -> bool:
     """Take back what ``edit`` paid, once.
-    Compare-and-swap on ``consensus_points_retracted``, the same shape ``services.reputation.scoring.retract_event`` uses and for the same reason: several paths can reach this for one row (the revert itself, an admin toggling the flag, deleting an already-reverted edit), and only the first may move the total.
 
     Args:
         edit: The edit whose award is being withdrawn.

@@ -1,16 +1,5 @@
 /**
  * The helpers exist to check what the three copies they replaced did not.
- *
- * `fetch` resolves for a 400 or a 500 - it only rejects when the request never
- * completed - so the old `postForm`/`getJson` ran `response.json()` against
- * whatever the error page produced. Usually that is a `SyntaxError` thrown
- * inside a `void`-ed promise: a page that quietly stops working, with nothing in
- * the console a user would see (P11).
- *
- * So the tests that matter are the refusal ones, and each asserts the *shape*
- * the call sites already read (`{ error }`) rather than that "something was
- * returned" - a helper that swallowed the failure and returned `{}` would pass
- * a looser assertion and leave every `if (response.error)` as dead code.
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
@@ -146,10 +135,7 @@ describe("session-request", () => {
     });
 
     test("a 204 resolves to an object, because every caller reads a property off it", async () => {
-        // fetchJson answers a bodyless success with null, correctly. Passing that
-        // through would make `if (response.error)` a TypeError - a crash where the
-        // old code merely did nothing. No games endpoint answers 204 today;
-        // turning one into a bodyless delete must not be what breaks its caller.
+        // fetchJson answers a bodyless success with null, correctly.
         respond("", { status: 204 });
 
         const result = await postForm("/games/leave/", {});
@@ -168,11 +154,7 @@ describe("session-request", () => {
     });
 
     test("postMultipart sends the FormData body with no explicit Content-Type", async () => {
-        // A FormData body must reach fetch() with no Content-Type header at
-        // all - the browser sets one itself (with the multipart boundary the
-        // server needs) only when the header is absent. Regression guard: the
-        // handwritten fetch() this replaced got this right by omission; a
-        // careless refactor could easily add one back.
+        // A FormData body must reach fetch() with no Content-Type header at all.
         const calls: [string, RequestInit][] = [];
         globalThis.fetch = mock(async (url: string, init: RequestInit) => {
             calls.push([url, init]);
@@ -200,10 +182,7 @@ describe("session-request", () => {
     });
 
     test("a non-JSON refusal does not throw an uncaught SyntaxError", async () => {
-        // The defect this replaces: `await response.json()` ran unconditionally,
-        // before the ok check, so any non-JSON error body (a session-expiry
-        // redirect to the login page, an nginx/proxy limit page) threw inside
-        // an un-awaited async function - no toast, nothing in the console.
+        // The defect this replaces: `await response.json()` ran unconditionally, before the ok check, so any non-JSON error body.
         respond("<!doctype html><title>413 Request Entity Too Large</title>", { status: 413 });
 
         const data = new FormData();
@@ -223,9 +202,7 @@ describe("session-request", () => {
     });
 
     test("both helpers suppress the generic toast, because they report themselves", async () => {
-        // base.html wraps window.fetch and toasts "Request failed (HTTP 503)."
-        // for any non-2xx. These two say something better, so they opt out - and
-        // opting out is per-call, not something fetchJson does for everyone.
+        // base.html wraps window.fetch and toasts "Request failed (HTTP 503)." for any non-2xx.
         const inits: RequestInit[] = [];
         globalThis.fetch = mock(async (_url: string, init: RequestInit) => {
             inits.push(init);

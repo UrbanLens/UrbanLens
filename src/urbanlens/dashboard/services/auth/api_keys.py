@@ -1,10 +1,4 @@
-"""Generation and verification of external-application API keys.
-
-Mirrors the hash-never-store-plaintext pattern used for backup codes
-(``services.auth.two_factor``): the plaintext key exists only at generation time,
-long enough to hand back to the caller once, and every later check compares
-against a salted hash rather than the raw value.
-"""
+"""Generation and verification of external-application API keys."""
 
 from __future__ import annotations
 
@@ -45,18 +39,13 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
 
     Args:
         user: The account the key acts on behalf of.
-        name: User-facing label (e.g. "Zapier"). Falls back to "API Key" if blank.
+        name: User-facing label (e.g. "Zapier").
 
     Returns:
-        Tuple of (the new ``ApiKey`` row, the raw key string). The raw key is
-        never recoverable again once this function returns - only its hash is
-        persisted.
+        Tuple of (the new ``ApiKey`` row, the raw key string).
 
     Raises:
-        RuntimeError: A unique key prefix couldn't be generated (should never
-            happen in practice - see the retry loop below).
-    """
-    # Collisions are astronomically unlikely (10 url-safe chars is ~59 bits of
+        RuntimeError: A unique key prefix couldn't be generated (should never happen in practice - see the retry loop below)."""
     # entropy) but the prefix is a unique DB column, so retry defensively
     # instead of ever surfacing an IntegrityError to the caller.
     prefix = ""
@@ -89,15 +78,12 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
 
 def authenticate_api_key(raw_key: str) -> ApiKey | None:
     """Resolve a presented raw key to its ``ApiKey`` row, or None if invalid.
-    Looks the key up by its public prefix first (cheap, indexed) before hashing the secret half, rather than iterating every active key's hash - see :class:`~urbanlens.dashboard.models.account.model.ApiKey`'s docstring for why that matters here specifically.
 
     Args:
-        raw_key: The full presented key, e.g. the ``Authorization`` header's
-            token part after ``Bearer ``.
+        raw_key: The full presented key, e.g. the ``Authorization`` header's token part after ``Bearer ``.
 
     Returns:
-        The matching, non-revoked ``ApiKey`` if the secret checks out; None
-        for a malformed, unknown, revoked, or mismatched key."""
+        The matching, non-revoked ``ApiKey`` if the secret checks out; None for a malformed, unknown, revoked, or mismatched key."""
     label_prefix = f"{KEY_LABEL}_"
     if not raw_key.startswith(label_prefix):
         return None
@@ -131,13 +117,11 @@ def revoke_api_key(user: User, api_key_id: int) -> bool:
     """Revoke one of ``user``'s API keys, if it exists and isn't already revoked.
 
     Args:
-        user: The owner - scoping by user prevents revoking someone else's key
-            by guessing an id.
+        user: The owner - scoping by user prevents revoking someone else's key by guessing an id.
         api_key_id: Primary key of the ``ApiKey`` row to revoke.
 
     Returns:
-        True if a key was revoked, False if no matching active key existed.
-    """
+        True if a key was revoked, False if no matching active key existed."""
     updated = ApiKey.objects.for_user(user).active().filter(pk=api_key_id).update(revoked_at=timezone.now())
     return updated > 0
 
@@ -159,10 +143,7 @@ def revoke_all_api_keys(user: User) -> int:
     Revoked, not deleted: ``ApiKeyUsageLog`` rows hang off the key, and the settings page shows a revoked key so its owner can see it went away.
 
     Args:
-        user: The owner. Scoping by user is what keeps a caller from revoking
-            somebody else's keys - do not lift this into a queryset method that
-            re-filters internally, or ``ApiKey.objects.all()`` becomes a way to
-            revoke every key on the site.
+        user: The owner.
 
     Returns:
         How many keys this revoked."""
@@ -175,15 +156,11 @@ def api_keys_settings_context(user: User, request: HttpRequest, **extra: object)
 
     Args:
         user: The account whose API keys to list.
-        request: The current request (used for the session and for building
-            absolute endpoint URLs).
+        request: The current request (used for the session and for building absolute endpoint URLs).
         **extra: Additional context to merge in.
 
     Returns:
-        Context dict with ``api_keys`` (one page of them, working keys first
-        and newest first within each group, each with its ``usage_log``
-        prefetched), ``api_keys_page_obj``, ``new_api_key``,
-        ``external_api_whoami_url``, and ``external_api_pins_url``."""
+        Context dict with ``api_keys`` (one page of them, working keys first and newest first within each group, each with its ``usage_log`` prefetched), ``api_keys_page_obj``, ``new_api_key``, ``external_api_whoami_url``, and ``external_api_pins_url``."""
     from django.urls import reverse
 
     from urbanlens.dashboard.services.core.pagination import get_page

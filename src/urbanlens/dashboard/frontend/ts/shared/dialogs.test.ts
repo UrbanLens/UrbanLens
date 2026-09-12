@@ -1,10 +1,5 @@
 /**
- * toastr is a CDN <script>, so `window.toastr` is absent whenever that request does
- * not land. Every one of the ~130 call sites behind this helper used to throw in that
- * state, which mattered because the callers are overwhelmingly error paths - the
- * network that loses the script is the one that caused the error being reported. In
- * the floorplan editor the "could not save" toast sat directly above the call arming
- * the save retry, so a missing library turned a retried save into a lost document.
+ * toastr is a CDN <script>, so `window.toastr` is absent whenever that request does not land.
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
@@ -68,9 +63,7 @@ describe("toast, with the library missing", () => {
     });
 
     test("renders toastr's own markup, so the bundled stylesheet still applies", () => {
-        // sass/_toastr.scss is ours and ships in the bundle - it styles
-        // `#toast-container > .toast-{kind}` and `.toast-message`. Matching those
-        // names is what makes the fallback look like every other toast.
+        // sass/_toastr.scss is ours and ships in the bundle - it styles `#toast-container > .toast-{kind}` and `.toast-message`.
         toast.error("Upload failed.");
 
         const shown = toasts();

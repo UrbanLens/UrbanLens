@@ -38,7 +38,6 @@ def area_label(*, city: str | None, state: str | None, country: str | None) -> s
 
 def display_name(*, wiki_name: str | None, official_name: str | None, city: str | None, state: str | None, country: str | None) -> str:
     """The best human-readable name for a place.
-    A place with neither falls back to "Unnamed Location in {area}" when address components are known, so a list of unnamed pins stays tellable apart; :func:`~urbanlens.dashboard.services.locations.naming.is_meaningful_name` still rejects that placeholder, so it never reaches an external API query or a saved name.
 
     Args:
         wiki_name: The linked wiki's name, if the place has a wiki.
@@ -48,7 +47,7 @@ def display_name(*, wiki_name: str | None, official_name: str | None, city: str 
         country: The location's country component.
 
     Returns:
-        The name to display. Never empty."""
+        The name to display."""
     if wiki_name:
         return wiki_name
     if official_name:
@@ -75,14 +74,12 @@ def formatted_address(*, address_basic: str | None, city: str | None, state: str
     """A "street, city, state" address, omitting the components that are absent.
 
     Args:
-        address_basic: The street address. Without one there is no address to
-            format, whatever the other components hold.
+        address_basic: The street address.
         city: The city component.
         state: The state component.
 
     Returns:
-        The joined address, or None when there is no street address.
-    """
+        The joined address, or None when there is no street address."""
     if not address_basic:
         return None
     parts = [address_basic]

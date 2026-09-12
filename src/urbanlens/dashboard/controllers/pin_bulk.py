@@ -36,19 +36,7 @@ logger = logging.getLogger(__name__)
 
 _ORGANIZE_KINDS = frozenset({KIND_TAG, KIND_CATEGORY, KIND_STATUS})
 
-#: Most pins one bulk request may name. Not a new policy - every external-API
-#: equivalent already declares `max_length=500` on its uuid list
-#: (`serializers_pin_bulk.py`); this is the same number on the surface the map's
-#: select tool drives, which had no bound at all.
-#:
-#: It matters because these edits cannot be one `UPDATE`. `Pin` carries eight
-#: live `post_save` receivers (map-pin cache, smart-list membership, wiki stat
-#: sync, draft-wiki creation, boundary refit, map-center invalidation,
-#: detail-pin resync, achievements), so every selected pin needs a real
-#: `save()`. Measured cost is ~2 queries per pin for a style or description
-#: edit and ~7 for a rating (`Review.update_or_create` plus its own receivers),
-#: so an unbounded selection turns one click into tens of thousands of queries
-#: inside a single request/response cycle.
+#: Most pins one bulk request may name. It matters because these edits cannot be one `UPDATE`.
 _MAX_BULK_PINS = 500
 
 #: Shared wording so every bulk endpoint refuses identically.
@@ -109,13 +97,9 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
 
         subtree = list(Pin.objects.filter(pk__in=[p.pk for p in pins]).with_descendants())
         with transaction.atomic():
-            # The stash must happen inside the same atomic block as the delete: stashing
-            # first and deleting after ensures a mid-delete failure rolls back both together,
-            # rather than leaving a committed UndoAction claiming a deletion that never
-            # actually happened. Pin.parent_pin is on_delete=CASCADE, so deleting just the
-            # originally-selected pins already cascades to every descendant captured in
-            # `subtree` above in one bulk operation - no need to delete each subtree member
-            # individually.
+            # The stash must happen inside the same atomic block as the delete: stashing first and deleting
+            # after ensures a mid-delete failure rolls back both together, rather than leaving a committed
+            # UndoAction claiming a deletion that never actually happened.
             undo_action = stash_for_undo(PIN_MODEL_LABEL, subtree, profile)
             if undo_action is None:
                 raise RuntimeError("stash_for_undo returned None outside an apply")
@@ -170,10 +154,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
             return HttpResponse("target_uuid is required.", status=400)
         if not source_uuids:
             return HttpResponse("At least one source_uuid is required.", status=400)
-        # Before any database work: a request that is too large should not first
-        # pay for being too large. This endpoint is the sharpest of the bulk set -
-        # every source is re-saved individually, and each save re-hulls the
-        # target's whole child set, so the per-source cost grows as it runs.
+        # Before any database work: a request that is too large should not first pay for being too large.
         if _too_many(source_uuids):
             return HttpResponse(_TOO_MANY_PINS, status=400)
 
@@ -193,10 +174,9 @@ class PinBulkMergeView(LoginRequiredMixin, View):
 
         merged = 0
         for source in sources:
-            # Structurally unreachable: by this point target is always root (either
-            # already was, or was just promoted above), so it has no ancestors for
-            # would_create_cycle to find a source in - kept as defense-in-depth per
-            # the model's own guard contract, same as the original root-only version.
+            # Structurally unreachable: by this point target is always root (either already was, or was just
+            # promoted above), so it has no ancestors for would_create_cycle to find a source in - kept as
+            # defense-in-depth per the model's own guard contract, same as the original root-only version.
             if source.would_create_cycle(target):
                 continue
             source.parent_pin = target
@@ -243,14 +223,12 @@ class PinBulkEditView(LoginRequiredMixin, View):
             if len(value) > max_length:
                 return HttpResponse(f"{request_field} is too long.", status=400)
             if model_field.endswith("color"):
-                # Length alone is not enough: these are interpolated into style="..."
-                # by the map and organize renderers, and `x" onmouse` is ten characters.
-                # Border colours keep the "none" sentinel, which means "no border".
+                # Length alone is not enough: these are interpolated into style="..." by the map and organize
+                # renderers, and `x" onmouse` is ten characters.
                 value = clean_color(value, default="", allow_none_keyword=model_field != "color") or ""
             elif model_field == "icon":
-                # Same reasoning one branch over: an icon becomes glyph text, an
-                # <img src="...">, or an emoji depending on its shape, so a value
-                # that is none of the three has no business being stored.
+                # Same reasoning one branch over: an icon becomes glyph text, an <img src="...">, or an emoji
+                # depending on its shape, so a value that is none of the three has no business being stored.
                 value = clean_icon(value, default="")
             style_updates[model_field] = value or None
 
@@ -285,9 +263,8 @@ class PinBulkEditView(LoginRequiredMixin, View):
                     setattr(pin, field, field_value)
                 pin.save(update_fields=update_fields)
 
-        # rating lives on Review (one per profile/pin pair, see PinEditView.post
-        # for the single-pin equivalent) - 0 explicitly clears every selected
-        # pin's review; absent/invalid leaves ratings untouched.
+        # rating lives on Review (one per profile/pin pair, see PinEditView.post for the single-pin equivalent)
+        # - 0 explicitly clears every selected pin's review; absent/invalid leaves ratings untouched.
         rating_raw = data.get("rating")
         if rating_raw is not None and str(rating_raw).strip():
             try:
@@ -384,10 +361,9 @@ class PinParentSearchView(LoginRequiredMixin, View):
 class PinBulkExportView(LoginRequiredMixin, View):
     """Download selected pins as GeoJSON/KML/GPX/CSV (UL-377/UL-382, plain form POST).
 
-    A plain (non-JSON) form POST, not fetch/JSON like the other bulk views -
-    submitted via a throwaway <form target="_blank"> so the browser handles
-    the file download itself from the Content-Disposition header, with no
-    URL-length limit on the pin count and no client-side blob handling.
+    A plain (non-JSON) form POST, not fetch/JSON like the other bulk views - submitted via a throwaway
+    <form target="_blank"> so the browser handles the file download itself from the Content-Disposition
+    header, with no URL-length limit on the pin count and no client-side blob handling.
     """
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:

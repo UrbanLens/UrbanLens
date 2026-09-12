@@ -44,12 +44,7 @@ class ServiceMeta(ABCMeta):
 
 @dataclass(slots=True, kw_only=True)
 class Service(ABC, metaclass=ServiceMeta):
-    """An abstract class to serve as a template for our services.
-
-    Class variables (set on subclasses, not dataclass fields):
-        service_key: Unique identifier for this service (e.g. ``"nps"``).
-            Must be set to enable automatic rate limiting and call logging.
-    """
+    """An abstract class to serve as a template for our services."""
 
     paid_service: ClassVar[bool] = False
     service_key: ClassVar[str | None] = None
@@ -67,10 +62,7 @@ class Gateway(Service, ABC):
 
     def __post_init__(self) -> None:
         """Replace the plain session with a rate-limited wrapper when applicable.
-
-        A custom session (e.g. a test mock) is preserved as-is; only the
-        default ``requests.Session`` instance is swapped for a rate-limited one.
-        """
+        A custom session (e.g. a test mock) is preserved as-is; only the default ``requests.Session`` instance is swapped for a rate-limited one."""
         key = type(self).service_key
         if key and type(self.session) is requests.Session:
             from urbanlens.dashboard.services.core.rate_limiter import _RateLimitedSession
@@ -81,20 +73,13 @@ class Gateway(Service, ABC):
     def endpoint_for_log(url: str) -> str:
         """How this gateway's URLs are described in ``ApiCallLog``.
 
-        Args:
-                url: The URL about to be requested.
-
         Returns:
-                The string to record as the call's endpoint."""
+            The string to record as the call's endpoint."""
         return url
 
 
 class GatewayRequestError(RuntimeError):
-    """Raised when an external gateway call fails or returns an unusable response.
-
-    Swap this for whatever error base class UrbanLens's other gateways already
-    raise, if one exists -- this is a self-contained stand-in.
-    """
+    """Raised when an external gateway call fails or returns an unusable response."""
 
 
 class GatewayRateLimitedError(GatewayRequestError):

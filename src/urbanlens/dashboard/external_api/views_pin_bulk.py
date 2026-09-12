@@ -49,11 +49,10 @@ def _owned_pins(request: Request, uuids: list) -> list[Pin]:
 class PinBulkDeleteView(ExternalApiView):
     """POST: delete several of the caller's own pins (and their detail-pin subtrees) at once.
 
-    Every pin named must belong to the caller; anything else in ``uuids`` is
-    silently ignored rather than refused, so a client replaying a queued
-    offline batch doesn't fail the whole request over one pin deleted
-    meanwhile on another device. The response's ``undo_uuid`` restores
-    everything this call removed via the generic ``POST
+    Every pin named must belong to the caller; anything else in ``uuids`` is silently ignored rather
+    than refused, so a client replaying a queued offline batch doesn't fail the whole request over one
+    pin deleted meanwhile on another device.
+    The response's ``undo_uuid`` restores everything this call removed via the generic ``POST
     undo/{undo_uuid}/restore/`` endpoint.
     """
 
@@ -74,9 +73,8 @@ class PinBulkDeleteView(ExternalApiView):
 
         subtree = list(Pin.objects.filter(pk__in=[pin.pk for pin in pins]).with_descendants())
         with transaction.atomic():
-            # Stashed inside the same atomic block as the delete: a mid-delete
-            # failure must roll back both together, never leave a committed
-            # UndoAction claiming a deletion that didn't happen.
+            # Stashed inside the same atomic block as the delete: a mid-delete failure must roll back both
+            # together, never leave a committed UndoAction claiming a deletion that didn't happen.
             undo_action = stash_for_undo(PIN_MODEL_LABEL, subtree, request.user.profile)
             if undo_action is None:
                 raise RuntimeError("stash_for_undo returned None outside an apply")
@@ -95,11 +93,10 @@ class PinBulkDeleteView(ExternalApiView):
 class PinBulkMergeView(OwnedPinMixin, ExternalApiView):
     """POST: fold several of the caller's own pins into one target as detail pins.
 
-    A target that's currently itself a detail pin is promoted to top-level
-    first - merging always leaves the target as the new top-level pin -
-    unless that promotion would collide with another top-level pin already
-    sitting at the exact same location, which is refused with 400 rather than
-    silently merging two unrelated top-level pins into one.
+    A target that's currently itself a detail pin is promoted to top-level first - merging always leaves
+    the target as the new top-level pin - unless that promotion would collide with another top-level pin
+    already sitting at the exact same location, which is refused with 400 rather than silently merging
+    two unrelated top-level pins into one.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -117,10 +114,9 @@ class PinBulkMergeView(OwnedPinMixin, ExternalApiView):
         if target is None:
             return Response({"error": "No such pin to merge into."}, status=404)
 
-        # Resolved and validated before any write: returning from inside
-        # transaction.atomic() without raising commits whatever was already
-        # saved rather than rolling it back, so the target's promotion must
-        # not happen until we know there's at least one valid source.
+        # Resolved and validated before any write: returning from inside transaction.atomic() without raising
+        # commits whatever was already saved rather than rolling it back, so the target's promotion must not
+        # happen until we know there's at least one valid source.
         promote_target = target.parent_pin_id is not None
         if promote_target:
             conflict = Pin.objects.filter(profile=target.profile, location_id=target.location_id, parent_pin__isnull=True).exclude(pk=target.pk).exists()
@@ -140,9 +136,8 @@ class PinBulkMergeView(OwnedPinMixin, ExternalApiView):
             merged_uuids: list[str] = []
             skipped_uuids: list[str] = []
             for source in sources:
-                # Structurally unreachable once target is root (either already
-                # was, or was just promoted above) - kept as defense-in-depth,
-                # matching the internal view's own guard.
+                # Structurally unreachable once target is root (either already was, or was just promoted above)
+                # - kept as defense-in-depth, matching the internal view's own guard.
                 if source.would_create_cycle(target):
                     skipped_uuids.append(str(source.uuid))
                     continue
@@ -165,9 +160,8 @@ class PinBulkMergeView(OwnedPinMixin, ExternalApiView):
 class PinBulkEditView(ExternalApiView):
     """POST: apply the same description, rating, label, and/or parent change to several pins at once.
 
-    Every field but ``uuids`` is optional and independent - send only the
-    ones you're changing. See ``serializers_pin_bulk.PinBulkEditSerializer``
-    for exact null/absent semantics.
+    Every field but ``uuids`` is optional and independent - send only the ones you're changing.
+    See ``serializers_pin_bulk.PinBulkEditSerializer`` for exact null/absent semantics.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -187,11 +181,10 @@ class PinBulkEditView(ExternalApiView):
             return Response({"error": "No matching pins."}, status=404)
         profile = request.user.profile
 
-        # Every field is resolved and validated up front, before any write:
-        # this endpoint isn't wrapped in a single all-or-nothing transaction
-        # (each field's changes are independently meaningful), so a 400
-        # raised partway through would otherwise leave earlier fields' edits
-        # committed despite the batch as a whole being rejected.
+        # Every field is resolved and validated up front, before any write: this endpoint isn't wrapped in a
+        # single all-or-nothing transaction (each field's changes are independently meaningful), so a 400 raised
+        # partway through would otherwise leave earlier fields' edits committed despite the batch as a whole
+        # being rejected.
         if data.get("description"):
             length_error = text_length_error(data["description"], MAX_PIN_DESCRIPTION_LENGTH, "Description")
             if length_error:

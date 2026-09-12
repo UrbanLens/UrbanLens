@@ -5,11 +5,8 @@ export interface ConfirmOptions {
     cancelLabel?: string;
 }
 
-/** Wraps window.confirmDialog (shared/confirm-dialog.ts), falling back to native confirm().
- *
- * Callers here never pass altLabel, so the dialog's third outcome cannot arise - but it
- * is narrowed explicitly rather than assumed, because "alt" is a truthy string and would
- * otherwise read as a confirmation if one were ever added.
+/**
+ * Wraps window.confirmDialog (shared/confirm-dialog.ts), falling back to native confirm().
  */
 export async function confirmAction(options: ConfirmOptions): Promise<boolean> {
     if (window.confirmDialog) {
@@ -23,15 +20,8 @@ type ToastKind = "success" | "error" | "warning" | "info";
 /** Matches toastr.options.timeOut in dashboard/themes/base.html. */
 const FALLBACK_TIMEOUT_MS = 4500;
 
-/** Shows a toast without the library, in the markup toastr itself emits.
- *
- * sass/_toastr.scss is ours and ships in the bundle; only the script is remote, so
- * the same container and class names get the same styling with nothing duplicated.
- *
- * Args:
- *     kind: Which of the four toast styles to render.
- *     message: Text to show. Set as text, never HTML - some callers pass server strings.
- *     title: Optional heading above the message.
+/**
+ * Shows a toast without the library, in the markup toastr itself emits.
  */
 function fallbackToast(kind: ToastKind, message: string, title?: string): void {
     const body = document.body;
@@ -63,14 +53,8 @@ function fallbackToast(kind: ToastKind, message: string, title?: string): void {
     window.setTimeout(() => item.remove(), FALLBACK_TIMEOUT_MS);
 }
 
-/** Routes to toastr when it is there, and to our own markup when it is not.
- *
- * toastr is a CDN <script> in dashboard/themes/base.html, so window.toastr is absent
- * whenever that request does not land - offline, blocked, or a failed integrity check.
- * Callers are overwhelmingly error paths, and the network that loses the script is the
- * one that causes the error, so throwing here would take out the recovery around it:
- * the floorplan editor's "could not save" toast sits directly above the call that arms
- * the retry, and a throw left the document dirty with nothing scheduled to try again.
+/**
+ * Routes to toastr when it is there, and to our own markup when it is not.
  */
 function notify(kind: ToastKind, message: string, title?: string): void {
     const library = window.toastr;

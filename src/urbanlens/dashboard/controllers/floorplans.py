@@ -26,9 +26,7 @@ logger = logging.getLogger(__name__)
 def _building_place(pin: Pin) -> Place | None:
     """The building place a pin's floorplan belongs to.
 
-    A building pin resolves to its own structure; a parcel/location pin with
-    exactly one building resolves to that. A multi-building parcel has no
-    single plan - each building carries its own, so the editor offers a
+    A multi-building parcel has no single plan - each building carries its own, so the editor offers a
     picker instead (see :func:`_building_choices`).
     """
     from urbanlens.dashboard.models.place.model import PlaceKind
@@ -45,9 +43,7 @@ def _building_place(pin: Pin) -> Place | None:
 def _building_choices(pin: Pin) -> list[dict]:
     """The buildings on a pin's parcel that a floorplan could belong to.
 
-    Empty unless the pin sits on a parcel holding several - the case where
-    "this pin's floorplan" has no single answer. Each entry names the child
-    pin covering that building when there is one, so the picker can send the
+    Each entry names the child pin covering that building when there is one, so the picker can send the
     user to the marker they already have rather than a bare place.
     """
     from urbanlens.dashboard.models.place.model import PlaceKind
@@ -74,8 +70,8 @@ def _parse_bbox(raw: str | None) -> tuple[float, float, float, float] | None:
     """Parse a ``min_lng,min_lat,max_lng,max_lat`` viewport filter.
 
     Raises:
-        ValueError: Malformed, or with a minimum exceeding its maximum - which
-            would silently match nothing rather than erroring.
+        ValueError: Malformed, or with a minimum exceeding its maximum - which would silently match
+        nothing rather than erroring.
     """
     if not raw:
         return None
@@ -103,18 +99,12 @@ def _parse_date(raw: str | None) -> datetime.date | None:
 def _building_outline(pin: Pin) -> list[list[float]]:
     """The building's footprint as a ring of ``[lat, lng]`` pairs, or empty.
 
-    Handed to the editor so a new floor can start from the real exterior
-    instead of asking someone to trace a wall they can already see.
-
-    **Only a BUILDING boundary is used.** The property boundary is deliberately
-    not a fallback: it describes the grounds, so on a campus or any lot larger
-    than its structure it seeds an enormous room shaped like the parcel, which
-    is both wrong and confidently wrong - it looks like survey data. An empty
-    canvas is the better answer when no footprint is known.
+    Handed to the editor so a new floor can start from the real exterior instead of asking someone to
+    trace a wall they can already see.
 
     Returns:
-        The outer ring, without the closing duplicate point (walls are drawn
-        around it cyclically), or an empty list when no footprint is known.
+        The outer ring, without the closing duplicate point (walls are drawn around it cyclically), or
+        an empty list when no footprint is known.
     """
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
@@ -122,11 +112,9 @@ def _building_outline(pin: Pin) -> list[list[float]]:
         polygon = Boundary.objects.effective_polygon_for_pin(pin, boundary_type)
         if polygon is None:
             continue
-        # A MultiPolygon here means several detached structures; the largest is
-        # the one a floorplan is most likely about. isinstance rather than
-        # geom_type, so this narrows for a reader and for the type checker
-        # instead of only for the runtime - a Polygon is not iterable, and
-        # nothing but the string said so.
+        # A MultiPolygon here means several detached structures; the largest is the one a floorplan is most
+        # likely about. isinstance rather than geom_type, so this narrows for a reader and for the type checker
+        # instead of only for the runtime - a Polygon is not iterable, and nothing but the string said so.
         if isinstance(polygon, MultiPolygon):
             parts = sorted(polygon, key=lambda part: part.area, reverse=True)
             if not parts:
@@ -152,13 +140,11 @@ class FloorplanJsonView(LoginRequiredMixin, View):
         """Return the pin's building floorplan as a document, or 204 when none.
 
         Args:
-            request: May carry ``?date=YYYY-MM-DD`` to resolve a historical
-                version.
+            request: May carry ``?date=YYYY-MM-DD`` to resolve a historical version.
             pin_slug: The pin whose building to resolve.
 
         Returns:
-            JsonResponse with the document, or 204 - absence is normal, not
-            an error.
+            JsonResponse with the document, or 204 - absence is normal, not an error.
         """
         from urbanlens.dashboard.services.floorplans.resolution import resolve_document
         from urbanlens.dashboard.services.floorplans.serialization import document_for
@@ -220,11 +206,11 @@ def _document_for_version(place: Place, profile, version_uuid: str) -> dict | No
 class FloorplanFeaturesView(LoginRequiredMixin, View):
     """GET /map/pin/<pin_slug>/floorplan/features/ - drawable items as GeoJSON.
 
-    The map-facing counterpart to the document endpoint, for renderers and
-    for any other software that speaks GeoJSON. Filters by viewport
-    (``?bbox=min_lng,min_lat,max_lng,max_lat``), storey (``?level=``) and
-    element kind (``?kind=``); ``?version=`` picks a specific plan version and
-    ``?date=`` resolves one by date, exactly like the document endpoint.
+    The map-facing counterpart to the document endpoint, for renderers and for any other software that
+    speaks GeoJSON.
+    Filters by viewport (``?bbox=min_lng,min_lat,max_lng,max_lat``), storey (``?level=``) and element
+    kind (``?kind=``); ``?version=`` picks a specific plan version and ``?date=`` resolves one by date,
+    exactly like the document endpoint.
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
@@ -245,16 +231,14 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
 
         version_uuid = request.GET.get("version") or ""
         if version_uuid:
-            # A specific version's uuid may name the caller's own plan or a
-            # published one - same fallback as the unversioned lookup below,
-            # just pinned to one exact row instead of "current".
+            # A specific version's uuid may name the caller's own plan or a published one - same fallback as the
+            # unversioned lookup below, just pinned to one exact row instead of "current".
             floorplan = Floorplan.objects.filter(place=place, profile=pin.profile, uuid=version_uuid, wiki__isnull=True).first()
             if floorplan is None and place_visible_to(place, pin.profile):
                 floorplan = Floorplan.objects.filter(place=place, uuid=version_uuid, wiki__isnull=False).first()
         else:
-            # Local-then-community, mirroring resolve_document() - a
-            # published plan must be reachable here too, not just through the
-            # document endpoint. See services.floorplans.resolution.
+            # Local-then-community, mirroring resolve_document() - a published plan must be reachable here too,
+            # not just through the document endpoint. See services.floorplans.resolution.
             floorplan = resolve_floorplan_row(place, profile=pin.profile, on_date=_parse_date(request.GET.get("date")))
         if floorplan is None:
             return HttpResponse(status=204)
@@ -271,9 +255,8 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
             # client renders into a toast - do not echo it.
             return JsonResponse({"ok": False, "error": "level must be a whole number."}, status=400)
 
-        # One filter serves both wall kinds and marker kinds - they never
-        # collide, and a caller asking for "stair" means markers whether or not
-        # it knows which table that is.
+        # One filter serves both wall kinds and marker kinds - they never collide, and a caller asking for
+        # "stair" means markers whether or not it knows which table that is.
         allowed = set(FloorplanWallKind.values) | set(FloorplanMarkerKind.values)
         kind = request.GET.get("kind", "")
         if kind and kind not in allowed:
@@ -289,8 +272,7 @@ class FloorplanSaveView(LoginRequiredMixin, View):
         """Persist a full floorplan document for the pin's building.
 
         Args:
-            request: JSON body holding the document; ``date`` inside it names
-                the version being written.
+            request: JSON body holding the document; ``date`` inside it names the version being written.
             pin_slug: The pin whose building is being edited.
 
         Returns:
@@ -305,9 +287,8 @@ class FloorplanSaveView(LoginRequiredMixin, View):
         )
 
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
-        # A plan may be placeless: not every pin resolves to a known building
-        # outline, and refusing to save one made the editor a dead end for
-        # exactly the properties that most need mapping by hand.
+        # A plan may be placeless: not every pin resolves to a known building outline, and refusing to save one
+        # made the editor a dead end for exactly the properties that most need mapping by hand.
         place = _building_place(pin)
 
         try:
@@ -325,42 +306,34 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             on_date=_parse_date(document.get("valid_from")),
             allow_community=bool(document.get("edit_community")),
         )
-        # A wiki-owned row is shared: parenting it to whoever happened to save
-        # it next would hand one profile's private pin the whole community
-        # plan, and mint detail pins in that account for other people's
-        # markers (see serialization._sync_linked_pin's stated invariant).
+        # A wiki-owned row is shared: parenting it to whoever happened to save it next would hand one profile's
+        # private pin the whole community plan, and mint detail pins in that account for other people's markers
+        # (see serialization._sync_linked_pin's stated invariant).
         if floorplan.pin_id is None and floorplan.wiki_id is None:
             floorplan.pin = pin
-        # Seed the plan-local origin from the pin the first time anything is
-        # saved. Every coordinate in the document is metres from this point, so
-        # it has to be fixed before the first wall lands and must never move
-        # afterwards - shifting it would silently translate the whole drawing.
+        # Seed the plan-local origin from the pin the first time anything is saved.
         if floorplan.origin_lat is None or floorplan.origin_lng is None:
             document.setdefault("plan_origin", {"lat": float(pin.effective_latitude), "lng": float(pin.effective_longitude)})
         try:
             save_document(floorplan, document, profile=pin.profile)
         except StaleDocumentError as exc:
-            # 409, not 400: the document is valid, it is just built on a version
-            # someone else has already replaced. The editor stops autosaving on
-            # this rather than retrying, since retrying is how the other tab's
-            # work gets destroyed.
+            # 409, not 400: the document is valid, it is just built on a version someone else has already
+            # replaced.
             logger.warning("Stale Document Error: %s", str(exc))
             return JsonResponse({"ok": False, "error": "Stale Document Error", "stale": True}, status=409)
         except FloorplanValidationError as exc:
             logger.warning("FloorPlanValidationError: %s", str(exc))
             return JsonResponse({"ok": False, "error": "That floorplan has an invalid value and couldn't be saved."}, status=400)
         except ValueError:
-            # Not a validation failure the serializer raised deliberately, so
-            # its text is not known to be safe to show - it may carry internals
-            # from wherever it actually came from.
+            # Not a validation failure the serializer raised deliberately, so its text is not known to be safe
+            # to show - it may carry internals from wherever it actually came from.
             logger.exception("Unexpected error saving floorplan for pin %s", pin_slug)
             return JsonResponse({"ok": False, "error": "That floorplan couldn't be saved."}, status=400)
         # A placeless plan has no sibling versions to list: for_place(None)
         # would match every placeless plan on the site rather than none.
         versions = _version_list(place, pin.profile) if place is not None else []
-        # Real provenance, not an assumption: a hardcoded "local" told the
-        # client it owned a row it had merely been allowed to edit, which hid
-        # the community banner from the next render.
+        # Real provenance, not an assumption: a hardcoded "local" told the client it owned a row it had merely
+        # been allowed to edit, which hid the community banner from the next render.
         origin = "community" if floorplan.wiki_id is not None else "local"
         saved = {**document_for(floorplan), "origin": origin, "versions": versions}
         return JsonResponse({"ok": True, "floorplan": saved})
@@ -373,8 +346,8 @@ class FloorplanPublishView(LoginRequiredMixin, View):
         """Copy the named version onto the place's community wiki.
 
         Returns:
-            JsonResponse with the published document, 404 when the version
-            isn't the caller's, or 409 when the place has no community wiki.
+            JsonResponse with the published document, 404 when the version isn't the caller's, or 409 when
+            the place has no community wiki.
         """
         from urbanlens.dashboard.models.floorplans.model import Floorplan
         from urbanlens.dashboard.services.floorplans.resolution import publish_to_wiki
@@ -408,8 +381,8 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         """Editor context: the pin, its building place, and its overlays.
 
         Returns:
-            Context with ``pin``, ``place`` (may be None - the page explains),
-            and the pin's georeferenced image overlays for tracing.
+            Context with ``pin``, ``place`` (may be None - the page explains), and the pin's georeferenced
+            image overlays for tracing.
         """
         context = super().get_context_data(**kwargs)
         pin = get_object_or_404(
@@ -422,9 +395,8 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         from urbanlens.dashboard.models.labels.model import Label
 
         context["pin"] = pin
-        # The same icon set and palette every other picker on the site uses, so
-        # a marker styled here and a detail pin styled from the pin page cannot
-        # offer different choices.
+        # The same icon set and palette every other picker on the site uses, so a marker styled here and a
+        # detail pin styled from the pin page cannot offer different choices.
         context["icon_categories"] = ICON_CATEGORIES
         context["color_choices"] = COLOR_CHOICES
         context["place"] = _building_place(pin)
@@ -435,9 +407,8 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         # The reference pool attaches to every item, so the photos already on
         # this pin are the likeliest evidence for a wall, a door or its lock.
         context["photos_json"] = [{"uuid": str(image.uuid), "url": image.image.url, "caption": image.caption or ""} for image in pin.images.order_by("-created")[:60] if image.image]
-        # Same "Manage Image Overlays" dialog as the pin-detail and wiki maps -
-        # browsing this pin's own photos for a blueprint/site plan to pin and
-        # skew onto the floorplan map, not a bespoke picker.
+        # Same "Manage Image Overlays" dialog as the pin-detail and wiki maps - browsing this pin's own photos
+        # for a blueprint/site plan to pin and skew onto the floorplan map, not a bespoke picker.
         context["manage_overlays_url"] = reverse("pin.overlays", args=[pin.slug])
         context["overlay_corners_url_template"] = reverse("pin.overlays.corners", args=[pin.slug, OVERLAY_UUID_PLACEHOLDER])
         # attributionControl is off on this map; required attribution renders

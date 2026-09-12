@@ -1,9 +1,5 @@
 """Session-scoped live text chat for trivia sessions.
-
-WebSocket-only send, HTTP-served history for reconnects. Binds
-``services.core.session_chat.SessionChat``, shared by every participant-session game;
-existing import paths and call signatures are unchanged.
-"""
+Binds ``services.core.session_chat.SessionChat``, shared by every participant-session game; existing import paths and call signatures are unchanged."""
 
 from __future__ import annotations
 

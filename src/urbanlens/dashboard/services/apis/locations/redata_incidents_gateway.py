@@ -1,5 +1,4 @@
-"""Gateway for REData's ``/incidents/`` near-a-coordinate endpoint.
-A point is NOT evidence about a specific building. - ``arrest_made`` is nullable and null is not false - only two of the nine cities publish it. - ``attributes.completeness_lag_days``, where present, marks a recent window the publisher itself says is incomplete."""
+"""Gateway for REData's ``/incidents/`` near-a-coordinate endpoint."""
 
 from __future__ import annotations
 
@@ -48,34 +47,11 @@ class RedataIncidentsGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch reported police incidents near a coordinate.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                categories: Restrict to these ``category`` tags (see
-                :data:`INCIDENT_CATEGORY_LABELS`). Applied to the result
-                only, so narrowing never prunes REData's cached set.
-                years: How many years back to search (REData default 3, max 25).
-                Bounds the fetch as well as the result.
-                arrests_only: Only incidents with a published arrest. Returns
-                nothing for the seven cities that publish no arrest flag -
-                deliberately, because treating silence as "no arrest" would
-                manufacture a statistic.
-                limit: Maximum number of incidents to return.
-                force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-                The parsed envelope. Entries carry ``category``,
-                ``offense_description``, ``occurred_at``/``reported_at`` (real
-                instants resolved in the city's own zone; the two routinely
-                differ by days), ``location_precision``, nullable
-                ``arrest_made``/``domestic``, and the publisher's own
-                class/wording plus collapse bookkeeping (``offenses``,
-                ``source_row_count``) under ``attributes``.
+            The parsed envelope.
 
         Raises:
-                LocationContextUnavailableError: The covering source failed to
-                answer, the request itself failed, or a filter value was
-                rejected."""
+            LocationContextUnavailableError: The covering source failed to answer, the request itself failed, or a filter value was rejected."""
         extra_params: dict[str, Any] = {}
         if categories:
             extra_params["category"] = categories

@@ -1,19 +1,5 @@
 {% load map_components static %}
-{% comment %}
-One album's own view, swapped into #albums-panel in place of the album list.
-Carries the same root id so the "All albums" link can swap back.
-
-The main column is the photo grid and nothing else. Everything that configures
-the album (custom order, cover, delete) lives in the header's overflow menu,
-and the two large secondary surfaces - the map and the "add existing photos"
-picker - are opt-in panels rather than always-rendered page content.
-
-Expects (from controllers.albums._album_detail_context):
-  album, grid_images, available_image_count, eligible_url, photo_count, cover, date_start, date_end
-  map_photos, placed_count
-  back_url, list_url, add_url, remove_url, reorder_url, edit_url, upload_url,
-  items_url, reposition_base
-{% endcomment %}
+{% comment %}One album's own view, swapped into #albums-panel in place of the album list.{% endcomment %}
 <div id="albums-panel" class="albums-panel album-detail"
      data-album-slug="{{ album.slug }}"
      data-album-pin-slug="{% if pin %}{{ pin.slug }}{% endif %}"
@@ -99,11 +85,7 @@ Expects (from controllers.albums._album_detail_context):
   <p class="album-detail-description">{{ album.description }}</p>
   {% endif %}
 
-  {% comment %}
-  Photo map. Hidden until asked for from the menu - it is a correction tool,
-  not the album's primary content. Initialised by shared/album-map.ts, which
-  drives the same Leaflet photo-marker layer the pin detail map uses.
-  {% endcomment %}
+  {% comment %}Photo map.{% endcomment %}
   <section id="album-map-section" class="album-map-section" hidden>
     <div class="album-map-head">
       <span class="album-map-hint settings-help">
@@ -157,11 +139,7 @@ Expects (from controllers.albums._album_detail_context):
   </div>
   {% endif %}
 
-  {% comment %}
-  "Add from photos already here" picker. A dialog rather than a second grid
-  below the album, which previously doubled the page's length and made it
-  ambiguous which grid was the album.
-  {% endcomment %}
+  {% comment %}"Add from photos already here" picker.{% endcomment %}
   {% if available_image_count %}
   <dialog id="album-picker-dialog" class="ul-dialog album-picker-dialog" aria-label="Add photos to album">
     <form method="dialog" class="album-picker-head">
@@ -171,12 +149,7 @@ Expects (from controllers.albums._album_detail_context):
       </button>
     </form>
     <p class="settings-help album-picker-hint">Click a photo to add it. It stays in the {{ context_type|default:"place" }}'s photos too.</p>
-    {% comment %}Filled when the dialog opens, a page at a time, from
-    eligible_url. Rendering it here put every photo the profile has ever
-    uploaded into a closed dialog on every album page view - bounded for a pin
-    or wiki album, unbounded for a Vault one (P69). Paginated rather than
-    capped, so a photo from years ago is still reachable, which is half of what
-    this picker is for.{% endcomment %}
+    {% comment %}Filled when the dialog opens, a page at a time, from eligible_url.{% endcomment %}
     <ul class="gallery-grid album-add-grid" data-album-eligible-url="{{ eligible_url }}"></ul>
     <div class="album-picker-status" data-album-picker-status hidden></div>
     <button type="button" class="btn btn--ghost album-picker-more" data-album-picker-more hidden>Show more photos</button>

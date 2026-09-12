@@ -42,30 +42,11 @@ class RedataHistoricalFeaturesGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch mapped historical features near a coordinate.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                kinds: Restrict to these ``kind`` tags (see
-                :data:`HISTORICAL_FEATURE_KIND_LABELS`). An unknown kind is a
-                REData ``400``, surfaced as
-                :class:`LocationContextUnavailableError`.
-                year: Only features whose validity interval contains this year.
-                Applied to REData's cached result, not the fetch, so
-                narrowing never prunes the cached set a later, different year
-                needs. A null ``start_year``/``end_year`` counts as matching
-                any year - see the module docstring.
-                limit: Maximum number of features to return.
-                force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-                The parsed envelope. Each ``results`` entry carries ``kind``,
-                ``name``, ``start_year``/``end_year`` (nullable), the publisher's
-                raw ``start_date``/``end_date`` strings, ``source_note`` (what the
-                feature was traced from), and real GeoJSON ``geometry``.
+            The parsed envelope.
 
         Raises:
-                LocationContextUnavailableError: The source failed to answer, the
-                request itself failed, or a filter value was rejected."""
+            LocationContextUnavailableError: The source failed to answer, the request itself failed, or a filter value was rejected."""
         extra_params: dict[str, Any] = {}
         if kinds:
             extra_params["kind"] = kinds

@@ -20,10 +20,7 @@ def token_ok(authorization_header: str) -> bool:
         authorization_header: Raw ``Authorization`` header value, or ``""``.
 
     Returns:
-        ``True`` when no token is configured (the gate is off) or the presented
-        token matches. ``compare_digest`` keeps the comparison constant-time, so
-        a wrong token leaks nothing about how much of it was right.
-    """
+        ``True`` when no token is configured (the gate is off) or the presented token matches."""
     expected = settings.UL_METRICS_TOKEN
     if not expected:
         return True
@@ -39,14 +36,10 @@ def network_ok(address: str) -> bool:
     """Check a client address against the configured CIDR allowlist.
 
     Args:
-        address: The client address, already resolved through the trusted-proxy
-            hop count where one applies.
+        address: The client address, already resolved through the trusted-proxy hop count where one applies.
 
     Returns:
-        ``True`` when no allowlist is configured (the gate is off) or the
-        address falls inside one of its networks. An address that does not parse
-        is never in any network, so a malformed one fails closed.
-    """
+        ``True`` when no allowlist is configured (the gate is off) or the address falls inside one of its networks."""
     raw = settings.UL_METRICS_ALLOWED_CIDRS
     if not raw:
         return True
@@ -57,8 +50,5 @@ def gates_configured() -> bool:
     """Report whether any gate is actually configured.
 
     Returns:
-        ``True`` when a token or an allowlist is set. Used by the startup check
-        and by the standalone exporter, which refuses to bind an unguarded port
-        on a deployed environment rather than silently serving one.
-    """
+        ``True`` when a token or an allowlist is set."""
     return bool(settings.UL_METRICS_TOKEN or settings.UL_METRICS_ALLOWED_CIDRS)

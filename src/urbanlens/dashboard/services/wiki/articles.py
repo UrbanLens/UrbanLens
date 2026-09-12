@@ -136,11 +136,7 @@ def _anchor_slug(title: str, used: set[str]) -> str:
 
     Args:
         title: The heading's plain text.
-        used: Anchors already assigned in this document (mutated in place).
-
-    Returns:
-        A unique anchor like ``"history"`` or ``"history-2"``.
-    """
+        used: Anchors already assigned in this document (mutated in place)."""
     base = _SLUG_DASH.sub("-", _SLUG_STRIP.sub("", title.strip().lower())).strip("-") or "section"
     candidate = base
     counter = 2
@@ -217,9 +213,7 @@ def render_article(content: str) -> RenderedArticle:
     return RenderedArticle(html=clean, toc=toc, has_references=has_references)
 
 
-# ----------------------------------------------------------------------
 # Persistence
-# ----------------------------------------------------------------------
 
 
 def get_article(*, pin: Pin | None = None, wiki: Wiki | None = None) -> Article | None:
@@ -253,11 +247,7 @@ def save_article(
     """Persist a new version of a pin/wiki article.
 
     Args:
-        editor: The profile making the edit, or None for a system-initiated
-            save (e.g. seeding a new wiki article from a matched Wikipedia
-            article) - both ``Article.last_edited_by`` and
-            ``ArticleRevision.editor`` are already nullable (SET_NULL) for
-            exactly this case.
+        editor: The profile making the edit, or None for a system-initiated save (e.g. seeding a new wiki article from a matched Wikipedia article) - both ``Article.last_edited_by`` and ``ArticleRevision.editor`` are already nullable (SET_NULL) for exactly this...
         content: The complete new Markdown source.
         edit_summary: Optional one-line description of the change.
         pin: Host pin (mutually exclusive with ``wiki``).
@@ -302,9 +292,7 @@ class ArticleConflictError(Exception):
     """Someone else saved the article while this editor was working on it.
 
     Attributes:
-        current_revision_id: The id of the revision that is actually current,
-            so a client can fetch it, show the other edit, and re-base.
-    """
+        current_revision_id: The id of the revision that is actually current, so a client can fetch it, show the other edit, and re-base."""
 
     def __init__(self, current_revision_id: int) -> None:
         """Record which revision is current."""
@@ -319,9 +307,7 @@ def latest_revision_id(article: Article | None) -> int | None:
         article: The article to inspect, or None when none exists yet.
 
     Returns:
-        The newest ``ArticleRevision`` id, or None when the article is absent
-        or has no revisions.
-    """
+        The newest ``ArticleRevision`` id, or None when the article is absent or has no revisions."""
     if article is None:
         return None
     latest = article.revisions.order_by("-created").first()
@@ -345,11 +331,8 @@ def save_article_checked(
         editor: The profile making the edit (None for system saves).
         content: The complete new Markdown source.
         edit_summary: Optional one-line description of the change.
-        viewer: Who is saving, when the conflict check must be asked about what
-            they were shown rather than what is stored - a concealed viewer. Its
-            absence means the two are the same, which is the ordinary case.
-        base_revision_id: The revision the editor started from, or None when
-            they believe the article has no revisions yet.
+        viewer: Who is saving, when the conflict check must be asked about what they were shown rather than what is stored - a concealed viewer.
+        base_revision_id: The revision the editor started from, or None when they believe the article has no revisions yet.
         pin: Host pin (mutually exclusive with ``wiki``).
         wiki: Host wiki.
 
@@ -358,7 +341,6 @@ def save_article_checked(
 
     Raises:
         ArticleConflictError: The article moved on since *base_revision_id*.
-            Nothing is written when this is raised.
         ValueError: Neither or both hosts were provided."""
     from urbanlens.dashboard.models.article.model import Article
 
@@ -389,17 +371,14 @@ def save_article_checked(
 
 def restore_revision(*, scope_article: Article, revision: ArticleRevision, editor: Profile | None) -> tuple[Article, ArticleRevision | None]:
     """Restore an older revision's content as a new revision.
-    History is append-only: restoring does not delete anything, it writes the old content forward as the newest revision, tagged with ``restored_from`` so the lineage stays visible in the history list.
 
     Args:
-        scope_article: The article being restored. *revision* must belong to
-            it - callers scope the lookup rather than trusting a bare id.
+        scope_article: The article being restored. *revision* must belong to it - callers scope the lookup rather than trusting a bare id.
         revision: The revision whose content to restore.
         editor: The profile performing the restore.
 
     Returns:
-        Tuple of (article, revision) - revision is None when the article
-        already held exactly that content.
+        Tuple of (article, revision) - revision is None when the article already held exactly that content.
 
     Raises:
         ValueError: *revision* does not belong to *scope_article*."""
@@ -422,14 +401,10 @@ def article_payload(article: Article, viewer: Profile) -> dict[str, Any]:
 
     Args:
         article: The article to render.
-        viewer: The requesting profile. Attribution is masked per the editor's
-            identity-visibility settings as seen by this viewer, never emitted
-            raw.
+        viewer: The requesting profile.
 
     Returns:
-        A JSON-serializable dict with the article's source, rendered HTML,
-        table of contents, word count, masked last editor, update timestamp,
-        and the ``base_revision_id`` a client must echo back on save."""
+        A JSON-serializable dict with the article's source, rendered HTML, table of contents, word count, masked last editor, update timestamp, and the ``base_revision_id`` a client must echo back on save."""
     # Local import: ``services.wiki.wiki_detail`` imports this module for its own
     # article summary, so a module-level import here would close the cycle.
     from urbanlens.dashboard.services.wiki.wiki_detail import masked_editor_name
@@ -449,17 +424,12 @@ def article_payload(article: Article, viewer: Profile) -> dict[str, Any]:
     }
 
 
-# ----------------------------------------------------------------------
 # Revision diffs
-# ----------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class DiffRow:
-    """One row of a rendered revision diff.
-
-    ``kind`` is "context", "add", or "del"; ``text`` is the line content.
-    """
+    """One row of a rendered revision diff."""
 
     kind: str
     text: str
@@ -474,8 +444,7 @@ def diff_revisions(old_content: str, new_content: str, *, context: int = 3) -> l
         context: Unchanged lines kept around each change hunk.
 
     Returns:
-        Ordered diff rows; a ``kind="skip"`` row marks elided unchanged spans.
-    """
+        Ordered diff rows; a ``kind="skip"`` row marks elided unchanged spans."""
     old_lines = old_content.splitlines()
     new_lines = new_content.splitlines()
     matcher = difflib.SequenceMatcher(a=old_lines, b=new_lines, autojunk=False)

@@ -95,11 +95,7 @@ describe("the floating undo bar", () => {
     });
 
     test("a rapid second click while an undo is in flight sends only one request", async () => {
-        // Pre-seed the bar (with its buttons) exactly as a server-rendered page
-        // would, so ensureBar() finds it already present and reuses it as-is
-        // (its early `if (root) return root` skips (re)building the buttons) -
-        // the dataset URLs must be in place before installUndoBar() runs, since
-        // its fetchStack() reads them synchronously before its first await.
+        // Pre-seed the bar (with its buttons) exactly as a server-rendered page would, so ensureBar() finds it already present and reuses it.
         const bar = document.createElement("nav");
         bar.id = "ul-undo-bar";
         bar.hidden = true;
@@ -127,9 +123,7 @@ describe("the floating undo bar", () => {
         try {
             installUndoBar();
             const undoBtn = document.getElementById("ul-undo-btn") as HTMLButtonElement;
-            // Let installUndoBar's fetchStack() (fetch -> response.json() ->
-            // syncButtons(), each its own microtask hop) resolve so the undo
-            // button is enabled before the test clicks it.
+            // Let installUndoBar's fetchStack() (fetch -> response.json() -> syncButtons(), each its own microtask hop) resolve so the undo button.
             for (let i = 0; i < 20 && undoBtn.hidden; i++) await new Promise((r) => setTimeout(r, 0));
             expect(undoBtn.hidden).toBe(false);
 
@@ -169,19 +163,10 @@ describe("the floating undo bar", () => {
 });
 
 describe("wrapping window.fetch", () => {
-    // base.html wraps `window.fetch` too, and marks its own wrapper
-    // `__urbanLensWrapped` - that marker is how it declines to wrap a second
-    // time. Replacing that function with a bare one drops the marker, and the
-    // next thing to run that block would wrap again and toast every failed
-    // request twice. The runtime's own `fetch` carries properties as well
-    // (Bun's has `preconnect`), which is what a two-year-stale `bun-types`
-    // was hiding.
+    // base.html wraps `window.fetch` too, and marks its own wrapper `__urbanLensWrapped`.
     interface MarkedFetch {
         __urbanLensWrapped?: boolean;
-        // Stands in for whatever else the replaced function was holding - the
-        // runtime's own `fetch` carries properties too (Bun's has
-        // `preconnect`), but naming that one here would couple this test to
-        // its signature rather than to the mechanism under test.
+        // Stands in for whatever else the replaced function was holding.
         __probe?: string;
     }
 

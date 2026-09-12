@@ -23,15 +23,7 @@ if TYPE_CHECKING:
 
 
 class PinListMarkupMapView(ExternalApiView):
-    """POST: create or refresh a markup map showing every pin on one of the caller's lists.
-
-    Wraps the same ``services.pins.pin_list_markup`` calls
-    ``controllers.pin_lists.PinListMarkupMapView`` uses, but returns the
-    created/refreshed map's uuid rather than a website redirect - there's no
-    dedicated "fetch one markup map" read endpoint yet, so a client currently
-    treats this uuid as an opaque reference (matching how
-    ``SafetyCheckinSerializer.markup_map_uuid`` is served today).
-    """
+    """POST: create or refresh a markup map showing every pin on one of the caller's lists."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "POST": frozenset({ApiKeyScope.LISTS_WRITE}),
@@ -50,9 +42,8 @@ class PinListMarkupMapView(ExternalApiView):
 
         markup_map = materialize_markup_map(request.user.profile, snapshot, existing_map=pin_list.markup_map, context=pin_list)
         if markup_map is None:
-            # Only returns None when the snapshot itself is None - unreachable
-            # here since that was already checked above, but handled
-            # explicitly rather than assumed, matching the internal view.
+            # Only returns None when the snapshot itself is None - unreachable here since that was already
+            # checked above, but handled explicitly rather than assumed, matching the internal view.
             return Response({"error": "Unable to create markup map."}, status=500)
 
         if pin_list.markup_map_id != markup_map.pk:

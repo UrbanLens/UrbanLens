@@ -1,13 +1,4 @@
-{% comment %}
-Inline card for an `@pin`/`@trip`/`@friend` share attached to a message.
-Context: `share` (DirectMessageShare), `viewer_id`, `partner`.
-
-Pin/friend accept-reject actions are HTMX-driven (outerHTML swap of this same
-card, keyed by `dm-share-card-<message id>`) so responding never navigates the
-recipient out of the thread - see MessageShareRespondPinView/
-MessageShareRespondFriendView. Trip RSVP still hands off to the trip detail
-page since RSVP needs more UI than fits in a chat card.
-{% endcomment %}
+{% comment %}Inline card for an `@pin`/`@trip`/`@friend` share attached to a message.{% endcomment %}
 <div class="dm-share-card" id="dm-share-card-{{ share.message_id }}">
   {% if share.kind == "pin" and share.pin_share %}
   <div class="dm-share-card__row">

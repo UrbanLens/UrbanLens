@@ -1,13 +1,5 @@
 """Registered native-client push destinations (UnifiedPush endpoints, FCM tokens).
-
-The browser gets live notifications over the Channels WebSocket
-(``models.notifications.signals``); a native app in the background does not
-hold a socket open, so it registers a push destination here instead and the
-server delivers through it (``services.notifications.push``). UnifiedPush - an app-chosen,
-self-hostable push server such as ntfy - is the default transport, matching
-the project's self-hosted ethos and keeping an F-Droid build free of Play
-Services; an FCM row kind exists for a future Play-Store build flavor and is
-not dispatched yet.
+The browser gets live notifications over the Channels WebSocket (``models.notifications.signals``); a native app in the background does not hold a socket open, so it registers a push destination here instead and the server delivers through it (``services.notifications.push``).
 """
 
 from __future__ import annotations
@@ -29,15 +21,7 @@ class PushTransport(TextChoices):
 
 class PushDevice(abstract.FrontendDashboardModel):
     """One native client's push destination, owned by a profile.
-
-    ``address`` is the UnifiedPush endpoint URL (or FCM registration token) -
-    treated as an opaque, secret-ish value: anyone holding a UnifiedPush URL
-    can send to that device, so it is never exposed through any read API.
-
-    Delivery bookkeeping: ``failure_count`` counts *consecutive* failed
-    dispatches; after ``services.notifications.push.MAX_CONSECUTIVE_FAILURES`` the device is
-    auto-revoked (dead endpoints otherwise accumulate forever - apps get
-    uninstalled without unregistering). A successful delivery resets the count.
+    ``address`` is the UnifiedPush endpoint URL (or FCM registration token) - treated as an opaque, secret-ish value: anyone holding a UnifiedPush URL can send to that device, so it is never exposed through any read API.
     """
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="push_devices")
@@ -67,14 +51,7 @@ class PushDevice(abstract.FrontendDashboardModel):
 
     @property
     def dispatch_enabled(self) -> bool:
-        """Whether ``services.notifications.push`` will actually send to this device.
-
-        Only UnifiedPush is dispatched. FCM rows are accepted and stored for a
-        future Play-flavor client, but skipped at send time because no FCM
-        sender exists yet (it needs a Google service-account credential), so a
-        registered FCM device receives silence rather than an error. Read
-        surfaces expose this so a client can say so instead of implying
-        delivery works.
+        """Whether ``services.notifications.push`` will actually send to this device. Only UnifiedPush is dispatched.
 
         Returns:
             True when this device's transport is dispatched today.

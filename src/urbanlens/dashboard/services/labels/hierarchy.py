@@ -16,8 +16,7 @@ def would_create_cycle(label: Label, parent_ids: Sequence[int]) -> bool:
     If ``label`` is found, it is already an ancestor of that proposed parent, so adding the reverse edge (proposed parent -> label) would make ``label`` its own ancestor.
 
     Args:
-        label: The label that would receive new parents. An unsaved label
-            (no pk) can never close a loop, since nothing can point at it yet.
+        label: The label that would receive new parents.
         parent_ids: Primary keys proposed as parents of *label*.
 
     Returns:

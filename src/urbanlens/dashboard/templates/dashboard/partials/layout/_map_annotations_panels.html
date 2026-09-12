@@ -1,20 +1,7 @@
-{% comment %}
-Shared map annotation UI - used identically by the Private Pin page and the
-Location wiki page so a change to one lands on both. Include inside a
-`.map-wrapper` div (must be `position: relative` - see _map.scss), right
-after the map's own card-header, alongside `<div id="map"></div>`.
-
-Relies on context already provided by both pages' own views: pin_type_choices,
-detail_pin_icon_choices, color_choices, markup_fill_color, markup_border_color.
-No page-specific (pin vs location) values are referenced here - see
-ts/entries/map-annotations.ts for the parameterized JS half (config read from
-a sibling #map-annotations-config element, not from this partial).
-{% endcomment %}
+{% comment %}Shared map annotation UI - used identically by the Private Pin page and the Location wiki page so a change to one lands on both.{% endcomment %}
 {% load map_components %}
 
-{# -- Map sidebar panel (Details + Photos tabs) - same collapsible left-docked #}
-{# sidebar UX as the main map's #pin-list-panel / .pin-list-handle (_map.scss): #}
-{# collapses to an edge handle button, expands into a full-height sidebar.      #}
+{# Map sidebar panel (Details + Photos tabs). #}
 <div id="detail-pin-list-panel" class="detail-pin-list-panel">
     <div class="detail-pin-list-header">
         <i class="material-symbols-outlined">layers</i>
@@ -36,8 +23,7 @@ a sibling #map-annotations-config element, not from this partial).
     </div>
 </div>
 
-{# Always-visible edge handle (hidden by JS via refreshPanelHeader() until there's #}
-{# at least one detail pin, markup item, or photo to show).                        #}
+{# Always-visible edge handle (hidden by JS via refreshPanelHeader() until there's at least one detail pin, markup item, or photo to.. #}
 <button type="button" id="detail-pin-list-handle" class="detail-pin-list-handle" style="display:none"
         onclick="_toggleDetailPinListPanel()" aria-label="Toggle detail pin list" aria-expanded="false"
         data-tooltip="Layers" data-tooltip-float="true" data-tooltip-pos="right">
@@ -46,22 +32,14 @@ a sibling #map-annotations-config element, not from this partial).
 
 <div id="map"></div>
 {{ custom_layers_json|json_script:"custom-layers-data" }}
-{# Georeferenced image overlays (Sanborn sheets, site plans) - same #}
-{# json_script pattern as the custom layers above. See                #}
-{# shared/map-image-overlays.ts and controllers/map_overlays.py.      #}
+{# Georeferenced image overlays (Sanborn sheets, site plans) - same json_script pattern as the custom layers above. #}
 {{ map_overlays_json|default:""|json_script:"map-overlays-data" }}
-{# -- Map toolbar (tools only; shared component - same as the main map). The  #}
-{# markup drawing tools (formerly a separate "Add Detail" dropdown docked in  #}
-{# .map-bottom-controls) live here as plain icon buttons like every other     #}
-{# map tool. Boundary editing has no dedicated button - click an existing     #}
-{# property/building boundary on the map to edit or delete it.                #}
+{# Map toolbar (tools only; shared component - same as the main map). #}
 {% map_toolbar "markup_pin,markup_line,markup_freehand,markup_arrow,markup_text,markup_square,markup_circle,markup_polygon,select_detail_pins,screenshot" panel_id="detail-map-buttons" screenshot_onclick="_openMapScreenshot()" %}
 
 {# -- Bottom-left map controls -- #}
 <div class="map-bottom-controls">
-    {# Shared layers panel - same component and engine as the main map. The  #}
-    {# details/photos buttons are page-registered toggles (see the `custom`  #}
-    {# option in ts/entries/map-annotations.ts).                             #}
+    {# Shared layers panel - same component and engine as the main map. #}
     {% map_layers_panel layers|default:"street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" custom_layers=custom_layers manage_layers_url=manage_layers_url manage_overlays_url=manage_overlays_url %}
     <div id="boundary-save-controls" class="map-overlay-btn-group" style="display:none">
         <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBoundary()">
@@ -76,31 +54,22 @@ a sibling #map-annotations-config element, not from this partial).
     </div>
 </div>
 
-{# Unified draw/edit panel this dropdown opens - must be a sibling of #}
-{# .map-bottom-controls, not nested inside it, so it positions relative to #}
-{# .map-wrapper instead of that small absolute-positioned button cluster. #}
+{# Unified draw/edit panel this dropdown opens. #}
 {% include "dashboard/partials/layout/_markup_panel_dialog.html" %}
 
-{# -- Manage Layers dialog: create/rename/recolor/reorder/delete custom  --- #}
-{# layers for this pin/wiki. Body is HTMX-loaded by the layers panel's     --- #}
-{# "Manage Layers" button (see _layers_panel.html / map_layers_panel()).   --- #}
+{# Manage Layers dialog: create/rename/recolor/reorder/delete custom layers for this pin/wiki. #}
 <dialog id="custom-layers-dialog" class="custom-layers-dialog ul-dialog" aria-labelledby="dialog-title-manage-layers">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Manage Layers" %}
     <div id="custom-layers-dialog-body" class="custom-layers-dialog-body ul-dialog-body"></div>
 </dialog>
 
-{# -- Manage Image Overlays dialog: add/remove georeferenced images and set -- #}
-{# their opacity/lock state. Aligning happens on the map itself, not here.  -- #}
+{# Manage Image Overlays dialog: add/remove georeferenced images and set their opacity/lock state. #}
 {% if manage_overlays_url %}
 <dialog id="map-overlays-dialog" class="custom-layers-dialog ul-dialog" aria-labelledby="dialog-title-image-overlays">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
     <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
          hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>
-    {# Fetches when the dialog opens (see the "Overlays" button's onclick in #}
-    {# _layers_panel.html) rather than on page load, and is a sibling load #}
-    {# target independent of the row-list body above - lining up an #}
-    {# overlay's opacity slider re-renders that body without re-querying #}
-    {# REData's historical-maps API too. #}
+    {# Fetches when the dialog opens rather than on page load, and is a sibling load target independent of the row-list body above. #}
     {% if manage_overlays_historical_url %}
     <div class="map-overlay-historical ul-dialog-body">
         <h4 class="map-overlay-historical-heading">Historical maps covering this location</h4>
@@ -113,10 +82,7 @@ a sibling #map-annotations-config element, not from this partial).
 </dialog>
 {% endif %}
 
-{# -- Unified detail-pin panel: same shell/fields for adding AND editing, no --- #}
-{# embedded picker map - placing/moving the pin happens on the main map. Must --- #}
-{# live inside .map-wrapper (like #markup-panel above) since .map-dialog--side -- #}
-{# positions itself absolutely relative to that ancestor. ---------------------- #}
+{# Unified detail-pin panel: same shell/fields for adding AND editing, no embedded picker map. #}
 <div id="detail-pin-panel" class="map-dialog map-dialog--side" style="display:none">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Detail Pin" title_id="detail-pin-panel-title" closefn="closeDetailPinPanel" %}
     <div class="detail-pin-add-body">

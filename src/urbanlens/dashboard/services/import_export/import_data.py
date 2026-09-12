@@ -112,11 +112,7 @@ def schedule_import_cleanup(import_dir_path: str, job_status: ImportJobStatus | 
 
 def _make_step_progress_reporter(job_status: ImportJobStatus, key: str, start_pct: int, end_pct: int) -> ProgressReporter:
     """Return a throttled callback that reports (done, count) progress within [start_pct, end_pct].
-
-    Writes to the cache-backed job status at most once per whole-percentage-point change
-    (so a 4000-row step doesn't issue 4000 cache writes), but always writes on the final
-    item so the step reliably lands on ``end_pct`` before the next step starts.
-    """
+    Writes to the cache-backed job status at most once per whole-percentage-point change (so a 4000-row step doesn't issue 4000 cache writes), but always writes on the final item so the step reliably lands on ``end_pct`` before the next step starts."""
     step_message = _STEP_MESSAGES.get(key, f"Importing {key}...")
     last_reported_pct = -1
 
@@ -219,8 +215,8 @@ class _ImportValidationError(Exception):
     pass
 
 
-#: Ceilings on what an uploaded archive may declare before extraction even starts, guarding against
-#: a crafted zip filling the disk (decompression bomb) or exhausting inodes.
+#: Ceilings on what an uploaded archive may declare before extraction even starts, guarding against a
+#: crafted zip filling the disk (decompression bomb) or exhausting inodes.
 #: The byte ceiling is dynamic (see ``_extraction_size_ceiling``) because export archives bundle the
 #: user's actual photo files, so a legitimate archive can approach the user's storage quota - the
 _EXTRACTED_BYTES_FLOOR = 2 * 1024**3
@@ -228,8 +224,8 @@ _MAX_ARCHIVE_MEMBERS = 50_000
 
 #: Chunk size for the bounded per-member read loop in `_extract_zip_members_bounded`.
 #: Bytes are only ever decompressed (via `zipfile.ZipExtFile.read()`) up to whatever's actually
-#: written to disk before the running total is checked against the ceiling again - this is what
-#: makes the ceiling a real, enforced limit on decompressed output rather than a check against the
+#: written to disk before the running total is checked against the ceiling again - this is what makes
+#: the ceiling a real, enforced limit on decompressed output rather than a check against the
 _ZIP_EXTRACT_CHUNK_BYTES = 1024 * 1024
 
 
@@ -238,8 +234,7 @@ def _extraction_size_ceiling(profile: Any | None) -> int:
     Allows twice the profile's resolved storage quota (photo payload plus headroom for the JSON data and quota changes between export and import), never below the 2 GiB floor.
 
     Args:
-        profile: The importing profile, or None when unknown (floor-based
-            fallback, used by direct callers in tests).
+        profile: The importing profile, or None when unknown (floor-based fallback, used by direct callers in tests).
 
     Returns:
         The maximum declared uncompressed size to accept, in bytes."""
@@ -314,20 +309,15 @@ def _extract_zip_members_bounded(
     ceiling: int,
 ) -> None:
     """Extract *members* from *zf* into *extract_root* under a hard, live-enforced byte ceiling.
-    Ports the bounded-read pattern already used by ``archive_extractor._extract_zip`` in place of a bare ``ZipFile.extractall()`` call: rather than trusting each member's declared (attacker-forgeable) ``file_size`` header, every member is decompressed and written in capped chunks, and the *actual* decompressed byte count accumulated so far is what gets checked against ``ceiling`` after every chunk - extraction aborts mid-stream the instant the real total is exceeded.
 
     Args:
         zf: The already-open ZipFile.
-        members: ``infolist()`` entries to extract. Directory entries are
-            skipped here. Path-traversal safety of ``member.filename`` must
-            already have been validated by the caller before this is invoked -
-            this function trusts ``extract_root``-relative paths are safe.
+        members: ``infolist()`` entries to extract.
         extract_root: Destination directory, already ``os.path.realpath``'d.
         ceiling: Maximum total bytes that may be written across all members.
 
     Raises:
-        _ImportValidationError: If the actual decompressed size of the archive,
-            summed across members as extraction proceeds, exceeds ``ceiling``."""
+        _ImportValidationError: If the actual decompressed size of the archive, summed across members as extraction proceeds, exceeds ``ceiling``."""
     total_written = 0
 
     for member in members:
@@ -371,14 +361,12 @@ _STRUCTURED_DATA_EXTENSIONS = (".json", ".csv")
 
 def _scan_extracted_files(extract_root: str) -> None:
     """Malware-scan and content-sniff every non-JSON file extracted from the archive.
-    Every extracted file is written to local disk (even if only temporarily - ``run_import``'s ``finally`` block removes ``extract_dir`` once the job ends) and the "photos/" export folder specifically will be turned into permanent ``Image`` rows once a photos importer exists - so scanning has to happen here, right after extraction and before any importer (present or future) ever opens these files, not deferred to whichever importer eventually persists them.
 
     Args:
         extract_root: Root directory the archive was extracted into.
 
     Raises:
-        _ImportValidationError: On the first infected file, a content/
-            extension mismatch, or the antivirus scanner being unavailable."""
+        _ImportValidationError: On the first infected file, a content/ extension mismatch, or the antivirus scanner being unavailable."""
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.security.content_sniffing import content_type_mismatch_error, guess_media_kind_from_extension, photo_is_not_an_image_error
     from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
@@ -570,9 +558,6 @@ def _import_pins(
         uuid_str = row.get("uuid", "")
 
         # Idempotency: skip pins that already exist FOR THIS USER.
-        # The profile scope is load-bearing: the archive is user-supplied, so a uuid belonging to
-        # another user's pin must not enter pin_uuid_map - later steps (visit history) create rows
-        # against the mapped pks.
         existing = Pin.objects.filter(uuid=uuid_str, profile=profile).first() if uuid_str else None
         if existing:
             pin_uuid_map[uuid_str] = existing.pk
@@ -1068,8 +1053,7 @@ def _import_custom_fields(
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Import custom field definitions, plus values for pin-targeted fields.
-    Values are only re-created for entity_type=pin, since that's the only target type this import can resolve a real local object for (photos/people/maps aren't imported by any other step); other entity types' values are skipped with a warning rather than silently dropped."""
+    """Import custom field definitions, plus values for pin-targeted fields."""
     from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
 
     rows = _read_json(data_dir, "custom_fields.json")
@@ -1136,8 +1120,7 @@ def _apply_exported_custom_field_value(value_obj: Any, field_type: str, exported
         pin_uuid_map: Archive uuid -> local pk, for resolving pin references.
 
     Returns:
-        True when a value was applied, False when it couldn't be (caller should skip).
-    """
+        True when a value was applied, False when it couldn't be (caller should skip)."""
     from decimal import Decimal, InvalidOperation
 
     from django.utils.dateparse import parse_date, parse_time
@@ -1196,9 +1179,7 @@ def _resolve_import_target(profile: Any, row: dict[str, Any], pin_uuid_map: dict
         pin_uuid_map: Archive pin uuid -> local pk, built by the pins step.
 
     Returns:
-        ``(pin_pk, wiki, resolved)`` - ``resolved`` False means the row named
-        a target that could not (or must not) be matched here; ``(None, None,
-        True)`` means the row genuinely had no target."""
+        ``(pin_pk, wiki, resolved)`` - ``resolved`` False means the row named a target that could not (or must not) be matched here; ``(None, None, True)`` means the row genuinely had no target."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
@@ -1227,8 +1208,7 @@ def _resolve_import_target(profile: Any, row: dict[str, Any], pin_uuid_map: dict
 
 
 def _apply_exported_created(instance: Any, created_raw: Any) -> None:
-    """Backdate an imported row's ``created`` to the exported timestamp.
-    ``created`` is ``auto_now_add`` so it can't be set at create time; a queryset ``update`` after the fact preserves the original ordering (comment threads, message history) without fighting the field definition."""
+    """Backdate an imported row's ``created`` to the exported timestamp."""
     from django.utils.dateparse import parse_datetime
 
     created = parse_datetime(str(created_raw or ""))
@@ -1245,8 +1225,7 @@ def _import_comments(
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Import the user's own pin/wiki comments (Notes), matched by ``target_uuid``.
-    A comment only means something attached to its target, so rows whose target can't be resolved (pin not in this import or not the user's own; wiki absent on this instance or not visible to the user - the same ``location_visible_to`` gate the wiki page enforces) are skipped with a warning rather than imported as orphans."""
+    """Import the user's own pin/wiki comments (Notes), matched by ``target_uuid``."""
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH
 
@@ -1396,8 +1375,7 @@ def _import_trips(
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Re-create the trips the user owned; members become fresh invitations.
-    Requests-not-facts, exactly like ``_import_connections``: only trips the user *created* are rebuilt (a membership in someone else's trip records THEIR trip - it cannot be reconstructed on their behalf), and exported members are re-invited through the same guards the trip UI applies (connections only, ``max_trip_members`` cap, ``STATUS_INVITED`` so each person still accepts for themselves)."""
+    """Re-create the trips the user owned; members become fresh invitations."""
     from django.utils.dateparse import parse_date
 
     from urbanlens.dashboard.models.profile.model import Profile
@@ -1488,7 +1466,7 @@ def _import_direct_messages(
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Restore the user's own SENT plaintext messages into their conversations. * **Received rows are never imported** - that would let a crafted archive fabricate messages "from" a real user (the same forgery ``_import_connections`` refuses for incoming friendship rows). * **Encrypted rows are never imported** - their ciphertext is sealed to the exporting account's key material and the server can't re-wrap what it can't read; the ciphertext stays available in the archive itself. * Sent plaintext rows are re-created only when the partner exists here, isn't muted either way, and ``can_direct_message`` (the same chokepoint the composer uses) still permits messaging them."""
+    """Restore the user's own SENT plaintext messages into their conversations. * **Received rows are never imported** - that would let a crafted archive fabricate messages "from" a real user (the same forgery ``_import_connections`` refuses for..."""
     from django.utils.dateparse import parse_datetime
 
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
@@ -1563,11 +1541,7 @@ class ImportContext:
         pin_uuid_map: Archive pin uuid -> local pk, built by the pins step.
         label_uuid_map: Archive label uuid -> local pk, built by the labels step.
         report_progress: Optional throttled (done, count) progress callback.
-        scratch: Per-run storage for a step that needs to carry a count or a
-            cached lookup from its rows into :meth:`RowImportType.finish`.
-            Registered import types are module-level singletons, so a step must
-            never keep that state on ``self``.
-    """
+        scratch: Per-run storage for a step that needs to carry a count or a cached lookup from its rows into :meth:`RowImportType.finish`."""
 
     profile: Any
     data_dir: str
@@ -1578,18 +1552,12 @@ class ImportContext:
     scratch: dict[str, Any] = field(default_factory=dict)
 
     def bump(self, key: str, amount: int = 1) -> None:
-        """Increment a named counter in :attr:`scratch`.
-
-        Args:
-            key: Counter name.
-            amount: How much to add.
-        """
+        """Increment a named counter in :attr:`scratch`."""
         self.scratch[key] = self.scratch.get(key, 0) + amount
 
 
 class ImportType(ABC):
     """One import step, reading a single file from the archive.
-    Steps added since subclass this instead: declare a key/filename/message, implement :meth:`run`, and append an instance to :data:`_REGISTERED_IMPORT_TYPES` plus its key to :data:`_IMPORT_ORDER` (the order is a real dependency graph - map annotations need pins, safety check-ins need maps - so it stays hand-written).
 
     Attributes:
         key: Manifest/export-type key this step handles.
@@ -1603,22 +1571,13 @@ class ImportType(ABC):
     def load(self, data_dir: str) -> Any:
         """Read this step's file from the archive.
 
-        Args:
-            data_dir: Directory holding the extracted archive's data files.
-
         Returns:
-            The parsed JSON, or None when the file is absent.
-        """
+            The parsed JSON, or None when the file is absent."""
         return _read_json(data_dir, self.filename)
 
     @abstractmethod
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Apply the loaded archive data to the importing profile.
-
-        Args:
-            data: Whatever :meth:`load` returned (never empty/None).
-            ctx: The shared import context.
-        """
+        """Apply the loaded archive data to the importing profile."""
 
     def __call__(
         self,
@@ -1630,16 +1589,7 @@ class ImportType(ABC):
         label_uuid_map: dict[str, int],
         report_progress: ProgressReporter | None = None,
     ) -> None:
-        """Run this import step.
-
-        Args:
-            profile: The profile being imported into.
-            data_dir: Directory holding the extracted archive's data files.
-            result: The shared created/skipped/warning tally.
-            pin_uuid_map: Archive pin uuid -> local pk.
-            label_uuid_map: Archive label uuid -> local pk.
-            report_progress: Optional throttled progress callback.
-        """
+        """Run this import step."""
         data = self.load(data_dir)
         if not data:
             return
@@ -1657,49 +1607,27 @@ class ImportType(ABC):
 
 
 class RowImportType(ImportType):
-    """An :class:`ImportType` over a JSON list, handling one row at a time.
-
-    Takes care of the bookkeeping every row-shaped importer repeats: progress
-    reporting, the created/skipped tally, discarding non-dict rows from a
-    hand-edited archive, and an optional whole-step permission gate.
-    """
+    """An :class:`ImportType` over a JSON list, handling one row at a time."""
 
     def allowed(self, ctx: ImportContext) -> bool:
         """Whether this step may run at all for the importing profile.
 
-        Args:
-                ctx: The shared import context.
-
         Returns:
-                True to process rows; False to skip the whole step."""
+            True to process rows; False to skip the whole step."""
         return True
 
     @abstractmethod
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
         """Apply one archive row.
 
-        Args:
-            row: The exported row.
-            ctx: The shared import context.
-
         Returns:
-            True when a record was created, False when the row was skipped.
-        """
+            True when a record was created, False when the row was skipped."""
 
     def finish(self, ctx: ImportContext) -> None:
-        """Hook for a summary warning once every row has been handled.
-
-        Args:
-            ctx: The shared import context.
-        """
+        """Hook for a summary warning once every row has been handled."""
 
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Iterate the archive's rows, tallying and reporting as it goes.
-
-        Args:
-            data: The parsed JSON list.
-            ctx: The shared import context.
-        """
+        """Iterate the archive's rows, tallying and reporting as it goes."""
         rows = [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
         total = len(rows)
         if not total:
@@ -1756,8 +1684,7 @@ def _connection_uuids(ctx: ImportContext) -> set[str]:
 
 
 class ProfileImport(ImportType):
-    """Restore the profile's own free-text content and contact handles.
-    ``username``, ``email``, ``first_name``, ``last_name`` and ``date_joined`` all live on ``auth.User`` and identify the *account*, not its content: an archive is routinely imported into a different account (that is the whole point of a portable export), and letting one overwrite the destination account's login identity would be an account-takeover primitive rather than a restore."""
+    """Restore the profile's own free-text content and contact handles."""
 
     key = "profile"
     filename = "profile.json"
@@ -1780,12 +1707,7 @@ class ProfileImport(ImportType):
     )
 
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Apply the exported profile content to the importing profile.
-
-        Args:
-            data: The parsed ``profile.json`` object.
-            ctx: The shared import context.
-        """
+        """Apply the exported profile content to the importing profile."""
         from django.utils.dateparse import parse_date
 
         from urbanlens.dashboard.models.profile.model import Profile
@@ -1825,12 +1747,7 @@ class ProfileImport(ImportType):
         self._import_secondary_emails(data.get("secondary_emails"), ctx)
 
     def _import_social_links(self, rows: Any, ctx: ImportContext) -> None:
-        """Restore one link per platform, never overwriting one already set.
-
-        Args:
-            rows: The exported ``social_links`` list.
-            ctx: The shared import context.
-        """
+        """Restore one link per platform, never overwriting one already set."""
         from urbanlens.dashboard.models.social_link.model import SocialLink
 
         if not isinstance(rows, list):
@@ -1852,12 +1769,7 @@ class ProfileImport(ImportType):
                 ctx.result.inc_skipped("social_links")
 
     def _import_secondary_emails(self, rows: Any, ctx: ImportContext) -> None:
-        """Restore additional addresses as unverified rows.
-
-        Args:
-            rows: The exported ``secondary_emails`` list.
-            ctx: The shared import context.
-        """
+        """Restore additional addresses as unverified rows."""
         from django.core.exceptions import ValidationError
         from django.core.validators import validate_email
 
@@ -1903,13 +1815,8 @@ class SafetyCheckinsImport(RowImportType):
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
         """Restore one check-in with its contacts and the owner's own messages.
 
-        Args:
-            row: The exported check-in row.
-            ctx: The shared import context.
-
         Returns:
-            True when a check-in was created.
-        """
+            True when a check-in was created."""
         from datetime import timedelta
 
         from django.utils.dateparse import parse_datetime
@@ -1977,13 +1884,8 @@ class SafetyCheckinsImport(RowImportType):
     def _resolve_trip(self, trip_uuid: Any, ctx: ImportContext) -> Any:
         """Resolve an exported trip uuid to one of the importer's own trips.
 
-        Args:
-            trip_uuid: The exported uuid, if any.
-            ctx: The shared import context.
-
         Returns:
-            The Trip, or None when it isn't the importer's.
-        """
+            The Trip, or None when it isn't the importer's."""
         from urbanlens.dashboard.models.trips.model import Trip
 
         parsed = _safe_uuid(trip_uuid)
@@ -1995,12 +1897,8 @@ class SafetyCheckinsImport(RowImportType):
         """Resolve an exported markup-map uuid to one of the importer's own maps.
         The map annotations step runs first and preserves archive uuids where they were free, so a same-archive restore re-links; a uuid pointing at someone else's map resolves to nothing rather than borrowing it.
 
-        Args:
-                map_uuid: The exported uuid, if any.
-                ctx: The shared import context.
-
         Returns:
-                The MarkupMap, or None."""
+            The MarkupMap, or None."""
         from urbanlens.dashboard.models.markup.model import MarkupMap
 
         parsed = _safe_uuid(map_uuid)
@@ -2009,13 +1907,7 @@ class SafetyCheckinsImport(RowImportType):
         return MarkupMap.objects.filter(uuid=parsed, profile=ctx.profile).first()
 
     def _import_contacts(self, checkin: Any, rows: Any, ctx: ImportContext) -> None:
-        """Re-create the check-in's emergency contact snapshots.
-
-        Args:
-            checkin: The freshly created check-in.
-            rows: The exported ``contacts`` list.
-            ctx: The shared import context.
-        """
+        """Re-create the check-in's emergency contact snapshots."""
         from django.utils.dateparse import parse_datetime
 
         from urbanlens.dashboard.models.profile.model import Profile
@@ -2049,13 +1941,7 @@ class SafetyCheckinsImport(RowImportType):
             ctx.result.inc_created("safety_contacts")
 
     def _import_messages(self, checkin: Any, rows: Any, ctx: ImportContext) -> None:
-        """Restore only the messages the check-in's owner wrote themselves.
-
-        Args:
-            checkin: The freshly created check-in.
-            rows: The exported ``messages`` list.
-            ctx: The shared import context.
-        """
+        """Restore only the messages the check-in's owner wrote themselves."""
         from urbanlens.dashboard.models.safety.model import SafetyCheckinMessage
 
         if not isinstance(rows, list):
@@ -2075,11 +1961,7 @@ class SafetyCheckinsImport(RowImportType):
             ctx.result.inc_created("safety_messages")
 
     def finish(self, ctx: ImportContext) -> None:
-        """Explain the two ways a restored check-in differs from the exported one.
-
-        Args:
-            ctx: The shared import context.
-        """
+        """Explain the two ways a restored check-in differs from the exported one."""
         disarmed = ctx.scratch.get("disarmed", 0)
         if disarmed:
             ctx.result.warnings.append(
@@ -2093,20 +1975,14 @@ class SafetyCheckinsImport(RowImportType):
 
 
 class MapAnnotationsImport(ImportType):
-    """Restore markup maps, their annotations, and georeferenced image overlays.
-    Only annotations the importer can own outright come back: standalone maps and everything drawn on them, plus markup and overlays attached to the importer's OWN pins (resolved through ``_resolve_import_target``, the same uuid-only matching comments and photos use)."""
+    """Restore markup maps, their annotations, and georeferenced image overlays."""
 
     key = "map_annotations"
     filename = "map_annotations.json"
     message = "Importing map annotations..."
 
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Restore the three annotation sections in dependency order.
-
-        Args:
-            data: The parsed ``map_annotations.json`` object.
-            ctx: The shared import context.
-        """
+        """Restore the three annotation sections in dependency order."""
         if not isinstance(data, dict):
             return
 
@@ -2141,12 +2017,7 @@ class MapAnnotationsImport(ImportType):
             )
 
     def _import_map(self, row: dict[str, Any], ctx: ImportContext) -> None:
-        """Restore one standalone markup map and the items drawn on it.
-
-        Args:
-            row: The exported map row.
-            ctx: The shared import context.
-        """
+        """Restore one standalone markup map and the items drawn on it."""
         from urbanlens.dashboard.models.markup.model import MarkupMap
 
         uuid_str = _safe_uuid(row.get("uuid"))
@@ -2175,12 +2046,7 @@ class MapAnnotationsImport(ImportType):
                 ctx.result.inc_created("map_annotation_items")
 
     def _import_standalone_markup(self, row: dict[str, Any], ctx: ImportContext) -> None:
-        """Restore one annotation drawn directly on the importer's own pin.
-
-        Args:
-            row: The exported markup row.
-            ctx: The shared import context.
-        """
+        """Restore one annotation drawn directly on the importer's own pin."""
         from urbanlens.dashboard.models.markup.model import PinMarkup
 
         uuid_str = _safe_uuid(row.get("uuid"))
@@ -2200,12 +2066,7 @@ class MapAnnotationsImport(ImportType):
             ctx.result.inc_created("map_annotation_items")
 
     def _import_overlay(self, row: dict[str, Any], ctx: ImportContext) -> None:
-        """Restore one georeferenced image overlay onto the importer's own pin.
-
-        Args:
-            row: The exported overlay row.
-            ctx: The shared import context.
-        """
+        """Restore one georeferenced image overlay onto the importer's own pin."""
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
         from urbanlens.dashboard.services.media.previews import is_web_safe
         from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
@@ -2266,13 +2127,8 @@ class MapAnnotationsImport(ImportType):
     def _restore_overlay_image(self, row: dict[str, Any], ctx: ImportContext) -> Any:
         """Re-upload an overlay's archived image file, honoring the storage quota.
 
-        Args:
-            row: The exported overlay row.
-            ctx: The shared import context.
-
         Returns:
-            The created Image, or None when the archive had no usable file.
-        """
+            The created Image, or None when the archive had no usable file."""
         from django.core.files import File
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
@@ -2332,8 +2188,7 @@ def _bounded_int(value: Any, *, default: int, low: int = 0, high: int = 100) -> 
         high: Inclusive upper bound.
 
     Returns:
-        An integer within ``[low, high]``.
-    """
+        An integer within ``[low, high]``."""
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -2408,13 +2263,8 @@ class SavedFiltersImport(RowImportType):
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
         """Restore one saved filter.
 
-        Args:
-            row: The exported filter row.
-            ctx: The shared import context.
-
         Returns:
-            True when a filter was created.
-        """
+            True when a filter was created."""
         from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
         uuid_str = _safe_uuid(row.get("uuid"))
@@ -2453,12 +2303,8 @@ class RoutesImport(RowImportType):
     def allowed(self, ctx: ImportContext) -> bool:
         """Whether route data may be created for the importing profile.
 
-        Args:
-            ctx: The shared import context.
-
         Returns:
-            True when the profile has route tracking enabled.
-        """
+            True when the profile has route tracking enabled."""
         from urbanlens.dashboard.services.visits.visits import route_import_allowed
 
         return route_import_allowed(ctx.profile)
@@ -2466,13 +2312,8 @@ class RoutesImport(RowImportType):
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
         """Restore one route.
 
-        Args:
-            row: The exported route row.
-            ctx: The shared import context.
-
         Returns:
-            True when a route was created.
-        """
+            True when a route was created."""
         from django.utils.dateparse import parse_datetime
 
         from urbanlens.dashboard.models.routes.model import Route, RouteSource

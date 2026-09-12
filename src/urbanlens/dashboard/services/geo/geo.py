@@ -1,7 +1,4 @@
-"""Shared GeoJSON <-> GEOS geometry helpers used by boundary drawing and PinList
-smart-membership bounding polygons, so both features parse/serialize polygons
-identically.
-"""
+"""Shared GeoJSON <-> GEOS geometry helpers used by boundary drawing and PinList smart-membership bounding polygons, so both features parse/serialize polygons identically."""
 
 from __future__ import annotations
 
@@ -12,14 +9,11 @@ from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, P
 
 
 class InvalidPolygonGeoJSONError(ValueError):
-    """Base for every way a submitted geometry can fail to be a usable polygon.
-    ``message`` is for logs, not a response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed (and possibly GEOS/GDAL-internals-bearing) text into a response just by adding a new ``raise``."""
+    """Base for every way a submitted geometry can fail to be a usable polygon."""
 
 
 class GeoJSONParseError(InvalidPolygonGeoJSONError):
-    """The payload isn't parseable geometry at all - malformed JSON, an unknown
-    ``type``, or a shape GEOS/GDAL otherwise rejects.
-    """
+    """The payload isn't parseable geometry at all - malformed JSON, an unknown ``type``, or a shape GEOS/GDAL otherwise rejects."""
 
 
 class NotPolygonalGeometryError(InvalidPolygonGeoJSONError):
@@ -47,8 +41,7 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
     Raises:
         GeoJSONParseError: The payload isn't valid GeoJSON/geometry at all.
         NotPolygonalGeometryError: It parsed, but isn't a Polygon or MultiPolygon.
-        EmptyPolygonGeometryError: It parsed to a Polygon/MultiPolygon with no coordinates.
-    """
+        EmptyPolygonGeometryError: It parsed to a Polygon/MultiPolygon with no coordinates."""
     try:
         geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
     except (GDALException, GEOSException, TypeError, ValueError) as exc:
@@ -78,11 +71,7 @@ def dissolve_polygons(polygons: list[Polygon]) -> MultiPolygon:
         polygons: GEOS Polygons, all in the same SRID (4326).
 
     Returns:
-        A MultiPolygon whose components are pairwise non-intersecting. Empty
-        input yields an empty MultiPolygon - callers must treat that as "no
-        geometry" and drop the criteria key entirely rather than storing an
-        empty-but-truthy geometry (an empty polygon in a `__within` lookup
-        would match zero rows instead of imposing no restriction)."""
+        A MultiPolygon whose components are pairwise non-intersecting."""
     if not polygons:
         return MultiPolygon([], srid=4326)
 

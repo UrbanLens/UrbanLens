@@ -33,10 +33,7 @@ def approximate_pin_count(wiki_id: int, exact_count: int) -> dict[str, object]:
         exact_count: The exact number of distinct users with this place pinned.
 
     Returns:
-        Dict with ``is_low`` (True when the count is under
-        :data:`MIN_VISIBLE_PIN_COUNT` and no number should be shown) and
-        ``value`` (the fuzzed count to display, or None when ``is_low``).
-    """
+        Dict with ``is_low`` (True when the count is under :data:`MIN_VISIBLE_PIN_COUNT` and no number should be shown) and ``value`` (the fuzzed count to display, or None when ``is_low``)."""
     if exact_count < MIN_VISIBLE_PIN_COUNT:
         return {"is_low": True, "value": None}
 
@@ -68,17 +65,10 @@ def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
 
     Args:
         wiki: The wiki being summarized (its pk keys the count's fuzz cache).
-        location: The Location the caller resolved the wiki through - may be
-            a different row than ``wiki.location`` when several Locations
-            share the wiki's Place (``resolve_visible_wiki`` allows this so
-            "everyone who pinned one property reaches the same page from
-            their own slug").
+        location: The Location the caller resolved the wiki through - may be a different row than ``wiki.location`` when several Locations share the wiki's Place (``resolve_visible_wiki`` allows this so "everyone who pinned one property reaches the same page from...
 
     Returns:
-        Dict with ``pin_count_low`` (bool), ``pin_count_approx`` (int, or None
-        when low), ``first_pinned`` (``date`` truncated to the 1st, or None),
-        and ``first_pinned_precision`` (always ``"month"``, so a client never
-        renders the value as an exact day)."""
+        Dict with ``pin_count_low`` (bool), ``pin_count_approx`` (int, or None when low), ``first_pinned`` (``date`` truncated to the 1st, or None), and ``first_pinned_precision`` (always ``"month"``, so a client never renders the value as an exact day)."""
     from urbanlens.dashboard.models.pin.model import Pin
 
     # Place-aware: count root pins across every Location sharing this wiki's Place, not just the one

@@ -1,50 +1,11 @@
-{% comment %}
-Compact map for safety check-in pages: a draggable destination marker, the
-shared "jump to" search bar ({% templatetag openblock %} map_search_bar {% templatetag closeblock %} + window.LocationSearchEngine,
-including local pins, addresses, coordinates, and Google Places), the shared
-layers panel ({% templatetag openblock %} map_layers_panel {% templatetag closeblock %} + window.MapLayers - the exact same
-component as the main map), and - when markup endpoints are configured and
-the map isn't readonly - the same markup drawing tools (line/arrow/text/
-shapes) as the pin detail and Location wiki maps, rendered as top-right
-toolbar icons and backed by the shared draw/edit side-panel
-(_markup_panel_dialog.html + window.createMarkupToolbar, see
-ts/shared/markup-toolbar.ts).
-
-The route drawing is backed by a standalone MarkupMap:
-  - The check-in detail page passes markup_map_uuid + the resolved
-    markup_json_url/markup_create_url/markup_edit_url_template for that map,
-    plus markup_map_view_url_template so viewport changes (pan/zoom/layer)
-    autosave onto the map.
-  - The check-in creation page passes no uuid but sets markup_map_create_url
-    (+ the markup_map_*_template vars consumed by createMarkupToolbar below):
-    the first drawn annotation creates a draft MarkupMap, whose uuid lands in
-    the hidden "markup_map" input so the create POST can link it.
-
-A readonly map (the contact portal) only ever needs to *view* any existing
-markup, never draw/edit it, so it keeps its own minimal read-only renderer
-instead of pulling in the shared toolbar. It still honours the owner's saved
-base layer via map_layer_mode/map_show_borders.
-
-Expects: map_center_lat, map_center_lng, destination_lat, destination_lng
-(either may be blank), map_layer_mode/map_show_borders (optional, initial
-layers), the markup context described above (omit it all to skip markup
-entirely), markup_fill_color/markup_border_color/markup_fill_opacity/
-markup_border_opacity (optional, profile defaults), readonly (true hides all
-editing controls and the destination marker becomes non-draggable).
-
-Leaflet itself is loaded by each including page's own {% templatetag openblock %} header {% templatetag closeblock %},
-so it's always available by the time this script runs - no typeof guard needed.
-{% endcomment %}
+{% comment %}Compact map for safety check-in pages: a draggable destination marker, the shared "jump to" search bar.{% endcomment %}
 {% load map_components %}
 <div class="safety-map-wrapper">
     {% if not readonly %}
     {% map_search_bar prefix="safety-map" %}
     {% endif %}
     <div id="safety-map"></div>
-    {# -- Map toolbar (tools only; shared component - same as the main map). The #}
-    {# markup drawing tools (formerly a separate "Add Detail" dropdown docked in #}
-    {# .map-bottom-controls) live here as plain icon buttons, same as on the pin #}
-    {# detail / Location wiki maps - only rendered when markup is enabled.       #}
+    {# Map toolbar (tools only; shared component - same as the main map). #}
     {% if not readonly and markup_json_url or not readonly and markup_map_create_url %}
     {% map_toolbar "markup_line,markup_freehand,markup_arrow,markup_text,markup_square,markup_circle,markup_polygon,screenshot" panel_id="safety-map-buttons" %}
     {% else %}
@@ -55,9 +16,7 @@ so it's always available by the time this script runs - no typeof guard needed.
     </div>
 </div>
 {% if not readonly %}{% if markup_json_url or markup_map_create_url %}
-{# Unified draw/edit panel this dropdown opens - must be a sibling of #}
-{# .map-bottom-controls, not nested inside it, so it positions relative to #}
-{# .safety-map-wrapper instead of that small absolute-positioned button cluster. #}
+{# Unified draw/edit panel this dropdown opens. #}
 {% include "dashboard/partials/layout/_markup_panel_dialog.html" %}
 {% endif %}{% endif %}
 {% if not readonly %}

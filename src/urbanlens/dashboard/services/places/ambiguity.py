@@ -1,5 +1,4 @@
-"""When a coordinate genuinely could mean two different places.
-Official geometry hung off each Location, fetched by point lookup, so importing 124 buildings onto one campus gave 124 Locations their own copy of the same parcel outline - and every visitor was told that 124 other locations covered their pin."""
+"""When a coordinate genuinely could mean two different places."""
 
 from __future__ import annotations
 
@@ -28,8 +27,7 @@ def competing_places(latitude, longitude, resolved: Place | None) -> list[Place]
         resolved: The place the coordinate resolved onto.
 
     Returns:
-        Competing places, most specific first. Almost always empty.
-    """
+        Competing places, most specific first."""
     from urbanlens.dashboard.models.place.model import Place
 
     return list(Place.objects.competing_for_point(latitude, longitude, resolved=resolved))
@@ -55,7 +53,6 @@ def representative_locations(places) -> list[Location]:
 
 def _shares_lineage(a: Place, b: Place) -> bool:
     """Whether one of two places is a ``PART_OF`` ancestor of the other.
-    This catches the case a data defect can still produce - a parcel and one of its own buildings recorded with mismatched ``domain_root`` - so a broken edge can surface a pin's own parcel as something to "switch" to, rather than merely fail to grant the access the edge should have.
 
     Args:
         a: One place.
@@ -80,11 +77,7 @@ def competing_wiki_locations(pin, profile: Profile) -> list[Location]:
         profile: The viewer, so nothing they haven't earned is named.
 
     Returns:
-        One Location per competing place, ready to render as switch targets.
-        Empty in every ordinary case - in particular, whenever the pin's own
-        coordinate has no resolved place to compare rivals against, since
-        nothing can be said to compete with an unknown answer.
-    """
+        One Location per competing place, ready to render as switch targets."""
     from urbanlens.dashboard.services.wiki.wiki_access import accessible_domain_ids
 
     if pin is None or pin.location_id is None or not pin.location.place_id:

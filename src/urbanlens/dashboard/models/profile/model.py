@@ -84,10 +84,9 @@ _COMMUNITY_GATED_VISIBILITY_FIELDS = (
     "common_pins_visibility",
 )
 
-# Wiki-sync boolean fields forced to False while community_enabled is False -
-# there's no wiki to sync with once community features are off. sync_aliases
-# (a choice field, not a bool) is handled separately since its "off" value
-# isn't False - see save() below.
+# Wiki-sync boolean fields forced to False while community_enabled is False - there's no wiki to
+# sync with once community features are off. sync_aliases (a choice field, not a bool) is handled
+# separately since its "off" value isn't False - see save() below.
 _COMMUNITY_GATED_SYNC_FIELDS = (
     "sync_rating_to_wiki",
     "sync_vulnerability_to_wiki",
@@ -111,10 +110,9 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     return haversine_km(p1[0], p1[1], p2[0], p2[1])
 
 
-# Rough lat/lng bounding boxes for the regions that use miles for everyday road
-# distances. Used only to pick a sensible *default* distance unit when the user
-# has not chosen one explicitly; a false negative just falls back to kilometres.
-# Each entry is (min_lat, max_lat, min_lng, max_lng).
+# Rough lat/lng bounding boxes for the regions that use miles for everyday road distances.
+# Used only to pick a sensible *default* distance unit when the user has not chosen one explicitly;
+# a false negative just falls back to kilometres.
 _MILES_REGION_BBOXES: tuple[tuple[float, float, float, float], ...] = (
     (24.0, 50.0, -125.0, -66.0),  # Contiguous United States
     (51.0, 72.0, -170.0, -129.0),  # Alaska
@@ -151,30 +149,18 @@ class Profile(abstract.PublicDashboardModel):
     # never agreed - existing accounts are backfilled to their profile creation
     # date (accepting terms is implied by having used the site already).
     tos_accepted_at = DateTimeField(null=True, blank=True)
-    # "Not now" on the post-login add-a-passkey-or-password prompt snoozes it
-    # until this moment (see PostLoginRedirectView). Profile-persisted rather
-    # than session-persisted deliberately: the old per-session flag re-nagged
-    # SSO users on every signin, which trained them to dismiss security
-    # prompts. Null = never snoozed.
+    # "Not now" on the post-login add-a-passkey-or-password prompt snoozes it until this moment (see
+    # PostLoginRedirectView).
+    # Null = never snoozed.
     credential_prompt_snoozed_until = DateTimeField(null=True, blank=True)
     bio = EncryptedTextField(null=True, blank=True, fail_soft=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
     area = EncryptedTextField(null=True, blank=True, fail_soft=True)
     birth_date = DateField(null=True, blank=True)
     started_exploring = DateField(null=True, blank=True)
 
-    # Interaction preferences. Public presentation, like bio/area above - shown
-    # on the profile page so other users know how this person prefers to be
-    # treated, on or off this site. Purely informational for now: nothing here
-    # is technically enforced (see PREFERENCE_FIELDS/preference_display below
-    # for the display-only surface this backs). Left blank rather than
-    # defaulted, so an unanswered preference is distinguishable from an
-    # explicit "yes" and the profile page can omit it entirely.
-    #
-    # The free-text halves are encrypted despite being displayed publicly, for
-    # the same reason bio/area are: encryption at rest defends the DB dump, not
-    # the rendered page. The fixed-choice halves stay plaintext - one of a
-    # handful of enum values reveals almost nothing to a dump, and they still
-    # need to work with get_<field>_display() and any future filtering.
+    # Interaction preferences.
+    # Public presentation, like bio/area above - shown on the profile page so other users know how
+    # this person prefers to be treated, on or off this site.
     photo_taking_preference = CharField(
         max_length=20,
         choices=PhotoTakingPreference.choices,
@@ -303,12 +289,10 @@ class Profile(abstract.PublicDashboardModel):
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.ANYTHING_IN_COMMON,
     )
-    # ANYONE, not ANYTHING_IN_COMMON: invite_by_email's unregistered-address
-    # branch always sends the invitation, unconditionally - so a stricter
-    # default here would make having an account *harder* to reach by friend
-    # request than not having one, which is backwards. The migration that
-    # changed this default backfills existing rows that were still at the old
-    # default, on the same reasoning as welcome_onboarding_complete above.
+    # ANYONE, not ANYTHING_IN_COMMON: invite_by_email's unregistered-address branch always sends the
+    # invitation, unconditionally - so a stricter default here would make having an account *harder*
+    # to reach by friend request than not having one, which is backwards.
+    # The migration that changed this default backfills existing rows that were still at the old
     friend_request_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
@@ -338,11 +322,10 @@ class Profile(abstract.PublicDashboardModel):
     # single indexed query instead of a full-table Python scan.
     primary_email_normalized = CharField(max_length=254, blank=True, default="", db_index=True)
 
-    # Contact information and its visibility. Encrypted at rest - none of these are
-    # ever looked up by value (access is gated by contact_visibility at the app layer,
-    # not by a DB query), so there's no lookup/index/uniqueness to preserve. fail_soft
-    # because Profile loads on nearly every request: an undecryptable row must degrade
-    # to a blank field, not 500 the whole site (see EncryptedTextField).
+    # Contact information and its visibility.
+    # Encrypted at rest - none of these are ever looked up by value (access is gated by
+    # contact_visibility at the app layer, not by a DB query), so there's no lookup/index/uniqueness
+    # to preserve. fail_soft because Profile loads on nearly every request: an undecryptable row
     phone_number = EncryptedTextField(blank=True, default="", fail_soft=True)
     signal_username = EncryptedTextField(blank=True, default="", fail_soft=True)
     discord_username = EncryptedTextField(blank=True, default="", fail_soft=True)
@@ -473,27 +456,23 @@ class Profile(abstract.PublicDashboardModel):
     ai_label_categories = BooleanField(default=False, help_text="AI can automatically suggest and add categories when a pin is created.")
     ai_label_statuses = BooleanField(default=False, help_text="AI can automatically suggest and add statuses when a pin is created.")
 
-    # Keyword-based auto-tagging preferences. Unlike the AI settings above, this
-    # matching is local pattern/substring matching (built-in CATEGORY_PATTERNS plus
-    # each Label's own `keywords` field) - no external API call and no subscription
-    # required - so it defaults to on. Independent of the ai_* toggles: a user can
-    # keep free keyword tagging while leaving paid AI tagging off, or vice versa.
+    # Keyword-based auto-tagging preferences.
+    # Unlike the AI settings above, this matching is local pattern/substring matching (built-in
+    # CATEGORY_PATTERNS plus each Label's own `keywords` field) - no external API call and no
+    # subscription required - so it defaults to on.
     keyword_tagging_enabled = BooleanField(default=True, help_text="Allow keyword-based auto-tagging on your account.")
     keyword_label_tags = BooleanField(default=True, help_text="Keyword matches can automatically add tags when a pin is created.")
     keyword_label_categories = BooleanField(default=True, help_text="Keyword matches can automatically add categories when a pin is created.")
     keyword_label_statuses = BooleanField(default=True, help_text="Keyword matches can automatically add a status when a pin is created.")
 
-    # Whether photo-keyword plugins run on this user's uploads to make their
-    # photos text-searchable. Applies to every enabled keywording strategy
-    # (embedded metadata tags, AI vision, classifiers); the AI-based providers
-    # additionally require the AI_PHOTO_PROCESSING subscription feature and the
-    # ai_enabled toggle above.
+    # Whether photo-keyword plugins run on this user's uploads to make their photos text-searchable.
+    # Applies to every enabled keywording strategy (embedded metadata tags, AI vision, classifiers);
+    # the AI-based providers additionally require the AI_PHOTO_PROCESSING subscription feature and
+    # the ai_enabled toggle above.
     generate_photo_keywords = BooleanField(default=True, help_text="Automatically generate searchable keywords for photos you upload.")
 
     # Voluntary downscale cap (longest edge, px) for future photo uploads.
-    # Null means "use whatever the site policy entitles me to". A value here can
-    # only tighten the site policy (the effective cap is the smaller of the two),
-    # letting users trade image resolution for more photos within their quota.
+    # Null means "use whatever the site policy entitles me to".
     image_downscale_max_dimension = IntegerField(null=True, blank=True)
 
     # Voluntary downscale cap (height, px) for future video uploads - same
@@ -505,10 +484,10 @@ class Profile(abstract.PublicDashboardModel):
     places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")
     places_wikipedia_enabled = BooleanField(default=True, help_text="Show Wikipedia-linked places in the Places layer.")
 
-    # When off, wiki pages never render their cover-photo hero banner for this
-    # viewer, regardless of whether the wiki has one set - lets a user opt out
-    # of community-uploaded imagery they haven't vetted themselves. Does not
-    # affect the viewer's own pin pages, which always show their chosen cover.
+    # When off, wiki pages never render their cover-photo hero banner for this viewer, regardless of
+    # whether the wiki has one set - lets a user opt out of community-uploaded imagery they haven't
+    # vetted themselves.
+    # Does not affect the viewer's own pin pages, which always show their chosen cover.
     show_wiki_cover_photos = BooleanField(default=True, help_text="Show the community-selected cover photo banner on wiki pages.")
 
     # Purely cosmetic opt-in - has no bearing on whether the user actually holds
@@ -516,40 +495,33 @@ class Profile(abstract.PublicDashboardModel):
     # is shown when they do.
     show_supporter_badge = BooleanField(default=True, help_text="Show a small supporter badge next to your name when you have an active subscription.")
 
-    # Mirrors what already happens automatically for community wikis (see
-    # services.wiki.wiki_seed) - when a Wikipedia article is confidently matched to
-    # one of your pins and it doesn't have an article yet, start one from that
-    # extract instead of leaving it blank. Never overwrites an existing
-    # article (seeded or human-written) - see seed_pin_article_from_wikipedia's
-    # own guard. Off entirely disables this per-pin auto-population, not
-    # anything about the wiki-side equivalent (which has no toggle - articles
-    # are private to a pin's owner, community wikis are not).
+    # Mirrors what already happens automatically for community wikis (see services.wiki.wiki_seed) -
+    # when a Wikipedia article is confidently matched to one of your pins and it doesn't have an
+    # article yet, start one from that extract instead of leaving it blank.
+    # Never overwrites an existing article (seeded or human-written) - see
     auto_create_pin_article_from_wikipedia = BooleanField(default=True, help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (if it doesn't have one yet).")
 
-    # Whether Private Pin pages may suggest reorganizing a pin's hierarchy -
-    # creating a child pin per building on a multi-building property, and
-    # nesting existing top-level pins that fall inside the property boundary.
-    # Off silences the suggestion everywhere at once; declining it on a single
-    # pin instead is per-pin and permanent (Pin.restructure_offer_dismissed).
-    # See services.pins.pin_restructure.
+    # Whether Private Pin pages may suggest reorganizing a pin's hierarchy - creating a child pin
+    # per building on a multi-building property, and nesting existing top-level pins that fall
+    # inside the property boundary.
+    # Off silences the suggestion everywhere at once; declining it on a single pin instead is
     suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and child pins when you open a property that has several.")
 
-    # Whether confidently-identified buildings on a multi-building property
-    # become child pins automatically, without the dialog. Only buildings the
-    # data is sure about are created this way; ambiguous ones always stay in
-    # the "add buildings" list. See services.pins.auto_nest.
+    # Whether confidently-identified buildings on a multi-building property become child pins
+    # automatically, without the dialog.
+    # Only buildings the data is sure about are created this way; ambiguous ones always stay in the
+    # "add buildings" list.
     auto_create_building_pins = BooleanField(default=True, help_text="Automatically add child pins for the buildings on a property when they are confidently identified. Ambiguous buildings still wait for your approval.")
 
     # Master switch for the whole pin-suggestion surface (Memories -> Locations).
-    # Off overrides every per-source toggle below: no new suggestions are
-    # created and any already-pending ones are hidden (not deleted) - see
+    # Off overrides every per-source toggle below: no new suggestions are created and any
+    # already-pending ones are hidden (not deleted) - see
     # services.pins.pin_suggestions.pending_suggestions_for_profile.
     pin_suggestions_enabled = BooleanField(default=True, help_text="Suggest pins based on your photos, public locations, and connected apps.")
 
-    # Whether community-approved public locations appear in this profile's
-    # suggestion queue. Public locations are the (rare) outcome of the
-    # public-pin vote - see services.pins.public_pins. Off both stops new
-    # suggestions from being created and hides any pending ones.
+    # Whether community-approved public locations appear in this profile's suggestion queue.
+    # Public locations are the (rare) outcome of the public-pin vote - see
+    # services.pins.public_pins.
     suggest_public_pins = BooleanField(default=True, help_text="Suggest community-approved public locations that you haven't pinned yet.")
 
     # Whether Immich/local-folder photo scans may raise pin suggestions. Off
@@ -562,11 +534,9 @@ class Profile(abstract.PublicDashboardModel):
     # being created and hides any pending ones.
     suggest_pins_from_external_apis = BooleanField(default=True, help_text="Suggest pins submitted by connected external apps.")
 
-    # Whether the new-user "suggested pins near you" dialog has already been
-    # shown on the map. Set the first time it's shown (regardless of the
-    # user's answer) so it never nags again - see controllers.maps.view_map.
-    # Existing profiles are backfilled to True by the migration that adds this
-    # field, so only genuinely new accounts ever see it.
+    # Whether the new-user "suggested pins near you" dialog has already been shown on the map.
+    # Set the first time it's shown (regardless of the user's answer) so it never nags again - see
+    # controllers.maps.view_map.
     map_pin_suggestions_intro_seen = BooleanField(default=False, help_text="Internal: whether the new-user pin-suggestions intro dialog has been shown on the map.")
 
     # Default ordering for the Private Pin page's Media gallery. "relevant"
@@ -595,15 +565,10 @@ class Profile(abstract.PublicDashboardModel):
     # or receive friend requests. Enforced in Pin.save()/Profile.save().
     community_enabled = BooleanField(default=True, help_text="Enable features that allow you to interact with other users. Community wikis, Trips, and Friend Requests are included in this.")
 
-    # Wiki sync preferences: automatically mirror star ratings and aliases
-    # between a pin's private details and its (shared) community wiki, so the
-    # user only has to set a value in one place. Rating/vulnerability/priority/
-    # danger are one-way (pin -> wiki, via WikiStatVote - see
-    # models.pin.signals); the wiki has no single owner, so there's no
-    # equivalent "wiki value" to pull back the other way. Aliases are additive
-    # in whichever direction(s) are enabled (see models.aliases.signals).
-    # All forced to their off value while community_enabled is False - see
-    # _COMMUNITY_GATED_SYNC_FIELDS below.
+    # Wiki sync preferences: automatically mirror star ratings and aliases between a pin's private
+    # details and its (shared) community wiki, so the user only has to set a value in one place.
+    # Rating/vulnerability/priority/ danger are one-way (pin -> wiki, via WikiStatVote - see
+    # models.pin.signals); the wiki has no single owner, so there's no equivalent "wiki value" to
     sync_rating_to_wiki = BooleanField(default=True, help_text="When you rate a pin, also count that rating on its community wiki.")
     sync_vulnerability_to_wiki = BooleanField(default=True, help_text="When you set a pin's vulnerability, also count it on its community wiki.")
     sync_priority_to_wiki = BooleanField(default=True, help_text="When you set a pin's priority, also count it on its community wiki.")
@@ -620,20 +585,14 @@ class Profile(abstract.PublicDashboardModel):
     # toggles below/elsewhere that remain independently adjustable.
     external_apis_enabled = BooleanField(default=True, help_text="Allow external services (weather, geocoding, place data, AI) to retrieve anonymized research data for you.")
 
-    # Ordered list of enabled homepage widget keys (see services.home.home_widgets),
-    # e.g. ["stats", "recent_photos", ...]. Empty = never customized - the
-    # homepage falls back to every widget, in the registry's default order.
-    # Widgets omitted here are simply disabled, not deleted - re-enabling one
-    # in the customize dialog just adds its key back.
+    # Ordered list of enabled homepage widget keys (see services.home.home_widgets), e.g.
+    # ["stats", "recent_photos", ...].
     home_widget_layout = JSONField(default=list, blank=True)
 
     # Per-action key-combo overrides for the site's customizable hotkeys (see
-    # frontend/ts/shared/hotkeys.ts's DEFAULT_HOTKEYS for the full action set
-    # and each default combo). Keyed by action id, e.g. {"undo": "ctrl+alt+z"}.
-    # Empty = every action uses its default; an action absent from this dict
-    # falls back to its default rather than being disabled. An unrecognized
-    # action id here is simply never matched against - HotkeySettingsForm
-    # already drops those on save, so this is just the storage, not the guard.
+    # frontend/ts/shared/hotkeys.ts's DEFAULT_HOTKEYS for the full action set and each default
+    # combo).
+    # Keyed by action id, e.g.
     keyboard_shortcuts = JSONField(default=dict, blank=True)
 
     # Set when the user requests account deletion; cleared on cancel/undo.
@@ -663,13 +622,7 @@ class Profile(abstract.PublicDashboardModel):
     objects = ProfileManager()
 
     def save(self, *args, **kwargs) -> None:
-        """Save the profile, forcing visibility settings to their most restrictive value while Community is off.
-
-        This single enforcement point covers every write path (settings forms,
-        onboarding, admin) so the existing view-level (``_can_view_profile``)
-        and model-level (``can_view_contact_info``) visibility checks work
-        correctly with no changes of their own.
-        """
+        """Save the profile, forcing visibility settings to their most restrictive value while Community is off."""
         update_fields = kwargs.get("update_fields")
         if not self.community_enabled:
             forced = [field for field in _COMMUNITY_GATED_VISIBILITY_FIELDS if getattr(self, field) != VisibilityChoice.NO_ONE]
@@ -739,12 +692,7 @@ class Profile(abstract.PublicDashboardModel):
 
     def best_known_point(self) -> tuple[float, float] | None:
         """Return a representative (lat, lng) for this profile without extra computation.
-
-        Uses already-persisted coordinates only - the explicit custom center, the
-        cached pin centroid, or the last remembered map position - so it is cheap
-        and side-effect free (it never triggers the O(n²) centroid computation).
-        This is the "where is this user" source for server-side "near me" filtering
-        (e.g. global search), since there is no live/persisted GPS position otherwise.
+        Uses already-persisted coordinates only - the explicit custom center, the cached pin centroid, or the last remembered map position - so it is cheap and side-effect free (it never triggers the O(n²) centroid computation).
 
         Returns:
             A (latitude, longitude) tuple, or None if no coordinate is on record.
@@ -761,10 +709,8 @@ class Profile(abstract.PublicDashboardModel):
     @property
     def effective_distance_units(self) -> str:
         """Return the distance unit to display for this profile.
-
-        An explicit ``distance_units`` choice always wins. Otherwise the unit is
-        inferred from the profile's known location, defaulting to kilometres when
-        the location is unknown or not in a miles-using region.
+        An explicit ``distance_units`` choice always wins.
+        Otherwise the unit is inferred from the profile's known location, defaulting to kilometres when the location is unknown or not in a miles-using region.
 
         Returns:
             A ``DistanceUnit`` value ("km" or "mi").
@@ -796,11 +742,10 @@ class Profile(abstract.PublicDashboardModel):
     def full_name(self):
         return self.user.get_full_name()
 
-    # Registry pairing each interaction-preference field with its public label,
-    # so both the profile template and preference_display/interaction_preferences
-    # below can iterate them without a hard-coded per-field template block.
-    # Extend this tuple alongside a new pair of model fields to add another
-    # preference category - nothing else needs to change to surface it.
+    # Registry pairing each interaction-preference field with its public label, so both the profile
+    # template and preference_display/interaction_preferences below can iterate them without a
+    # hard-coded per-field template block.
+    # Extend this tuple alongside a new pair of model fields to add another preference category -
     PREFERENCE_FIELDS: ClassVar[tuple[tuple[str, str], ...]] = (
         ("photo_taking_preference", "Taking Photos of Me"),
         ("photo_sharing_preference", "Sharing Photos of Me"),
@@ -813,10 +758,7 @@ class Profile(abstract.PublicDashboardModel):
 
     def preference_display(self, field: str) -> str:
         """Return the human-readable value of one interaction-preference field.
-
-        Falls back to the paired ``<field>_other`` free-text note when the
-        stored choice is "other" and that note is non-blank; otherwise returns
-        the choice's display label, or "" when the preference is unset.
+        Falls back to the paired ``<field>_other`` free-text note when the stored choice is "other" and that note is non-blank; otherwise returns the choice's display label, or "" when the preference is unset.
 
         Args:
             field: One of the field names in ``PREFERENCE_FIELDS``.
@@ -847,16 +789,8 @@ class Profile(abstract.PublicDashboardModel):
 
     def compute_map_center(self) -> tuple[float, float] | None:
         """Find the densest geographic cluster of pins and return its centroid.
-
-        A naive average breaks when the user has pins on multiple continents -
-        the centre point ends up in the ocean between them. The largest regional
-        concentration wins instead, which for a single tight collection is the
-        ordinary centroid.
-
-        The clustering itself is in ``services.geo.clustering``, which finds that
-        concentration in a single pass. This sits on the critical path of the map
-        page, so its cost has to depend on the radius rather than on how many
-        pins the account holds.
+        A naive average breaks when the user has pins on multiple continents - the centre point ends up in the ocean between them.
+        The largest regional concentration wins instead, which for a single tight collection is the ordinary centroid.
 
         Returns:
             (latitude, longitude) as floats, or None if the user has no pins
@@ -884,10 +818,7 @@ class Profile(abstract.PublicDashboardModel):
 
     def get_map_center(self) -> tuple[float, float] | None:
         """Return the map center coordinates to use as the initial view.
-
         In GPS mode, returns None - the browser handles centering via geolocation.
-        In custom mode, returns the user-stored coordinates.
-        In auto mode, returns the cached pin centroid (computing it if needed).
 
         Returns:
             (latitude, longitude) tuple, or None when the caller should defer to JS.
@@ -909,10 +840,7 @@ class Profile(abstract.PublicDashboardModel):
 
     def get_map_center_template_context(self) -> dict[str, float | str | None]:
         """Return template variables for client-side map centering.
-
-        Mirrors the main map page: server coordinates when the profile mode
-        supplies them, plus a pin-cluster fallback for GPS mode when the browser
-        denies geolocation.
+        Mirrors the main map page: server coordinates when the profile mode supplies them, plus a pin-cluster fallback for GPS mode when the browser denies geolocation.
 
         Returns:
             Dict with ``map_center_lat``, ``map_center_lng``, ``map_center_mode``,
@@ -932,11 +860,10 @@ class Profile(abstract.PublicDashboardModel):
             "map_center_mode": self.map_center_mode,
             "gps_fallback_lat": gps_fallback[0] if gps_fallback else None,
             "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
-            # The GPS fix itself is still requested for map-centering (a purely
-            # client-side convenience), but the page must not relay it to the
-            # server via _recordGeolocationVisit when the profile has live
-            # location-tracking turned off - the request body would carry the
-            # user's exact coordinates regardless of the server no-op-ing it.
+            # The GPS fix itself is still requested for map-centering (a purely client-side
+            # convenience), but the page must not relay it to the server via _recordGeolocationVisit
+            # when the profile has live location-tracking turned off - the request body would carry
+            # the user's exact coordinates regardless of the server no-op-ing it.
             "geolocation_tracking_allowed": self.track_geolocation,
         }
 
@@ -962,12 +889,6 @@ class Profile(abstract.PublicDashboardModel):
     def are_blocked(subject: Profile, other: Profile) -> bool:
         """Return True when either profile has blocked the other.
 
-        Blocking is checked in both directions deliberately: it must be an
-        absolute veto on contact regardless of who blocked whom, unlike
-        :meth:`are_friends` and the ``VisibilityChoice`` settings, which are
-        never consulted for it - a BLOCKED ``Friendship`` row exists whether
-        ``subject`` blocked ``other`` or the reverse.
-
         Args:
             subject: One profile of the pair.
             other: The other profile.
@@ -985,10 +906,6 @@ class Profile(abstract.PublicDashboardModel):
     @staticmethod
     def has_pending_request_to(sender: Profile, recipient: Profile) -> bool:
         """Return True when ``sender`` has an unanswered friend request to ``recipient``.
-
-        Sending a friend request deliberately opens the sender's own privacy
-        gates to the recipient - one way only - so the recipient can look at
-        who is asking before deciding (see :meth:`visibility_permits`).
 
         Args:
             sender: The profile that sent the request.
@@ -1082,19 +999,7 @@ class Profile(abstract.PublicDashboardModel):
     @staticmethod
     def visibility_permits(visibility: str, subject: Profile, other: Profile, *, allow_pending_request: bool = True) -> bool:
         """Return True if ``subject``'s ``visibility`` setting permits ``other``.
-
-        Shared evaluator for every per-field ``VisibilityChoice`` setting on
-        this model (contact info, profile, photos, etc.) so the friend/common-pin/
-        common-friend/common-trip relationship queries live in exactly one place.
-
-        Accepted friends qualify for every option except NO_ONE - a friend is
-        never more of a stranger than someone who merely shares a pin or trip.
-        A pending friend request *sent by* ``subject`` counts the recipient as
-        a friend too (one way only): asking someone to connect deliberately
-        lets them see who is asking. Set ``allow_pending_request=False`` for
-        settings that shouldn't extend that courtesy - e.g. contact info like
-        a phone number is more sensitive than "who's asking to connect" and
-        should wait for the request to actually be accepted.
+        Shared evaluator for every per-field ``VisibilityChoice`` setting on this model (contact info, profile, photos, etc.) so the friend/common-pin/ common-friend/common-trip relationship queries live in exactly one place.
 
         Args:
             visibility: The ``VisibilityChoice`` value being evaluated.
@@ -1155,11 +1060,7 @@ class Profile(abstract.PublicDashboardModel):
 
     def can_view_contact_info(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's contact methods.
-
-        Unlike most visibility settings, a merely-pending friend request does
-        not unlock this - contact details like a phone number are more
-        sensitive than "who's asking to connect" and wait for an accepted
-        friendship.
+        Unlike most visibility settings, a merely-pending friend request does not unlock this - contact details like a phone number are more sensitive than "who's asking to connect" and wait for an accepted friendship.
 
         Args:
             viewer: The profile requesting access, or None for anonymous visitors.
@@ -1177,17 +1078,7 @@ class Profile(abstract.PublicDashboardModel):
 
     def accepts_direct_messages_from(self, sender: Profile) -> bool:
         """Return True if ``sender`` may send this profile a direct message.
-
-        A BLOCKED relationship in either direction is an absolute veto,
-        checked before anything else - it overrides even the "already
-        messaged them, so they can always reply" exception below, since
-        blocking someone you've previously messaged must still stop them
-        from replying. Short of that, evaluates this profile's
-        ``direct_message_visibility`` setting through the shared
-        ``visibility_permits`` evaluator, with one addition: a profile that
-        has already messaged the sender can always be replied to, regardless
-        of the setting - starting a conversation is an implicit invitation
-        to answer.
+        Short of that, evaluates this profile's ``direct_message_visibility`` setting through the shared ``visibility_permits`` evaluator, with one addition: a profile that has already messaged the sender can always be replied to, regardless of the setting - starting a conversation is an implicit invitation to answer.
 
         Args:
             sender: The profile attempting to send a message.
@@ -1211,21 +1102,8 @@ class Profile(abstract.PublicDashboardModel):
     @staticmethod
     def visible_profile_pks(viewer: Profile | None, subjects: Sequence[Profile]) -> set[int]:
         """Batch equivalent of :meth:`can_view_profile` over many subjects at once.
-
-        ``can_view_profile`` costs a fixed number of queries *per subject*, and every
-        relationship helper it reaches rebuilds the **viewer's** own set (pinned
-        locations, accepted friends, trip ids) on each call. Rendering a list of people
-        - a conversation list, a member list - therefore scaled linearly: the sidebar
-        conversation list measured about eleven queries per row.
-
-        This resolves the viewer's sets once and answers every subject from them, so the
-        cost is fixed regardless of how many subjects there are.
-
-        Semantics must match ``can_view_profile`` exactly, since a divergence here shows
-        a real name where the single-subject path would have masked it.
-        ``test_identity_visibility_batch`` asserts the two agree across every
-        ``VisibilityChoice`` and relationship combination rather than trusting this
-        reimplementation.
+        ``can_view_profile`` costs a fixed number of queries *per subject*, and every relationship helper it reaches rebuilds the **viewer's** own set (pinned locations, accepted friends, trip ids) on each call.
+        This resolves the viewer's sets once and answers every subject from them, so the cost is fixed regardless of how many subjects there are.
 
         Args:
             viewer: The profile viewing, or None for an anonymous viewer.
@@ -1239,13 +1117,7 @@ class Profile(abstract.PublicDashboardModel):
     @staticmethod
     def visible_contact_info_pks(viewer: Profile | None, subjects: Sequence[Profile]) -> set[int]:
         """Batch equivalent of :meth:`can_view_contact_info` over many subjects at once.
-
-        The contact-info sibling of :meth:`visible_profile_pks`, differing in the two
-        ways ``can_view_contact_info`` differs from ``can_view_profile``: an unanswered
-        friend request does not open the gate (a phone number is more sensitive than
-        "who's asking to connect"), and there is no temporary-access fallback - a
-        ``DirectMessageTemporaryAccess`` grant reveals an identity, never a contact
-        method.
+        The contact-info sibling of :meth:`visible_profile_pks`, differing in the two ways ``can_view_contact_info`` differs from ``can_view_profile``: an unanswered friend request does not open the gate (a phone number is more sensitive than "who's asking to connect"), and there is no temporary-access fallback - a ``DirectMessageTemporaryAccess`` grant reveals an identity, never a contact method.
 
         Args:
             viewer: The profile viewing, or None for an anonymous viewer.
@@ -1266,13 +1138,7 @@ class Profile(abstract.PublicDashboardModel):
         temporary_access: bool,
     ) -> set[int]:
         """Resolve one ``VisibilityChoice`` field over many subjects for one viewer.
-
-        Shared body of :meth:`visible_profile_pks` and
-        :meth:`visible_contact_info_pks`, parameterised by the three things that
-        separate them, so the relationship queries exist once. A second copy of
-        this would be a second place for the semantics to drift from
-        :meth:`visibility_permits`, which is the failure this whole family is
-        tested against.
+        Shared body of :meth:`visible_profile_pks` and :meth:`visible_contact_info_pks`, parameterised by the three things that separate them, so the relationship queries exist once.
 
         Args:
             viewer: The profile viewing, or None for an anonymous viewer.
@@ -1334,10 +1200,9 @@ class Profile(abstract.PublicDashboardModel):
         wants_trip = needs & {VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON}
 
         if wants_pin:
-            # Place-aware, not a raw Location match - two pins on the same
-            # parcel fifty metres apart must count as shared (see
-            # services.pins.common_pins.pinned_place_keys, which this mirrors
-            # in batch form rather than per-pair).
+            # Place-aware, not a raw Location match - two pins on the same parcel fifty metres apart
+            # must count as shared (see services.pins.common_pins.pinned_place_keys, which this
+            # mirrors in batch form rather than per-pair).
             viewer_place_ids: set[int] = set()
             viewer_location_ids: set[int] = set()
             for location_id, place_id in Pin.objects.filter(profile=viewer, location__isnull=False).values_list("location_id", "location__place_id"):
@@ -1390,25 +1255,7 @@ class Profile(abstract.PublicDashboardModel):
     @staticmethod
     def related_profile_ids(viewer: Profile) -> set[int]:
         """Every profile that could pass a non-``ANYONE`` visibility gate for ``viewer``.
-
-        Deliberately a **superset**, and only useful as one. Answering "which of
-        these subjects may I see" is :meth:`visible_profile_pks`'s job and stays
-        there; this answers the different question a *queryset* has to ask -
-        which rows are even worth resolving - so that a list can be narrowed in
-        SQL before it is paginated, rather than resolved row by row afterwards.
-
-        The union is the disjunction :meth:`visibility_permits` evaluates, read
-        from the viewer's side: accepted friends, profiles with an unanswered
-        request to the viewer, and the common-pin, common-friend and common-trip
-        partners, plus profiles holding a temporary-access grant to the viewer.
-        Nothing outside that union can pass any gate except ``ANYONE``, which
-        callers test directly in SQL and which is why it is absent here.
-
-        Being loose is safe and being tight is not: an extra id costs one more
-        row for the real check to reject, while a missing one hides a profile
-        the viewer is entitled to. So every branch here is unconditioned by the
-        subject's own setting - which setting a relationship happens to satisfy
-        is decided later, by the helper that decides it for every other caller.
+        Answering "which of these subjects may I see" is :meth:`visible_profile_pks`'s job and stays there; this answers the different question a *queryset* has to ask - which rows are even worth resolving - so that a list can be narrowed in SQL before it is paginated, rather than resolved row by row afterwards.
 
         Args:
             viewer: The profile whose relationships are being enumerated.
@@ -1463,24 +1310,8 @@ class Profile(abstract.PublicDashboardModel):
     @staticmethod
     def viewers_who_can_see(subject: Profile, viewers: Sequence[Profile]) -> set[int]:
         """Batch equivalent of :meth:`can_view_profile` over many *viewers* of one subject.
-
-        The mirror of :meth:`visible_profile_pks`, and a genuinely different
-        question: that one renders a list of people to one viewer, this one
-        shows one person's name to a roomful. A group message carries its
-        sender's name, so the name has to be resolved through every recipient's
-        own visibility - once per recipient, which is a query each, twice per
-        send (the notification and the live payload are built separately).
-
-        Simpler than the other direction despite the symmetry, because there is
-        exactly one subject: ``profile_visibility`` is a single value, so the
-        per-subject branch tree collapses to one case rather than being
-        evaluated per row.
-
-        Semantics must match ``can_view_profile`` exactly - a divergence here
-        shows a real name to someone the single-viewer path would have masked
-        it from. ``test_identity_visibility_batch`` asserts the two agree across
-        every ``VisibilityChoice`` and relationship combination rather than
-        trusting this reimplementation.
+        The mirror of :meth:`visible_profile_pks`, and a genuinely different question: that one renders a list of people to one viewer, this one shows one person's name to a roomful.
+        A group message carries its sender's name, so the name has to be resolved through every recipient's own visibility - once per recipient, which is a query each, twice per send (the notification and the live payload are built separately).
 
         Args:
             subject: The profile whose identity is being displayed.
@@ -1594,13 +1425,6 @@ class Profile(abstract.PublicDashboardModel):
 
     def can_view_common_pins_with(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see the specific pins this profile has in common with them.
-
-        Deliberately mutual, unlike every other per-field visibility setting on
-        this model: revealing which locations a pair of users have both pinned
-        exposes information about *both* of them, not just this profile, so
-        both ``self.common_pins_visibility`` and ``viewer.common_pins_visibility``
-        must independently permit the other - one profile's setting can never
-        be overridden by the other's.
 
         Args:
             viewer: The profile requesting access, or None for anonymous visitors.

@@ -1,5 +1,4 @@
-"""Shared (de)serialization for persisted main-map filter criteria.
-``SearchForm.cleaned_data`` (``dashboard.forms.search.SearchForm``) is not directly JSON-safe: its ``custom_fields`` criteria (from ``SearchForm.parse_custom_field_criteria()``) carry live ``CustomField`` model instances rather than ids."""
+"""Shared (de)serialization for persisted main-map filter criteria."""
 
 from __future__ import annotations
 
@@ -63,15 +62,10 @@ def serialize_form_criteria(
         cleaned_data: A ``SearchForm.cleaned_data``-shaped dict.
         label_groups: Output of ``SearchForm.parse_label_groups()``, if any.
         custom_field_criteria: Output of ``SearchForm.parse_custom_field_criteria()``, if any.
-        regions: Mapping of ``"include_regions"``/``"exclude_regions"`` to a
-            parsed MultiPolygon (e.g. from ``SearchForm.parse_region_geojson()``),
-            or None/absent for no restriction on that dimension.
+        regions: Mapping of ``"include_regions"``/``"exclude_regions"`` to a parsed MultiPolygon (e.g. from ``SearchForm.parse_region_geojson()``), or None/absent for no restriction on that dimension.
 
     Returns:
-        A dict safe to store directly in a JSONField (``SavedFilter.criteria``
-        / ``PinList.smart_filter``); absent keys mean "no filter on that
-        dimension", matching ``SearchForm``'s own semantics.
-    """
+        A dict safe to store directly in a JSONField (``SavedFilter.criteria`` / ``PinList.smart_filter``); absent keys mean "no filter on that dimension", matching ``SearchForm``'s own semantics."""
     from urbanlens.dashboard.services.geo.geo import geometry_to_geojson
 
     out: dict[str, Any] = {}
@@ -139,14 +133,10 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
 
     Args:
         stored: A dict previously produced by ``serialize_form_criteria``.
-        profile: Owner used to re-resolve ``custom_fields`` field ids scoped
-            to that profile's own custom fields.
+        profile: Owner used to re-resolve ``custom_fields`` field ids scoped to that profile's own custom fields.
 
     Returns:
-        A criteria dict in the live-object shape ``filter_by_criteria``
-        expects (dates parsed back, custom-field ids resolved to instances).
-        Custom-field entries whose field was deleted since the filter was
-        saved are silently dropped."""
+        A criteria dict in the live-object shape ``filter_by_criteria`` expects (dates parsed back, custom-field ids resolved to instances)."""
     from urbanlens.dashboard.models.custom_fields.model import CustomField
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.services.geo.geo import parse_multipolygon_geojson
@@ -178,8 +168,7 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
 
 
 class CriteriaOwnershipError(ValueError):
-    """Stored criteria referenced a label or custom field the profile may not use.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text (including which id was rejected) into a response just by adding a new ``raise``."""
+    """Stored criteria referenced a label or custom field the profile may not use."""
 
 
 class LabelOwnershipError(CriteriaOwnershipError):
@@ -197,9 +186,7 @@ def referenced_label_ids(stored: dict[str, Any]) -> set[int]:
         stored: A criteria dict in the stored (JSON-safe) shape.
 
     Returns:
-        The set of referenced label pks. Non-integer entries are ignored - they
-        cannot match a real label, and this function's job is to enumerate, not
-        to validate the shape."""
+        The set of referenced label pks."""
     ids: set[int] = set()
     for key in _LABEL_LIST_KEYS:
         for value in stored.get(key) or []:
@@ -243,7 +230,7 @@ def validate_criteria_ownership(stored: dict[str, Any], profile: Profile) -> Non
         CustomFieldOwnershipError: A referenced custom field is not theirs.
 
     Note:
-        Whichever subclass is raised, a catch site must respond with its own hand-authored, generic text rather than anything derived from the exception - it must not say which id was rejected, since distinguishing "exists but not yours" from "does not exist" is the very thing this function exists to deny an API client."""
+        Whichever subclass is raised, a catch site must respond with its own hand-authored, generic text rather than anything derived from the exception - it must not say which id was rejected, since distinguishing "exists but not yours" from "does not..."""
     from urbanlens.dashboard.models.custom_fields.model import CustomField
     from urbanlens.dashboard.models.labels.model import Label
 

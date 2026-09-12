@@ -38,6 +38,5 @@ def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
         lng2: Second point's longitude in degrees.
 
     Returns:
-        Distance in kilometres.
-    """
+        Distance in kilometres."""
     return haversine_meters(lat1, lng1, lat2, lng2) / 1000.0

@@ -16,7 +16,7 @@ def instrumentation_wanted(*, metrics_enabled: bool, process_role: str) -> bool:
 
 
 def require_django_prometheus() -> None:
-    """Fail naming UL_METRICS_ENABLED when django-prometheus is missing."""
+    """Fail when metrics are on but django-prometheus is missing."""
     try:
         import django_prometheus  # noqa: F401  (imported for its side effect of proving it is installed)
     except ImportError as exc:
@@ -28,28 +28,14 @@ def require_django_prometheus() -> None:
 
 
 def disable_multiprocess_metrics() -> None:
-    """Take ``prometheus_client`` out of multiprocess mode for this process.
+    """Take ``prometheus_client`` out of multiprocess mode.
 
-    Popping ``PROMETHEUS_MULTIPROC_DIR`` is not enough on its own.
-    ``prometheus_client.values`` resolves ``ValueClass`` once, at import, from
-    the variable as it stood then - so in any process that imported the library
-    while it was still set, every later registry keeps mmap-backed values and
-    joins their path against ``None``. That is not hypothetical ordering: with
-    ``UL_METRICS_ENABLED=true``, :func:`require_django_prometheus` imports
-    ``django_prometheus`` - and through it ``prometheus_client`` - from
-    ``base.py``, which the test settings module cannot run before.
-
-    Re-resolving the class through the library's own ``get_value_class`` is what
-    makes the pop take effect regardless of who imported first - and that
-    function reads the deprecated lowercase spelling too, so leaving it set
-    would re-resolve straight back into multiprocess mode.
+    Re-resolves ValueClass after popping the env vars, so the pop applies
+    even when the library was already imported.
     """
     for name in ("PROMETHEUS_MULTIPROC_DIR", "prometheus_multiproc_dir"):
         os.environ.pop(name, None)
-    # Imported after the pop, and deliberately not conditional on the module
-    # already being in sys.modules: if it is, this re-resolves it; if it is not,
-    # the import itself resolves it - and by then the variables are gone, so it
-    # resolves to the single-process class either way.
+    # Re-resolves to the single-process class either way.
     from prometheus_client import values
 
     values.ValueClass = values.get_value_class()

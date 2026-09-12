@@ -1,37 +1,4 @@
-{% comment %}
-Reusable pagination bar for any card or section rendered by a single HTMX view.
-
-Context:
-  page_obj    - a django.core.paginator.Page. Pass another name in through
-                `{% include ... with page_obj=failures_page_obj %}` when a page
-                renders two paginated sections.
-  extra_query - optional extra query-string fragment (e.g. "children=1")
-                appended to every pagination link so view flags survive
-                page changes.
-
-Optional overrides, each defaulting to what a plain HTMX-loaded card needs:
-  page_url       - where a page click goes. Defaults to `request.path`, which
-                   is wrong for a partial that is also rendered inside a full
-                   page: the click would swap a whole HTML document into the
-                   section. Pass a `{% url %}` for those.
-  page_param     - the page query parameter. Defaults to `page`; override when
-                   one page carries two paginated sections, or a single click
-                   moves both of them.
-  page_target    - HTMX target. Defaults to `closest .card`.
-  page_swap      - HTMX swap. Defaults to `outerHTML`, which suits a view that
-                   renders the whole card; a view rendering only the section's
-                   contents wants `innerHTML`.
-  page_noun      - names this list in the buttons' accessible labels, e.g.
-                   "import failures". Worth setting when a page has more than
-                   one pagination bar, since "Previous page" twice tells a
-                   screen-reader user nothing about which list moves.
-  page_bar_class - extra class(es) on the bar itself.
-  page_links     - emit plain links instead of HTMX buttons. What a full-page
-                   view needs: an `hx-get` there would fetch a whole HTML
-                   document and swap it into one div. A link also keeps the
-                   back button working, which is most of the value on a page
-                   the user arrived at by navigating.
-{% endcomment %}
+{% comment %}Reusable pagination bar for any card or section rendered by a single HTMX view.{% endcomment %}
 {% if page_links %}
 {% if page_obj.paginator.num_pages > 1 %}
 <div class="pagination-bar {{ page_bar_class }}">
@@ -59,11 +26,7 @@ Optional overrides, each defaulting to what a plain HTMX-loaded card needs:
 </div>
 {% endif %}
 {% elif adaptive_pagination and page_obj.paginator.num_pages > 1 %}
-{# Starts hidden - it renders with no Prev/Next buttons until initAdaptivePagination #}
-{# (pages/location/index.html) measures the list and calls renderControls, which #}
-{# un-hides it only if pagination actually applies. Without this, the empty bar's #}
-{# padding/border-top (see .pagination-bar in _components.scss) shows as a bare #}
-{# strip for a moment on every load. #}
+{# Starts hidden - it renders with no Prev/Next buttons until initAdaptivePagination (pages/location/index.html) measures the list. #}
 <div class="pagination-bar" data-adaptive-pagination-controls
      data-server-page="{{ page_obj.number }}"
      data-server-pages="{{ page_obj.paginator.num_pages }}"

@@ -1,5 +1,4 @@
-"""Pin export writers: GeoJSON, KML, GPX, and generic CSV.
-Only a pin's name, coordinates, and description are portable across every one of these formats - richer UrbanLens-specific fields (ratings, security indicators, labels, ...) stay in the full JSON account export (``services.import_export.export._export_pins``), which remains the source of truth for a complete round-trippable backup."""
+"""Pin export writers: GeoJSON, KML, GPX, and generic CSV."""
 
 from __future__ import annotations
 

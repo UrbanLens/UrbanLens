@@ -1,13 +1,5 @@
 """Google Photos plugin: rate-limit defaults for the per-user picker integration.
-
-The integration itself (OAuth connect/disconnect, pin-detail picker session)
-lives in ``dashboard/services/apis/photos/``, ``dashboard/controllers/google_photos.py``,
-and ``dashboard/tasks.py``; every call runs against the requesting user's own
-Google Photos library using their stored OAuth grant (a separate grant from
-Google Calendar - see ``GooglePhotosAccount``). This plugin registers the
-service's rate-limit defaults so calls are throttled and logged like every
-other external API.
-"""
+This plugin registers the service's rate-limit defaults so calls are throttled and logged like every other external API."""
 
 from __future__ import annotations
 

@@ -1,9 +1,4 @@
-"""GPX track/route import - the Route counterpart to gpx.py's waypoint-only pin import.
-
-gpx.py intentionally ignores ``<trk>``/``<rte>`` content when producing pins (see
-its module docstring). This module handles that content instead, turning each
-track/route into a Route record rather than a flood of individual pins.
-"""
+"""GPX track/route import - the Route counterpart to gpx.py's waypoint-only pin import."""
 
 from __future__ import annotations
 
@@ -132,16 +127,13 @@ def gpx_tracks_to_routes(file_contents: bytes, user_profile: Profile, source_fil
         source_filename: Original upload filename, stored as Route.source_filename.
 
     Returns:
-        List of ParsedRoute (unsaved Route + its raw points) - one per
-        ``<trk>``/``<rte>`` element with at least 2 points.
+        List of ParsedRoute (unsaved Route + its raw points) - one per ``<trk>``/``<rte>`` element with at least 2 points.
 
     Raises:
         gpxpy.gpx.GPXException: If the file is not valid GPX.
         UnicodeDecodeError: If the file is not UTF-8 text.
         defusedxml.ElementTree.ParseError: If the file is not well-formed XML.
-        ValueError: If the XML attempts a forbidden DTD/entity-expansion/
-            external-entity reference (an XXE attempt).
-    """
+        ValueError: If the XML attempts a forbidden DTD/entity-expansion/ external-entity reference (an XXE attempt)."""
     text = file_contents.decode("utf-8")
 
     # See gpx.py's gpx_to_dict for why this pre-parse exists: gpxpy has no way to accept a hardened
@@ -191,7 +183,6 @@ def gpx_tracks_to_routes(file_contents: bytes, user_profile: Profile, source_fil
 
 def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint], profile: Profile) -> int:
     """Scan a route's raw points for dwells near the profile's own pins and create visits.
-    Gated on the profile's visit-logging setting, not only on route import: the route itself is the user's own track (``track_routes``), but a dwell writes a PinVisit, which is what ``track_pin_visits`` governs - and its help text already tells the user it covers imports.
 
     Args:
         route: The already-saved Route these points belong to.
@@ -199,8 +190,7 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
         profile: Owning profile - only this profile's own pins are candidates.
 
     Returns:
-        Number of PinVisit(source=HISTORY) rows created. Zero when visit logging
-        is turned off, even though the route itself still saves."""
+        Zero when visit logging is turned off, even though the route itself still saves."""
     from django.contrib.gis.measure import D
     from django.db import transaction
     from geopy.distance import geodesic
@@ -254,9 +244,6 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
             qualified = True
 
         if qualified and dwell_start is not None:
-            # HISTORY, not GEOLOCATION: this visit was derived from a track file the user uploaded,
-            # which is what the enum documents HISTORY as ("imported from the user's location
-            # history") and what the sibling Google Takeout importer already records.
             # GEOLOCATION means "the user's device provided a geolocation" - a live ping, gated by
             with transaction.atomic():
                 Pin.objects.select_for_update().get(pk=pin.pk)

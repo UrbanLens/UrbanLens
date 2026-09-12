@@ -1,9 +1,4 @@
-{% comment %}
-Grace period slider: how long after the expected check-in time before contacts
-are notified. Context: `value` (current hours, float) and optional `dom_id`
-(defaults to "grace_period_hours" - only override when included more than once
-on the same page).
-{% endcomment %}
+{% comment %}Grace period slider: how long after the expected check-in time before contacts are notified.{% endcomment %}
 <div class="safety-grace-slider" data-role="grace-slider">
     <input type="range" class="safety-grace-slider-range" name="grace_period_hours"
            id="{{ dom_id|default:'grace_period_hours' }}" data-role="range"

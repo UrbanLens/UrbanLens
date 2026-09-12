@@ -78,8 +78,8 @@ def _get_group(profile: Profile, group_uuid) -> tuple[GroupChat, GroupChatMember
         ``(group, membership)``.
 
     Raises:
-        Http404: When the group doesn't exist or the profile isn't an active
-            member - the two cases are indistinguishable by design.
+        Http404: When the group doesn't exist or the profile isn't an active member - the two cases are
+        indistinguishable by design.
     """
     group = GroupChat.objects.filter(uuid=group_uuid).first()
     if group is None:
@@ -123,11 +123,9 @@ def _group_thread_context(profile: Profile, group: GroupChat, membership: GroupC
     thread_messages, has_more_older = group_thread_page(membership)
     members = [row.profile for row in group.active_memberships().select_related("profile", "profile__user").order_by("created")]
 
-    # A group can include people who aren't friends with everyone else in it,
-    # whose privacy settings may not permit some viewers to see their name/
-    # avatar - the message content itself still shows (this is "who sent it",
-    # not "what they said"), same as any other shared space. Resolved once
-    # per distinct sender (not per message) and attached for the template.
+    # A group can include people who aren't friends with everyone else in it, whose privacy settings may not
+    # permit some viewers to see their name/ avatar - the message content itself still shows (this is "who sent
+    # it", not "what they said"), same as any other shared space.
     distinct_senders = {message.sender_id: message.sender for message in thread_messages if message.sender_id}
     sender_identities = resolve_visible_identities(profile, list(distinct_senders.values()))
     for message in thread_messages:
@@ -159,12 +157,10 @@ class GroupCreateView(LoginRequiredMixin, View):
         """Create a group with the caller plus the picked members.
 
         Args:
-            request: The incoming request. Reads ``name`` and repeated
-                ``member_slugs`` values.
+            request: The incoming request.
 
         Returns:
-            JSON ``{uuid, url}`` on success; 400/403 with a plain-text error
-            the page JS shows as a toast.
+            JSON ``{uuid, url}`` on success; 400/403 with a plain-text error the page JS shows as a toast.
         """
         profile = _get_profile(request)
         name = request.POST.get("name", "")
@@ -207,8 +203,7 @@ class GroupConversationView(LoginRequiredMixin, View):
             group_uuid: UUID of the group chat.
 
         Returns:
-            Thread partial for HTMX requests; the whole messages page with
-            this group active otherwise.
+            Thread partial for HTMX requests; the whole messages page with this group active otherwise.
         """
         from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
 
@@ -221,9 +216,8 @@ class GroupConversationView(LoginRequiredMixin, View):
 
         context = {
             **_group_thread_context(profile, group, membership),
-            # all_conversations_for (not the 1:1-only conversations_for): the
-            # sidebar on a directly-loaded group-thread URL must show every
-            # conversation, groups included - not just 1:1 threads.
+            # all_conversations_for (not the 1:1-only conversations_for): the sidebar on a directly-loaded
+            # group-thread URL must show every conversation, groups included - not just 1:1 threads.
             "conversations": all_conversations_for(profile),
             "active_partner": None,
             "active_slug": "",
@@ -240,13 +234,11 @@ class GroupSendView(LoginRequiredMixin, View):
         """Create a message and return the refreshed thread partial.
 
         Args:
-            request: The incoming request. Reads ``body`` (or the encrypted
-                ``ciphertext``/``nonce``/``key_version`` triple).
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
-            The thread partial on success; a plain-text 400/403 the page JS
-            surfaces as a toast.
+            The thread partial on success; a plain-text 400/403 the page JS surfaces as a toast.
         """
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
@@ -300,7 +292,7 @@ class GroupOlderMessagesView(LoginRequiredMixin, View):
         """Return the page of messages immediately older than ``before``.
 
         Args:
-            request: The incoming request. Reads ``before`` (a message pk).
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -365,7 +357,7 @@ class GroupRenameView(LoginRequiredMixin, View):
         """Rename the group and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``name``.
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -404,12 +396,6 @@ class GroupMuteToggleView(LoginRequiredMixin, View):
             request: The incoming request.
             group_uuid: UUID of the group chat.
 
-        The flip lives here rather than in the service because it is a property
-        of *this button*: the web UI has one control whose meaning is "the
-        other state". ``set_group_muted`` names an end state instead, so the
-        external API's PUT/DELETE pair cannot be turned into a toggle by a
-        retry - see its docstring.
-
         Returns:
             The re-rendered thread partial.
         """
@@ -439,12 +425,10 @@ class GroupMembersDialogView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         group, _membership = _get_group(profile, group_uuid)
         memberships = list(group.active_memberships().select_related("profile", "profile__user").order_by("created"))
-        # Resolves each member's display name/avatar per their own privacy
-        # settings toward the viewer (a member added by someone else may not
-        # be friends with everyone here) and gives every member - masked or
-        # not - a distinct fallback-avatar color, so two members sharing the
-        # same default color/placeholder aren't indistinguishable apart from
-        # an initial letter.
+        # Resolves each member's display name/avatar per their own privacy settings toward the viewer (a member
+        # added by someone else may not be friends with everyone here) and gives every member - masked or not -
+        # a distinct fallback-avatar color, so two members sharing the same default color/placeholder aren't
+        # indistinguishable apart from an initial letter.
         identities = resolve_visible_identities(profile, [m.profile for m in memberships])
         return render(
             request,
@@ -466,7 +450,7 @@ class GroupAddMembersView(LoginRequiredMixin, View):
         """Add the posted members and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads repeated ``member_slugs``.
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -508,7 +492,7 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         """Remove the posted member and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``profile_id``.
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -516,11 +500,10 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
-        # Looked up by numeric id, not slug: the member being removed may have
-        # a masked identity toward the requester (see resolve_visible_identities
-        # in GroupMembersDialogView.get), and a profile's slug is derived from
-        # their username (see Profile._slugify_base) - putting it in the DOM/
-        # request body would leak the very identity the mask is hiding.
+        # Looked up by numeric id, not slug: the member being removed may have a masked identity toward the
+        # requester (see resolve_visible_identities in GroupMembersDialogView.get), and a profile's slug is
+        # derived from their username (see Profile._slugify_base) - putting it in the DOM/ request body would
+        # leak the very identity the mask is hiding.
         profile_id_raw = request.POST.get("profile_id", "")
         if not profile_id_raw.isdigit():
             return HttpResponseBadRequest("A valid profile_id is required.")
@@ -617,7 +600,7 @@ class GroupSharePinView(LoginRequiredMixin, View):
         """Create the per-member PinShares + chat message and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``pin_slug`` and ``body``.
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -652,13 +635,12 @@ class GroupSharePinRespondView(LoginRequiredMixin, View):
         """Apply the accept/reject decision and return the refreshed share card.
 
         Args:
-            request: The incoming request. Reads ``action`` (``accept``/``reject``).
+            request: The incoming request.
             group_uuid: UUID of the group chat.
             message_id: PK of the message carrying the pin share.
 
         Returns:
-            The re-rendered ``_group_share_card.html`` fragment with a toast
-            trigger, or 400/404 on failure.
+            The re-rendered ``_group_share_card.html`` fragment with a toast trigger, or 400/404 on failure.
         """
         from urbanlens.dashboard.controllers.pin_sharing import apply_pin_share_response
         from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
@@ -697,7 +679,7 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
         """Return matching, addable profiles for the member picker.
 
         Args:
-            request: The incoming request. Reads ``q``.
+            request: The incoming request.
 
         Returns:
             The member search-results partial.
@@ -711,9 +693,8 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
         results: list[Profile] = []
         if len(query) >= 2:
             candidates = Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: MEMBER_SEARCH_LIMIT * 4]
-            # can_view_profile mirrors RecipientSearchView: the results partial
-            # renders each candidate's real slug/username/avatar, so a profile
-            # hidden from the requester must not be enumerable through this
+            # can_view_profile mirrors RecipientSearchView: the results partial renders each candidate's real
+            # slug/username/avatar, so a profile hidden from the requester must not be enumerable through this
             # picker either.
             results = [candidate for candidate in candidates if can_direct_message(profile, candidate) and candidate.can_view_profile(profile)][:MEMBER_SEARCH_LIMIT]
             for candidate in results:

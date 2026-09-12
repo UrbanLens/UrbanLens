@@ -37,10 +37,7 @@
 		.brand-name {
 			font-size: 1.15rem;
 			font-weight: 700;
-			// Not --ul-grey-1. The sidebar's rgba(0,0,0,.3) sits *over* the card,
-			// so it composites to #b2b2b2 on light and #151515 on dark - and
-			// --ul-grey-1 inverts with it (#dfdfdf / #373737), landing at
-			// 1.59:1 and 1.53:1. It was unreadable in both themes, not just dark.
+			// Not --ul-grey-1.
 			color: var(--ul-grey-9);
 			line-height: 1.2;
 			word-break: break-word;

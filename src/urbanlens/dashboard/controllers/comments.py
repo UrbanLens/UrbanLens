@@ -69,17 +69,12 @@ def comment_image_error(image_file) -> str | None:
 def start_comment_image_scan(comment) -> None:
     """Mark a newly-uploaded comment image pending and queue its background malware scan.
 
-    Call immediately after saving a brand-new image upload onto a comment
-    (never for one attached via "Choose Existing" - that file was already
-    scanned on its original upload, see ``attach_existing_comment_image``).
-    Sets ``pending_scan`` so the comment is hidden from every other viewer
-    (see ``_build_context``/``trip._render_trip_comments``) until the scan
-    clears it, then enqueues the appropriate task for whichever comment type
-    this is.
+    Call immediately after saving a brand-new image upload onto a comment (never for one attached via
+    "Choose Existing" - that file was already scanned on its original upload, see
+    ``attach_existing_comment_image``).
 
     Args:
-        comment: The just-created ``Comment`` or ``TripComment``, already
-            carrying its new image.
+        comment: The just-created ``Comment`` or ``TripComment``, already carrying its new image.
     """
     from urbanlens.dashboard.models.trips.model import TripComment
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
@@ -94,20 +89,11 @@ def start_comment_image_scan(comment) -> None:
 def _discard_comment_image(comment) -> None:
     """Remove a deleted comment's stored photo from disk.
 
-    Django stopped deleting ``FileField`` files on row deletion in 1.3, so a
-    deleted comment used to leave its photo under ``comment_images/`` forever -
-    where the media gate's orphan branch serves it to any authenticated user
-    who knows the name (see "Authenticated media gate - residual per-family
-    risk" in docs/PROBLEMS.md). Each comment owns its file outright:
-    :func:`attach_existing_comment_image` *copies* rather than sharing storage,
-    precisely so one deletion cannot strand another row's image.
-
-    Best-effort - the row is already gone, and a storage hiccup must not turn a
-    successful delete into a 500.
+    Each comment owns its file outright: :func:`attach_existing_comment_image` *copies* rather than
+    sharing storage, precisely so one deletion cannot strand another row's image.
 
     Args:
-        comment: The comment whose file should be discarded. Safe to call when
-            it has no image.
+        comment: The comment whose file should be discarded.
     """
     if not comment.image:
         return
@@ -120,31 +106,16 @@ def _discard_comment_image(comment) -> None:
 def attach_existing_comment_image(comment: Comment, existing_image_id: str, profile: Profile) -> None:
     """Copy one of the poster's own already-uploaded photos onto a comment.
 
-    Backs the "Choose Existing" tab of the comment/Notes image-attach dialog
-    (base.html's ``_openCommentAttachImageDialog``), so posting a photo
-    already shared elsewhere doesn't require re-uploading a duplicate. Copies
-    the file rather than pointing the comment at the same storage the source
-    ``Image`` uses, so deleting either later doesn't orphan the other -
-    deliberately skips re-running ``comment_image_error`` too, since the
-    source file already passed those checks (size/content-type/malware) on
-    its original upload.
+    Copies the file rather than pointing the comment at the same storage the source ``Image`` uses, so
+    deleting either later doesn't orphan the other - deliberately skips re-running
+    ``comment_image_error`` too, since the source file already passed those checks
+    (size/content-type/malware) on its original upload.
 
     Args:
         comment: The already-created comment to attach the photo to.
         existing_image_id: The ``Image.pk`` submitted by the picker.
-        profile: The poster - only their own photos are eligible, same scope
-            ``CommentImagePickerView`` lists.
-
-    Silently no-ops on a bad/foreign id rather than failing the whole post -
-    it only ever comes from a picker listing the poster's own photos, so a
-    mismatch means stale client state, not something worth a hard error.
-    Scoped to ``MediaKind.PHOTO`` explicitly, matching the picker's own scope -
-    ``comment.image`` is always rendered as an ``<img>`` (see
-    partials/comments/_comment_body.html), and the skipped ``comment_image_error``
-    re-check above only holds for a row that was actually validated as a photo
-    on upload; a Vault document's bytes never were (see
-    services/media/images.image_upload_error's ``declared_media_type ==
-    MediaKind.PHOTO`` branch).
+        profile: The poster - only their own photos are eligible, same scope ``CommentImagePickerView``
+        lists.
     """
     import os
 
@@ -162,11 +133,11 @@ class CommentImagePickerView(LoginRequiredMixin, View):
     """GET /comments/images/picker/ - list the caller's own uploaded photos to attach.
 
     Companion to the plain upload flow for comment/Notes image attachments
-    (``#comment-image-composer``'s "Choose Existing" tab): lets the poster
-    reuse one of their own photos instead of uploading a duplicate. Entirely
-    generic - just the caller's own ``Image`` rows, no comment-specific
-    filtering - mirroring how ``DirectMessageMapPickerView`` is reused as-is
-    for the analogous "Choose Existing" tab on the map-attach dialog.
+    (``#comment-image-composer``'s "Choose Existing" tab): lets the poster reuse one of their own photos
+    instead of uploading a duplicate.
+    Entirely generic - just the caller's own ``Image`` rows, no comment-specific filtering - mirroring
+    how ``DirectMessageMapPickerView`` is reused as-is for the analogous "Choose Existing" tab on the
+    map-attach dialog.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -207,9 +178,9 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
     # Set of profile IDs whose images should be blurred for this viewer.
     blurred_profiles: set[int] = {p.pk for p in all_commenters if p != profile and not profile.can_view_photos_from(p)}
 
-    # Every visibility decision - comment-visibility, pending-scan, the @loc
-    # mention gate, and author-identity masking - lives in this one call, shared
-    # with the external API so the two surfaces cannot drift apart on it.
+    # Every visibility decision - comment-visibility, pending-scan, the @loc mention gate, and author-identity
+    # masking - lives in this one call, shared with the external API so the two surfaces cannot drift apart on
+    # it.
     visible = visible_comment_tree(top_level, profile)
 
     rendered = [
@@ -225,11 +196,6 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
                 }
                 for reply in item.replies
             ],
-            # A reply whose parent was deleted also has parent=None, so it
-            # queries identically to a genuine top-level comment - this
-            # distinguishes the two so the template can render an "[Original
-            # comment deleted]" placeholder above it instead of showing it as
-            # if it had always stood on its own (UL-219).
             "parent_was_deleted": item.parent_was_deleted,
         }
         for item in visible
@@ -237,9 +203,8 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
     return {
         "rendered_comments": rendered,
         "page_obj": page_obj,
-        # The gated count, not comments_qs.count(): a raw total disagrees with
-        # the thread whenever a gate dropped something, which is the existence
-        # oracle services.comments.comments is built to deny.
+        # The gated count, not comments_qs.count(): a raw total disagrees with the thread whenever a gate
+        # dropped something, which is the existence oracle services.comments.comments is built to deny.
         "total_comment_count": visible_comment_count(comments_qs, profile),
         "profile": profile,
         "blurred_profiles": blurred_profiles,
@@ -254,12 +219,8 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
 def _pin_comments_context(pin, profile: Profile, request: HttpRequest) -> dict:
     """Build the Notes panel context for a pin, aggregating child pins' notes on ``?children=1``.
 
-    Mirrors the page-wide "show child pin details" toggle already applied to the
-    map, photo gallery, and visit history (see ``controllers.visits._render_visit_history``)
-    - a note left on a child pin must not be invisible from the parent's own
-    Notes tab just because it happens to live on a nested row. Posting and
-    deleting still always act on the exact pin passed in; only the *listing*
-    aggregates.
+    - a note left on a child pin must not be invisible from the parent's own Notes tab just because it
+      happens to live on a nested row. Posting and deleting still ...
 
     Args:
         pin: The pin whose Notes panel is being rendered.
@@ -318,9 +279,8 @@ class PinCommentsView(LoginRequiredMixin, View):
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            # parent__isnull=True: replies render one level deep
-            # (visible_comment_tree never walks a reply's own .replies), so a
-            # reply-to-a-reply would persist but never appear anywhere.
+            # parent__isnull=True: replies render one level deep (visible_comment_tree never walks a reply's own
+            # .replies), so a reply-to-a-reply would persist but never appear anywhere.
             parent = get_object_or_404(Comment, id=parent_id, pin=pin, parent__isnull=True)
         comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=pin))
         if image:
@@ -343,9 +303,8 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _profile(request)
-        # A deletable comment may live on any descendant, not just the exact
-        # pin in the URL - the aggregated view's delete buttons post back here
-        # for a note authored on a child pin.
+        # A deletable comment may live on any descendant, not just the exact pin in the URL - the aggregated
+        # view's delete buttons post back here for a note authored on a child pin.
         subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
         comment = get_object_or_404(Comment, id=comment_id, pin__in=subtree)
         if comment.profile != profile:
@@ -354,15 +313,11 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
         comment.delete()
         _discard_comment_image(comment)
         if markup_map is not None:
-            # The comment itself is not restorable, but the map attached to it is
-            # hand-drawn work - stash it so deleting the comment can't silently
-            # destroy the drawing.
+            # The comment itself is not restorable, but the map attached to it is hand-drawn work - stash it so
+            # deleting the comment can't silently destroy the drawing.
             stash_for_undo(MARKUP_MAP_MODEL_LABEL, [markup_map], markup_map.profile)
             markup_map.delete()
-        # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
-        # orphaned top-level comments. Re-render the whole panel rather than just
-        # removing the deleted <li>, so those replies stay visible in place
-        # instead of disappearing until the next reload.
+        # Replies to a deleted comment survive (parent FK is SET_NULL), becoming orphaned top-level comments.
         ctx = _pin_comments_context(pin, profile, request)
         return _render_comments(request, ctx)
 
@@ -373,18 +328,9 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 def _visible_wiki_comments(wiki: Wiki, profile: Profile, *, include_children: bool = False) -> QuerySet[Comment]:
     """The wiki's comments as *profile* is entitled to see them at page scope.
 
-    Applies wiki concealment only. Per-comment gates (the author's
-    ``comment_visibility``, a pending malware scan, an ``@loc`` mention the
-    viewer has not pinned) are not expressible as a queryset filter; listing
-    applies them in :func:`visible_comment_tree` via ``_build_context``, and
-    by-id paths (reply parent, delete) must go through
-    :func:`_wiki_comment_addressable_by` so a sequential id is not an
-    existence oracle for a comment the listing withholds.
-
-    One function rather than the same two lines at each of the three call sites:
-    the GET had them and the POST and DELETE re-renders did not, so posting a
-    comment handed a concealed viewer the whole thread that the page they were
-    looking at had just filtered.
+    One function rather than the same two lines at each of the three call sites: the GET had them and
+    the POST and DELETE re-renders did not, so posting a comment handed a concealed viewer the whole
+    thread that the page they were looking at had just filtered.
 
     Args:
         wiki: The wiki whose comments are being listed.
@@ -408,10 +354,7 @@ def _visible_wiki_comments(wiki: Wiki, profile: Profile, *, include_children: bo
 def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comment] | None:
     """The queryset a concealed viewer's replies must be prefetched from.
 
-    Narrowing the top level is not enough. ``comment.replies`` is keyed on the
-    parent's primary key, so a stranger's reply to a comment the viewer *can*
-    see - their own, or a friend's - arrives in full however the top-level
-    queryset was filtered.
+    Narrowing the top level is not enough.
 
     Args:
         wiki: The wiki whose comments are being listed.
@@ -433,17 +376,13 @@ def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comme
 def _wiki_comment_addressable_by(wiki: Wiki, profile: Profile, comment_id: int | str) -> Comment:
     """Return one wiki comment *profile* may address by id, or 404.
 
-    ``_visible_wiki_comments`` only applies wiki-concealment. Addressing a
-    sequential id also needs the per-comment gates (author
-    ``comment_visibility``, pending malware scan, ``@loc`` mention) or a
-    guessed id is an existence oracle for comments the listing withholds -
-    and a reply would notify an author whose comments this caller is not
-    permitted to read. Matches the external API's ``comment_is_visible``
-    check on the same paths.
+    Addressing a sequential id also needs the per-comment gates (author ``comment_visibility``, pending
+    malware scan, ``@loc`` mention) or a guessed id is an existence oracle for comments the listing
+    withholds - and a reply would notify an author whose comments this caller is not permitted to read.
 
     Args:
-        wiki: The wiki (or ancestor, when child comments are aggregated)
-            whose thread is being addressed.
+        wiki: The wiki (or ancestor, when child comments are aggregated) whose thread is being
+        addressed.
         profile: The viewer.
         comment_id: The sequential id from the URL or ``parent_id`` field.
 
@@ -451,8 +390,8 @@ def _wiki_comment_addressable_by(wiki: Wiki, profile: Profile, comment_id: int |
         The comment, with ``profile`` selected.
 
     Raises:
-        Http404: Unknown id, a comment on a concealed row, or a comment
-            this caller was never shown - all indistinguishable.
+        Http404: Unknown id, a comment on a concealed row, or a comment this caller was never shown -
+        all indistinguishable.
     """
     comment = get_object_or_404(
         _visible_wiki_comments(wiki, profile, include_children=True).select_related("profile"),
@@ -505,10 +444,9 @@ class WikiCommentsView(LoginRequiredMixin, View):
         if parent_id:
             parent = _wiki_comment_addressable_by(wiki, profile, parent_id)
             if parent.parent_id is not None:
-                # Replies render one level deep (visible_comment_tree never
-                # walks a reply's own .replies) - a reply-to-a-reply would
-                # persist but never appear anywhere, so refuse it the same
-                # way an unaddressable id already is.
+                # Replies render one level deep (visible_comment_tree never walks a reply's own .replies) - a
+                # reply-to-a-reply would persist but never appear anywhere, so refuse it the same way an
+                # unaddressable id already is.
                 raise Http404
         comment = Comment.objects.create(
             wiki=wiki,
@@ -553,24 +491,17 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
-        # Owner-only, per the guard above, so this is always the contributor
-        # ending their own contribution - the same case, and the same treatment,
-        # as withdrawing a photo from a wiki (see detach_image_from_wiki). A
-        # removal by anyone else would be the weighted case instead; there is no
-        # such path here today, which is why this retracts outright.
+        # Owner-only, per the guard above, so this is always the contributor ending their own contribution - the
+        # same case, and the same treatment, as withdrawing a photo from a wiki (see detach_image_from_wiki).
         retract_events_for_target(comment, reason="contribution_withdrawn")
         comment.delete()
         _discard_comment_image(comment)
         if markup_map is not None:
-            # The comment itself is not restorable, but the map attached to it is
-            # hand-drawn work - stash it so deleting the comment can't silently
-            # destroy the drawing.
+            # The comment itself is not restorable, but the map attached to it is hand-drawn work - stash it so
+            # deleting the comment can't silently destroy the drawing.
             stash_for_undo(MARKUP_MAP_MODEL_LABEL, [markup_map], markup_map.profile)
             markup_map.delete()
-        # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
-        # orphaned top-level comments. Re-render the whole panel rather than just
-        # removing the deleted <li>, so those replies stay visible in place
-        # instead of disappearing until the next reload.
+        # Replies to a deleted comment survive (parent FK is SET_NULL), becoming orphaned top-level comments.
         include_children = request.GET.get("children") == "1"
         ctx = _build_context(
             _visible_wiki_comments(wiki, profile, include_children=include_children),
@@ -595,11 +526,8 @@ class CommentReactionView(LoginRequiredMixin, View):
 
     def post(self, request, comment_id):
         profile = _profile(request)
-        # Only comments the user can actually see: comments on their own pins,
-        # or on wikis for locations they have pinned themselves. An unscoped
-        # id lookup would let sequential-id probing react to (and read
-        # reaction rows of) comments on private pins or wikis the requester
-        # can't otherwise view.
+        # Only comments the user can actually see: comments on their own pins, or on wikis for locations they
+        # have pinned themselves.
         comment = get_object_or_404(
             Comment.objects.filter(Q(pin__profile=profile) | Q(wiki__isnull=False)).select_related("wiki__location", "profile"),
             id=comment_id,
@@ -607,25 +535,17 @@ class CommentReactionView(LoginRequiredMixin, View):
         if comment.wiki_id:
             if not location_visible_to(comment.wiki.location, profile):
                 raise Http404
-            # Re-resolved through the same concealment-aware lookup every
-            # other by-id wiki-comment path uses (reply-parent resolution,
-            # delete) - the fetch above only established which wiki this is;
-            # it applies no concealment narrowing itself, so a concealed
-            # comment was otherwise still reachable (and reactable) by a
-            # guessed sequential id.
+            # Re-resolved through the same concealment-aware lookup every other by-id wiki-comment path uses
+            # (reply-parent resolution, delete) - the fetch above only established which wiki this is; it
+            # applies no concealment narrowing itself, so a concealed comment was otherwise still reachable (and
+            # reactable) by a guessed sequential id.
             comment = _wiki_comment_addressable_by(comment.wiki, profile, comment_id)
-        # Page-level visibility isn't enough on its own. comment_is_visible
-        # applies the same per-comment gates the listing does: the author's
-        # comment_visibility, a pending malware scan, and an @loc mention the
-        # caller has not pinned. Checking only comment_visibility left the
-        # other two reachable by sequential id.
+        # Page-level visibility isn't enough on its own. comment_is_visible applies the same per-comment gates
+        # the listing does: the author's comment_visibility, a pending malware scan, and an @loc mention the
+        # caller has not pinned.
         elif not comment_is_visible(comment, profile):
             raise Http404
-        # The add/remove/notify sequence lives in the service, not here. It used
-        # to be hand-rolled in this view as well, and the two copies agreeing was
-        # a coincidence: fixing a missing notification on the service side (the
-        # external API reacted without ever notifying the author) left this copy
-        # untouched, and only the panel's copy happened to already be correct.
+        # The add/remove/notify sequence lives in the service, not here.
         try:
             toggle_reaction(profile, comment, request.POST.get("emoji", ""))
         except UnsupportedReactionEmojiError as exc:
@@ -709,10 +629,8 @@ def _aggregate_reactions(reactions_qs, profile: Profile | None = None, *, concea
     Args:
         reactions_qs: The comment's reactions.
         profile: The viewer, required when ``conceal`` is True.
-        conceal: Whether this viewer sees the concealed form of the wiki the
-            comment belongs to - a reaction is a contribution like any other,
-            so a concealed viewer's own (visible) comment must not report an
-            audience of strangers it cannot otherwise see.
+        conceal: Whether this viewer sees the concealed form of the wiki the comment belongs to - a
+        reaction is a contribution like any other, so a...
     """
     if conceal:
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows

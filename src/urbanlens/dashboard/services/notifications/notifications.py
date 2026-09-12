@@ -1,10 +1,4 @@
-"""Critical-issue notification dispatch (admin email + Gotify push).
-
-Lets the site admin be alerted about critical issues (e.g. a pin import failing to
-process an uploaded file) without exposing the details of whatever triggered the
-issue - callers should only pass high-level, non-sensitive facts (what happened and
-when) and point the admin at the app logs for specifics.
-"""
+"""Critical-issue notification dispatch (admin email + Gotify push)."""
 
 from __future__ import annotations
 
@@ -49,11 +43,7 @@ def notify(event: str, subject: str, message: str) -> None:
     Args:
         event: One of the ``NotificationEvent`` keys.
         subject: Short human-readable summary; also used as the Gotify title.
-        message: Notification body. Must not include user-supplied content (e.g.
-            uploaded file contents or names) - only non-sensitive facts such as a
-            file format and timestamp. Admins can consult the app logs to
-            investigate further.
-    """
+        message: Notification body."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     fields = _EVENT_CHANNEL_FIELDS.get(event)

@@ -1,16 +1,5 @@
 /**
  * The composer's whole job is the gap between "sent" and "accepted".
- *
- * All three game clients cleared their input the moment `send()` returned true,
- * which reports transmission. The consumer answers a refused frame with
- * `{"type": "error"}` - an out-of-scope credential, a failed write, and soon a
- * volume limit - and none of them had a `case "error"` at all, so a refusal
- * arrived as a message that simply vanished (P31).
- *
- * The ordering tests are the ones that matter. Under a rate limit, refusals
- * arrive for the *oldest* unacknowledged send while newer ones may already have
- * succeeded, so a composer that just remembers "the last thing I sent" hands
- * back the wrong message exactly when it is being used most.
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
@@ -166,10 +155,7 @@ describe("ChatComposer", () => {
     });
 
     test("a reconnect forgets what was in flight", () => {
-        // The acknowledgement went down with the connection, so the entry would
-        // never be retired - and the next message with the same text would
-        // retire it instead of itself, shifting the queue for the rest of the
-        // session.
+        // The acknowledgement went down with the connection, so the entry would never be retired.
         const input = makeInput("lost to a drop");
         const composer = new ChatComposer(input, () => true);
         composer.submit();

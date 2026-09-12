@@ -1,5 +1,4 @@
-"""What the weather actually was on the day of a visit.
-It is the counterpart of the forecast that ``services.apis.locations.weather_resolution`` serves, and the opposite kind of fact: a forecast is only meaningful relative to when it was made, while the record of a day that has already happened never changes."""
+"""What the weather actually was on the day of a visit."""
 
 from __future__ import annotations
 
@@ -41,10 +40,7 @@ def is_recorded_yet(day: date, *, today: date | None = None) -> bool:
         today: Override for the current date, for tests.
 
     Returns:
-        False when ``day`` predates :data:`RECORD_BEGINS` or falls inside the
-        :data:`PUBLICATION_LAG_DAYS` window - in both cases there is nothing to
-        fetch, and the second is temporary.
-    """
+        False when ``day`` predates :data:`RECORD_BEGINS` or falls inside the :data:`PUBLICATION_LAG_DAYS` window - in both cases there is nothing to fetch, and the second is temporary."""
     current = today or timezone.localdate()
     return RECORD_BEGINS <= day <= current - timedelta(days=PUBLICATION_LAG_DAYS)
 
@@ -56,10 +52,7 @@ def cached_days(location: Location) -> dict[str, Any]:
         location: The shared Location the visit's pin points at.
 
     Returns:
-        A mapping of ISO date to that day's record. Empty when nothing has been
-        fetched yet. Deliberately ignores ``LocationCache.is_stale`` - see the
-        module docstring.
-    """
+        A mapping of ISO date to that day's record."""
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
     entry = LocationCache.objects.filter(location=location, source=CACHE_SOURCE).first()
@@ -79,8 +72,7 @@ class RecordedDay:
         low_f: Daily minimum temperature.
         mean_f: Daily mean temperature.
         precipitation_in: Rainfall as liquid volume, inches.
-        snowfall_in: Snow as accumulated depth, inches - not the same quantity
-            as ``precipitation_in`` in different units.
+        snowfall_in: Snow as accumulated depth, inches - not the same quantity as ``precipitation_in`` in different units.
         wind_max_mph: Maximum sustained wind.
         gust_max_mph: Maximum gust."""
 
@@ -104,8 +96,7 @@ class RecordedDay:
         Assembled here rather than in a template because the interesting cases are all conditional - a day with a high but no low, a dry day, a reading of exactly zero - and each one is a branch a template expresses badly and nothing can test.
 
         Returns:
-                Something like ``"72° / 54°F · 0.30 in rain · gusts 31 mph"``, or
-                ``""`` when nothing came back."""
+            Something like ``"72° / 54°F · 0.30 in rain · gusts 31 mph"``, or ``""`` when nothing came back."""
         parts: list[str] = []
         if self.high_f is not None and self.low_f is not None:
             parts.append(f"{self.high_f:.0f}° / {self.low_f:.0f}°F")
@@ -178,11 +169,7 @@ def _fetch_days(latitude: float, longitude: float, start: date, end: date) -> di
         end: Last day, inclusive.
 
     Returns:
-        ``{iso_date: record}`` for the days REData could answer, empty when it
-        could not answer at all. A range is one request however wide it is,
-        which is what makes the trip surface affordable: a week-long trip costs
-        one call per location rather than one per day.
-    """
+        ``{iso_date: record}`` for the days REData could answer, empty when it could not answer at all."""
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 
     if not redata_configured():
@@ -210,15 +197,12 @@ def recorded_range(location: Location, start: date, end: date) -> dict[str, Reco
     One REData request covers the whole range, so a caller with several days at one place (a trip's activities, a run of visits) should use this rather than calling :func:`recorded_weather` per day.
 
     Args:
-        location: The shared Location whose coordinates are queried and whose
-            cache row the days are stored in.
+        location: The shared Location whose coordinates are queried and whose cache row the days are stored in.
         start: First day, inclusive.
         end: Last day, inclusive.
 
     Returns:
-        ``{iso_date: RecordedDay}`` for the days that could be answered. Days
-        outside the recorded window (see :func:`is_recorded_yet`) are absent
-        rather than fetched."""
+        ``{iso_date: RecordedDay}`` for the days that could be answered."""
     wanted = [day for day in _days_between(start, end) if is_recorded_yet(day)]
     if not wanted:
         return {}
@@ -252,9 +236,7 @@ def _clusters(days: list[date]) -> list[tuple[date, date]]:
         days: The days to fetch, in any order.
 
     Returns:
-        ``(start, end)`` pairs covering every day, splitting wherever the gap
-        exceeds :data:`_MERGE_GAP_DAYS`.
-    """
+        ``(start, end)`` pairs covering every day, splitting wherever the gap exceeds :data:`_MERGE_GAP_DAYS`."""
     ordered = sorted(set(days))
     if not ordered:
         return []
@@ -273,14 +255,9 @@ def recorded_days(location: Location, days: Iterable[date], *, allow_fetch: bool
     """Recorded weather for a set of days at one location, cache-first.
 
     Args:
-        location: The shared Location whose coordinates are queried and whose
-            cache row the days are stored in.
-        days: The days wanted, in any order. Duplicates and days outside the
-            recorded window are dropped.
-        allow_fetch: When False, answer only from cache. Use this on any path
-            that must not make an outbound call - a page render, a list, an
-            export. :func:`missing_days` says what such a caller would need to
-            queue.
+        location: The shared Location whose coordinates are queried and whose cache row the days are stored in.
+        days: The days wanted, in any order.
+        allow_fetch: When False, answer only from cache.
 
     Returns:
         ``{iso_date: RecordedDay}`` for the days that could be answered."""
@@ -306,7 +283,6 @@ def recorded_days(location: Location, days: Iterable[date], *, allow_fetch: bool
 
 def missing_days(location: Location, days: Iterable[date]) -> list[date]:
     """Which of ``days`` are recordable, wanted, and not cached yet.
-    Days outside ERA5's window are absent rather than listed: they are not missing, they are unanswerable, and queueing them would retry forever.
 
     Args:
         location: The Location whose cache row is consulted.
@@ -352,20 +328,12 @@ def recorded_weather(location: Location, day: date, *, allow_fetch: bool = True)
     """The weather on one day at one location, from cache or REData.
 
     Args:
-        location: The shared Location the visit's pin points at. Its
-            coordinates are what gets queried.
+        location: The shared Location the visit's pin points at.
         day: The day to look up.
-        allow_fetch: When False, answer only from cache. Use this on any path
-            that must not make an outbound call (a list render, a bulk export).
+        allow_fetch: When False, answer only from cache.
 
     Returns:
-        That day's record - ``date`` plus REData's fixed-unit
-        ``temperature_max_c``/``temperature_min_c``/``temperature_mean_c``,
-        ``precipitation_mm``, ``snowfall_cm``, ``wind_speed_max_kmh`` and
-        ``wind_gusts_max_kmh`` - or None when the day is outside the recorded
-        window, the location has no coordinates, REData is not configured, or
-        the lookup failed. A null *inside* a returned record is a real answer:
-        ERA5 gained some variables later than others."""
+        That day's record - ``date`` plus REData's fixed-unit ``temperature_max_c``/``temperature_min_c``/``temperature_mean_c``, ``precipitation_mm``, ``snowfall_cm``, ``wind_speed_max_kmh`` and ``wind_gusts_max_kmh`` - or None when the day is outside..."""
     if not is_recorded_yet(day):
         return None
 
@@ -390,7 +358,6 @@ def recorded_weather(location: Location, day: date, *, allow_fetch: bool = True)
 
 def _store(location: Location, days: dict[str, Any]) -> None:
     """Merge fetched days into the location's cached record.
-    Merges rather than replaces so a lookup for one date keeps the days another already stored, and re-reads the row under a row lock so two concurrent lookups for different dates cannot each write a copy missing the other's.
 
     Args:
         location: The Location to cache against.

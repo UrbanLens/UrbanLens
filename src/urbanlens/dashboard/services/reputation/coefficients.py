@@ -47,9 +47,9 @@ PER_WIKI_PERIOD_CAP = Decimal(60)
 PER_RULE_PERIOD_CAP = Decimal(120)
 
 #: Quality bonuses.
-#: Strictly *additive bonuses for metadata present*, never a penalty for absence - EXIF extraction
-#: is skipped entirely when the uploader has ``track_pin_visits`` off, so a penalty would quietly
-#: pay users less for having a privacy setting enabled.
+#: Strictly *additive bonuses for metadata present*, never a penalty for absence - EXIF extraction is
+#: skipped entirely when the uploader has ``track_pin_visits`` off, so a penalty would quietly pay
+#: users less for having a privacy setting enabled.
 QUALITY_HAS_CAPTURE_DATE = Decimal("1.5")
 QUALITY_HAS_REAL_GPS = Decimal("1.5")
 

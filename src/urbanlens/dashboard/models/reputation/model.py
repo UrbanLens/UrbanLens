@@ -1,35 +1,5 @@
 """The hidden reputation ledger.
-
-Two models. :class:`ReputationEvent` is the append-only truth - one row per
-contribution, carrying the inputs that produced its value so a score can be
-explained later. :class:`ProfileReputation` is a cache of the sum, because the
-consumers of this system read a total on the request path and summing a growing
-ledger per read is exactly the cost this feature is required not to add.
-
-Three properties are deliberate and worth not undoing:
-
-**Rows are written synchronously; only their *value* is deferred.** The ledger
-has no source of truth outside itself - unlike every achievement metric, which
-is a count over other tables and can be recomputed at any time. A row written
-by a Celery task would be lost whenever the broker is briefly unreachable,
-because ``safely_enqueue_task`` swallows that and returns None. So the row is
-inserted inside the contributor's own transaction (a rolled-back contribution
-rolls its row back with it), with ``value`` null, and the scorer fills it in
-afterwards. ``ReputationEventQuerySet.unscored`` is what the nightly sweep
-drains.
-
-**Value is a Decimal, not an integer.** The diminishing-returns curve is
-fractional by design - a full point for the first comment in a month, half for
-the second, a quarter for the third.
-
-**Retraction is a flag, not a deletion or a negative row.** A wiki edit's
-``reverted`` state is current state rather than history - reverting a revert
-clears it - so retraction has to be re-applicable in both directions. A
-compensating negative row could not be un-applied.
-
-This score is never shown to the user. See ``docs/designs/reputation-and-gating.md``
-for what it is for, and for why the gate that consumes it is still an open
-design question.
+Two models. :class:`ReputationEvent` is the append-only truth - one row per contribution, carrying the inputs that produced its value so a score can be explained later. :class:`ProfileReputation` is a cache of the sum, because the consumers of this system read a total on the request path and summing a growing ledger per read is exactly the cost this feature is required not to add.
 """
 
 from __future__ import annotations
@@ -60,11 +30,7 @@ from urbanlens.dashboard.models.reputation.queryset import ProfileReputationMana
 
 def rule_choices() -> list[tuple[str, str]]:
     """Return the registered rule keys, for ``rule_key``'s choices.
-
-    A callable rather than a list, matching ``Achievement.metric``: the
-    registry is populated at import time by whatever rules are installed, so
-    passing the function means registering a new rule never generates a
-    migration.
+    A callable rather than a list, matching ``Achievement.metric``: the registry is populated at import time by whatever rules are installed, so passing the function means registering a new rule never generates a migration.
     """
     from urbanlens.dashboard.services.reputation.rules import rule_choices as registry_choices
 
@@ -134,16 +100,9 @@ class ReputationEvent(abstract.DashboardModel):
         ordering = ["-occurred_at"]
         get_latest_by = "occurred_at"
         constraints = [
-            # The idempotency key. Celery runs with acks_late and retries on
-            # OSError, so any task that writes a row can run twice; and a
-            # signal can fire again on a re-save. One row per (rule, target)
-            # makes a repeat a no-op at the database rather than something
-            # each caller has to remember to check.
-            #
-            # Rules with no discrete target (tenure, activity streaks) pass
-            # target_id=None, which Postgres treats as distinct in a unique
-            # index - those rules carry the period in their rule_key's target
-            # instead. See services.reputation.scoring.record_event.
+            # The idempotency key.
+            # Celery runs with acks_late and retries on OSError, so any task that writes a row can
+            # run twice; and a signal can fire again on a re-save.
             UniqueConstraint(fields=["rule_key", "target_kind", "target_id"], name="uniq_reputation_event_target"),
         ]
         indexes = [

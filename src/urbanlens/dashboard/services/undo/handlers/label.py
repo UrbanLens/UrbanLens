@@ -55,18 +55,7 @@ class LabelUndoHandler(UndoHandler):
         """Recreate the labels, then relink hierarchy and pin assignments.
 
         Raises:
-            UndoExpiredError: If the owning profile was deleted during the
-                retention window, or if the label's name has been taken since the
-                delete. Every relational piece still restores leniently - a
-                parent or pin that vanished meanwhile is skipped rather than
-                failing the whole restore.
-
-        The name check exists because ``Label`` gained a uniqueness constraint
-        (migration 0042). Before it, restoring onto a reused name simply produced
-        a duplicate; now it would raise `IntegrityError` from the database, which
-        reaches the user as a 500 with no explanation. Refusing with a message is
-        the graceful form of the same answer.
-        """
+            UndoExpiredError: If the owning profile was deleted during the retention window, or if the label's name has been taken since the delete."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.models.pin.model import Pin

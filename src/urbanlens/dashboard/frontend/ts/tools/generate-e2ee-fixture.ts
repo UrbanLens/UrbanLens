@@ -1,19 +1,5 @@
 /**
  * Generate the E2EE interoperability fixture consumed by native clients' test suites.
- *
- * Runs the REAL web-client crypto (shared/e2ee-crypto.ts, libsodium WASM) end to
- * end - KDF derivations, identity keypair, key wrapping, recovery wrapping,
- * conversation-key sealing, one message - and emits every input, intermediate,
- * and output as one JSON document. A native implementation (the Flutter app's
- * E2eeService) replays each step against the recorded inputs and must match
- * byte-for-byte; see docs/e2ee-interop-fixture.json for the committed copy and
- * the field-by-field verification contract in its `_readme`.
- *
- * Every secret in the output is generated fresh for the fixture and belongs to
- * no real account. Do not point this at real user data; there is no way to.
- *
- * Usage (from the repo root):
- *     bun run src/urbanlens/dashboard/frontend/ts/tools/generate-e2ee-fixture.ts > docs/e2ee-interop-fixture.json
  */
 import sodium from "libsodium-wrappers-sumo";
 

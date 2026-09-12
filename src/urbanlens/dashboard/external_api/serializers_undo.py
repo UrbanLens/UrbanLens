@@ -18,12 +18,11 @@ class UndoEntrySerializer(serializers.Serializer):
 class UndoHistorySerializer(serializers.Serializer):
     """The undo feed, as the endpoint actually returns it.
 
-    Exists because the endpoint was documented as a bare array of
-    :class:`UndoEntrySerializer` while returning this envelope, so a generated
-    client iterated an object. The envelope is the correct half of that
-    disagreement: ``omitted`` is load-bearing, and dropping it to match the old
-    declaration would remove a client's only signal that its credential is
-    missing a scope (see ``views_undo.UndoListView``).
+    Exists because the endpoint was documented as a bare array of :class:`UndoEntrySerializer` while
+    returning this envelope, so a generated client iterated an object.
+    The envelope is the correct half of that disagreement: ``omitted`` is load-bearing, and dropping it
+    to match the old declaration would remove a client's only signal that its credential is missing a
+    scope (see ``views_undo.UndoListView``).
     """
 
     entries = UndoEntrySerializer(many=True, read_only=True)

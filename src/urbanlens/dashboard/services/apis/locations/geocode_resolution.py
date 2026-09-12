@@ -1,5 +1,4 @@
-"""Resolves forward-geocoding (address -> coordinates) to REData or direct Nominatim.
-Only used for the simple "resolve an address typed into a pin-creation form" flow - the richer, OSM-metadata-heavy Nominatim reverse-geocode panel (``plugins.builtin.nominatim``) is a different, deliberately direct-only integration (see that module's own docstring)."""
+"""Resolves forward-geocoding (address -> coordinates) to REData or direct Nominatim."""
 
 from __future__ import annotations
 
@@ -19,13 +18,10 @@ def geocode_address(address: str) -> tuple[float | None, float | None]:
         address: The address string to geocode.
 
     Returns:
-        A ``(latitude, longitude)`` tuple, or ``(None, None)`` when the
-        address doesn't resolve to a place anywhere.
+        A ``(latitude, longitude)`` tuple, or ``(None, None)`` when the address doesn't resolve to a place anywhere.
 
     Raises:
-        RateLimitExceededError: The app-wide Nominatim budget refused the
-            fallback call (see :func:`nominatim_geocode`).
-    """
+        RateLimitExceededError: The app-wide Nominatim budget refused the fallback call (see :func:`nominatim_geocode`)."""
     if redata_configured():
         try:
             envelope = RedataGeocodeGateway().geocode(address, limit=1)
@@ -44,20 +40,15 @@ def geocode_address(address: str) -> tuple[float | None, float | None]:
 
 def nominatim_geocode(address: str) -> tuple[float | None, float | None]:
     """Forward-geocode one address through the project's Nominatim gateway.
-    Goes through :class:`~urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway` rather than a raw geopy client so the call is rate-limited (Nominatim's usage policy is one request/second; the app-wide budget enforces it), cost-logged, timeout-bounded, and sent under the project's own user agent.
 
     Args:
         address: The address string to geocode.
 
     Returns:
-        A ``(latitude, longitude)`` tuple, or ``(None, None)`` when Nominatim
-        has no such place or the request failed (the gateway flattens
-        failures to an empty result).
+        A ``(latitude, longitude)`` tuple, or ``(None, None)`` when Nominatim has no such place or the request failed (the gateway flattens failures to an empty result).
 
     Raises:
-        RateLimitExceededError: The app-wide Nominatim budget refused the
-            call - propagated so a caller cannot mistake "we did not ask"
-            for "no such place"."""
+        RateLimitExceededError: The app-wide Nominatim budget refused the call - propagated so a caller cannot mistake "we did not ask" for "no such place"."""
     from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
 
     results = NominatimGateway().search(address, limit=1)

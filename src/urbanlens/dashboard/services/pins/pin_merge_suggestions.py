@@ -1,5 +1,4 @@
-"""Accept/reject lifecycle for PinMergeSuggestion.
-Thin wrapper around ``services.pins.pin_merge.merge_pins`` - this module only resolves "which pin is the survivor" and flips the suggestion's status; ``pin_merge`` owns the actual data-consolidating merge mechanics so any future "merge these two pins" affordance can call it directly without going through a suggestion at all."""
+"""Accept/reject lifecycle for PinMergeSuggestion."""
 
 from __future__ import annotations
 
@@ -25,18 +24,13 @@ def _resolve_survivor_loser(suggestion: PinMergeSuggestion, survivor_pk: int | N
 
     Args:
         suggestion: The suggestion being accepted.
-        survivor_pk: Explicit choice of pin_a_id/pin_b_id, or None to use
-            ``suggestion.suggested_survivor``.
+        survivor_pk: Explicit choice of pin_a_id/pin_b_id, or None to use ``suggestion.suggested_survivor``.
 
     Returns:
         (survivor, loser) pins.
 
     Raises:
-        ValueError: ``survivor_pk`` (or ``suggested_survivor``, if that's what
-            was used) is neither of this suggestion's two pins, or either pin
-            is already gone (only possible for a non-pending suggestion, which
-            the caller should have already filtered out via ``is_actionable``).
-    """
+        ValueError: ``survivor_pk`` (or ``suggested_survivor``, if that's what was used) is neither of this suggestion's two pins, or either pin is already gone (only possible for a non-pending suggestion, which the caller should have already filtered out via..."""
     chosen_pk = survivor_pk if survivor_pk is not None else suggestion.suggested_survivor_id
     if chosen_pk not in (suggestion.pin_a_id, suggestion.pin_b_id):
         raise ValueError(f"{chosen_pk} is not one of this suggestion's two pins")
@@ -59,21 +53,15 @@ def accept_pin_merge_suggestion(
     Args:
         suggestion: The pending suggestion being accepted.
         profile: The accepting profile (must own both pins).
-        survivor_pk: User's explicit choice of which pin survives - must be
-            ``suggestion.pin_a_id`` or ``suggestion.pin_b_id``. Defaults to
-            ``suggestion.suggested_survivor`` when omitted.
-        resolutions: User's choices for any real field conflicts between the
-            two pins - see ``services.pins.pin_merge.plan_merge_conflicts`` and
-            ``merge_pins``.
+        survivor_pk: User's explicit choice of which pin survives - must be ``suggestion.pin_a_id`` or ``suggestion.pin_b_id``.
+        resolutions: User's choices for any real field conflicts between the two pins - see ``services.pins.pin_merge.plan_merge_conflicts`` and ``merge_pins``.
 
     Returns:
         The surviving, now-merged pin.
 
     Raises:
         ValueError: ``survivor_pk`` isn't one of the suggestion's two pins.
-        services.pins.pin_merge.UnresolvedMergeConflictError: a real conflict
-            between the two pins has no resolution supplied.
-    """
+        services.pins.pin_merge.UnresolvedMergeConflictError: a real conflict between the two pins has no resolution supplied."""
     survivor, loser = _resolve_survivor_loser(suggestion, survivor_pk)
     merged = merge_pins(survivor, loser, profile, resolutions)
     # A plain queryset .update() rather than suggestion.save(): survivor/loser are

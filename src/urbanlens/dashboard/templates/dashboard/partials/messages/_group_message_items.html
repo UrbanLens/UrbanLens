@@ -1,9 +1,4 @@
-{% comment %}
-Message bubbles and day separators for one page of a group thread. Included by
-both `_group_thread.html` (the most recent page) and
-`_group_thread_messages_page.html` (older pages fetched via infinite scroll).
-Context: `thread_messages`, `group`, `viewer_id`, `my_slug`.
-{% endcomment %}
+{% comment %}Message bubbles and day separators for one page of a group thread.{% endcomment %}
 {% load dashboard_tags %}
 {% for message in thread_messages %}
 {% ifchanged message.created|date:"Y-m-d" %}

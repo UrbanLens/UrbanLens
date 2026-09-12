@@ -1,11 +1,5 @@
 /**
- * Vault > Photos gallery grid: infinite scroll, off-screen image pruning, and
- * the sort control. Reuses the same fetch/scroll/prune engine as album grids
- * (see photo-virtual-grid.ts), parameterized for this page's own `.photo-tile`
- * markup rather than the shared album `.gallery-item` one - upload, delete, and
- * the lightbox here are plain page-level JS (pages/vault/photos.html) that
- * already speak that markup, and this module only adds pages to the same grid
- * without disturbing them.
+ * Vault > Photos gallery grid: infinite scroll, off-screen image pruning, and the sort control.
  */
 
 import { bindPhotoGrid } from "./photo-virtual-grid";
@@ -23,10 +17,7 @@ interface VaultPhotoJson {
     longitude?: unknown;
 }
 
-// The static shell has no interpolated values at all - id, caption, and the
-// thumbnail URL are all set afterward as element properties (src, ariaLabel,
-// a bound click handler), not woven into a markup string, so a caption or
-// filename containing a quote has nothing to break out of.
+// The static shell has no interpolated values at all.
 const TILE_SHELL =
     '<button type="button" class="photo-tile-btn"><img alt="" loading="lazy" onload="this.classList.add(\'is-loaded\')" ' +
     "onerror=\"urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')\"></button>" +
@@ -94,10 +85,7 @@ function bindGrid(grid: HTMLElement, sort: string): void {
         unbindGrid();
         unbindGrid = null;
     }
-    // Read from the grid's own dataset (set server-side from the ?show= the
-    // page was loaded with), not the URL directly - the "Photos from Others"
-    // toggle is a plain link/full navigation (see photos.html), so whatever
-    // the page loaded with is what pagination should keep requesting.
+    // Read from the grid's own dataset (set server-side from the ?show= the page was loaded with), not the URL directly.
     const show = grid.dataset.show === "from_others" ? "from_others" : "";
     unbindGrid = bindPhotoGrid(grid, {
         inAlbum: false,
@@ -137,17 +125,10 @@ if (document.readyState === "loading") {
     init();
 }
 
-// Exposed so pages/vault/photos.html's own inline upload handler can prepend
-// a freshly-uploaded photo through the exact same tile markup this module
-// renders for fetched pages, instead of a second hand-written copy drifting
-// out of sync with this one. Declared globally in types/globals.d.ts.
+// Exposed so pages/vault/photos.html's own inline upload handler can prepend a freshly-uploaded photo through the exact same tile markup.
 window.renderVaultPhotoTile = renderVaultPhotoTile;
 
-// Re-fetches the grid from scratch under the current sort. Used after an
-// upload batch completes under any sort but "recent" - see this page's own
-// _finishUpload, which is the one place a freshly uploaded photo can't just
-// be spliced into the DOM (where it belongs depends on the sort criterion,
-// which only the server can resolve).
+// Re-fetches the grid from scratch under the current sort.
 window.refreshVaultPhotoGrid = function refreshVaultPhotoGrid(): void {
     const grid = document.getElementById("photo-grid");
     if (!grid) return;

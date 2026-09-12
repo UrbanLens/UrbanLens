@@ -17,8 +17,7 @@
     {% map_toolbar "add_pin,import,search,pin_list,select,screenshot" %}
 
     {# -- Layers panel (bottom-left, Google-Maps style; shared component) ------ #}
-    {# Rendered by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} tag and driven by      #}
-    {# window.MapLayers - the same code every other map on the site uses.       #}
+    {# Rendered by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} tag and driven by window.MapLayers. #}
     {% if show_places_layer %}
     {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders,infrastructure,places" %}
     {% else %}
@@ -69,9 +68,7 @@
               hx-swap="outerHTML"
               hx-sync="this:replace">
             {% csrf_token %}
-            {# Kept in sync by toggleToolbarSavedFilter() - the bottom-right toolbar's active #}
-            {# filter set rides along with every existing #filter-form submission (map.search, #}
-            {# the pin-list panel GET, URL restore) as an independent, AND-combined layer.       #}
+            {# Kept in sync by toggleToolbarSavedFilter(). #}
             <input type="hidden" name="toolbar_filter_ids" id="fp-toolbar-filter-ids" value="">
 
             <div class="fp-section">
@@ -276,8 +273,6 @@
                     <input type="hidden" name="exclude_regions" id="fp-exclude-regions">
 
                     {# Selected labels area - two columns, shown only when something selected. #}
-                    {# All interactions (click/drag/drop/AND-OR toggle) are wired by the      #}
-                    {# shared picker engine - see ts/shared/label-picker.ts.                  #}
                     <div class="fp-label-selected" id="fp-label-selected" style="display:none">
                         <div class="fp-label-col fp-label-col--incl" id="fp-label-col-incl">
                             <div class="fp-label-col-title">
@@ -304,9 +299,7 @@
                         <div class="fp-formula-display-text" id="fp-formula-display-text"></div>
                     </div>
 
-                    {# Kind tabs filtering the availability list below - shared with every #}
-                    {# label picker (search still narrows within the active tab, via the  #}
-                    {# formula bar below - see ts/shared/label-picker.ts). #}
+                    {# Kind tabs filtering the availability list below. #}
                     <div class="tad-tabs" id="fp-label-kind-tabs" role="tablist">
                         <button type="button" class="tad-tab tad-tab--active" data-tab="" role="tab">All</button>
                         <button type="button" class="tad-tab" data-tab="tag" role="tab">Tags</button>
@@ -362,11 +355,7 @@
             </details>
             {% endif %}
 
-            {# Overlapping pins -- flags pins whose footprint (a drawn/generated #}
-            {# property boundary, or a default circle around its coordinates    #}
-            {# when it has none) overlaps another pin's - useful both for real  #}
-            {# overlapping properties and for spotting pins accidentally left   #}
-            {# stacked on the same spot. #}
+            {# Overlapping pins -- flags pins whose footprint. #}
             <div class="fp-section fp-toggle-row">
                 <label class="fp-toggle">
                     <input type="checkbox" name="overlapping_pins" id="fp-overlapping-pins">
@@ -409,9 +398,7 @@
 
     {# -- Pin list panel (left-docked) ------------------------------------ #}
     <div id="pin-list-panel">
-        {# Reuses the filter panel's header chrome - on mobile this panel is a #}
-        {# bottom sheet, where the edge handle is unavailable and a visible #}
-        {# close control is the only dismiss affordance besides the toolbar toggle. #}
+        {# Reuses the filter panel's header chrome - on mobile this panel is a bottom sheet, where the edge handle is unavailable and a visible. #}
         <div class="fp-header">
             <span class="fp-title">Pins</span>
             <button type="button" class="fp-close" onclick="_togglePinListPanel()" aria-label="Close">✕</button>
@@ -459,7 +446,6 @@
     </div>
     <div class="apdlg-body">
 
-        {# Name #}
         <div class="form-field">
             <label class="form-label">Name</label>
             <input type="text" id="apdlg-name" class="form-input" placeholder="Pin name" autocomplete="off">

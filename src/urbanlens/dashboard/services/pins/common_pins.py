@@ -35,13 +35,10 @@ def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
     Two profiles count as sharing a place when their pins resolve onto the same real-world thing, not only when they land on the identical coordinate row (see :func:`pinned_place_keys`).
 
     Args:
-        profiles: The profiles to intersect. Fewer than two profiles can
-            never have anything "in common", so that case always returns
-            an empty set rather than one profile's full pin list.
+        profiles: The profiles to intersect.
 
     Returns:
-        The set of ``Location`` ids - one representative per shared place -
-        pinned by all of ``profiles``."""
+        The set of ``Location`` ids - one representative per shared place - pinned by all of ``profiles``."""
     if len(profiles) < 2:
         return set()
     shared = set.intersection(*[pinned_place_keys(profile) for profile in profiles])
@@ -68,9 +65,7 @@ def common_pin_locations(profiles: Sequence[Profile]) -> QuerySet[Location]:
         profiles: The profiles to intersect.
 
     Returns:
-        A ``Location`` queryset for the shared locations, or ``Location.objects.none()``
-        when there are none (or fewer than two profiles were given).
-    """
+        A ``Location`` queryset for the shared locations, or ``Location.objects.none()`` when there are none (or fewer than two profiles were given)."""
     common_ids = common_pin_location_ids(profiles)
     if not common_ids:
         return Location.objects.none()

@@ -49,11 +49,9 @@ logger = logging.getLogger(__name__)
 #: Field edits per page in the wiki's history list.
 _HISTORY_PAGE_SIZE = 25
 
-# Metadata for the four community stat votes (danger / vulnerability / priority /
-# rating) shown on the wiki page - the shared-place equivalent of a pin's own
-# STAT_FIELD_META (see controllers/pin_edit.py), reworded for a community voice
-# since these are a composite of every contributing profile's vote, not one
-# person's opinion.
+# Metadata for the four community stat votes (danger / vulnerability / priority / rating) shown on the wiki page
+# - the shared-place equivalent of a pin's own STAT_FIELD_META (see controllers/pin_edit.py), reworded for a
+# community voice since these are a composite of every contributing profile's vote, not one person's opinion.
 WIKI_STAT_FIELD_META = {
     "danger": {
         "label": "Danger",
@@ -92,8 +90,8 @@ def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None, *, conce
         conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
-        Dict with the composite, the viewer's own vote, and that field's
-        label/help/modifier/wide metadata.
+        Dict with the composite, the viewer's own vote, and that field's label/help/modifier/wide
+        metadata.
     """
     return {
         "field": field,
@@ -118,17 +116,13 @@ class LocationWikiView(LoginRequiredMixin, View):
 
         conceal = concealment_active(wiki, profile)
 
-        # Only count root pins (not detail pins), and count distinct users.
-        # The exact count is never exposed - see services.wiki.community_counts.
-        # Shared with the external API's wiki detail payload so the two can't
-        # drift on the privacy rules (notably: first_pinned is suppressed
-        # entirely while the pin count is too low to display).
+        # Only count root pins (not detail pins), and count distinct users. The exact count is never exposed -
+        # see services.wiki.community_counts.
         from urbanlens.dashboard.services.wiki.community_counts import wiki_community_summary
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealed_community_summary
 
-        # Everything below reads field values through this rather than the live
-        # row. It delegates for anything not concealed, so the ordinary path is
-        # unchanged and the concealed one cannot forget a field.
+        # Everything below reads field values through this rather than the live row. It delegates for anything
+        # not concealed, so the ordinary path is unchanged and the concealed one cannot forget a field.
         shown = conceal_wiki(wiki, profile)
 
         community = concealed_community_summary() if conceal else wiki_community_summary(wiki, location)
@@ -138,10 +132,8 @@ class LocationWikiView(LoginRequiredMixin, View):
         # The requesting user's own pin for this location (used for the back-link).
         user_pin = location.pins.filter(profile=profile).first()
 
-        # Places that genuinely compete for the user's pin coordinate - two
-        # unrelated parcels whose county geometry overlaps. Not the buildings
-        # on this property, which are the same place and answer as one; see
-        # services.places.ambiguity for why this is now almost always empty.
+        # Places that genuinely compete for the user's pin coordinate - two unrelated parcels whose county
+        # geometry overlaps.
         other_locations = [candidate for candidate in competing_wiki_locations(user_pin, profile) if candidate.pk != location.pk]
 
         from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
@@ -164,10 +156,8 @@ class LocationWikiView(LoginRequiredMixin, View):
             ("emergency", "Emergency"),
         ]
 
-        # A cover photo is somebody's photograph, promoted by somebody's choice,
-        # and neither the act nor the promotion is recorded anywhere the
-        # provenance rules can read. Concealed viewers get the state a wiki has
-        # before anyone picks one.
+        # A cover photo is somebody's photograph, promoted by somebody's choice, and neither the act nor the
+        # promotion is recorded anywhere the provenance rules can read.
         show_wiki_cover_photo = bool(not conceal and profile.show_wiki_cover_photos and wiki.cover_photo_id)
         wiki_cover_candidates: list[dict] = []
         if show_wiki_cover_photo:
@@ -180,16 +170,11 @@ class LocationWikiView(LoginRequiredMixin, View):
         custom_layers = list(visible_rows(CustomLayer.objects.for_wiki(wiki), wiki, profile).order_by("order", "created"))
         visible_layer_ids = {layer.pk for layer in custom_layers}
 
-        # Filtered the same way as every other related-row type on this page
-        # (comments, custom layers, overlays, edit history) - the About
-        # card's own template used to compute `wiki.links.all` unfiltered.
         wiki_links = visible_rows(wiki.links.all(), wiki, profile)
 
         wiki_is_site_scope = site_scope.is_site_scope(wiki)
-        # Page-wide "show child pin details" toggle: when on (?children=1), the
-        # map, photo gallery, and comments all include content from this wiki's
-        # child wikis (any depth). Off by default except on a parcel wiki,
-        # whose children *are* the content, matching the Private Pin page.
+        # Page-wide "show child pin details" toggle: when on (?children=1), the map, photo gallery, and comments
+        # all include content from this wiki's child wikis (any depth).
         include_children = request.GET.get("children", "1" if wiki_is_site_scope else "0") == "1"
         has_child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).exists()
 
@@ -202,13 +187,11 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "custom_layers": custom_layers,
                 "custom_layers_json": [layer.to_json() for layer in custom_layers],
                 "manage_layers_url": reverse("location.wiki.layers", args=[location.slug]),
-                # Only ever the parent this viewer could actually open - see
-                # visible_parent_wiki: linking to one they haven't earned would
-                # confirm a place exists that they cannot see.
+                # Only ever the parent this viewer could actually open - see visible_parent_wiki: linking to one
+                # they haven't earned would confirm a place exists that they cannot see.
                 "parent_wiki": visible_parent_wiki(wiki, profile),
-                # Filtered by who created it - own+friends overlays survive, an
-                # overlay filed under a now-invisible layer renders unlayered
-                # (see overlay_payload's visible_layer_ids).
+                # Filtered by who created it - own+friends overlays survive, an overlay filed under a
+                # now-invisible layer renders unlayered (see overlay_payload's visible_layer_ids).
                 "map_overlays_json": overlay_payload(visible_rows(MapImageOverlay.objects.for_wiki(wiki), wiki, profile), visible_layer_ids),
                 "manage_overlays_url": reverse("location.wiki.overlays", args=[location.slug]),
                 "manage_overlays_historical_url": reverse("location.wiki.overlays.historical", args=[location.slug]),
@@ -223,9 +206,8 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "has_child_wikis": has_child_wikis,
                 "include_children": include_children,
                 **scope_badge(wiki),
-                # Counted over what this viewer can see, not over every row - a
-                # badge computed on the raw set announces the comments it is
-                # standing in front of.
+                # Counted over what this viewer can see, not over every row - a badge computed on the raw set
+                # announces the comments it is standing in front of.
                 "wiki_comment_count": visible_comment_count(conceal_rows(wiki.comments.all(), profile) if conceal else wiki.comments.all(), profile),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
@@ -243,10 +225,9 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "markup_border_color": profile.markup_border_color,
                 "markup_border_opacity": profile.markup_border_opacity,
                 "security_level_choices": SecurityLevel.choices,
-                # Read from `shown`: these eight feed both the About-card chips
-                # and the always-rendered Suggest-edits prefill, so reading the
-                # live row here would put concealed values back on the page
-                # through a <select>.
+                # Read from `shown`: these eight feed both the About-card chips and the always-rendered
+                # Suggest-edits prefill, so reading the live row here would put concealed values back on the
+                # page through a <select>.
                 "location_security_values": [
                     ("fences", "Fences", shown.fences),
                     ("alarms", "Alarms", shown.alarms),
@@ -266,10 +247,9 @@ class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
     """GET: the wiki's shared Building Attributes card (REData building number/name/year built).
 
     Location-scoped (``LocationCache``, not a Pin), so this reads whatever
-    ``RedataBuildingAttributesEnrichmentSource``'s background enrichment cycle
-    (or a visiting pin's own on-demand panel fetch) already cached - the wiki
-    page never triggers a live REData fetch itself, mirroring how the
-    Ownership card only ever shows already-known ``WikiOwner`` rows.
+    ``RedataBuildingAttributesEnrichmentSource``'s background enrichment cycle (or a visiting pin's own
+    on-demand panel fetch) already cached - the wiki page never triggers a live REData fetch itself,
+    mirroring how the Ownership card only ever shows already-known ``WikiOwner`` rows.
     """
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
@@ -304,14 +284,10 @@ class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
 class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
     """GET: the wiki's shared list of every building standing on this property.
 
-    The community counterpart to ``PinController.parcel_buildings``, rendering
-    the same partial from the same location-scoped ``LocationCache`` row. Like
-    the Building Attributes card beside it, this never triggers a live fetch -
-    it shows whatever ``ParcelBuildingsEnrichmentSource``'s background cycle
-    (or a visiting pin's own panel fetch) already cached.
-
-    Rows never link anywhere: a child wiki is a marker on this page's own map,
-    not a page of its own.
+    Like the Building Attributes card beside it, this never triggers a live fetch - it shows whatever
+    ``ParcelBuildingsEnrichmentSource``'s background cycle (or a visiting pin's own panel fetch) already
+    cached.
+    Rows never link anywhere: a child wiki is a marker on this page's own map, not a page of its own.
     """
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
@@ -347,6 +323,7 @@ class LocationWikiEditView(LoginRequiredMixin, View):
     """Suggest (and immediately apply) a community edit to a Wiki's fields.
 
     POST /location/<slug>/wiki/edit/
+
     Body (JSON or form): field=value pairs for any subset of _WIKI_EDITABLE_FIELDS.
     Records a WikiEdit and applies changes to the Wiki.
     """
@@ -361,10 +338,9 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
-        # apply_wiki_edit mutates and saves the row it is given, so it needs the
-        # real one: resolve_visible_wiki hands back a concealed projection to a
-        # gated viewer, and saving that would persist their redacted view over
-        # what the community actually wrote.
+        # apply_wiki_edit mutates and saves the row it is given, so it needs the real one: resolve_visible_wiki
+        # hands back a concealed projection to a gated viewer, and saving that would persist their redacted view
+        # over what the community actually wrote.
         target = writable_wiki(wiki)
         try:
             # baseline=wiki: the dialog was prefilled from the projection and
@@ -378,11 +354,9 @@ class LocationWikiEditView(LoginRequiredMixin, View):
             return JsonResponse({"ok": True, "message": "No changes detected."})
         changes = edit.changes
 
-        # Description, dates, and security indicators all render together in the
-        # "About" card - send back the freshly-rendered fragment so the client can
-        # swap it in place instead of leaving edited-but-unrendered fields stale.
-        # Concealed again on the way out: this fragment goes back to the viewer
-        # who just wrote, and `target` is now carrying everyone's values.
+        # Description, dates, and security indicators all render together in the "About" card - send back the
+        # freshly-rendered fragment so the client can swap it in place instead of leaving edited-but-unrendered
+        # fields stale.
         about_html = render_to_string(
             "dashboard/partials/wiki/_wiki_about_card.html",
             {"wiki": conceal_wiki(target, profile), "wiki_links": visible_rows(target.links.all(), target, profile)},
@@ -394,13 +368,9 @@ class LocationWikiEditView(LoginRequiredMixin, View):
 def _render_history(request, location: Location, wiki: Wiki):
     """Render the edit-history partial, including the requester's own profile.
 
-    Shared by the history list view and the revert/delete actions below so a
-    successful action re-renders the up-to-date list in place, instead of
-    leaving a stale row (or a raw JSON body) swapped into the DOM. Those
-    actions send the page they were fired from, so an expunge on page three
-    does not drop the user back to page one; ``get_page`` clamps an
-    out-of-range number, which is what deleting the only row on the last page
-    produces.
+    Shared by the history list view and the revert/delete actions below so a successful action
+    re-renders the up-to-date list in place, instead of leaving a stale row (or a raw JSON body) swapped
+    into the DOM.
     """
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active, redact_edit_changes
 
@@ -411,17 +381,12 @@ def _render_history(request, location: Location, wiki: Wiki):
     # Narrowed before paginating: a page taken over the unfiltered history
     # would be short by however many of its rows concealment then removed.
     page = get_page(request, conceal_rows(edits, profile) if conceal else edits, _HISTORY_PAGE_SIZE)
-    # Materialised before mutating: a queryset re-runs its query on each
-    # iteration, so redacting in place and handing the page to the template
-    # would render the unredacted rows from a second fetch.
+    # Materialised before mutating: a queryset re-runs its query on each iteration, so redacting in place and
+    # handing the page to the template would render the unredacted rows from a second fetch.
     rows: Any = list(page.object_list)
     if conceal:
-        # Two separate problems here. The list itself names every editor and
-        # what they changed, so it is filtered to the viewer and their friends.
-        # And each surviving row's `changes` still carries the *pre-edit* value
-        # in its "from" side - which for the viewer's own edit is whatever a
-        # stranger had written there. That half survives a perfect read gate,
-        # because it lands in content the rules promise always to show.
+        # Two separate problems here. That half survives a perfect read gate, because it lands in content the
+        # rules promise always to show.
         for edit in rows:
             edit.changes = redact_edit_changes(edit.changes)
 
@@ -447,8 +412,8 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
     """Revert a specific WikiEdit.
 
     POST /location/<slug>/wiki/history/<edit_id>/revert/
-    Creates a new WikiEdit that restores the "from" values and marks the
-    original edit as reverted.
+
+    Creates a new WikiEdit that restores the "from" values and marks the original edit as reverted.
     """
 
     def post(self, request, location_slug, edit_id: int):
@@ -466,9 +431,8 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         revert_edit, skipped_fields = revert_wiki_edit(location, target, profile, target_edit)
 
         if revert_edit is None:
-            # Every field this edit touched was changed again by someone else
-            # since - nothing left to revert. Don't record a no-op WikiEdit or
-            # mark the original as reverted.
+            # Every field this edit touched was changed again by someone else since - nothing left to revert.
+            # Don't record a no-op WikiEdit or mark the original as reverted.
             response = _render_history(request, location, target)
             response["HX-Trigger"] = json.dumps(
                 {"showToast": {"level": "warning", "message": f"Could not revert - every field was changed again since this edit: {', '.join(skipped_fields)}."}},
@@ -487,13 +451,6 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
     """Permanently erase one of the requesting user's own wiki edits.
 
     POST /location/<slug>/wiki/history/<edit_id>/delete/
-
-    Unlike a plain revert (which keeps the edit visible in history, just
-    flagged as reverted), this restores the fields to their pre-edit values
-    (if not already reverted) and hard-deletes the WikiEdit row - and its
-    revert record, if any, since that also carries the original value as its
-    "from" - so no copy of the data lingers anywhere. Intended for cases like
-    accidentally pasting private information into a public wiki field.
 
     Only the editor who made the original edit may delete it.
     """
@@ -516,20 +473,16 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
             revert_changes, skipped_fields = revert_edit_fields(location, target, target_edit)
             save_edited_fields(target, revert_changes)
 
-        # The field-revision log records every write, so the value this view
-        # exists to erase also survives there, with the editor's name on it.
-        # Purge those rows before dropping the edit, or the promise in this
-        # view's docstring stops being true - see
-        # models.abstract.versioned.purge_recorded_value.
+        # The field-revision log records every write, so the value this view exists to erase also survives
+        # there, with the editor's name on it.
         from urbanlens.dashboard.models.abstract.versioned import purge_recorded_value
 
         for field_name, diff in (target_edit.changes or {}).items():
             if isinstance(diff, dict) and "to" in diff:
                 purge_recorded_value(target, field_name, diff["to"])
 
-        # Take back what this edit paid before the row carrying that amount is
-        # gone. Compare-and-swap, so an edit already reverted (and so already
-        # retracted) is a no-op rather than a double charge.
+        # Take back what this edit paid before the row carrying that amount is gone. Compare-and-swap, so an
+        # edit already reverted (and so already retracted) is a no-op rather than a double charge.
         from urbanlens.dashboard.services.consensus.points import retract_wiki_edit_award
 
         retract_wiki_edit_award(target_edit)
@@ -551,10 +504,9 @@ class PublicPinVoteView(LoginRequiredMixin, View):
     """Cast, change, or withdraw the requester's public-pin ballot.
 
     POST /location/<slug>/wiki/public-vote/
-    Body: ``choice`` = ``public`` | ``private`` | ``withdraw``.
 
-    Re-renders just the vote block. Ballots are anonymous and no tally is
-    ever shown - the response only reflects the requester's own choice.
+    Ballots are anonymous and no tally is ever shown - the response only reflects the requester's own
+    choice.
     """
 
     def post(self, request, location_slug):
@@ -588,11 +540,11 @@ class BoundaryVoteView(LoginRequiredMixin, View):
     """Cast or change the requester's vote for a location's official boundary.
 
     POST /location/<slug>/wiki/boundary/vote/
-    Body: ``boundary_id`` = pk of one of the location's candidate boundaries.
 
-    Returns JSON with the requester's (new) choice and whether the community
-    now has consensus - the dialog updates itself client-side rather than
-    re-rendering (its mini Leaflet maps would otherwise need re-initializing).
+    Body: ``boundary_id`` = pk of one of the location's candidate boundaries.
+    Returns JSON with the requester's (new) choice and whether the community now has consensus - the
+    dialog updates itself client-side rather than re-rendering (its mini Leaflet maps would otherwise
+    need re-initializing).
     """
 
     def post(self, request, location_slug):
@@ -611,9 +563,8 @@ class BoundaryVoteView(LoginRequiredMixin, View):
             logger.info("boundary vote rejected: %s", exc)
             return JsonResponse({"error": "That boundary isn't a valid option for this place."}, status=400)
 
-        # Same conceal-aware answer the GET's boundary_vote_context computes -
-        # the raw has_consensus() states that other people voted, which is
-        # exactly what boundary_vote_context(conceal=True) exists to hide.
+        # Same conceal-aware answer the GET's boundary_vote_context computes - the raw has_consensus() states
+        # that other people voted, which is exactly what boundary_vote_context(conceal=True) exists to hide.
         vote_context = boundary_vote_context(location.place, profile, conceal=concealment_active(wiki, profile))
         return JsonResponse(
             {
@@ -628,10 +579,10 @@ class WikiStatVoteView(LoginRequiredMixin, View):
     """Cast or clear the requester's vote on one community stat field.
 
     POST /location/<slug>/wiki/stat/<field>/vote/
-    Body: ``value`` (1-5) to cast a vote, or 0/absent to clear it.
 
-    Re-renders just that stat item - both the recalculated composite and the
-    viewer's own vote - never a full page reload.
+    Body: ``value`` (1-5) to cast a vote, or 0/absent to clear it.
+    Re-renders just that stat item - both the recalculated composite and the viewer's own vote - never a
+    full page reload.
     """
 
     def post(self, request, location_slug, field):

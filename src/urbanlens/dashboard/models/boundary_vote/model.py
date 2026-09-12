@@ -1,19 +1,6 @@
 """BoundaryVote - one profile's pick of a location's most accurate official boundary.
-
-When more than one external provider has geometry for a place (REData's
-county parcel vs. Overpass's OpenStreetMap perimeter), the community picks
-which one should be the location's *official* property boundary - the one
-used for matching pins to wikis. Votes are recency-weighted (see
-``services.geo.boundary_voting``), so a newer vote outweighs an equally-split
-older one and the consensus can drift as the underlying data improves.
-
-Only externally-sourced candidate ``Boundary`` rows are votable - a
-user-drawn shape can never become the official matching boundary, which is
-the whole point of restricting the choice to a vote between providers.
-
-One row per (location, profile): changing your vote updates the row's
-``boundary`` and its ``updated`` timestamp, which is what the recency
-weighting reads - re-affirming a choice refreshes its weight.
+When more than one external provider has geometry for a place (REData's county parcel vs.
+Votes are recency-weighted (see ``services.geo.boundary_voting``), so a newer vote outweighs an equally-split older one and the consensus can drift as the underlying data improves.
 """
 
 from __future__ import annotations

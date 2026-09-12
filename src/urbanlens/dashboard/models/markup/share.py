@@ -13,13 +13,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_
 
 class MarkupMapShare(abstract.DashboardModel):
     """A one-to-one share of a standalone MarkupMap from one profile to another.
-
-    Unlike PinShare there is no accept/reject workflow - this model exists
-    purely to grant the recipient a permission-checked view of someone else's
-    map and to carry the notification, mirroring PinShareDetailView's
-    to_profile-scoped access pattern without any of PinShare's materialization
-    machinery. The recipient's only action is to optionally clone the map into
-    their own account (see services.sharing.map_sharing.clone_markup_map).
+    Unlike PinShare there is no accept/reject workflow - this model exists purely to grant the recipient a permission-checked view of someone else's map and to carry the notification, mirroring PinShareDetailView's to_profile-scoped access pattern without any of PinShare's materialization machinery.
     """
 
     markup_map = ForeignKey("dashboard.MarkupMap", on_delete=CASCADE, related_name="shares")

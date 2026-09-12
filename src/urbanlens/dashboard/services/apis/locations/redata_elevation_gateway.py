@@ -17,22 +17,9 @@ class RedataElevationGateway(RedataLocationContextGateway):
     def get_elevation(self, latitude: float, longitude: float, *, force_refresh: bool = False) -> LocationContextEnvelope:
         """Fetch every configured DEM's elevation reading at a coordinate.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-                The parsed envelope. Each ``results`` entry is
-                ``{"provider", "dataset", "resolution_meters", "elevation_meters",
-                "status"}``, in REData's recommended order (finest resolution
-                first where it applies) - never a single winner, since digital
-                elevation models genuinely disagree with each other by real
-                margins on the same terrain. ``elevation_meters: null`` alongside
-                ``status: "ok"`` is itself a real answer (a gap in that model's
-                coverage, e.g. open ocean), not a failure.
+            The parsed envelope.
 
         Raises:
-                LocationContextUnavailableError: Every configured DEM failed to
-                answer, or the request to REData failed outright."""
+            LocationContextUnavailableError: Every configured DEM failed to answer, or the request to REData failed outright."""
         return self.near_point(_ELEVATION_PATH, latitude, longitude, force_refresh=force_refresh)

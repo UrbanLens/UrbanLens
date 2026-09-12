@@ -34,9 +34,9 @@ GAME_THUMBS_UP_WEIGHT = 0.5
 GAME_REPORT_WEIGHT = 1.0
 
 #: Half-life for a report's weight, in days.
-#: A report is the only signal that can single-handedly push a photo below the eligibility floor,
-#: and an excluded photo stops being shown - so it can never earn the "shown, no reaction"
-#: impressions that would otherwise rehabilitate it.
+#: A report is the only signal that can single-handedly push a photo below the eligibility floor, and
+#: an excluded photo stops being shown - so it can never earn the "shown, no reaction" impressions
+#: that would otherwise rehabilitate it.
 GAME_REPORT_HALF_LIFE_DAYS = 180.0
 
 #: Weight below which a decayed report is dropped entirely rather than kept as a vanishing negative.
@@ -51,9 +51,9 @@ GAME_REPORT_MIN_WEIGHT = 0.01
 GAME_NO_REACTION_WEIGHT = 0.01
 
 #: In-game thumbs down counts toward "not relevant" at a token weight only - "wrong photo for this
-#: game" (blurry, ambiguous, gives away the answer too easily) is not the same claim as "not
-#: relevant to this location's wiki", so it must never be enough on its own (or even in real
-#: numbers) to drag a genuinely relevant photo's score to or below zero and knock it out of
+#: game" (blurry, ambiguous, gives away the answer too easily) is not the same claim as "not relevant
+#: to this location's wiki", so it must never be enough on its own (or even in real numbers) to drag
+#: a genuinely relevant photo's score to or below zero and knock it out of
 GAME_THUMBS_DOWN_WEIGHT = 0.001
 
 #: Weights for the signals counted in bulk. Reports are handled separately (see
@@ -72,7 +72,7 @@ def _decayed_report_penalty(image: Image, *, now: datetime | None = None) -> flo
 
     Args:
         image: The materialized image whose reports to weigh.
-        now: Reference time, for tests. Defaults to the current time.
+        now: Reference time, for tests.
 
     Returns:
         A non-negative total to be subtracted from the photo's score."""
@@ -96,10 +96,7 @@ def effective_relevance(image: Image) -> float:
         image: A materialized ``Image`` row.
 
     Returns:
-        wiki net vote score (each mark counts as +1/-1) plus the weighted
-        SpotGuessr gameplay signal (thumbs up/down/no-reaction - see
-        ``_GAME_WEIGHTS``) minus the age-decayed report penalty (see
-        :data:`GAME_REPORT_HALF_LIFE_DAYS`)."""
+        wiki net vote score (each mark counts as +1/-1) plus the weighted SpotGuessr gameplay signal (thumbs up/down/no-reaction - see ``_GAME_WEIGHTS``) minus the age-decayed report penalty (see :data:`GAME_REPORT_HALF_LIFE_DAYS`)."""
     if not image.media_source_key or not image.media_item_key or image.location_id is None:
         return 0.0
 
@@ -116,21 +113,15 @@ def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
     The same three-state write ``controllers.wiki_media.WikiMediaVoteView`` performs, addressed by an ``Image`` row instead of by a raw ``(source, item_key)`` pair from a gallery tile.
 
     Args:
-        image: The materialized media row being voted on. Must carry the
-            ``location``/``media_source_key``/``media_item_key`` identity that
-            ``MediaRelevance`` is keyed by (see ``Image.media_source_key``).
-        profile: The voting profile. One vote per profile per item; re-voting
-            replaces the previous mark.
-        value: ``1`` for relevant, ``-1`` for not relevant, ``0`` to withdraw
-            an existing vote.
+        image: The materialized media row being voted on.
+        profile: The voting profile.
+        value: ``1`` for relevant, ``-1`` for not relevant, ``0`` to withdraw an existing vote.
 
     Returns:
-        The item's new net community score (up-votes minus down-votes across
-        every contributing profile).
+        The item's new net community score (up-votes minus down-votes across every contributing profile).
 
     Raises:
-        ValueError: *value* isn't one of -1/0/1, or *image* has no relevance
-            identity to vote on."""
+        ValueError: *value* isn't one of -1/0/1, or *image* has no relevance identity to vote on."""
     if value not in (-1, 0, 1):
         raise ValueError("Vote value must be -1, 0, or 1.")
     if image.location_id is None or not image.media_source_key or not image.media_item_key:
@@ -169,11 +160,8 @@ class VotePolicy(StrEnum):
     """How a "relevant" mark should treat a vote the profile already cast.
 
     Attributes:
-        EXPLICIT: The user deliberately clicked "relevant" - overwrite whatever
-            they had before, including a previous down-vote.
-        IMPLIED: Relevance is a side effect of some other action (adding the
-            item to an album, say). A side effect must never silently reverse
-            a deliberate down-vote, so those are left alone."""
+        EXPLICIT: The user deliberately clicked "relevant" - overwrite whatever they had before, including a previous down-vote.
+        IMPLIED: Relevance is a side effect of some other action (adding the item to an album, say)."""
 
     EXPLICIT = "explicit"
     IMPLIED = "implied"
@@ -183,16 +171,11 @@ class RelevantCacheResult(NamedTuple):
     """Outcome of :func:`record_relevant_and_cache`.
 
     Attributes:
-        image: The materialized local copy, or None when nothing was cached
-            (the vote was declined, materialization was skipped, the download
-            failed, or it was deferred to a worker).
+        image: The materialized local copy, or None when nothing was cached (the vote was declined, materialization was skipped, the download failed, or it was deferred to a worker).
         voted: Whether a "relevant" vote was recorded by this call.
-        declined: True when an :attr:`VotePolicy.IMPLIED` call found an
-            existing down-vote and left it alone.
+        declined: True when an :attr:`VotePolicy.IMPLIED` call found an existing down-vote and left it alone.
         error: A user-safe message when materialization failed, else None.
-        queued: True when the download was handed to a Celery worker instead
-            of run inline, so ``image`` is not populated yet.
-    """
+        queued: True when the download was handed to a Celery worker instead of run inline, so ``image`` is not populated yet."""
 
     image: Image | None
     voted: bool
@@ -227,15 +210,9 @@ def record_relevant_and_cache(
         caption: Optional caption carried from the gallery tile.
         pin: Cache the copy against this Pin (personal save), if given.
         wiki: Cache the copy against this Wiki (shared save), if given.
-        item_key: The gallery tile's own item key. Defaults to hashing *url*,
-            but a caller that already has one must pass it: a panel is free to
-            key an item by something other than its image url, and writing the
-            vote under a different key than the caller reads the score back
-            with would silently lose it.
-        policy: Whether this is a deliberate click or an implied side effect -
-            see :class:`VotePolicy`.
-        materialize: Set False to record the vote without downloading (the
-            ``photos`` panel is already local, so there's nothing to fetch).
+        item_key: The gallery tile's own item key.
+        policy: Whether this is a deliberate click or an implied side effect - see :class:`VotePolicy`.
+        materialize: Set False to record the vote without downloading (the ``photos`` panel is already local, so there's nothing to fetch).
 
     Returns:
         A :class:`RelevantCacheResult`."""
@@ -291,19 +268,14 @@ def record_relevant_and_cache(
 
 def local_images_for_gallery_items(location: Location, source: str, urls: Iterable[str]) -> dict[str, Image]:
     """Bulk-lookup already-materialized local copies for a Media gallery panel's live results.
-    Lets the pin-detail/wiki gallery prefer a cached local copy over hot- linking the provider whenever *any* profile has already materialized that exact item (e.g. by voting it relevant) - the remote url stays available too, callers should keep offering it as a "view original" link rather than dropping it once a local copy exists.
 
     Args:
         location: The location whose gallery is being rendered.
-        source: The provider panel key (e.g. ``"wikimedia"``) - matched
-            against ``Image.media_source_key``, not the translated
-            ``ImageSource`` value.
-        urls: Each item's full-resolution image url, as rendered by the
-            panel (the same url ``media_item_key()`` is hashed from).
+        source: The provider panel key (e.g. ``"wikimedia"``) - matched against ``Image.media_source_key``, not the translated ``ImageSource`` value.
+        urls: Each item's full-resolution image url, as rendered by the panel (the same url ``media_item_key()`` is hashed from).
 
     Returns:
-        Mapping of ``url`` to its materialized ``Image`` row, for every url
-        that has one - urls with no local copy are simply absent."""
+        Mapping of ``url`` to its materialized ``Image`` row, for every url that has one - urls with no local copy are simply absent."""
     from urbanlens.dashboard.models.images.model import Image
 
     keys_by_item_key = {media_item_key(url): url for url in urls}

@@ -1,5 +1,4 @@
-"""Resolves Google Maps CIDs to coordinates, choosing REData or Google Places.
-A batch call to REData's ``POST /places/resolve-cids/`` (see ``../REData/docs/api-reference.md``, "Google Maps CID resolution" - deliberately asynchronous on REData's end, so a cid it hasn't finished resolving yet comes back as ``pending``, not an error)."""
+"""Resolves Google Maps CIDs to coordinates, choosing REData or Google Places."""
 
 from __future__ import annotations
 
@@ -22,11 +21,7 @@ PROVIDER_GOOGLE = "google_places"
 
 @dataclass(frozen=True, slots=True)
 class CidResolutionResult:
-    """Outcome of one ``resolve_cids`` call.
-
-    Every cid passed in ends up in exactly one of ``resolved``, ``unresolvable``,
-    or ``pending``.
-    """
+    """Outcome of one ``resolve_cids`` call."""
 
     provider: str
     resolved: dict[int, tuple[float, float]] = field(default_factory=dict)
@@ -52,17 +47,10 @@ def resolve_cids(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> 
 
     Args:
         cids: Google Maps CIDs to resolve.
-        urls_by_cid: The source Google Maps URL for any of ``cids`` that came
-            from one (e.g. a Takeout CSV import) - passed through to REData
-            when it's the configured provider, since it resolves via a place's
-            own URL faster and more reliably than the bare cid alone (see
-            ``RedataCidGateway``/``CidLookupEntry``). Ignored by the Google
-            Places fallback. Cids with no entry here are sent as plain ints.
+        urls_by_cid: The source Google Maps URL for any of ``cids`` that came from one (e.g. a Takeout CSV import) - passed through to REData when it's the configured provider, since it resolves via a place's own URL faster and more reliably than the bare cid alone...
 
     Returns:
-        A :class:`CidResolutionResult` partitioning every input cid into
-        resolved/unresolvable/pending.
-    """
+        A :class:`CidResolutionResult` partitioning every input cid into resolved/unresolvable/pending."""
     if settings.redata_api_url and settings.redata_api_key:
         return _resolve_via_redata(cids, urls_by_cid)
     return _resolve_via_google(cids)

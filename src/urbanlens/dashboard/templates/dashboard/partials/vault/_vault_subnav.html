@@ -1,11 +1,4 @@
-{% comment %}
-Vault > Home / Photos / Documents cross-page nav - plain links (not the
-client-side page-tabs.js pattern; these are separate pages), reusing the same
-.ul-subnav-tabs/.ul-subnav-tab classes for a consistent look.
-
-Context:
-  active_tab - "home", "photos", or "documents"
-{% endcomment %}
+{% comment %}Vault > Home / Photos / Documents cross-page nav - plain links.{% endcomment %}
 <nav class="ul-subnav-tabs" aria-label="Vault sections">
     <a class="ul-subnav-tab{% if active_tab == 'home' %} is-active{% endif %}" href="{% url 'vault.home' %}"
        {% if active_tab == 'home' %}aria-current="page"{% endif %}>

@@ -71,8 +71,7 @@ def build_authorization_url(redirect_uri: str, state: str) -> str:
         Fully-formed authorization URL to redirect the user to.
 
     Raises:
-        CalendarNotConfiguredError: When the OAuth client is not configured.
-    """
+        CalendarNotConfiguredError: When the OAuth client is not configured."""
     client_id, _ = _oauth_client()
     return google_oauth.build_authorization_url(client_id, redirect_uri, CALENDAR_SCOPES, state)
 
@@ -85,8 +84,7 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict[str, Any]:
         redirect_uri: The same redirect URI used to obtain the code.
 
     Returns:
-        Token response payload (``access_token``, ``refresh_token``,
-        ``expires_in``, ``id_token``, ``scope``, ...).
+        Token response payload (``access_token``, ``refresh_token``, ``expires_in``, ``id_token``, ``scope``, ...).
 
     Raises:
         CalendarNotConfiguredError: When the OAuth client is not configured.
@@ -106,8 +104,7 @@ def refresh_access_token(refresh_token: str) -> dict[str, Any]:
 
     Raises:
         CalendarNotConfiguredError: When the OAuth client is not configured.
-        GatewayRequestError: When the refresh fails (e.g. access revoked).
-    """
+        GatewayRequestError: When the refresh fails (e.g. access revoked)."""
     client_id, client_secret = _oauth_client()
     return google_oauth.refresh_access_token(client_id, client_secret, refresh_token)
 
@@ -133,10 +130,8 @@ class GoogleCalendarGateway(Gateway):
     """Events API client bound to one user's connected Google account.
 
     Attributes:
-        account: The user's stored calendar credentials. Tokens are
-            refreshed in place (and persisted) as needed.
-        base_url: Calendar v3 API root.
-    """
+        account: The user's stored calendar credentials.
+        base_url: Calendar v3 API root."""
 
     service_key: ClassVar[str] = "google_calendar"
     paid_service: ClassVar[bool] = False
@@ -158,8 +153,7 @@ class GoogleCalendarGateway(Gateway):
             Headers dict with a valid bearer token.
 
         Raises:
-            GatewayRequestError: When the token cannot be refreshed.
-        """
+            GatewayRequestError: When the token cannot be refreshed."""
         if self.account.is_token_expired:
             self._refresh_token()
         return {"Authorization": f"Bearer {self.account.access_token}"}
@@ -168,9 +162,7 @@ class GoogleCalendarGateway(Gateway):
         """Refresh and persist the account's access token.
 
         Raises:
-            GoogleAuthExpiredError: When no refresh token is stored or the
-                refresh is rejected by Google.
-        """
+            GoogleAuthExpiredError: When no refresh token is stored or the refresh is rejected by Google."""
         if not self.account.refresh_token:
             raise GoogleAuthExpiredError("Google Calendar connection is missing a refresh token. Please reconnect.")
         payload = refresh_access_token(self.account.refresh_token)
@@ -193,19 +185,11 @@ class GoogleCalendarGateway(Gateway):
     ) -> dict[str, Any] | None:
         """Perform an authenticated request against the Calendar API.
 
-        Args:
-                method: HTTP method.
-                url: Absolute URL.
-                params: Optional query parameters.
-                json_body: Optional JSON request body.
-                ok_statuses: Statuses treated as success.
-
         Returns:
-                Decoded JSON body, or None for empty (204) responses.
+            Decoded JSON body, or None for empty (204) responses.
 
         Raises:
-                GoogleAuthExpiredError: When Google rejects the current credentials (401/403).
-                GatewayRequestError: On any other non-success response."""
+            GoogleAuthExpiredError: When Google rejects the current credentials (401/403)."""
         response = self.session.request(
             method,
             url,
@@ -240,14 +224,8 @@ class GoogleCalendarGateway(Gateway):
     ) -> list[dict[str, Any]]:
         """List (non-recurring-expanded) upcoming events on the user's calendar.
 
-        Args:
-            time_min: Lower bound (inclusive) for the event end time.
-            time_max: Optional upper bound for the event start time.
-            max_results: Page size cap; a single page is fetched.
-
         Returns:
-            Event resource dicts ordered by start time.
-        """
+            Event resource dicts ordered by start time."""
         params: dict[str, Any] = {
             "timeMin": time_min.isoformat(),
             "singleEvents": "true",
@@ -262,15 +240,11 @@ class GoogleCalendarGateway(Gateway):
     def get_event(self, event_id: str) -> dict[str, Any]:
         """Fetch a single event by id.
 
-        Args:
-                event_id: Google event identifier.
-
         Returns:
-                The event resource dict.
+            The event resource dict.
 
         Raises:
-                CalendarEventNotFoundError: When the event does not exist.
-                GatewayRequestError: On other API failures."""
+            CalendarEventNotFoundError: When the event does not exist."""
         body = self._request("GET", f"{self._events_url}/{event_id}")
         if body is None:
             raise GatewayRequestError("Google Calendar returned an empty event.")
@@ -279,14 +253,11 @@ class GoogleCalendarGateway(Gateway):
     def create_event(self, body: dict[str, Any]) -> dict[str, Any]:
         """Create an event on the user's calendar.
 
-        Args:
-                body: Event resource payload.
-
         Returns:
-                The created event resource dict.
+            The created event resource dict.
 
         Raises:
-                GatewayRequestError: On API failure."""
+            GatewayRequestError: On API failure."""
         created = self._request("POST", self._events_url, json_body=body)
         if created is None:
             raise GatewayRequestError("Google Calendar returned an empty response for event creation.")
@@ -295,16 +266,11 @@ class GoogleCalendarGateway(Gateway):
     def update_event(self, event_id: str, body: dict[str, Any]) -> dict[str, Any]:
         """Update an existing event (PATCH semantics).
 
-        Args:
-                event_id: Google event identifier.
-                body: Partial event resource payload.
-
         Returns:
-                The updated event resource dict.
+            The updated event resource dict.
 
         Raises:
-                CalendarEventNotFoundError: When the event no longer exists.
-                GatewayRequestError: On other API failures."""
+            CalendarEventNotFoundError: When the event no longer exists."""
         updated = self._request("PATCH", f"{self._events_url}/{event_id}", json_body=body)
         if updated is None:
             raise GatewayRequestError("Google Calendar returned an empty response for event update.")
@@ -313,11 +279,8 @@ class GoogleCalendarGateway(Gateway):
     def delete_event(self, event_id: str) -> None:
         """Delete an event from the user's calendar.
 
-        Args:
-                event_id: Google event identifier.
-
         Raises:
-                GatewayRequestError: On API failure other than 404/410."""
+            GatewayRequestError: On API failure other than 404/410."""
         try:
             self._request("DELETE", f"{self._events_url}/{event_id}", ok_statuses=(200, 204, 404, 410))
         except CalendarEventNotFoundError:

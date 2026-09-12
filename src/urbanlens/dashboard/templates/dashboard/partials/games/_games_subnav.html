@@ -1,15 +1,4 @@
-{% comment %}
-Shared games tab strip, rendered in {% block subnav %} by the hub AND by every
-game page, so entering a game is never a one-way trip out of the nav.
-
-Requires in context:
-  games   - the GAMES registry (controllers/games.py); every game controller
-            passes it, so there is no second hardcoded list to drift.
-  active  - "games" on the hub, otherwise the current game's GameEntry.url_name.
-
-Usage:
-  {% include "dashboard/partials/games/_games_subnav.html" with active="spotguessr" %}
-{% endcomment %}
+{% comment %}Shared games tab strip, rendered in {% block subnav %} by the hub AND by every game page, so entering a game is never a one-way trip.{% endcomment %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
         <nav class="ul-subnav-tabs ul-game-subnav" aria-label="Games">

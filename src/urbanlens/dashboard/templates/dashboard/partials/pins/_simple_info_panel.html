@@ -1,27 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-Generic pin-detail info panel: a heading + optional chips, a row of quick
-facts, and an optional metadata grid, with an optional header/footer external
-link. Shared by every simple text-based external-data panel (Photon, Census
-TIGERweb, EPA Envirofacts, iNaturalist, GDELT, USGS Earthquake) so each one
-only needs a controller view building this context, not its own template/CSS.
-
-Context:
-    section_id, icon, title: panel identity (matches the placeholder's).
-    debug: optional DebugEntry for the admin overlay.
-    header_link: optional {url, label} - external link icon in the header.
-    heading_name: optional bold primary line under the header.
-    chips: optional list of short strings rendered as pill chips.
-    facts: optional list of {icon, text, href (optional)} shown as a row.
-    meta: optional list of {label, value, href (optional)} shown as a
-        definition-list grid; href renders the value as an external link.
-    footer_link: optional {url, label} - "View on X ->" link at the bottom.
-    pin, can_ai_extract: injected by the panel_info dispatcher. A link entry
-        (meta item or footer_link) that also sets ai_extract=True gets an AI
-        extraction button beside it - opt-in per link, so only links to real
-        content pages about the place (news articles, facility reports) offer
-        it, never provider homepages.
-{% endcomment %}
+{% comment %}Generic pin-detail info panel: a heading + optional chips, a row of quick facts, and an optional metadata grid, with an optional.{% endcomment %}
 <div id="{{ section_id }}" class="simple-info-panel {% if nested %}nested{% else %}card{% endif %}"
      data-collapse-scope="pin" data-collapse-section="{{ section_id }}">
     {% if debug %}

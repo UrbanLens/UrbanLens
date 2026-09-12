@@ -1,10 +1,4 @@
-"""Undo handler for PinList.
-
-Deleting a list destroys hand-built curation - which pins, in what order - while
-the pins themselves survive. Every comparable delete (pins, wikis, trips, safety
-check-ins, saved filters) is already restorable from Undo History; lists were the
-gap.
-"""
+"""Undo handler for PinList."""
 
 from __future__ import annotations
 
@@ -27,8 +21,7 @@ MODEL_LABEL = "pin_list"
 
 @register
 class PinListUndoHandler(UndoHandler):
-    """Restores a list's own fields and its membership (pin ids + order).
-    The two optional links a list can carry restore leniently rather than blocking: ``source_saved_filter`` and ``markup_map`` are both ``SET_NULL`` on their own deletes, so a restored list simply drops a link whose target is gone - exactly what would have happened had the list never been deleted."""
+    """Restores a list's own fields and its membership (pin ids + order)."""
 
     model_label = MODEL_LABEL
     model = PinList
@@ -60,13 +53,7 @@ class PinListUndoHandler(UndoHandler):
         """Recreate the lists and re-add every member pin that still exists.
 
         Raises:
-            UndoExpiredError: If the owning profile was deleted during the
-                retention window, or the list's name has since been reused -
-                ``uq_pin_list_profile_name`` would otherwise surface as an
-                uncaught IntegrityError, the same contract every other handler
-                follows. (``uq_pin_list_profile_slug`` cannot fire: the slug is
-                regenerated on save rather than restored.)
-        """
+            UndoExpiredError: If the owning profile was deleted during the retention window, or the list's name has since been reused - ``uq_pin_list_profile_name`` would otherwise surface as an uncaught IntegrityError, the same contract every other handler follows."""
         from django.contrib.gis.geos import GEOSGeometry
 
         # Deferred import: services.undo.service imports services.undo.handlers

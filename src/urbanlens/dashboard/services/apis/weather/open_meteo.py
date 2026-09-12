@@ -66,18 +66,8 @@ class OpenMeteoGateway(Gateway):
     def get_weather_forecast(self, latitude: float, longitude: float) -> list[ForecastSlot] | None:
         """Return a morning/evening forecast strip for the next few days.
 
-        Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-
         Returns:
-            Normalized ``ForecastSlot`` entries (09:00 and 18:00 local time
-            for each of the next 5 days), or None on failure. ``date`` stays
-            the naive local wall clock ``timezone=auto`` returns (the pin
-            weather panels display local time); ``date_utc`` anchors each
-            slot in UTC using the response's ``utc_offset_seconds``, and is
-            omitted if that field is missing or malformed.
-        """
+            ``date`` stays the naive local wall clock ``timezone=auto`` returns (the pin weather panels display local time); ``date_utc`` anchors each slot in UTC using the response's ``utc_offset_seconds``, and is omitted if that field is missing or malformed."""
         params: dict[str, Any] = {
             "latitude": latitude,
             "longitude": longitude,
@@ -145,14 +135,9 @@ class OpenMeteoGateway(Gateway):
 
     def get_sun_times(self, latitude: float, longitude: float) -> SunTimes | None:
         """Return today's sunrise/sunset and approximate golden-hour windows.
-        Fetched independently of ``get_weather_forecast`` (UL-345): the main forecast strip may come from OpenWeatherMap instead, but its 5-day/ 3-hour endpoint doesn't carry sunrise/sunset, so this always goes through Open-Meteo regardless of which provider serves the temperature/condition forecast.
-
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
 
         Returns:
-                Today's sun times, or None on failure."""
+            Today's sun times, or None on failure."""
         params: dict[str, Any] = {
             "latitude": latitude,
             "longitude": longitude,

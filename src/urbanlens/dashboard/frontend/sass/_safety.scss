@@ -12,28 +12,17 @@
     overflow-y: hidden;
     resize: none;
 
-    // Modern browsers can grow the box to fit its content with pure CSS - no
-    // need to wait for the safetyAutoExpand() JS fallback (_autoexpand_textareas.html)
-    // to run on load/input. Harmless no-op where unsupported.
+    // Modern browsers can grow the box to fit its content with pure CSS.
     field-sizing: content;
 }
 
-// `.safety-page textarea.safety-autoexpand` (2 classes) intentionally outranks
-// the sitewide `body div.container textarea` fallback (_base.scss) - that rule's
-// extra type selectors (body, div) give it higher specificity than the plain
-// `.form-row textarea` padding this would otherwise get, leaving these boxes
-// under-padded.
+// `.safety-page textarea.safety-autoexpand` (2 classes) intentionally outranks the sitewide `body div.container textarea` fallback.
 .safety-page textarea.safety-autoexpand {
     box-sizing: border-box;
     padding: .6rem .75rem;
 }
 
-// The shared `.card .card-header` rule is a 4-column CSS grid keyed to specific
-// selectors (icon / span:not(.badge) / .badge / .gallery-upload-compact-btn).
-// Safety card headers mix a variable number of icons, badges, and status text
-// that don't match that contract, which causes auto-placed items to overlap or
-// stretch full-width. Override with a plain flex row instead - deterministic
-// regardless of how many children a given header has.
+// The shared `.card.card-header` rule is a 4-column CSS grid keyed to specific selectors (icon / span:not(badge) /.badge /..
 .safety-page .card .card-header {
     display: flex;
     align-items: center;
@@ -42,9 +31,7 @@
 
     > * { grid-area: unset; }
 
-    // h3 grows to fill remaining space - anything before it (an icon, a status
-    // badge) stays left and content-sized; anything after it (status text,
-    // action buttons) is naturally pushed to the right edge.
+    // h3 grows to fill remaining space - anything before it (an icon, a status badge) stays left and content-sized.
     h3 {
         flex: 1 1 auto;
         min-width: 0;
@@ -62,8 +49,6 @@
 }
 
 // "Also notify the community wiki" toggle on the check-in create/detail forms.
-// Lives inside a bare HTMX-swapped container (#safety-wiki-notify-option) that
-// renders nothing at all when the destination isn't covered by a community wiki.
 .safety-wiki-notify {
     .safety-wiki-notify-row {
         display: block;
@@ -123,9 +108,7 @@
     }
 }
 
-// Gradient hero header now lives in the shared .ul-page-hero component
-// (_page_hero.scss / partials/ui/_page_hero.html), reused across the safety
-// pages, Organize, and Thanks & Credits.
+// Gradient hero header now lives in the shared.ul-page-hero component (_page_hero.scss / partials/ui/_page_hero.html), reused across.
 
 // Action row below the hero (New check-in, cancel/check-in/delete, mark
 // safe, ...) - kept out of the decorative hero itself, mirroring
@@ -358,9 +341,7 @@
     &--error { color: $color-red-500; }
 }
 
-// On the check-in detail page, the status pill floats next to whichever field was
-// just edited (positioned via JS in detail.html) and fades out after "Saved" -
-// distinct from the defaults page's inline (in-flow) status text in its card header.
+// On the check-in detail page, the status pill floats next to whichever field was just edited (positioned via JS in detail.html).
 .safety-autosave-status--floating {
     position: fixed;
     z-index: $z-dropdown;
@@ -387,10 +368,7 @@
     margin: 1rem 0;
 }
 
-// Collapsed (default) state on the check-in detail page - hides every add/remove
-// control behind the header's "Edit" button until it's clicked (see .is-editing,
-// toggled by _contact_picker.html's own script). Not applied to the defaults page
-// or check-in creation, where the picker is always meant to be immediately editable.
+// Collapsed (default) state on the check-in detail page.
 .safety-contact-picker--collapsible:not(.is-editing) {
     [data-role="avatar-picker"],
     [data-role="input-wrap"],
@@ -580,17 +558,12 @@
     color: var(--ul-grey-8);
 }
 
-// Positioning context for the floating search bar (.addr-search-bar), the
-// bottom-left "Add Detail" markup controls (.map-bottom-controls), and the
-// markup side panel (.map-dialog--side) - all position themselves absolutely
-// relative to this, the same way pin detail's .map-wrapper does.
+// Positioning context for the floating search bar (addr-search-bar), the bottom-left "Add Detail" markup controls.
 .safety-map-wrapper {
     position: relative;
     width: 100%;
     margin-bottom: .5rem;
-    // Mirrors #safety-map's own height below so this wrapper has a definite
-    // size for @include map-query-container to safely contain against
-    // (`contain: size` collapses an "auto" height to 0 otherwise).
+    // Mirrors #safety-map's own height below so this wrapper has a definite size for @include map-query-container to safely contain against.
     height: calc(100vh - 51rem);
     min-height: 360px;
     @include map-query-container;
@@ -891,9 +864,7 @@
     }
 }
 
-// Plays once, right before the page reloads to its now-archived state (see
-// _dissolve_animation.html) - the reload itself is what actually hides the
-// content; this transition is purely the visible "dissolving" cue leading up to it.
+// Plays once, right before the page reloads to its now-archived state - the reload itself is what actually hides the content.
 .safety-dissolving {
     transition: opacity .8s ease, filter .8s ease;
     opacity: 0;
@@ -909,9 +880,7 @@
     cursor: pointer;
 }
 
-// A saved emergency contact who has since been blocked. Kept, not deleted -
-// see services.visits.safety.blocked_default_contacts for why - so this has
-// to be visible enough to act on without reading as an error.
+// A saved emergency contact who has since been blocked.
 .safety-blocked-contact-warning {
     display: flex;
     gap: 0.6rem;

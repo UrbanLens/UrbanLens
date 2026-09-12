@@ -1,16 +1,5 @@
 /**
  * The shared confirm dialog, and the two flows built on it.
- *
- * Installed as window globals because every caller is an inline ``onclick=`` in a
- * template - ``confirmDialog`` alone is reached from ten of them. Lifted out of
- * ``base.html``'s inline script so it is typechecked and testable; the markup it
- * drives (``#confirm-dialog``) still lives in that template.
- *
- * Elements are resolved on first use rather than at load time. That is not a
- * style choice: this bundle loads from ``base.html``'s ``<head>`` (see
- * ``entries-classic/core.ts`` for why it is a classic script rather than a
- * module), and ``#confirm-dialog`` is markup further down the body, so binding
- * eagerly would capture nulls and leave a dialog that never opens.
  */
 
 interface ConfirmOptions {
@@ -80,11 +69,7 @@ export function confirmDialog(options: ConfirmOptions | string): Promise<Confirm
     // which would leave the click looking like it did nothing.
     if (!found) return Promise.resolve(false);
 
-    // The dialog is a page-wide singleton. A second call while it's already
-    // open would otherwise overwrite resolveCurrent below - leaving the
-    // first call's promise unresolved forever - and showModal() throws on a
-    // <dialog> that's already open. Settle the earlier one as cancelled
-    // first, the same as a backdrop click or Escape would.
+    // The dialog is a page-wide singleton.
     if (found.dialog.open) settle(false);
 
     found.title.textContent = opts.title || "Are you sure?";
@@ -102,10 +87,6 @@ export function confirmDialog(options: ConfirmOptions | string): Promise<Confirm
 
 /**
  * Confirm before following a community-added link.
- *
- * Returning false from the ``onclick=`` cancels the native navigation; a confirmed
- * click re-opens the url here, because the original click's user activation is
- * already spent by the time the promise resolves.
  */
 export function urbanlensConfirmExternalLink(event: Event, url: string): boolean {
     event.preventDefault();
@@ -121,10 +102,7 @@ export function urbanlensConfirmExternalLink(event: Event, url: string): boolean
 }
 
 /**
- * Delete a pin, letting the server veto with a 409 when it has children so the
- * user decides whether those go too.
- *
- * Returns true (deleted), false (cancelled), or null (the request failed).
+ * Delete a pin, letting the server veto with a 409 when it has children so the user decides whether those go too.
  */
 export async function deletePinCascade(pinUuid: string, pinName: string, csrfToken: string): Promise<boolean | null> {
     const confirmed = await confirmDialog({
@@ -149,7 +127,7 @@ export async function deletePinCascade(pinUuid: string, pinName: string, csrfTok
         try {
             data = await response.json();
         } catch {
-            /* non-JSON 409 */
+
         }
         if (!data?.requires_children_decision) return null;
 
@@ -171,11 +149,7 @@ export async function deletePinCascade(pinUuid: string, pinName: string, csrfTok
     }
 
     if (response.ok) {
-        // The map keeps its pins in localStorage and its poll only compares the newest
-        // pin's `updated` timestamp - a deletion cannot advance that, so the poll is
-        // blind to it and the map would keep restoring a pin that no longer exists.
-        // Flagged here rather than at each call site: the map page remembered to, the
-        // Private Pin page did not, and the next caller would have had to know as well.
+        // The map keeps its pins in localStorage and its poll only compares the newest pin's `updated` timestamp.
         try {
             localStorage.setItem("ul_pins_dirty", "1");
         } catch {

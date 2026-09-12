@@ -1,10 +1,5 @@
 """Per-user Immich server connection.
-
-Each user connects *their own* self-hosted Immich server via a personal API
-key - there is no site-wide Immich instance. Unlike ``GoogleCalendarAccount``
-(whose OAuth tokens are scoped and remotely revocable), a raw Immich API key
-grants direct read access to the user's whole photo library, so ``api_key``
-is stored encrypted at rest via ``EncryptedTextField``.
+Each user connects *their own* self-hosted Immich server via a personal API key - there is no site-wide Immich instance.
 """
 
 from __future__ import annotations
@@ -27,14 +22,7 @@ logger = logging.getLogger(__name__)
 
 class ImmichAccountManager(abstract.DashboardManager):
     """Adds lookups that self-heal when a stored api_key can't be decrypted.
-
-    A field-encryption-key change (see ``models.fields.EncryptedTextField``)
-    leaves any previously-saved ``api_key`` permanently unreadable - every
-    plain ``.filter(...).first()``/``.get(...)`` on this model raises
-    ``InvalidToken`` the moment the row is materialized, which used to 500
-    every page and Celery task that touched the account. These methods treat
-    that exactly like "never connected" and remove the now-useless row so
-    the user can just reconnect.
+    These methods treat that exactly like "never connected" and remove the now-useless row so the user can just reconnect.
     """
 
     def get_for_profile(self, profile: Profile) -> ImmichAccount | None:
@@ -55,11 +43,7 @@ class ImmichAccountManager(abstract.DashboardManager):
 
     def _delete_undecryptable(self, profile_id: int) -> None:
         """Hard-delete via raw SQL.
-
-        A normal queryset ``.delete()`` still instantiates matching rows to
-        dispatch delete signals, which re-triggers the same decrypt failure -
-        raw SQL (identifiers pulled from ``_meta``, not user input) sidesteps
-        that entirely.
+        A normal queryset ``.delete()`` still instantiates matching rows to dispatch delete signals, which re-triggers the same decrypt failure - raw SQL (identifiers pulled from ``_meta``, not user input) sidesteps that entirely.
         """
         table = self.model._meta.db_table  # noqa: SLF001 - _meta is public API despite the underscore
         column = self.model._meta.get_field("profile").column  # noqa: SLF001
@@ -92,10 +76,7 @@ class ImmichAccount(abstract.DashboardModel):
 
     def asset_web_url(self, asset_id: str) -> str:
         """Return the Immich web URL for one asset.
-
-        Used both as the "view on Immich" attribution link and as the de-dup
-        key stored on ``Image.source_url`` - an asset already imported to a
-        pin is recognised by matching this URL, without re-downloading it.
+        Used both as the "view on Immich" attribution link and as the de-dup key stored on ``Image.source_url`` - an asset already imported to a pin is recognised by matching this URL, without re-downloading it.
 
         Args:
             asset_id: The Immich asset id.
@@ -107,10 +88,7 @@ class ImmichAccount(abstract.DashboardModel):
 
     def asset_url_prefix(self) -> str:
         """Every asset URL from this account starts with this.
-
-        Split out so a backfill can recognise rows this account created without
-        restating the URL shape - two spellings of one format drift, and the
-        one that drifts is always the copy.
+        Split out so a backfill can recognise rows this account created without restating the URL shape - two spellings of one format drift, and the one that drifts is always the copy.
 
         Returns:
             The account's asset URL prefix, with a trailing slash.

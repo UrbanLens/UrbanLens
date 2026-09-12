@@ -29,9 +29,7 @@ def is_cached_external_media(image: Image) -> bool:
         image: The row to classify.
 
     Returns:
-        True when the row carries the gallery identity that
-        ``services.media.media_materialize`` stamps onto everything it caches.
-    """
+        True when the row carries the gallery identity that ``services.media.media_materialize`` stamps onto everything it caches."""
     return bool(image.media_source_key and image.media_item_key)
 
 
@@ -42,8 +40,7 @@ def community_relevant_vote_count(image: Image) -> int:
         image: A user-uploaded row shared to a wiki.
 
     Returns:
-        The number of distinct other profiles who marked it relevant, or 0
-        when the photo has no gallery identity to be voted on."""
+        The number of distinct other profiles who marked it relevant, or 0 when the photo has no gallery identity to be voted on."""
     from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 
     if image.location_id is None or not image.image:
@@ -68,8 +65,7 @@ def refresh_community_quota_bonus(image: Image) -> bool:
         image: The photo a relevance vote just landed on.
 
     Returns:
-        True if this call granted the exemption, False if it didn't apply or
-        was already granted."""
+        True if this call granted the exemption, False if it didn't apply or was already granted."""
     from urbanlens.dashboard.models.images.model import Image as ImageModel
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
@@ -99,8 +95,7 @@ def revoke_community_quota_bonus(image: Image) -> bool:
         image: The photo being withdrawn from its wiki.
 
     Returns:
-        True if this call cleared the exemption, False if the row carried some
-        other exemption or none at all."""
+        True if this call cleared the exemption, False if the row carried some other exemption or none at all."""
     from urbanlens.dashboard.models.images.model import Image as ImageModel
 
     # Guarded on the exact value, not on truthiness: four of the five reasons
@@ -120,9 +115,7 @@ def revoke_community_bonuses_on_wiki_delete(wiki_ids: Collection[int], *, delete
     ``Image.wiki`` is ``SET_NULL``, so deleting a wiki detaches every contributor's photos in one statement.
 
     Args:
-        wiki_ids: Primary keys of every wiki the delete will remove, descendants
-            included - the FK is nulled for the whole cascaded subtree, so a
-            revoke that stopped at the named wiki would miss the rest.
+        wiki_ids: Primary keys of every wiki the delete will remove, descendants included - the FK is nulled for the whole cascaded subtree, so a revoke that stopped at the named wiki would miss the rest.
         deleted_by: The profile performing the delete.
 
     Returns:

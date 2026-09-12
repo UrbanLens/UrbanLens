@@ -27,8 +27,7 @@ def is_own_site_url(url: str) -> bool:
         url: The URL a user is asking to be archived.
 
     Returns:
-        True if the URL's host is this site's own domain or urbanlens.org
-        (or a subdomain of either), meaning it should not be submitted."""
+        True if the URL's host is this site's own domain or urbanlens.org (or a subdomain of either), meaning it should not be submitted."""
     from django.conf import settings
 
     hostname = (urlparse(url).hostname or "").lower().rstrip(".")
@@ -49,15 +48,8 @@ class WaybackMachineGateway(Gateway):
     def get_availability(self, url: str, *, timestamp: str | None = None) -> dict[str, Any]:
         """Return the closest archived snapshot for a URL.
 
-        Args:
-            url: The URL to look up.
-            timestamp: Optional 14-digit timestamp (YYYYMMDDhhmmss) to find the
-                nearest capture to a specific point in time.
-
         Returns:
-            Parsed JSON with an ``archived_snapshots`` dict, which may be empty
-            if the URL has never been archived.
-        """
+            Parsed JSON with an ``archived_snapshots`` dict, which may be empty if the URL has never been archived."""
         params: dict[str, Any] = {"url": url}
         if timestamp:
             params["timestamp"] = timestamp
@@ -68,16 +60,8 @@ class WaybackMachineGateway(Gateway):
     def search_cdx(self, url: str, **params: Any) -> list[Any]:
         """Search the CDX index for captures of a URL or URL pattern.
 
-        Args:
-            url: URL or URL prefix/pattern to search for.  Supports ``*`` wildcards
-                when ``matchType`` is set to ``"prefix"`` or ``"domain"``.
-            **params: Additional CDX API parameters (e.g. ``from_``, ``to``,
-                ``limit``, ``matchType``, ``filter``, ``fl``).
-
         Returns:
-            List of capture rows.  With ``output="json"`` (the default), the first
-            row is the field header and subsequent rows are captures.
-        """
+            List of capture rows."""
         query = {"url": url, "output": "json", **params}
         response = self.session.get(_CDX_URL, params=query, timeout=20)
         response.raise_for_status()
@@ -86,15 +70,8 @@ class WaybackMachineGateway(Gateway):
     def get_memento_timemap(self, url: str, *, output: str = "json", **params: Any) -> list[Any] | str:
         """Return a Memento TimeMap listing archived captures for a URL.
 
-        Args:
-            url: The URL to retrieve the TimeMap for.
-            output: Response format - ``"json"`` (default), ``"link"``, or ``"cdxj"``.
-            **params: Additional query parameters.
-
         Returns:
-            Parsed list of Memento records when ``output="json"``, otherwise the
-            raw text body.
-        """
+            Parsed list of Memento records when ``output="json"``, otherwise the raw text body."""
         timemap_url = f"{_MEMENTO_TIMEMAP_URL}/{output}/{url}"
         response = self.session.get(timemap_url, params=params, timeout=20)
         response.raise_for_status()
@@ -105,13 +82,8 @@ class WaybackMachineGateway(Gateway):
     def save_url(self, url: str, **params: Any) -> dict[str, Any]:
         """Ask the Wayback Machine to archive a URL now.
 
-        Args:
-                url: The URL to archive.
-                **params: Additional query parameters passed to the save endpoint.
-
         Returns:
-                Dict with ``"archived_url"`` (the saved copy's URL) and
-                ``"status_code"`` (HTTP status of the final response)."""
+            Dict with ``"archived_url"`` (the saved copy's URL) and ``"status_code"`` (HTTP status of the final response)."""
         response = self.session.get(f"{_SAVE_URL}/{url}", params=params, timeout=30, allow_redirects=True)
         response.raise_for_status()
         return {"archived_url": response.url, "status_code": response.status_code}

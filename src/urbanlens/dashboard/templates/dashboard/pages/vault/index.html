@@ -19,9 +19,7 @@
 <div class="page-inner">
 
     {% if is_empty %}
-    {# A brand-new Vault: three zeroes and an empty storage bar say nothing     #}
-    {# useful, so offer the two ways in instead. Reuses the shared empty-state  #}
-    {# treatment from the Memories timeline.                                    #}
+    {# A brand-new Vault: three zeroes and an empty storage bar say nothing useful, so offer the two ways in instead. #}
     <div class="memories-empty-state">
         <div class="memories-empty-state-icon"><i class="material-symbols-outlined">home_storage</i></div>
         <h2>Your Vault is empty</h2>
@@ -66,8 +64,7 @@
             </div>
         </a>
         {% endif %}
-        {# Albums live in a panel on the Photos page - `vault.photos.albums` is #}
-        {# the AJAX-only partial behind it and has no page chrome of its own.   #}
+        {# Albums live in a panel on the Photos page - `vault.photos.albums` is the AJAX-only partial behind it and has no page chrome of its own. #}
         <a class="vault-stat-tile" href="{% url 'vault.photos' %}#albums">
             <div class="vault-stat-icon"><i class="material-symbols-outlined">photo_album</i></div>
             <div>
@@ -109,8 +106,7 @@
     </section>
 
     {% if video_count %}
-    {# The only surface that hands a user one of their own videos - there is no #}
-    {# Videos page, and their bytes are on the bar above whether or not one exists. #}
+    {# The only surface that hands a user one of their own videos. #}
     <section class="ul-section vault-home-videos" id="videos">
         <h2 class="vault-home-section-title"><i class="material-symbols-outlined">videocam</i> Videos</h2>
         <ul class="vault-video-list">

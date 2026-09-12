@@ -33,9 +33,7 @@ def ancestors_of(place: Place) -> list[Place]:
         place: The place whose ancestry to walk.
 
     Returns:
-        The ancestor chain, empty for a root place. Stops at
-        :data:`MAX_LINEAGE_DEPTH` so a pre-existing cycle can't hang a caller.
-    """
+        The ancestor chain, empty for a root place."""
     chain: list[Place] = []
     seen: set[int] = {place.pk} if place.pk else set()
     current = place.parent if place.parent_id else None
@@ -71,17 +69,15 @@ def set_parent(place: Place, parent: Place | None, relation: str = PlaceRelation
     """Attach a place to a parent (or detach it) and repair the derived columns.
 
     Args:
-        place: The place to re-parent. Must be saved.
+        place: The place to re-parent.
         parent: The new parent, or None to make ``place`` a domain root.
-        relation: How it attaches - ``PART_OF`` keeps both in one access
-            domain, ``MEMBER_OF`` makes the parent an earned aggregate.
+        relation: How it attaches - ``PART_OF`` keeps both in one access domain, ``MEMBER_OF`` makes the parent an earned aggregate.
 
     Returns:
         The updated place.
 
     Raises:
-        PlaceLineageError: If the edge would create a cycle.
-    """
+        PlaceLineageError: If the edge would create a cycle."""
     if place.pk is None:
         raise PlaceLineageError("Cannot re-parent an unsaved place.")
     if would_create_cycle(place, parent):
@@ -102,8 +98,7 @@ def propagate_domain_root(place: Place) -> int:
     """Push a place's domain root down through its ``PART_OF`` subtree.
 
     Args:
-        place: The place whose subtree to repair. Its own ``domain_root`` is
-            taken as already correct.
+        place: The place whose subtree to repair.
 
     Returns:
         How many descendant rows were updated."""
@@ -132,7 +127,6 @@ def propagate_domain_root(place: Place) -> int:
 
 def refresh_derived_flags(place_ids: Iterable[int | None]) -> None:
     """Recompute the cached child summaries on the given places.
-    ``is_aggregate`` (has ``MEMBER_OF`` children, therefore earned rather than resolved onto) and ``building_child_count`` (how many buildings stand on it, therefore whether markers here have to commit to parcel-or-building scope) are both read on hot paths, so they are maintained on every edge change rather than counted per request.
 
     Args:
         place_ids: Place primary keys; None entries and duplicates are ignored."""

@@ -1,9 +1,5 @@
 """Forward geocoding (free-text address -> coordinates).
-
-Split out from ``controllers.maps`` so it can be shared by the map "add pin by
-address" flow and any other pin-creation entry point (e.g. the external API)
-without a controller-to-controller import.
-"""
+Split out from ``controllers.maps`` so it can be shared by the map "add pin by address" flow and any other pin-creation entry point (e.g. the external API) without a controller-to-controller import."""
 
 from __future__ import annotations
 
@@ -17,10 +13,8 @@ def get_pin_by_address(address: str) -> tuple[float | None, float | None]:
         address: The address string to geocode.
 
     Returns:
-        A ``(latitude, longitude)`` tuple, or ``(None, None)`` when the
-        address doesn't resolve to a place.
+        A ``(latitude, longitude)`` tuple, or ``(None, None)`` when the address doesn't resolve to a place.
 
     Raises:
-        RateLimitExceededError: The app-wide Nominatim budget refused the
-            direct fallback call."""
+        RateLimitExceededError: The app-wide Nominatim budget refused the direct fallback call."""
     return geocode_address(address)

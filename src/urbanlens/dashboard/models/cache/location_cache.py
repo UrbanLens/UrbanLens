@@ -15,12 +15,8 @@ if TYPE_CHECKING:
 
 
 class LocationCache(abstract.DashboardModel):
-    """
-    Caches responses from external data sources keyed to a shared Location.
-
-    An empty-dict ``data`` field means "we searched and found nothing" - this
-    is still a valid cached result so we don't hammer the upstream API again.
-    A missing row means the source has never been queried for this location.
+    """Caches responses from external data sources keyed to a shared Location.
+    An empty-dict ``data`` field means "we searched and found nothing" - this is still a valid cached result so we don't hammer the upstream API again.
     """
 
     source = models.CharField(max_length=50)
@@ -53,8 +49,7 @@ class LocationCache(abstract.DashboardModel):
 
     @classmethod
     def get_fresh(cls, location: Location, source: str) -> LocationCache | None:
-        """
-        Returns a non-stale cache entry, or None if missing or stale.
+        """Returns a non-stale cache entry, or None if missing or stale.
 
         Args:
             location: The Location to look up.
@@ -71,8 +66,7 @@ class LocationCache(abstract.DashboardModel):
 
     @classmethod
     def set(cls, location: Location, source: str, data: dict, query_key: str = "") -> LocationCache:
-        """
-        Upsert a cache entry.
+        """Upsert a cache entry.
 
         Args:
             location: The Location to cache data for.

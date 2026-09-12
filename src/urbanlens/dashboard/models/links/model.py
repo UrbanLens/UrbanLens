@@ -40,11 +40,7 @@ class _LinkBase(abstract.DashboardModel):
         ordering = ["order", "id"]
 
     def save(self, *args, **kwargs) -> None:
-        """Sanitize ``name`` to a strict character set before persisting it.
-
-        Single enforcement point regardless of write path (manual add, KMZ
-        import link extraction, ...) - mirrors ``_AliasBase.save()``.
-        """
+        """Sanitize ``name`` to a strict character set before persisting it."""
         from urbanlens.dashboard.services.locations.naming import sanitize_name
 
         update_fields = kwargs.get("update_fields")
@@ -78,11 +74,6 @@ class PinLink(_LinkBase):
     class Meta(_LinkBase.Meta):
         db_table = "dashboard_pin_links"
         constraints = [
-            # Hashed rather than indexing `url` directly: it holds up to 2000
-            # characters, and a btree entry over that in multibyte UTF-8 can
-            # exceed Postgres' ~2704-byte row limit - which would turn a long
-            # link into an insert error, a worse failure than the duplicate row
-            # this prevents.
             UniqueConstraint(F("pin"), MD5("url"), name="db_plink_pin_url_unique"),
         ]
         indexes = []

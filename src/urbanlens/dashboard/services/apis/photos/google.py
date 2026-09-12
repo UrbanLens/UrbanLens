@@ -1,5 +1,4 @@
-"""Google Photos Picker API gateway.
-Google's Photos Library API stopped exposing GPS coordinates and broad library search entirely (see ``docs/designs/plugins.md`` / this session's Immich research); the **Picker API** is the only sanctioned mechanism left, and it's fundamentally a different shape: the user picks photos in Google's own UI (``pickerUri``), we poll a session until they're done, then list whatever they picked - there is no server-side "near this pin" filter to apply."""
+"""Google Photos Picker API gateway."""
 
 from __future__ import annotations
 
@@ -58,8 +57,7 @@ def build_authorization_url(redirect_uri: str, state: str) -> str:
         Fully-formed authorization URL to redirect the user to.
 
     Raises:
-        GooglePhotosNotConfiguredError: When the OAuth client is not configured.
-    """
+        GooglePhotosNotConfiguredError: When the OAuth client is not configured."""
     client_id, _ = _oauth_client()
     return google_oauth.build_authorization_url(client_id, redirect_uri, PHOTOS_PICKER_SCOPES, state)
 
@@ -144,9 +142,7 @@ class GooglePhotosGateway(Gateway):
     """Picker API client bound to one user's connected Google Photos account.
 
     Attributes:
-        account: The user's stored Google Photos OAuth credentials. Tokens
-            are refreshed in place (and persisted) as needed.
-    """
+        account: The user's stored Google Photos OAuth credentials."""
 
     service_key: ClassVar[str] = "google_photos"
     paid_service: ClassVar[bool] = False
@@ -163,8 +159,7 @@ class GooglePhotosGateway(Gateway):
             Headers dict with a valid bearer token.
 
         Raises:
-            GatewayRequestError: When the token cannot be refreshed.
-        """
+            GatewayRequestError: When the token cannot be refreshed."""
         if self.account.is_token_expired:
             self._refresh_token()
         return {"Authorization": f"Bearer {self.account.access_token}"}
@@ -173,9 +168,7 @@ class GooglePhotosGateway(Gateway):
         """Refresh and persist the account's access token.
 
         Raises:
-            GatewayRequestError: When no refresh token is stored or the
-                refresh is rejected by Google.
-        """
+            GatewayRequestError: When no refresh token is stored or the refresh is rejected by Google."""
         if not self.account.refresh_token:
             raise GatewayRequestError("Google Photos connection is missing a refresh token. Please reconnect.")
         client_id, client_secret = _oauth_client()
@@ -194,8 +187,7 @@ class GooglePhotosGateway(Gateway):
             The new session, including the ``picker_uri`` to send the user to.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
-        """
+            GatewayRequestError: On a network error or non-2xx response."""
         response = self.session.post(f"{PICKER_API_BASE}/sessions", json={}, headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
         if not response.ok:
             logger.warning("Google Photos create_session failed (%s): %s", response.status_code, response.text[:500])
@@ -205,14 +197,11 @@ class GooglePhotosGateway(Gateway):
     def get_session(self, session_id: str) -> PickerSession:
         """Fetch the current state of a picker session.
 
-        Args:
-                session_id: The session id from :meth:`create_session`.
-
         Returns:
-                The session's current state.
+            The session's current state.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         response = self.session.get(f"{PICKER_API_BASE}/sessions/{session_id}", headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
         if not response.ok:
             logger.warning("Google Photos get_session failed (%s): %s", response.status_code, response.text[:500])
@@ -232,14 +221,11 @@ class GooglePhotosGateway(Gateway):
     def list_session_media_items(self, session_id: str) -> list[PickedMediaItem]:
         """List every item the user selected in a completed picker session.
 
-        Args:
-                session_id: The session id from :meth:`create_session`.
-
         Returns:
-                The picked media items, across all pages.
+            The picked media items, across all pages.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         items: list[PickedMediaItem] = []
         page_token: str | None = None
         while True:
@@ -270,17 +256,11 @@ class GooglePhotosGateway(Gateway):
     def download_media_item(self, base_url: str, *, original: bool = True) -> bytes:
         """Download a picked item's bytes.
 
-        Args:
-                base_url: The item's ``base_url`` from :meth:`list_session_media_items`.
-                original: When True (default), request the original file (``=d``
-                suffix per Google's documented download convention); when
-                False, request a :data:`PREVIEW_MAX_DIMENSION` preview instead.
-
         Returns:
-                The file bytes.
+            The file bytes.
 
         Raises:
-                GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response."""
         suffix = "=d" if original else f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}"
         response = self.session.get(f"{base_url}{suffix}", headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
         if not response.ok:

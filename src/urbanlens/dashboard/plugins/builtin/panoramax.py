@@ -1,8 +1,4 @@
-"""Panoramax plugin: free, open-source street-level imagery, via REData.
-
-REData-backed (``services.apis.locations.redata_media_gateway`` - see that
-module's docstring); no longer calls api.panoramax.xyz directly.
-"""
+"""Panoramax plugin: free, open-source street-level imagery, via REData."""
 
 from __future__ import annotations
 

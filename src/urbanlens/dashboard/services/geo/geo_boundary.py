@@ -34,12 +34,7 @@ class GeoBoundary:
     """A geographic region, lazily resolved to a GEOS polygon and memoized.
 
     Attributes:
-        _loader: Zero-argument callable returning the boundary's geometry (or
-            None when it couldn't be resolved). Invoked at most once per
-            instance, on first real use (:meth:`contains` or :attr:`geometry`)
-            - never at construction, so assigning a ``GeoBoundary`` as a
-            ``ClassVar`` never touches the network or database.
-    """
+        _loader: Zero-argument callable returning the boundary's geometry (or None when it couldn't be resolved)."""
 
     _loader: Callable[[], Polygon | MultiPolygon | None]
     _cached: Polygon | MultiPolygon | None = field(default=None, init=False, repr=False)
@@ -52,7 +47,7 @@ class GeoBoundary:
         A loader that *raises* has not answered, and is only honoured for :data:`_FAILED_LOAD_RETRY_SECONDS`, because the two are otherwise indistinguishable to every caller and the second one heals on its own.
 
         Returns:
-                The boundary geometry, or None when it is unresolved or unavailable."""
+            The boundary geometry, or None when it is unresolved or unavailable."""
         if self._loaded:
             return self._cached
         if self._retry_after is not None and time.monotonic() < self._retry_after:
@@ -81,12 +76,8 @@ class GeoBoundary:
     def contains(self, lat: float | None, lng: float | None) -> bool:
         """Return True if (lat, lng) falls within this boundary.
 
-        Args:
-                lat: WGS-84 latitude.
-                lng: WGS-84 longitude.
-
         Returns:
-                True when inside (or touching the edge of) the boundary."""
+            True when inside (or touching the edge of) the boundary."""
         if lat is None or lng is None:
             return False
         geometry = self._geometry()
@@ -102,12 +93,8 @@ class GeoBoundary:
     def from_bboxes(cls, boxes: Sequence[BBox]) -> GeoBoundary:
         """Build a boundary from a union of lat/lng bounding boxes (pure math, no I/O).
 
-        Args:
-            boxes: Each box as (lat_min, lat_max, lng_min, lng_max).
-
         Returns:
-            A ``GeoBoundary`` covering the union of all boxes.
-        """
+            A ``GeoBoundary`` covering the union of all boxes."""
 
         def _load() -> MultiPolygon:
             polygons = []
@@ -123,11 +110,8 @@ class GeoBoundary:
     def from_wkt(cls, wkt: str) -> GeoBoundary:
         """Build a boundary from a hand-authored WKT polygon/multipolygon (pure parsing, no I/O).
 
-        Args:
-                wkt: Well-known text, e.g. ``"POLYGON((...))"``.
-
         Returns:
-                A ``GeoBoundary`` wrapping the parsed geometry."""
+            A ``GeoBoundary`` wrapping the parsed geometry."""
 
         def _load() -> Polygon | MultiPolygon:
             from django.contrib.gis.geos import GEOSGeometry
@@ -173,15 +157,12 @@ USA: GeoBoundary = GeoBoundary.from_bboxes(_USA_BBOXES)
 
 def state_boundary(state_abbr: str) -> GeoBoundary:
     """Return a lazily-loaded boundary for one US state, from Census TIGERweb.
-    The fetched polygon is cached in Django's shared cache (state boundaries are effectively static) so a process restart doesn't re-fetch, and memoized on the returned ``GeoBoundary`` so repeated ``.contains()`` calls within one process never repeat even a cache lookup.
 
     Args:
         state_abbr: Two-letter USPS state abbreviation (e.g. ``"NY"``).
 
     Returns:
-        A ``GeoBoundary`` for the state. Resolves to no geometry (so
-        ``.contains()`` always returns False) if TIGERweb has no matching
-        state or the request fails."""
+        A ``GeoBoundary`` for the state."""
 
     def _load() -> Polygon | MultiPolygon | None:
         from django.core.cache import cache

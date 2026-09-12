@@ -12,10 +12,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
-#: This panel is specifically "Recent Seismic Activity" - REData's hazards
-#: endpoint pools other event kinds (flood, wildfire, ...) behind the same
-#: shared registry, so results are filtered to this one even though the only
-#: provider configured today (usgs_earthquakes) never returns anything else.
+#: This panel is specifically "Recent Seismic Activity" - REData's hazards endpoint pools other event
+#: kinds (flood, wildfire, ...) behind the same shared registry, so results are filtered to this one
+#: even though the only provider configured today (usgs_earthquakes) never returns anything else.
 _EARTHQUAKE_EVENT_TYPE = "earthquake"
 
 

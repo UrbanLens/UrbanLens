@@ -25,9 +25,9 @@ if TYPE_CHECKING:
 class ApiKeyAuthentication(BaseAuthentication):
     """Authenticates a request bearing ``Authorization: Bearer <api-key>``.
 
-    On success, DRF stashes the returned ``(user, auth)`` tuple as
-    ``request.user``/``request.auth`` - ``external_api.permissions.HasApiKeyScope``
-    reads ``request.auth`` (the ``ApiKey`` row) to check its granted scopes.
+    On success, DRF stashes the returned ``(user, auth)`` tuple as ``request.user``/``request.auth`` -
+    ``external_api.permissions.HasApiKeyScope`` reads ``request.auth`` (the ``ApiKey`` row) to check its
+    granted scopes.
     """
 
     keyword = "Bearer"
@@ -39,14 +39,12 @@ class ApiKeyAuthentication(BaseAuthentication):
             request: The incoming DRF request.
 
         Returns:
-            ``(user, api_key)`` on success; ``None`` when no bearer token was
-            presented at all, or the token isn't ``ulk_``-labeled (letting
-            other authenticators - notably OAuth2 access tokens, which share
-            the ``Bearer`` scheme - or anonymous access take over).
+            ``(user, api_key)`` on success; ``None`` when no bearer token was presented at all, or the token
+            isn't ``ulk_``-labeled (letting other...
 
         Raises:
-            AuthenticationFailed: A ``ulk_``-labeled bearer token was
-                presented but doesn't resolve to an active key.
+            AuthenticationFailed: A ``ulk_``-labeled bearer token was presented but doesn't resolve to an
+            active key.
         """
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith(f"{self.keyword} "):
@@ -54,19 +52,16 @@ class ApiKeyAuthentication(BaseAuthentication):
 
         raw_key = auth_header[len(self.keyword) + 1 :].strip()
         if not raw_key.startswith(f"{KEY_LABEL}_"):
-            # Not an API key at all - claim nothing, so a non-ulk bearer token
-            # (an OAuth2 access token) isn't falsely rejected here before its
-            # own authenticator gets a look.
+            # Not an API key at all - claim nothing, so a non-ulk bearer token (an OAuth2 access token) isn't
+            # falsely rejected here before its own authenticator gets a look.
             return None
 
         api_key = authenticate_api_key(raw_key)
         if api_key is None:
             raise AuthenticationFailed("Invalid or revoked API key.")
 
-        # Logged here (once per successfully authenticated request) rather than
-        # per-view, so every current and future external_api endpoint gets
-        # activity tracking automatically. Never logged for a rejected key -
-        # see record_api_key_usage's docstring for why.
+        # Logged here (once per successfully authenticated request) rather than per-view, so every current and
+        # future external_api endpoint gets activity tracking automatically.
         record_api_key_usage(api_key, request.path)
 
         return (api_key.user, api_key)

@@ -1,5 +1,4 @@
-"""Disposable accounts for the on-demand integration suite.
-Sign-up alone therefore cannot produce an account it can use - ``RegistrationForm.save`` sets ``is_active = False`` and waits for a verification click - so the accounts are provisioned here instead, by a management command run on the target deployment."""
+"""Disposable accounts for the on-demand integration suite."""
 
 from __future__ import annotations
 

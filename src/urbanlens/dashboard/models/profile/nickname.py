@@ -12,15 +12,7 @@ from urbanlens.dashboard.models.profile.queryset import ProfileNicknameManager
 
 class ProfileNickname(abstract.DashboardModel):
     """A private nickname one user assigns to another user's profile.
-
-    Only the *author* can see the nickname they assigned; the *subject*
-    profile owner cannot.  Each author may hold at most one nickname per
-    subject.
-
-    Deliberately *not* encrypted at rest, unlike the sibling private
-    annotations: global search matches it with ``nickname__icontains`` (see
-    ``services.global_search.providers.person_match``), which cannot work
-    against ciphertext. See ``docs/DATA_ENCRYPTION.md``.
+    Only the *author* can see the nickname they assigned; the *subject* profile owner cannot.
     """
 
     nickname = CharField(

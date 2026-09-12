@@ -28,24 +28,12 @@ class MediaItem:
 
     Attributes:
         url: Full-resolution image URL.
-        thumb_url: Thumbnail URL, or ``""`` when the provider has no preview
-            image for this item (e.g. a text/document record) - the frontend
-            renders a fallback icon tile in that case instead of dropping it.
+        thumb_url: Thumbnail URL, or ``""`` when the provider has no preview image for this item (e.g. a text/document record) - the frontend renders a fallback icon tile in that case instead of dropping it.
         caption: Human-readable caption or title.
         source: Human-readable provider name (e.g. ``"Smithsonian Open Access"``).
         page_url: Link to the item's page on the provider's site, if any.
-        content_type: The provider-declared content type of ``url``, when it
-            publishes one. Only some do, but where it exists it is the only
-            reliable way to know a "photo" is really a scanned PDF or a TIFF -
-            an API-generated URL usually carries no extension to infer from -
-            and the gallery needs that to decide whether the item has to be
-            rendered server-side to be displayable at all (see
-            ``services.media.previews``).
-        author: Who to credit for the photo itself, distinct from ``source``
-            (the provider/archive). Empty for providers that don't expose a
-            per-item credit; populated for a wiki-shared ``Image`` row from
-            ``Image.author`` (see ``services.photos.wiki_copy``).
-    """
+        content_type: The provider-declared content type of ``url``, when it publishes one.
+        author: Who to credit for the photo itself, distinct from ``source`` (the provider/archive)."""
 
     url: str
     thumb_url: str
@@ -58,11 +46,7 @@ class MediaItem:
 
 class MediaProvider(Gateway, ABC):
     """Template for gateways that return captioned media for a Location.
-
-    Subclasses implement ``_generate_media`` to yield ``MediaItem``s for a
-    search term; ``get_media`` wraps that with the shared 7-day
-    ``LocationCache``, so results are only fetched once per Location.
-    """
+    Subclasses implement ``_generate_media`` to yield ``MediaItem``s for a search term; ``get_media`` wraps that with the shared 7-day ``LocationCache``, so results are only fetched once per Location."""
 
     display_name: ClassVar[str] = "Media"
     #: Restricts this provider to a geographic region (see ``services.geo.geo_boundary``);
@@ -90,35 +74,15 @@ class MediaProvider(Gateway, ABC):
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
         """Yield MediaItems for ``search_term``.
 
-        Args:
-            search_term: The search term to use to find media.
-            address: The address of the location, if any. Some media providers
-                may use this, or quote it, differently than others.
-
         Returns:
-            Generator of ``MediaItem``s.
-        """
+            Generator of ``MediaItem``s."""
         ...
 
     def get_media(self, location: Location, search_terms: list[str], *, address: str | None = None, limit: int = 24) -> tuple[list[MediaItem], bool]:
         """Return captioned media for ``location``, using the 7-day LocationCache.
 
-        Args:
-            location: The shared Location to cache results against.
-            search_terms: Ordered queries passed to ``_generate_media``, most
-                specific first. Every term is tried and results are merged
-                (deduped by URL) up to ``limit`` -- some search engines return
-                nothing for an overly specific query (e.g. a full street
-                address) but do match a broader one, so a single provider may
-                be given more than one candidate query to widen recall.
-            address: The address of the location, if any. Some media providers
-                may use this, or quote it, differently than others.
-            limit: Maximum number of items to return.
-
         Returns:
-            Tuple of (list of ``MediaItem``s, empty when the provider found
-            nothing or failed; whether the result was served from cache).
-        """
+            Tuple of (list of ``MediaItem``s, empty when the provider found nothing or failed; whether the result was served from cache)."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         if (service_key := self.service_key) is None:

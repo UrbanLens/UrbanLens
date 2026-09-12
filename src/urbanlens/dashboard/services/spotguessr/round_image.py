@@ -47,8 +47,7 @@ def stripped_round_image(image: Image) -> tuple[bytes, str]:
         A ``(bytes, content_type)`` pair ready to put in an HTTP response.
 
     Raises:
-        RoundImageUnavailableError: The row has no stored file, or the file
-            cannot be opened or decoded as an image."""
+        RoundImageUnavailableError: The row has no stored file, or the file cannot be opened or decoded as an image."""
     if not image.image:
         raise RoundImageUnavailableError("This round's photo has no stored file.")
 

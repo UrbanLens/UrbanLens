@@ -60,10 +60,7 @@ describe("after an HTMX swap", () => {
     });
 
     test("does not scroll again on a later, unrelated swap once it already landed", () => {
-        // A page reached via a hash link keeps that hash in the URL for as long
-        // as the reader stays on it - every other HTMX interaction afterwards
-        // (pagination, a like, an unrelated form) used to yank the reader back
-        // to the original anchor.
+        // A page reached via a hash link keeps that hash in the URL for as long as the reader stays on it.
         const spy = target("comment-42");
         setHash("#comment-42");
         settle();
@@ -87,13 +84,9 @@ describe("after an HTMX swap", () => {
 });
 
 describe("a fragment that is not a valid CSS selector", () => {
-    // querySelector throws a DOMException on these. They are not hypothetical:
-    // OAuth providers append "#_=_" and "#access_token=..." on redirect back, and
-    // this app signs in through Google and Discord.
+    // querySelector throws a DOMException on these.
     //
-    // Asserted against scrollToHash directly, not through dispatchEvent: an
-    // exception thrown inside a listener is reported rather than propagated, so
-    // wrapping the dispatch in .not.toThrow() would pass no matter what happened.
+    // Asserted against scrollToHash directly, not through dispatchEvent.
     const invalid = ["#_=_", "#access_token=abc123", "#/route", "#foo=bar", "#123", "#!", "#sec:2"];
 
     for (const hash of invalid) {

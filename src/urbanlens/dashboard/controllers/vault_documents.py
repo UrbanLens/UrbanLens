@@ -96,9 +96,9 @@ class DocumentItemsView(LoginRequiredMixin, View):
 
     GET /vault/documents/items/?offset=&limit=&sort=
 
-    Same ``{items, total, offset, limit}`` shape as Vault Photos' own
-    ``PhotoItemsView`` (see controllers.vault_photos), which is what lets
-    both pages share ``photo-virtual-grid.ts``'s fetch/scroll/prune engine.
+    Same ``{items, total, offset, limit}`` shape as Vault Photos' own ``PhotoItemsView`` (see
+    controllers.vault_photos), which is what lets both pages share ``photo-virtual-grid.ts``'s
+    fetch/scroll/prune engine.
     """
 
     def get(self, request: HttpRequest) -> JsonResponse:
@@ -139,11 +139,10 @@ class DocumentUploadView(LoginRequiredMixin, View):
 
     POST /vault/documents/upload/
 
-    Reuses ``services.photos.photo_upload.upload_photo`` - the same pipeline
-    Vault Photos' own dropzone calls - which already classifies a document by
-    content-type/extension and enforces the ``DOCUMENT_UPLOADS`` feature gate;
-    nothing here is document-specific beyond the field name read from the
-    request and the error message for a missing file.
+    Reuses ``services.photos.photo_upload.upload_photo`` - the same pipeline Vault Photos' own dropzone
+    calls - which already classifies a document by content-type/extension and enforces the
+    ``DOCUMENT_UPLOADS`` feature gate; nothing here is document-specific beyond the field name read from
+    the request and the error message for a missing file.
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:

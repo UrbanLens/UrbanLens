@@ -28,8 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class PinCreationError(ValueError):
-    """Raised when the given input can't be turned into a Pin.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """Raised when the given input can't be turned into a Pin."""
 
 
 class DuplicateCoordinatesError(PinCreationError):
@@ -58,10 +57,7 @@ class DuplicateUuidError(PinCreationError):
 
 class PinCreationForbiddenError(PinCreationError):
     """The input was well-formed but a profile setting forbids acting on it.
-
-    Distinct from plain :class:`PinCreationError` so HTTP-facing callers can
-    map it to 403 rather than 400 without inspecting the message text.
-    """
+    Distinct from plain :class:`PinCreationError` so HTTP-facing callers can map it to 403 rather than 400 without inspecting the message text."""
 
 
 def resolve_child_pin_location(
@@ -79,9 +75,7 @@ def resolve_child_pin_location(
         profile: Owner of the child pin being placed or moved.
         latitude: Submitted latitude.
         longitude: Submitted longitude.
-        exclude_pin: A pin to ignore when looking for an overlap - the pin being
-            moved, so re-submitting its current point stays a no-op instead of
-            colliding with itself.
+        exclude_pin: A pin to ignore when looking for an overlap - the pin being moved, so re-submitting its current point stays a no-op instead of colliding with itself.
         defaults: Field defaults used only when creating a new Location.
 
     Returns:
@@ -137,57 +131,31 @@ def create_pin_for_profile(
     """Create a Pin for a profile from raw, untrusted-shaped input.
 
     Args:
-        profile: The owning profile - the pin is always created as this
-            profile's own, regardless of who/what is calling.
+        profile: The owning profile - the pin is always created as this profile's own, regardless of who/what is calling.
         name: User-provided display name, if any.
-        latitude: Marker latitude. Required unless ``address`` resolves to one.
-        longitude: Marker longitude. Required unless ``address`` resolves to one.
+        latitude: Marker latitude.
+        longitude: Marker longitude.
         address: Free-text address to geocode when coordinates aren't given.
         icon: Icon key/emoji override.
         color: Hex color override.
         description: Personal notes to store on the pin, if any.
-        pin_type: A ``PinType`` value; when given, the pin is marked
-            user-classified (``pin_type_is_user_provided``) so automatic
-            classification won't overwrite it - mirroring ``name``'s handling.
+        pin_type: A ``PinType`` value; when given, the pin is marked user-classified (``pin_type_is_user_provided``) so automatic classification won't overwrite it - mirroring ``name``'s handling.
         custom_icon: An uploaded custom icon image.
         label_ids: Label ids to attach directly (takes precedence over tag_ids/category_ids).
         tag_ids: Tag-kind label ids to attach when ``label_ids`` wasn't given.
         category_ids: Category-kind label ids to attach when ``label_ids`` wasn't given.
         google_place_id: A Google Place id to link on both the pin and location.
         place_canonical_name: Canonical name to seed a newly-created Location with.
-        client_uuid: A caller-generated uuid making the create idempotent: when a
-            pin with this uuid already belongs to ``profile``, that pin is
-            returned (``result.created`` False) instead of creating a duplicate.
-            The external API's offline-outbox clients retry creates until
-            acknowledged, so the same submission may legitimately arrive twice.
-        parent_id: An existing pin of this profile's to create this one as a
-            child (detail pin) of. When given, the Location is resolved by
-            :func:`resolve_child_pin_location` - an exact-coordinate match
-            instead of the default fuzzy dedup radius, since a detail pin's
-            whole point is to sit at its own precise coordinates near its
-            parent, which the fuzzy radius would otherwise collapse onto the
-            parent's own Location. A child pin is exempt from the
-            one-root-pin-per-location rule, but not from the narrower rule that
-            no two of a profile's pins may share an exact point.
-        name_is_user_provided: Whether ``name`` was deliberately typed by the
-            owner, rather than produced by a parser/importer. True protects it
-            from the automatic name-upgrade sweep
-            (:func:`tasks.upgrade_placeholder_pin_names`) exactly as an
-            explicit rename does. Ignored when ``name`` is blank.
+        client_uuid: A caller-generated uuid making the create idempotent: when a pin with this uuid already belongs to ``profile``, that pin is returned (``result.created`` False) instead of creating a duplicate.
+        parent_id: An existing pin of this profile's to create this one as a child (detail pin) of.
+        name_is_user_provided: Whether ``name`` was deliberately typed by the owner, rather than produced by a parser/importer.
 
     Returns:
-        The created (or, for an idempotent replay, existing) pin plus every
-        Location match at this point.
+        The created (or, for an idempotent replay, existing) pin plus every Location match at this point.
 
     Raises:
-        PinCreationError: Neither coordinates nor a usable address were given,
-            the address couldn't be geocoded, ``client_uuid`` is already used
-            by a pin that isn't this profile's, ``parent_id`` doesn't match
-            one of this profile's own pins, the profile already has a
-            top-level pin at this exact location, or (for a child pin) it
-            already has any pin at this exact point.
-        PinCreationForbiddenError: An address needed geocoding but external lookups
-            are turned off for this profile."""
+        PinCreationError: Neither coordinates nor a usable address were given, the address couldn't be geocoded, ``client_uuid`` is already used by a pin that isn't this profile's, ``parent_id`` doesn't match one of this profile's own pins, the profile already has a...
+        PinCreationForbiddenError: An address needed geocoding but external lookups are turned off for this profile."""
     if client_uuid is not None:
         existing = Pin.objects.filter(profile=profile, uuid=client_uuid).select_related("location").first()
         if existing is not None:

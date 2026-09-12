@@ -1,20 +1,5 @@
 /**
  * `urbanlensMediaThumbFallback` has to exist before the first `<img>` can fail.
- *
- * Nine templates render `<img onerror="urbanlensMediaThumbFallback(this, ...)">`
- * server-side. An `onerror` for a URL that 404s fires *during parsing*, as soon
- * as the response comes back - which for a photo whose file never landed is
- * immediately, long before the end of the document.
- *
- * `themes/base.html` defined the function in a `<script>` after the page
- * content, so every one of those handlers threw `ReferenceError` instead of
- * swapping in the icon tile the function exists to provide. Observed in a
- * browser on 2026-09-06 on Vault > Photos: four `ReferenceError`s, four broken
- * images, no fallback tiles - while `typeof window.urbanlensMediaThumbFallback`
- * read `"function"` by the time anyone looked, which is what made it invisible.
- *
- * Only handlers that can fire during parse need this. `onclick` cannot, which
- * is why the sibling `urbanlensSizeEditInPlaceInput` is fine where it is.
  */
 
 import { describe, expect, test } from "bun:test";

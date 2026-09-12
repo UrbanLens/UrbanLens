@@ -1,9 +1,5 @@
 /**
- * createTemporalImagerySlider() itself is Leaflet/DOM-coupled (it drives a
- * real map and reads elements out of a container), so - mirroring
- * map-layers.test.ts's scope - only the pure helpers factored out of it are
- * unit tested here: label formatting, URL-template substitution, and the
- * slider's min/max bounds.
+ * createTemporalImagerySlider() itself is Leaflet/DOM-coupled (it drives a real map and reads elements out of a container), so.
  */
 import { describe, expect, test } from "bun:test";
 import { formatYearLabel, sliderRange, temporalFeaturesUrl } from "./temporal-imagery";

@@ -1,5 +1,4 @@
 {# Membership settings subsection - loaded via HTMX (BillingSettingsSectionView). #}
-{# Context: stripe_configured, role_rows, subscriptions, has_billing_customer, minimum_pledge_dollars #}
 <div id="billing-settings-body" class="settings-subsection-body">
 {% if not stripe_configured %}
     <p class="settings-help">Paid subscriptions aren't configured on this server yet.</p>

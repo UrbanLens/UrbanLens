@@ -16,16 +16,10 @@ def can_see_official_owners(user: AbstractBaseUser | AnonymousUser | None) -> bo
     """Whether this user may see automatically-sourced owner identity/contact info.
 
     Args:
-        user: The viewing user. Anonymous - and None, for a caller with no
-            viewer to resolve at all - are both False: a gate on a private
-            individual's name and contact details has to fail closed, so a
-            code path that forgets to pass a viewer withholds the data rather
-            than publishing it.
+        user: The viewing user.
 
     Returns:
-        True when the user holds ``SiteFeature.PROPERTY_OWNERS`` - which site
-        admins and any role granting it do, per ``user_has_feature``.
-    """
+        True when the user holds ``SiteFeature.PROPERTY_OWNERS`` - which site admins and any role granting it do, per ``user_has_feature``."""
     from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 
     if user is None:
@@ -55,8 +49,7 @@ def visible_owners(owners, user: AbstractBaseUser | AnonymousUser) -> list[WikiO
         user: The viewing user.
 
     Returns:
-        The rows this user may see, as a list (the caller renders them and
-        also needs a length, so evaluating once here avoids a second query)."""
+        The rows this user may see, as a list (the caller renders them and also needs a length, so evaluating once here avoids a second query)."""
     from urbanlens.dashboard.models.property_owner.meta import OwnerSource
 
     rows = list(owners)
@@ -67,17 +60,13 @@ def visible_owners(owners, user: AbstractBaseUser | AnonymousUser) -> list[WikiO
 
 def sale_rows(sales, user: AbstractBaseUser | AnonymousUser) -> list[dict]:
     """Sale records with their party names filtered for this viewer.
-    A sale's grantor/grantee are ``WikiOwner`` rows like any other, and the ones written from county deed records carry ``OwnerSource.OFFICIAL`` - so without this the Sale History tab would hand back the very names the Ownership panel beside it withholds.
 
     Args:
         sales: Sale records, ideally with their party relations prefetched.
         user: The viewing user.
 
     Returns:
-        One dict per sale: ``sale``, the visible ``previous_owners`` and
-        ``new_owners``, and ``parties_withheld`` when any name was removed -
-        so the template can say the parties are known but not shown, rather
-        than rendering a misleading "Unknown"."""
+        One dict per sale: ``sale``, the visible ``previous_owners`` and ``new_owners``, and ``parties_withheld`` when any name was removed - so the template can say the parties are known but not shown, rather than rendering a misleading "Unknown"."""
     entitled = can_see_official_owners(user)
     rows = []
     for sale in sales:
@@ -98,7 +87,6 @@ def sale_rows(sales, user: AbstractBaseUser | AnonymousUser) -> list[dict]:
 
 def withheld_official_count(owners, user: AbstractBaseUser | AnonymousUser) -> int:
     """How many official owner records were withheld from this user.
-    Surfaced so the panel can say "2 official records are available with a subscription" rather than silently showing an empty card - a user who can't tell the difference between "no owner on record" and "you can't see it" has no reason to subscribe, and would reasonably assume the data simply isn't there.
 
     Args:
         owners: An iterable of ``WikiOwner``/``PinOwner`` rows.

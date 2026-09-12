@@ -1,8 +1,5 @@
 /**
- * These primitives implement a fixed wire protocol shared with the server
- * (models/e2ee/key_bundle.py, PyNaCl interop tests) - format or parameter
- * drift here breaks decryption for every existing user, silently, so the
- * round-trip and cross-derivation guarantees below are worth pinning down.
+ * These primitives implement a fixed wire protocol shared with the server (models/e2ee/key_bundle.py, PyNaCl interop tests).
  */
 import { beforeAll, describe, expect, test } from "bun:test";
 import {
@@ -31,10 +28,7 @@ beforeAll(async () => {
 });
 
 describe("deriveKeyFromPrf", () => {
-    // The derivation is part of the E2EEPasskeyWrap wire protocol: a changed
-    // output orphans every stored wrap, so it is pinned to a fixed vector
-    // (HKDF-SHA256, empty salt, info "urbanlens-e2ee-passkey-wrap-v1",
-    // computed independently with Python's cryptography.hazmat HKDF).
+    // The derivation is part of the E2EEPasskeyWrap wire protocol.
     test("matches the pinned HKDF-SHA256 vector", async () => {
         const prfOutput = new Uint8Array(32).fill(7);
         const key = await deriveKeyFromPrf(prfOutput);

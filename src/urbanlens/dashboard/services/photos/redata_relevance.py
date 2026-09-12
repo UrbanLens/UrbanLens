@@ -1,5 +1,4 @@
-"""Wires UrbanLens's photos up to REData's photo-relevance-scoring service.
-REData scores it immediately and the response's confidence is cached back onto the ``Image`` row (:data:`Image.redata_confidence` and friends) so pin-detail/wiki galleries can order by it without a live call on every render. - **Votes** (``POST /photos/votes/``), whenever a user marks a photo relevant/not relevant - see :func:`queue_relevance_vote`."""
+"""Wires UrbanLens's photos up to REData's photo-relevance-scoring service."""
 
 from __future__ import annotations
 
@@ -25,11 +24,7 @@ def _redata_configured() -> bool:
 
 def _source_host(image: Image) -> str | None:
     """Best-effort site host this photo came from, for REData's ``source`` field.
-
-    Only meaningful for a photo materialized from an external provider
-    (``source_url`` set) - a plain personal upload has no "site" to report,
-    so this returns None for one rather than something like ``"upload"``.
-    """
+    Only meaningful for a photo materialized from an external provider (``source_url`` set) - a plain personal upload has no "site" to report, so this returns None for one rather than something like ``"upload"``."""
     if not image.source_url:
         return None
     host = urlparse(image.source_url).hostname
@@ -37,11 +32,7 @@ def _source_host(image: Image) -> str | None:
 
 
 def _years_from_abandoned(image: Image) -> float | None:
-    """Years between this photo's capture and the location's wiki-recorded abandonment date.
-
-    Negative when the photo predates abandonment, per REData's own field
-    convention. None when either side of the comparison is unknown.
-    """
+    """Years between this photo's capture and the location's wiki-recorded abandonment date."""
     if image.taken_at is None:
         return None
 
@@ -61,15 +52,10 @@ def _submission_payload(image: Image) -> dict[str, Any] | None:
     """Build one ``POST /photos/`` submission dict for ``image``, or None if it can't be scored.
 
     Args:
-        image: A photo with ``location`` set - REData scores relevance
-            against a place, so a photo with no resolved location has
-            nothing to submit yet (it may be submitted later, once
-            ``tasks.process_image_upload`` resolves one).
+        image: A photo with ``location`` set - REData scores relevance against a place, so a photo with no resolved location has nothing to submit yet (it may be submitted later, once ``tasks.process_image_upload`` resolves one).
 
     Returns:
-        The submission dict, or None when ``image`` has no usable location
-        coordinates at all (its own, and its Location's, are both unset).
-    """
+        The submission dict, or None when ``image`` has no usable location coordinates at all (its own, and its Location's, are both unset)."""
     from urbanlens.dashboard.models.images.model import Image
 
     latitude = image.effective_latitude
@@ -111,8 +97,7 @@ def submit_photos(images: list[Image]) -> None:
     Called from the ``submit_redata_photos`` Celery task - never call this synchronously from a request/view.
 
     Args:
-        images: Photos to submit - each is skipped (not sent) when it has no
-            usable location coordinates yet."""
+        images: Photos to submit - each is skipped (not sent) when it has no usable location coordinates yet."""
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.services.apis.photos.redata_photos_gateway import RedataPhotosGateway
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
@@ -160,7 +145,6 @@ def submit_photos(images: list[Image]) -> None:
 
 def queue_photo_submission(image: Image) -> None:
     """Queue ``image`` for REData submission, if REData is configured and it has a location.
-    Safe to call unconditionally from any photo-creation call site (upload processing, external-source enrichment, Media-gallery materialization) - silently does nothing when REData isn't configured or the photo has no location yet, so callers never need their own guard.
 
     Args:
         image: The newly created (or newly located) photo."""
@@ -178,11 +162,7 @@ def queue_relevance_vote(image: Image, profile: Profile, *, is_relevant: bool) -
     REData has no "retract a vote" endpoint, so this is only meaningful for an explicit relevant/not-relevant vote, not for clearing one back to neutral (callers should simply not call this for a clear).
 
     Args:
-        image: The photo being voted on. If REData was never told about this
-            photo (no location at submission time, or the submission hasn't
-            landed yet), the vote comes back in REData's own
-            ``unknown_photo_ids`` and is otherwise a no-op on REData's side -
-            see ``services.apis.photos.redata_photos_gateway.RedataPhotosGateway.submit_votes``.
+        image: The photo being voted on.
         profile: The voting profile.
         is_relevant: True for a relevant vote, False for not-relevant."""
     if not _redata_configured():

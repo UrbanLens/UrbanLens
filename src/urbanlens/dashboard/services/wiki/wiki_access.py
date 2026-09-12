@@ -46,7 +46,7 @@ def _earn_aggregates(domains: set[int]) -> set[int]:
     Repeated to a fixpoint, because earning one tier can complete the member set of the tier above it: with campus -> {A, B} and A -> {A1, A2}, holding A1 and A2 earns A, which together with B then earns the campus.
 
     Args:
-        domains: Domain roots already accessible. Not mutated.
+        domains: Domain roots already accessible.
 
     Returns:
         The closure, including everything in ``domains``."""
@@ -99,13 +99,11 @@ def _snapshot_earned_split_families(profile: Profile, domain_ids: set[int]) -> N
 
 def _domains_given_pins(pins, profile: Profile | None, *, extra_point=None) -> set[int]:
     """Every access domain the given pins (plus any grants) reach.
-    The one implementation of the access rule. :func:`accessible_domain_ids` passes a profile's real pins; the pin-move preview passes a hypothetical set (every pin except the one being moved, plus that pin's proposed point), so the preview can never drift from the rule actually enforced.
 
     Args:
         pins: A ``Pin`` queryset standing in for the viewer's pins.
         profile: The viewer, for grant lookup; None skips grants.
-        extra_point: An additional point to treat as pinned, for previewing a
-            move before it happens.
+        extra_point: An additional point to treat as pinned, for previewing a move before it happens.
 
     Returns:
         Set of ``Place.domain_root_id`` values."""
@@ -139,9 +137,7 @@ def accessible_domain_ids(profile: Profile) -> set[int]:
         profile: The viewing profile.
 
     Returns:
-        Set of ``Place.domain_root_id`` values, empty for a profile with no
-        placed pins and no grants.
-    """
+        Set of ``Place.domain_root_id`` values, empty for a profile with no placed pins and no grants."""
     from urbanlens.dashboard.models.pin.model import Pin
 
     return _domains_given_pins(Pin.objects.filter(profile=profile), profile)
@@ -172,8 +168,7 @@ def _visible_given_pins(location: Location, pins, profile: Profile | None, *, ex
         extra_point: An additional point to treat as pinned.
 
     Returns:
-        Whether that set of pins grants visibility of *location*'s wiki.
-    """
+        Whether that set of pins grants visibility of *location*'s wiki."""
     if pins.filter(location=location).exists():
         return True
 
@@ -192,7 +187,6 @@ def _visible_given_pins(location: Location, pins, profile: Profile | None, *, ex
 
 def location_visible_to(location: Location, profile: Profile) -> bool:
     """Whether *profile* has a pin at *location*, or anywhere in its access domain.
-    Otherwise the profile qualifies when any of their pins resolves onto the same real-world thing - the parcel, or any building on it - which is what makes two users who pinned the same property metres apart share its wiki without either having to pin the other's exact coordinate.
 
     Args:
         location: The Location to check.
@@ -269,8 +263,7 @@ def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> lis
         longitude: Proposed new longitude.
 
     Returns:
-        The affected wikis, each with its ``location`` selected. Empty when the
-        move costs the owner nothing."""
+        The affected wikis, each with its ``location`` selected."""
     from django.contrib.gis.geos import Point
 
     from urbanlens.dashboard.models.pin.model import Pin
@@ -312,23 +305,16 @@ def visible_parent_wiki(wiki: Wiki, profile: Profile) -> Wiki | None:
 
 def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
     """Resolve a Location and its Wiki, 404ing unless the requester can see it.
-    A location with no wiki yet, a location_slug that doesn't exist at all, and a real wiki the requester hasn't earned all raise the identical ``Http404`` - deliberately indistinguishable, so guessing slugs can never reveal which locations other users have pinned.
 
     Args:
         request: The current request (used for the requesting profile).
         location_slug: Slug of the Location whose Wiki is being resolved.
 
     Returns:
-        Tuple of (Location, Wiki, requester's Profile). The Wiki may be a
-        **concealed projection** - a real Wiki instance, with the real primary
-        key, carrying only the field values this viewer is entitled to. It
-        refuses ``save()``/``delete()``; a write path must re-fetch the row or
-        use ``queryset.update()``. Related managers on it are *not* filtered -
-        rows are concealed separately by ``concealment.conceal_rows``.
+        Tuple of (Location, Wiki, requester's Profile).
 
     Raises:
-        Http404: The location doesn't exist, has no wiki, or the requester
-            can't see it."""
+        Http404: The location doesn't exist, has no wiki, or the requester can't see it."""
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki

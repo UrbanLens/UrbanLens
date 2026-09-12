@@ -1,11 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-One equivalence group card on the tag mapping admin page.
-
-Context:
-  group - ExternalTagGroup, with `members` prefetched
-  search - current search query, for round-tripping through the preferred-star POST
-{% endcomment %}
+{% comment %}One equivalence group card on the tag mapping admin page.{% endcomment %}
 <div class="card exttag-group-card" data-group-id="{{ group.pk }}">
     <div class="exttag-group-list" data-group-id="{{ group.pk }}">
         {% for entry in group.members.all %}

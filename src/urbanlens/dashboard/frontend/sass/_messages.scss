@@ -1,9 +1,7 @@
 @use 'variables' as *;
 
 // -- Direct messages ------------------------------------------------------------
-// Navbar dropdown (.msg-*) reuses the notification bell shell (.nav-notif /
-// .nav-notif-panel / .notif-badge in _nav.scss); the messages page (.dm-*) is a
-// two-pane inbox with chat bubbles, collapsing to a single pane on mobile.
+// Navbar dropdown (msg-*) reuses the notification bell shell (nav-notif /.nav-notif-panel /.notif-badge in _nav.scss).
 
 // -- Shared avatars ---------------------------------------------------------
 
@@ -53,11 +51,7 @@
     background: $color-purple-500;
 }
 
-// Distinct-per-list fallback-avatar palette (see services/avatar_colors.py).
-// Used wherever several default avatars can appear together in one list (a
-// group chat's member dialog/search results) - assign_avatar_colors() picks
-// one of these per person so nobody in that same list looks identical to
-// anyone else in it. PALETTE_SIZE in that module must match this count.
+// Distinct-per-list fallback-avatar palette.
 .avatar-color-0 { background: $color-red-500; }
 .avatar-color-1 { background: $color-pink-500; }
 .avatar-color-2 { background: $color-purple-500; }
@@ -274,20 +268,12 @@
     transition: grid-template-columns .15s ease;
 }
 
-// Collapsing gives the thread pane the full width - the sidebar's own
-// contents are clipped via its `overflow: hidden` rather than unmounted, so
-// re-expanding needs no re-fetch. Desktop only (matches the mobile
-// single-pane breakpoint below): on mobile the sidebar already has its own
-// show/hide behavior via .dm-page--thread-open.
+// Collapsing gives the thread pane the full width - the sidebar's own contents are clipped via its `overflow.
 @media (min-width: 721px) {
     .dm-layout--sidebar-collapsed {
         grid-template-columns: 0 1fr;
 
-        // .dm-sidebar-expand-btn floats at top:.9rem/left:.6rem relative to
-        // .dm-layout, which lands right on top of the thread header's own
-        // back button/avatar once the sidebar's 0-width column puts the
-        // thread pane flush against that same corner - push the header's
-        // content clear of it instead of overlapping.
+        // .dm-sidebar-expand-btn floats at top:.9rem/left:.6rem relative to.dm-layout, which lands right on top of the thread header's own back.
         .dm-thread__header {
             padding-left: 3rem;
         }
@@ -416,10 +402,7 @@
     }
 }
 
-// _reset.scss's global `input[type=search]:not(.browser-default)` rule
-// outranks a lone `.dm-compose__input` class on specificity, so the ID is
-// needed here too to reliably win and keep the field inset from the sidebar
-// edge instead of visually touching it.
+// _reset.scss's global `input[type=search]:not(browser-default)` rule outranks a lone `.dm-compose__input` class on specificity, so.
 #dm-recipient-input.dm-compose__input {
     width: 100%;
     max-width: 100%;
@@ -989,9 +972,7 @@
     --lock-margin: 1rem;
     position: relative;
     max-width: min(75%, 34rem);
-    // Symmetric, roomier padding gives the relaxed "text message" feel; the
-    // action button and timestamp now live *outside* the bubble (revealed on
-    // hover/tap), so no extra right inset is reserved for them.
+    // Symmetric, roomier padding gives the relaxed "text message" feel.
     padding: 0.75rem 1.2rem;
     border-radius: 18px;
     font-size: .92rem;
@@ -999,14 +980,10 @@
     display: flex;
     flex-direction: column;
     word-break: break-word;
-    transition: margin-bottom .12s ease;        
+    transition: margin-bottom .12s ease;
 
 
-    // A message that directly continues the previous bubble (same sender,
-    // same day, sent within MESSAGE_GROUP_GAP_SECONDS) sits closer to it and
-    // loses the rounded corner on the side that touches it - the "message
-    // burst" look other chat apps use instead of a string of identical,
-    // evenly-spaced bubbles.
+    // A message that directly continues the previous bubble (same sender, same day, sent within MESSAGE_GROUP_GAP_SECONDS) sits closer to it.
     &--grouped {
         margin-top: -.35rem;
     }
@@ -1021,16 +998,12 @@
         animation: dm-message-highlight 2s ease-out;
     }
 
-    // Floating "more actions" affordance, tucked just outside the bubble on its
-    // outer edge. Hidden until the bubble is hovered, focused, or tapped
-    // (.dm-bubble--peek) so a resting conversation stays clean.
+    // Floating "more actions" affordance, tucked just outside the bubble on its outer edge.
     &__menu-btn {
         position: absolute;
         top: 50%;
         transform: translateY(-50%);
-        // Above the map preview's isolated stacking context (see
-        // .comment-map-preview) and above neighboring grouped bubbles so it's
-        // never painted over when it floats past this bubble's own edge.
+        // Above the map preview's isolated stacking context and above neighboring grouped bubbles so it's never painted over when it floats past.
         z-index: 2;
         width: 1.5rem;
         height: 1.5rem;
@@ -1098,12 +1071,6 @@
     }
 
     // Reveal the action button + timestamp on hover, keyboard focus, or tap.
-    // Grouped bubbles sit almost flush against each other (margin-top: -.35rem
-    // above), leaving no room for the floating time/menu-btn/reaction-add
-    // affordances (which sit up to 1rem below the bubble's own box) without
-    // overlapping the next bubble - so pushing the following sibling down via
-    // margin-bottom (added on top of #dm-messages' flex `gap`) makes room for
-    // them only while they're actually visible.
     &:hover,
     &:focus-within,
     &--peek {
@@ -1119,12 +1086,7 @@
         }
     }
 
-    // Invisible hover-bridge spanning the gap between the bubble's own edge
-    // and the menu button floating just outside it (see __menu-btn above) -
-    // without this, moving the cursor from the bubble's text toward the
-    // button crosses a dead zone with no hover target, losing :hover on the
-    // bubble (and so the button's opacity/pointer-events) before the cursor
-    // ever arrives - the button could be seen but never actually clicked.
+    // Invisible hover-bridge spanning the gap between the bubble's own edge and the menu button floating just outside it.
     &::before {
         content: '';
         position: absolute;
@@ -1189,16 +1151,13 @@
             left: auto;
             right: .35rem;
         }
-        
+
         i {
             right: -1.25rem;
         }
     }
 
-    // Preserves line breaks (Shift+Enter in the composer) - without this the
-    // browser's default whitespace collapsing renders every message as one
-    // run-on line despite the newline characters surviving all the way
-    // through storage and back.
+    // Preserves line breaks (Shift+Enter in the composer).
     &__body {
         white-space: pre-wrap;
     }
@@ -1281,9 +1240,7 @@
     pointer-events: none;
 }
 
-// The DM lightbox skips the shared gallery's side panel (see index.html's
-// comment on #dm-lightbox), so its column needs its own flex direction
-// instead of .lightbox-inner's default row layout.
+// The DM lightbox skips the shared gallery's side panel, so its column needs its own flex direction instead of.lightbox-inner's default.
 .dm-lightbox-inner {
     flex-direction: column;
 }
@@ -1326,11 +1283,7 @@
     }
 }
 
-// .dm-bubble sizes itself to its content (the align-self: flex-start/flex-end
-// above overrides #dm-messages' default flex stretch), so the shared
-// .comment-map-preview/.comment-map-thumb pair - which size themselves via
-// percentage widths - has no definite container width to resolve against and
-// collapses toward zero. Give it an explicit width here instead.
+// .dm-bubble sizes itself to its content.
 .dm-map-card {
     position: relative;
     width: min(280px, 60vw);
@@ -1339,9 +1292,7 @@
         width: 100%;
     }
 
-    // The shared "Expand map" button already claims the bottom-right corner
-    // of the thumbnail; move it aside so the DM-only save/edit actions can
-    // take that corner instead, matching where chat apps put a save affordance.
+    // The shared "Expand map" button already claims the bottom-right corner of the thumbnail.
     .comment-map-expand-btn {
         right: auto;
         left: .5rem;
@@ -1449,10 +1400,7 @@
     background: var(--ul-surface-raised);
     font-size: .78rem;
 
-    // A plain-class `display` rule otherwise beats the browser's default
-    // `[hidden] { display: none }` (equal specificity, author sheet wins) -
-    // this element is toggled via the `hidden` attribute from JS, so it needs
-    // its own higher-specificity override to actually disappear.
+    // A plain-class `display` rule otherwise beats the browser's default `[hidden] { display.
     &[hidden] {
         display: none;
     }
@@ -1520,10 +1468,7 @@
     }
 }
 
-// Floating outside the bubble (overlapping its bottom edge, like the menu
-// button and timestamp) rather than sitting inline in the flow keeps a
-// resting message compact - it only takes up space once revealed on hover,
-// same as most chat apps' reaction trigger.
+// Floating outside the bubble (overlapping its bottom edge, like the menu button and timestamp) rather than sitting inline in the flow.
 .dm-reaction-add-wrap {
     position: absolute;
     bottom: -1rem;
@@ -1534,16 +1479,7 @@
     transition: opacity .12s ease;
 }
 
-// Anchored to the OPPOSITE horizontal corner from .dm-bubble__time (which
-// floats at left/right: .35rem on this same side, see &__time above) rather
-// than the same corner - both elements are only ever revealed together (see
-// the :hover rule below and __time's own :hover rule), and previously both
-// floated at left/right: 0 on the *same* side, guaranteeing an overlap
-// between the timestamp text and this button on every hover. Opposite
-// corners of the bubble's own width give real, guaranteed clearance without
-// depending on either element's exact rendered width (narrow enough bubbles -
-// a one-character message - could still bring them close; not otherwise
-// addressed here).
+// Anchored to the OPPOSITE horizontal corner from.dm-bubble__time.
 .dm-bubble--them .dm-reaction-add-wrap {
     right: 0;
 }
@@ -1735,9 +1671,7 @@
     }
 }
 
-// Positioned dynamically by JS (top/left set to land just under the "@" the
-// user typed, mirroring the textarea's own text metrics) rather than docked
-// to a fixed corner - .dm-composer is its positioned ancestor.
+// Positioned dynamically by JS (top/left set to land just under the "@" the user typed, mirroring the textarea's own text metrics).
 .dm-mention-menu {
     position: absolute;
     z-index: 20;

@@ -46,13 +46,11 @@ class Command(BaseCommand):
     def _backfill_source(self, cache_source: str, tag_source: str, extractor: Callable[[dict], list[ExtractedTag]], *, dry_run: bool) -> None:
         """Sync one provider's cached data onto every Place it covers.
 
-        A Place can be shared by several Locations (see PlaceExternalTag's
-        own docstring on the multi-tenant-Place trade-off) - to stay
-        consistent with how the live panel/enrichment sync already behaves
-        for that case (whichever Location's fetch runs most recently wins),
-        this picks each Place's most-recently-updated LocationCache row of
-        this source and ignores any older ones for the same Place, rather
-        than merging or accumulating across Locations.
+        A Place can be shared by several Locations (see PlaceExternalTag's own docstring on the
+        multi-tenant-Place trade-off) - to stay consistent with how the live panel/enrichment sync already
+        behaves for that case (whichever Location's fetch runs most recently wins), this picks each Place's
+        most-recently-updated LocationCache row of this source and ignores any older ones for the same
+        Place, rather than merging or accumulating across Locations.
 
         Args:
             cache_source: The LocationCache.source value to read.

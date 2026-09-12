@@ -50,18 +50,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Read from the column rather than repeated as a literal: the name is
-#: truncated to fit, so a widened column would otherwise keep being clipped at
-#: the old width with nothing to show why.
+#: Read from the column rather than repeated as a literal: the name is truncated to fit, so a widened column
+#: would otherwise keep being clipped at the old width with nothing to show why.
 _MAX_ALBUM_NAME_LENGTH = column_max_length(Album, "name")
 
 
 def _panel_owner(request: HttpRequest, owner: Pin | Wiki | Profile) -> Pin | Wiki | Profile:
     """The pin whose Photos tab we should re-render after a mutation.
 
-    Album action URLs use the album's own pin slug. When the user is viewing
-    a parent with child albums listed, ``from_pin`` names that parent so a
-    delete/edit doesn't swap the panel into the child's own album list.
+    Album action URLs use the album's own pin slug.
     """
     slug = request.GET.get("from_pin") or request.POST.get("from_pin")
     if slug and isinstance(owner, Pin) and slug != owner.slug:
@@ -107,19 +104,15 @@ def _children_query(include_children: bool) -> str:
 def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None, *, vault: bool = False) -> tuple[Pin | Wiki | Profile, QuerySet[Album]]:
     """Resolve the Album owner (Pin, Wiki, or the requesting profile's Vault) from URL kwargs.
 
-    Same permission split as ``custom_layers._resolve_layer_owner``: pin-scoped
-    requires ownership, wiki-scoped goes through ``resolve_visible_wiki`` (any
-    signed-in user who has earned access to the wiki may curate its albums,
-    matching the shared wiki-editing model). A Vault route carries no owner
-    slug at all - there is exactly one Vault per profile, resolved from the
-    request itself rather than a URL segment.
+    A Vault route carries no owner slug at all - there is exactly one Vault per profile, resolved from
+    the request itself rather than a URL segment.
 
     Args:
         request: The current HttpRequest (used for the ownership checks).
         pin_slug: Slug of the parent pin, if this is a personal-album route.
         location_slug: Slug of the parent location, if this is a community-album route.
-        vault: True for a Vault (Profile-owned) album route; *pin_slug* and
-            *location_slug* are ignored when set.
+        vault: True for a Vault (Profile-owned) album route; *pin_slug* and *location_slug* are ignored
+        when set.
 
     Returns:
         Tuple of (owner, album queryset already filtered to that owner).
@@ -135,11 +128,8 @@ def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_sl
         return pin, Album.objects.for_pin(pin)
     if location_slug is None:
         raise Http404
-    # Filtered by who created it, not hidden outright - an album is a named
-    # grouping like a CustomLayer, and the same "your own work back is not a
-    # leak" reasoning applies (see custom_layers._resolve_layer_owner). The
-    # photos inside a visible album are filtered separately - see
-    # services.photos.albums.
+    # Filtered by who created it, not hidden outright - an album is a named grouping like a CustomLayer, and the
+    # same "your own work back is not a leak" reasoning applies (see custom_layers._resolve_layer_owner).
     from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
@@ -166,12 +156,8 @@ def _get_album(request: HttpRequest, pin_slug: str | None, location_slug: str | 
 def _owner_slug(owner: Pin | Wiki) -> str:
     """Return the slug used in *owner*'s own URL namespace.
 
-    ``slug`` is nullable on the model, but cannot be absent here: both owner
-    kinds were fetched *by* this slug in :func:`_resolve_album_owner`, and both
-    mint one on save. Declared non-optional rather than propagating an
-    ``Optional`` no caller could act on - every use feeds ``reverse()``, which
-    turns None into an opaque ``NoReverseMatch`` 500. The guard makes the
-    impossible case a clean 404 instead.
+    ``slug`` is nullable on the model, but cannot be absent here: both owner kinds were fetched *by*
+    this slug in :func:`_resolve_album_owner`, and both mint one on save.
 
     Args:
         owner: The album owner resolved from the URL.
@@ -200,9 +186,9 @@ def _url_prefix(owner: Pin | Wiki | Profile) -> str:
 def _owner_url_args(owner: Pin | Wiki | Profile) -> list[str]:
     """Return the positional ``reverse()`` args identifying *owner* in its own URL namespace.
 
-    A vault (Profile-owned) album has no owner-slug segment - there is one
-    implicit album space per user, resolved from the request - so this is
-    empty for a Profile and ``[_owner_slug(owner)]`` for a Pin/Wiki.
+    A vault (Profile-owned) album has no owner-slug segment - there is one implicit album space per
+    user, resolved from the request - so this is empty for a Profile and ``[_owner_slug(owner)]`` for a
+    Pin/Wiki.
     """
     if isinstance(owner, Profile):
         return []
@@ -221,19 +207,14 @@ def _album_row(
 ) -> dict:
     """Build one album's template payload, with its action URLs pre-reversed.
 
-    URLs are built here (by positional ``args``) rather than in-template
-    because ``{% url %}`` can't take a dynamic view name plus dynamic kwargs -
-    same reasoning as ``custom_layers._render_layer_list``.
-
-    Cover, count, and date range can be passed in (the Photos tab listing
-    already computed them without hydrating every photo) or derived from
-    *images* when the caller has that list.
+    URLs are built here (by positional ``args``) rather than in-template because ``{% url %}`` can't
+    take a dynamic view name plus dynamic kwargs - same reasoning as
+    ``custom_layers._render_layer_list``.
 
     Args:
         owner: The Pin, Wiki, or Profile the album belongs to.
         album: The album to describe.
-        images: The album's viewer-visible photos, in display order, when
-            the caller already has them. Omitted on the listing path.
+        images: The album's viewer-visible photos, in display order, when the caller already has them.
         cover: Precomputed cover photo.
         photo_count: Precomputed visible-photo count.
         date_start: Precomputed earliest capture time.
@@ -278,10 +259,7 @@ def _album_row(
 def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
     """Describe *images* for the album map layer.
 
-    Only the viewer's own photos are marked movable: repositioning goes through
-    the gallery's per-image endpoint, which refuses to move someone else's
-    upload. Sending ``movable`` from here keeps the map from offering a drag
-    that the server would then reject.
+    Sending ``movable`` from here keeps the map from offering a drag that the server would then reject.
 
     Args:
         images: The album's viewer-visible photos.
@@ -323,12 +301,9 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.images.queryset import prime_viewer_scope
 
-    # This view resolves the same viewer's photo visibility four times below -
-    # visible_album_item_pairs, album_images_page, eligible_images_for, and the
-    # picker payload - and each resolution costs the viewer's friends, pinned
-    # locations, trip memberships and reachable wikis. Nothing here writes any
-    # of those, so one resolution serves all four; see prime_viewer_scope for
-    # why that claim has to be made explicitly rather than cached into.
+    # This view resolves the same viewer's photo visibility four times below - visible_album_item_pairs,
+    # album_images_page, eligible_images_for, and the picker payload - and each resolution costs the viewer's
+    # friends, pinned locations, trip memberships and reachable wikis.
     prime_viewer_scope(viewer)
 
     pairs = visible_album_item_pairs(album, viewer, owner)
@@ -338,20 +313,13 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     cover = cover_from_ids(album, visible_ids)
     row = _album_row(owner, album, page, cover=cover, photo_count=total, date_start=date_start, date_end=date_end)
     row["grid_images"] = page
-    # A count, not the photos. The picker fetches its own pages from
-    # AlbumEligibleImagesView when it opens; rendering them here put every photo
-    # the profile has ever uploaded into a closed dialog on every page view
-    # (P69). The count is still needed: it decides whether the "Add from this
-    # place" affordance appears at all, and which of two empty-state sentences
-    # the album shows.
+    # A count, not the photos.
     row["available_image_count"] = eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).count()
     row["eligible_url"] = reverse(f"{_url_prefix(owner)}.eligible", args=[*_owner_url_args(owner), album.slug])
     row["back_url"] = reverse(_url_prefix(owner), args=_owner_url_args(owner))
     row["list_url"] = row["back_url"]
-    # The gallery's own per-image endpoint owns repositioning; the album map
-    # posts to it rather than growing a second writer for Image coordinates.
-    # A vault album has no such gallery endpoint yet, so its map is read-only -
-    # same fallback the lightbox already uses for a page with no reposition wiring.
+    # The gallery's own per-image endpoint owns repositioning; the album map posts to it rather than growing a
+    # second writer for Image coordinates.
     row["reposition_base"] = "" if isinstance(owner, Profile) else reverse("pin.gallery" if isinstance(owner, Pin) else "location.wiki.gallery", args=_owner_url_args(owner))
     map_images = list(Image.objects.filter(pk__in=visible_ids).select_related("location")) if visible_ids else []
     row["map_photos"] = _photo_map_payload(map_images, viewer)
@@ -365,9 +333,8 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     row["move_targets"] = [{"slug": pin.slug, "name": pin.effective_name} for pin in move_album_targets(album)] if isinstance(owner, Pin) else []
     row["failure_url"] = reverse("vault.photos.failures")
     row["pin"] = owner if isinstance(owner, Pin) else None
-    # Fallback centre for an album whose photos carry no coordinates at all;
-    # the map fits to the photos themselves whenever there are any. A vault
-    # album has no single place to fall back to.
+    # Fallback centre for an album whose photos carry no coordinates at all; the map fits to the photos
+    # themselves whenever there are any. A vault album has no single place to fall back to.
     location = owner.location if isinstance(owner, (Pin, Wiki)) else None
     row["map_center_lat"] = float(location.latitude) if location is not None and location.latitude is not None else None
     row["map_center_lng"] = float(location.longitude) if location is not None and location.longitude is not None else None
@@ -380,8 +347,7 @@ def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, incl
     Args:
         owner: The Pin, Wiki, or Profile (Vault) whose photos to show.
         viewer: The browsing profile, for the photo-visibility gate.
-        include_children: When True on a pin, also list descendant albums and
-            unfiled photos.
+        include_children: When True on a pin, also list descendant albums and unfiled photos.
 
     Returns:
         Template context for ``_albums_panel.html``.
@@ -517,20 +483,15 @@ def _picker_album_payload(owner: Pin | Wiki | Profile, viewer: Profile, *, exclu
 def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki | Profile) -> None:
     """URLs the album UI needs for delete / send-to-wiki / share, when they exist.
 
-    Three separate questions, and P61 is what came of answering them with one
-    URL: a vault album got no bulk endpoint at all, so its Delete button
-    rendered hidden forever alongside the two that genuinely do not apply.
+    Three separate questions, and P61 is what came of answering them with one URL: a vault album got no
+    bulk endpoint at all, so its Delete button rendered hidden forever alongside the two that genuinely
+    do not apply.
 
     - Delete works for a pin and for the vault, at their own endpoints.
-    - Send to wiki is pin-only: the endpoint derives the wiki from
-      ``pin.location``, and a vault album has no location. The vault's own
-      per-photo version asks the user which wiki, from a picker the bulk bar
-      has nowhere to put.
-    - Share opens the *pin* share dialog, so it is pin-only for the same
-      reason. Single-photo share from the lightbox is how a vault photo gets
-      shared, and is unaffected.
-
-    A wiki-owned album gets none of the three, which is unchanged.
+    - Send to wiki is pin-only: the endpoint derives the wiki from ``pin.location``, and a vault album
+      has no location. The vault's own per-photo version asks the ...
+    - Share opens the *pin* share dialog, so it is pin-only for the same reason. Single-photo share from
+      the lightbox is how a vault photo gets shared, and is unaf...
     """
     if isinstance(owner, Pin):
         slug = _owner_slug(owner)
@@ -551,9 +512,8 @@ def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki | Profile) -> None:
 def _album_bulk_actions(*, inside_album: bool) -> list[dict]:
     """Buttons for the shared ``ul-bulk-bar`` on the Photos tab.
 
-    The bar only shows a button when the client supplies a callback for its
-    ``action`` key, so list and detail can share this list and hide move/remove
-    on the album list by omitting those callbacks.
+    The bar only shows a button when the client supplies a callback for its ``action`` key, so list and
+    detail can share this list and hide move/remove on the album list by omitting those callbacks.
     """
     actions = [
         {"action": "add_to_album", "icon": "photo_library", "label": "Add to album"},
@@ -581,20 +541,17 @@ class AlbumPhotosView(LoginRequiredMixin, View):
     GET /map/pin/<pin_slug>/albums/
     GET /location/<location_slug>/wiki/albums/
     GET /vault/photos/albums/
-    POST (same URLs) creates an album.
 
-    ``?album=<slug>`` renders that album's own view instead of the list, which
-    is what makes an opened album a real, shareable URL: the browser's Back
-    button and a pasted link both land on the same place. The client pushes
-    that query string when an album is opened (see ``shared/album-items.ts``).
+    ``?album=<slug>`` renders that album's own view instead of the list, which is what makes an opened
+    album a real, shareable URL: the browser's Back button and a pasted link both land on the same
+    place.
     """
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
         """Render the Photos panel, or one album when ``?album=`` is given.
 
-        An ``album`` slug that doesn't resolve falls back to the list rather
-        than 404ing - a stale bookmark to a since-deleted album should still
-        land somewhere useful.
+        An ``album`` slug that doesn't resolve falls back to the list rather than 404ing - a stale bookmark
+        to a since-deleted album should still land somewhere useful.
 
         Args:
             request: HttpRequest.
@@ -731,9 +688,8 @@ class AlbumEditView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
         """Apply an album edit.
 
-        Only fields actually present in the POST (or JSON body) are touched,
-        so a partial form can't blank out the rest. JSON requests (cover
-        changes from the lightbox/context menu) get a JSON response.
+        Only fields actually present in the POST (or JSON body) are touched, so a partial form can't blank
+        out the rest.
 
         Args:
             request: HttpRequest.
@@ -816,10 +772,7 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
     POST /location/<location_slug>/wiki/albums/<album_slug>/add/
     POST /vault/photos/albums/<album_slug>/add/
 
-    Body is JSON. ``image_ids`` adds existing local photos. ``media`` adds an
-    external Media-gallery item, which additionally counts as a "relevant"
-    vote and caches a local copy - unless the caller already voted that item
-    *not* relevant, in which case their vote stands and nothing is added.
+    Body is JSON.
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
@@ -833,8 +786,8 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
             vault: True for a Vault (Profile-owned) album route.
 
         Returns:
-            JSON with how many photos were added, plus ``declined``/``error``
-            when an external item was skipped or failed to download.
+            JSON with how many photos were added, plus ``declined``/``error`` when an external item was
+            skipped or failed to download.
         """
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -844,11 +797,8 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
 
         image_ids = _int_ids(body.get("image_ids"))
         if image_ids:
-            # Re-scope through eligible_images_for so an id belonging to another
-            # owner entirely (a different pin/wiki/profile, or one this viewer
-            # can't see) can't be filed into this album. For a vault owner this
-            # deliberately still includes the profile's own pin/wiki-filed
-            # photos - see owner_kwargs_to_image_scope's docstring.
+            # Re-scope through eligible_images_for so an id belonging to another owner entirely (a different
+            # pin/wiki/profile, or one this viewer can't see) can't be filed into this album.
             images = list(eligible_images_for(owner, profile).filter(pk__in=image_ids))
             added = add_images_to_album(album, images, profile)
             response["added"] += added
@@ -866,9 +816,9 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
 
         media = body.get("media")
         if isinstance(media, dict) and media.get("url"):
-            # The external Media-gallery search is place-scoped (it materializes
-            # against a Location) - a Vault album has none, so this is refused
-            # outright rather than reaching _add_external's owner.location access.
+            # The external Media-gallery search is place-scoped (it materializes against a Location) - a Vault
+            # album has none, so this is refused outright rather than reaching _add_external's owner.location
+            # access.
             if isinstance(owner, Profile):
                 response["error"] = "Vault albums can only hold your own uploaded photos, not external media."
             else:
@@ -880,11 +830,8 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
     def _add_external(self, owner: Pin | Wiki, album: Album, profile: Profile, media: dict) -> dict:
         """Vote an external gallery item relevant, then cache and file it.
 
-        The vote is written inline because it's a cheap DB write and it's the
-        part that must not be lost. The download is handed to a Celery worker,
-        since it blocks on a remote server for up to 15s and the user is
-        waiting on this response. If the broker is unreachable the download
-        falls back to running inline rather than silently never happening.
+        If the broker is unreachable the download falls back to running inline rather than silently never
+        happening.
 
         Args:
             owner: The Pin or Wiki that owns the album.
@@ -946,10 +893,10 @@ class AlbumUploadView(LoginRequiredMixin, View):
     POST /location/<location_slug>/wiki/albums/<album_slug>/upload/
     POST /vault/photos/albums/<album_slug>/upload/
 
-    Multipart, one ``image`` file per request - same contract as the pin and
-    wiki galleries, whose response body the client reuses to render the new
-    tile. The photo is created against the album's owner first, so it lands in
-    the owner's gallery too; filing it in the album is the extra step.
+    Multipart, one ``image`` file per request - same contract as the pin and wiki galleries, whose
+    response body the client reuses to render the new tile.
+    The photo is created against the album's owner first, so it lands in the owner's gallery too; filing
+    it in the album is the extra step.
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
@@ -963,8 +910,8 @@ class AlbumUploadView(LoginRequiredMixin, View):
             vault: True for a Vault (Profile-owned) album route.
 
         Returns:
-            201 with the gallery JSON for the new photo, or the rejection's
-            own status (400/409/413/415) with an ``error`` message.
+            201 with the gallery JSON for the new photo, or the rejection's own status (400/409/413/415)
+            with an ``error`` message.
         """
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -1071,20 +1018,9 @@ class AlbumEligibleImagesView(LoginRequiredMixin, View):
     GET /location/<location_slug>/wiki/albums/<album_slug>/eligible/
     GET /vault/photos/albums/<album_slug>/eligible/
 
-    The picker used to be rendered into the page in full, inside a `<dialog>`
-    that stays closed until a click. For a pin or wiki album that is bounded by
-    one place's photos; for a Vault album it is every photo the profile has ever
-    uploaded, so a photographer with years of uploads had thousands of tiles
-    rendered on every album page view, for a dialog they usually never open
-    (P69).
-
-    Paginated rather than capped, so an older photo stays reachable. A cap would
-    have been the smaller change and the wrong one: this picker's whole purpose
-    can be "find the photo from last year", which is exactly what a newest-first
-    slice removes.
-
-    Excludes what the album already holds, which is what the inline version did
-    with ``.exclude(pk__in=visible_ids)``.
+    Paginated rather than capped, so an older photo stays reachable.
+    A cap would have been the smaller change and the wrong one: this picker's whole purpose can be "find
+    the photo from last year", which is exactly what a newest-first slice removes.
     """
 
     def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:

@@ -26,11 +26,7 @@ MAX_NOTIFICATION_PAGE_SIZE = 100
 
 class InvalidNotificationCursorError(InvalidCursorError):
     """A :func:`list_notifications` pagination cursor didn't decode, or wasn't ours.
-
-    Kept distinct from the base :class:`InvalidCursorError` so a catch site
-    here can dispatch on this feed specifically. ``message`` is for logs only -
-    see :class:`InvalidCursorError`.
-    """
+    Kept distinct from the base :class:`InvalidCursorError` so a catch site here can dispatch on this feed specifically."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,15 +48,13 @@ def list_notifications(
     Ordered by ``(-created, -pk)`` so the keyset stays deterministic when several notifications share a timestamp (a batch fan-out routinely produces those).
 
     Args:
-        profile: The owner whose notifications to read. Rows belonging to
-            anyone else are never returned.
+        profile: The owner whose notifications to read.
         unread_only: Restrict to unread rows.
         cursor: Opaque continuation token from a previous page.
         limit: Page size, clamped to :data:`MAX_NOTIFICATION_PAGE_SIZE`.
 
     Returns:
-        The page of notifications and the cursor for the next one (``None``
-        when the page is the last).
+        The page of notifications and the cursor for the next one (``None`` when the page is the last).
 
     Raises:
         InvalidNotificationCursorError: ``cursor`` is malformed or was never ours."""
@@ -94,8 +88,7 @@ def mark_notification_read(profile: Profile, notification_uuid: UUID | str) -> b
         notification_uuid: The notification's public uuid.
 
     Returns:
-        True when a row was updated; False when nothing matched (including an
-        already-read row belonging to the caller, which needs no write)."""
+        True when a row was updated; False when nothing matched (including an already-read row belonging to the caller, which needs no write)."""
     return NotificationLog.objects.for_profile(profile).filter(uuid=notification_uuid).exclude(status=Status.READ).update(status=Status.READ) > 0
 
 
@@ -181,7 +174,6 @@ def update_preferences(profile: Profile, changes: dict[str, Any]) -> Notificatio
     Args:
         profile: The owner whose preferences to change.
         changes: Mapping of ``{stem: {"delivery": ..., "whatsapp": ..., "sms": ...}}``.
-            Unknown stems and omitted keys are ignored.
 
     Returns:
         The updated ``NotificationPreference``."""
@@ -216,9 +208,7 @@ def serialize_preferences(prefs: NotificationPreference) -> dict[str, dict[str, 
         prefs: The row to serialize.
 
     Returns:
-        ``{stem: {"delivery": str, "whatsapp": bool, "sms": bool}}`` for every
-        stem :func:`preference_field_names` reports.
-    """
+        ``{stem: {"delivery": str, "whatsapp": bool, "sms": bool}}`` for every stem :func:`preference_field_names` reports."""
     return {
         stem: {
             "delivery": getattr(prefs, stem),

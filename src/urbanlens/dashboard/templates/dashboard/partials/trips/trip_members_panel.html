@@ -41,8 +41,6 @@
             {% endif %}
 
             {# RSVP: clickable dropdown for current user, static badge for others. #}
-            {# Invited-but-not-joined members skip RSVP entirely - see the invite  #}
-            {# banner in trip_header_partial.html for the join/decline action.    #}
             {% if membership.status == 'invited' %}
             <span class="trip-member-rsvp trip-member-rsvp--invited" title="Hasn't joined the trip yet">Invited</span>
             {% elif membership.profile == profile %}
@@ -117,8 +115,7 @@
     {% endif %}
 </div>
 
-{# -- Add member dialog - lives here (not detail.html) so it refreshes with #}
-{# this panel and never shows a friend who was just added as still addable. #}
+{# Add member dialog - lives here (not detail.html) so it refreshes with this panel and never shows a friend who was just added as still. #}
 {% if can_add_members %}
 <dialog id="add-member-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-add-member">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Member" %}

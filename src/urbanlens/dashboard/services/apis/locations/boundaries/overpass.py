@@ -46,11 +46,7 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urba
 
 def _seconds_until_next_day() -> int:
     """Seconds from now until the next UTC midnight.
-
-    Used as the TTL for a downed-endpoint flag so a failed instance is retried
-    at the start of the next day. The project runs in UTC (``TIME_ZONE``), so
-    "the next day" is the next UTC calendar day.
-    """
+    Used as the TTL for a downed-endpoint flag so a failed instance is retried at the start of the next day."""
     now = timezone.now()
     next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(1, int((next_midnight - now).total_seconds()))
@@ -58,11 +54,7 @@ def _seconds_until_next_day() -> int:
 
 def _mark_endpoint_down(url: str) -> None:
     """Take an Overpass endpoint out of rotation until the next day.
-
-    Cache failures are swallowed: if the shared cache is unavailable we simply
-    can't remember the outage, which is safe (the endpoint just gets tried
-    again) and must never break a boundary lookup.
-    """
+    Cache failures are swallowed: if the shared cache is unavailable we simply can't remember the outage, which is safe (the endpoint just gets tried again) and must never break a boundary lookup."""
     try:
         cache.set(_DOWN_CACHE_KEY.format(url), 1, timeout=_seconds_until_next_day())
     except Exception:
@@ -169,8 +161,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
         return endpoints
 
     def _available_endpoints(self) -> list[str]:
-        """Healthy endpoints: the primary first, then fallbacks in randomised order.
-        The self-hosted primary is preferred deliberately (fastest, no per-IP limits, under our control - see the module comment); shuffling only the fallbacks spreads whatever load does spill over evenly across the public instances instead of always hammering the same one."""
+        """Healthy endpoints: the primary first, then fallbacks in randomised order."""
         available = [url for url in self._endpoints() if not _endpoint_is_down(url)]
         if available and available[0] == self.base_url:
             fallbacks = available[1:]
@@ -183,19 +174,11 @@ class OverpassGateway(Gateway, BoundaryProvider):
         """Run a raw Overpass QL query and return the decoded JSON payload.
         Any endpoint that fails that way is taken out of rotation until the next day (:func:`_mark_endpoint_down`), so a chronically overloaded instance stops being tried at all.
 
-        Args:
-                query: The Overpass QL program to execute.
-                timeout: Optional HTTP timeout override in seconds; defaults to
-                ``self.timeout``.
-
         Returns:
-                The decoded JSON payload, or an empty dict if the response was not a
-                JSON object or every endpoint is currently down.
+            The decoded JSON payload, or an empty dict if the response was not a JSON object or every endpoint is currently down.
 
         Raises:
-                requests.RequestException: If every available endpoint fails
-                transiently, or on the first non-retryable HTTP error.
-                RateLimitExceededError: If our own rate limiter blocks the call."""
+            requests.RequestException: If every available endpoint fails transiently, or on the first non-retryable HTTP error."""
         http_timeout = timeout or self.timeout
         candidates = self._available_endpoints()
         if not candidates:
@@ -294,15 +277,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
         """Return every OSM building whose footprint falls inside a polygon.
         Overpass's own ``poly:`` filter takes the real boundary instead, so a 40-acre campus is queried exactly, in one request.
 
-        Args:
-                polygon: The property boundary to search inside (WGS-84). A
-                MultiPolygon is queried by its largest ring.
-
         Returns:
-                One dict per building - ``{"name", "latitude", "longitude",
-                "osm_id", "source"}`` - matching the record shape
-                ``plugins.builtin.parcel_buildings`` caches. Empty when the
-                polygon is unusable or Overpass found nothing."""
+            One dict per building - ``{"name", "latitude", "longitude", "osm_id", "source"}`` - matching the record shape ``plugins.builtin.parcel_buildings`` caches."""
         ring = self._largest_exterior_ring(polygon)
         if ring is None:
             return []
@@ -343,11 +319,8 @@ out center tags;
         """The exterior ring of the largest part of a polygonal geometry, as (lon, lat) pairs.
         Overpass's ``poly:`` filter accepts a single ring, so a MultiPolygon (the shape every stored ``Boundary`` uses) has to be reduced to one - its largest part is the parcel proper, any others being outbuildings or slivers.
 
-        Args:
-                polygon: The geometry to reduce; None is tolerated.
-
         Returns:
-                The ring's coordinates, or None when there is no usable ring."""
+            The ring's coordinates, or None when there is no usable ring."""
         if polygon is None:
             return None
         largest: GEOSGeometry | None = polygon
@@ -405,12 +378,7 @@ out center tags;
 
     @staticmethod
     def _is_building_element(element: dict) -> bool:
-        """True when an OSM element's tags describe a building footprint.
-
-        Anything else (landuse, amenity perimeter, leisure grounds, industrial
-        sites...) is treated as a property boundary - ambiguity resolves to
-        property.
-        """
+        """True when an OSM element's tags describe a building footprint."""
         tags = element.get("tags")
         if not isinstance(tags, dict):
             return False
@@ -432,13 +400,8 @@ out center tags;
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | None]:
         """Return the smallest containing building footprint and property perimeter.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                name: Unused; Overpass matches spatially.
-
         Returns:
-                Mapping with "building" and "property" keys (values may be None)."""
+            Mapping with "building" and "property" keys (values may be None)."""
         candidates = self._containing_polygons_by_kind(latitude, longitude)
         return {kind: (min(polygons, key=lambda polygon: polygon.area) if polygons else None) for kind, polygons in candidates.items()}
 

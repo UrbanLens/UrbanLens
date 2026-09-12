@@ -121,8 +121,7 @@ def parent_slug_prefix(names: Sequence[str]) -> str:
     """Choose a short slug prefix from a parent's names and aliases.
 
     Args:
-        names: Display name first, then aliases and any other candidates
-            (including an already-short parent slug). Empty strings are ignored.
+        names: Display name first, then aliases and any other candidates (including an already-short parent slug).
 
     Returns:
         A lowercase slug prefix, or ``""`` when nothing usable can be derived."""
@@ -193,14 +192,11 @@ def unique_slug(
 
     Args:
         name: Raw display name of the entity being slugged.
-        is_taken: Returns True when a candidate is already in use in the
-            relevant uniqueness scope.
+        is_taken: Returns True when a candidate is already in use in the relevant uniqueness scope.
         prefix: Optional parent-derived prefix (already a slug).
         max_length: Hard cap matching the slug column.
-        preferred_length: Soft cap for the ideal slug; defaults to
-            ``max_length``.
-        min_length: Below this, leftover tokens are added back even if the
-            ideal already fitted the preferred length.
+        preferred_length: Soft cap for the ideal slug; defaults to ``max_length``.
+        min_length: Below this, leftover tokens are added back even if the ideal already fitted the preferred length.
         fallback: Used when ``name`` slugifies to nothing.
 
     Returns:
@@ -259,9 +255,7 @@ def _trim_at_hyphen(value: str, budget: int) -> str:
         budget: Maximum length.
 
     Returns:
-        A prefix of ``value`` no longer than ``budget``, or ``""`` when even
-        the first segment does not fit.
-    """
+        A prefix of ``value`` no longer than ``budget``, or ``""`` when even the first segment does not fit."""
     if budget <= 0:
         return ""
     if len(value) <= budget:

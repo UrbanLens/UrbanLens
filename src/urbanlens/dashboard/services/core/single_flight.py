@@ -24,12 +24,9 @@ def claim(key: str, ttl_seconds: int) -> bool:
     Args:
         key: Identifies the job and whose it is.
         ttl_seconds: How long the reservation survives without being released.
-            Must exceed the task's own hard time limit, or a second copy can
-            start while the first is still running.
 
     Returns:
-        Whether the caller may start the job.
-    """
+        Whether the caller may start the job."""
     try:
         return bool(cache.add(key, PENDING, timeout=ttl_seconds))
     except _CACHE_ERRORS:

@@ -47,10 +47,7 @@ class ArticleScope:
         location: The wiki's Location (wiki scope only) - used to build URLs.
         is_private: True for a pin article (only its owner ever sees it).
         host_name: Display name of the pin/wiki for headings.
-        urls: Named endpoint URLs for templates (view/edit/save/preview/
-            history). Per-revision URLs are derived from ``history`` by
-            appending ``<revision_id>/`` (and ``restore/``), matching the
-            nested route layout.
+        urls: Named endpoint URLs for templates (view/edit/save/preview/ history).
     """
 
     profile: Profile
@@ -88,9 +85,8 @@ def _pin_urls(pin_slug: str) -> dict[str, str]:
 def _resolved_article(scope: ArticleScope) -> Article | None:
     """Re-read the scope's article the way ``ArticleViewBase.resolve`` would.
 
-    Used after a write, so the fragment sent back reflects what was just saved
-    while staying concealed for the viewer who saved it. A private pin article
-    has no concealment to apply and takes the plain path.
+    Used after a write, so the fragment sent back reflects what was just saved while staying concealed
+    for the viewer who saved it.
 
     Args:
         scope: The resolved scope, after a write.
@@ -110,10 +106,8 @@ def _resolved_article(scope: ArticleScope) -> Article | None:
 def _writable_article(scope: ArticleScope) -> Article:
     """The scope's article as a row that may be written.
 
-    ``scope.article`` may be a concealed projection carrying an older
-    revision's text; restoring through it would publish that text as the
-    current article. See ``concealment.writable_wiki`` for the same argument
-    about wikis.
+    ``scope.article`` may be a concealed projection carrying an older revision's text; restoring through
+    it would publish that text as the current article.
 
     Args:
         scope: The resolved scope.
@@ -141,9 +135,9 @@ def _writable_article(scope: ArticleScope) -> Article:
 def _visible_revision_queryset(scope: ArticleScope):
     """The scope's article revisions, narrowed to what its viewer may see.
 
-    One definition rather than the same filter at each of the four places that
-    list or look up a revision - the shape of defect this whole layer keeps
-    producing is a rule spelled out per call site and forgotten at one of them.
+    One definition rather than the same filter at each of the four places that list or look up a
+    revision - the shape of defect this whole layer keeps producing is a rule spelled out per call site
+    and forgotten at one of them.
 
     Args:
         scope: The resolved scope.
@@ -171,12 +165,11 @@ class ArticleViewBase(LoginRequiredMixin, View):
         """Resolve the host (pin or wiki) and its article for this request.
 
         Args:
-            request: The current request.
-            **kwargs: URL kwargs; ``location_slug`` selects wiki scope,
-                ``pin_slug`` selects pin scope.
+            request: The current request. **kwargs: URL kwargs; ``location_slug`` selects wiki scope,
+            ``pin_slug`` selects pin scope.
 
         Returns:
-            The populated :class:`ArticleScope`.
+            The populated: class:`ArticleScope`.
 
         Raises:
             Http404: Host not found or not accessible to the requester.
@@ -187,9 +180,8 @@ class ArticleViewBase(LoginRequiredMixin, View):
             location, wiki, profile = resolve_visible_wiki(request, kwargs["location_slug"])
             return ArticleScope(
                 profile=profile,
-                # An article is entirely user-contributed prose, so a concealed
-                # viewer sees the newest revision they are entitled to - or
-                # None, which is what a place nobody has written up looks like.
+                # An article is entirely user-contributed prose, so a concealed viewer sees the newest revision
+                # they are entitled to - or None, which is what a place nobody has written up looks like.
                 article=conceal_article(get_article(wiki=wiki), wiki, profile),
                 pin=None,
                 wiki=wiki,
@@ -229,8 +221,7 @@ class ArticleViewBase(LoginRequiredMixin, View):
         Args:
             response: The response to annotate.
             level: toastr level ("success", "error", ...).
-            message: Toast body.
-            *extra_events: Additional client event names to trigger.
+            message: Toast body. *extra_events: Additional client event names to trigger.
 
         Returns:
             The same response, for chaining.
@@ -246,11 +237,9 @@ class ArticleViewBase(LoginRequiredMixin, View):
         separate read-only view - see frontend/ts/entries/article-wysiwyg.ts) for the
         resolved scope.
         """
-        # The visible revisions, not all of them: this id goes out to the
-        # client as the conflict-check baseline and comes back on save, so
-        # taking it from the live row would hand a concealed viewer the id of a
-        # revision they were not shown - and make the conflict check compare
-        # against text they never saw.
+        # The visible revisions, not all of them: this id goes out to the client as the conflict-check baseline
+        # and comes back on save, so taking it from the live row would hand a concealed viewer the id of a
+        # revision they were not shown - and make the conflict check compare against text they never saw.
         latest_revision = _visible_revision_queryset(scope).order_by("-created").first()
         return render(
             request,
@@ -278,12 +267,7 @@ class ArticlePanelView(ArticleViewBase):
 
 
 class ArticleSaveView(ArticleViewBase):
-    """Persist a new article version.
-
-    POST .../article/save/  with ``content``, ``edit_summary`` and
-    ``base_revision_id`` (the latest revision the editor was started from,
-    used to detect conflicting edits on community wikis).
-    """
+    """Persist a new article version."""
 
     def post(self, request: HttpRequest, **kwargs) -> HttpResponse:
         scope = self.resolve(request, **kwargs)
@@ -297,9 +281,7 @@ class ArticleSaveView(ArticleViewBase):
             response["HX-Reswap"] = "none"
             return self.toast(response, "error", length_error)
 
-        # Conflict check: someone else saved while this editor was open. The
-        # client keeps the user's text so nothing is lost. Shared with the
-        # external API via services.wiki.articles.save_article_checked.
+        # Conflict check: someone else saved while this editor was open.
         base_revision_id = int(base_revision_raw) if base_revision_raw.isdigit() else None
         try:
             _article, revision = save_article_checked(
@@ -347,13 +329,11 @@ class ArticlePreviewView(ArticleViewBase):
 class ArticleImageUploadView(ArticleViewBase):
     """Upload an image to embed inline in an article, from the WYSIWYG editor.
 
-    POST .../article/image/  with an ``image`` file.
-
-    Images are stored as ordinary ``Image`` rows against the article's host
-    (pin or wiki) - the same model and validation (size/content-type
-    sniffing/malware scan/quota) every other gallery upload goes through -
-    so a pasted-in article image is never a lower-scrutiny upload path than
-    the Memories or pin/wiki gallery.
+    POST .../article/image/ with an ``image`` file.
+    Images are stored as ordinary ``Image`` rows against the article's host (pin or wiki) - the same
+    model and validation (size/content-type sniffing/malware scan/quota) every other gallery upload goes
+    through - so a pasted-in article image is never a lower-scrutiny upload path than the Memories or
+    pin/wiki gallery.
     """
 
     def post(self, request: HttpRequest, **kwargs) -> JsonResponse:
@@ -404,22 +384,16 @@ def _annotate_deltas(revisions: list[ArticleRevision], *, following: ArticleRevi
     """Pair each revision (newest first) with its size delta, ordinal and current flag.
 
     Args:
-        revisions: Revisions ordered newest first. One page of them, once the
-            list is long enough to paginate.
-        following: The revision immediately older than the last one in
-            ``revisions`` - the top of the next page. Sizing the oldest row on
-            a page against ``None`` instead would report it as an edit that
-            wrote the whole article from empty.
-        highest_number: The ordinal of ``revisions[0]``; defaults to the length
-            of the list, which is only right on an unpaginated history.
-        current_id: The id of the newest revision in the whole history. The
-            page's own first row is not it once there is more than one page,
-            and the template both marks that row "current" and withholds its
-            Restore button.
+        revisions: Revisions ordered newest first.
+        following: The revision immediately older than the last one in ``revisions`` - the top of the
+        next page.
+        highest_number: The ordinal of ``revisions[0]``; defaults to the length of the list, which is
+        only right on an unpaginated history.
+        current_id: The id of the newest revision in the whole history.
 
     Returns:
-        Dicts of {revision, delta, number, is_current} where number is 1 for
-        the oldest revision of all, not for the oldest on this page.
+        Dicts of {revision, delta, number, is_current} where number is 1 for the oldest revision of all,
+        not for the oldest on this page.
     """
     total = len(revisions)
     highest = total if highest_number is None else highest_number
@@ -445,8 +419,8 @@ def _history_rows(request: HttpRequest, scope: ArticleScope) -> tuple[list[dict]
         scope: The resolved article scope.
 
     Returns:
-        The annotated rows for the requested page, and the ``Page`` itself so
-        the template can render pagination controls.
+        The annotated rows for the requested page, and the ``Page`` itself so the template can render
+        pagination controls.
     """
     revisions = _visible_revision_queryset(scope).order_by("-created")
     page = get_page(request, revisions, _HISTORY_PAGE_SIZE)
@@ -490,9 +464,8 @@ class ArticleRevisionView(ArticleViewBase):
         scope = self.resolve(request, **kwargs)
         if scope.article is None:
             raise Http404
-        # Scoped to what this viewer may see, not merely to the article: an
-        # unfiltered by-id lookup is an oracle, answering "does revision N
-        # exist here" - and then handing over its whole diff - for revisions
+        # Scoped to what this viewer may see, not merely to the article: an unfiltered by-id lookup is an
+        # oracle, answering "does revision N exist here" - and then handing over its whole diff - for revisions
         # concealment has already decided this account cannot read.
         visible = _visible_revision_queryset(scope)
         revision = get_object_or_404(visible, id=kwargs["revision_id"])
@@ -541,7 +514,6 @@ class ArticleRestoreView(ArticleViewBase):
             },
         )
         message = "Article restored to the selected version." if new_revision else "That version is already the current article."
-        # "articleChanged" refreshes the read-mode Article tab; the history
-        # list itself is the body of this response, so it must NOT also listen
-        # for this event (that would double-fetch).
+        # "articleChanged" refreshes the read-mode Article tab; the history list itself is the body of this
+        # response, so it must NOT also listen for this event (that would double-fetch).
         return self.toast(response, "success", message, "articleChanged")

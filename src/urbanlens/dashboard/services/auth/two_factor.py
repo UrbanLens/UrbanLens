@@ -46,11 +46,7 @@ def has_totp(user: User) -> bool:
 
 
 def has_second_factor(user: User) -> bool:
-    """True when the account has any second factor (passkey or TOTP) enabled.
-
-    This is the single gate ``CustomLoginView``/``LoginTwoFactorView`` use to
-    decide whether a password login needs a follow-up challenge.
-    """
+    """True when the account has any second factor (passkey or TOTP) enabled."""
     return has_passkeys(user) or has_totp(user)
 
 
@@ -61,8 +57,7 @@ def security_settings_context(user: User, request: HttpRequest, **extra: object)
     Args:
         user: The account whose security state to describe.
         request: The current request (used for the session).
-        **extra: Additional context to merge in, e.g. ``code_error`` for an
-            inline TOTP-confirm failure message."""
+        **extra: Additional context to merge in, e.g. ``code_error`` for an inline TOTP-confirm failure message."""
     from urbanlens.dashboard.services.auth.webauthn import has_passkeys, list_credentials
 
     return {
@@ -80,11 +75,7 @@ def security_settings_context(user: User, request: HttpRequest, **extra: object)
 
 
 def maybe_clear_backup_codes(user: User) -> None:
-    """Delete this account's backup codes once it has no second factor left.
-
-    Call after removing a passkey or disabling TOTP - backup codes with
-    nothing left to back up are just dead, potentially-leaked secrets.
-    """
+    """Delete this account's backup codes once it has no second factor left."""
     if not has_second_factor(user):
         BackupCode.objects.for_user(user).delete()
 
@@ -105,11 +96,7 @@ def totp_provisioning_uri(user: User, secret: str) -> str:
 
 def _totp_matched_step(secret: str, code: str, valid_window: int = 1) -> int | None:
     """Return the time-step ``code`` matches against ``secret``, or None.
-
-    Reimplements ``pyotp.TOTP.verify()``'s window search by hand (rather than
-    calling it directly) so the caller learns *which* step matched - needed
-    for replay protection, which ``verify()`` alone can't provide.
-    """
+    Reimplements ``pyotp.TOTP.verify()``'s window search by hand (rather than calling it directly) so the caller learns *which* step matched - needed for replay protection, which ``verify()`` alone can't provide."""
     totp = pyotp.TOTP(secret)
     # Some authenticator apps display/copy the code with a middle space (e.g.
     # "123 456") - strip all whitespace, not just the ends, so a pasted code still matches.
@@ -148,9 +135,7 @@ def verify_totp_code(user: User, code: str) -> bool:
         code: The 6-digit code the user typed in.
 
     Returns:
-        True if the code is valid and freshly-used; False otherwise (including
-        when the account has no TOTP device, or its secret can no longer be
-        decrypted - see the ``InvalidToken`` handling below)."""
+        True if the code is valid and freshly-used; False otherwise (including when the account has no TOTP device, or its secret can no longer be decrypted - see the ``InvalidToken`` handling below)."""
     try:
         device = TOTPDevice.objects.for_user(user).first()
     except InvalidToken:
@@ -242,10 +227,5 @@ def verify_and_consume_backup_code(user: User, code: str) -> bool:
 
 
 def verify_login_code(user: User, code: str) -> bool:
-    """Verify a login-time code as either a TOTP code or a backup code.
-
-    Used by ``LoginTwoFactorCodeView`` as the fallback to a passkey assertion -
-    tries TOTP first (if a device exists), then falls back to backup codes,
-    since either is an acceptable second factor at login.
-    """
+    """Verify a login-time code as either a TOTP code or a backup code."""
     return verify_totp_code(user, code) or verify_and_consume_backup_code(user, code)

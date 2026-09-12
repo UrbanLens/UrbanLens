@@ -27,11 +27,7 @@
                 <i class="material-symbols-outlined" aria-hidden="true">call_made</i>
                 Shared by you ({{ sent_count }})
             </button>
-            {% comment %}
-            hx-trigger="click once": the received half is fetched the first time
-            this button is clicked and not again, so the toggle stays instant
-            afterwards. Its own pagination re-fetches the same target.
-            {% endcomment %}
+            {% comment %}hx-trigger="click once": the received half is fetched the first time this button is clicked and not again, so the toggle stays instant.{% endcomment %}
             <button type="button" class="btn btn--secondary view-toggle-btn" data-view="received"
                     onclick="memoriesSharingSetView('received')" title="Shared with you"
                     hx-get="{% url 'memories.sharing.received' %}"

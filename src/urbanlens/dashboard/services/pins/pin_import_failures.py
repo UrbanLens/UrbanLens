@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 
 def record_pin_import_failure(profile: Profile, cid: int, *, name: str, description: str, reason: PinImportFailureReason, maps_url: str = "") -> None:
     """Record a pin's cid that couldn't be placed automatically, unless one already exists.
-    Idempotent per ``(profile, cid)`` via ``PinImportFailure.objects.get_or_create`` (backed by the ``uq_pin_import_failure_profile_cid`` constraint): since the same import can legitimately be re-run over the same source file, this must never create a second row, or touch ``name``/``description``/``reason`` on one that already exists - even if a later attempt captured slightly different values, or the existing row isn't pending anymore.
 
     Args:
         profile: Owner the failure belongs to.
@@ -26,9 +25,7 @@ def record_pin_import_failure(profile: Profile, cid: int, *, name: str, descript
         name: Best-known name for the place, captured at the moment it was deferred.
         description: Best-known description, captured the same way.
         reason: Why the automatic lookup failed.
-        maps_url: The Google Maps URL the cid came from, when the import had
-            one. Stored for its embedded S2 cell, which gives an approximate
-            position used only to corroborate a guessed location."""
+        maps_url: The Google Maps URL the cid came from, when the import had one."""
     PinImportFailure.objects.get_or_create(
         profile=profile,
         cid=cid,
@@ -63,12 +60,9 @@ def resolve_pin_import_failure(
         The pin that was moved (legacy repair) or newly placed.
 
     Raises:
-        services.pins.pin_creation.NoLocationProvidedError: Neither a usable
-            address nor coordinates were given.
-        services.pins.pin_creation.AddressResolutionError: The address
-            couldn't be geocoded.
-        services.pins.pin_creation.PinCreationForbiddenError: An address needed
-            geocoding but external lookups are turned off for this profile."""
+        services.pins.pin_creation.NoLocationProvidedError: Neither a usable address nor coordinates were given.
+        services.pins.pin_creation.AddressResolutionError: The address couldn't be geocoded.
+        services.pins.pin_creation.PinCreationForbiddenError: An address needed geocoding but external lookups are turned off for this profile."""
     if latitude is None or longitude is None:
         if not address:
             raise NoLocationProvidedError("Neither coordinates nor an address were given.")
@@ -78,7 +72,7 @@ def resolve_pin_import_failure(
         if latitude is None or longitude is None:
             raise AddressResolutionError("Geocoding the given address returned no coordinates.")
 
-    # --- TEMPORARY (legacy CID coordinate repair) -------------------------
+    # TEMPORARY (legacy CID coordinate repair)
     repaired = repair_legacy_pin_coordinates(
         profile=profile,
         cid=int(failure.cid),
@@ -86,7 +80,7 @@ def resolve_pin_import_failure(
         latitude=latitude,
         longitude=longitude,
     )
-    # --- end TEMPORARY ------------------------------------------------------
+    # end TEMPORARY
 
     if repaired is not None:
         pin = repaired

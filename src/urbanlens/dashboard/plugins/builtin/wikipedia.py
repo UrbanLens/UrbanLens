@@ -62,23 +62,10 @@ class WikipediaPanelSource(LocationCachePanelSource):
     @staticmethod
     def _ancestor_campus_article(pin: Pin) -> dict | None:
         """Campus fallback: search again from each ancestor pin's own point.
-
-        A large campus (an HRSH-style hospital complex, a factory site)
-        typically has exactly one Wikipedia article, geotagged at a single
-        point - usually the main building. A child pin for an outbuilding can
-        easily sit more than the geosearch radius away from that point, so its
-        own coordinates find nothing even though the campus article is exactly
-        what its panel should show. Rather than widening the global radius
-        (which would invite false-positive matches for every ordinary pin),
-        each ancestor's coordinates and name get their own normal-radius
-        search (UL-354, decision 2026-07-23).
-
-        Args:
-            pin: The pin whose own-coordinate search came up empty.
+        A child pin for an outbuilding can easily sit more than the geosearch radius away from that point, so its own coordinates find nothing even though the campus article is exactly what its panel should show.
 
         Returns:
-            The first ancestor's matched article dict, or None.
-        """
+            The first ancestor's matched article dict, or None."""
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
 
         seen: set[int] = {pin.pk}
@@ -118,12 +105,8 @@ class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Find the best-matching Wikipedia article for a location.
 
-        Args:
-            location: The location to fetch an article for.
-
         Returns:
-            Tuple of (article payload or None, query key).
-        """
+            Tuple of (article payload or None, query key)."""
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
 
         lat = float(location.latitude or 0)
@@ -140,14 +123,8 @@ class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
 
 
 class WikipediaMediaPanelSource(MediaPanelSource):
-    """Media panel backed by the pin's own matched Wikipedia article, not a
-    generic name search - see ``WikipediaMediaGateway``.
-
-    The "search term" ``fetch`` uses is the exact article title from the
-    Wikipedia summary panel's own cache, so this naturally no-ops for any pin
-    without a confidently-matched article - there's nothing to read images
-    from yet.
-    """
+    """Media panel backed by the pin's own matched Wikipedia article, not a generic name search - see ``WikipediaMediaGateway``.
+    The "search term" ``fetch`` uses is the exact article title from the Wikipedia summary panel's own cache, so this naturally no-ops for any pin without a confidently-matched article - there's nothing to read images from yet."""
 
     @staticmethod
     def search_terms(pin: Pin, _gateway: MediaProvider) -> list[str]:
@@ -163,23 +140,7 @@ class WikipediaMediaPanelSource(MediaPanelSource):
         return [title] if title else []
 
     def gate(self, pin: Pin) -> bool:
-        """Whether to attempt this panel at all.
-
-        Slightly looser than the base class's "has a search term" check: on a
-        pin's very first visit, this panel's own background fetch and the
-        Wikipedia summary panel's fetch are scheduled at roughly the same
-        time (see ``PanelSource.fetch``'s "runs inside a Celery worker, never
-        on the request path" contract - neither can synchronously wait for
-        the other on the request path here in ``gate``, which runs on every
-        request/poll and must stay cheap). Gating strictly on an
-        already-cached title would mean this panel gives up permanently
-        (204, the gallery JS's "done, nothing" signal) if it's asked before
-        the summary panel has reported back even once - so a pin with no
-        ``wikipedia`` LocationCache row *at all* yet (never fetched, as
-        opposed to fetched-and-found-nothing) still gets a shot: its own
-        fetch will re-check the cache when it actually runs, by which point
-        the summary panel has very likely already completed.
-        """
+        """Whether to attempt this panel at all."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         if pin.location is None:

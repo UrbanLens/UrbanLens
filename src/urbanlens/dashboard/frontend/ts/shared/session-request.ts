@@ -1,26 +1,5 @@
 /**
  * The three game clients' HTTP helpers, in one place and checking their responses.
- *
- * SpotGuessr, Trivia and Consensus each carried a near-identical `postForm` and
- * `getJson`, and none of the six checked `response.ok`. `fetch` resolves for a
- * 400 or a 500 - it only rejects when the request never completed - so
- * `response.json()` ran against whatever the error page produced: usually a
- * `SyntaxError` thrown inside a `void`-ed promise, which is a page that quietly
- * stops working (P11). They also had no timeout, so a request that never
- * answered hung its button forever.
- *
- * Both keep resolving with the parsed body rather than throwing, because that is
- * the contract 62 call sites already have. A refusal is surfaced *in that
- * shape*: `{ error: "<the server's own message>" }`, which is exactly what every
- * `postForm` caller already tests for. Those call sites start handling non-2xx
- * responses without being touched, and this file is the only place that had to
- * learn the difference.
- *
- * `getJson` toasts and `postForm` does not, which is asymmetric on purpose: all
- * 33 `getJson` call sites ignore the result's shape entirely (`data.friends ??
- * []`, so a failure renders an empty list and says nothing), while the
- * `postForm` ones test `.error` and toast it themselves. Toasting in both would
- * double up on every refused write.
  */
 
 import { getCsrfToken } from "./csrf";
@@ -34,13 +13,6 @@ interface RequestFailure {
 
 /**
  * What a bodyless success resolves to.
- *
- * `fetchJson` answers a 204 with `null`, correctly - a DRF delete has nothing to
- * return. These two must not pass that through: every call site reads a property
- * off the result (`response.error`, `data.friends ?? []`), so a `null` is a
- * `TypeError` rather than a quiet no-op. None of the three games' endpoints
- * answers 204 today; turning one of them into a bodyless delete should not be
- * the change that crashes its caller.
  */
 const EMPTY_BODY = {} as const;
 
@@ -55,16 +27,6 @@ function describe(error: unknown): string {
 
 /**
  * POST form-encoded data and return the parsed body.
- *
- * Args:
- *     url: Always `urlFor(urls.<name>, ...)` - a same-origin, server-rendered
- *         path template with only numeric ids substituted, never an arbitrary
- *         or external url.
- *     data: Fields to send.
- *
- * Returns:
- *     The parsed response body, or `{ error }` when the request was refused or
- *     never completed.
  */
 export async function postForm(url: string, data: Record<string, string> | URLSearchParams): Promise<any> {
     const body = data instanceof URLSearchParams ? data : new URLSearchParams(data);
@@ -73,9 +35,7 @@ export async function postForm(url: string, data: Record<string, string> | URLSe
             method: "POST",
             headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
             body,
-            // The caller checks `.error` and toasts it; base.html's generic
-            // "Request failed (HTTP 503)." on top of that is a second toast
-            // saying less.
+            // The caller checks `.error` and toasts it; base.html's generic "Request failed (HTTP 503)." on top of that is a second toast saying.
             reportsItsOwnErrors: true,
         })) ?? EMPTY_BODY;
     } catch (error) {
@@ -85,20 +45,6 @@ export async function postForm(url: string, data: Record<string, string> | URLSe
 
 /**
  * POST multipart form data (a file upload) and return the parsed body.
- *
- * {@link postForm}'s multipart counterpart - not folded into it because a
- * `FormData` body must never carry an explicit `Content-Type`: the browser
- * sets one itself, with the multipart boundary the server needs to parse it,
- * only when the header is absent.
- *
- * Args:
- *     url: Always `urlFor(urls.<name>, ...)` - see {@link postForm}.
- *     data: The multipart body (a file plus whatever other fields).
- *
- * Returns:
- *     The parsed response body, or `{ error }` when the request was refused,
- *     answered with a body that wasn't the expected JSON shape, or never
- *     completed.
  */
 export async function postMultipart(url: string, data: FormData): Promise<any> {
     try {
@@ -117,14 +63,6 @@ export async function postMultipart(url: string, data: FormData): Promise<any> {
 
 /**
  * GET JSON and return the parsed body, reporting a failure to the user.
- *
- * Args:
- *     url: Same-origin `urlFor(...)` path template - see {@link postForm}.
- *
- * Returns:
- *     The parsed response body, or `{ error }` when the request was refused or
- *     never completed. The caller is not expected to check: a lobby or chat
- *     history that could not be loaded has already been reported here.
  */
 export async function getJson(url: string): Promise<any> {
     try {

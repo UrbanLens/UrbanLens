@@ -27,9 +27,7 @@ def set_if_small(key: str, content: bytes, content_type: str, timeout: int, *, l
         max_bytes: Largest body to store.
 
     Returns:
-        Whether it was stored. Callers serve the body either way - refusing to
-        cache must never mean refusing to answer.
-    """
+        Whether it was stored."""
     if len(content) > max_bytes:
         logger.warning("%s was %d bytes, over the %d cache ceiling; serving it uncached.", label, len(content), max_bytes)
         return False

@@ -1,5 +1,4 @@
-"""Shared sanitization for Leaflet map snapshots (``map_data`` JSON blobs).
-Because the blob is user-submitted and rendered back into the DOM, every field is validated and clamped here before it is trusted."""
+"""Shared sanitization for Leaflet map snapshots (``map_data`` JSON blobs)."""
 
 from __future__ import annotations
 
@@ -45,10 +44,7 @@ def _sanitize_markup_color(v: object, fallback: str = "#e74c3c") -> str:
 
 def _sanitize_optional_color(v: object) -> str | None:
     """Return ``v`` if it is a hex colour or the string ``"none"``, else None.
-
-    Unlike the shared helper, callers here distinguish "no usable value" from
-    "unset" by testing for None, so the empty-string fallback is mapped back.
-    """
+    Unlike the shared helper, callers here distinguish "no usable value" from "unset" by testing for None, so the empty-string fallback is mapped back."""
     return sanitize_optional_color(v) or None
 
 
@@ -113,9 +109,7 @@ def sanitize_map_data(data: object) -> dict | None:
         data: The decoded JSON value (expected to be a dict).
 
     Returns:
-        A sanitized snapshot dict, or None if ``data`` is not a usable snapshot
-        (e.g. missing/invalid centre coordinates).
-    """
+        A sanitized snapshot dict, or None if ``data`` is not a usable snapshot (e.g. missing/invalid centre coordinates)."""
     if not isinstance(data, dict):
         return None
     center_lat = data.get("center_lat")
@@ -160,9 +154,7 @@ def default_markup_map_title(context: Pin | Wiki | Trip | PinList | None = None)
         context: The Pin, Wiki, Trip, or PinList this map was created from, if known.
 
     Returns:
-        ``"<name> - <date>"`` when a context is given, otherwise just the
-        creation date (e.g. ``"Jul 10, 2026"``).
-    """
+        ``"<name> - <date>"`` when a context is given, otherwise just the creation date (e.g. ``"Jul 10, 2026"``)."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.pin_list.model import PinList
     from urbanlens.dashboard.models.trips.model import Trip
@@ -188,14 +180,10 @@ def materialize_markup_map(
         profile: Owner for a newly created map.
         snapshot: Sanitized snapshot dict, or None when no map was submitted.
         existing_map: The map currently linked by the host, if any.
-        context: The Pin/Wiki/Trip/PinList this map is attached to, if known -
-            used only for a newly-created map's default title (see
-            ``default_markup_map_title``); ignored when updating an existing
-            map, whose title the user may have already customized.
+        context: The Pin/Wiki/Trip/PinList this map is attached to, if known - used only for a newly-created map's default title (see ``default_markup_map_title``); ignored when updating an existing map, whose title the user may have already customized.
 
     Returns:
-        The MarkupMap the host should now link to, or None when the map was
-        removed (a now-unreferenced existing map is deleted)."""
+        The MarkupMap the host should now link to, or None when the map was removed (a now-unreferenced existing map is deleted)."""
     from urbanlens.dashboard.models.markup.model import MarkupMap
 
     if snapshot is None:

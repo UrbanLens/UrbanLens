@@ -1,23 +1,5 @@
 /**
  * `core.js` runs before `<body>` exists, and one throw kills every install after it.
- *
- * `themes/base.html` loads this bundle as a plain, non-deferred `<script>` inside
- * `<head>`, so `document.body` is null while its 24 `installGlobal*()` calls run.
- * They are a flat list of top-level statements: the first one that throws takes
- * the other 23 with it, silently, on every page in the app.
- *
- * That is not hypothetical. `installGlobalAssistantOverlay` began binding a
- * listener to `document.body` on 2026-09-02 (167000b77) and is the *first* call
- * in the list, so from that commit until this test was written the entire bundle
- * was dead site-wide - no confirm dialog, no fetch-json, no label picker, no
- * markup engine, no leave confirmation. Nothing failed: `window.createMarkupToolbar`
- * was simply undefined, and every feature that checked for it did nothing.
- *
- * Three modules already carry a hand-written `if (document.body)` guard and say
- * why in their own comments, so the trap was known. What was missing was anything
- * that fails when the next module forgets - which is what this is. It asserts on
- * the *last* statement in the entry, because that is the one nothing else can
- * reach if anything earlier throws.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -28,11 +10,6 @@ const BASE_TEMPLATE = join(import.meta.dir, "../../../templates/dashboard/themes
 
 /**
  * Run `run` in the state a `<head>` script sees: no `<body>`, still parsing.
- *
- * Both halves matter. Some modules here wait on `document.body` and some on
- * `readyState === "loading"`; either is a correct reading of "the body is not
- * there yet", and a harness that faked only one of them would report a module
- * broken for a state a browser never produces.
  */
 function inHeadScriptState(run: () => void): void {
     const realBody = Object.getOwnPropertyDescriptor(Document.prototype, "body");

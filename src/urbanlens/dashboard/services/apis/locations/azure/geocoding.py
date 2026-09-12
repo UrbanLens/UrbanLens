@@ -48,15 +48,11 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
     def geocode_address(self, query: str) -> dict[str, Any] | None:
         """Forward-geocode a free-text address or place name.
 
-        Args:
-                query: Address or place-name query string.
-
         Returns:
-                The best-matching normalized result, or None when nothing
-                matched or the request failed.
+            The best-matching normalized result, or None when nothing matched or the request failed.
 
         Raises:
-                ValueError: When no subscription key is configured."""
+            ValueError: When no subscription key is configured."""
         if not query:
             return None
         try:
@@ -70,16 +66,11 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
         """Reverse-geocode coordinates to a formatted address.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-
         Returns:
-                The normalized address result, or None when nothing matched or
-                the request failed.
+            The normalized address result, or None when nothing matched or the request failed.
 
         Raises:
-                ValueError: When no subscription key is configured."""
+            ValueError: When no subscription key is configured."""
         try:
             body = self._get(
                 "/reverseGeocode",

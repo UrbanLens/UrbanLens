@@ -1,9 +1,5 @@
 /**
  * Floating undo/redo buttons and Ctrl+Z / Ctrl+Shift+Z.
- *
- * The default provider talks to the server undo stack. A page can register a
- * local provider (the floorplan editor's in-memory history) that takes over
- * the same buttons while it is mounted.
  */
 
 import { getCsrfToken } from "./csrf";
@@ -131,14 +127,7 @@ async function afterServerChange(): Promise<void> {
     window.location.reload();
 }
 
-// Both the click handlers and the Ctrl+Z/Ctrl+Shift+Z shortcut funnel through
-// this one function for the server-backed provider (see activeProvider below),
-// so guarding here covers a rapid double-click and a held-down shortcut alike.
-// The backend already serializes a genuine double-submit correctly (the loser
-// gets a 410/"already restored" style error), but a same-tab double-click was
-// still sending a second real request for what the user experienced as one
-// action - which surfaced as a confusing error toast for a redundant click,
-// not any actual corruption.
+// Both the click handlers and the Ctrl+Z/Ctrl+Shift+Z shortcut funnel through this one function for the server-backed provider, so.
 let requestInFlight = false;
 
 async function postStack(which: "undo" | "redo"): Promise<void> {
@@ -266,13 +255,7 @@ function wrapFetch(): void {
         if (response.ok && mutating && !isStackCall) scheduleRefresh();
         return response;
     };
-    // Carry over whatever the function being replaced was holding. base.html
-    // wraps `window.fetch` too and marks its own wrapper `__urbanLensWrapped`,
-    // which is how it declines to wrap a second time; replacing that function
-    // with a bare one drops the marker, and the next thing to run that block
-    // would double-wrap and toast every failed request twice. The runtime's
-    // own `fetch` also carries properties (Bun's has `preconnect`), which is
-    // how a two-year-stale `bun-types` was hiding this.
+    // Carry over whatever the function being replaced was holding. base.html wraps `window.fetch` too and marks its own wrapper.
     window.fetch = Object.assign(wrapped, replacedFetch) as typeof window.fetch;
 }
 
@@ -286,9 +269,7 @@ export function resetUndoBarForTests(): void {
     window.removeEventListener("resize", placeBar);
     document.body?.removeEventListener("htmx:afterRequest", onHtmxAfterRequest);
     if (fetchWrapped && replacedFetch) {
-        // The unbound function that was there, not `nativeFetch`: binding
-        // makes a fresh function object, which would drop the same properties
-        // wrapping was just taught to keep.
+        // The unbound function that was there, not `nativeFetch`.
         window.fetch = replacedFetch;
         fetchWrapped = false;
         nativeFetch = null;

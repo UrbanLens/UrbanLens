@@ -96,11 +96,11 @@ def _dir_size_mb(path: str) -> float:
 class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Site admin settings page.
 
-    Requires the ``dashboard.view_site_admin`` permission (superusers bypass
-    this automatically via Django's permission system).
+    GET /site-admin/settings/ → settings page
+    POST /site-admin/settings/ → save settings, re-render page
 
-    GET  /site-admin/settings/  → settings page
-    POST /site-admin/settings/  → save settings, re-render page
+    Requires the ``dashboard.view_site_admin`` permission (superusers bypass this automatically via
+    Django's permission system).
     """
 
     permission_required = "dashboard.view_site_admin"
@@ -117,9 +117,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         settings = SiteSettings.get_current()
         complete_site_admin_onboarding(request.user)
 
-        # Ranked sources first, in the admin's configured priority order, followed
-        # by any remaining available sources (unranked, falling back to plugin
-        # order at resolution time).
+        # Ranked sources first, in the admin's configured priority order, followed by any remaining available
+        # sources (unranked, falling back to plugin order at resolution time).
         priority_slugs = settings.name_source_priority_list
         providers_by_slug = {provider.source: provider.verbose_name for provider in plugin_registry.name_providers()}
         name_source_order = [(slug, providers_by_slug[slug], True) for slug in priority_slugs if slug in providers_by_slug]
@@ -145,9 +144,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "settings": settings,
                 "page_name": "site-admin",
                 "saved": request.GET.get("saved"),
-                # What the size limit actually resolves to. An ingress cap
-                # lowers it silently otherwise, so an admin would set 250 MB and
-                # watch users be refused at 100 with nothing on this page saying why.
+                # What the size limit actually resolves to. An ingress cap lowers it silently otherwise, so an
+                # admin would set 250 MB and watch users be refused at 100 with nothing on this page saying why.
                 "ingress_body_limit_mb": ingress_body_limit_bytes() // 1_000_000,
                 "environment_override_choices": EnvironmentOverrideChoice.choices,
                 "effective_environment_label": settings.get_effective_environment_label(),
@@ -200,9 +198,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             # Unknown slugs are tolerated: the name resolver ignores sources it
             # never sees, so a disabled plugin's slug can stay configured.
             slugs = [token.strip().lower() for token in request.POST.get("default_name_source_priority", "").split(",")]
-            # The regex constrains each token's characters, not its length, and
-            # says nothing about how many tokens arrive - so the joined result
-            # has to be checked against the column it is going into.
+            # The regex constrains each token's characters, not its length, and says nothing about how many
+            # tokens arrive - so the joined result has to be checked against the column it is going into.
             joined = ",".join(slug for slug in slugs if re.fullmatch(r"[a-z0-9_-]+", slug))
             priority_error = column_length_error(SiteSettings, "default_name_source_priority", joined, "Name source priority")
             if priority_error:
@@ -273,9 +270,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             settings.image_downscale_vip = request.POST.get("image_downscale_vip") in {"1", "true", "on", "True"}
         if "max_upload_file_size_mb" in request.POST:
             with contextlib.suppress(ValueError, TypeError):
-                # Upper-clamped to clamd's StreamMaxLength (docker-compose.yml's
-                # clamav service) so this can't drift back out of sync with what
-                # the malware scanner will actually accept - see the matching
+                # Upper-clamped to clamd's StreamMaxLength (docker-compose.yml's clamav service) so this can't
+                # drift back out of sync with what the malware scanner will actually accept - see the matching
                 # MaxValueValidator on the model field.
                 settings.max_upload_file_size_mb = min(max(1, int(request.POST.get("max_upload_file_size_mb", settings.max_upload_file_size_mb))), 900)
         if "video_downscale_enabled" in request.POST:
@@ -289,11 +285,10 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         settings.save()
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            # Several numeric fields above are silently clamped into range rather
-            # than rejected (e.g. image_downscale_max_dimension to [256, 20000]) -
-            # report back what was actually persisted so the autosave JS can
-            # repaint the input instead of leaving it showing the raw value the
-            # admin typed while claiming "Saved".
+            # Several numeric fields above are silently clamped into range rather than rejected (e.g.
+            # image_downscale_max_dimension to [256, 20000]) - report back what was actually persisted so the
+            # autosave JS can repaint the input instead of leaving it showing the raw value the admin typed
+            # while claiming "Saved".
             clamped_fields = (
                 "max_trip_members",
                 "max_bbox_area_km2",
@@ -329,7 +324,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 class SiteAdminUIComponentsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Development-only UI component showcase for site admins.
 
-    GET /site-admin/ui-components/  → visual reference for reusable UI classes.
+    GET /site-admin/ui-components/ → visual reference for reusable UI classes.
 
     Returns 403 when the effective environment is not development.
     """
@@ -421,10 +416,10 @@ class DevToolbarToggleMapDarkModeView(LoginRequiredMixin, PermissionRequiredMixi
 class DevToolbarClearSessionView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Flush the Django session (dev toolbar).
 
-    Clears server-side session state and signals the client to wipe ``sessionStorage``
-    before reloading. The user will be logged out.
-
     POST /site-admin/dev/clear-session/
+
+    Clears server-side session state and signals the client to wipe ``sessionStorage`` before reloading.
+    The user will be logged out.
     """
 
     permission_required = "dashboard.view_site_admin"
@@ -446,10 +441,10 @@ class DevToolbarClearSessionView(LoginRequiredMixin, PermissionRequiredMixin, Vi
 class DevToolbarResetOnboardingView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Restore onboarding tips and hints for the current user (dev toolbar).
 
-    Resets profile guidance to show walkthrough cards again and signals the client
-    to clear dismissed onboarding keys from browser storage before reloading.
-
     POST /site-admin/dev/reset-onboarding/
+
+    Resets profile guidance to show walkthrough cards again and signals the client to clear dismissed
+    onboarding keys from browser storage before reloading.
     """
 
     permission_required = "dashboard.view_site_admin"
@@ -810,11 +805,9 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             settings_obj = SiteSettings.get_current()
             valid_features = set(SiteFeature.values)
             selected = sorted(value for value in request.POST.getlist("features") if value in valid_features)
-            # save(update_fields=...), not queryset.update(): the get_current() above
-            # memoises the row for the rest of this request (see
-            # models.site_settings.request_cache), and only post_save invalidates that
-            # memo. Writing the same single column either way, so this costs nothing
-            # and keeps anything added below from reading the pre-edit values.
+            # save(update_fields=...), not queryset.update(): the get_current() above memoises the row for the
+            # rest of this request (see models.site_settings.request_cache), and only post_save invalidates that
+            # memo.
             settings_obj.default_features = ",".join(selected)
             settings_obj.save(update_fields=["default_features", "updated"])
             if is_htmx:
@@ -848,19 +841,7 @@ def _parse_duration_months(raw: str | None) -> int | None:
         return None
 
 
-#: Groups services into tabs on the API limits page. No such taxonomy exists
-#: on ServiceDefaults/ApiRateLimit itself (plugins declare only display_name/
-#: limits/usa_only/notes) - this is a manually curated, best-effort mapping
-#: rather than an exhaustive one; anything absent falls into "Other" so a new
-#: service is never hidden, just uncategorized until someone adds it here.
-#:
-#: That fallback stops being graceful once most of a family lands in it. As
-#: REData grew a domain per panel, 18 of its 32 service keys were sitting in
-#: "Other" - more than half the surface in the catch-all tab. Add the key here
-#: when you add the gateway; ``test_api_limit_categories`` fails if you don't.
-#: ``redata_capabilities`` is included: it started as the endpoint this very page
-#: reads, but the site-features panel now uses it per pin to discover which
-#: providers cover a coordinate, so it has a budget worth seeing.
+#: Groups services into tabs on the API limits page.
 _API_LIMIT_CATEGORIES: dict[str, str] = {
     # Geocoding & Places
     "google_geocoding": "Geocoding & Places",
@@ -918,9 +899,8 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "internet_archive": "Reference & Archives",
     "wayback_machine": "Reference & Archives",
     "redata_reference_documents": "Reference & Archives",
-    # The state/city historic inventories behind the historic-registers panel.
-    # Archival rather than regulatory: these are survey records, the same kind
-    # of material as the other entries here.
+    # The state/city historic inventories behind the historic-registers panel. Archival rather than regulatory:
+    # these are survey records, the same kind of material as the other entries here.
     "redata_cultural_resources": "Reference & Archives",
     "redata_public_locations": "Reference & Archives",
     # Parks & Regulatory
@@ -961,13 +941,12 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
 def _redata_capabilities() -> dict | None:
     """REData's capability index for the api-limits page, cached for an hour.
 
-    The index changes on REData deploys, not per request, and this page must
-    render whether or not REData is configured or reachable - so a failure is
-    a ``None`` (the template hides the card), never an exception.
+    The index changes on REData deploys, not per request, and this page must render whether or not
+    REData is configured or reachable - so a failure is a ``None`` (the template hides the card), never
+    an exception.
 
     Returns:
-        The ``{"domains", "text_domains"}`` body, or None when REData is
-        unconfigured or unreachable.
+        The ``{"domains", "text_domains"}`` body, or None when REData is unconfigured or unreachable.
     """
     from django.core.cache import cache
 
@@ -983,11 +962,8 @@ def _redata_capabilities() -> dict | None:
     try:
         body = RedataCapabilitiesGateway().get_capabilities()
     except Exception:
-        # Broad on purpose: this card is strictly optional, and the page must
-        # render whatever a gateway can throw (structured REData errors,
-        # transport errors, the test suite's network guard). The miss is
-        # cached briefly too, so an outage doesn't add a failing round-trip
-        # to every admin page load.
+        # Broad on purpose: this card is strictly optional, and the page must render whatever a gateway can
+        # throw (structured REData errors, transport errors, the test suite's network guard).
         logger.warning("REData capabilities fetch failed; omitting the card", exc_info=True)
         cache.set(cache_key, {}, 300)
         return None
@@ -1130,9 +1106,9 @@ class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     GET /site-admin/plugins/ → plugin inventory page
 
-    Shows each plugin's metadata, discovery source, contributions, and the
-    enabled state of the services it declares. Per-service runtime toggles
-    live on the API limits page; install-level plugin disabling is done via
+    Shows each plugin's metadata, discovery source, contributions, and the enabled state of the services
+    it declares.
+    Per-service runtime toggles live on the API limits page; install-level plugin disabling is done via
     the ``UL_DISABLED_PLUGINS`` env setting.
     """
 
@@ -1193,17 +1169,10 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
     GET /site-admin/users/ → paginated, searchable list of users.
     POST /site-admin/users/ → ``request_delete`` / ``cancel_delete`` for one account.
 
-    The listing is read-only; ``post`` is not (see its own docstring). An earlier
-    version of this docstring described the whole view as read-only, which was wrong
-    from the moment deletion was added here.
-
-    This is deliberately privacy-preserving: even a site admin does not get a
-    backdoor around a user's ``contact_visibility`` setting here. Email is
-    only shown when the viewing admin's own profile would satisfy that
-    user's configured visibility rule, exactly as
-    ``Profile.can_view_contact_info`` evaluates for any other viewer (e.g. a
-    "Friends only" user's email stays hidden unless the admin happens to be
-    their friend).
+    The listing is read-only; ``post`` is not (see its own docstring).
+    Email is only shown when the viewing admin's own profile would satisfy that user's configured
+    visibility rule, exactly as ``Profile.can_view_contact_info`` evaluates for any other viewer (e.g. a
+    "Friends only" user's email stays hidden unless the admin happens to be their friend).
     """
 
     permission_required = "dashboard.view_site_admin"
@@ -1237,24 +1206,8 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
     def _search_filter(search: str, viewer: Profile) -> Q:
         """Match a search term only against the fields this admin may actually see.
 
-        Masking what a row renders does not keep the class docstring's promise
-        while the same fields still decide which rows come back: a search for a
-        hidden address returns exactly one row reading "Hidden", and a wrong
-        guess renders the empty state, so one request per guess confirms or
-        denies any address (P80). The username and first name are the same
-        oracle against ``profile_visibility``, since a masked row renders
-        "Invisible User" rather than disappearing.
-
-        Restricting *matching* rather than membership is the part that keeps the
-        page usable: a hidden account still appears when the admin browses the
-        directory, and an account whose identity is visible but whose contact
-        details are not stays findable by username.
-
-        Rows are narrowed in SQL rather than resolved one at a time, so the two
-        clauses come from a bounded set of ids plus an ``ANYONE`` test the
-        database can answer for every other row. Accounts with no profile row
-        satisfy neither, which matches how they render: ``get_or_create`` gives
-        them the default visibility, which is not ``ANYONE``.
+        The username and first name are the same oracle against ``profile_visibility``, since a masked row
+        renders "Invisible User" rather than disappearing.
 
         Args:
             search: The raw search term.
@@ -1292,10 +1245,7 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         members = list(page.object_list)
         profiles = [self._profile_for(member) for member in members]
-        # Resolved for the whole page at once. Per row these cost about fifteen
-        # queries between them - three friendship variants, a trip-membership
-        # lookup and a pin/place lookup each - which is most of what the page
-        # spent at 25 rows (P68).
+        # Resolved for the whole page at once.
         identity_visible = Profile.visible_profile_pks(viewer_profile, profiles)
         contact_visible = Profile.visible_contact_info_pks(viewer_profile, profiles)
 
@@ -1303,10 +1253,6 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
         for member, profile in zip(members, profiles, strict=True):
             email_visible = profile.pk in contact_visible
             profile_visible = profile.pk in identity_visible
-            # Resolved once and passed in: get_quota_bytes looks these up
-            # itself when it isn't given them, and this row needs them for its
-            # own `roles` key - so the page was paying for the same query twice
-            # per user, 25 rows at a time (P68).
             roles = active_subscription_roles(member)
             quota_bytes = get_quota_bytes(profile, roles=roles)
             used_bytes = get_storage_used_bytes(profile)
@@ -1348,11 +1294,10 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
     def post(self, request: HttpRequest):
         """Admin-initiated account deletion, sharing the self-service flow's grace period and undo.
 
-        Reuses ``request_deletion``/``cancel_deletion`` verbatim - a deletion
-        triggered here goes through the exact same 7-day grace period,
-        reminder, and hard-delete task as a user deleting their own data, and
-        can be undone the same way (either the user logging back in, or an
-        admin using ``cancel_delete`` here).
+        Reuses ``request_deletion``/``cancel_deletion`` verbatim - a deletion triggered here goes through
+        the exact same 7-day grace period, reminder, and hard-delete task as a user deleting their own data,
+        and can be undone the same way (either the user logging back in, or an admin using ``cancel_delete``
+        here).
         """
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.services.profile.account_deletion import cancel_deletion, request_deletion
@@ -1449,12 +1394,10 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         site_settings = SiteSettings.get_current()
 
-        # Service health (Postgres/Valkey/Celery/nginx pings) and the git
-        # update check (a `git fetch` against the remote, only cached for the
-        # life of this worker process) are both real I/O, not DB lookups -
-        # fetched by SiteAdminHomeStatusPartialView below instead of blocking
-        # this page's initial render, same as the /site-admin/stats/ page
-        # already lazy-loads its own system panel.
+        # Service health (Postgres/Valkey/Celery/nginx pings) and the git update check (a `git fetch` against
+        # the remote, only cached for the life of this worker process) are both real I/O, not DB lookups -
+        # fetched by SiteAdminHomeStatusPartialView below instead of blocking this page's initial render, same
+        # as the /site-admin/stats/ page already lazy-loads its own system panel.
         return render(
             request,
             "dashboard/pages/site_admin_home.html",
@@ -1501,9 +1444,9 @@ class SiteAdminHomeStatusPartialView(_AdminPermissionMixin, View):
 
     GET /site-admin/status/
 
-    Split out of ``SiteAdminHomeView`` because ``collect_infrastructure_service_stats``
-    pings Postgres/Valkey/Celery/nginx and ``get_git_update_status`` runs a
-    ``git fetch`` - real I/O that shouldn't block the page's initial render.
+    Split out of ``SiteAdminHomeView`` because ``collect_infrastructure_service_stats`` pings
+    Postgres/Valkey/Celery/nginx and ``get_git_update_status`` runs a ``git fetch`` - real I/O that
+    shouldn't block the page's initial render.
     """
 
     def get(self, request: HttpRequest):
@@ -1717,16 +1660,15 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
 class CeleryTaskStatusView(_AdminPermissionMixin, View):
     """Return normalized Celery task progress for polling progress bars.
 
-    Celery's result backend has no per-task owner field to check a requester
-    against (see ``services/celery.TaskProgress`` - it's just state/progress
-    counters, not tied to a user id), so a bare ``LoginRequiredMixin`` here
-    would let any authenticated user poll any task's progress/result by
-    task_id, cross-account. The only current producer of task ids for this
-    endpoint (``BackupStartView`` in ``controllers/tools.py``) already
-    requires ``dashboard.view_site_admin`` to enqueue a task in the first
-    place, so gating this view behind the same permission (rather than a
-    per-task ownership check that the result backend can't support without a
-    schema change) closes the same hole for the endpoint that reads it back.
+    Celery's result backend has no per-task owner field to check a requester against (see
+    ``services/celery.TaskProgress`` - it's just state/progress counters, not tied to a user id), so a
+    bare ``LoginRequiredMixin`` here would let any authenticated user poll any task's progress/result by
+    task_id, cross-account.
+    The only current producer of task ids for this endpoint (``BackupStartView`` in
+    ``controllers/tools.py``) already requires ``dashboard.view_site_admin`` to enqueue a task in the
+    first place, so gating this view behind the same permission (rather than a per-task ownership check
+    that the result backend can't support without a schema change) closes the same hole for the endpoint
+    that reads it back.
     """
 
     def get(self, request, task_id: str):

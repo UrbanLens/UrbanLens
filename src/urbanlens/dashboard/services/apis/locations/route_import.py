@@ -21,12 +21,11 @@ def import_routes_streaming(parsed_routes: list[ParsedRoute], profile: Profile) 
     r"""Stream SSE events while saving parsed Route candidates.
 
     Args:
-        parsed_routes: Unsaved Route instances paired with their raw points,
-            as returned by ``gpx_tracks_to_routes``/``semantic_history_to_routes``.
+        parsed_routes: Unsaved Route instances paired with their raw points, as returned by ``gpx_tracks_to_routes``/``semantic_history_to_routes``.
         profile: The profile these routes belong to (used for dwell-detection).
 
     Yields:
-        SSE-formatted strings (``data: {...}\\n\\n``)."""
+        SSE-formatted strings (``data: {...}\\\\n\\\\n``)."""
     from urbanlens.dashboard.services.import_formats.gpx_tracks import detect_dwells_and_create_visits
     from urbanlens.dashboard.services.visits.visits import route_import_allowed
 

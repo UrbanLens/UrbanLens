@@ -1,16 +1,7 @@
 """External-facing AI assistant endpoints: a stateless mirror of the web chat.
 
-A turn runs on ``ai-worker`` (``services.ai.tasks.run_assistant_turn_task``),
-never inline in this process - this domain gates, enqueues, and polls,
-mirroring ``controllers.assistant``'s web flow. Statelessness is what
-differs: the web view keeps conversation history in the Django session and
-resolves a finished turn by mutating it in place; this domain has no
-session, so the message/history that started a turn is cached under its own
-key (:data:`_CONTEXT_TTL_SECONDS`) and read back once the poll resolves, to
-build the ``history`` this endpoint hands back to the client for its next
-call. Nothing here mutates shared state across two racing polls the way the
-web view's consume gate must - ``get_task_progress``/cache reads are all
-idempotent, so a second poll simply recomputes the same answer.
+A turn runs on ``ai-worker`` (``services.ai.tasks.run_assistant_turn_task``), never inline in this
+process - this domain gates, enqueues, and polls, mirroring ``controllers.assistant``'s web flow.
 """
 
 from __future__ import annotations
@@ -53,9 +44,8 @@ from urbanlens.dashboard.services.core.celery import get_task_progress, safely_e
 if TYPE_CHECKING:
     from rest_framework.request import Request
 
-#: How long a turn's originating (message, history) stays cached for the poll
-#: endpoint to read back - matches the turn record's own TTL (turns.py) so
-#: neither expires first.
+#: How long a turn's originating (message, history) stays cached for the poll endpoint to read back - matches
+#: the turn record's own TTL (turns.py) so neither expires first.
 _CONTEXT_TTL_SECONDS = 15 * 60
 _UNAVAILABLE_ERROR = "AI features are currently turned off for your account or this site."
 _QUEUE_FAILED_ERROR = "Couldn't reach the assistant just now. Please try again."
@@ -99,12 +89,9 @@ def _poll_attempt(request: Request) -> int:
 def _finished_result(task_id: str, turn_id: str) -> dict[str, Any] | None:
     """This turn's task result if it has finished, else ``None`` (still running).
 
-    Reads the turn-result cache before the Celery backend, so polling a
-    resolved turn again returns the same reply instead of reporting it
-    pending forever - see ``services.ai.turns.store_turn_result``. That
-    matters more here than on the web: a ``GET`` an HTTP client retries
-    (because it lost the response, or because its poll loop simply asks
-    again) must not consume the reply the first call already fetched.
+    That matters more here than on the web: a ``GET`` an HTTP client retries (because it lost the
+    response, or because its poll loop simply asks again) must not consume the reply the first call
+    already fetched.
     """
     cached = read_turn_result(turn_id)
     if cached is not None:
@@ -133,17 +120,15 @@ def _api_proposals(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
 class AssistantMessageView(ExternalApiView):
     """POST: enqueue one chat message; 202 with a turn id to poll.
 
-    Stateless: ``history`` is round-tripped through the client rather than
-    kept server-side. Entries are capped to ``MAX_HISTORY_ENTRIES`` here (the
-    same cap the web chat's session enforces).
+    Stateless: ``history`` is round-tripped through the client rather than kept server-side.
+    Entries are capped to ``MAX_HISTORY_ENTRIES`` here (the same cap the web chat's session enforces).
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "POST": frozenset({ApiKeyScope.ASSISTANT_WRITE}),
     }
-    #: The standard three plus the assistant-specific cap - a chat turn still
-    #: counts against the burst and write budgets as well. See
-    #: throttling.AssistantMessageThrottle for why a turn needs its own cap.
+    #: The standard three plus the assistant-specific cap - a chat turn still counts against the burst and write
+    #: budgets as well. See throttling.AssistantMessageThrottle for why a turn needs its own cap.
     throttle_classes: ClassVar[list] = [ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle, AssistantMessageThrottle]
 
     @extend_schema(
@@ -221,11 +206,11 @@ class AssistantTurnPollView(ExternalApiView):
 class AssistantProposalConfirmView(ExternalApiView):
     """POST: confirm (and actually run) one write-tool proposal from a resolved turn.
 
-    The write itself never ran inside the turn loop - it ran on ai-worker,
-    where ``registry.execute()`` refuses every write outright, and even off
-    ai-worker the loop always calls ``execute(..., confirmed=False)``. This
-    is that write's only real execution path: it runs here, on the ordinary
-    web process, only once the caller explicitly confirms it.
+    The write itself never ran inside the turn loop - it ran on ai-worker, where ``registry.execute()``
+    refuses every write outright, and even off ai-worker the loop always calls ``execute(...,
+    confirmed=False)``.
+    This is that write's only real execution path: it runs here, on the ordinary web process, only once
+    the caller explicitly confirms it.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -262,11 +247,10 @@ class AssistantProposalConfirmView(ExternalApiView):
 class AssistantResetView(ExternalApiView):
     """POST: reset the conversation.
 
-    A genuine no-op for this stateless shape - there is no server-side
-    history left to clear once it lives client-side. Kept for surface
-    symmetry with the web routes the mobile requirements named; a client
-    "resets" by simply discarding its own ``history`` and sending an empty
-    list on its next message.
+    A genuine no-op for this stateless shape - there is no server-side history left to clear once it
+    lives client-side.
+    Kept for surface symmetry with the web routes the mobile requirements named; a client "resets" by
+    simply discarding its own ``history`` and sending an empty list on its next message.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {

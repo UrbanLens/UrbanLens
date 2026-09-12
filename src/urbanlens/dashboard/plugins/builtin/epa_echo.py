@@ -1,38 +1,5 @@
-"""EPA ECHO plugin: EPA-regulated facility data for pinned locations. USA only.
-
-Two panels share one upstream fetch budget (``_fetch_epa_echo_data``, called
-by both panels' ``fetch()`` and writing the same ``LocationCache`` row -
-mirrors the Yelp plugin's shared-row trick between its Media-gallery tab and
-its own bespoke panel):
-
-- ``EpaEchoDetailPanelSource`` ("epa_echo_detail") - specific-site detail
-  card, shown unconditionally (not subscription-gated) whenever a regulated
-  facility's own coordinates are close enough to the pin's to plausibly BE
-  this pin, not just nearby. This is the integration's primary purpose.
-- ``EpaEchoNearbyPanelSource`` ("epa_echo") - the list of nearby regulated
-  facilities, folded into the subscription-gated "Nearby Research" tab group
-  (see ``PinController._NEARBY_RESEARCH_TABS``) rather than shown to everyone.
-
-Both panels are registered so either one's auto-load/click can populate the
-shared cache row first; if a subscriber opens the Nearby Research tab within
-the same narrow window the unconditional detail card's own auto-load fetch is
-still in flight, both may briefly race to fetch independently (their
-Celery-task single-flight keys differ, per-panel) - harmless, since the loser
-just overwrites the row with equivalent data, but worth knowing about if EPA's
-conservative rate limit ever gets tripped by that.
-
-Backed by REData's shared points-of-interest lookup (``provider="epa_echo"``)
-rather than the direct EPA ECHO REST API this project used before
-(``services.apis.locations.epa_echo``, now removed). That direct API needed a
-two-step, tightly rate-limited (5 calls/minute) dance - a nearby-search call
-with no per-facility longitude, then a separate Detailed Facility Report call
-per candidate to get real coordinates and compliance detail - which is why the
-old version of this module had a wall-clock exact-match budget and a
-closest-by-latitude candidate ordering to spend that scarce per-candidate
-budget wisely. REData's own ``epa_echo`` provider resolves every candidate's
-coordinates and compliance attributes in the single lookup call, so none of
-that per-candidate budgeting exists anymore - see :func:`_fetch_epa_echo_data`.
-"""
+"""EPA ECHO plugin: EPA-regulated facility data for pinned locations.
+Two panels share one upstream fetch budget (``_fetch_epa_echo_data``, called by both panels' ``fetch()`` and writing the same ``LocationCache`` row - mirrors the Yelp plugin's shared-row trick between its Media-gallery tab and its own bespoke panel):"""
 
 from __future__ import annotations
 
@@ -72,8 +39,7 @@ def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
         lng2: Second longitude in degrees.
 
     Returns:
-        Distance in miles.
-    """
+        Distance in miles."""
     from urbanlens.dashboard.models.profile.meta import DistanceUnit
     from urbanlens.dashboard.services.core.units import km_to_display
     from urbanlens.dashboard.services.geo.distance import haversine_km
@@ -83,34 +49,13 @@ def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 def _facility_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
     """Map a REData ``epa_echo`` points-of-interest row onto this plugin's facility shape.
-
-    The compliance data lives in ``attributes``, since the generic
-    ``PointOfInterest`` model promotes only the fields every provider can
-    answer. The keys are REData's own, read from its
-    ``parcels/services/epa_echo/lookup.py``: ``compliance_status``,
-    ``significant_violator``, ``quarters_with_violation``,
-    ``last_inspection_date``, ``inspection_count``, ``active`` and ``address``.
-    Two of them were guessed here before that module existed
-    (``quarters_in_noncompliance``, ``last_inspection``) and guessed wrong, so
-    every facility printed "last inspected no recorded inspection" and no
-    non-compliance count at all until 2026-08-19.
-
-    Unlike the direct EPA ECHO API this replaced - whose Detailed Facility
-    Report broke compliance history down per environmental statute (RCRA, CAA,
-    CWA, ...) - REData's documented attributes are a single flattened status
-    per facility, not a per-program list. A facility's history across
-    multiple statutes is no longer distinguishable; only its overall status is.
+    The compliance data lives in ``attributes``, since the generic ``PointOfInterest`` model promotes only the fields every provider can answer.
 
     Args:
         poi: One ``PointOfInterestSerializer``-shaped row with ``provider="epa_echo"``.
 
     Returns:
-        ``{"registry_id", "name", "address", "latitude", "longitude",
-        "compliance_status", "significant_violator",
-        "quarters_in_noncompliance", "last_inspection", "inspection_count"}``
-        - the two ``quarters``/``inspection`` keys keep this plugin's own
-        names, which the template and the API payload already use.
-    """
+        ``{"registry_id", "name", "address", "latitude", "longitude", "compliance_status", "significant_violator", "quarters_in_noncompliance", "last_inspection", "inspection_count"}`` - the two ``quarters``/``inspection`` keys keep this plugin's own..."""
     attributes = poi.get("attributes") or {}
     return {
         "registry_id": poi.get("external_id") or "",
@@ -128,20 +73,7 @@ def _facility_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
 
 def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
     """Search REData for nearby EPA-regulated facilities and pick out an exact-site match.
-
-    REData's own ``epa_echo`` points-of-interest provider resolves every
-    candidate's coordinates and compliance attributes in one call - unlike the
-    direct EPA ECHO API this replaced, there is no separate, rate-limited
-    per-candidate detail fetch left to budget (see the module docstring).
-
-    Every facility this function sees is still recorded in ``EpaFacility``,
-    project-wide, exactly as before - reusable by any other pin's own
-    exact-site check, and by :class:`EpaFacilityNameProvider`, without a
-    second REData call.
-
-    Returns the shape persisted to the shared LocationCache row:
-    ``{"facilities": [...], "exact_site": {...} | None}``.
-    """
+    Every facility this function sees is still recorded in ``EpaFacility``, project-wide, exactly as before - reusable by any other pin's own exact-site check, and by :class:`EpaFacilityNameProvider`, without a second REData call."""
     from urbanlens.dashboard.models.epa_facility import EpaFacility
     from urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway import RedataPointsOfInterestGateway
     from urbanlens.dashboard.services.geo.geo_filter import is_usa_coordinates
@@ -185,17 +117,11 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
 def _fetch_and_cache(pin: Pin) -> dict[str, Any]:
     """Run the shared upstream fetch, persist the shared cache row, and propagate any exact-site match.
 
-    Both panel sources' ``fetch()`` methods are this exact sequence (they
-    deliberately share one ``LocationCache`` row - see the module docstring),
-    so it lives here once instead of being duplicated in each.
-
     Args:
         pin: The pin whose location's EPA data should be (re)fetched.
 
     Returns:
-        The freshly-cached payload, so a caller can act on ``exact_site``
-        without re-reading the cache row.
-    """
+        The freshly-cached payload, so a caller can act on ``exact_site`` without re-reading the cache row."""
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
     lat = float(pin.effective_latitude or 0)
@@ -210,28 +136,12 @@ def _fetch_and_cache(pin: Pin) -> dict[str, Any]:
 
 
 def _propagate_exact_site_to_nearby_locations(location: Location, exact_site: dict[str, Any]) -> None:
-    """Apply a newly-confirmed exact-site EPA match to any other pinned Location within
-    the exact-match radius whose own ``epa_echo`` cache has no match yet.
-
-    Without this, a Location that happened to strike out on its own exact-site
-    check stays cached with an empty result for up to
-    ``SiteSettings.external_data_cache_days``, even after a neighboring pin
-    - sometimes fetched moments later - definitively proves the same facility
-    sits right there too. Since the facility's own confirmed coordinates are
-    already in hand, this costs zero extra REData calls: it's a plain
-    proximity query against already-pinned Locations, writing the same
-    ``exact_site`` payload directly into their cache rows.
-
-    Never overwrites a Location that already has its own confirmed
-    ``exact_site`` - only fills in rows that are missing or empty, so a
-    genuinely different real match is never clobbered.
+    """Apply a newly-confirmed exact-site EPA match to any other pinned Location within the exact-match radius whose own ``epa_echo`` cache has no match yet.
+    Never overwrites a Location that already has its own confirmed ``exact_site`` - only fills in rows that are missing or empty, so a genuinely different real match is never clobbered.
 
     Args:
-        location: The Location the match was just confirmed for (excluded
-            from the neighbor search - it already has the match).
-        exact_site: The confirmed exact-site payload, including its own
-            ``latitude``/``longitude``.
-    """
+        location: The Location the match was just confirmed for (excluded from the neighbor search - it already has the match).
+        exact_site: The confirmed exact-site payload, including its own ``latitude``/``longitude``."""
     from django.contrib.gis.geos import Point
     from django.contrib.gis.measure import D
 
@@ -273,14 +183,10 @@ class EpaEchoNearbyPanelSource(_EpaEchoPanelSourceBase):
     section_id = "epa-echo-section"
     icon = "factory"
     title = "EPA Regulated Facilities"
-    # The subscription gate as a fact about the source rather than only as an
-    # entry in a controller's tab dict: any surface that serves this panel -
-    # the web tab strip, the external API, whatever comes next - can now check
-    # the same field instead of each keeping its own list and eventually
-    # disagreeing about which panels are gated. Its sibling
-    # EpaEchoDetailPanelSource deliberately has no required_feature: an
-    # exact-site compliance card is the integration's primary purpose and is
-    # shown to everyone. See PinController._NEARBY_RESEARCH_TABS.
+    # The subscription gate as a fact about the source rather than only as an entry in a
+    # controller's tab dict: any surface that serves this panel - the web tab strip, the external
+    # API, whatever comes next - can now check the same field instead of each keeping its own list
+    # and eventually disagreeing about which panels are gated.
     required_feature: ClassVar[SiteFeature | None] = SiteFeature.NEARBY_RESEARCH
 
     def fetch(self, pin: Pin) -> None:
@@ -326,11 +232,7 @@ class EpaEchoNearbyPanelSource(_EpaEchoPanelSourceBase):
 
 
 class EpaEchoDetailPanelSource(_EpaEchoPanelSourceBase):
-    """Specific-site EPA compliance detail, shown whenever a regulated facility sits at this exact pin.
-
-    Not subscription-gated - this is the integration's primary purpose, as
-    opposed to EpaEchoNearbyPanelSource's list of merely-nearby facilities.
-    """
+    """Specific-site EPA compliance detail, shown whenever a regulated facility sits at this exact pin."""
 
     key = "epa_echo_detail"
     cache_source = _CACHE_SOURCE
@@ -350,18 +252,7 @@ class EpaEchoDetailPanelSource(_EpaEchoPanelSourceBase):
 
     @staticmethod
     def _add_echo_report_link(pin: Pin, location: Location, registry_id: str) -> None:
-        """Add the EPA ECHO compliance report URL to the pin's (and wiki's) links, if not already there.
-
-        Mirrors NominatimPanelSource._add_osm_link's pattern for auto-adding a
-        confirmed-relevant external report link once a facility is matched to
-        this exact pin - see render_context's footer_link for the same URL
-        shown inline on the detail card itself.
-
-        Args:
-            pin: The pin whose links should include this URL.
-            location: The pin's location, for reaching its wiki (if any).
-            registry_id: The EPA FRS Registry ID of the matched facility.
-        """
+        """Add the EPA ECHO compliance report URL to the pin's (and wiki's) links, if not already there."""
         from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
 
         url = f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}"
@@ -404,11 +295,7 @@ class EpaEchoDetailPanelSource(_EpaEchoPanelSourceBase):
 
 class EpaFacilityNameProvider(NameProvider):
     """Suggests the exact-site EPA facility's name as an official-name candidate.
-
-    Only fires when a facility was matched as genuinely AT this pin's
-    coordinates (see ``_fetch_epa_echo_data``'s exact-match check) - never
-    suggests the name of a merely-nearby facility.
-    """
+    Only fires when a facility was matched as genuinely AT this pin's coordinates (see ``_fetch_epa_echo_data``'s exact-match check) - never suggests the name of a merely-nearby facility."""
 
     def __init__(self) -> None:
         """Initialize with the ``epa_echo`` source slug."""
@@ -417,13 +304,8 @@ class EpaFacilityNameProvider(NameProvider):
     def candidates(self, location: Location) -> list[str | None]:
         """Return the exact-site facility's name, when one was matched.
 
-        Args:
-            location: The location to name.
-
         Returns:
-            A single-item list with the facility name, or empty when no
-            exact-site match exists yet (or ever).
-        """
+            A single-item list with the facility name, or empty when no exact-site match exists yet (or ever)."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         cache_row = LocationCache.get_fresh(location, _CACHE_SOURCE)

@@ -1,6 +1,5 @@
 """Deciding what a wiki shows to a viewer who has not earned its detail yet.
-A wiki row exists for every place, so absence is itself a tell - and so is any visible difference in how the site behaves for this account.
-Filtering only; ``wiki_access`` decides reachability."""
+A wiki row exists for every place, so absence is itself a tell - and so is any visible difference in how the site behaves for this account."""
 
 from __future__ import annotations
 
@@ -39,7 +38,7 @@ def accepted_friend_ids(profile: Profile) -> set[int]:
         profile: The viewer.
 
     Returns:
-        Profile pks, not including the viewer's own. Mute does not end friendship."""
+        Profile pks, not including the viewer's own."""
     cached = getattr(profile, _FRIEND_CACHE_ATTR, None)
     if cached is not None:
         return cached
@@ -72,16 +71,13 @@ def visible_actor_ids(profile: Profile | None) -> set[int]:
 
 def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]:
     """Return the field values a concealed viewer should be shown.
-    Reads the recorded write history rather than the live row: the live row is the union of everybody's edits, and this viewer is entitled to a subset of them.
 
     Args:
         wiki: The wiki being rendered.
         viewer: Who is looking, or None when signed out.
 
     Returns:
-        ``{field_name: value}`` covering every versioned field. A field nobody
-        the viewer can see has ever written resolves to the model default,
-        which is what a brand-new wiki would show."""
+        ``{field_name: value}`` covering every versioned field."""
     resolved = resolve_fields(
         wiki,
         sources=(WriteSource.AUTOMATIC,),
@@ -114,7 +110,6 @@ def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]
 
 def concealment_active(wiki: Wiki, viewer: Profile | None) -> bool:
     """Whether this viewer should be shown the concealed form of this wiki.
-    Currently always False; the reputation threshold is not set yet.
 
     Args:
         wiki: The wiki being rendered.
@@ -185,10 +180,7 @@ def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
         viewer: Who is looking, or None when signed out.
 
     Returns:
-        The narrowed queryset. Unchanged when the model is not in
-        :data:`_ACTOR_FIELDS` and has no special case, so a caller cannot
-        silently get an unfiltered result for a model this does understand -
-        see the KeyError path."""
+        The narrowed queryset."""
     from urbanlens.dashboard.models.images.model import Image
 
     model_name = queryset.model.__name__
@@ -233,7 +225,6 @@ def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
 
 def visible_rows(queryset: Any, wiki: Wiki, viewer: Profile | None) -> Any:
     """A wiki-scoped queryset narrowed to what *viewer* may see.
-    Worth one name for two reasons beyond brevity: it is what a by-id lookup should be scoped to, and spelling that out per call site is how nine of them ended up scoped to the wiki instead of the viewer - an existence oracle that answers "is there a row N here" for rows concealment has already decided the account cannot see, and, on the mutating routes, lets it act on one.
 
     Args:
         queryset: Rows already scoped to one wiki.
@@ -272,7 +263,6 @@ def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki:
     if is_concealed(wiki):
         # Idempotent, and cheaply so: several surfaces still call this on a wiki
         # that resolve_visible_wiki already concealed, and re-resolving the
-        # write history to reach the same answer is pure cost.
         if wiki._ul_concealed_for == viewer_key:  # noqa: SLF001
             return wiki
         # Built for somebody else. One viewer's projection must never be handed
@@ -316,7 +306,6 @@ def is_concealed(row: Concealable) -> bool:
 
 def writable_wiki(wiki: Wiki) -> Wiki:
     """Return a row that may be written: *wiki* itself, or a fresh fetch of it.
-    That function now returns a concealed projection to viewers who are gated, and a projection carries substituted values for the fields its viewer may not see - so saving it would write concealment over real community content, which is why the projection refuses ``save()`` outright.
 
     Args:
         wiki: A wiki, possibly a projection.
@@ -358,8 +347,7 @@ def visible_article_revision(article: Article, viewer: Profile | None) -> Articl
         viewer: Who is looking, or None when signed out.
 
     Returns:
-        The newest revision this viewer may see, or None when there is none -
-        which is what a place nobody has written up looks like."""
+        The newest revision this viewer may see, or None when there is none - which is what a place nobody has written up looks like."""
     return conceal_rows(article.revisions.all(), viewer).order_by("-created", "-pk").first()
 
 

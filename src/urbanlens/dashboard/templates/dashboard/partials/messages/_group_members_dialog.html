@@ -1,15 +1,4 @@
-{% comment %}
-Group members dialog: list the active members; the creator can remove members
-and add new ones (search reuses the group member-search endpoint). Injected
-into #dm-share-dialog-host by the messages page JS. Context: `group`,
-`memberships`, `is_manager`, `viewer_id`.
-
-Each membership.profile has been run through resolve_visible_identities
-(controllers/group_chats.py), which sets display_name/display_avatar_url/
-is_masked/avatar_color_class directly on it - a member added by someone
-else may not be friends with everyone here, so their real name/avatar only
-shows when their own privacy settings permit this viewer to see it.
-{% endcomment %}
+{% comment %}Group members dialog: list the active members.{% endcomment %}
 <dialog id="dm-group-members-dialog" class="dm-share-dialog ul-dialog" aria-labelledby="dm-group-members-dialog-title">
   <div class="dialog-header">
     <span id="dm-group-members-dialog-title">Members of {{ group.name }}</span>

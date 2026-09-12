@@ -72,15 +72,9 @@ def _is_locked_out(key: str) -> bool:
 def _bump_counter(key: str, timeout: int) -> int:
     """Increment a failure counter atomically and return its new value.
 
-    Read-then-write loses increments exactly when it matters: parallel failed
-    logins all read the same value and write the same successor, so a spray
-    run wide enough never reaches the limit it is being counted against.
-    ``incr`` is a single operation on every backend we run (Valkey's INCR,
-    LocMemCache under its lock).
-
-    ``touch`` afterwards keeps the window sliding from the most recent
-    failure, which is what ``incr`` alone would give up - it leaves the
-    original expiry in place.
+    Read-then-write loses increments exactly when it matters: parallel failed logins all read the same
+    value and write the same successor, so a spray run wide enough never reaches the limit it is being
+    counted against.
 
     Args:
         key: The counter's cache key.
@@ -103,11 +97,8 @@ def _bump_counter(key: str, timeout: int) -> int:
 def _resolve_login_user(identifier: str) -> User | None:
     """Resolve a submitted login identifier to the account it would authenticate against.
 
-    Mirrors ``EmailOrUsernameModelBackend``: an exact username match first,
-    then (if the identifier looks like an email) a primary/verified-secondary/
-    normalized-email lookup via ``find_user_by_email``. Used so failed-login
-    tracking can be keyed by stable account id rather than by the raw
-    submitted string.
+    Used so failed-login tracking can be keyed by stable account id rather than by the raw submitted
+    string.
 
     Args:
         identifier: The raw "username" field value as submitted.
@@ -136,10 +127,9 @@ def _lockout_key_for_user(user: User) -> str:
 def _raw_lockout_key(identifier: str) -> str:
     """Return a normalized fallback lockout-key fragment for an unresolved identifier.
 
-    Still collapses case and (for email-shaped input) Gmail dot/plus variants,
-    so probing textual variants of an identifier that doesn't match any
-    account is rate-limited under one shared key rather than each variant
-    getting a fresh counter - it just isn't tied to a real account id.
+    Still collapses case and (for email-shaped input) Gmail dot/plus variants, so probing textual
+    variants of an identifier that doesn't match any account is rate-limited under one shared key rather
+    than each variant getting a fresh counter - it just isn't tied to a real account id.
     """
     from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
@@ -152,13 +142,9 @@ def _raw_lockout_key(identifier: str) -> str:
 def _lockout_key_for_identifier(identifier: str) -> str:
     """Resolve a raw submitted login identifier to its lockout-counter key.
 
-    Rotating through equivalent-but-textually-distinct identifiers for the
-    same account (Gmail dot/plus variants, a verified secondary email) all
-    collapse onto the same counter instead of each getting its own untripped
-    one. Falls back to a normalized raw-string key when no account matches,
-    so unknown-identifier probing is still rate-limited (just under a
-    different key) - the lockout *check* itself behaves identically either
-    way, so this introduces no account-enumeration side channel.
+    Rotating through equivalent-but-textually-distinct identifiers for the same account (Gmail dot/plus
+    variants, a verified secondary email) all collapse onto the same counter instead of each getting its
+    own untripped one.
 
     Args:
         identifier: The raw "username" field value as submitted.
@@ -174,8 +160,8 @@ def _record_failed_attempt(key: str) -> int:
     """Increment the failure counter; apply lockout when the limit is reached.
 
     Args:
-        key: The resolved lockout key (see ``_lockout_key_for_identifier``)
-            for the identifier that just failed to authenticate.
+        key: The resolved lockout key (see ``_lockout_key_for_identifier``) for the identifier that just
+        failed to authenticate.
 
     Returns:
         The updated failure count (after incrementing).
@@ -205,8 +191,8 @@ def _clear_login_attempts(key: str) -> None:
     """Remove failure tracking after a successful login.
 
     Args:
-        key: The resolved lockout key (see ``_lockout_key_for_user``) for the
-            account that just authenticated successfully.
+        key: The resolved lockout key (see ``_lockout_key_for_user``) for the account that just
+        authenticated successfully.
     """
     cache.delete(_attempts_key(key))
     cache.delete(_lockout_key(key))
@@ -215,9 +201,9 @@ def _clear_login_attempts(key: str) -> None:
 def _lockout_error_message(minutes: int) -> str:
     """The error shown when a login attempt is refused at the lockout gate.
 
-    A single source keeps the identifier-lockout and per-IP-throttle rejections
-    byte-identical, so a refused attempt reveals neither which dimension
-    (account or address) tripped nor whether the identifier exists.
+    A single source keeps the identifier-lockout and per-IP-throttle rejections byte-identical, so a
+    refused attempt reveals neither which dimension (account or address) tripped nor whether the
+    identifier exists.
 
     Args:
         minutes: The configured ``SiteSettings.login_lockout_minutes``.
@@ -239,19 +225,16 @@ def _login_ip_attempts_key(ip: str) -> str:
 def _is_ip_locked_out(request: HttpRequest) -> bool:
     """Return True if the requesting IP has exhausted its failed-login budget.
 
-    Complements the per-identifier lockout: that one stops repeated attempts on
-    a single account but lets one address spray attempts across many
-    identifiers (and doubles as a targeted DoS, since anyone can trip it for a
-    victim's identifier at no cost to themselves). This throttle counts
-    failures per client IP regardless of the identifier submitted.
+    Complements the per-identifier lockout: that one stops repeated attempts on a single account but
+    lets one address spray attempts across many identifiers (and doubles as a targeted DoS, since anyone
+    can trip it for a victim's identifier at no cost to themselves).
 
     Args:
         request: The incoming login request.
 
     Returns:
-        True when the IP's failure count has reached
-        ``SiteSettings.login_ip_max_attempts`` within the current window;
-        always False when that setting is 0 (disabled).
+        True when the IP's failure count has reached ``SiteSettings.login_ip_max_attempts`` within the
+        current window; always False when that...
     """
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
@@ -265,10 +248,8 @@ def _is_ip_locked_out(request: HttpRequest) -> bool:
 def _record_login_ip_failure(request: HttpRequest) -> int:
     """Increment the requesting IP's failed-login counter.
 
-    Failures only - a successful login never touches the counter, so the
-    throttle simply expires ``login_lockout_minutes`` after the last recorded
-    failure. Mirrors the ``_PASSPHRASE_RATE_LIMIT`` cache-counter pattern used
-    elsewhere in this module.
+    Failures only - a successful login never touches the counter, so the throttle simply expires
+    ``login_lockout_minutes`` after the last recorded failure.
 
     Args:
         request: The login request that just failed.
@@ -313,9 +294,8 @@ def _is_two_factor_locked_out(user_id: int) -> bool:
 def _record_two_factor_failure(user_id: int) -> int:
     """Increment the 2FA code failure counter; lock out once the limit is reached.
 
-    Reuses ``SiteSettings.login_max_attempts``/``login_lockout_minutes`` so a
-    password-verified attacker can't brute-force the TOTP/backup-code fallback
-    within a single session.
+    Reuses ``SiteSettings.login_max_attempts``/``login_lockout_minutes`` so a password-verified attacker
+    can't brute-force the TOTP/backup-code fallback within a single session.
 
     Args:
         user_id: Primary key of the user mid-2FA-challenge.
@@ -438,9 +418,9 @@ class SignupView(generic.CreateView):
         self._send_verification_email(user, verification)
         # Store the email in session so the "check email" page can display it
         self.request.session["pending_verification_email"] = user.email
-        # Store pending invite token (if the user arrived via an invitation link)
-        # in the session as a fast path and on the verification record so invite
-        # acceptance survives opening the verification email in a different browser.
+        # Store pending invite token (if the user arrived via an invitation link) in the session as a fast path
+        # and on the verification record so invite acceptance survives opening the verification email in a
+        # different browser.
         if _coerce_invite_token(invite_token):
             self.request.session["pending_invite_token"] = invite_token
         return redirect("verify_email_sent")
@@ -473,11 +453,8 @@ class SignupView(generic.CreateView):
 def _store_signup_auth_salt(user: User, auth_salt: str) -> None:
     """Record a signup's client-side KDF salt, enrolling the account in derived auth.
 
-    When the signup form's JS derived the login credential in the browser, the
-    salt it used arrives as ``e2ee_auth_salt`` - storing it is what makes the
-    login page derive the same credential later. A signup without it (JS
-    unavailable) simply stays a legacy raw-password account and upgrades
-    transparently on first login.
+    When the signup form's JS derived the login credential in the browser, the salt it used arrives as
+    ``e2ee_auth_salt`` - storing it is what makes the login page derive the same credential later.
 
     Args:
         user: The newly created user.
@@ -546,8 +523,6 @@ class VerifyEmailView(View):
         invite_token = session_invite_token or verification.pending_invite_token
         _process_pending_invitations(user, invite_token=str(invite_token) if invite_token else None)
 
-        # Deliver any friend requests + visit suggestions that were waiting on
-        # this email address (visit participants tagged before the account existed).
         from urbanlens.dashboard.services.visits.visit_invites import process_pending_visit_invites
 
         process_pending_visit_invites(user)
@@ -609,10 +584,9 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
 def _unicode_ci_compare(s1: str, s2: str) -> bool:
     """Case-insensitive Unicode comparison (Unicode Technical Report 36, 2.11.2(B)(2)).
 
-    Mirrors ``django.contrib.auth.forms._unicode_ci_compare`` - reimplemented
-    locally rather than imported because that name is private and untyped in
-    django-stubs; it backs the same DB-``__iexact``-plus-Python-comparison
-    pattern Django's own ``PasswordResetForm.get_users()`` uses.
+    Mirrors ``django.contrib.auth.forms._unicode_ci_compare`` - reimplemented locally rather than
+    imported because that name is private and untyped in django-stubs; it backs the same
+    DB-``__iexact``-plus-Python-comparison pattern Django's own ``PasswordResetForm.get_users()`` uses.
 
     Args:
         s1: First string to compare.
@@ -627,15 +601,15 @@ def _unicode_ci_compare(s1: str, s2: str) -> bool:
 def sso_provider_hint(user: User) -> str:
     """Name the social-auth provider a passwordless account signed up through.
 
-    Shared by the set-password prompt and the SSO-aware password reset form
-    so the two surfaces never drift on how a provider is named.
+    Shared by the set-password prompt and the SSO-aware password reset form so the two surfaces never
+    drift on how a provider is named.
 
     Args:
         user: The user to inspect.
 
     Returns:
-        A display name like ``"Google"``/``"Discord"``, or the generic
-        ``"a social account"`` fallback if no provider row is found.
+        A display name like ``"Google"``/``"Discord"``, or the generic ``"a social account"`` fallback
+        if no provider row is found.
     """
     provider = user.social_auth.values_list("provider", flat=True).first() if hasattr(user, "social_auth") else None
     return {"google-oauth2": "Google", "discord": "Discord"}.get(provider or "", "a social account")
@@ -644,19 +618,9 @@ def sso_provider_hint(user: User) -> str:
 class ResetPasswordWithApiKeyChoiceForm(SetPasswordForm):
     """The reset form, plus the offer to revoke API keys along with the password.
 
-    Resetting a password invalidates every session, which is what makes it the
-    standard response to a suspected compromise - but it does not touch
-    ``ApiKey`` rows, and a key can be minted from a session alone. So the
-    remedy a victim reaches for leaves the intruder's long-lived credential
-    working.
-
-    Asked here rather than after the reset because ``post_reset_login`` is
-    False: this POST is the only moment in the flow where the account is
-    identified. A prompt on the next page would have no principal to act as.
-
-    Not required, and default off. Revoking is the destructive answer, most
-    resets are ordinary forgetfulness, and a key that stops working without the
-    owner choosing that is a broken integration they have to debug.
+    Asked here rather than after the reset because ``post_reset_login`` is False: this POST is the only
+    moment in the flow where the account is identified.
+    A prompt on the next page would have no principal to act as.
     """
 
     revoke_api_keys = forms.BooleanField(
@@ -669,35 +633,30 @@ class ResetPasswordWithApiKeyChoiceForm(SetPasswordForm):
 class SsoAwarePasswordResetForm(PasswordResetForm):
     """PasswordResetForm that tells SSO-only accounts how to sign in (UL-257).
 
-    Django's stock ``get_users()`` silently drops any account with
-    ``has_usable_password() == False`` - correct for building a raw-password
-    reset link, but the view shows the same generic "check your email"
-    success page regardless, so an SSO-only user who requests a reset is
-    told it worked and then never receives anything, with no hint that their
-    account has no password to reset in the first place.
-
-    This keeps the anti-enumeration property (the requester-facing response
-    never reveals which branch fired, or whether the address matched at all)
-    by still matching SSO-only accounts in ``get_users()``, then routing them
-    to a different email in ``send_mail()`` that names their sign-in
+    Django's stock ``get_users()`` silently drops any account with ``has_usable_password() == False`` -
+    correct for building a raw-password reset link, but the view shows the same generic "check your
+    email" success page regardless, so an SSO-only user who requests a reset is told it worked and then
+    never receives anything, with no hint that their account has no password to reset in the first
+    place.
+    This keeps the anti-enumeration property (the requester-facing response never reveals which branch
+    fired, or whether the address matched at all) by still matching SSO-only accounts in
+    ``get_users()``, then routing them to a different email in ``send_mail()`` that names their sign-in
     provider instead of a reset link.
     """
 
     def get_users(self, email: str):
         """Include SSO-only accounts alongside password-auth accounts.
 
-        Mirrors ``PasswordResetForm.get_users()`` exactly, minus the
-        ``has_usable_password()`` filter. Uses ``get_user_model()`` and a
-        local NFKC-normalized casefold comparison rather than importing
-        Django's private, untyped ``UserModel``/``_unicode_ci_compare``
-        module internals, which django-stubs doesn't expose.
+        Uses ``get_user_model()`` and a local NFKC-normalized casefold comparison rather than importing
+        Django's private, untyped ``UserModel``/``_unicode_ci_compare`` module internals, which django-stubs
+        doesn't expose.
 
         Args:
             email: The submitted email address.
 
         Returns:
-            A generator of active users matching ``email``, regardless of
-            whether they have a usable password.
+            A generator of active users matching ``email``, regardless of whether they have a usable
+            password.
         """
         user_model = get_user_model()
         email_field_name = user_model.get_email_field_name()
@@ -740,19 +699,12 @@ class SsoAwarePasswordResetForm(PasswordResetForm):
 class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
     """PasswordResetConfirmView that keeps derived-auth accounts consistent.
 
-    An email-link reset never sees the old password, which has two E2EE
-    consequences this view handles:
+    An email-link reset never sees the old password, which has two E2EE consequences this view handles:
 
-    - Derived-auth accounts (``AccountKdf`` exists) get their new credential
-      derived client-side; the fresh salt arrives as ``e2ee_auth_salt`` and
-      replaces the stored one. If the field is missing (JS failed), the
-      ``AccountKdf`` row is deleted so the account reverts to legacy
-      raw-password auth instead of being locked out by a derivation mismatch -
-      it re-upgrades transparently at the next login.
-    - Any password-wrapped private-key copy is now undecryptable (the old
-      password is gone), so it is flagged stale. The next login from a device
-      that still holds the cached key silently re-wraps it; a cold device
-      falls back to the recovery key.
+    - Derived-auth accounts (``AccountKdf`` exists) get their new credential derived client-side; the
+      fresh salt arrives as ``e2ee_auth_salt`` and replaces the sto...
+    - Any password-wrapped private-key copy is now undecryptable (the old password is gone), so it is
+      flagged stale. The next login from a device that still holds ...
     """
 
     form_class = ResetPasswordWithApiKeyChoiceForm
@@ -764,8 +716,7 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
             **kwargs: Base context kwargs.
 
         Returns:
-            The template context with ``e2ee_mode`` (``derived``/``legacy``)
-            and ``active_api_key_count``.
+            The template context with ``e2ee_mode`` (``derived``/``legacy``) and ``active_api_key_count``.
         """
         from urbanlens.dashboard.models.account import AccountKdf
         from urbanlens.dashboard.services.auth.api_keys import active_api_key_count
@@ -773,12 +724,8 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
         context = super().get_context_data(**kwargs)
         user = getattr(self, "user", None)
         context["e2ee_mode"] = "derived" if user is not None and AccountKdf.objects.for_user(user).exists() else "legacy"
-        # Gated on validlink, not on `user`. Django resolves self.user from the
-        # uidb64 *before* checking the token, and a uidb64 is an encoded integer
-        # pk - so keying on `user` alone would publish any account's key count on
-        # the unauthenticated "Link expired" page. The count only, never the key
-        # names: those are user-authored text on a page that today reveals
-        # nothing about the account, and the settings page already lists them.
+        # Gated on validlink, not on `user`. The count only, never the key names: those are user-authored text
+        # on a page that today reveals nothing about the account, and the settings page already lists them.
         context["active_api_key_count"] = active_api_key_count(user) if self.validlink and user is not None else 0
         return context
 
@@ -808,9 +755,8 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
             from urbanlens.dashboard.services.auth.api_keys import revoke_all_api_keys
 
             revoked = revoke_all_api_keys(user)
-            # auth_base.html renders messages, and password_reset_complete
-            # extends it - so this is the one surface that can confirm it, the
-            # account having no session to land in.
+            # auth_base.html renders messages, and password_reset_complete extends it - so this is the one
+            # surface that can confirm it, the account having no session to land in.
             messages.success(self.request, f"Revoked {revoked} API key{'' if revoked == 1 else 's'}. Any app using one will need a new key.")
         return response
 
@@ -821,20 +767,13 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
 class CustomLoginView(LoginView):
     """LoginView extended with rate limiting and inactive-account detection.
 
-    Rate limiting has two independent dimensions, both stored in Django's cache
-    (no extra DB table needed) so they reset automatically when the cache is
-    cleared or expires:
+    Rate limiting has two independent dimensions, both stored in Django's cache (no extra DB table
+    needed) so they reset automatically when the cache is cleared or expires:
 
-    - Per identifier: after ``SiteSettings.login_max_attempts`` consecutive
-      failures the account is locked for ``SiteSettings.login_lockout_minutes``
-      minutes.
-    - Per client IP: after ``SiteSettings.login_ip_max_attempts`` failures
-      across *any* identifiers, further attempts from that address are refused
-      for the same window - the brake on spraying that the identifier lockout
-      cannot provide.
-
-    Both gates emit the same error text (see ``_lockout_error_message``).
-    Setting either threshold to 0 in site admin disables that dimension.
+    - Per identifier: after ``SiteSettings.login_max_attempts`` consecutive failures the account is
+      locked for ``SiteSettings.login_lockout_minutes`` minutes.
+    - Per client IP: after ``SiteSettings.login_ip_max_attempts`` failures across *any* identifiers,
+      further attempts from that address are refused for the same wi...
     """
 
     template_name = "registration/login.html"
@@ -847,17 +786,12 @@ class CustomLoginView(LoginView):
     def get_context_data(self, **kwargs):
         """Add ``is_first_run`` so the template can drop "Welcome back" on a fresh install.
 
-        "Welcome back" makes no sense on the very first login form anyone
-        ever sees on a brand-new instance - there is no possible "back" to
-        refer to (UL-179). ``User.objects.exists()`` would already be True
-        by the time this page is reached (registration creates the account
-        *before* the user logs in), so this uses
-        ``bootstrap_admin_onboarding_complete`` instead - it defaults False
-        for a genuinely empty site and stays False through the whole
-        registration -> login -> setup-wizard journey, only flipping True
-        once the bootstrap admin finishes onboarding (see
-        ``services.admin.site_admin``), which is the actual window this copy
-        should stay off for.
+        ``User.objects.exists()`` would already be True by the time this page is reached (registration
+        creates the account *before* the user logs in), so this uses ``bootstrap_admin_onboarding_complete``
+        instead - it defaults False for a genuinely empty site and stays False through the whole
+        registration -> login -> setup-wizard journey, only flipping True once the bootstrap admin finishes
+        onboarding (see ``services.admin.site_admin``), which is the actual window this copy should stay off
+        for.
         """
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
@@ -874,12 +808,8 @@ class CustomLoginView(LoginView):
             minutes = SiteSettings.get_current().login_lockout_minutes
             form = self.get_form()
             form.errors["__all__"] = form.error_class([_lockout_error_message(minutes)])
-            # Deliberately not self.form_invalid: that override is the failure
-            # accounting path, and no credential was checked here. Counting a
-            # gate response fed each throttle from the other - retries against
-            # an already-locked identifier drained the shared IP budget, and
-            # once an IP was throttled, submitting a victim's username locked
-            # *their* account too, correct password or not.
+            # Deliberately not self.form_invalid: that override is the failure accounting path, and no
+            # credential was checked here.
             return super().form_invalid(form)
         return super().post(request, *args, **kwargs)
 
@@ -904,18 +834,14 @@ class CustomLoginView(LoginView):
         return super().form_valid(form)
 
     def form_invalid(self, form: AuthenticationForm) -> HttpResponse:
-        # Count every failure against the requesting IP too, whatever the
-        # identifier (or lack of one). Skipped once the IP is already at its
-        # limit, mirroring the identifier counter below, so the window is
-        # fixed rather than sliding while an attacker keeps hammering.
+        # Count every failure against the requesting IP too, whatever the identifier (or lack of one).
         if not _is_ip_locked_out(self.request):
             _record_login_ip_failure(self.request)
 
         username = form.data.get("username", "").strip()
         if username:
-            # Resolve once: used both to key the lockout counter by stable
-            # account id (so equivalent identifiers for the same account share
-            # one counter) and, below, for the unverified-account hint.
+            # Resolve once: used both to key the lockout counter by stable account id (so equivalent identifiers
+            # for the same account share one counter) and, below, for the unverified-account hint.
             user = _resolve_login_user(username)
             lockout_key = _lockout_key_for_user(user) if user is not None else _raw_lockout_key(username)
 
@@ -952,8 +878,8 @@ def _pending_2fa_user(request: HttpRequest) -> User | None:
         request: The incoming request.
 
     Returns:
-        The active User awaiting a passkey assertion, or None if there isn't one
-        (either nothing pending, or the stashed id no longer resolves to an active user).
+        The active User awaiting a passkey assertion, or None if there isn't one (either nothing
+        pending, or the stashed id no longer resolves...
     """
     user_id = request.session.get(_WEBAUTHN_PENDING_USER_KEY)
     if not user_id:
@@ -985,10 +911,10 @@ def _complete_two_factor_login(request: HttpRequest, user: User) -> str:
 class LoginTwoFactorView(View):
     """Renders the 2FA challenge page reached after a password login.
 
-    Only reachable via ``CustomLoginView.form_valid()`` stashing a pending user
-    id in the session - visiting directly without that redirects to login.
-    Offers a passkey prompt, a TOTP/backup-code form, or both, depending on
-    what the account has configured.
+    Only reachable via ``CustomLoginView.form_valid()`` stashing a pending user id in the session -
+    visiting directly without that redirects to login.
+    Offers a passkey prompt, a TOTP/backup-code form, or both, depending on what the account has
+    configured.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -997,13 +923,10 @@ class LoginTwoFactorView(View):
         user = _pending_2fa_user(request)
         if user is None:
             return redirect("login")
-        # A passkey-only account (no TOTP/backup codes) never renders this
-        # page's one {% csrf_token %} tag (inside the code-fallback form), so
-        # Django would otherwise only set the csrftoken cookie here if an
-        # earlier page in the session happened to. runLogin()'s options/verify
-        # fetches need that cookie unconditionally - forcing it explicitly
-        # guarantees it regardless of how the user reached this page (password
-        # login or SSO).
+        # A passkey-only account (no TOTP/backup codes) never renders this page's one {% csrf_token %} tag
+        # (inside the code-fallback form), so Django would otherwise only set the csrftoken cookie here if an
+        # earlier page in the session happened to. runLogin()'s options/verify fetches need that cookie
+        # unconditionally - forcing it explicitly guarantees it regardless of how the user reached this page
         get_token(request)
         return render(request, "registration/login_2fa.html", _two_factor_challenge_context(user))
 
@@ -1105,25 +1028,14 @@ class LoginTwoFactorCancelView(View):
         return redirect("login")
 
 
-#: How long "Not now" on the credential prompt stays quiet. Profile-persisted:
-#: the old per-session flag re-nagged SSO users on every signin, which trained
-#: them to dismiss security prompts (see docs/designs/e2ee-passkey-unlock.md).
+#: How long "Not now" on the credential prompt stays quiet. Profile-persisted: the old per-session flag
+#: re-nagged SSO users on every signin, which trained them to dismiss security prompts (see
+#: docs/designs/e2ee-passkey-unlock.md).
 CREDENTIAL_PROMPT_SNOOZE = timedelta(days=30)
 
 
 def _needs_credential_prompt(profile) -> bool:
     """True when this account should see the add-a-passkey-or-password prompt.
-
-    The prompt exists to give a passwordless (SSO) account *some* durable way
-    back into its encrypted messages on a cold device, so what silences it is
-    an unlock path, not a credential row. Owning a passkey is not the same
-    thing: an authenticator without ``prf`` support, or one enrolled before
-    this feature existed, carries no ``E2EEPasskeyWrap`` and unwraps nothing.
-    Treating those as "handled" left exactly the accounts this prompt is for
-    permanently unprompted.
-
-    Accounts with no key bundle have nothing to unlock, so for them any
-    passkey is credential enough.
 
     Args:
         profile: The signed-in user's profile.
@@ -1150,11 +1062,7 @@ def _needs_credential_prompt(profile) -> bool:
 class SetPasswordPromptView(LoginRequiredMixin, View):
     """GET /accounts/set-password/ - offer a passwordless account a passkey or a password.
 
-    Reached from ``PostLoginRedirectView`` after a login of an account with no
-    usable password and no passkey. The passkey path is primary (one tap, and
-    the PRF wrap makes encrypted messages unlock on any device); the password
-    form is the fallback for browsers without WebAuthn. "Not now" snoozes for
-    ``CREDENTIAL_PROMPT_SNOOZE`` rather than one session.
+    "Not now" snoozes for ``CREDENTIAL_PROMPT_SNOOZE`` rather than one session.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -1176,10 +1084,9 @@ class SetPasswordPromptView(LoginRequiredMixin, View):
 class SetPasswordSkipView(View):
     """POST /accounts/set-password/skip/ - snooze the prompt for a month.
 
-    POST rather than GET because the snooze outlives the session: as a GET it
-    was reachable by cross-site top-level navigation, which carries a
-    SameSite=Lax session cookie, so any page could silence a security prompt
-    for a month on the visitor's behalf.
+    POST rather than GET because the snooze outlives the session: as a GET it was reachable by
+    cross-site top-level navigation, which carries a SameSite=Lax session cookie, so any page could
+    silence a security prompt for a month on the visitor's behalf.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -1217,9 +1124,8 @@ class PostLoginRedirectView(View):
         except Profile.DoesNotExist:
             profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        # Social-auth accounts have no usable password. Offer a passkey (or a
-        # password) so their encrypted messages can unlock on a new device -
-        # once, with a month-long snooze, not per session.
+        # Social-auth accounts have no usable password. Offer a passkey (or a password) so their encrypted
+        # messages can unlock on a new device - once, with a month-long snooze, not per session.
         if _needs_credential_prompt(profile):
             return redirect("account.set_password")
 
@@ -1248,31 +1154,17 @@ def _coerce_invite_token(invite_token: object) -> UUID | None:
 def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
     """Return open invitations matching the user's email and/or signup invite token.
 
-    The ``accepted_at__isnull=True`` filter here only narrows the candidate
-    set at selection time - it does NOT guard against reprocessing, since two
-    concurrent verifications can both select the same open invitation. The
-    actual guard is the write-time conditional claim
-    (``FriendInvitation.mark_accepted``) that ``_apply_pending_invitation``
-    performs before any side effect.
-
-    Deliberately does NOT filter on ``expires_at``: any
-    ``PendingSubscriptionGrant`` attached to an invite is a promise that
-    shouldn't silently evaporate just because the invited user took longer
-    than the 14-day window to verify their email. The friend-connection side
-    of an expired invite may be a bit stale, but ``Friendship.request`` is a
-    harmless no-op-ish call for that - losing an unredeemed grant is the
-    worse outcome.
+    The ``accepted_at__isnull=True`` filter here only narrows the candidate set at selection time - it
+    does NOT guard against reprocessing, since two concurrent verifications can both select the same
+    open invitation.
     """
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
     from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
     pending_by_id: dict[int, FriendInvitation] = {}
 
-    # Matched on the normalized address, not case-insensitive-exact, so a
-    # pending invite sent to a Gmail dot/+ variant of this address is still
-    # found - see FriendInvitation.email_normalized. Skipped entirely for a
-    # blank email so a blank-normalized invitation row (there should be none,
-    # but see the field's own blank default) can never spuriously match.
+    # Matched on the normalized address, not case-insensitive-exact, so a pending invite sent to a Gmail dot/+
+    # variant of this address is still found - see FriendInvitation.email_normalized.
     normalized_email = normalize_email(user.email) if user.email else ""
     if normalized_email:
         for invitation in FriendInvitation.objects.filter(
@@ -1331,11 +1223,7 @@ def _apply_pending_invitation(invitation, profile) -> None:
     direction, since the side effects here (a friend request, a notification,
     a subscription grant) are ones a user would notice twice.
     """
-    # Claimed exactly once. Both branches of the 2026-08-17 merge added this
-    # guard and the resolution kept both copies, so the second call always
-    # returned False against its own predecessor and the function bailed before
-    # creating anything - an email-verified invitation produced no friend
-    # request, no notification and no subscription grant.
+    # Claimed exactly once.
     if not invitation.mark_accepted():
         return
 
@@ -1408,29 +1296,18 @@ _PASSWORD_CHECK_MAX_LENGTH = 1024
 def validate_password_policy(request: HttpRequest) -> JsonResponse:
     """Run a candidate password through the configured ``AUTH_PASSWORD_VALIDATORS``.
 
-    Exists for the E2EE signup / password-reset / password-change flows: the
-    client derives the login credential from the raw password *before* submit,
-    so the credential the server authenticates always "looks strong" and the
-    configured validators (length 12, complexity, common-password, HIBP
-    breach check) would otherwise never run against the real password at all.
-    The raw password crosses HTTPS exactly once here, is validated in memory,
-    and is never stored or logged (decision 2026-07-23, "Option (a): a
-    validation endpoint" in docs/NOTES.md - rather than duplicating every
-    validator's rules in TypeScript and keeping them in sync by hand).
-
-    Anonymous by design (signup has no session yet). Rate-limited per IP
-    primarily to bound the outbound HIBP range-API calls this can trigger.
+    Exists for the E2EE signup / password-reset / password-change flows: the client derives the login
+    credential from the raw password *before* submit, so the credential the server authenticates always
+    "looks strong" and the configured validators (length 12, complexity, common-password, HIBP breach
+    check) would otherwise never run against the real password at all.
 
     Args:
-        request: JSON body with ``password`` plus optional ``username`` and
-            ``email`` (fed to ``UserAttributeSimilarityValidator`` so
-            "password resembles your username" is caught before the account
-            exists).
+        request: JSON body with ``password`` plus optional ``username`` and ``email`` (fed to
+        ``UserAttributeSimilarityValidator`` so "password resembles...
 
     Returns:
-        JSON ``{valid, errors}`` (200), 400 on a malformed body, or 429 when
-        rate-limited - callers treat any non-200 as "could not check" and
-        fail open, since the 12-char client-side floor still applies.
+        JSON ``{valid, errors}`` (200), 400 on a malformed body, or 429 when rate-limited - callers
+        treat any non-200 as "could not check" and...
     """
     from django.contrib.auth.password_validation import validate_password
 

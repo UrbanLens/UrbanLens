@@ -1,15 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-Organize > Display Order tab's priority list.
-
-Context:
-  priority_items - Label queryset (tags/categories/statuses), in display order
-
-Rendered both on the initial Organize page load and by OrganizePriorityListView
-(refetched via the `refreshPriority` event, fired after any label create/edit/
-delete/merge/bulk-edit/convert elsewhere on the page - this list was previously
-only ever built once at page load and never caught up with those changes).
-{% endcomment %}
+{% comment %}Organize > Display Order tab's priority list.{% endcomment %}
 <div id="priority-list" class="priority-list" data-save-url="{% url 'organize.priority.save' %}"
      hx-get="{% url 'organize.priority.list' %}" hx-trigger="refreshPriority from:body" hx-swap="innerHTML">
     {% for item in priority_items %}

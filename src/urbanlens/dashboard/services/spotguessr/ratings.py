@@ -1,9 +1,4 @@
-"""Applying a completed round's results to Glicko-2 ratings.
-
-See ``docs/designs/drafts/spotguessr.md`` ("Glicko-2 ratings: player skill vs.
-location difficulty") for why a round is treated as one rating period for
-both the players and the location.
-"""
+"""Applying a completed round's results to Glicko-2 ratings."""
 
 from __future__ import annotations
 
@@ -19,8 +14,7 @@ from urbanlens.dashboard.services.spotguessr.scoring import MAX_ROUND_POINTS
 
 @dataclass(frozen=True)
 class RatingChange:
-    """One profile's display-scale Glicko-2 rating, before and after a single round.
-    Surfaced all the way out to the frontend (``serializers.serialize_reveal``/ ``serialize_round_reveal``) so a round's reveal can show "▲ +14 rating" - see the SpotGuessr audit's "the game computes your rating change every round and never shows it to you" finding."""
+    """One profile's display-scale Glicko-2 rating, before and after a single round."""
 
     rating_before: float
     rating_after: float
@@ -37,10 +31,7 @@ def apply_round_ratings(round_: GameRound, guesses: list[Guess]) -> dict[int, Ra
     ``services.spotguessr.session._finish_round`` is the only caller and enforces this.
 
     Returns:
-        Each guessing profile's own ``RatingChange`` from this round, keyed
-        by profile id - the immediate "how did I do" signal a round's reveal
-        can't get from anywhere else, since the before/after ratings only
-        ever exist in-memory here."""
+        Each guessing profile's own ``RatingChange`` from this round, keyed by profile id - the immediate "how did I do" signal a round's reveal can't get from anywhere else, since the before/after ratings only ever exist in-memory here."""
     if not guesses:
         return {}
 

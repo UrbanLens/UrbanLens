@@ -105,9 +105,7 @@ class DatabaseBackup:
 
     def run(self) -> bool:
         """Run ``pg_dump`` and purge old backups; return True on success."""
-        # Belt-and-suspenders: callers (e.g. tasks._run_database_backup) already create this
-        # directory explicitly before calling run(), but this method should be safe to call
-        # on its own too.
+        # Also safe to call standalone, not just via the task wrapper.
         self.create_backup_dir()
 
         backup_filename = f"backup_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.sql"

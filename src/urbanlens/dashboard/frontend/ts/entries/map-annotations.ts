@@ -1,15 +1,5 @@
 /**
- * Shared map annotations page: markup drawing/editing, the unified detail-pin
- * side panel, the typed boundary editor (+ its context menu), the photo
- * layer, and the Details/Photos layers list panel. Used identically by the
- * Private Pin page and the Location wiki page. The map's right-click menu is
- * the shared base (copy coordinates, Street View, directions) plus "Create
- * child pin here"; boundary polygons extend that same menu with Edit /
- * Convert / Delete.
- *
- * Config comes from data-* attributes on `#map` rather than being baked into
- * the script by the template (see templates/dashboard/pages/location/index.html
- * and wiki.html), which is what lets one compiled bundle serve both pages.
+ * Shared map annotations page: markup drawing/editing, the unified detail-pin side panel, the typed boundary editor.
  */
 import { safeColor } from "../shared/markup-engine";
 import { getCsrfToken } from "../shared/csrf";
@@ -24,18 +14,12 @@ import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoM
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
 import { openMediaLightbox } from "../shared/media-lightbox";
 
-// Exposed at module scope, not inside the page-init function below: this
-// needs no page-specific state (it reads the clicked tile's own containing
-// grid fresh from the DOM), so it's available as soon as this shared bundle
-// loads - both pages' pin_media_items.html tiles call it directly.
+// Exposed at module scope, not inside the page-init function below.
 window.mediaOpenLightbox = openMediaLightbox;
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
-// Triggers TS to pick up @types/leaflet-draw's `declare module "leaflet"`
-// augmentation (L.Draw, L.Control.Draw, L.EditToolbar, ...) - erased at
-// build time, no runtime import (leaflet-draw is loaded via CDN like Leaflet
-// itself, only referenced here as an ambient global via `L`).
+// Triggers TS to pick up @types/leaflet-draw's `declare module "leaflet"` augmentation (L.Draw, L.Control.Draw, L.EditToolbar,...).
 import type { } from "leaflet-draw";
 
 interface DetailPinEntry {
@@ -1209,19 +1193,7 @@ function init(): void {
     }
     window._toggleDetailPinListPanel = toggleDetailPinListPanel;
 
-    // Satellite/street-view carousel controls (satellite_view.html / street_view.html
-    // fragments, HTMX-swapped into this page). Defined here - not inside those
-    // fragments' own <script> tags - because HTMX inserts a swapped fragment's DOM
-    // (including <img> tags, which start loading immediately) before it executes any
-    // <script> tags found within that same fragment: a fast-failing image (cached
-    // 404, empty src, ...) can fire its onerror before a same-fragment <script>
-    // defining the handler has run, throwing "X is not defined". Defining these
-    // globals here (this module loads and runs on page load, well before any panel
-    // fragment can be swapped in) guarantees they exist before any swap can happen.
-    // Remembers which provider's slide the user last flipped to (by its
-    // display-name `source`, e.g. "Esri World Imagery"), so the next pin
-    // detail page's satellite carousel opens on that same provider instead
-    // of always starting over at the default order - see _satShowRemembered.
+    // Satellite/street-view carousel controls (satellite_view.html / street_view.html fragments, HTMX-swapped into this page).
     const SAT_LAST_SOURCE_KEY = "ul_sat_last_source";
 
     function _satRememberSource(source: string): void {
@@ -1263,10 +1235,7 @@ function init(): void {
         _satRebuildDots(slides.length);
     }
     function _satRebuildDots(count: number): void {
-        // Prev/next only make sense with more than one slide - the server
-        // already omits them from the initial render when there's just one,
-        // but a broken image can drop the count further at runtime
-        // (_satRemoveSlide), so hide them here too if that happens.
+        // Prev/next only make sense with more than one slide.
         const prev = document.querySelector<HTMLElement>("#sat-carousel .sat-prev");
         const next = document.querySelector<HTMLElement>("#sat-carousel .sat-next");
         if (prev) prev.hidden = count <= 1;
@@ -1316,12 +1285,7 @@ function init(): void {
     };
     window._satShow = _satShow;
 
-    // The interactive embed (see street_view.html's .sv-embed) is a cross-origin
-    // iframe: Google renders its own "no imagery here" state (a blank/black scene)
-    // inside it, which our JS has no way to read to detect - there's no success
-    // signal either, so this can only be a manually-triggered swap
-    // (.sv-embed-fallback-btn below), never an automatic one on a timer with
-    // nothing to cancel it on success.
+    // The interactive embed is a cross-origin iframe.
     function _svSwapToStatic(slide: HTMLElement): void {
         const iframe = slide.querySelector<HTMLIFrameElement>(".sv-embed");
         const staticImg = slide.querySelector<HTMLImageElement>(".sv-img--fallback");
@@ -1352,10 +1316,7 @@ function init(): void {
         _svRebuildDots(slides.length);
     }
     function _svRebuildDots(count: number): void {
-        // Prev/next only make sense with more than one slide - the server
-        // already omits them from the initial render when there's just one,
-        // but a broken image can drop the count further at runtime
-        // (_svRemoveSlide), so hide them here too if that happens.
+        // Prev/next only make sense with more than one slide.
         const prev = document.querySelector<HTMLElement>("#sv-carousel .sv-prev");
         const next = document.querySelector<HTMLElement>("#sv-carousel .sv-next");
         if (prev) prev.hidden = count <= 1;
@@ -1403,10 +1364,7 @@ function init(): void {
     };
     window._svShow = _svShow;
 
-    // Promotes a direct child pin to take this pin's place as the parent -
-    // the child becomes the parent, and this pin becomes its child. Only
-    // ever offered for Pin-backed direct children (entry.slug set, no
-    // owner_name), same gating as the Edit button below.
+    // Promotes a direct child pin to take this pin's place as the parent - the child becomes the parent, and this pin becomes its child.
     async function promotePinToParent(entry: DetailPinEntry): Promise<void> {
         if (!entry.slug || !entry.url) return;
         if (!(await confirmAction({ title: "Make this the parent pin?", message: `"${entry.name || "This pin"}" will become the parent, and the current pin will become its child. Everything else - name, notes, reviews, photos, visit history - stays with each pin.`, confirmLabel: "Swap" }))) {
@@ -1430,11 +1388,7 @@ function init(): void {
             .catch(() => toast.error("Could not swap these pins."));
     }
 
-    // Popup shown when a child pin's marker is clicked: name, which child pin it
-    // belongs to (for nested entries), and a link to that pin's own detail
-    // page - plus Edit/promote-to-parent shortcuts for this pin's own direct
-    // children (no hover tooltip - the click popup already covers this, and a
-    // separate hover tooltip here renders unreadably in dark mode).
+    // Popup shown when a child pin's marker is clicked.
     function detailPinPopupContent(entry: DetailPinEntry): HTMLElement {
         const el = document.createElement("div");
         el.className = "pin-popup child-pin-popup";
@@ -1498,11 +1452,7 @@ function init(): void {
     function loadDetailPins(): void {
         fetch(cfg.detailPinsJsonUrl)
             .then((r) => {
-                // Without this, a server error whose body still parses as
-                // JSON (or one with no "detail_pins" key) fell through to
-                // the success branch below, which unconditionally clears
-                // the existing layer - a transient failure wiped every pin
-                // already on the map rather than leaving them alone.
+                // Without this, a server error whose body still parses as JSON (or one with no "detail_pins" key) fell through to the success branch.
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 return r.json();
             })
@@ -1532,11 +1482,7 @@ function init(): void {
                         longitude: dp.longitude,
                         marker: null,
                     };
-                    // Nested entries (owner_name set) belong to a child pin and are
-                    // display-only here - not draggable, edited on their own page.
-                    // No hover tooltip - the click popup below already covers name/
-                    // owner/actions, and a separate hover tooltip here renders
-                    // unreadably in dark mode (dark text on a dark background).
+                    // Nested entries (owner_name set) belong to a child pin and are display-only here - not draggable, edited on their own page.
                     const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name && !detailSelectMode });
                     if (entry.url) {
                         marker.bindPopup(detailPinPopupContent(entry));
@@ -1545,9 +1491,7 @@ function init(): void {
                         // direct click-to-edit behavior there.
                         marker.on("click", () => openDetailPinEditDialog(entry));
                     }
-                    // Select-mode click toggles selection instead of opening the popup
-                    // or the editor. Ctrl/cmd-click on a second pin of this type
-                    // *enters* select mode with both selected, matching the main map.
+                    // Select-mode click toggles selection instead of opening the popup or the editor.
                     marker.on("click", (e) => {
                         handleDetailPinSelectClick(entry, marker, e);
                     });
@@ -1592,10 +1536,7 @@ function init(): void {
     }
 
     // -- Detail pin multi-select: act on several child pins at once ------------
-    // Pin-only (cfg.pinSlug is empty on the wiki page, which shares this module
-    // but has no reparentable Pin-backed detail pins to act on) - the button is
-    // removed there. Nested entries (entry.owner_name set) are display-only and
-    // never selectable, matching their existing non-draggable/non-editable state.
+    // Pin-only (cfg.pinSlug is empty on the wiki page, which shares this module but has no reparentable Pin-backed detail pins to act on).
     let detailSelectMode = false;
     const selectedDpUuids = new Set<string>();
     const dpSelectMemory = new AdditiveSelectMemory();
@@ -1623,11 +1564,8 @@ function init(): void {
     });
 
     /**
-     * Consume a marker click for multi-select when appropriate.
-     *
-     * Returns true when the click should not also open a popup / editor:
-     * already in select mode, or a ctrl/cmd-click that just entered it.
-     */
+ * Consume a marker click for multi-select when appropriate.
+ */
     function handleDetailPinSelectClick(entry: DetailPinEntry, marker: L.Marker, event: L.LeafletMouseEvent): boolean {
         if (entry.owner_name || !canDetailMultiSelect()) return false;
         const additive = isAdditiveClick(event);
@@ -1682,9 +1620,7 @@ function init(): void {
         document.getElementById("map")?.classList.add("select-mode");
         map.dragging.disable();
         setDetailPinDragging(false);
-        // Disabling dragging makes Leaflet hand touch panning back to the
-        // browser, which would scroll the page instead of letting the rubber
-        // band consume the gesture.
+        // Disabling dragging makes Leaflet hand touch panning back to the browser, which would scroll the page instead of letting the rubber.
         map.getContainer().style.touchAction = "none";
     }
 
@@ -1725,9 +1661,7 @@ function init(): void {
                 ? {
                     ...(cfg.detailPinsBulkEditUrl ? { edit: openSelectedDpBulkEditDialog } : {}),
                     promote: doPromoteSelectedDp,
-                    // "Share" and "Send to wiki" are pin-only - the wiki page shares
-                    // this same module for its own (community) child-wiki toolbar,
-                    // which has neither concept.
+                    // "Share" and "Send to wiki" are pin-only - the wiki page shares this same module for its own (community) child-wiki toolbar, which has.
                     ...(cfg.pinShareDialogUrl ? { share: doShareSelectedDp } : {}),
                     ...(cfg.detailPinsSendToWikiUrl ? { wiki: doSendSelectedDpToWiki } : {}),
                     delete: doDeleteSelectedDp,
@@ -1839,11 +1773,7 @@ function init(): void {
         if (!uuids.length) return;
         const n = uuids.length;
         if (!(await confirmAction({ title: "Promote child pins?", message: `Promote ${n} child pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))) return;
-        // `.catch(() => false)` matters as much as the `.ok`: without it a single
-        // network failure rejects the whole Promise.all, so this function throws
-        // and the user gets no toast, no cleared selection and no refreshed list
-        // after confirming a bulk promote - see doDeleteSelectedDp() below, which
-        // needed the same fix for the same reason.
+        // `.catch(() => false)` matters as much as the `.ok`.
         const results = await Promise.all(
             uuids.map((uuid) => {
                 const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
@@ -1915,11 +1845,7 @@ function init(): void {
         if (!uuids.length) return;
         const n = uuids.length;
         if (!(await confirmAction({ title: "Delete child pins?", message: `Delete ${n} child pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))) return;
-        // `.catch(() => false)` matters as much as the `.ok`: without it a single
-        // network failure rejects the whole Promise.all, so this function throws
-        // and the user gets no toast, no cleared selection and no refreshed list
-        // after confirming a bulk delete. Counting it as "not deleted" instead
-        // routes it into the warning below, which already says the right thing.
+        // `.catch(() => false)` matters as much as the `.ok`.
         const results = await Promise.all(
             uuids.map((uuid) =>
                 fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
@@ -1979,8 +1905,7 @@ function init(): void {
     });
 
     // -- Photo panel -----------------------------------------------------------
-    // Icon and sizing come from shared/photo-map so this map and an album's map
-    // render a photo identically.
+    // Icon and sizing come from shared/photo-map so this map and an album's map render a photo identically.
     function photoMarkerSize(highlighted?: boolean): number {
         return sharedPhotoMarkerSize(map.getZoom(), highlighted);
     }
@@ -2023,9 +1948,7 @@ function init(): void {
         });
         marker.on("mouseover", () => window._galleryHighlightMarker?.(imgId, true));
         marker.on("mouseout", () => window._galleryHighlightMarker?.(imgId, false));
-        // Open the photo in the gallery lightbox. The url is passed as a
-        // fallback because the gallery grid is paginated - this photo may not
-        // be on the currently rendered gallery page.
+        // Open the photo in the gallery lightbox.
         marker.on("click", () => window.galleryOpenLightbox?.(imgId, { url }));
         marker.on("contextmenu", (event: L.LeafletMouseEvent) => {
             L.DomEvent.stop(event);
@@ -2089,9 +2012,7 @@ function init(): void {
     };
 
     // -- Tap-to-place ----------------------------------------------------------
-    // HTML5 drag-and-drop never fires on touch, so drag-onto-the-map leaves a
-    // photo with no coordinates unplaceable from a phone. An armed item hands
-    // the next map click to the same placement path a drop takes.
+    // HTML5 drag-and-drop never fires on touch, so drag-onto-the-map leaves a photo with no coordinates unplaceable from a phone.
     type PendingPlacement = { kind: "photo"; photoId: number } | { kind: "media"; itemEl: HTMLElement; item: MediaDropItem };
     let pendingPlacement: PendingPlacement | null = null;
     const PLACEMENT_HINT = "Tap the map to place this photo, or press Escape to cancel.";
@@ -2284,13 +2205,7 @@ function init(): void {
         placePhotoAt(Number.parseInt(idStr, 10), map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]));
     });
 
-    // Drop a Media-section item (external provider result, not yet a real
-    // Image row - see PinController.media_relevance) onto the map: this
-    // materializes it locally (downloads + saves, same as clicking
-    // "relevant") and sets its coordinates in one request, then adds it to
-    // the photo layer exactly like a real gallery photo. Only wired when the
-    // page actually has a Media section (cfg.mediaRelevanceUrl - the wiki
-    // page, which shares this module, has none).
+    // Drop a Media-section item (external provider result, not yet a real Image row - see PinController.media_relevance) onto the map.
     function placeMediaItemAt(itemEl: HTMLElement | undefined, item: MediaDropItem, latlng: L.LatLng): void {
         fetch(cfg.mediaRelevanceUrl, {
             method: "POST",
@@ -2375,9 +2290,7 @@ function init(): void {
         .catch((err) => console.warn("Could not load gallery photos for panel:", err));
 
     // -- Boundary editor (property + building) ----------------------------------
-    // Two typed boundaries render in different colors: the property boundary
-    // (parcel/grounds, red) and the building boundary (footprint, blue). Each
-    // is fetched, drawn, and edited independently against the same endpoint.
+    // Two typed boundaries render in different colors.
     const boundaryApiUrl = cfg.boundaryUrl;
     type BoundaryType = "property" | "building";
     const BOUNDARY_STYLES: Record<BoundaryType, L.PathOptions> = {
@@ -2400,10 +2313,7 @@ function init(): void {
     const boundarySources: Record<BoundaryType, string | null> = { property: null, building: null }; // pin|wiki|inherited|generated|circle|null
     let boundaryBoundsFitted = false;
 
-    // Clicking an already-active draw-toolbar tool cancels it instead of no-op
-    // re-enabling it. Prototype-patched dynamically like the original script;
-    // `any` here is deliberate - the patch's whole point is to be generic
-    // across Leaflet.Draw's incompatible per-tool return types.
+    // Clicking an already-active draw-toolbar tool cancels it instead of no-op re-enabling it.
     if (!window._boundaryDrawToggleWired) {
         window._boundaryDrawToggleWired = true;
         ([L.Draw.Polygon, L.EditToolbar.Edit] as any[]).forEach((Ctor) => {
@@ -2467,9 +2377,7 @@ function init(): void {
             const entry = boundaries[type] || {};
             loadBoundary(type, entry.polygon || null, entry.source || null);
         });
-        // Buildings drawn on detail pins keep the building layer meaningful even
-        // when this pin has no building boundary of its own. When neither
-        // exists, no building layer is shown at all ("no known building here").
+        // Buildings drawn on detail pins keep the building layer meaningful even when this pin has no building boundary of its own.
         detailBuildingItems.clearLayers();
         (data.detail_buildings || []).forEach((entry: any) => {
             if (entry.polygon) addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a child pin)");
@@ -2488,16 +2396,7 @@ function init(): void {
         attachBoundaryClickHandlers();
     }
 
-    // Boundary generation happens in a background task on first view (see
-    // services/external_data.py) - while the server reports pending, poll
-    // until the generated polygons land rather than blocking the page load.
-    // A previously-generated boundary also goes stale after a while (see
-    // SiteSettings.boundary_cache_days) - the server serves the last-known
-    // geometry immediately (already applied below) while refreshing it in
-    // the background, reporting that as "refreshing" rather than "pending"
-    // since there's already something on the map. Poll the same way in both
-    // cases so an already-open page redraws with the newer geometry once it
-    // lands, without ever blocking on it.
+    // Boundary generation happens in a background task on first view.
     function fetchBoundaries(attempt: number): void {
         fetch(boundaryApiUrl)
             .then((r) => r.json())
@@ -2519,13 +2418,7 @@ function init(): void {
                 const editableLayer = layer as L.Layer & { editing?: { _markerGroup?: L.LayerGroup } };
                 if (editableLayer.editing?._markerGroup) {
                     editableLayer.editing._markerGroup.eachLayer((m) => {
-                        // Leaflet's event system has no jQuery-style dot
-                        // namespacing - "contextmenu.rcdelete" was a distinct
-                        // event type nothing ever fires, so right-click
-                        // delete never worked despite the toast advertising
-                        // it. .off() with no listener removes every
-                        // "contextmenu" handler, which is what keeps repeat
-                        // calls (this runs on every EDITSTART) from stacking.
+                        // Leaflet's event system has no jQuery-style dot namespacing.
                         m.off("contextmenu");
                         m.on("contextmenu", (e: L.LeafletMouseEvent) => {
                             L.DomEvent.stopPropagation(e);
@@ -2537,10 +2430,7 @@ function init(): void {
         }, 100);
     }
 
-    // `visible` names the normal (not-editing) state - true hides the boundary
-    // save controls, false shows them. A boundary edit session is started from
-    // the boundary's own right-click context menu (see openBoundaryCtxMenu),
-    // since boundaries have no dedicated toolbar button.
+    // `visible` names the normal (not-editing) state - true hides the boundary save controls, false shows them.
     function setBoundaryEditButtonsVisible(visible: boolean): void {
         const controls = document.getElementById("boundary-save-controls");
         if (controls) controls.style.display = visible ? "none" : "";
@@ -2631,7 +2521,7 @@ function init(): void {
             try {
                 msg = (await response.json()).error || msg;
             } catch {
-                /* keep default */
+
             }
             throw new Error(msg);
         }
@@ -2646,10 +2536,7 @@ function init(): void {
             .then((data) => {
                 const exiting = options.exitEdit !== false;
                 if (exiting) exitBoundaryEdit();
-                // The server responds with the full refreshed payload (the clear
-                // path falls back down the resolution chain server-side); only
-                // redraw from it outside active editing so in-progress vertex
-                // edits aren't clobbered.
+                // The server responds with the full refreshed payload (the clear path falls back down the resolution chain server-side).
                 if (exiting || !boundaryDrawControl) applyBoundaryPayload(data);
                 if (data.pending || data.refreshing) fetchBoundaries(0);
                 if (!options.quiet) toast.success(geometry ? "Boundary saved." : "Boundary reset to the default.");
@@ -2761,21 +2648,14 @@ function init(): void {
     }
 
     // -- Unified detail-pin panel (add + edit) -----------------------------------
-    // Same panel/fields for both; instead of a second embedded map, placing or
-    // moving the pin happens by clicking/dragging directly on the main map -
-    // the map stays interactive and in view the whole time.
+    // Same panel/fields for both; instead of a second embedded map, placing or moving the pin happens by clicking/dragging directly.
     let editingDp: DetailPinEntry | null = null;
     let dpMode: "add" | "edit" | null = null;
     let dpActiveMarker: L.Marker | null = null;
     let dpCreatedUuid: string | null = null;
     let dpAutoSaveTimer: ReturnType<typeof setTimeout> | undefined;
     let dpAutoSaveUuid: string | null = null;
-    // Whether the user picked a Type in this panel session. The select's first
-    // option is "Auto", meaning "work out whether this is a building from the
-    // footprint under it" (see services.locations.site_scope) - so pin_type is
-    // only ever submitted when it was deliberately chosen. Submitting it
-    // regardless would mark every autosave as a user decision and freeze (or
-    // overwrite) an automatic classification the server may have just made.
+    // Whether the user picked a Type in this panel session.
     let dpTypeTouched = false;
 
     function currentDpIcon(): L.DivIcon {
@@ -2854,9 +2734,7 @@ function init(): void {
             body: JSON.stringify(collectDpFormData()),
         })
             .then((r) => {
-                // fetch only rejects on a network failure - a validation
-                // error (400) resolved here and was swallowed as success,
-                // so the edit looked saved while the server had discarded it.
+                // fetch only rejects on a network failure - a validation error (400) resolved here and was swallowed as success, so the edit looked.
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
             })
             .catch(() => toast.error("Failed to save detail pin changes."));
@@ -2877,9 +2755,7 @@ function init(): void {
     }
 
     function onMainMapClickForDp(e: L.LeafletMouseEvent): void {
-        // In edit mode the pin already exists on the map and is draggable/self-saving
-        // (see loadDetailPins) - clicking elsewhere should pan/interact with the map
-        // as normal, not silently relocate an existing pin.
+        // In edit mode the pin already exists on the map and is draggable/self-saving.
         if (dpMode === "edit") return;
         const { lat, lng } = e.latlng;
         if (dpActiveMarker) {
@@ -2983,9 +2859,7 @@ function init(): void {
 
         (document.getElementById("detail-pin-panel") as HTMLElement).style.display = "";
 
-        // Manipulate the pin's real marker directly rather than a stand-in - it's
-        // already draggable and self-saving (see loadDetailPins); this just keeps
-        // the panel's hidden lat/lon fields in sync with it while open.
+        // Manipulate the pin's real marker directly rather than a stand-in - it's already draggable and self-saving.
         dpActiveMarker = dp.marker;
         dp.marker?.on("dragend", onDpMarkerDragEnd);
         map.on("click", onMainMapClickForDp);
@@ -2994,9 +2868,7 @@ function init(): void {
     function closeDetailPinPanel(): void {
         (document.getElementById("detail-pin-panel") as HTMLElement).style.display = "none";
         map.off("click", onMainMapClickForDp);
-        // A pin created via 'add' mode is already persisted (see createDpImmediately) -
-        // swap the provisional local marker for the fully-wired one loadDetailPins builds
-        // (autosaving drag, click-to-edit, sidebar list entry) instead of discarding it.
+        // A pin created via 'add' mode is already persisted.
         const wasAdding = dpMode === "add" && dpCreatedUuid;
         if (dpActiveMarker) {
             dpActiveMarker.off("dragend", onDpMarkerDragEnd);
@@ -3046,9 +2918,7 @@ function init(): void {
     document.getElementById("detail-pin-form")?.addEventListener("submit", (e) => {
         e.preventDefault();
         if (dpMode === "add") {
-            // Already saved incrementally as each change was made (see
-            // createDpImmediately/scheduleDpAutoSave) - this button just closes
-            // the panel; closeDetailPinPanel flushes any pending debounced save.
+            // Already saved incrementally as each change was made - this button just closes the panel.
             closeDetailPinPanel();
             return;
         }
@@ -3097,18 +2967,10 @@ function init(): void {
     });
 
     // -- Boundaries: click or right-click a polygon for Edit / Convert / Delete --
-    // Leaflet's event system has no jQuery-style dot-namespacing - a listener
-    // registered for the literal string 'click.openEditor' never matches a real
-    // click, which Leaflet always fires as plain 'click'. Bind/unbind a named
-    // handler under the real event name instead.
+    // Leaflet's event system has no jQuery-style dot-namespacing.
     function onBoundaryLayerClick(e: L.LeafletMouseEvent): void {
         if (boundaryDrawControl) return;
-        // Don't hijack a click that's actually meant to draw a shape onto (or drop
-        // a detail pin inside) this boundary - without this, clicking a boundary
-        // while a tool is armed always opened the context menu instead of placing
-        // the point, making it impossible to draw into a boundary polygon at all.
-        // Not stopping propagation here lets the click keep bubbling to the map's
-        // own click handler (the draw session / detail-pin placement listener).
+        // Don't hijack a click that's actually meant to draw a shape onto (or drop a detail pin inside) this boundary.
         if (toolbar.isDrawBusy() || dpMode === "add") return;
         L.DomEvent.stopPropagation(e);
         openBoundaryCtxMenu(e.target as L.Layer, e);
@@ -3219,9 +3081,7 @@ declare global {
         deleteMarkupEdit: () => Promise<void>;
         openMarkupEditDialog: (item: MarkupItem) => void;
         loadMarkup: () => void;
-        // Applies the edit panel's fields (label/width/opacity/security/layer) to
-        // the item being edited - called by _markup_panel_dialog.html's inline
-        // oninput=/onchange= attributes on every field in that panel.
+        // Applies the edit panel's fields (label/width/opacity/security/layer) to the item being edited.
         _liveApplyMarkupEdit: () => void;
 
         // "Take a screenshot" toolbar button (_map_annotations_panels.html) -
@@ -3242,9 +3102,7 @@ declare global {
         finishBoundaryEdit: () => void;
         _boundaryDrawToggleWired?: boolean;
 
-        // Satellite/street-view carousel controls, exposed for satellite_view.html /
-        // street_view.html's onclick=/onerror= attributes - see their definitions
-        // above for why they live here instead of in those fragments' own scripts.
+        // Satellite/street-view carousel controls, exposed for satellite_view.html / street_view.html's onclick=/onerror= attributes.
         _satRemoveSlide: (img: HTMLImageElement) => void;
         _satPrev: () => void;
         _satNext: () => void;
@@ -3256,9 +3114,7 @@ declare global {
         _svNext: () => void;
         _svShow: (idx: number) => void;
 
-        // External photo-gallery integration hooks (gallery.ts, out of scope for
-        // this migration) - this page calls out to them and also implements the
-        // three the gallery calls back into.
+        // External photo-gallery integration hooks (gallery.ts, out of scope for this migration).
         galleryRepositionImage?: (imgId: number, lat: number, lng: number, onRejected: () => void) => void;
         gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
         galleryOpenLightbox?: (imgId: number, opts: { url: string }) => void;
@@ -3269,9 +3125,6 @@ declare global {
         _galleryHighlightMarker: (imgId: number, on: boolean) => void;
 
         // Media-section drag-onto-map integration (pages/location/index.html).
-        // The dragged tile's own element, stashed by mediaItemDragStart so the
-        // drop handler above can update its visual state - HTML5 drag-and-drop
-        // only carries string data through dataTransfer, not element refs.
         _mediaDragItemEl?: HTMLElement;
         mediaApplyMaterializedDrop?: (itemEl: HTMLElement | undefined, data: Record<string, unknown>) => void;
         // Touch counterpart to that drag: arms the tile so the next map tap

@@ -1,61 +1,4 @@
-{% comment %}
-Shared photo lightbox - single source of truth for every full-size photo
-viewer on the site (pin detail / location wiki / safety check-in galleries,
-Vault > Photos, Vault > Documents, the user profile page). Include once per
-page; open it via `window.galleryOpenLightboxItem(list, idx)`, where `list`
-is an array of normalized items:
-  {url, thumbUrl, caption, author, copyright, sourceUrl, sourceName, takenAt,
-   imageId, canRelevance, relevant, mediaSource, mediaKey, latitude, longitude,
-   mediaType}
-`latitude`/`longitude` (numbers, or omitted/null) draw the small location map
-in the side panel - see #lightbox-location below. The marker is draggable
-(and drags persist via `window.galleryRepositionImage`, reusing whichever
-gallery context - pin/wiki/safety - is on the page) only when both `imageId`
-and that function are present; otherwise the map renders read-only.
-`thumbUrl` is optional - a browser-safe fallback shown in place of `url` if
-the full-resolution file fails to load (e.g. a Wikimedia .tif result).
-`mediaType` is optional and only meaningful as `'document'` - every other
-value (including omitted) renders the normal <img> path. Vault > Documents'
-own lightbox items are the only current source of it (see
-window.documentsOpenLightbox in pages/vault/documents.html) - a page whose
-items are all one media type doesn't need to set it per-item elsewhere.
-
-Context:
-  lightbox_id            - DOM id for the <dialog> (default "gallery-lightbox").
-  show_cover_action      - whether to render the "Set as cover photo" button
-                            (only meaningful when photos belong to a single
-                            pin/location, e.g. pin detail or location wiki).
-  cover_photo_url         - POST endpoint for "Set as cover photo"; blank hides it.
-  current_cover_image_id - the pin/wiki's current cover_photo id (if any), so
-                            the button can offer "Remove cover photo" instead
-                            of "Set as cover photo" for that image.
-  cover_hero_key          - "pin" or "wiki": which on-page cover-hero banner
-                            (see partials/js/cover-hero.js) to live-update
-                            when the cover changes - drives the "#<key>-cover-
-                            hero" element id and the "<key>" passed to
-                            window._coverHeroNav. Blank when the page has no
-                            such banner (e.g. safety check-ins).
-  cover_hero_enabled      - whether the banner should actually be shown once
-                            a cover exists (the wiki hero also depends on the
-                            viewer's show_wiki_cover_photos preference, which
-                            a live update must keep respecting).
-  pin_media_relevance_url - POST endpoint for the pin Media gallery's relevant/
-                            not-relevant marking; blank when not applicable
-                            (harmless even if set - only used for items with
-                            canRelevance true, which pages outside the pin
-                            Media gallery never set).
-  show_attachment_points  - whether to load "Shared via" (wiki/DM) info for
-                            the current item's owner (see
-                            PhotoAttachmentPointsView) - only the profile
-                            photo strip sets this; every other lightbox use
-                            leaves it off so it doesn't fire a needless
-                            request per photo.
-  show_floorplan_overlay_action - whether to offer "Use as floorplan overlay"
-                            in the more-actions menu. Private pin details
-                            only; hidden for wiki/memories/profile lightboxes.
-  floorplan_overlay_url   - POST endpoint that creates (or reuses) a map
-                            overlay from this photo (`pin.overlays`).
-{% endcomment %}
+{% comment %}Shared photo lightbox - single source of truth for every full-size photo viewer on the site.{% endcomment %}
 {% with lightbox_id=lightbox_id|default:"gallery-lightbox" %}
 <dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog" aria-label="Photo viewer">
   <div class="lightbox-inner">
@@ -70,13 +13,7 @@ Context:
       <span id="lightbox-fallback-note" class="lightbox-fallback-note" hidden>
         <i class="material-symbols-outlined">image</i> Showing a smaller preview - the full-size file isn't viewable in this browser
       </span>
-      {# Document mode (item.mediaType === 'document') - an <iframe> preview   #}
-      {# for a file the browser can render inline (a PDF, which every         #}
-      {# document is eventually converted to - see services.media.documents). #}
-      {# An iframe's onerror only fires for network-level failures, not a     #}
-      {# wrong content-type or blocked embed, so the open-in-new-tab link is  #}
-      {# always shown alongside it rather than gated on a load/error signal   #}
-      {# this element can't reliably give.                                   #}
+      {# Document mode (item.mediaType === 'document'). #}
       <div id="lightbox-document-view" class="lightbox-document-view" hidden>
         <iframe id="lightbox-document-frame" class="lightbox-document-frame" title="Document preview"></iframe>
         <div class="lightbox-document-bar">
@@ -137,9 +74,7 @@ Context:
           <i class="material-symbols-outlined">open_in_new</i><span>View source</span>
         </a>
       </div>
-      {# Pin/wiki filing + album membership for the viewer's own photos - loads #}
-      {# empty for anything else (see PhotoAssociationsView). Unconditional -   #}
-      {# cheap and relevant on every page this lightbox appears on.            #}
+      {# Pin/wiki filing + album membership for the viewer's own photos - loads empty for anything else. #}
       <div id="lightbox-associations" class="lightbox-associations-wrap"></div>
       <div id="lightbox-location" class="lightbox-location" hidden>
         <div id="lightbox-location-map" class="lightbox-location-map"></div>
@@ -182,10 +117,7 @@ Context:
   </div>
 </dialog>
 
-{# Shared small picker dialog for "File to a pin" / "Send to a wiki" /       #}
-{# "Share with a friend" - one instance reused for all three, reconfigured   #}
-{# per open (title, placeholder, search endpoint, pick handler). See         #}
-{# window._lightboxOpenPinPicker/_lightboxOpenWikiPicker/_lightboxOpenSharePicker. #}
+{# Shared small picker dialog for "File to a pin" / "Send to a wiki" / "Share with a friend". #}
 <dialog id="lightbox-picker-dialog" class="lightbox-picker-dialog ul-dialog" aria-label="Photo picker">
   <div class="lightbox-picker-header">
     <h3 id="lightbox-picker-title"></h3>

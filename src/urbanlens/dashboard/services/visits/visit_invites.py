@@ -1,5 +1,4 @@
-"""External visit participants: creation from the visit form, email invites, and deferred delivery.
-For each, the owner chooses whether to *send* them a visit suggestion; unchecked participants are recorded on the owner's own copy of the visit without the other user being contacted. - **External people**: a free-form name plus an optional email address, stored as :class:`~urbanlens.dashboard.models.visits.participant.ExternalVisitParticipant`."""
+"""External visit participants: creation from the visit form, email invites, and deferred delivery."""
 
 from __future__ import annotations
 
@@ -188,8 +187,7 @@ def process_pending_visit_invites(user: User, email: str | None = None) -> int:
 
     Args:
         user: The account the email belongs to.
-        email: The specific address that was just verified; defaults to the
-            account's primary email.
+        email: The specific address that was just verified; defaults to the account's primary email.
 
     Returns:
         The number of participant rows resolved to this account."""

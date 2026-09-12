@@ -21,8 +21,8 @@ TRUST_DECAY_GAMMA = 0.98
 
 #: Injection-probability floor/ceiling.
 #: Even a maximally trusted veteran is occasionally re-checked (the floor); even a
-#: brand-new/untrusted player isn't checked on much more than a third of their rounds (the ceiling)
-#: - "periodically re-confirm, but don't overwhelm well-intentioned players."
+#: brand-new/untrusted player isn't checked on much more than a third of their rounds (the ceiling) -
+#: "periodically re-confirm, but don't overwhelm well-intentioned players."
 CHECK_PROBABILITY_MIN = 0.02
 CHECK_PROBABILITY_MAX = 0.35
 
@@ -70,8 +70,7 @@ def should_inject_check(profile: Profile) -> bool:
 
 
 def should_inject_check_for_profiles(profiles: Iterable[Profile]) -> bool:
-    """Competitive-mode variant: whether the next round for every joined participant should be a check round.
-    A competitive round's content is identical for every participant, so this uses the *minimum* trust score across the roster (the least- trusted participant drives the decision) and honors every participant's individual cooldown - a check round is skipped if any one of them was just checked."""
+    """Competitive-mode variant: whether the next round for every joined participant should be a check round."""
     from urbanlens.dashboard.models.consensus.model import ConsensusProfile
 
     consensus_profiles = [ConsensusProfile.objects.get_or_create_for(profile) for profile in profiles]
@@ -85,11 +84,7 @@ def should_inject_check_for_profiles(profiles: Iterable[Profile]) -> bool:
 
 
 def record_check_result(profile: Profile, *, correct: bool) -> None:
-    """Update ``profile``'s trust posterior after a trust-check round resolves.
-
-    Race-safe: locks the profile's ``ConsensusProfile`` row for the duration
-    of the update.
-    """
+    """Update ``profile``'s trust posterior after a trust-check round resolves."""
     from urbanlens.dashboard.models.consensus.model import ConsensusProfile
 
     with transaction.atomic():

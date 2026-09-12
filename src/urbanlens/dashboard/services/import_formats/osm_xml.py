@@ -46,13 +46,11 @@ def osm_xml_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[st
         user_profile: The profile to associate with each pin.
 
     Returns:
-        List of pin dicts, one per tagged node and one per tagged way (way pins
-        are placed at the centroid of the way's referenced node coordinates).
+        List of pin dicts, one per tagged node and one per tagged way (way pins are placed at the centroid of the way's referenced node coordinates).
 
     Raises:
         xml.etree.ElementTree.ParseError: If the file is not valid XML.
-        ValueError: If a ``lat``/``lon`` attribute cannot be parsed as a float.
-    """
+        ValueError: If a ``lat``/``lon`` attribute cannot be parsed as a float."""
     pins: list[dict[str, Any]] = []
     try:
         root = parse_xml(file_contents)

@@ -71,10 +71,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: HTTP status each shared trip-service error maps to on the internal surface.
-#: The external API keeps its own copy of this mapping (it answers with JSON
-#: rather than the plain-text bodies HTMX turns into toasts), but both derive
-#: the status from the same exception classes.
+#: HTTP status each shared trip-service error maps to on the internal surface. The external API keeps its own
+#: copy of this mapping (it answers with JSON rather than the plain-text bodies HTMX turns into toasts), but
+#: both derive the status from the same exception classes.
 _TRIP_ERROR_STATUS: dict[type[TripError], int] = {
     TripNotFoundError: 404,
     TripPermissionError: 403,
@@ -84,15 +83,15 @@ _TRIP_ERROR_STATUS: dict[type[TripError], int] = {
 def _trip_error_response(exc: TripError) -> HttpResponse:
     """Turn a shared trip-service error into the plain-text response HTMX expects.
 
-    Bodies stay plain text (not JSON) because the site's global
-    ``htmx:responseError`` handler surfaces the raw body as a toast.
+    Bodies stay plain text (not JSON) because the site's global ``htmx:responseError`` handler surfaces
+    the raw body as a toast.
 
     Args:
         exc: The error raised by a trip service.
 
     Returns:
-        A response carrying the error message and its mapped status; anything
-        not specifically mapped is a 400.
+        A response carrying the error message and its mapped status; anything not specifically mapped is
+        a 400.
     """
     # The service carries the raw username so each surface escapes for its own
     # medium - HTML here, unescaped JSON in the external API.
@@ -115,9 +114,7 @@ def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "d
         direction: ``"asc"`` or ``"desc"``.
 
     Returns:
-        Trips the profile belongs to, with list stats prefetched. Ordered per ``sort``/
-        ``direction`` - see :meth:`TripQuerySet.for_list_page` for the "soonest first"
-        grouping applied when ``sort="start_date"`` and ``direction="asc"``.
+        Trips the profile belongs to, with list stats prefetched.
     """
     return Trip.objects.for_list_page(profile, sort=sort, direction=direction)
 
@@ -125,15 +122,9 @@ def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "d
 def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) -> None:
     """Mask each listed trip's member/creator identities the viewer may not see.
 
-    A trips list is more diffuse than the single-trip render sites
-    ``services/profile/identity_visibility.py`` covers (member panel, activity
-    and comment attribution): every card carries its own member avatars and
-    creator badge, across however many trips are listed at once, so the masking
-    has to run over the whole page's worth of them. Mutates each
-    ``TripMembership.profile``/``Trip.creator`` object in place (see
-    ``identity_visibility.mask_profile_references``) so
-    ``trip_list_partial.html`` can render ``display_name``/``display_avatar_url``
-    instead of the raw username/avatar.
+    Mutates each ``TripMembership.profile``/``Trip.creator`` object in place (see
+    ``identity_visibility.mask_profile_references``) so ``trip_list_partial.html`` can render
+    ``display_name``/``display_avatar_url`` instead of the raw username/avatar.
 
     Args:
         viewer: The profile viewing the list.
@@ -153,9 +144,9 @@ def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) ->
 def _annotate_viewer_membership(viewer: Profile, trips: Iterable[Trip]) -> None:
     """Attach ``trip.viewer_membership`` (or ``None``) to each listed trip.
 
-    Reuses the ``memberships`` prefetch ``for_list_page`` already loads, so
-    ``trip_list_partial.html`` can gate viewer-only actions (e.g. "Start a
-    check-in") on join status without an extra query per card.
+    Reuses the ``memberships`` prefetch ``for_list_page`` already loads, so ``trip_list_partial.html``
+    can gate viewer-only actions (e.g. "Start a check-in") on join status without an extra query per
+    card.
 
     Args:
         viewer: The profile viewing the list.
@@ -214,8 +205,8 @@ def _trip_overview_stats(trips: Iterable[Trip]) -> dict[str, int]:
         trips: The viewer's trips.
 
     Returns:
-        Dict with `total` and one key per `Trip.timeline_status` value
-        (`planning`, `upcoming`, `active`, `past`).
+        Dict with `total` and one key per `Trip.timeline_status` value (`planning`, `upcoming`,
+        `active`, `past`).
     """
     stats = {"total": 0, "planning": 0, "upcoming": 0, "active": 0, "past": 0}
     for t in trips:
@@ -227,15 +218,10 @@ def _trip_overview_stats(trips: Iterable[Trip]) -> dict[str, int]:
 def trip_or_not_found(request: HttpRequest, trip_slug: str, profile: Profile) -> Trip | HttpResponse:
     """Return the trip when *profile* may see it, else the styled "not found" page.
 
-    The thin HTMX-facing adapter over
-    :func:`~urbanlens.dashboard.services.trips.trip_access.get_trip_for_viewer`,
-    which is where the rule itself lives.
-
-    Replaces the former ``_trip_or_403``. That version rendered the same page
-    for a missing trip and for one the viewer had no access to, but answered
-    404 for the first and 403 for the second - so the status code alone
-    distinguished "no such slug" from "somebody else's trip", which is exactly
-    the enumeration the shared page was meant to prevent. Both are 404 now.
+    That version rendered the same page for a missing trip and for one the viewer had no access to, but
+    answered 404 for the first and 403 for the second - so the status code alone distinguished "no such
+    slug" from "somebody else's trip", which is exactly the enumeration the shared page was meant to
+    prevent.
 
     Args:
         request: The incoming request (needed to render the page).
@@ -278,19 +264,16 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
 def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *, oob: bool = False) -> str:
     """Render just the activities panel markup (index map, vote counts, per-activity permissions).
 
-    Split out from ``_render_activities_panel`` so other views whose primary
-    response is a different panel (e.g. toggling a member's organizer status)
-    can still include a fresh copy as an out-of-band swap - organizer status
-    feeds directly into each activity's ``can_manage`` flag here.
+    Split out from ``_render_activities_panel`` so other views whose primary response is a different
+    panel (e.g. toggling a member's organizer status) can still include a fresh copy as an out-of-band
+    swap - organizer status feeds directly into each activity's ``can_manage`` flag here.
 
     Args:
         request: The incoming request.
         trip: The trip whose itinerary is being rendered.
         profile: The viewing profile.
-        oob: When True, marks the rendered root element ``hx-swap-oob="true"``
-            so it can be concatenated onto another view's primary response
-            instead of wrapping it in a second element carrying the same id
-            (which would leave two ``#trip-activities-panel`` nodes in the DOM).
+        oob: When True, marks the rendered root element ``hx-swap-oob="true"`` so it can be concatenated
+        onto another view's primary response instead...
 
     Returns:
         The rendered activities-panel markup.
@@ -325,11 +308,10 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
 def _trip_hero_oob(request: HttpRequest, trip: Trip) -> str:
     """Render the page hero as an out-of-band HTMX swap.
 
-    The hero lives in base.html's ``{% block hero %}`` (outside ``#trip-header``,
-    as a sibling of ``{% block subnav %}``) so it renders in the correct spot
-    above the page container, but its name/description/date-range display
-    still needs to stay in sync after an edit or an activity date change - see
-    ``TripEditView`` and ``_render_activities_panel``.
+    The hero lives in base.html's ``{% block hero %}`` (outside ``#trip-header``, as a sibling of ``{%
+    block subnav %}``) so it renders in the correct spot above the page container, but its
+    name/description/date-range display still needs to stay in sync after an edit or an activity date
+    change - see ``TripEditView`` and ``_render_activities_panel``.
     """
     from django.urls import reverse
 
@@ -351,16 +333,13 @@ def _trip_hero_oob(request: HttpRequest, trip: Trip) -> str:
 def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the activities panel as the primary HTMX response.
 
-    Bundles out-of-band refreshes so sibling elements don't go stale after an
-    activity add/edit/delete/complete:
+    Bundles out-of-band refreshes so sibling elements don't go stale after an activity
+    add/edit/delete/complete:
 
-    - ``#trip-header``/``#trip-hero``: an activity add/edit/delete/complete can
-      change the trip's persisted date range (see ``_expand_trip_dates``) - keep
-      the header and hero's date display in sync instead of leaving them stale
-      until reload.
-    - the weather panel can't be refreshed the same cheap way (it's a live
-      external API call), so it's told to re-fetch itself via HX-Trigger,
-      same as its own initial ``hx-trigger="load"``.
+    - ``#trip-header``/``#trip-hero``: an activity add/edit/delete/complete can change the trip's
+      persisted date range (see ``_expand_trip_dates``) - keep the head...
+    - the weather panel can't be refreshed the same cheap way (it's a live external API call), so it's
+      told to re-fetch itself via HX-Trigger, same as its own init...
     """
     activities_html = _activities_panel_html(request, trip, profile)
     viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.for_trip_and_profile(trip, profile).first()
@@ -395,19 +374,13 @@ class TripOverviewView(LoginRequiredMixin, View):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         # with_effective_dates: the calendar payload and the stat tiles both read
-        # effective_start_date/effective_end_date/timeline_status, which query the
-        # trip's activities per row without the annotations.
+        # effective_start_date/effective_end_date/timeline_status, which query the trip's activities per row
+        # without the annotations.
         all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user").with_effective_dates())
         recently_updated_trips = list(Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT))
         recently_viewed_trips = list(Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT))
-        # Matches TripListView/CalendarImportView - every list of other members'
-        # trips must mask identities the viewer isn't allowed to see.
-        #
-        # Only the two rendered lists need it. `all_trips` never reaches the
-        # template: it is consumed here into `stats` and `trips_calendar_data`,
-        # which carry no identity fields (uuid/name/dates/status/url). Masking it
-        # walked every trip's memberships, so an unbounded trip list cost two
-        # queries per trip to mutate objects that were then discarded.
+        # Matches TripListView/CalendarImportView - every list of other members' trips must mask identities the
+        # viewer isn't allowed to see. Only the two rendered lists need it.
         _apply_trip_list_identity_masking(profile, recently_updated_trips)
         _apply_trip_list_identity_masking(profile, recently_viewed_trips)
         return render(
@@ -500,9 +473,6 @@ class TripCreateView(LoginRequiredMixin, View):
         source = body.get("source") or "list"
 
         try:
-            # Name is optional (UL-360): a blank submission gets a generated one,
-            # and the upcoming-trip quota/description limit are enforced by the
-            # same service the external API creates trips through.
             trip, _created = create_trip(
                 profile,
                 name=body.get("name"),
@@ -680,13 +650,13 @@ class TripActivitiesView(LoginRequiredMixin, View):
 class TripAiSuggestionsView(LoginRequiredMixin, View):
     """AI-generated trip suggestions: pins worth adding, and a possible reorder.
 
-    GET  /trips/<slug>/ai-suggestions/  -> render panel (cached)
-    POST /trips/<slug>/ai-suggestions/  -> force a fresh generation (cooldown-limited)
+    GET /trips/<slug>/ai-suggestions/ -> render panel (cached)
+    POST /trips/<slug>/ai-suggestions/ -> force a fresh generation (cooldown-limited)
 
-    Read-only: this view never creates or changes anything by itself. Adding
-    a suggested pin re-uses the normal add-activity endpoint (the suggestion
-    already carries the requester's own pin slug); applying a suggested order
-    is a separate, explicit action (see TripApplySuggestedOrderView).
+    Read-only: this view never creates or changes anything by itself.
+    Adding a suggested pin re-uses the normal add-activity endpoint (the suggestion already carries the
+    requester's own pin slug); applying a suggested order is a separate, explicit action (see
+    TripApplySuggestedOrderView).
     """
 
     def get(self, request, trip_slug):
@@ -719,12 +689,10 @@ class TripApplySuggestedOrderView(LoginRequiredMixin, View):
     """Apply an AI-suggested activity order.
 
     POST /trips/<slug>/activities/apply-order/
-    Body: {"order": [activity_id, ...]}
 
-    Only ever accepts an exact permutation of the trip's own current
-    non-completed activities - never partial, never containing another
-    trip's ids, so a stale or tampered order can't silently drop or hijack
-    activities.
+    Body: {"order": [activity_id, ...]} Only ever accepts an exact permutation of the trip's own current
+    non-completed activities - never partial, never containing another trip's ids, so a stale or
+    tampered order can't silently drop or hijack activities.
     """
 
     def post(self, request, trip_slug):
@@ -770,9 +738,8 @@ class TripActivityEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
-        # The edit form always submits every field, so the presence-keyed
-        # service call reproduces this endpoint's full-replace semantics -
-        # except child_trip_uuid, which the form only sends when it applies.
+        # The edit form always submits every field, so the presence-keyed service call reproduces this
+        # endpoint's full-replace semantics - except child_trip_uuid, which the form only sends when it applies.
         changes: dict[str, Any] = {
             "title": body.get("title"),
             "notes": body.get("notes"),
@@ -1028,9 +995,7 @@ class TripMemberOrganizerView(LoginRequiredMixin, View):
         trip = result
 
         try:
-            # Scoped to this trip's roster - see TripMemberRemoveView. The panel
-            # keeps its toggle UX by computing the target value here; the service
-            # itself takes an explicit boolean so a retried API call is idempotent.
+            # Scoped to this trip's roster - see TripMemberRemoveView.
             require_trip_creator(trip, profile)
             target = resolve_trip_member(trip, profile_id=profile_id)
             membership = TripMembership.objects.for_trip_and_profile(trip, target).first()
@@ -1038,10 +1003,9 @@ class TripMemberOrganizerView(LoginRequiredMixin, View):
         except TripError as exc:
             return _trip_error_response(exc)
 
-        # Organizer status feeds directly into each activity's can_manage flag
-        # (see _activities_panel_html) - without this, the acting creator (and
-        # the newly (de)promoted organizer, on their own screen) wouldn't see
-        # activity permissions update until reloading.
+        # Organizer status feeds directly into each activity's can_manage flag (see _activities_panel_html) -
+        # without this, the acting creator (and the newly (de)promoted organizer, on their own screen) wouldn't
+        # see activity permissions update until reloading.
         members_response = _render_members_panel(request, trip, profile)
         activities_html = _activities_panel_html(request, trip, profile, oob=True)
         members_response.content += activities_html.encode()
@@ -1132,12 +1096,8 @@ class TripActivityMoveView(LoginRequiredMixin, View):
         except ValueError:
             return HttpResponse("Invalid date format.", status=400)
 
-        # move_activity enforces trip.allow_edit_activities (the same
-        # permission every other date/position change on an activity
-        # requires) - a bare trip-membership check here previously let any
-        # joined member reschedule any activity, even on a trip restricted to
-        # organizer-only edits. See services.trips.trip_activities.set_activity_position's
-        # docstring for the same class of fix made there earlier.
+        # See services.trips.trip_activities.set_activity_position's docstring for the same class of fix made
+        # there earlier.
         try:
             move_activity(trip, profile, activity_id, date=new_date)
         except TripError as exc:
@@ -1151,11 +1111,10 @@ class TripMembershipJoinView(LoginRequiredMixin, View):
 
     POST /trips/<slug>/join/
 
-    Unlocks contribution rights (add/edit activities, comment, vote, add
-    members) for an invited member - separate from RSVP, which only says
-    whether they expect to actually show up. Declining an invitation reuses
-    `TripLeaveView` instead, since a not-yet-joined member has no
-    contributions to lose by leaving.
+    Unlocks contribution rights (add/edit activities, comment, vote, add members) for an invited member
+
+    - separate from RSVP, which only says whether they expect to actually show up. Declining an
+      invitation reuses `TripLeaveView` instead, since a not-yet-joined m...
     """
 
     def post(self, request, trip_slug):
@@ -1167,9 +1126,8 @@ class TripMembershipJoinView(LoginRequiredMixin, View):
 
         join_trip(trip, profile)
 
-        # Joining unlocks contribution across the whole page (activities,
-        # comments, members) - simplest to reload rather than stitch together
-        # OOB swaps for every affected panel for a rare, one-off action.
+        # Joining unlocks contribution across the whole page (activities, comments, members) - simplest to
+        # reload rather than stitch together OOB swaps for every affected panel for a rare, one-off action.
         response = HttpResponse("", status=200)
         response["HX-Refresh"] = "true"
         return response
@@ -1207,10 +1165,9 @@ class TripActivityRSVPView(LoginRequiredMixin, View):
     """Set or clear the current user's RSVP override for one activity.
 
     POST /trips/<slug>/activities/<id>/rsvp/
-    Body: {rsvp: "yes"|"no"|"maybe"|""}
 
-    An empty value deletes the override so the activity immediately inherits
-    the current trip RSVP again.
+    Body: {rsvp: "yes"|"no"|"maybe"|""} An empty value deletes the override so the activity immediately
+    inherits the current trip RSVP again.
     """
 
     def post(self, request, trip_slug, activity_id):
@@ -1247,9 +1204,8 @@ class TripLeaveView(LoginRequiredMixin, View):
 
     DELETE /trips/<slug>/leave/
 
-    Also doubles as "decline invitation" for a member who was invited but
-    never joined (see `TripMembershipJoinView`) - either way the membership
-    row is simply removed.
+    Also doubles as "decline invitation" for a member who was invited but never joined (see
+    `TripMembershipJoinView`) - either way the membership row is simply removed.
     """
 
     def delete(self, request, trip_slug):
@@ -1313,8 +1269,8 @@ class TripActivityPositionView(LoginRequiredMixin, View):
     """Save a map-drag position override for a trip activity.
 
     POST /trips/<slug>/activities/<int:activity_id>/position/
-    Body: {lat: float, lng: float}
-    This updates lat_override/lng_override on the TripActivity only - the
+
+    Body: {lat: float, lng: float} This updates lat_override/lng_override on the TripActivity only - the
     underlying Pin and Location coordinates are never modified.
     """
 
@@ -1328,14 +1284,7 @@ class TripActivityPositionView(LoginRequiredMixin, View):
 
         Returns:
             JsonResponse confirming saved coordinates, or an error HttpResponse.
-
-        Note:
-            Two deliberate behavior changes over the original implementation,
-            applied to this internal endpoint as well as the external one: it
-            now requires edit-activities permission (it previously admitted any
-            *invited* member, joined or not), and coordinates are bounds-checked
-            (they previously were not, so a marker could be saved at latitude
-            5000). See ``services.trips.trip_activities.set_activity_position``.
+            Note: See ``services.trips.trip_activities.set_activity_position``.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = trip_or_not_found(request, trip_slug, profile)
@@ -1362,9 +1311,9 @@ class TripActivityPositionView(LoginRequiredMixin, View):
 class TripChildTripSearchView(LoginRequiredMixin, View):
     """Search for trips the current user can add as a child activity.
 
-    Only trips the user is a member of (excluding the current trip) are returned.
-
     GET /trips/<slug>/child-trip-search/?q=<query>
+
+    Only trips the user is a member of (excluding the current trip) are returned.
     """
 
     def get(self, request, trip_slug):
@@ -1398,18 +1347,14 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
 def _forecast_gap_seconds(slot: ForecastSlot, target: datetime.datetime) -> float:
     """Absolute gap in seconds between a forecast slot and a scheduled time.
 
-    A slot carrying an aware-UTC ``date_utc`` (see the ``ForecastSlot``
-    contract) is compared against an aware ``target`` directly, so the gap is
-    offset-correct even when the provider's ``date`` is a local wall clock
-    (Open-Meteo's is). Slots without one fall back to comparing wall clocks,
-    forced naive on both sides so an offset-carrying ``date`` can't raise
-    "can't subtract offset-naive and offset-aware datetimes" and 500 the
-    trip page.
+    Slots without one fall back to comparing wall clocks, forced naive on both sides so an
+    offset-carrying ``date`` can't raise "can't subtract offset-naive and offset-aware datetimes" and
+    500 the trip page.
 
     Args:
         slot: The forecast slot to measure.
-        target: The activity's scheduled time (aware UTC from the ORM, but a
-            naive value is tolerated and falls back to the wall-clock path).
+        target: The activity's scheduled time (aware UTC from the ORM, but a naive value is tolerated
+        and falls back to the wall-clock path).
 
     Returns:
         The absolute difference in seconds.
@@ -1429,9 +1374,6 @@ def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
 
     Tries REData first, then the direct OpenWeatherMap/Open-Meteo chain - see
     ``services.apis.locations.weather_resolution.get_raw_forecast_slots``.
-
-    Returns a list of dicts with keys:
-      activity, location_name, scheduled_at, slot, no_coords, out_of_range
     """
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
     from urbanlens.dashboard.services.apis.locations.weather_resolution import get_raw_forecast_slots
@@ -1506,35 +1448,19 @@ def _group_by_day(rows: list[dict]) -> list[tuple]:
 def _build_activity_history(activities: list[TripActivity]) -> list[dict]:
     """For each past activity, what the weather actually was on its day.
 
-    The counterpart of :func:`_build_activity_forecasts`, for activities the
-    forecast can no longer say anything about. A forecast is only meaningful
-    relative to when it was made; a record of a day that has already happened
-    never changes, which is why this needs no freshness handling at all.
-
-    Grouped by coordinate before fetching, and fetched as a *range* per group,
-    so a week-long trip with five activities at one place costs one REData
-    request rather than five. Activities whose position comes from a lat/lng
-    override have no ``Location`` to cache against and take the uncached path -
-    REData still caches the days on its own side.
+    A forecast is only meaningful relative to when it was made; a record of a day that has already
+    happened never changes, which is why this needs no freshness handling at all.
 
     Args:
         activities: Past trip activities, in any order.
 
     Returns:
-        A list of dicts with keys ``activity``, ``location_name``,
-        ``scheduled_at`` and ``recorded`` (a
-        :class:`~urbanlens.dashboard.services.locations.visit_weather.RecordedDay`),
-        for the activities a reading could be found for. Activities with no
-        coordinates, no date, or a day outside ERA5's window are absent rather
-        than rendered as empty rows.
+        A list of dicts with keys ``activity``, ``location_name``, ``scheduled_at`` and ``recorded``
+        (a...
     """
     from urbanlens.dashboard.services.locations.visit_weather import recorded_range, recorded_range_at
 
-    # (rounded coordinate) -> the activities there. Rounding matches
-    # _build_activity_forecasts' own key, so the two group identically. The day
-    # is carried alongside rather than re-derived below: `scheduled_at` is
-    # nullable and the guard that rules that out is here, so re-reading it
-    # later would be reasoning the reader (and the type checker) cannot follow.
+    # (rounded coordinate) -> the activities there.
     by_point: dict[tuple[float, float], list[tuple[TripActivity, tuple[float, float], datetime.date]]] = {}
     for act in activities:
         coords = activity_coords(act)
@@ -1596,17 +1522,14 @@ class TripWeatherView(LoginRequiredMixin, View):
         else:
             today = timezone.localdate()
             all_activities = list(_activity_qs(trip))
-            # A past activity is one the forecast can no longer speak to. It gets
-            # the recorded-conditions treatment below instead of being dropped,
-            # which is what left a finished trip's weather panel empty.
+            # A past activity is one the forecast can no longer speak to.
             past_activities = [act for act in all_activities if act.scheduled_at is not None and act.scheduled_at.date() < today]
             try:
                 recorded = _build_activity_history(past_activities)
             except (requests.RequestException, KeyError, TypeError, ValueError):
-                # REData's own unavailability is already absorbed inside
-                # `visit_weather._fetch_days`, which answers with no days rather
-                # than raising - so what reaches here is a malformed activity
-                # (an unparseable coordinate, say), not an outage.
+                # REData's own unavailability is already absorbed inside `visit_weather._fetch_days`, which
+                # answers with no days rather than raising - so what reaches here is a malformed activity (an
+                # unparseable coordinate, say), not an outage.
                 logger.warning("Historical weather fetch failed for trip %s", trip_slug, exc_info=True)
                 recorded = []
             recorded_days = _group_by_day(recorded)
@@ -1617,12 +1540,10 @@ class TripWeatherView(LoginRequiredMixin, View):
             else:
                 try:
                     activity_forecasts = _build_activity_forecasts(activities)
-                    # Drop activities with nothing useful to show (no location data,
-                    # or too far outside the 5-day forecast window) instead of
-                    # rendering an empty "No location data"/"Outside 5-day forecast"
-                    # row for them - a day (or the whole panel) with nothing left
-                    # after this simply doesn't appear, rather than showing only
-                    # empty placeholders.
+                    # Drop activities with nothing useful to show (no location data, or too far outside the
+                    # 5-day forecast window) instead of rendering an empty "No location data"/"Outside 5-day
+                    # forecast" row for them - a day (or the whole panel) with nothing left after this simply
+                    # doesn't appear, rather than showing only empty placeholders.
                     activity_forecasts = [af for af in activity_forecasts if af["slot"] is not None]
 
                     day_map: dict = defaultdict(list)

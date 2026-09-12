@@ -18,18 +18,10 @@ class VendorAsset:
     """A third-party file the site loads.
 
     Attributes:
-        kind: What tag renders it. ``image`` assets have no tag; they are
-            referenced by URL from script and CSS.
+        kind: What tag renders it.
         path: Where the file sits under the mirror root, when one is configured.
-            Also the identity of the version: change it and both sources move
-            together.
         fallback: The public URL used when no mirror is configured.
-        integrity: Subresource-integrity hash for ``fallback`` only. A mirror
-            serving a re-compressed or differently-minified copy would fail an
-            SRI check against the CDN's bytes, so this is not emitted for a
-            mirrored asset - which is same-origin and covered by the operator
-            controlling it.
-    """
+        integrity: Subresource-integrity hash for ``fallback`` only."""
 
     kind: Literal["script", "style", "image"]
     path: str
@@ -161,10 +153,7 @@ def vendor_asset_url(key: str) -> str:
         The mirror URL when one is configured, else the public fallback.
 
     Raises:
-        KeyError: If the key is not in the table. Raised rather than returning ""
-            so a typo in a template is a failed render rather than a silently
-            missing script - which reads as a broken page with no explanation.
-    """
+        KeyError: If the key is not in the table."""
     asset = VENDOR_ASSETS[key]
     root = _mirror_root()
     if not root:
@@ -179,13 +168,11 @@ def vendor_asset_tag(key: str) -> SafeString:
         key: A key of :data:`VENDOR_ASSETS`.
 
     Returns:
-        The tag, with integrity and crossorigin only when loading from the
-        public fallback.
+        The tag, with integrity and crossorigin only when loading from the public fallback.
 
     Raises:
         KeyError: If the key is not in the table.
-        ValueError: If the asset is an image, which has no tag of its own.
-    """
+        ValueError: If the asset is an image, which has no tag of its own."""
     asset = VENDOR_ASSETS[key]
     if asset.kind == "image":
         raise ValueError(f"{key} is an image; use vendor_asset_url")

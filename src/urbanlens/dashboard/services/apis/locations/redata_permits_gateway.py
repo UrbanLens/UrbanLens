@@ -1,5 +1,4 @@
-"""Gateway for REData's ``/permits/`` near-a-coordinate endpoint.
-Providers are *cities* (Chicago, New York, San Francisco, Austin, Seattle), each covering only its own bounding box, radius pinned at 150 m: outside every registered city the answer is ``not_applicable``, which is a different answer from "no filings here"."""
+"""Gateway for REData's ``/permits/`` near-a-coordinate endpoint."""
 
 from __future__ import annotations
 
@@ -34,29 +33,11 @@ class RedataPermitsGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch permit/violation/site-plan filings near a coordinate.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                kinds: Restrict to these ``kind`` tags (see
-                :data:`PERMIT_KIND_LABELS`).
-                years: How many years of filings to search.
-                limit: Maximum number of filings to return.
-                force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-                The parsed envelope, ordered by ``issued_at`` (issued for a
-                permit, cited for a violation). Entries carry ``kind``,
-                ``filed_at`` (null for violations and for feeds publishing one
-                date), ``estimated_cost`` (the applicant's own *declared* value -
-                a scale indicator, never an appraisal), ``work_type``/``status``
-                (each city's own wording, deliberately unflattened), ``address``
-                as filed, and ``url`` - a deep link to the city's own record and
-                the route to its plan drawings (published by Austin and Seattle;
-                blank for Chicago and New York).
+            The parsed envelope, ordered by ``issued_at`` (issued for a permit, cited for a violation).
 
         Raises:
-                LocationContextUnavailableError: The covering source failed to
-                answer, or the request itself failed."""
+            LocationContextUnavailableError: The covering source failed to answer, or the request itself failed."""
         extra_params: dict[str, Any] = {}
         if kinds:
             extra_params["kind"] = kinds

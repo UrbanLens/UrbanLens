@@ -13,12 +13,7 @@ def flatten_timeline(envelope: dict[str, Any]) -> list[dict[str, Any]]:
         envelope: The body of ``GET /imagery/timeline/``.
 
     Returns:
-        Offerings newest first. A ``kind="capture"`` entry has a ``captured_on``
-        and an ``asset`` ready to display; a ``kind="range"`` entry carries
-        ``start``/``end``/``step`` plus the ``time_series_asset_uuid`` needed to
-        materialise a date, and ``continuous`` saying whether every date in it
-        is guaranteed to exist.
-    """
+        Offerings newest first."""
     offerings: list[dict[str, Any]] = []
 
     for capture in envelope.get("captures") or []:
@@ -73,9 +68,7 @@ def _resolved_flag(capture: dict[str, Any]) -> Any:
         capture: One ``captures`` entry.
 
     Returns:
-        ``True``/``False``/``None`` as REData reports it, or ``None`` when
-        absent - which means the source publishes no acquisition date at all,
-        and is not the same claim as ``False``."""
+        ``True``/``False``/``None`` as REData reports it, or ``None`` when absent - which means the source publishes no acquisition date at all, and is not the same claim as ``False``."""
     attributes = capture.get("attributes")
     if isinstance(attributes, dict) and "capture_date_resolved" in attributes:
         return attributes["capture_date_resolved"]

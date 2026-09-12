@@ -1,5 +1,4 @@
-"""Central hook for "one profile's MarkupMap became visible to another".
-Every place a MarkupMap gets handed to a different profile - a DM attachment, a standalone map share, or a map attached to an explicit pin share - should call :func:`share_markup_map_with_profile` exactly once for that send, so the geometry-based pin-share detection in ``services.sharing.map_pin_share_detection`` lives in one place instead of being reimplemented per send-path."""
+"""Central hook for "one profile's MarkupMap became visible to another"."""
 
 from __future__ import annotations
 
@@ -30,9 +29,7 @@ def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup
         markup_map: The map whose detection produced this match.
 
     Returns:
-        The newly created PinShare, or None if one already existed for this
-        (pin, recipient) pair (an earlier explicit share, or an earlier
-        send/detection pass)."""
+        The newly created PinShare, or None if one already existed for this (pin, recipient) pair (an earlier explicit share, or an earlier send/detection pass)."""
     from urbanlens.dashboard.services.sharing.share_provenance import record_share_exposure, resolve_and_stamp_origin_share
 
     if PinShare.objects.already_shared_with(recipient, pin=pin).exists():
@@ -56,7 +53,6 @@ def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup
 
 def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_map: MarkupMap) -> list[PinShare]:
     """Run pin-share detection for a map being sent from ``sender`` to ``recipient``.
-    It never creates or sends the DM/notification/share itself - only records any pins the map reveals - and never clones or otherwise materializes anything on the recipient's account (see :func:`clone_markup_map` for that, a separate and only user-initiated action).
 
     Args:
         sender: ``markup_map``'s owner at the time of sending.
@@ -64,9 +60,7 @@ def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_ma
         markup_map: The map being shared.
 
     Returns:
-        Newly created PinShare rows (empty if nothing was detected, or
-        everything was already recorded from a prior send of this or another
-        map covering the same pins)."""
+        Newly created PinShare rows (empty if nothing was detected, or everything was already recorded from a prior send of this or another map covering the same pins)."""
     pins = sync_pin_inferences(markup_map)
     shares = []
     for pin in pins:
@@ -81,11 +75,9 @@ def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> 
     Reuses ``MarkupMap.to_snapshot()``/``replace_items_from_snapshot()`` - the same round-trip already used by ``materialize_markup_map`` - so item cloning logic isn't duplicated.
 
     Args:
-        source: The map being cloned (may or may not still be owned by
-            ``sender`` - ``shared_by`` records who sent it regardless).
+        source: The map being cloned (may or may not still be owned by ``sender`` - ``shared_by`` records who sent it regardless).
         recipient: The profile the clone will belong to.
-        sender: The profile who most recently sent ``source`` to ``recipient``
-            (shown as "From X" on the clone).
+        sender: The profile who most recently sent ``source`` to ``recipient`` (shown as "From X" on the clone).
 
     Returns:
         The newly created clone, owned by ``recipient``."""
@@ -96,11 +88,9 @@ def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> 
 
 def infer_source_share_for_pin(pin: Pin) -> PinShare | None:
     """Best-effort match of a self-created pin to a prior inbound map-detected share.
-    This is inherently approximate (proximity + recency, no user confirmation) - it is only ever used as a fallback when ``source_share`` itself is unset, and only at the moment the pin is explicitly shared onward (see ``controllers.pin_sharing.PinShareCreateView``), never at pin creation time.
 
     Args:
-        pin: The pin to find a plausible inbound share for. Must have a
-            ``location``.
+        pin: The pin to find a plausible inbound share for.
 
     Returns:
         The best-matching PinShare, or None if no plausible match exists."""

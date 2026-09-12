@@ -19,9 +19,7 @@ def encode_cursor(stamp: datetime, pk: int) -> str:
 
     Args:
         stamp: The row's ordering timestamp.
-        pk: The row's primary key, which breaks ties between rows sharing a
-            timestamp - without it a batch of simultaneously-created rows
-            would page inconsistently.
+        pk: The row's primary key, which breaks ties between rows sharing a timestamp - without it a batch of simultaneously-created rows would page inconsistently.
 
     Returns:
         A URL-safe base64 token."""
@@ -38,9 +36,7 @@ def decode_cursor(cursor: str) -> tuple[datetime, int]:
         The ``(timestamp, pk)`` position the next page continues from.
 
     Raises:
-        InvalidCursorError: The token is malformed, or decodes to a naive
-            datetime (every stored timestamp here is timezone-aware, so a
-            naive one means the token was not ours)."""
+        InvalidCursorError: The token is malformed, or decodes to a naive datetime (every stored timestamp here is timezone-aware, so a naive one means the token was not ours)."""
     try:
         raw = base64.urlsafe_b64decode(cursor.encode()).decode()
         stamp_raw, _, pk_raw = raw.rpartition("|")

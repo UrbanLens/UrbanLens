@@ -757,9 +757,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 }
 
-// Cards flow into as many columns as fit at 340px+ each, so the many
-// single/few-field settings cards pack side by side on wide screens instead
-// of each stacking full-width for just one input.
+// Cards flow into as many columns as fit at 340px+ each, so the many single/few-field settings cards pack side by side on wide screens.
 .site-admin-settings-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -819,11 +817,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         padding-top: .5rem;
     }
 
-    // Sub-element (__item/__handle/__rank/__label/__move/__btn/__toggle) styling
-    // for this markup now lives unscoped in _tags.scss, so it also applies to
-    // the same dashboard/partials/ui/_priority_list.html partial used outside
-    // site-admin (e.g. the settings page) - only this page-specific container
-    // override (max-width, tighter gap) stays here.
+    // Sub-element (__item/__handle/__rank/__label/__move/__btn/__toggle) styling for this markup now lives unscoped in _tags.scss, so it.
     .priority-list {
         list-style: none;
         margin: 0 0 .5rem;
@@ -1655,7 +1649,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
 
 // - Dark Mode
 [data-theme="dark"] {
-    
+
     .subscription-admin-page .role-pill {
         background: linear-gradient(135deg, rgba($color-indigo-600, .25), rgba($color-blue-500, .2));
         color: var(--ul-grey-8);
@@ -1713,9 +1707,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
 
 }
 // -- Suggestion model report (site-admin/models/) ---------------------------
-// Its own block rather than reused admin-table/admin-list names: those do not
-// exist, and inventing class names that no stylesheet defines is how a page
-// ships looking broken while every test passes.
+// Its own block rather than reused admin-table/admin-list names.
 .model-report {
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
@@ -1873,9 +1865,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     min-height: 2.25rem;
 }
 
-// The ungrouped pool and every group card's member list share this class -
-// Sortable is initialized on each one, all sharing one `group:` name so a
-// chip can be dragged between any of them (see external-tag-mapping.ts).
+// The ungrouped pool and every group card's member list share this class.
 .exttag-group-list {
     padding: .35rem;
     border-radius: 8px;

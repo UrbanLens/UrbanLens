@@ -41,12 +41,7 @@ class SavedFilterUndoHandler(UndoHandler):
         """Recreate the saved filters.
 
         Raises:
-            UndoExpiredError: If the owning profile was deleted during the retention
-                window, or the filter's name has since been used for another of that
-                profile's filters - ``uq_saved_filter_profile_name`` would otherwise
-                surface as an uncaught IntegrityError, the same contract
-                ``PinUndoHandler.restore`` follows.
-        """
+            UndoExpiredError: If the owning profile was deleted during the retention window, or the filter's name has since been used for another of that profile's filters - ``uq_saved_filter_profile_name`` would otherwise surface as an uncaught..."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.models.profile.model import Profile

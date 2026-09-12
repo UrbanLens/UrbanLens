@@ -1,5 +1,4 @@
-"""Simulate viewing your own profile as another type of user.
-The preview works by creating a throwaway "ghost" ``User`` (and the real relationship rows - friendship, shared pin, mutual friend, or shared trip - that the selected audience implies) inside a database transaction, rendering the page through the normal view stack as that ghost, and then rolling the transaction back so nothing persists."""
+"""Simulate viewing your own profile as another type of user."""
 
 from __future__ import annotations
 
@@ -29,11 +28,9 @@ _MODE_LABEL_OVERRIDES = {
 
 def preview_modes() -> list[tuple[str, str]]:
     """Return the selectable preview audiences as ``(mode, label)`` pairs.
-    The list is derived from :class:`VisibilityChoice` so it always mirrors the options offered by the privacy controls on the settings page - if a new visibility level is added there, it automatically becomes previewable here (unknown levels fall back to a no-relationship ghost).
 
     Returns:
-        List of ``(mode value, human-readable label)`` tuples, in the same
-        order as the settings-page choices."""
+        List of ``(mode value, human-readable label)`` tuples, in the same order as the settings-page choices."""
     return [(value, _MODE_LABEL_OVERRIDES.get(value, label)) for value, label in VisibilityChoice.choices]
 
 
@@ -56,11 +53,9 @@ def create_ghost_viewer(owner: Profile, mode: str) -> User:
     Args:
         owner: The profile being previewed (the logged-in user's own profile).
         mode: A :class:`VisibilityChoice` value selecting the relationship.
-            Unknown values produce a ghost with no relationship at all.
 
     Returns:
-        The ghost ``User``, whose ``Profile`` was auto-created by the
-        ``post_save`` signal."""
+        The ghost ``User``, whose ``Profile`` was auto-created by the ``post_save`` signal."""
     from urbanlens.dashboard.models.profile.model import Profile
 
     ghost_user = User.objects.create_user(username=f"preview_{uuid.uuid4().hex[:16]}")

@@ -55,12 +55,7 @@ def _item_out(row: FloorplanItem, source_uuids: dict, reference_uuids: dict) -> 
 
 
 def _marker_dict(marker: FloorplanMarker, source_uuids: dict, reference_uuids: dict) -> dict[str, Any]:
-    """One marker's document entry, deferring to its linked pin where it has one.
-
-    A linked pin is the freshest copy of name/icon/color once it exists - it
-    may have been renamed or restyled from the Private Pin page since this
-    marker was last saved here.
-    """
+    """One marker's document entry, deferring to its linked pin where it has one."""
     linked = marker.linked_pin
     return {
         **_item_out(marker, source_uuids, reference_uuids),
@@ -199,10 +194,7 @@ def _int_in(raw, field: str) -> int | None:
     """An optional integer from a document payload.
 
     Raises:
-        ValueError: Present but not a number - reported to the caller as a
-            400 naming the field, rather than reaching the database and
-            surfacing as a 500.
-    """
+        ValueError: Present but not a number - reported to the caller as a 400 naming the field, rather than reaching the database and surfacing as a 500."""
     if raw is None or raw == "":
         return None
     try:
@@ -229,10 +221,7 @@ def _required_float_in(raw, field: str) -> float:
     """A coordinate the document must carry.
 
     Raises:
-        ValueError: Absent or not a number. A wall missing an endpoint is not
-            a wall, and defaulting it to zero would silently move it to the
-            plan origin.
-    """
+        ValueError: Absent or not a number."""
     value = _float_in(raw, field)
     if value is None:
         raise FloorplanValidationError(f"{field} is required")
@@ -243,12 +232,7 @@ def _date_in(raw) -> datetime.date | None:
     """Parse an ISO date or None.
 
     Raises:
-        ValueError: Not an ISO date. The message is deliberately ours rather
-            than ``fromisoformat``'s, which quotes the offending input back
-            verbatim - these messages are surfaced to the client, so echoing
-            caller-supplied text there makes the error response a reflection
-            sink.
-    """
+        ValueError: Not an ISO date."""
     if not raw:
         return None
     try:
@@ -352,10 +336,7 @@ def _choice_in(raw, choices, field: str, default: str) -> str:
     """One of an enum's values, defaulting when absent.
 
     Raises:
-        ValueError: Present but unrecognised. Coercing an unknown value to the
-            default is how a whole class of item quietly becomes the wrong
-            thing while looking like it saved.
-    """
+        ValueError: Present but unrecognised."""
     if raw is None or raw == "":
         return default
     if raw not in choices:
@@ -414,10 +395,7 @@ class _Pools:
 
 def _stored_values(row: FloorplanItem) -> dict[str, Any] | None:
     """Every concrete column's current value, or None for a row not yet in the database.
-
-    Read by attname, so a foreign key is compared as its id rather than by fetching
-    the object it points at.
-    """
+    Read by attname, so a foreign key is compared as its id rather than by fetching the object it points at."""
     if row.pk is None:
         return None
     # _meta is Django's documented model API, underscore notwithstanding.
@@ -474,7 +452,6 @@ _TWIN_FIELDS = ("name", "name_is_user_provided", "pin_type", "pin_type_is_user_p
 
 def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan: Floorplan) -> None:
     """Create, move, or restyle a marker's detail-pin twin to match it.
-    A marker only ever gets one on a personal, pin-owned floorplan - the wiki-published copy (see :func:`services.floorplans.resolution.publish_to_wiki`) has no owning pin to parent a detail pin under, and its own markers stay unlinked rather than reaching across to another profile's private pin.
 
     Args:
         marker: The marker to link, already saved (has a pk).
@@ -530,8 +507,7 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
 
 
 def _sync_markers(existing_by_uuid: dict, payloads: list[dict] | None, floor: FloorplanFloor, pools: _Pools, profile: Profile | None, floorplan: Floorplan) -> None:
-    """Reconcile one floor's markers, keeping each one's detail-pin twin in step.
-    A hand-rolled counterpart to :func:`_sync` rather than a parameter added to it: markers are the only floorplan item with a twin elsewhere on the site, and threading that through the generic helper would make every other caller (walls, openings, locks, rooms) carry a no-op it never uses."""
+    """Reconcile one floor's markers, keeping each one's detail-pin twin in step."""
     from urbanlens.dashboard.models.floorplans.model import FloorplanMarker, FloorplanMarkerKind
 
     for index, payload in enumerate(payloads or []):
@@ -606,9 +582,7 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         The saved floorplan.
 
     Raises:
-        ValueError: Something in the document is unusable, named in the message
-            so the caller can turn it into a 400 a client can act on.
-    """
+        ValueError: Something in the document is unusable, named in the message so the caller can turn it into a 400 a client can act on."""
     from urbanlens.dashboard.models.floorplans.model import (
         FloorplanFloor,
         FloorplanLock,

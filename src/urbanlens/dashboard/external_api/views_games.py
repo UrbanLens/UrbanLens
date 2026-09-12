@@ -1,33 +1,20 @@
 """External-API views for SpotGuessr: solo play only, over a credential.
 
-The web game is a superset of this: it also has a lobby, friend invites, a
-join/begin handshake, host-side "end the game now", and live session chat, all
-of which are coordinated over ``consumers.GameSessionConsumer``. **None of that
-is mirrored here, and that is a design decision rather than an unfinished
-one.** A multiplayer round withholds its reveal until every joined participant
-has guessed, and then delivers it as a WebSocket broadcast; a client that
-guessed into such a round over HTTP has nothing left to poll and would sit
-there forever, looking to its user like the game had hung. So every
-session-scoped view below runs :class:`SoloSessionOnlyMixin` and refuses a
-multi-participant or still-in-lobby session with a 409 that says, in as many
-words, to use the web client.
+The web game is a superset of this: it also has a lobby, friend invites, a join/begin handshake,
+host-side "end the game now", and live session chat, all of which are coordinated over
+``consumers.GameSessionConsumer``. **None of that is mirrored here, and that is a design decision
+rather than an unfinished one.** A multiplayer round withholds its reveal until every joined
+participant has guessed, and then delivers it as a WebSocket broadcast; a client that guessed into
+such a round over HTTP has nothing left to poll and would sit there forever, looking to its user
+like the game had hung.
+Nothing here re-derives a score, a rating, a round, or an eligibility rule - a second implementation
+of any of those would not merely duplicate code, it would produce a *different game* for mobile
+players than for web ones, which no test on either side would catch.
 
-Everything else defers to ``services.spotguessr``. Nothing here re-derives a
-score, a rating, a round, or an eligibility rule - a second implementation of
-any of those would not merely duplicate code, it would produce a *different
-game* for mobile players than for web ones, which no test on either side would
-catch.
-
-Two boundaries are worth stating explicitly, because both are easy to
-accidentally remove:
-
-- **404, never 403, for a session the caller does not participate in.** Session
-  ids are sequential global integers (``GameSession`` extends
-  ``DashboardModel``, which has no uuid), so a 403 would let anyone enumerate
-  exactly how many games the site has played and when.
-- **Profiles are identified by slug on the wire.** The internal summary payload
-  is keyed by profile primary key; those are remapped here before anything is
-  sent.
+- **404, never 403, for a session the caller does not participate in.** Session ids are sequential
+  global integers (``GameSession`` extends ``DashboardModel``,...
+- **Profiles are identified by slug on the wire.** The internal summary payload is keyed by profile
+  primary key; those are remapped here before anything is sent.
 """
 
 from __future__ import annotations
@@ -106,9 +93,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: The body every session-scoped endpoint returns for a session this API will
-#: not play. ``error_code`` is machine-readable on purpose: a client needs to
-#: branch to "open this in the browser" rather than surface the prose.
+#: The body every session-scoped endpoint returns for a session this API will not play. ``error_code`` is
+#: machine-readable on purpose: a client needs to branch to "open this in the browser" rather than surface the
+#: prose.
 MULTIPLAYER_REFUSAL = {"error": "This session requires the web client.", "error_code": "multiplayer_unsupported"}
 
 
@@ -119,9 +106,7 @@ def _rating_payload(rating: PlayerModeRating | None) -> dict[str, Any] | None:
         rating: The rating row, or None for a player who has never played.
 
     Returns:
-        The wire payload, or None. ``rating``/``rating_deviation`` are the
-        Elo-familiar display values, never the paper's internal mu/phi - no
-        client should have to know the scale constant.
+        The wire payload, or None.
     """
     if rating is None:
         return None
@@ -137,15 +122,15 @@ def _rating_payload(rating: PlayerModeRating | None) -> dict[str, Any] | None:
 def _parse_geo_bounds_query(raw: str | None) -> tuple[dict | None, Response | None]:
     """Parse+validate an optional ``geo_bounds`` GeoJSON query-string value.
 
-    Mirrors ``controllers.spotguessr._parse_geo_bounds`` exactly, translated to
-    this API's ``{"error": ...}`` envelope instead of ``JsonResponse``.
+    Mirrors ``controllers.spotguessr._parse_geo_bounds`` exactly, translated to this API's ``{"error":
+    ...}`` envelope instead of ``JsonResponse``.
 
     Args:
         raw: The raw ``geo_bounds`` query parameter, or None.
 
     Returns:
-        ``(geojson, None)`` on success (``geojson`` is None when ``raw`` was
-        empty), or ``(None, response)`` carrying the 400 to return as-is.
+        ``(geojson, None)`` on success (``geojson`` is None when ``raw`` was empty), or ``(None,
+        response)`` carrying the 400 to return as-is.
     """
     try:
         geo_bounds_geojson = json.loads(raw) if raw else None
@@ -154,9 +139,8 @@ def _parse_geo_bounds_query(raw: str | None) -> tuple[dict | None, Response | No
 
     config = spotguessr_session.GameConfig(geo_bounds_geojson=geo_bounds_geojson)
     try:
-        # GameConfig.geo_bounds only parses the GeoJSON lazily on access -
-        # force it now so a malformed-but-valid-JSON payload 400s here,
-        # rather than surfacing as a 500 later inside the pin query.
+        # GameConfig.geo_bounds only parses the GeoJSON lazily on access - force it now so a
+        # malformed-but-valid-JSON payload 400s here, rather than surfacing as a 500 later inside the pin query.
         _ = config.geo_bounds
     except (GEOSException, GDALException, ValueError, TypeError):
         return None, Response({"error": "Invalid geo_bounds - must be a valid GeoJSON polygon."}, status=400)
@@ -166,33 +150,23 @@ def _parse_geo_bounds_query(raw: str | None) -> tuple[dict | None, Response | No
 class SoloSessionOnlyMixin:
     """Refuses any session this API cannot honestly finish.
 
-    Applied to every session-scoped view. The check is deliberately *not*
-    "status != LOBBY": a multiplayer game whose host has already begun it is
-    ACTIVE, exactly like a solo one, and it is the one that actually traps a
-    client. Both conditions are refused:
+    Applied to every session-scoped view.
 
-    - **more than one participant** - reveals are withheld until every joined
-      participant has guessed and then arrive only over the WebSocket, so an
-      HTTP client that guesses into such a round has nothing to poll and will
-      wait forever;
-    - **still in LOBBY** - there is no join/begin handshake on this surface, so
-      the session can never leave that state through anything here.
-
-    This is not defensive padding. Without it the failure is silent and
-    indistinguishable from a slow server, which is the worst way for a mobile
-    client to discover an unsupported feature.
+    - **more than one participant** - reveals are withheld until every joined participant has guessed
+      and then arrive only over the WebSocket, so an HTTP client th...
+    - **still in LOBBY** - there is no join/begin handshake on this surface, so the session can never
+      leave that state through anything here.
     """
 
     def refuse_if_multiplayer(self, session: GameSession) -> Response | None:
         """Return the 409 refusal when *session* is not solo-playable, else None.
 
         Args:
-            session: The session the caller asked to act on. Already confirmed
-                to be one the caller participates in.
+            session: The session the caller asked to act on.
 
         Returns:
-            A 409 ``Response`` carrying :data:`MULTIPLAYER_REFUSAL`, or None
-            when the session is a solo one this API can play.
+            A 409 ``Response`` carrying :data:`MULTIPLAYER_REFUSAL`, or None when the session is a solo one
+            this API can play.
         """
         if session.status == GameSessionStatus.LOBBY:
             return Response(dict(MULTIPLAYER_REFUSAL), status=409)
@@ -204,27 +178,25 @@ class SoloSessionOnlyMixin:
 class SpotGuessrSessionScopedView(SoloSessionOnlyMixin, ExternalApiView):
     """Base for every endpoint addressed by a session id.
 
-    Holds the two rules those endpoints share: the caller must participate in
-    the session, and the session must be solo. Resolving both in one place is
-    what keeps a new endpoint from accidentally being the one that answers 403,
-    or the one that forgets the solo check.
+    Holds the two rules those endpoints share: the caller must participate in the session, and the
+    session must be solo.
+    Resolving both in one place is what keeps a new endpoint from accidentally being the one that
+    answers 403, or the one that forgets the solo check.
     """
 
     def get_participant_session(self, request: Request, session_id: int) -> GameSession | None:
         """The session, only if the calling credential's owner participates in it.
 
-        Any participant status qualifies (INVITED as well as JOINED), matching
-        the internal controller: an invitee may look at a session before
-        deciding about it.
+        Any participant status qualifies (INVITED as well as JOINED), matching the internal controller: an
+        invitee may look at a session before deciding about it.
 
         Args:
             request: The authenticated request.
             session_id: The session's primary key, straight from the URL.
 
         Returns:
-            The session, or None when it does not exist *or* is somebody
-            else's - never distinguished, since a sequential id would otherwise
-            let a caller count the site's games.
+            The session, or None when it does not exist *or* is somebody else's - never distinguished, since
+            a sequential id would otherwise let a...
         """
         participant = GameSessionParticipant.objects.filter(session_id=session_id, profile__user=request.user).select_related("session").first()
         return participant.session if participant is not None else None
@@ -237,8 +209,8 @@ class SpotGuessrSessionScopedView(SoloSessionOnlyMixin, ExternalApiView):
             session_id: The session's primary key.
 
         Returns:
-            ``(session, None)`` when the caller may proceed, or
-            ``(None, response)`` carrying the 404 or 409 to return as-is.
+            ``(session, None)`` when the caller may proceed, or ``(None, response)`` carrying the 404 or 409
+            to return as-is.
         """
         session = self.get_participant_session(request, session_id)
         if session is None:
@@ -252,18 +224,11 @@ class SpotGuessrSessionScopedView(SoloSessionOnlyMixin, ExternalApiView):
 class SpotGuessrOverviewView(ExternalApiView):
     """GET: the SpotGuessr start screen - settings, limits, your rating, and what to resume.
 
-    The web route of the same name renders HTML, so this is a genuinely new
-    endpoint rather than a re-exposure of an existing JSON one. It deliberately
-    omits the web page's mode-card icons/descriptions and its reversed URL
-    templates: those describe how one client draws the screen, and baking them
-    into a public contract would make a CSS decision a breaking change.
-
-    ``friend_ratings`` is a separate, separately-gated block. A credential
-    holding only ``games:read`` is asking about *its own* play; naming the
-    user's friends is a social read, so the key is present only when the
-    credential also holds ``social:read``, and each friend's identity is
-    resolved through ``resolve_visible_identity`` so a friend who restricts
-    their profile stays masked here too.
+    The web route of the same name renders HTML, so this is a genuinely new endpoint rather than a
+    re-exposure of an existing JSON one.
+    It deliberately omits the web page's mode-card icons/descriptions and its reversed URL templates:
+    those describe how one client draws the screen, and baking them into a public contract would make a
+    CSS decision a breaking change.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -299,9 +264,9 @@ class SpotGuessrOverviewView(ExternalApiView):
             profile: The viewer.
 
         Returns:
-            One entry per friend who has not opted out of showing ratings. A
-            masked friend carries no slug at all: the slug is a stable handle
-            that would identify them across requests and defeat the masking.
+            One entry per friend who has not opted out of showing ratings.
+            masked friend carries no slug at all: the slug is a stable handle that would identify them
+            across requests and defeat the masking.
         """
         entries = list(visible_friend_ratings(profile))
         # Resolved for the whole list at once - the per-friend call rebuilds
@@ -326,10 +291,9 @@ class SpotGuessrPreferencesView(ExternalApiView):
     """PATCH: update the one genuinely user-editable SpotGuessr preference.
 
     Mirrors ``controllers.spotguessr.SpotGuessrSettingsView`` exactly.
-    ``last_config`` stays off this surface entirely - it is auto-managed by
-    ``remember_last_config`` on every session start, never directly
-    user-writable (confirmed against the internal view, which also only ever
-    touches ``show_ratings_to_friends``).
+    ``last_config`` stays off this surface entirely - it is auto-managed by ``remember_last_config`` on
+    every session start, never directly user-writable (confirmed against the internal view, which also
+    only ever touches ``show_ratings_to_friends``).
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -351,10 +315,9 @@ class SpotGuessrPreferencesView(ExternalApiView):
 class SpotGuessrEligibleCountView(ExternalApiView):
     """GET: how many of the caller's own pins fall inside a candidate area.
 
-    Mirrors ``controllers.spotguessr.SpotGuessrAreaPinCountView`` exactly - a
-    lightweight pre-check so a client can warn "not enough pins here" before
-    spending the (tighter, billed-imagery-capable) session-start budget on a
-    config that has nothing to play.
+    Mirrors ``controllers.spotguessr.SpotGuessrAreaPinCountView`` exactly - a lightweight pre-check so a
+    client can warn "not enough pins here" before spending the (tighter, billed-imagery-capable)
+    session-start budget on a config that has nothing to play.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -379,18 +342,16 @@ class SpotGuessrEligibleCountView(ExternalApiView):
 class SpotGuessrEligiblePinsView(PaginatedListMixin, ExternalApiView):
     """GET: the caller's own pins that are currently SpotGuessr-eligible.
 
-    A browse/read endpoint, not a play mode - solo eligibility is exactly "the
-    player's own pinned locations" (see ``services.spotguessr.eligibility``),
-    optionally narrowed to a candidate ``geo_bounds`` the same way session
-    start and the area-count pre-check are. Mirrors
-    ``controllers.spotguessr.SpotGuessrPinsView``, paginated instead of
-    returned as one unbounded list.
+    A browse/read endpoint, not a play mode - solo eligibility is exactly "the player's own pinned
+    locations" (see ``services.spotguessr.eligibility``), optionally narrowed to a candidate
+    ``geo_bounds`` the same way session start and the area-count pre-check are.
+    Mirrors ``controllers.spotguessr.SpotGuessrPinsView``, paginated instead of returned as one
+    unbounded list.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
-        # Both scopes: unlike the area pre-check above, this returns each
-        # pin's label and exact coordinates - the same private location data
-        # pins:read gates everywhere else.
+        # Both scopes: unlike the area pre-check above, this returns each pin's label and exact coordinates -
+        # the same private location data pins:read gates everywhere else.
         "GET": frozenset({ApiKeyScope.GAMES_READ, ApiKeyScope.PINS_READ}),
     }
 
@@ -425,28 +386,20 @@ class SpotGuessrEligiblePinsView(PaginatedListMixin, ExternalApiView):
 class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
     """GET: the caller's session history. POST: start a new solo session.
 
-    The list has no internal equivalent at all - the web page resumes from a
-    JavaScript variable it was rendered with, which a native client that was
-    backgrounded and killed has no access to. It is what makes "come back to
-    the app and carry on" possible, so it deliberately includes finished and
-    multiplayer sessions too, each flagged ``is_multiplayer`` so a client knows
-    up front which ones this API will refuse to play.
-
-    POST starts a solo session *and* generates its first round, because a
-    session without one is not something a client can do anything with. A
-    config with nothing eligible to play answers 409 and creates nothing. (The
-    internal endpoint answers 200 with an ``error_code`` for that case; a 200
-    that means "your request did not happen" is a wart, and mirroring it would
-    make every generated client treat the failure as success.)
+    POST starts a solo session *and* generates its first round, because a session without one is not
+    something a client can do anything with.
+    (The internal endpoint answers 200 with an ``error_code`` for that case; a 200 that means "your
+    request did not happen" is a wart, and mirroring it would make every generated client treat the
+    failure as success.)
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "GET": frozenset({ApiKeyScope.GAMES_READ}),
         "POST": frozenset({ApiKeyScope.GAMES_WRITE}),
     }
-    #: The start throttle counts only the write tier, so listing sessions is not
-    #: charged against the (deliberately tight) start budget. See
-    #: ``throttling.GameStartThrottle`` for why starting needs its own cap.
+    #: The start throttle counts only the write tier, so listing sessions is not charged against the
+    #: (deliberately tight) start budget. See ``throttling.GameStartThrottle`` for why starting needs its own
+    #: cap.
     throttle_classes: ClassVar[list] = [ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle, GameStartThrottle]
 
     @extend_schema(parameters=[SpotGuessrSessionListQuerySerializer], responses={200: SpotGuessrSessionSerializer(many=True)})
@@ -522,8 +475,8 @@ class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
 def _host_slugs(sessions: list[GameSession]) -> dict[int, str | None]:
     """Map the host profile id of each session to that profile's slug.
 
-    Resolved in one query for the whole page rather than per row, and existing
-    at all because host *ids* must never reach the wire.
+    Resolved in one query for the whole page rather than per row, and existing at all because host *ids*
+    must never reach the wire.
 
     Args:
         sessions: The page of sessions being serialized.
@@ -559,20 +512,12 @@ class SpotGuessrSessionDetailView(SpotGuessrSessionScopedView):
 class SpotGuessrRoundView(SpotGuessrSessionScopedView):
     """GET: the session's current round, creating the next one when the last is done.
 
-    Read-shaped but emphatically not a read. This call generates rounds, can
-    complete the session, and persists the session's frozen ``bonus_scope`` on
-    its first invocation, so it is neither idempotent nor cacheable - hence the
-    explicit write tier below. Left in the hourly read budget it would sit in a
-    bucket sized for a mobile client's bulk sync, which is exactly the wrong
-    ceiling for a call that runs eligibility passes and can bill a Street View
+    Left in the hourly read budget it would sit in a bucket sized for a mobile client's bulk sync, which
+    is exactly the wrong ceiling for a call that runs eligibility passes and can bill a Street View
     fetch.
     """
 
-    #: ``games:write`` as well as ``games:read``, because this GET *writes* -
-    #: see the class docstring. Reclassifying it into the write throttle tier
-    #: (below) bounded how often it could be called but authorized nothing: a
-    #: read-only credential could still generate rounds, freeze the session's
-    #: ``bonus_scope`` and complete the session. A throttle is not a permission.
+    #: ``games:write`` as well as ``games:read``, because this GET *writes* - see the class docstring.
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "GET": frozenset({ApiKeyScope.GAMES_READ, ApiKeyScope.GAMES_WRITE}),
     }
@@ -607,14 +552,12 @@ class SpotGuessrRoundView(SpotGuessrSessionScopedView):
 class SpotGuessrGuessView(SpotGuessrSessionScopedView):
     """POST: submit this session's guess for one round.
 
-    Scoring, the date bonus, the country/state/city bonus, the Glicko-2 update,
-    the reveal, and advancing to the next round all happen inside
-    ``services.spotguessr.session.submit_guess`` - which is also where the row
-    lock that makes a concurrent double-submit safe lives. This view therefore
-    neither re-runs any rating math nor wraps the call in a transaction of its
-    own: an outer ``atomic()`` would extend that lock across the broadcast and
-    next-round generation, turning a correctly-scoped critical section into a
-    session-wide one.
+    Scoring, the date bonus, the country/state/city bonus, the Glicko-2 update, the reveal, and
+    advancing to the next round all happen inside ``services.spotguessr.session.submit_guess`` - which
+    is also where the row lock that makes a concurrent double-submit safe lives.
+    This view therefore neither re-runs any rating math nor wraps the call in a transaction of its own:
+    an outer ``atomic()`` would extend that lock across the broadcast and next-round generation, turning
+    a correctly-scoped critical section into a session-wide one.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -638,10 +581,7 @@ class SpotGuessrGuessView(SpotGuessrSessionScopedView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Point takes (x, y) - longitude first. Getting this backwards does not
-        # raise anywhere: it silently produces a valid point somewhere else on
-        # Earth, so every guess scores as a miss and the game merely looks
-        # broken rather than erroring. Asserted directly in the tests.
+        # Point takes (x, y) - longitude first.
         guess_point = Point(data["longitude"], data["latitude"], srid=4326)
 
         try:
@@ -661,13 +601,9 @@ class SpotGuessrGuessView(SpotGuessrSessionScopedView):
 class SpotGuessrRoundExpireView(SpotGuessrSessionScopedView):
     """POST: force-reveal the current round because its round timer expired.
 
-    Mirrors ``controllers.spotguessr.SpotGuessrRoundTimeoutView``. The
-    authoritative check is server-side (``round_.created`` plus the session's
-    own ``round_time_limit_seconds``, never the client's clock) - this just
-    gives a client whose local countdown hit zero a fast path to
-    ``expire_round_timer``. A no-op (200, not an error) when the round is
-    already revealed or the timer genuinely hasn't expired yet - a
-    late/duplicate/clock-skewed call is harmless either way.
+    The authoritative check is server-side (``round_.created`` plus the session's own
+    ``round_time_limit_seconds``, never the client's clock) - this just gives a client whose local
+    countdown hit zero a fast path to ``expire_round_timer``.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -696,13 +632,8 @@ class SpotGuessrRoundExpireView(SpotGuessrSessionScopedView):
 class SpotGuessrRoundFeedbackView(SpotGuessrSessionScopedView):
     """POST: thumbs up/down, or report, the photo a Photos-mode round just showed.
 
-    Mirrors ``controllers.spotguessr.SpotGuessrPhotoFeedbackView``. Feeds
-    ``services.media.media_relevance.effective_relevance`` at a reduced weight (or,
-    for a report, full weight against "not relevant") - see
-    ``services.spotguessr.relevance`` for exactly how. A 400 for a round with
-    no photo (Named Place/Street View); a 403 for a round this profile never
-    guessed on - there is no "reaction to a photo you weren't shown" case to
-    support.
+    A 400 for a round with no photo (Named Place/Street View); a 403 for a round this profile never
+    guessed on - there is no "reaction to a photo you weren't shown" case to support.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -753,16 +684,15 @@ def _summary_payload(session: GameSession) -> dict[str, Any]:
     """The service's session summary, with profile ids swapped for slugs.
 
     The summary itself (points, rating delta, best round) is computed by
-    ``services.spotguessr.session.session_summary`` and not recomputed here -
-    this only rewrites the identifier, because the internal payload is keyed by
-    primary key and those must not leave the server.
+    ``services.spotguessr.session.session_summary`` and not recomputed here - this only rewrites the
+    identifier, because the internal payload is keyed by primary key and those must not leave the
+    server.
 
     Args:
         session: The session to summarize.
 
     Returns:
-        The summary with each participant carrying ``profile_slug`` instead of
-        ``profile_id``.
+        The summary with each participant carrying ``profile_slug`` instead of ``profile_id``.
     """
     summary = spotguessr_session.session_summary(session)
     rows = summary.get("participants", [])
@@ -774,19 +704,11 @@ def _summary_payload(session: GameSession) -> dict[str, Any]:
 class SpotGuessrRoundImageView(SoloSessionOnlyMixin, ExternalApiView):
     """GET: the round's photo as bytes, with every metadata block removed.
 
-    A native client cannot render the ``image_url`` on the round payload
-    without also holding ``media:read`` and following the media gate, and even
-    then it would receive the *original* file. That file routinely still
-    carries the camera's GPS tags, which point straight at the answer - so this
-    endpoint exists specifically to hand over a copy that does not, and it
-    requires both ``games:read`` (this is game content) and ``media:read``
-    (these are the user's own photo bytes). ``HasApiKeyScope`` requires every
-    declared scope, so a credential holding only one of the pair gets nothing.
-
-    Charged against the media budget rather than the API read budget, for the
-    same reason the media gate is: a screen of images is a burst of file
-    requests, and metering them against the JSON caps would refuse legitimate
-    play while still leaving a leaked key able to pull files all day.
+    A native client cannot render the ``image_url`` on the round payload without also holding
+    ``media:read`` and following the media gate, and even then it would receive the *original* file.
+    Charged against the media budget rather than the API read budget, for the same reason the media gate
+    is: a screen of images is a burst of file requests, and metering them against the JSON caps would
+    refuse legitimate play while still leaving a leaked key able to pull files all day.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -816,8 +738,7 @@ class SpotGuessrRoundImageView(SoloSessionOnlyMixin, ExternalApiView):
             return Response({"error": "Not found."}, status=404)
 
         response = HttpResponse(payload, content_type=content_type)
-        # Private: these bytes are one user's photo served under their own
-        # credential, and a shared cache holding them would serve them to the
-        # next caller of the same URL.
+        # Private: these bytes are one user's photo served under their own credential, and a shared cache
+        # holding them would serve them to the next caller of the same URL.
         response["Cache-Control"] = "private, max-age=300"
         return response

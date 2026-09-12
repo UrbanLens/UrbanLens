@@ -14,8 +14,7 @@ if TYPE_CHECKING:
 
 
 def record_in_round_upload(round_: ConsensusRound, image: Image, profile: Profile) -> ConsensusRoundPhoto:
-    """Record that ``image`` was captured/uploaded during ``round_`` by ``profile``.
-    Attaches the photo to this round's wiki directly if it isn't already attached anywhere - uploading a photo *during a Consensus round* is an explicit, unambiguous "share this with the wiki" action, unlike a profile's ordinary pin-gallery uploads (which stay private until explicitly shared) - so it's immediately eligible for future ``PHOTO_COORDINATES`` rounds via the same ``wiki``-non-null gate."""
+    """Record that ``image`` was captured/uploaded during ``round_`` by ``profile``."""
     if image.wiki_id is None:
         image.wiki = round_.wiki
         image.save(update_fields=["wiki", "updated"])

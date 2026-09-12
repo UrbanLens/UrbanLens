@@ -42,8 +42,7 @@ def referenceable_queryset(kind: str, profile: Profile) -> QuerySet:
         An access-scoped queryset of candidate targets.
 
     Raises:
-        ValueError: For an unknown kind.
-    """
+        ValueError: For an unknown kind."""
     from urbanlens.dashboard.models.friendship.model import Friendship
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -86,9 +85,7 @@ def resolve_reference(kind: str, pk: Any, profile: Profile) -> Any | None:
         profile: The referencing user.
 
     Returns:
-        The target instance, or None when it doesn't exist, isn't an int pk,
-        or the profile may not reference it.
-    """
+        The target instance, or None when it doesn't exist, isn't an int pk, or the profile may not reference it."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
     try:
@@ -161,13 +158,10 @@ def reference_choices(kind: str, profile: Profile, *, include_pk: int | None = N
     Args:
         kind: A :data:`REFERENCE_KINDS` value.
         profile: The referencing user.
-        include_pk: A pk to force into the list (the currently stored value)
-            even when it falls outside the cap.
+        include_pk: A pk to force into the list (the currently stored value) even when it falls outside the cap.
 
     Returns:
-        Up to :data:`MAX_REFERENCE_CHOICES` (pk, label) tuples sorted by label,
-        or an empty list for an unknown kind.
-    """
+        Up to :data:`MAX_REFERENCE_CHOICES` (pk, label) tuples sorted by label, or an empty list for an unknown kind."""
     try:
         candidates = referenceable_queryset(kind, profile)[: MAX_REFERENCE_CHOICES + 1]
     except ValueError:

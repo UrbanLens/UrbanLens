@@ -1,9 +1,5 @@
 /**
- * WebAuthn globals bundle: exposes window.UrbanLensWebAuthn for the
- * login-2fa page and the Settings > Security passkey panel.
- *
- * Built as a classic IIFE script (like e2ee.ts and core.ts) so inline
- * <script> blocks in those templates can call it synchronously after load.
+ * WebAuthn globals bundle: exposes window.UrbanLensWebAuthn for the login-2fa page and the Settings > Security passkey panel.
  */
 import { registerPasskey, runLogin } from "../shared/webauthn-client";
 

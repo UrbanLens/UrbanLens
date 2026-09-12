@@ -1,9 +1,4 @@
-"""Surface pins the user marked visited but never logged a dated PinVisit for.
-
-The Memories page uses this to prompt the user to turn a vague "I've been here"
-flag (``Pin.last_visited`` or a "Visited" status label) into a concrete,
-dated ``PinVisit`` record they can then enrich with photos, a map, and notes.
-"""
+"""Surface pins the user marked visited but never logged a dated PinVisit for."""
 
 from __future__ import annotations
 
@@ -29,10 +24,7 @@ def unlogged_visited_pins(profile: Profile, *, limit: int = UNLOGGED_VISIT_LIMIT
         limit: Maximum number of pins to return.
 
     Returns:
-        Up to ``limit`` top-level pins that are marked visited but have no
-        ``PinVisit`` record, ordered by ``last_visited`` (most recent first,
-        nulls last), then by id for a stable tail order.
-    """
+        Up to ``limit`` top-level pins that are marked visited but have no ``PinVisit`` record, ordered by ``last_visited`` (most recent first, nulls last), then by id for a stable tail order."""
     return list(
         Pin.objects.filter(profile=profile).visited_without_record().select_related("location").order_by(F("last_visited").desc(nulls_last=True), "id")[:limit],
     )

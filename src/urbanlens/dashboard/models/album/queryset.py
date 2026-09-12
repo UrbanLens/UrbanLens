@@ -69,11 +69,7 @@ class AlbumItemQuerySet(abstract.DashboardQuerySet):
         return self.filter(album=album)
 
     def in_display_order(self, album: Album) -> AlbumItemQuerySet:
-        """This album's items in its current sort method.
-
-        Date and name sorts join ``image`` and read live metadata. Custom
-        order puts numbered items first and null ``order`` (photos added
-        after the last drag) at the end.
+        """This album's items in its current sort method. Date and name sorts join ``image`` and read live metadata.
 
         Args:
             album: The album whose ``sort`` to apply.

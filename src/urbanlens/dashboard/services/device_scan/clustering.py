@@ -1,5 +1,4 @@
-"""Turn a device's raw scan history into fuzzy WikiDeviceMarker location(s).
-The whole pipeline is a **full recompute from raw history** each time it runs, rather than incrementally-merged running state: at this app's current data volume (beta, low upload counts) a full recompute is simpler to reason about, trivially idempotent (running it twice with no new data is a no-op), and far easier to test correctly than incremental merge bookkeeping."""
+"""Turn a device's raw scan history into fuzzy WikiDeviceMarker location(s)."""
 
 from __future__ import annotations
 
@@ -60,12 +59,10 @@ def weight_for_age(age: timedelta) -> float:
     """Recency weight for an observation this old - halves every ``DECAY_HALF_LIFE_DAYS``.
 
     Args:
-        age: How long ago the observation was made. Negative (future,
-            e.g. clock skew) is treated as zero.
+        age: How long ago the observation was made.
 
     Returns:
-        A weight in ``(0, 1]`` - always positive, never exceeding 1.
-    """
+        A weight in ``(0, 1]`` - always positive, never exceeding 1."""
     age_days = max(age.total_seconds() / 86_400, 0.0)
     return 0.5 ** (age_days / DECAY_HALF_LIFE_DAYS)
 
@@ -77,9 +74,7 @@ def confidence_for_weight(total_weight: float) -> float:
         total_weight: Sum of every contributing entry's recency weight.
 
     Returns:
-        A value in ``[0, 1)`` that increases monotonically with weight but
-        never reaches 1 - there is always room for one more corroborating scan.
-    """
+        A value in ``[0, 1)`` that increases monotonically with weight but never reaches 1 - there is always room for one more corroborating scan."""
     return 1.0 - math.exp(-max(total_weight, 0.0) / CONFIDENCE_SATURATION_WEIGHT)
 
 
@@ -88,7 +83,6 @@ def weighted_centroid(points_with_weights: Sequence[tuple[Point, float]]) -> Poi
 
     Args:
         points_with_weights: Non-empty sequence of (point, weight) pairs.
-            Every weight must be positive.
 
     Returns:
         The weighted-average point, SRID 4326."""
@@ -108,9 +102,7 @@ def weighted_radius_meters(points_with_weights: Sequence[tuple[Point, float]], c
         centroid: The points' weighted centroid.
 
     Returns:
-        The weighted RMS distance from centroid, floored at
-        ``MIN_RADIUS_METERS``.
-    """
+        The weighted RMS distance from centroid, floored at ``MIN_RADIUS_METERS``."""
     total_weight = sum(weight for _, weight in points_with_weights)
     variance = sum(weight * _haversine_meters(point, centroid) ** 2 for point, weight in points_with_weights) / total_weight
     return max(math.sqrt(variance), MIN_RADIUS_METERS)
@@ -130,13 +122,11 @@ def _weight_entry(entry: DeviceScanEntry, now: datetime.datetime) -> _WeightedEn
     """Build a :class:`_WeightedEntry` from a persisted scan entry.
 
     Args:
-        entry: A ``detected=True`` scan entry, with its ``readings``
-            prefetched.
+        entry: A ``detected=True`` scan entry, with its ``readings`` prefetched.
         now: Reference time for the recency-weight calculation.
 
     Returns:
-        The entry's clustering inputs.
-    """
+        The entry's clustering inputs."""
     readings = list(entry.readings.all())
     signal_values = [reading.signal_strength for reading in readings if reading.signal_strength is not None]
     avg_signal = sum(signal_values) / len(signal_values) if signal_values else None
@@ -207,10 +197,7 @@ def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[Wik
         wiki: The wiki whose device markers are being recomputed.
 
     Returns:
-        The markers now current for this (device, wiki) pair (created or
-        updated this call) - callers don't need this return value for the
-        pipeline to work, it's provided for tests.
-    """
+        The markers now current for this (device, wiki) pair (created or updated this call) - callers don't need this return value for the pipeline to work, it's provided for tests."""
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
     from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, MarkerStatus, WikiDeviceMarker
 

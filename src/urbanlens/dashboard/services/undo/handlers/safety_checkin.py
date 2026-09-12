@@ -50,8 +50,7 @@ MODEL_LABEL = "safety_checkin"
 
 @register
 class SafetyCheckinUndoHandler(UndoHandler):
-    """Restores a check-in's own fields, its emergency-contact snapshots, and its partners.
-    A partner assignment, unlike chat history, *is* state needed to resume the check-in - so it's restored the same way contacts are."""
+    """Restores a check-in's own fields, its emergency-contact snapshots, and its partners."""
 
     model_label = MODEL_LABEL
     model = SafetyCheckin
@@ -98,12 +97,7 @@ class SafetyCheckinUndoHandler(UndoHandler):
         """Recreate check-ins, their contact snapshots, and their partners.
 
         Raises:
-            UndoExpiredError: If the owning profile, destination location,
-                attached markup map(s), a contact's linked profile, or a
-                partner's profile/inviter was independently deleted during
-                the retention window, since recreating the row would
-                otherwise fail with an uncaught IntegrityError.
-        """
+            UndoExpiredError: If the owning profile, destination location, attached markup map(s), a contact's linked profile, or a partner's profile/inviter was independently deleted during the retention window, since recreating the row would otherwise fail with an uncaught IntegrityError."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.services.undo.service import UndoExpiredError

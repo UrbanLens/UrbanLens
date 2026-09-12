@@ -1,13 +1,6 @@
 """Wireless device scanning: ingested scan data and the wiki markers it produces.
-
-The mobile app's device-scanning feature uploads nearby-device readings (MAC
-address, signal-strength samples along a route, a client-estimated location,
-and a device-type guess) through the external API. A background task
-(``dashboard.tasks.process_device_scan_upload``) turns camera/sensor/tracker
-detections into :class:`WikiDeviceMarker` rows - fuzzy map markers that
-tighten as more scans corroborate them - on every wiki whose boundary
-contains the detection. See ``services.device_scan`` for the classification
-and clustering logic; this module only holds the data.
+The mobile app's device-scanning feature uploads nearby-device readings (MAC address, signal-strength samples along a route, a client-estimated location, and a device-type guess) through the external API.
+See ``services.device_scan`` for the classification and clustering logic; this module only holds the data.
 """
 
 from __future__ import annotations
@@ -88,9 +81,9 @@ class ScannedDevice(abstract.FrontendDashboardModel):
     """
 
     # Normalized upper-case colon-separated form (see
-    # services.device_scan.mac_address.normalize_mac_address) - the only
-    # form ever stored, so a lookup can never miss a match over a casing or
-    # separator difference between two uploads of the same device.
+    # services.device_scan.mac_address.normalize_mac_address) - the only form ever stored, so a
+    # lookup can never miss a match over a casing or separator difference between two uploads of the
+    # same device.
     mac_address = CharField(max_length=17, unique=True, editable=False)
     display_name = CharField(max_length=255, blank=True, default="")
     device_type = CharField(max_length=20, choices=DeviceType.choices, default=DeviceType.UNKNOWN)
@@ -111,17 +104,7 @@ class ScannedDevice(abstract.FrontendDashboardModel):
 
 class DeviceScanUpload(abstract.FrontendDashboardModel):
     """One batch upload from the mobile app's device-scanning feature.
-
-    ``profile`` is null whenever the uploading profile has
-    ``Profile.track_device_scans`` turned off - the upload is still processed
-    (classification/markers are shared community data), just without personal
-    attribution. Authentication is always required to reach the upload
-    endpoint regardless; this field only controls attribution.
-
-    A ``FrontendDashboardModel`` (for its ``uuid``) rather than a plain
-    ``DashboardModel``, so the upload endpoint's response can hand back an
-    opaque identifier - matching every other external-API response in this
-    app, none of which ever expose a raw integer pk.
+    ``profile`` is null whenever the uploading profile has ``Profile.track_device_scans`` turned off - the upload is still processed (classification/markers are shared community data), just without personal attribution.
     """
 
     profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="device_scan_uploads")
@@ -177,11 +160,7 @@ class DeviceScanEntry(abstract.DashboardModel):
 
 class DeviceSignalReading(abstract.DashboardModel):
     """One raw (coordinate, signal strength) sample along a scan route.
-
-    Kept for richness beyond what the v1 clustering algorithm consumes (a
-    per-entry average signal strength) - future refinements (proper
-    trilateration, a signal-strength heatmap) can mine this without a schema
-    change, per the "store as much data as possible" requirement.
+    Kept for richness beyond what the v1 clustering algorithm consumes (a per-entry average signal strength) - future refinements (proper trilateration, a signal-strength heatmap) can mine this without a schema change, per the "store as much data as possible" requirement.
     """
 
     entry = ForeignKey(DeviceScanEntry, on_delete=CASCADE, related_name="readings")
@@ -203,17 +182,7 @@ class DeviceSignalReading(abstract.DashboardModel):
 
 class WikiDeviceMarker(abstract.FrontendDashboardModel):
     """A fuzzy (or manually pinpointed) device location on one wiki's map.
-
-    Multiple ACTIVE rows can exist for the same (device, wiki) pair while a
-    moved device's old and new locations are both still corroborated - see
-    ``services.device_scan.clustering`` for how they're reconciled.
-
-    ``centroid`` is the single source of truth for where this marker is
-    displayed, whether it holds an automatically-computed fuzzy position or a
-    manually placed one - a future wiki-editing UI sets ``manually_placed``
-    and overwrites ``centroid``/``radius_meters`` directly (typically to a
-    precise point and a near-zero radius) when a user pinpoints the device;
-    the clustering recompute then leaves this row's position alone.
+    Multiple ACTIVE rows can exist for the same (device, wiki) pair while a moved device's old and new locations are both still corroborated - see ``services.device_scan.clustering`` for how they're reconciled.
     """
 
     wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, related_name="device_markers")
@@ -226,18 +195,13 @@ class WikiDeviceMarker(abstract.FrontendDashboardModel):
 
     confidence = FloatField(default=0.0)
     observation_count = PositiveIntegerField(default=0)
-    # Consecutive "not detected" reports with no positive corroboration in
-    # between - reset to 0 by any positive detection. Crossing
-    # ABSENCE_STREAK_THRESHOLD (services.device_scan.clustering) flips status
-    # to PRESUMED_REMOVED.
+    # Consecutive "not detected" reports with no positive corroboration in between - reset to 0 by
+    # any positive detection.
+    # Crossing ABSENCE_STREAK_THRESHOLD (services.device_scan.clustering) flips status to
+    # PRESUMED_REMOVED.
     absence_streak = PositiveIntegerField(default=0)
     avg_signal_strength = FloatField(null=True, blank=True)
 
-    # Deliberately plain (not auto_now[_add]) and always set explicitly by
-    # services.device_scan.clustering from the contributing entries' own
-    # timestamps - unlike the inherited created/updated (this row's own
-    # lifecycle), a marker's first recompute can already span scan data
-    # going back to the lookback window's start.
     first_observed_at = DateTimeField()
     last_observed_at = DateTimeField()
 

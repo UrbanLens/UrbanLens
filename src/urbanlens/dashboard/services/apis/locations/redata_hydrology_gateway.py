@@ -8,7 +8,6 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import L
 
 _HYDROLOGY_PATH = "/api/v1/hydrology/"
 
-#: REData's four-value ``kind`` vocabulary (collapsing ~70 USGS feature
 #: codes; the source's own code survives in ``feature_type``).
 HYDROLOGY_KIND_LABELS: dict[str, str] = {
     "stream": "Stream",
@@ -33,25 +32,11 @@ class RedataHydrologyGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch streams, waterbodies, wetlands and the containing watershed.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                limit: Maximum number of features to return.
-                force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-                The parsed envelope. Entries carry ``kind`` (see
-                :data:`HYDROLOGY_KIND_LABELS`), ``name`` (blank is "unnamed", not
-                unknown), ``feature_type``, nullable ``distance_meters`` (null
-                for watersheds and NWI wetlands - see module docstring), and
-                ``area_sq_km`` (read it to tell a pond from a bay - an estuary is
-                one polygon). NWI rows decode their classification under
-                ``attributes`` (``nwi_code``, ``system``, ``wetland_class``,
-                ``water_regime``).
+            The parsed envelope.
 
         Raises:
-                LocationContextUnavailableError: Every covering source failed to
-                answer, or the request itself failed."""
+            LocationContextUnavailableError: Every covering source failed to answer, or the request itself failed."""
         return self.near_point(
             _HYDROLOGY_PATH,
             latitude,

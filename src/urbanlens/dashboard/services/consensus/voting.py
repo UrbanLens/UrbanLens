@@ -17,8 +17,7 @@ if TYPE_CHECKING:
 
 
 class ConsensusVotingError(Exception):
-    """Raised when ``record_vote`` can't cast a vote.
-    The message is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """Raised when ``record_vote`` can't cast a vote."""
 
 
 class AnswerNotInRoundError(ConsensusVotingError):
@@ -34,12 +33,8 @@ class VoteTally:
     """The result of tallying a round's votes.
 
     Attributes:
-        winning_answers: Every answer tied to the winning (agreeing) cluster
-            - the "correct" value's original submitter(s) - empty when no
-            consensus formed.
-        consensus_reached: Whether the winning cluster's vote share strictly
-            exceeded the session's configured threshold.
-    """
+        winning_answers: Every answer tied to the winning (agreeing) cluster - the "correct" value's original submitter(s) - empty when no consensus formed.
+        consensus_reached: Whether the winning cluster's vote share strictly exceeded the session's configured threshold."""
 
     winning_answers: list[ConsensusAnswer]
     consensus_reached: bool
@@ -90,14 +85,10 @@ def tally_votes(round_: ConsensusRound, *, vote_threshold: float) -> VoteTally:
 
     Args:
         round_: The round whose votes to tally.
-        vote_threshold: The vote share (of votes actually cast, not of the
-            full roster - an abstention isn't a "no") a cluster must
-            strictly exceed to count as consensus.
+        vote_threshold: The vote share (of votes actually cast, not of the full roster - an abstention isn't a "no") a cluster must strictly exceed to count as consensus.
 
     Returns:
-        The tally. Fewer than 2 votes cast, or no answers to cluster,
-        always reports no consensus.
-    """
+        The tally."""
     strategy = get_strategy(round_.field_kind)
     answers = list(round_.answers.all())
     votes = list(ConsensusVote.objects.for_round(round_).select_related("chosen_answer"))

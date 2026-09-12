@@ -59,10 +59,7 @@
         </div>
         {% else %}
         {% if unlogged_visits %}
-        {# Pins marked "Visited" (by label or last_visited) with no dated PinVisit #}
-        {# yet - real content even before there's a date to plot on the timeline. #}
-        {# Each card swaps itself (by #memories-unlogged-band id) after an action - #}
-        {# same partial, same wiring, as its home on the Visits subpage. #}
+        {# Pins marked "Visited" (by label or last_visited) with no dated PinVisit yet. #}
         {% include "dashboard/partials/memories/_unlogged_visits.html" %}
         {% endif %}
 

@@ -5,11 +5,11 @@ from __future__ import annotations
 
 
 def safe_int_or_none(value: object) -> int | None:
-    """Return ``value`` as an int, or ``None`` when it is not one. ``None`` rather than a number is what a row lookup needs.
+    """Return ``value`` as an int, or ``None`` when it is not one.
+    ``None`` rather than a number is what a row lookup needs.
 
     Args:
-        value: Raw value from `request.POST`/`request.GET`, a parsed JSON body, or
-            a third party's metadata.
+        value: Raw value from `request.POST`/`request.GET`, a parsed JSON body, or a third party's metadata.
 
     Returns:
         The parsed integer, or ``None`` when ``value`` is missing or unparseable."""
@@ -34,12 +34,10 @@ def safe_int(value: object, default: int = 0) -> int:
 
     Args:
         value: Raw value from `request.POST`/`request.GET` or a parsed JSON body.
-        default: Returned when ``value`` is missing, or is not something an int can be
-            parsed from.
+        default: Returned when ``value`` is missing, or is not something an int can be parsed from.
 
     Returns:
-        The parsed integer, or ``default``.
-    """
+        The parsed integer, or ``default``."""
     parsed = safe_int_or_none(value)
     return default if parsed is None else parsed
 
@@ -51,11 +49,9 @@ def clamp_int(value: object, *, low: int, high: int, default: int) -> int:
         value: Raw value from request data.
         low: Minimum allowed value.
         high: Maximum allowed value.
-        default: Used when ``value`` is not parseable as an int; it is clamped too, so a
-            caller cannot accidentally widen the range through its own default.
+        default: Used when ``value`` is not parseable as an int; it is clamped too, so a caller cannot accidentally widen the range through its own default.
 
     Returns:
-        An integer within ``[low, high]``.
-    """
+        An integer within ``[low, high]``."""
     parsed = safe_int(value, default)
     return max(low, min(high, parsed))

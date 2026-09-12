@@ -1,5 +1,4 @@
-"""Helper for embedding JSON directly inside an already-open `<script>` block.
-Several views build a single larger `<script>` block containing multiple JS object/array literals (e.g. a pin's `tags_data` inline inside a bigger per-pin JS object) and interpolate JSON into it via `{{ ... |safe }}` - `json_script` doesn't fit there, so this replicates just its escaping."""
+"""Helper for embedding JSON directly inside an already-open `<script>` block."""
 
 from __future__ import annotations
 
@@ -17,12 +16,10 @@ _JSON_SCRIPT_ESCAPES = {ord(">"): "\\u003E", ord("<"): "\\u003C", ord("&"): "\\u
 
 def safe_json_for_script(value: Any) -> str:
     """Serialize a value to JSON that is safe to embed inline inside a `<script>` block.
-    Uses Django's own ``DjangoJSONEncoder`` (the same encoder ``{% json_script %}`` and ``JsonResponse`` already rely on elsewhere in this project) so values that aren't natively JSON-serializable - ``Decimal``, ``datetime``/``date``, ``UUID``, ``Promise`` (lazy translation strings) - are handled gracefully instead of raising ``TypeError``.
 
     Args:
         value: The JSON-serializable value (e.g. a list of dicts of label data).
 
     Returns:
-        A JSON string with `<`, `>`, and `&` escaped so it cannot break out of the
-        enclosing `<script>` tag or inject HTML, even when rendered with `|safe`."""
+        A JSON string with `<`, `>`, and `&` escaped so it cannot break out of the enclosing `<script>` tag or inject HTML, even when rendered with `|safe`."""
     return json.dumps(value, cls=DjangoJSONEncoder).translate(_JSON_SCRIPT_ESCAPES)

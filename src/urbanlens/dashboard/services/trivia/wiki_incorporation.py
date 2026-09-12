@@ -1,5 +1,4 @@
-"""AI wiki-incorporation for well-upvoted user-submitted Trivia questions.
-Once a ``USER_SUBMITTED``, ``APPROVED`` question's community vote score crosses :data:`WIKI_INCORPORATION_SCORE_THRESHOLD`, this module drafts a new plain-text paragraph folding the trivia fact into the location's wiki article - reusing the exact same draft -> sanitize -> safety-classify -> append pipeline as :mod:`services.ai.article_expansion` (same ``sanitize_article_plain_text``, same ``article_safety.classify_article_text``, same ``article_expansion.append_to_article``), with only the writing step itself carrying a dedicated AI feature (``trivia_wiki_incorporation``) so it has its own SiteSettings toggle and cost tracking."""
+"""AI wiki-incorporation for well-upvoted user-submitted Trivia questions."""
 
 from __future__ import annotations
 
@@ -107,15 +106,10 @@ def incorporate_question_into_wiki(question: TriviaQuestion) -> bool:
     Skipped without any AI call when the question is already processed, isn't a still-approved ``USER_SUBMITTED`` question, has no location wiki, or hasn't crossed :data:`WIKI_INCORPORATION_SCORE_THRESHOLD`.
 
     Args:
-        question: The candidate question. Callers processing a batch should
-            ``select_related("location", "location__wiki")`` to avoid N+1s.
+        question: The candidate question.
 
     Returns:
-        True only when new text was actually appended to the wiki article.
-        False covers every skip reason, including "processed but nothing was
-        added" (safety-rejected, or nothing new to say) - callers that need
-        to distinguish those should inspect ``question.wiki_incorporated_at``
-        afterward."""
+        True only when new text was actually appended to the wiki article."""
     try:
         if question.wiki_incorporated_at is not None:
             return False

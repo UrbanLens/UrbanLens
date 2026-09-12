@@ -35,7 +35,6 @@ def _backdate(instance: Any, when: Any) -> None:
 
 def seed_friendships(owner: Profile, personas: list[Profile]) -> None:
     """Accepted friendships: the owner with every persona, and a few among them.
-    Goes straight to ``Friendship.objects.create(status=ACCEPTED)`` rather than ``request()``/``accept()`` - those exist to run the request flow a real user would; skipping straight to the end state is what a seeder wants, and neither one notifies on its own (notifications are the service layer's job, not the model's - see ``services.social.friendship``).
 
     Args:
         owner: The login account's profile.
@@ -57,12 +56,9 @@ def seed_friendships(owner: Profile, personas: list[Profile]) -> None:
 
 def seed_wiki_comments(personas_by_pin: dict[Profile, list[Pin]]) -> list[Any]:
     """A few comments on the wikis of pooled locations, where more than one profile can see them.
-    Only fires on a location more than one seeded profile actually holds a pin on - the owner holds every pooled location, so that is any location a persona was also given, which is enough for a real (if one-sided) conversation to exist under the owner's own view of the wiki.
 
     Args:
-        personas_by_pin: Each seeded profile mapped to the pins just created
-            for it, in pool order - used to find the locations two profiles
-            share.
+        personas_by_pin: Each seeded profile mapped to the pins just created for it, in pool order - used to find the locations two profiles share.
 
     Returns:
         Every created comment (openers and replies), in creation order."""
@@ -100,7 +96,6 @@ _WIKI_COMMENT_REPLIES = [
 
 def seed_direct_messages(owner: Profile, personas: list[Profile]) -> list[Any]:
     """A short plaintext exchange between the owner and each persona, and one among personas.
-    Plain ``DirectMessage.objects.create`` rather than ``create_direct_message()`` - the service function is what a real send goes through (permission checks, notifications, scheduled email/text alerts, address detection), all of which a seeder wants none of.
 
     Args:
         owner: The login account's profile.
@@ -132,7 +127,6 @@ def seed_direct_messages(owner: Profile, personas: list[Profile]) -> list[Any]:
 
 def seed_group_chat(owner: Profile, personas: list[Profile]) -> None:
     """One group chat, memberships created strictly before the messages they should see.
-    Ordering is load-bearing: ``GroupChatMembership.created`` is the floor ``visible_window`` uses to decide which messages a member can see (see ``models.group_chats.queryset``), so a message backdated earlier than its sender's own membership would be invisible to everyone else in the group - including, confusingly, its own sender.
 
     Args:
         owner: The login account's profile, and the chat's creator.
@@ -159,16 +153,12 @@ def seed_group_chat(owner: Profile, personas: list[Profile]) -> None:
 
 
 def seed_visits(profile: Profile, pins: list[Pin], *, on_this_day: bool = False) -> list[Any]:
-    """A visit history on most of the profile's pins, spread widely enough to read as real use.
-    ``create_manual_visit`` rather than ``PinVisit.objects.create`` directly: it also runs ``sync_last_visited`` and ``add_visited_status`` (the "Visited" label), which are exactly the derived state a real visit would produce and a raw insert would silently skip.
+    """``create_manual_visit`` rather than ``PinVisit.objects.create`` directly: it also runs ``sync_last_visited`` and ``add_visited_status`` (the "Visited" label), which are exactly the derived state a real visit would produce and a raw insert would silently skip.
 
     Args:
         profile: Pin owner.
         pins: The profile's own pins to log visits against.
-        on_this_day: When True, the first visit is dated exactly one year ago
-            today - the only way ``MemoriesOnThisDayView`` (an exact
-            month/day match, current year excluded) ever has something to
-            show without waiting for a real year to pass.
+        on_this_day: When True, the first visit is dated exactly one year ago today - the only way ``MemoriesOnThisDayView`` (an exact month/day match, current year excluded) ever has something to show without waiting for a real year to pass.
 
     Returns:
         The created visits."""
@@ -188,11 +178,9 @@ def seed_visits(profile: Profile, pins: list[Pin], *, on_this_day: bool = False)
 
 def mark_unlogged_visits(pins: list[Pin]) -> None:
     """Mark a couple of pins visited with no logged ``PinVisit`` - the Memories "Visits" queue's whole reason to exist.
-    Deliberately the opposite of :func:`seed_visits`: ``visited_without_record`` (the query behind that page) requires ``last_visited`` set *and* zero ``PinVisit`` rows, so this must never route through ``create_manual_visit``, which creates exactly the record that would disqualify a pin.
 
     Args:
-        pins: Candidate pins; the ones already visited via :func:`seed_visits`
-            must not be passed here, or they no longer qualify either."""
+        pins: Candidate pins; the ones already visited via :func:`seed_visits` must not be passed here, or they no longer qualify either."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.visits.visits import add_visited_status
 
@@ -214,8 +202,7 @@ def seed_routes(profile: Profile) -> list[Any]:
     """A couple of short recorded routes, so the Memories map has route markers and a nonzero distance total.
 
     Args:
-        profile: Route owner - routes have no shared/wiki analog and are
-            always personal.
+        profile: Route owner - routes have no shared/wiki analog and are always personal.
 
     Returns:
         The created routes."""
@@ -272,7 +259,6 @@ def seed_markup_maps(profile: Profile) -> None:
 
 def seed_labels(pins_by_profile: dict[Profile, list[Pin]]) -> None:
     """Attach a few of the profile's own default labels to its pins.
-    No label is ever created here - ``create_default_tags`` already gave every seeded profile ~43 of them (status/category/tag/media) on creation, the same signal a real signup gets, so this only has to choose and attach.
 
     Args:
         pins_by_profile: Each seeded profile mapped to its own pins."""
@@ -290,7 +276,6 @@ def seed_labels(pins_by_profile: dict[Profile, list[Pin]]) -> None:
 
 def seed_safety_checkins(profiles: list[Profile]) -> None:
     """A couple of historical, already-resolved safety check-ins.
-    No signal is connected to ``SafetyCheckin`` at all (confirmed by inspection - the only app-wide ``post_save`` receivers are for label defaults and achievements), and notification only ever happens from escalation Celery tasks or explicit calls this never makes, so a plain create is silent by construction, not by luck.
 
     Args:
         profiles: Every seeded profile."""
@@ -315,8 +300,7 @@ def seed_journal_content(pins_by_profile: dict[Profile, list[Pin]]) -> list[Any]
         pins_by_profile: Each seeded profile mapped to its own pins.
 
     Returns:
-        The created pin comments (not the reviews - there is nothing further
-        in this module that needs to reference a review by instance)."""
+        The created pin comments (not the reviews - there is nothing further in this module that needs to reference a review by instance)."""
     from urbanlens.dashboard.models.reviews.model import Review
     from urbanlens.dashboard.services.comments.comments import create_comment
 
@@ -354,7 +338,6 @@ def seed_reactions(owner: Profile, personas: list[Profile]) -> None:
 
 def seed_pin_shares(owner: Profile, personas: list[Profile], pins: list[Pin]) -> None:
     """A couple of accepted pin shares, for the Memories "Sharing" page.
-    Replicates the share-creation half of ``create_pin_share`` without its notification - ``resolve_and_stamp_origin_share``/``record_share_exposure`` are the exact two calls that function makes to keep the ``LocationExposure`` provenance chain intact (CLAUDE.md requires this of every share path, this one included), and are the whole reason this is not a bare ``PinShare.objects.create``.
 
     Args:
         owner: The sharer.
@@ -384,11 +367,10 @@ def seed_trips(owner: Profile, personas: list[Profile], pool: list[Location]) ->
     Args:
         owner: The trips' creator.
         personas: Candidates for trip membership.
-        pool: Pooled locations to build activities against; nothing is built
-            when there is no location pool yet.
+        pool: Pooled locations to build activities against; nothing is built when there is no location pool yet.
 
     Returns:
-        The created trips, in creation order. Empty when the pool is empty."""
+        The created trips, in creation order."""
     from urbanlens.dashboard.services.trips.trip_activities import create_activity
     from urbanlens.dashboard.services.trips.trip_crud import create_trip
     from urbanlens.dashboard.services.trips.trip_membership import set_trip_rsvp
@@ -459,9 +441,7 @@ def _placeholder_photo(caption: str, color: tuple[int, int, int]) -> Any:
         color: Background RGB.
 
     Returns:
-        A ``django.core.files.base.ContentFile`` ready to assign to an
-        ``ImageField``.
-    """
+        A ``django.core.files.base.ContentFile`` ready to assign to an ``ImageField``."""
     from io import BytesIO
 
     from django.core.files.base import ContentFile
@@ -476,13 +456,10 @@ def _placeholder_photo(caption: str, color: tuple[int, int, int]) -> Any:
 
 def seed_photos(pins_by_profile: dict[Profile, list[Pin]], *, on_this_day: bool = False) -> list[Any]:
     """A handful of generated photos per profile, attached to their own pins.
-    ``source=ImageSource.UPLOAD`` (the field default) is correct here, not a fileless-row workaround: a real file is written to local storage, so this is what a genuine upload looks like, and it is also what ``achievements.signals._is_genuine_upload`` requires for the photo streak - a nice side effect, since it means that surface has something real to show too.
 
     Args:
         pins_by_profile: Each seeded profile mapped to its own pins.
-        on_this_day: When True, one photo is dated exactly one year ago today
-            - see ``seed_visits``' identical parameter for why an exact match
-            has to be deliberate rather than left to chance.
+        on_this_day: When True, one photo is dated exactly one year ago today - see ``seed_visits``' identical parameter for why an exact match has to be deliberate rather than left to chance.
 
     Returns:
         The created photos."""
@@ -542,7 +519,6 @@ def seed_comment_photo(comment: Any) -> None:
 
 def seed_dm_photo(sender: Profile, dm: Any) -> None:
     """One photo attached to a direct message, via ``Image.direct_message``.
-    ``images_revealed=True`` so the seeded photo renders unblurred by default - that field otherwise governs the blur-reveal state for a photo from someone the recipient hasn't trusted yet, which is irrelevant flavor for a demo and would just make the photo look broken until clicked.
 
     Args:
         sender: The message's sender, credited as the photo's uploader.
@@ -556,7 +532,6 @@ def seed_dm_photo(sender: Profile, dm: Any) -> None:
 
 def seed_achievements_and_activity(profiles: list[Profile]) -> None:
     """Award whatever Achievement definitions already exist, and backfill an activity streak.
-    Achievement *definitions* are global (no profile FK - see ``models.achievements.model``), so this never creates one: doing so would appear on every real user's achievements page, and saving an active one enqueues a backfill sweep across every profile in the database.
 
     Args:
         profiles: Every seeded profile - owner and personas."""

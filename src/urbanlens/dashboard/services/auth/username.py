@@ -217,7 +217,7 @@ class UsernameGenerator:
         The fallback should essentially never be reached given the size of the word lists.
 
         Returns:
-                A unique username string."""
+            A unique username string."""
         for _ in range(cls.MAX_RETRIES):
             adj = secrets.choice(cls.ADJECTIVES)
             animal = secrets.choice(cls.ANIMALS)

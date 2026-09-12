@@ -25,11 +25,9 @@ logger = logging.getLogger(__name__)
 
 def active_metric_keys() -> set[str]:
     """Return the metric keys at least one active achievement measures.
-    It is one indexed query against a table that holds a handful of admin-authored rows, and caching it bought staleness instead of speed: a rolled-back transaction leaves no signal to invalidate on, so the stale set survives and makes write-path behaviour depend on what ran before it.
 
     Returns:
-        The set of measured metric keys, or an empty set if the table cannot be
-        read yet (mid-migration on a fresh database)."""
+        The set of measured metric keys, or an empty set if the table cannot be read yet (mid-migration on a fresh database)."""
     from urbanlens.dashboard.models.achievements.model import Achievement
 
     try:
@@ -52,14 +50,11 @@ def evaluate_profile(
 
     Args:
         profile: The profile to evaluate.
-        metric_keys: Restrict evaluation to achievements measuring these
-            metrics. None evaluates every active achievement.
-        notify: Whether to raise an in-app notification per new award. Turned
-            off for bulk backfills of historical activity.
+        metric_keys: Restrict evaluation to achievements measuring these metrics.
+        notify: Whether to raise an in-app notification per new award.
 
     Returns:
-        The awards newly granted by this call, in grant order. Empty when the
-        profile already held everything it qualifies for."""
+        The awards newly granted by this call, in grant order."""
     from urbanlens.dashboard.models.achievements.model import Achievement, UserAchievement
 
     achievements = Achievement.objects.active()
@@ -95,9 +90,7 @@ def _award_qualifying(
     Args:
         profile: The profile being evaluated.
         pending: Active achievements the profile has not already earned.
-        values: Metric values keyed by metric key. A missing key is treated as
-            not qualifying rather than as zero, so an unknown metric can never
-            accidentally grant.
+        values: Metric values keyed by metric key.
         notify: Whether to raise an in-app notification per new award.
 
     Returns:
@@ -127,8 +120,7 @@ def _grant(profile: Profile, achievement: Achievement, value: int) -> UserAchiev
         value: The metric value that qualified them.
 
     Returns:
-        The new award, or None when another worker granted it first.
-    """
+        The new award, or None when another worker granted it first."""
     from urbanlens.dashboard.models.achievements.model import UserAchievement
 
     try:
@@ -151,10 +143,7 @@ def _grant(profile: Profile, achievement: Achievement, value: int) -> UserAchiev
 
 def _notify(profile: Profile, award: UserAchievement) -> None:
     """Raise an in-app notification for a newly earned award.
-
-    Notification failures must not roll back the award itself, so this swallows
-    and logs rather than propagating.
-    """
+    Notification failures must not roll back the award itself, so this swallows and logs rather than propagating."""
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
     from urbanlens.dashboard.models.notifications.model import NotificationLog
     from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
@@ -198,9 +187,7 @@ def evaluate_achievement_for_all(achievement: Achievement, *, notify: bool = Fal
 
     Args:
         achievement: The award to backfill.
-        notify: Whether to notify each recipient. Off by default - a brand new
-            award backfilling across the whole user base would otherwise fan out
-            a notification to nearly everyone at once.
+        notify: Whether to notify each recipient.
 
     Returns:
         How many profiles received the award."""
@@ -279,16 +266,10 @@ def progress_for_profile(profile: Profile, viewer: Profile | None = None) -> lis
 
     Args:
         profile: The profile whose progress is being described.
-        viewer: Who is looking. Secret awards are listed only when *profile*
-            has earned them, and locked awards' progress bars are shown only to
-            the owner - a stranger should not be able to read off exactly how
-            many pins someone has.
+        viewer: Who is looking.
 
     Returns:
-        One dict per listed achievement with ``achievement``, ``earned``,
-        ``earned_at``, ``value`` and ``percent`` keys, ordered by the model's
-        default ordering.
-    """
+        One dict per listed achievement with ``achievement``, ``earned``, ``earned_at``, ``value`` and ``percent`` keys, ordered by the model's default ordering."""
     from urbanlens.dashboard.models.achievements.model import Achievement, UserAchievement
 
     is_owner = viewer is not None and viewer.pk == profile.pk

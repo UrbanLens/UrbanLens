@@ -1,16 +1,4 @@
-{% comment %}
-Boundary-vote dialog: side-by-side mini maps of every candidate official
-boundary (REData county parcel vs. Overpass/OSM perimeter, ...) with a
-"This one" button under each. Renders nothing unless boundary_vote context
-exists (two or more candidates - see services.boundary_voting).
-
-Auto-opens only while nobody has voted yet AND the viewer hasn't dismissed
-it before (localStorage). Once any vote exists, it stays behind the map
-card's "Vote on boundary" button, which calls window.openBoundaryVoteDialog().
-
-Usage:
-  {% include "dashboard/partials/wiki/_boundary_vote_dialog.html" with location=location boundary_vote=boundary_vote %}
-{% endcomment %}
+{% comment %}Boundary-vote dialog: side-by-side mini maps of every candidate official boundary (REData county parcel vs.{% endcomment %}
 {% if boundary_vote %}
 <dialog id="boundary-vote-dialog" class="ul-dialog boundary-vote-dialog" aria-labelledby="dialog-title-which-boundary-looks-right">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Which boundary looks right?" %}

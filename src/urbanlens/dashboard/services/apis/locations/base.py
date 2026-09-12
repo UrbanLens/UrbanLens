@@ -59,10 +59,9 @@ class StreetViewSlide:
         img_src: Absolute URL or ``data:`` URI for the image.
         source: Human-readable provider name (e.g. ``"Google Street View"``).
         date: Human-readable capture date (e.g. ``"2022-06"`` or ``"Unknown"``).
-        heading: Camera heading in degrees (0-360, 0 = north). ``None`` if unknown.
-        latitude: Actual image capture latitude. ``None`` if unknown.
-        longitude: Actual image capture longitude. ``None`` if unknown.
-    """
+        heading: Camera heading in degrees (0-360, 0 = north).
+        latitude: Actual image capture latitude.
+        longitude: Actual image capture longitude."""
 
     img_src: str
     source: str
@@ -85,8 +84,7 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, bool]:
         what: Label for the log line.
 
     Returns:
-        ``(slides, degraded)`` - ``degraded`` True when the provider failed
-        part-way, meaning the result must not be cached."""
+        ``(slides, degraded)`` - ``degraded`` True when the provider failed part-way, meaning the result must not be cached."""
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
@@ -109,8 +107,7 @@ class SlideFetch(NamedTuple):
     Attributes:
         slides: What the provider produced, in its own order.
         from_cache: The answer came from this provider's cache, not the source.
-        degraded: The provider failed part-way. The answer is a floor, and must
-            not be recorded as a settled one."""
+        degraded: The provider failed part-way."""
 
     slides: list
     from_cache: bool
@@ -172,13 +169,8 @@ class BoundaryProvider(Service, ABC):
         """Return this provider's boundaries keyed by boundary type.
         `Mapping` rather than `dict`, because `dict` is invariant in its value type: a provider that only ever yields Polygons could not otherwise declare that narrower return.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                name: Optional place name for name-aware providers.
-
         Returns:
-                Mapping of boundary type value to polygon (or None)."""
+            Mapping of boundary type value to polygon (or None)."""
         return {self.boundary_kind: self.get_boundary(latitude, longitude, name=name)}
 
 
@@ -259,12 +251,7 @@ def geometry_bbox(geometry: dict) -> BBox | None:
 
 
 def feature_intersects_bbox(feature: dict, bbox: BBox) -> bool:
-    """True if a GeoJSON Feature's geometry overlaps ``bbox``.
-
-    This is a cheap bounding-box test, not an exact polygon intersection --
-    good enough for filtering large downloaded shards, not for precise
-    spatial joins. Use shapely/GeoPandas downstream if you need exactness.
-    """
+    """True if a GeoJSON Feature's geometry overlaps ``bbox``."""
     geometry = feature.get("geometry")
     if not geometry:
         return False
@@ -347,13 +334,10 @@ def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | Non
     Only still needed for sources that hand back Esri's native ring-list shape directly - Census TIGERweb (``geo_boundary.py``) being the one remaining caller.
 
     Args:
-        geometry: A dict of the shape ``{"format": "esri_rings", "rings": [...]}``,
-            or None.
+        geometry: A dict of the shape ``{"format": "esri_rings", "rings": [...]}``, or None.
 
     Returns:
-        A single ``Polygon``, a ``MultiPolygon`` when more than one exterior
-        shell was found, or None when the geometry is missing, malformed, or
-        has no usable exterior ring."""
+        A single ``Polygon``, a ``MultiPolygon`` when more than one exterior shell was found, or None when the geometry is missing, malformed, or has no usable exterior ring."""
     if not isinstance(geometry, dict) or geometry.get("format") != "esri_rings":
         return None
     rings = geometry.get("rings")
@@ -416,16 +400,12 @@ def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | Non
 
 def geojson_polygon_to_geos(geometry: dict | None) -> Polygon | MultiPolygon | None:
     """Convert a standard GeoJSON ``Polygon``/``MultiPolygon`` dict into a GEOS geometry.
-    Unlike :func:`esri_rings_to_polygon`, the input here is already correct, standard GeoJSON (RFC 7946 winding order, holes already nested under their shell) - REData's API returns geometry in this shape directly, so this is a direct structural translation rather than a geometry-fixing one: GeoJSON's ``coordinates`` array for a ``Polygon`` (``[exterior_ring, hole_ring, ...]``, each ring a list of ``[lon, lat]`` pairs) is exactly the ring-list shape Django's own ``Polygon(*rings)`` constructor expects.
 
     Args:
-        geometry: A dict of the shape ``{"type": "Polygon"|"MultiPolygon",
-            "coordinates": [...]}``, or None.
+        geometry: A dict of the shape ``{"type": "Polygon"|"MultiPolygon", "coordinates": [...]}``, or None.
 
     Returns:
-        A single ``Polygon``, a ``MultiPolygon`` when more than one shell was
-        present, or None when the geometry is missing, malformed, an
-        unsupported type (e.g. a bare ``Point``), or resolves to nothing valid."""
+        A single ``Polygon``, a ``MultiPolygon`` when more than one shell was present, or None when the geometry is missing, malformed, an unsupported type (e.g. a bare ``Point``), or resolves to nothing valid."""
     if not isinstance(geometry, dict):
         return None
     geo_type = geometry.get("type")

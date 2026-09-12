@@ -20,9 +20,9 @@ if TYPE_CHECKING:
 
 _RECENT_LIMIT = 12
 
-#: How many videos the home page lists. There is no Videos page to send anyone
-#: to, and this is the only surface that hands a user their own video's id, so
-#: it lists rather than links - capped, with a line saying so when it bites.
+#: How many videos the home page lists. There is no Videos page to send anyone to, and this is the only surface
+#: that hands a user their own video's id, so it lists rather than links - capped, with a line saying so when it
+#: bites.
 _VIDEO_LIST_LIMIT = 50
 
 
@@ -43,18 +43,14 @@ class VaultHomeView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         gallery = Image.objects.uploaded_by(profile)
-        # One pass over the profile's rows for both counts rather than a
-        # full scan each - these are unindexed-suffix counts over a library
-        # that grows without bound.
+        # One pass over the profile's rows for both counts rather than a full scan each - these are
+        # unindexed-suffix counts over a library that grows without bound.
         counts = gallery.aggregate(
             photos=Count("pk", filter=Q(media_type=MediaKind.PHOTO)),
             documents=Count("pk", filter=Q(media_type=MediaKind.DOCUMENT)),
             videos=Count("pk", filter=Q(media_type=MediaKind.VIDEO)),
-            # The same predicate `get_storage_totals` splits counted bytes from
-            # exempt ones on, so this is a slice of the bar below rather than a
-            # separately-derived number. The two are still separate reads, so a
-            # concurrent delete between them can leave the slice momentarily
-            # larger - a display number that self-corrects, not an invariant.
+            # The same predicate `get_storage_totals` splits counted bytes from exempt ones on, so this is a
+            # slice of the bar below rather than a separately-derived number.
             video_bytes=Sum("file_size", filter=Q(media_type=MediaKind.VIDEO, quota_exempt_reason="")),
         )
         photo_count = counts["photos"] or 0
@@ -68,9 +64,8 @@ class VaultHomeView(LoginRequiredMixin, View):
         remaining_bytes = None if quota_bytes is None else max(quota_bytes - used_bytes, 0)
         percent_used = min(round(used_bytes * 100 / quota_bytes), 100) if quota_bytes else 0
 
-        # A shared "most recent upload" strip across both media types - the two
-        # querysets are each already small (only the most recent slice), so
-        # merging and re-sorting in Python beats a UNION query for this size.
+        # A shared "most recent upload" strip across both media types - the two querysets are each already small
+        # (only the most recent slice), so merging and re-sorting in Python beats a UNION query for this size.
         recent = sorted(
             chain(
                 gallery.photos().order_by("-created")[:_RECENT_LIMIT],
@@ -93,11 +88,8 @@ class VaultHomeView(LoginRequiredMixin, View):
                 "document_count": document_count,
                 "video_count": video_count,
                 "album_count": album_count,
-                # Drives the welcome/empty state - counts of zero across the board
-                # make the stat tiles and storage bar pure noise for a new user.
-                # Videos belong in it: their bytes are already on the bar, so a
-                # library holding only videos would otherwise be billed while the
-                # page told its owner they had nothing.
+                # Drives the welcome/empty state - counts of zero across the board make the stat tiles and
+                # storage bar pure noise for a new user.
                 "is_empty": not (photo_count or document_count or video_count or album_count),
                 "recent_uploads": recent,
                 "videos": videos,

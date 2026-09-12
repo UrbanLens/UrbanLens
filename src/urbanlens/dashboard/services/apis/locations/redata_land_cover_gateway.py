@@ -24,20 +24,9 @@ class RedataLandCoverGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch the NLCD land-cover classification at a point.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-                force_refresh: Bypass REData's cache and re-query live.
-
         Returns:
-                The parsed envelope. The (at most one) result carries
-                ``class_code`` (NLCD's own legend value), ``class_name``
-                (decoded; blank rather than invented for an unrecognised code),
-                ``is_developed`` (groups the four developed classes; **null**
-                where nothing is classified, which is not the same as
-                "undeveloped"), and ``resolution_meters``.
+            The parsed envelope.
 
         Raises:
-                LocationContextUnavailableError: The source failed to answer, or
-                the request itself failed."""
+            LocationContextUnavailableError: The source failed to answer, or the request itself failed."""
         return self.near_point(_LAND_COVER_PATH, latitude, longitude, force_refresh=force_refresh)

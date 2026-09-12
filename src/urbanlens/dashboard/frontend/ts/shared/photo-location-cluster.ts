@@ -1,11 +1,5 @@
 /**
- * Pure geometry helpers for the Tools-page local folder scanner
- * (entries/photo-location-scan.ts): greedy proximity clustering of scanned
- * photo GPS hits, and filtering clusters against the browser's cached pins.
- * Mirrors the server-side clustering in services/pin_suggestions.py (same
- * default merge radius) so client-side grouping roughly matches what the
- * backend will do again once results are uploaded - kept dependency-free
- * (no DOM/File System Access APIs) so it can run under `bun test` directly.
+ * Pure geometry helpers for the Tools-page local folder scanner (entries/photo-location-scan.ts).
  */
 
 /** Default merge radius in metres - matches boundary.DEFAULT_RADIUS_METERS server-side. */
@@ -15,10 +9,7 @@ export const DEFAULT_CLUSTER_RADIUS_M = 50;
 export const EXISTING_PIN_RADIUS_M = 100;
 
 /**
- * Representative photo File references kept per cluster for the opt-in
- * preview/upload picker - a small sample, not every hit that fed the
- * cluster. Matches the server's MAX_SUGGESTION_PHOTOS cap with headroom for
- * browsing before narrowing down to a selection.
+ * Representative photo File references kept per cluster for the opt-in preview/upload picker.
  */
 export const MAX_CLUSTER_PHOTOS_SHOWN = 6;
 
@@ -58,12 +49,7 @@ export function haversineMeters(a: { lat: number; lng: number }, b: { lat: numbe
 }
 
 /**
- * Add one hit to a running list of clusters, merging into the nearest one
- * within radiusM of its running centroid or starting a new cluster.
- *
- * Incremental (rather than a batch clusterHits(allHits)) so the Tools page
- * can update its live results list as each matching file is found during a
- * scan, without re-clustering everything found so far on every file.
+ * Add one hit to a running list of clusters, merging into the nearest one within radiusM of its running centroid or starting a new.
  */
 export function addHitToClusters(clusters: PhotoCluster[], hit: PhotoHit, radiusM: number = DEFAULT_CLUSTER_RADIUS_M): PhotoCluster[] {
     for (const cluster of clusters) {

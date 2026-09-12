@@ -1,19 +1,6 @@
 """Tombstones for user-deleted auto-added items (aliases, links, labels, owners).
-
-Several kinds of Pin/Wiki sub-records can be created either by the user
-directly, or automatically by background/on-demand code (external name-provider
-syncs, AI link/alias extraction, keyword/AI auto-tagging, ...). Before this
-model existed, deleting one of those auto-added records had no lasting effect:
-the same automatic code path would run again later (the next panel view, the
-next enrichment cycle, a re-run of AI extraction) and silently recreate the
-exact thing the user just removed, since none of those paths had any way to
-know the user had already rejected that value.
-
-A row here means "the user removed this and it must not come back on its own."
-Automatic-creation code should check ``was_removed()`` before creating a
-record; manual delete views should call ``record()`` when the deleted record
-was itself auto-added (a purely user-created-and-user-deleted record has
-nothing to suppress - there's no automation that would ever recreate it).
+Several kinds of Pin/Wiki sub-records can be created either by the user directly, or automatically by background/on-demand code (external name-provider syncs, AI link/alias extraction, keyword/AI auto-tagging, ...).
+A row here means "the user removed this and it must not come back on its own." Automatic-creation code should check ``was_removed()`` before creating a record; manual delete views should call ``record()`` when the deleted record was itself auto-added (a purely user-created-and-user-deleted record has nothing to suppress - there's no automation that would ever recreate it).
 """
 
 from __future__ import annotations
@@ -38,12 +25,7 @@ class AutoRemovalKind(TextChoices):
 
 class _AutoRemovalBase(abstract.DashboardModel):
     """Shared fields: which kind of item, and its normalized identifying value.
-
-    ``value`` is normalized per-kind before storage/lookup so a re-add attempt
-    with cosmetically different text still matches: alias/owner names are
-    lowercased (case-insensitive, matching the alias/owner uniqueness rules),
-    label values are the label's primary key as a string, link values are the
-    exact URL (case-sensitive by nature).
+    ``value`` is normalized per-kind before storage/lookup so a re-add attempt with cosmetically different text still matches: alias/owner names are lowercased (case-insensitive, matching the alias/owner uniqueness rules), label values are the label's primary key as a string, link values are the exact URL (case-sensitive by nature).
     """
 
     kind = CharField(max_length=10, choices=AutoRemovalKind.choices)

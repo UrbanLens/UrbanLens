@@ -62,8 +62,7 @@ class FlickrGateway(Gateway):
             An ``OAuth1`` auth callable for use as ``requests``' ``auth=``.
 
         Raises:
-            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
-        """
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret."""
         api_key, api_secret = _consumer_credentials()
         return OAuth1(
             api_key,
@@ -75,17 +74,11 @@ class FlickrGateway(Gateway):
     def _call(self, method: str, *, extra_params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Call one ``flickr.*`` REST method and return its decoded JSON body.
 
-        Args:
-                method: The Flickr API method name (e.g. ``flickr.photos.search``).
-                extra_params: Additional method-specific parameters.
-
         Returns:
-                The decoded JSON response body.
+            The decoded JSON response body.
 
         Raises:
-                FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
-                GatewayRequestError: On a network error, non-2xx response, or a
-                Flickr-level error (``stat != "ok"``)."""
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret."""
         params = {"method": method, "format": "json", "nojsoncallback": "1", **(extra_params or {})}
         try:
             response = self.session.get(REST_ENDPOINT, params=params, auth=self._auth(), timeout=_REQUEST_TIMEOUT)
@@ -107,9 +100,7 @@ class FlickrGateway(Gateway):
             Tuple of (user NSID, username or None).
 
         Raises:
-            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
-            GatewayRequestError: When the token is invalid or the call fails.
-        """
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret."""
         body = self._call("flickr.test.login")
         user = body["user"]
         username = user.get("username", {}).get("_content")
@@ -118,17 +109,11 @@ class FlickrGateway(Gateway):
     def _search(self, extra_params: dict[str, Any]) -> list[FlickrPhoto]:
         """Run one ``flickr.photos.search`` query scoped to the connected user.
 
-        Args:
-                extra_params: Method-specific search parameters (geo radius, date
-                range, or sort order) layered onto the shared defaults below.
-
         Returns:
-                Matching photos, each with thumbnail/original URLs and coordinates
-                when Flickr reports them.
+            Matching photos, each with thumbnail/original URLs and coordinates when Flickr reports them.
 
         Raises:
-                FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
-                GatewayRequestError: On a network error or non-2xx/error response."""
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret."""
         body = self._call(
             "flickr.photos.search",
             extra_params={"user_id": "me", "extras": _SEARCH_EXTRAS, "per_page": "250", **extra_params},
@@ -148,32 +133,21 @@ class FlickrGateway(Gateway):
     def search_near(self, lat: float, lon: float, radius_km: float) -> list[FlickrPhoto]:
         """Search the connected user's own photos within a radius of a point.
 
-        Args:
-                lat: Latitude of the search center.
-                lon: Longitude of the search center.
-                radius_km: Search radius in kilometers (Flickr caps this at 32km).
-
         Returns:
-                Matching photos, each with thumbnail/original URLs and coordinates
-                when Flickr reports them.
+            Matching photos, each with thumbnail/original URLs and coordinates when Flickr reports them.
 
         Raises:
-                FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
-                GatewayRequestError: On a network error or non-2xx/error response."""
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret."""
         return self._search({"lat": f"{lat:.6f}", "lon": f"{lon:.6f}", "radius": f"{min(radius_km, 32):.3f}", "radius_units": "km"})
 
     def search_by_dates(self, dates: Sequence[datetime.date]) -> list[FlickrPhoto]:
         """Return the user's own photos taken on any of the given calendar dates.
 
-        Args:
-                dates: Calendar dates to search, in the account's local time.
-
         Returns:
-                Matching photos, deduplicated by id.
+            Matching photos, deduplicated by id.
 
         Raises:
-                FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
-                GatewayRequestError: On a network error or non-2xx/error response."""
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret."""
         seen: dict[str, FlickrPhoto] = {}
         for day in dates:
             next_day = day + datetime.timedelta(days=1)
@@ -184,32 +158,22 @@ class FlickrGateway(Gateway):
     def list_recent(self, limit: int = _DEFAULT_RECENT_LIMIT) -> list[FlickrPhoto]:
         """Return the user's most recently taken photos, with no filter applied.
 
-        Args:
-                limit: Maximum number of photos to return (Flickr caps a single
-                page at 500).
-
         Returns:
-                Up to ``limit`` photos, most recently taken first.
+            Up to ``limit`` photos, most recently taken first.
 
         Raises:
-                FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
-                GatewayRequestError: On a network error or non-2xx/error response."""
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret."""
         return self._search({"sort": "date-taken-desc", "per_page": str(min(limit, 500))})
 
     def get_original(self, photo_id: str, fallback_url: str | None = None) -> tuple[bytes, str, str]:
         """Download a photo's original file.
         Uses ``fallback_url`` (the search result's ``url_o``) when given, to avoid an extra API call; falls back to ``flickr.photos.getSizes`` when the owner has disabled original downloads and no ``url_o`` was returned.
 
-        Args:
-                photo_id: The Flickr photo id.
-                fallback_url: The photo's ``url_o`` from a prior search result, if any.
-
         Returns:
-                Tuple of (file bytes, filename, content-type).
+            Tuple of (file bytes, filename, content-type).
 
         Raises:
-                GatewayRequestError: When no downloadable size is available, or
-                the download fails."""
+            GatewayRequestError: When no downloadable size is available, or the download fails."""
         url = fallback_url or self._largest_available_url(photo_id)
         try:
             response = self.session.get(url, timeout=_REQUEST_TIMEOUT)
@@ -224,14 +188,11 @@ class FlickrGateway(Gateway):
     def _largest_available_url(self, photo_id: str) -> str:
         """Return the largest size URL Flickr will serve for a photo.
 
-        Args:
-                photo_id: The Flickr photo id.
-
         Returns:
-                The source URL of the largest available size.
+            The source URL of the largest available size.
 
         Raises:
-                GatewayRequestError: When Flickr reports no downloadable sizes."""
+            GatewayRequestError: When Flickr reports no downloadable sizes."""
         body = self._call("flickr.photos.getSizes", extra_params={"photo_id": photo_id})
         sizes = body.get("sizes", {}).get("size", [])
         if not sizes:

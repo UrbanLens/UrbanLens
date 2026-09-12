@@ -1,18 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-Site-admin tag mapping page body. Re-rendered wholesale (hx-swap="outerHTML")
-by the search box, the group/preferred/move actions, and the "Group
-selected" bulk action - see external-tag-mapping.ts, which re-inits its
-Sortable instances and click delegation every time this swaps.
-
-Context:
-  groups - ExternalTagGroup queryset, members prefetched, non-empty only
-  clusters - list[SuggestedCluster]: currently-ungrouped entries clustered by
-             default (same display text) matching, 2+ members each
-  singleton_pool - ExternalTagVocabularyEntry list: ungrouped, not part of
-                    any suggested cluster
-  search - the current search query, "" if none
-{% endcomment %}
+{% comment %}Site-admin tag mapping page body.{% endcomment %}
 <div id="external-tag-mapping-body" class="exttag-mapping-body"
      data-search="{{ search }}"
      data-group-url="{% url 'site_admin_external_tags_group' %}"

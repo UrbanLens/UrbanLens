@@ -87,14 +87,11 @@ def is_web_safe(url: str, content_type: str = "") -> bool:
     """Whether a browser can render this item directly in an ``<img>``.
 
     Args:
-        url: The item's URL. Only its path extension is consulted.
-        content_type: The provider-declared content type, when known - it wins
-            over the extension, which is frequently absent or wrong on an
-            API-generated URL.
+        url: The item's URL.
+        content_type: The provider-declared content type, when known - it wins over the extension, which is frequently absent or wrong on an API-generated URL.
 
     Returns:
-        True when the item needs no server-side conversion.
-    """
+        True when the item needs no server-side conversion."""
     declared = (content_type or "").split(";")[0].strip().lower()
     if declared:
         return declared in WEB_SAFE_CONTENT_TYPES
@@ -109,8 +106,7 @@ def needs_server_side_preview(url: str, content_type: str = "") -> bool:
         content_type: The provider-declared content type, when known.
 
     Returns:
-        True when :func:`render_preview` is expected to be able to produce an
-        image for this item."""
+        True when :func:`render_preview` is expected to be able to produce an image for this item."""
     if not url:
         return False
     declared = (content_type or "").split(";")[0].strip().lower()
@@ -173,8 +169,7 @@ def preview_thumb_url(url: str, content_type: str = "") -> str:
         content_type: The provider-declared content type, when known.
 
     Returns:
-        A URL that serves a browser-renderable image, or ``""`` when this item
-        can't be previewed and should keep its fallback icon tile."""
+        A URL that serves a browser-renderable image, or ``""`` when this item can't be previewed and should keep its fallback icon tile."""
     if not needs_server_side_preview(url, content_type):
         return ""
     if url.startswith("/"):
@@ -191,12 +186,9 @@ def gallery_thumb_url(item_url: str, thumb_url: str, content_type: str = "") -> 
         item_url: The item's full-resolution URL.
         thumb_url: The provider's own thumbnail URL, possibly ``""``.
         content_type: The declared content type of ``item_url``, when known.
-            Not applied to ``thumb_url``, which is a different file whenever
-            the provider published one separately.
 
     Returns:
-        A displayable URL, or ``""`` when nothing here is renderable and the
-        caller should fall back to an icon tile."""
+        A displayable URL, or ``""`` when nothing here is renderable and the caller should fall back to an icon tile."""
     if thumb_url:
         if is_web_safe(thumb_url):
             return thumb_url
@@ -231,7 +223,6 @@ def _pdf_first_page(raw: bytes):
 @untrusted_parse("image.decode")
 def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = PREVIEW_MAX_DIMENSION) -> tuple[bytes, str] | None:
     """Convert one file's bytes into a browser-renderable image.
-    Format detection prefers the file's own magic bytes over the declared content type: REData, CRIS and several archives label scanned documents with generic or simply wrong types, and getting this wrong means falling back to a broken tile rather than raising.
 
     Args:
         raw: The source file's bytes.
@@ -239,8 +230,7 @@ def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = P
         max_dimension: Longest edge of the result.
 
     Returns:
-        ``(image_bytes, content_type)`` for the converted image, or None when
-        the source couldn't be decoded as either a PDF or an image."""
+        ``(image_bytes, content_type)`` for the converted image, or None when the source couldn't be decoded as either a PDF or an image."""
     if not raw:
         return None
 
@@ -322,12 +312,10 @@ def stage_preview_source(digest: str, raw: bytes, content_type: str) -> dict[str
     Args:
         digest: A stable hash of the source URL, used as the filename.
         raw: The file's bytes.
-        content_type: The provider-declared content type, passed through to the
-            renderer as a hint.
+        content_type: The provider-declared content type, passed through to the renderer as a hint.
 
     Returns:
-        A small descriptor to put in the cache - filename plus content type,
-        not bytes - for :func:`load_preview_source` to resolve."""
+        A small descriptor to put in the cache - filename plus content type, not bytes - for :func:`load_preview_source` to resolve."""
     root = _preview_source_root()
     target = root / f"{digest}.bin"
     # Written beside and renamed, so a worker never reads a half-written file.
@@ -344,9 +332,7 @@ def load_preview_source(descriptor: dict[str, str]) -> tuple[bytes, str] | None:
         descriptor: The value :func:`stage_preview_source` returned.
 
     Returns:
-        ``(bytes, content_type)``, or None when the file is gone - swept as an
-        orphan, or already consumed by an earlier render.
-    """
+        ``(bytes, content_type)``, or None when the file is gone - swept as an orphan, or already consumed by an earlier render."""
     target = _preview_source_root() / Path(descriptor.get("name", "")).name
     try:
         return target.read_bytes(), descriptor.get("content_type", "")
@@ -393,10 +379,7 @@ def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl
     """Queue a preview render in the sandbox worker, at most once per key. :func:`render_preview` reaches Pillow and poppler, so it must not run in a web process - see :mod:`urbanlens.dashboard.services.sandbox.guard`.
 
     Args:
-        source_cache_key: Cache key holding what the worker needs to find the
-            source - a :func:`stage_preview_source` descriptor, or (for a caller
-            that already had the bytes cached) a ``(bytes, content_type)`` pair.
-            Must already be populated by the caller.
+        source_cache_key: Cache key holding what the worker needs to find the source - a :func:`stage_preview_source` descriptor, or (for a caller that already had the bytes cached) a ``(bytes, content_type)`` pair.
         preview_cache_key: Cache key the rendered preview is written to.
         ttl: Seconds to cache a successful render.
         failure_ttl: Seconds to cache the :data:`UNPREVIEWABLE` sentinel."""
@@ -420,9 +403,7 @@ def cached_preview(preview_cache_key: str) -> tuple[bytes, str] | None:
         preview_cache_key: The key :func:`request_sandbox_render` was given.
 
     Returns:
-        ``(image_bytes, content_type)``, or None when the render has not
-        finished, was never queued, or produced nothing. All three mean the same
-        thing to a caller: serve the icon tile."""
+        ``(image_bytes, content_type)``, or None when the render has not finished, was never queued, or produced nothing."""
     cached = cache.get(preview_cache_key)
     if cached is None or cached in (UNPREVIEWABLE, RENDER_QUEUED):
         return None

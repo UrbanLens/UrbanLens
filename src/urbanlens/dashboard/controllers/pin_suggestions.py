@@ -62,8 +62,8 @@ _BULK_ACTIONS = [
 def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
     """Return the profile's pending, settings-visible suggestions, newest first.
 
-    Suggestions from a source the profile has turned off (or all of them, if
-    ``pin_suggestions_enabled`` is off) are hidden, not deleted - see
+    Suggestions from a source the profile has turned off (or all of them, if ``pin_suggestions_enabled``
+    is off) are hidden, not deleted - see
     ``services.pins.pin_suggestions.pending_suggestions_for_profile``.
     """
     return pending_suggestions_for_profile(profile).select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
@@ -72,14 +72,10 @@ def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
 def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False, view_pin_url: str | None = None) -> HttpResponse:
     """Return an empty HTMX response that removes the swapped card and fires a toast.
 
-    Mirrors ``controllers.vault_photos._toast``. When ``view_pin_url`` is given (a
-    brand-new pin was just created), the toast includes a "View pin" link -
-    toastr renders the message as HTML, same as the bulk-delete undo toast on
-    the main map.
+    Mirrors ``controllers.vault_photos._toast``.
 
     Args:
-        message: Toast body text (HTML-escaped by the caller if it embeds
-            any dynamic value).
+        message: Toast body text (HTML-escaped by the caller if it embeds any dynamic value).
         level: toastr level ("success", "info", "warning", "error").
         status: HTTP status code for the (otherwise empty) response.
         refresh_queue: Whether to also fire the ``refreshQueue`` htmx event.
@@ -106,9 +102,8 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
         suggestions_qs = _pending_suggestions(profile)
         page_obj = get_page(request, suggestions_qs, _PAGE_SIZE)
         merge_cards = merge_suggestion_cards(pending_merge_suggestions(profile))
-        # Paginated with its own parameter, so a next-page click on either
-        # section of this page does not move the other - see
-        # PinImportFailureQueuePartialView.
+        # Paginated with its own parameter, so a next-page click on either section of this page does not move
+        # the other - see PinImportFailureQueuePartialView.
         failures_page = get_page(
             request,
             pending_pin_import_failures(profile),
@@ -127,28 +122,23 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
                 "pin_suggestions_count": page_obj.paginator.count,
                 "bulk_actions": _BULK_ACTIONS,
                 "available_labels": _available_labels(profile),
-                # Merge suggestions are expected to be rare (one per genuine
-                # duplicate-pin collision), so unlike pin_suggestions they get
-                # no pagination/map of their own - see merge_suggestion_cards.
+                # Merge suggestions are expected to be rare (one per genuine duplicate-pin collision), so unlike
+                # pin_suggestions they get no pagination/map of their own - see merge_suggestion_cards.
                 "merge_suggestion_cards": merge_cards,
                 "merge_suggestions_count": len(merge_cards),
-                # Places Google couldn't locate during an import - see
-                # controllers.pin_import_failures. Small in number like merge
-                # suggestions, so no pagination/map of its own either.
+                # Places Google couldn't locate during an import - see controllers.pin_import_failures. Small in
+                # number like merge suggestions, so no pagination/map of its own either.
                 "pin_import_failures": import_failures,
                 "failures_page_obj": failures_page,
                 "pin_import_failures_count": failures_page.paginator.count,
-                # The map (and its attribution) only renders when there are
-                # suggestions to plot - see locations.html's {% if pin_suggestions_count %}.
-                # pin-select-map.js disables Leaflet's own on-map attribution
-                # control for every map it creates, so whichever page embeds
-                # it must enable the footer's live attribution slot instead.
+                # The map (and its attribution) only renders when there are suggestions to plot - see
+                # locations.html's {% if pin_suggestions_count %}. pin-select-map.js disables Leaflet's own
+                # on-map attribution control for every map it creates, so whichever page embeds it must enable
+                # the footer's live attribution slot instead.
                 "show_map_footer": bool(page_obj.paginator.count),
-                # Set when this page was reached via the map's new-user "suggested
-                # pins near you" dialog (?onboarding=1) - highlights the "Accept
-                # all suggestions" button and, once clicked, redirects back to the
-                # map instead of just refreshing the queue in place. Does not
-                # apply to normal visits to this page - see locations.html.
+                # Set when this page was reached via the map's new-user "suggested pins near you" dialog
+                # (?onboarding=1) - highlights the "Accept all suggestions" button and, once clicked, redirects
+                # back to the map instead of just refreshing the queue in place.
                 "onboarding_flow": request.GET.get("onboarding") == "1",
             },
         )
@@ -171,8 +161,8 @@ class PinSuggestionMapDataView(LoginRequiredMixin, View):
 
     GET /memories/locations/map-data/
 
-    Unlike the card grid, the map always shows every pending suggestion
-    regardless of which card page is showing - spatial browsing is the point.
+    Unlike the card grid, the map always shows every pending suggestion regardless of which card page is
+    showing - spatial browsing is the point.
     """
 
     def get(self, request: HttpRequest) -> JsonResponse:
@@ -195,12 +185,11 @@ class PinSuggestionMapDataView(LoginRequiredMixin, View):
 class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
     """GET /memories/locations/<suggestion_id>/immich/thumbnail/<asset_id>/ - proxies one thumbnail.
 
-    Mirrors ``controllers.immich.PinImmichThumbnailView`` (same cache key
-    shape, same TTL), but keyed by suggestion instead of pin - a new-pin
-    suggestion has no ``Pin`` yet to key off of. Also validates the asset id
-    is actually one of this suggestion's ``sample_assets`` - a suggestion is a
-    weaker trust boundary than an owned pin, so ownership of the Immich
-    account alone isn't treated as enough to fetch an arbitrary asset id.
+    Mirrors ``controllers.immich.PinImmichThumbnailView`` (same cache key shape, same TTL), but keyed by
+    suggestion instead of pin - a new-pin suggestion has no ``Pin`` yet to key off of.
+    Also validates the asset id is actually one of this suggestion's ``sample_assets`` - a suggestion is
+    a weaker trust boundary than an owned pin, so ownership of the Immich account alone isn't treated as
+    enough to fetch an arbitrary asset id.
     """
 
     def get(self, request: HttpRequest, suggestion_id: int, asset_id: str) -> HttpResponse:
@@ -231,22 +220,15 @@ class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
 def _bulk_accept_suggestion(suggestion: PinSuggestion, profile: Profile, *, resolve_names_async: bool) -> None:
     """Accept one suggestion of a bulk batch without any inline external API call.
 
-    Passes ``fetch_if_missing=False`` down the accept chain so a brand-new
-    Location is created unnamed instead of blocking the request on a live
-    Google lookup per suggestion (a batch may hold up to
-    ``_MAX_BULK_SUGGESTIONS`` of them). The canonical name backfills in the
-    background via ``tasks.resolve_location_place_name`` - the same lazy path
-    PinOverviewView dispatches - so only the shared Location's official name
-    arrives late; the pin's own name comes from the suggestion and is set
-    immediately.
+    Passes ``fetch_if_missing=False`` down the accept chain so a brand-new Location is created unnamed
+    instead of blocking the request on a live Google lookup per suggestion (a batch may hold up to
+    ``_MAX_BULK_SUGGESTIONS`` of them).
 
     Args:
         suggestion: The pending suggestion to accept.
         profile: The accepting profile (must be ``suggestion.profile``).
-        resolve_names_async: Whether to dispatch the background name backfill
-            for a still-nameless Location - callers pass
-            ``profile.external_apis_enabled``, the same gate PinOverviewView
-            applies before enqueueing this task.
+        resolve_names_async: Whether to dispatch the background name backfill for a still-nameless
+        Location - callers pass ``profile.external_apis_enabled``, the...
     """
     result = accept_pin_suggestion(suggestion, profile, fetch_if_missing=False)
     if result.immich_import_visits:
@@ -270,12 +252,11 @@ class PinSuggestionBulkActionView(LoginRequiredMixin, View):
 
     POST /memories/locations/bulk/<action>/, JSON body ``{"suggestion_ids": [...]}``.
 
-    Modeled on ``controllers.pin_bulk``'s pattern: non-owned, already-handled,
-    or nonexistent ids are silently skipped rather than erroring the whole
-    batch. Bulk actions never carry a photo selection - see
-    ``services.pins.pin_suggestions.accept_pin_suggestion``; any candidate photos on
-    a bulk-accepted suggestion are simply discarded, same as an unchecked
-    single accept.
+    Modeled on ``controllers.pin_bulk``'s pattern: non-owned, already-handled, or nonexistent ids are
+    silently skipped rather than erroring the whole batch.
+    Bulk actions never carry a photo selection - see
+    ``services.pins.pin_suggestions.accept_pin_suggestion``; any candidate photos on a bulk-accepted
+    suggestion are simply discarded, same as an unchecked single accept.
     """
 
     def post(self, request: HttpRequest, action: str) -> JsonResponse:
@@ -317,12 +298,11 @@ class PinSuggestionAcceptAllView(LoginRequiredMixin, View):
 
     POST /memories/locations/accept-all/
 
-    Unlike ``PinSuggestionBulkActionView``, the caller supplies no ids - this
-    always operates on the full pending set (``_pending_suggestions``), which
-    is what both the "Accept all suggestions" button on this page and the
-    map's new-user "suggested pins near you" onboarding flow need. Capped at
-    ``_MAX_BULK_SUGGESTIONS`` for the same reason as the bulk view - a hard
-    backstop against pathological queue sizes, not an expected real limit.
+    Unlike ``PinSuggestionBulkActionView``, the caller supplies no ids - this always operates on the
+    full pending set (``_pending_suggestions``), which is what both the "Accept all suggestions" button
+    on this page and the map's new-user "suggested pins near you" onboarding flow need.
+    Capped at ``_MAX_BULK_SUGGESTIONS`` for the same reason as the bulk view - a hard backstop against
+    pathological queue sizes, not an expected real limit.
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:

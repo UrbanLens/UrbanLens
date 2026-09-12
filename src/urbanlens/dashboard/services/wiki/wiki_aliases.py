@@ -1,8 +1,4 @@
-"""Promoting one of a wiki's alternate names to be its community name.
-
-The wiki counterpart of ``services.pins.pin_subresources.promote_alias_to_name``.
-a wiki rename is an *audited community edit*.
-"""
+"""Promoting one of a wiki's alternate names to be its community name."""
 
 from __future__ import annotations
 
@@ -26,8 +22,7 @@ def alias_is_current_name(alias: WikiAlias, wiki: Wiki | None) -> bool:
 
     Args:
         alias: The alias under consideration.
-        wiki: The wiki it belongs to, or None when the caller has no wiki in
-            hand (in which case nothing can be the current name).
+        wiki: The wiki it belongs to, or None when the caller has no wiki in hand (in which case nothing can be the current name).
 
     Returns:
         True when *alias* names the wiki as it currently stands."""
@@ -38,25 +33,18 @@ def alias_is_current_name(alias: WikiAlias, wiki: Wiki | None) -> bool:
 
 
 def promote_wiki_alias_to_name(wiki: Wiki, profile: Profile, alias: WikiAlias) -> WikiEdit | None:
-    """Make *alias* the wiki's community name, recording it in the edit history.
-    Promoting the alias that is *already* the name is a no-op rather than an error: "use this name" is an idempotent statement of intent, and a client that retries a request whose response it never saw must not be punished for it.
+    """Promoting the alias that is *already* the name is a no-op rather than an error: "use this name" is an idempotent statement of intent, and a client that retries a request whose response it never saw must not be punished for it.
 
     Args:
-        wiki: The wiki to rename. Mutated and saved in place.
-        profile: The profile performing the rename, recorded as the edit's
-            editor.
-        alias: The alias to promote. The caller is responsible for having
-            looked it up scoped to *wiki*.
+        wiki: The wiki to rename.
+        profile: The profile performing the rename, recorded as the edit's editor.
+        alias: The alias to promote.
 
     Returns:
-        The recorded :class:`~urbanlens.dashboard.models.wiki_edit.WikiEdit`, or
-        None when *alias* was already the name and nothing changed.
+        The recorded :class:`~urbanlens.dashboard.models.wiki_edit.WikiEdit`, or None when *alias* was already the name and nothing changed.
 
     Raises:
-        WikiEditValidationError: Never in practice - ``apply_wiki_edit``
-            validates only security levels, dates and description length, and
-            ``name`` is none of them - but propagated rather than swallowed so a
-            future rule added there is not silently ignored here."""
+        WikiEditValidationError: Never in practice - ``apply_wiki_edit`` validates only security levels, dates and description length, and ``name`` is none of them - but propagated rather than swallowed so a future rule added there is not silently ignored here."""
     outgoing = (wiki.name or "").strip()
     if is_meaningful_name(outgoing):
         try:

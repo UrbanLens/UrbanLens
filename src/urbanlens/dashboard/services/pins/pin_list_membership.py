@@ -24,16 +24,9 @@ class ListAddResult:
     """Outcome of one :func:`add_pins_to_list` call.
 
     Attributes:
-        added: How many ``PinListItem`` rows were actually created. Pins
-            already on the list are not counted - they are skipped, not
-            re-added.
-        skipped_over_cap: How many otherwise-addable pins were dropped because
-            the list would have exceeded ``max_pins``. Zero when the cap is
-            disabled or was never reached.
-        max_pins: The cap in force at the time of the call (0 = unlimited), so
-            a caller can render an accurate message without re-reading
-            ``SiteSettings``.
-    """
+        added: How many ``PinListItem`` rows were actually created.
+        skipped_over_cap: How many otherwise-addable pins were dropped because the list would have exceeded ``max_pins``.
+        max_pins: The cap in force at the time of the call (0 = unlimited), so a caller can render an accurate message without re-reading ``SiteSettings``."""
 
     added: int
     skipped_over_cap: int
@@ -75,12 +68,7 @@ def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) 
 
     Args:
         pin_list: The list whose ``smart_filter``/``smart_boundary`` just changed.
-        filter_ids: Precomputed result of ``filter_matching_ids(pin_list)``,
-            for callers that already resolved it (e.g. resyncing several
-            lists that share the exact same freshly-saved ``smart_filter``
-            criteria) and want to skip re-resolving the same Label/CustomField
-            criteria into a Pin queryset for every list. Resolved internally
-            when omitted."""
+        filter_ids: Precomputed result of ``filter_matching_ids(pin_list)``, for callers that already resolved it (e.g. resyncing several lists that share the exact same freshly-saved ``smart_filter`` criteria) and want to skip re-resolving the same..."""
     from urbanlens.dashboard.models.pin_list.model import PinListItem
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
@@ -162,7 +150,6 @@ def _pin_in_boundary(pin: Pin, pin_list: PinList) -> bool:
 
 def filter_matching_ids(pin_list: PinList) -> set[int]:
     """Resolve ``pin_list.smart_filter`` into the set of currently-matching pin ids.
-    Exposed publicly (not just an internal helper of ``resync_smart_list``) so callers resyncing several lists that share the exact same freshly-saved ``smart_filter`` criteria and profile (e.g. every ``PinList`` derived from one edited ``SavedFilter``) can resolve it once and pass the result to each list's ``resync_smart_list(pin_list, filter_ids=...)`` call, instead of every list independently re-resolving the same Label/CustomField criteria into a Pin queryset.
 
     Args:
         pin_list: The list whose ``smart_filter`` to resolve.
@@ -186,15 +173,8 @@ def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str |
 
     Args:
         pin_list: The list to add to.
-        pins: The pins to add. Callers are responsible for having scoped these
-            to the list owner's own pins - this function does not re-check
-            ownership.
-        added_via: Provenance stamped on the new rows. Defaults to
-            ``PinListItem.ADDED_MANUAL``, which is what protects them from
-            ever being auto-removed by a later smart-list resync. Passed as
-            ``None`` rather than referencing ``PinListItem`` in the signature
-            so this module keeps its function-level model imports (see the
-            other functions here) and stays import-cycle free.
+        pins: The pins to add.
+        added_via: Provenance stamped on the new rows.
 
     Returns:
         A :class:`ListAddResult` describing what happened."""
@@ -239,8 +219,7 @@ def remove_pins_from_list(pin_list: PinList, pin_ids: Sequence[int]) -> int:
 
     Args:
         pin_list: The list to remove from.
-        pin_ids: Primary keys of the pins to remove. Ids not on this list are
-            ignored.
+        pin_ids: Primary keys of the pins to remove.
 
     Returns:
         How many membership rows were actually deleted."""

@@ -1,15 +1,5 @@
 """DirectMessageLocationMention - coordinates/address detected in a message's text.
-
-One row per distinct place detected in one direct message (see
-``services.messaging.dm_location_detection``). The mention is what the chat UI renders
-under the bubble: an "Add to map" button for the recipient when the place
-counted as a share, or - for the recipient only, since it is their private
-data - the name of their own existing pin at that place.
-
-The mention row is presentation-level and dies with its message; the
-``pin_share`` it may have produced (and that share's ``LocationExposure``)
-deliberately survives message deletion - information, once received, cannot
-be un-received, so the share chain must keep counting it.
+One row per distinct place detected in one direct message (see ``services.messaging.dm_location_detection``).
 """
 
 from __future__ import annotations
@@ -56,10 +46,7 @@ class DirectMessageLocationMention(abstract.DashboardModel):
     @property
     def can_add_to_map(self) -> bool:
         """Whether the "Add to map" action is currently available for this mention.
-
-        True while the backing share can still be accepted - PENDING
-        (DM-detected) or DETECTED (the place reached the recipient earlier
-        via map/trip detection, which never auto-materializes a pin).
+        True while the backing share can still be accepted - PENDING (DM-detected) or DETECTED (the place reached the recipient earlier via map/trip detection, which never auto-materializes a pin).
 
         Returns:
             True when the recipient may create a pin from this mention.
@@ -70,9 +57,7 @@ class DirectMessageLocationMention(abstract.DashboardModel):
 
     def recipient_pin(self):
         """The message recipient's own top-level pin at this place, if any.
-
-        Private data: only ever render the result to the pin's owner (the
-        message recipient) - never to the sender.
+        Private data: only ever render the result to the pin's owner (the message recipient) - never to the sender.
 
         Returns:
             The recipient's Pin near this mention's location, or None.

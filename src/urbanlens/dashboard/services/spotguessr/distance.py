@@ -1,5 +1,4 @@
-"""Geodesic distance helpers for SpotGuessr scoring.
-Always computed via PostGIS ``ST_Distance`` over a ``geography`` cast (correct in meters at any latitude) - never the codebase's other, approximate "degrees x 111,320" shortcut (``services.sharing.map_sharing``), since scoring fairness depends on being right at sub-kilometer scale, not just trip-planning scale."""
+"""Geodesic distance helpers for SpotGuessr scoring."""
 
 from __future__ import annotations
 
@@ -17,8 +16,7 @@ if TYPE_CHECKING:
 
 
 def location_boundary_polygon(location: Location) -> GEOSGeometry | None:
-    """The location's *shared* effective property boundary.
-    Scoring must use exactly one boundary for every participant in a session, so this only ever reads the place's own official outline - falling back to the same circle those helpers use when no provider knows the coordinate."""
+    """The location's *shared* effective property boundary."""
     from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
 
     polygon = parcel_polygon_for_location(location)

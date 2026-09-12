@@ -1,12 +1,7 @@
 """External-API routes for label actions beyond single-label CRUD and customization.
 
-``urls.py`` owns ``labels/`` (browse/create), ``labels/{uuid}/`` (detail/patch/
-delete), and ``labels/{uuid}/customization/`` and ``.../merge/``. Priority
-reorder and the bulk delete/edit/convert actions live here instead, mirroring
-how ``urls_pin_extra.py`` splits pin actions away from the frozen pin CRUD
-routes.
-
-Wiring: see ``urls_pin_extra.py``'s docstring - same rules apply.
+Priority reorder and the bulk delete/edit/convert actions live here instead, mirroring how
+``urls_pin_extra.py`` splits pin actions away from the frozen pin CRUD routes.
 """
 
 from __future__ import annotations

@@ -64,8 +64,7 @@ def _humanize_osm_key(value: str) -> str:
 
 @dataclass(slots=True, kw_only=True)
 class NominatimGateway(Gateway):
-    """Reverse-geocodes coordinates via the Nominatim API and returns rich place metadata.
-    The LocationCache layer ensures we only query once per 7 days, so this is not a concern in practice."""
+    """Reverse-geocodes coordinates via the Nominatim API and returns rich place metadata."""
 
     service_key: ClassVar[str] = "nominatim"
     paid_service: ClassVar[bool] = False
@@ -131,24 +130,12 @@ class NominatimGateway(Gateway):
 
     def reverse_geocode_admin(self, latitude: float, longitude: float) -> dict[str, str] | None:
         """Reverse-geocode coordinates to just their country/state/city, for admin-level comparisons.
-        A lighter sibling of ``reverse_geocode()`` - used by ``services.spotguessr.geo_bonus`` to score a guess point's administrative area against a round's answer location, which only needs these three fields, not the full place-metadata shape ``_normalise()`` builds for the location-info panel.
-
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
 
         Returns:
-                ``{"country": ..., "state": ..., "city": ...}`` (each possibly
-                an empty string if Nominatim didn't report it), or None if
-                Nominatim returned a genuine "nothing found" response.
+            ``{"country": ..., "state": ..., "city": ...}`` (each possibly an empty string if Nominatim didn't report it), or None if Nominatim returned a genuine "nothing found" response.
 
         Raises:
-                Exception: on a request/transport failure (including a
-                ``RateLimitExceededError`` from the shared rate-limited
-                session) - deliberately NOT swallowed to None here, so a
-                transient failure isn't indistinguishable from a real
-                "no result" to ``geo_bonus``'s caching layer (which gives
-                the two cases very different TTLs; see its docstring)."""
+            Exception: on a request/transport failure (including a ``RateLimitExceededError`` from the shared rate-limited session) - deliberately NOT swallowed to None here, so a transient failure isn't indistinguishable from a real "no result" to..."""
         params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "format": "json", "addressdetails": 1}
         resp = self.session.get(
             f"{self.base_url}/reverse",
@@ -172,12 +159,8 @@ class NominatimGateway(Gateway):
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
         """Reverse-geocode coordinates and return structured place metadata.
 
-        Args:
-                latitude: WGS-84 latitude.
-                longitude: WGS-84 longitude.
-
         Returns:
-                Dict with place metadata, or None if no result or an error occurred."""
+            Dict with place metadata, or None if no result or an error occurred."""
         try:
             params: dict[str, str | int | float] = {
                 "lat": latitude,

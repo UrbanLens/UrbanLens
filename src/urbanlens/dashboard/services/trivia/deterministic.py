@@ -1,5 +1,4 @@
-"""Deterministic trivia-question generation from cached property-records data.
-Reads only ``LocationCache`` rows already populated by the property-records plugins, via ``services.locations.site_scope.parcel_buildings()`` - never triggers a live REData fetch, mirroring how every existing panel reading this data works (see ``site_scope.parcel_buildings``'s own docstring: "a page render only ever reads it")."""
+"""Deterministic trivia-question generation from cached property-records data."""
 
 from __future__ import annotations
 
@@ -86,15 +85,12 @@ def _building_count_question(location: Location, buildings: list[dict]) -> Trivi
 
 def generate_deterministic_questions(location: Location) -> list[TriviaQuestion]:
     """Generate (or return already-generated) deterministic questions for ``location``.
-    Idempotent via each question's ``dedupe_key`` - safe to call on every round-candidate evaluation for every location under consideration; a location whose cache already produced these questions just returns the existing rows rather than duplicating them.
 
     Args:
         location: The location to generate questions for.
 
     Returns:
-        Every deterministic question now on record for this location (empty
-        if there's no cached parcel-buildings data yet, or none of it met a
-        generator's bar)."""
+        Every deterministic question now on record for this location (empty if there's no cached parcel-buildings data yet, or none of it met a generator's bar)."""
     buildings = site_scope.parcel_buildings(location) or []
     questions = [*_year_built_questions(location, buildings), *_building_number_questions(location, buildings)]
 

@@ -95,19 +95,11 @@ class ParsedQuery:
         date_end: Inclusive end of a parsed date range, or None.
         place: A place name parsed from "in/near/at <place>", or None.
         date_phrase: The date words as typed, for echoing back in the UI.
-        near_me: Whether the query asked for results near the searching user
-            ("near me", "nearby", "close to me", ...).
-        near_phrase: The near-me words exactly as typed (e.g. "near me"). Kept
-            as literal text (not just a boolean) so a query with no other
-            terms still finds a result literally named "near me" - see the
-            no-free-text-terms branch of ``SearchProvider.apply_text``.
-        near_lat: The searching user's latitude, filled in by the engine (which
-            has access to the profile) when ``near_me`` is set.
+        near_me: Whether the query asked for results near the searching user ("near me", "nearby", "close to me", ...).
+        near_phrase: The near-me words exactly as typed (e.g. "near me").
+        near_lat: The searching user's latitude, filled in by the engine (which has access to the profile) when ``near_me`` is set.
         near_lng: The searching user's longitude, filled in the same way.
-        person: A person name parsed from "from <person>" (only recognized
-            alongside the ``messages`` or ``pins`` type, e.g. "messages from
-            Alice" or "pin from John" for pins John shared with the user).
-    """
+        person: A person name parsed from "from <person>" (only recognized alongside the ``messages`` or ``pins`` type, e.g. "messages from Alice" or "pin from John" for pins John shared with the user)."""
 
     raw: str
     text: str = ""
@@ -147,9 +139,7 @@ class ParsedQuery:
         """Human-readable chips describing the structured filters in effect.
 
         Returns:
-            Short strings like ``"Photos"``, ``"Jun 1 - Aug 31, 2025"``,
-            ``"in Cincinnati"`` for the results header.
-        """
+            Short strings like ``"Photos"``, ``"Jun 1 - Aug 31, 2025"``, ``"in Cincinnati"`` for the results header."""
         from urbanlens.dashboard.services.global_search.results import RESULT_TYPES
 
         chips: list[str] = []
@@ -187,11 +177,7 @@ class ParsedQuery:
 
     def describe_problems(self) -> list[str]:
         """Warnings to show beside the results.
-
-        Covers the two cases where an empty result would otherwise be
-        misleading: a key that looks like an operator but is not one, and an
-        operator that is real but cannot currently be answered.
-        """
+        Covers the two cases where an empty result would otherwise be misleading: a key that looks like an operator but is not one, and an operator that is real but cannot currently be answered."""
         notes = [f"\u201c{key}:\u201d isn't a search operator, so it was searched as text." for key in self.unknown_keys]
         notes.extend(f"\u201c{key}:\u201d {reason}" for key, reason in self.unsupported)
         return notes
@@ -256,12 +242,9 @@ def _resolve_calendar_date(phrase: str, today: date, year_hint: int | None = Non
     """Resolve a single date phrase (one side of a "between X and Y" clause) to a concrete date.
 
     Args:
-        phrase: A lowercase date phrase, e.g. "march 5, 2024", "3/5/2024",
-            "2024-03-05", "march 2024", or "2024".
+        phrase: A lowercase date phrase, e.g. "march 5, 2024", "3/5/2024", "2024-03-05", "march 2024", or "2024".
         today: Anchor date used to infer a missing year for "month day" phrases.
-        year_hint: Year to use for a bare "month day" phrase instead of
-            guessing from ``today`` - set when the other side of a "between X
-            and Y" clause carried an explicit year that should apply to both.
+        year_hint: Year to use for a bare "month day" phrase instead of guessing from ``today`` - set when the other side of a "between X and Y" clause carried an explicit year that should apply to both.
 
     Returns:
         The resolved date, or None if the phrase isn't a recognized format."""
@@ -315,8 +298,7 @@ def _between_range(first: str, second: str, today: date) -> tuple[date, date]:
         (start, end) with start <= end.
 
     Raises:
-        ValueError: Either side isn't a recognized date phrase.
-    """
+        ValueError: Either side isn't a recognized date phrase."""
     # If only one side spells out a year ("march 1 and march 15 2024"), apply
     # it to the other side too instead of guessing a year from `today`.
     first_year = re.search(r"\d{4}", first)
@@ -341,9 +323,7 @@ def _extract_dates(text: str, today: date) -> tuple[str, date | None, date | Non
         today: Anchor date for relative phrases.
 
     Returns:
-        (remaining text, start, end, matched phrase) - start/end/phrase are
-        None when no date phrase was found.
-    """
+        (remaining text, start, end, matched phrase) - start/end/phrase are None when no date phrase was found."""
     # Ordered longest/most-specific first so e.g. "summer 2024" wins over "2024".
     patterns: list[tuple[re.Pattern[str], object]] = [
         (re.compile(rf"\bbetween\s+({_DATE_PHRASE})\s+and\s+({_DATE_PHRASE})\b"), lambda m: _between_range(m.group(1), m.group(2), today)),
@@ -398,10 +378,7 @@ def _extract_near_me(text: str) -> tuple[str, str | None]:
         text: Lowercased query text with dates/types already removed.
 
     Returns:
-        (remaining text, the matched phrase verbatim, or None if not found).
-        The phrase is kept (not just a boolean) so it can still be matched as
-        literal text - see :class:`ParsedQuery.near_phrase`.
-    """
+        (remaining text, the matched phrase verbatim, or None if not found)."""
     for pattern in (_NEAR_ME_PATTERN, _NEARBY_PATTERN):
         match = pattern.search(text)
         if match:
@@ -514,9 +491,7 @@ def parse_query(raw: str) -> ParsedQuery:
         raw: The query exactly as the user typed it.
 
     Returns:
-        A populated :class:`ParsedQuery`. Unrecognized content is preserved in
-        ``text``/``terms`` so nothing the user typed is silently dropped.
-    """
+        A populated :class:`ParsedQuery`."""
     today = timezone.localdate()
     cleaned = " ".join(raw.split())
     parsed = ParsedQuery(raw=raw, text=cleaned)
@@ -591,7 +566,7 @@ def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
     Operators set the same fields the English heuristics would, so downstream consumers never learn which register the user wrote in.
 
     Args:
-        parsed: The query being built. Mutated.
+        parsed: The query being built.
         scanned: The operator scan of the raw query."""
     parsed.clauses = list(scanned.clauses)
     parsed.unknown_keys = tuple(scanned.unknown_keys)
@@ -637,11 +612,7 @@ def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
 
 def _apply_date_clause(parsed: ParsedQuery, key: str, value: str) -> None:
     """Resolve one date operator's value onto *parsed*.
-
-    Reuses the same phrase vocabulary the English path uses, so
-    ``visited:"last march"`` and "visited last march" resolve identically
-    rather than being two date parsers that drift.
-    """
+    Reuses the same phrase vocabulary the English path uses, so ``visited:"last march"`` and "visited last march" resolve identically rather than being two date parsers that drift."""
     today = timezone.localdate()
     spoken = value.lower().replace("-", " ").strip()
     _, start, end, phrase = _extract_dates(spoken, today)
@@ -659,10 +630,7 @@ def _apply_date_clause(parsed: ParsedQuery, key: str, value: str) -> None:
 
 def _resolve_types(values: tuple[str, ...]) -> set[str]:
     """Result-type slugs named by a ``type:`` clause.
-
-    Accepts the same words the English path accepts (``photo``, ``photos``,
-    ``picture``...), so the two registers share one vocabulary.
-    """
+    Accepts the same words the English path accepts (``photo``, ``photos``, ``picture``...), so the two registers share one vocabulary."""
     resolved: set[str] = set()
     for value in values:
         slug = TYPE_KEYWORDS.get(value.lower())

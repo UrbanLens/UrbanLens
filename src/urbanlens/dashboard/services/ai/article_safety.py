@@ -54,10 +54,7 @@ class ArticleSafetyVerdict:
 
     Attributes:
         approved: True only when the model returned the APPROVE token.
-        reason: None on approval; otherwise a short machine reason
-            (``safety``, ``inappropriate``, ``off_topic``, ``ai_unavailable``,
-            or ``unparseable``).
-    """
+        reason: None on approval; otherwise a short machine reason (``safety``, ``inappropriate``, ``off_topic``, ``ai_unavailable``, or ``unparseable``)."""
 
     approved: bool
     reason: str | None = None
@@ -72,8 +69,7 @@ def classify_article_text(text: str, *, place_name: str, profile: Profile | None
         profile: The requesting profile, used only for the AI-availability gate.
 
     Returns:
-        APPROVE, or REJECT with a reason. Fail-closed on every error path.
-    """
+        APPROVE, or REJECT with a reason."""
     from urbanlens.dashboard.services.ai.factory import get_gateway
 
     gateway = get_gateway("article_safety", profile=profile, instructions=_INSTRUCTIONS)

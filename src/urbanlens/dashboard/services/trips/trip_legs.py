@@ -1,5 +1,4 @@
-"""Drive-time legs between consecutive trip activities (UL-60 slice).
-Routed via REData when configured, falling back to the direct OSRM gateway otherwise (see ``services.apis.locations.routing_resolution``), and cached aggressively either way: road distances between two fixed places don't change, so a leg is fetched live at most once and then served from cache for weeks."""
+"""Drive-time legs between consecutive trip activities (UL-60 slice)."""
 
 from __future__ import annotations
 
@@ -29,11 +28,7 @@ _UNROUTABLE = {"unroutable": True}
 
 
 def activity_coords(act: TripActivity) -> tuple[float, float] | None:
-    """Return (lat, lng) for a trip activity, respecting override fields.
-
-    Priority: lat_override/lng_override -> pin effective coords -> location
-    coords. Returns None if no coordinates are available.
-    """
+    """Return (lat, lng) for a trip activity, respecting override fields."""
     if act.lat_override is not None and act.lng_override is not None:
         return (act.lat_override, act.lng_override)
     if act.pin:
@@ -81,16 +76,11 @@ def compute_legs(sequence: list[tuple[int, tuple[float, float]]], *, max_live_ca
     """Compute driving legs between consecutive stops in ``sequence``.
 
     Args:
-        sequence: Ordered ``(activity_id, (latitude, longitude))`` stops -
-            only include stops whose coordinates the viewer may see.
-        max_live_calls: Budget of uncached OSRM requests this call may make;
-            legs beyond the budget are omitted (not errors) until a later,
-            warmer render.
+        sequence: Ordered ``(activity_id, (latitude, longitude))`` stops - only include stops whose coordinates the viewer may see.
+        max_live_calls: Budget of uncached OSRM requests this call may make; legs beyond the budget are omitted (not errors) until a later, warmer render.
 
     Returns:
-        Mapping of the *arriving* activity's id to its leg from the previous
-        stop. Unroutable or not-yet-fetched pairs are absent.
-    """
+        Mapping of the *arriving* activity's id to its leg from the previous stop."""
     legs: dict[int, TripLeg] = {}
     live_calls = 0
 

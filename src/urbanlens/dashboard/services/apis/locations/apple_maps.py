@@ -38,16 +38,8 @@ class AppleMapsGateway(Gateway):
     ) -> dict[str, Any]:
         """Search for places near coordinates.
 
-        Args:
-            latitude: WGS-84 latitude of the search origin.
-            longitude: WGS-84 longitude of the search origin.
-            query: Free-text search query (e.g. ``"coffee shop"``).
-            radius: Optional search radius in meters.
-            **params: Additional Apple Maps API parameters (``lang``, ``resultTypeFilter``, etc.).
-
         Returns:
-            Parsed JSON response with ``results`` list of place objects.
-        """
+            Parsed JSON response with ``results`` list of place objects."""
         request_params: dict[str, Any] = {"q": query, "searchLocation": f"{latitude},{longitude}", **params}
         if radius is not None:
             request_params["searchRegion"] = f"{latitude},{longitude},{radius}"
@@ -58,14 +50,8 @@ class AppleMapsGateway(Gateway):
     def reverse_geocode_coordinates(self, latitude: float, longitude: float, **params: Any) -> dict[str, Any]:
         """Reverse geocode coordinates to addresses or places.
 
-        Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            **params: Additional API parameters (``lang``, ``limitToCountries``, etc.).
-
         Returns:
-            Parsed JSON with a ``results`` list of address objects.
-        """
+            Parsed JSON with a ``results`` list of address objects."""
         response = self.session.get(
             f"{_BASE_URL}/reverseGeocode",
             headers=self._headers(),
@@ -78,14 +64,8 @@ class AppleMapsGateway(Gateway):
     def geocode_address(self, query: str, **params: Any) -> dict[str, Any]:
         """Forward geocode a structured or free-form address.
 
-        Args:
-            query: Address string to geocode.
-            **params: Additional API parameters (``lang``, ``limitToCountries``,
-                ``searchLocation``, ``userLocation``, etc.).
-
         Returns:
-            Parsed JSON with a ``results`` list of geocoded place objects.
-        """
+            Parsed JSON with a ``results`` list of geocoded place objects."""
         response = self.session.get(f"{_BASE_URL}/geocode", headers=self._headers(), params={"q": query, **params}, timeout=10)
         response.raise_for_status()
         return response.json()
@@ -100,16 +80,8 @@ class AppleMapsGateway(Gateway):
     ) -> dict[str, Any]:
         """Return estimated travel time between two coordinate pairs.
 
-        Args:
-            origin_latitude: Starting point latitude.
-            origin_longitude: Starting point longitude.
-            destination_latitude: Destination latitude.
-            destination_longitude: Destination longitude.
-            **params: Additional API parameters (``transportType``, ``departureDate``, etc.).
-
         Returns:
-            Parsed JSON with an ``etas`` list of ETA results, one per transport type.
-        """
+            Parsed JSON with an ``etas`` list of ETA results, one per transport type."""
         response = self.session.get(
             f"{_BASE_URL}/etas",
             headers=self._headers(),

@@ -1,4 +1,4 @@
-"""Wires UrbanLens's tag/category labels up to REData's label-suggestion service. **Only ``KIND_TAG`` and ``KIND_CATEGORY`` labels are ever synced or suggested.** Status, people, and media labels never leave this codebase - they aren't "which of my labels applies to this place" in the sense REData models, and people/media labels in particular attach to profiles/images rather than places at all."""
+"""Wires UrbanLens's tag/category labels up to REData's label-suggestion service. **Only ``KIND_TAG`` and ``KIND_CATEGORY`` labels are ever synced or suggested.** Status, people, and media labels never leave this codebase - they aren't "which of my..."""
 
 from __future__ import annotations
 
@@ -48,8 +48,7 @@ def _label_definition(label: Label, *, is_active: bool) -> dict[str, Any]:
 
 
 def _profile_ids_for_label(label: Label) -> list[int]:
-    """Every profile whose REData taxonomy should carry this label's definition.
-    A global label (``profile=None``) is visible to - and so synced for - every profile, since REData's taxonomy is namespaced per ``user_id`` with no concept of a label shared across namespaces (only ``canonical_key`` links them, computed independently on REData's side)."""
+    """Every profile whose REData taxonomy should carry this label's definition."""
     if label.profile_id is not None:
         return [label.profile_id]
     from urbanlens.dashboard.models.profile.model import Profile
@@ -101,8 +100,7 @@ def sync_pin_assignment(pin: Pin) -> None:
     Called from the ``sync_redata_pin_assignment`` Celery task - never call this synchronously from a request/view.
 
     Args:
-        pin: The pin whose assignment changed. Skipped (not sent) if it has
-            no profile."""
+        pin: The pin whose assignment changed."""
     if not _redata_configured() or pin.profile_id is None:
         return
 
@@ -123,10 +121,7 @@ def backfill_profile(profile: Profile) -> tuple[int, int]:
         profile: The profile to backfill.
 
     Returns:
-        ``(labels_synced, pins_synced)`` counts - not a success/failure
-        signal, since individual batch failures are logged and swallowed
-        exactly like every other REData call in this module. ``(0, 0)`` off
-        production, where nothing is sent at all."""
+        ``(labels_synced, pins_synced)`` counts - not a success/failure signal, since individual batch failures are logged and swallowed exactly like every other REData call in this module."""
     from urbanlens.dashboard.services.core.environment import skip_upstream_contribution
 
     if not _redata_configured():
@@ -178,13 +173,9 @@ def queue_label_definition_sync(label: Label) -> None:
 
 def queue_label_retirement(label: Label) -> None:
     """Queue retirement (``is_active: false``) of a label that used to be tag/category.
-    Called when a label is deleted, or its kind changes away from tag/category - REData has no delete endpoint, only retirement, and a retired label "stops being suggested, but its history stays."
 
     Args:
-        label: The label being deleted or converted away. ``parent_ids`` are
-            deliberately omitted (always ``[]``) rather than queried - a
-            label mid-delete may have already lost its M2M rows, and a
-            retired definition's parents are moot."""
+        label: The label being deleted or converted away."""
     if not _redata_configured():
         return
     definition = {"external_id": str(label.uuid), "name": label.name, "parent_ids": [], "description": label.description or "", "is_active": False}
@@ -217,18 +208,13 @@ def queue_pin_assignment_sync(pin_id: int) -> None:
 
 def get_suggestions(pin: Pin, *, limit: int | None = None) -> list[tuple[Label, float]] | None:
     """Ask REData which of the pin owner's own tag/category labels likely apply here.
-    REData's ``implied`` (ancestors of what's already applied) is deliberately not surfaced here: UrbanLens already knows its own hierarchy and renders applied labels - including their ancestors - through the existing label-chip UI, so re-deriving that from REData's answer would be redundant.
 
     Args:
         pin: The pin to suggest labels for.
         limit: Max results - passed through to REData (default 10, max 50).
 
     Returns:
-        ``(label, confidence)`` pairs for labels REData suggests that still
-        resolve to a real local ``Label`` row, highest confidence first
-        (REData's own ordering is preserved). ``None`` when REData isn't
-        configured or the request fails - callers should render no
-        suggestions, not an error."""
+        ``(label, confidence)`` pairs for labels REData suggests that still resolve to a real local ``Label`` row, highest confidence first (REData's own ordering is preserved)."""
     if not _redata_configured() or pin.profile_id is None:
         return None
 

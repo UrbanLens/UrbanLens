@@ -1,19 +1,4 @@
-{% comment %}
-Manage Layers dialog body - HTMX-swapped by every create/rename/recolor/
-reorder/delete action (see controllers/custom_layers.py's _render_layer_list).
-Rendered inside #custom-layers-dialog-body (see _map_annotations_panels.html).
-
-Every action below re-targets the whole #custom-layers-dialog-body (not just
-the <ul>) because the response is this entire template - ul + form + script.
-Swapping just the <ul> via outerHTML still splices the response's form/script
-siblings into the DOM alongside the ones already there, duplicating them on
-every single action.
-
-Reuses the .dp-color-picker/.dp-color-swatch/.dp-icon-picker/.dp-icon-btn CSS
-classes already defined for the detail-pin add form in this same directory -
-no new picker styling needed, just a small swatch-click script scoped to this
-fragment (delegated, so it survives being HTMX-swapped back in).
-{% endcomment %}
+{% comment %}Manage Layers dialog body - HTMX-swapped by every create/rename/recolor/ reorder/delete action.{% endcomment %}
 <ul id="custom-layer-manage-list" class="custom-layer-manage-list">
     {% for row in rows %}
     <li class="custom-layer-manage-row" id="custom-layer-row-{{ row.layer.uuid }}">

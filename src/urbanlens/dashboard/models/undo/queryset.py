@@ -10,7 +10,7 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.undo.model import UndoAction  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
+    from urbanlens.dashboard.models.undo.model import UndoAction  # noqa: F401 - mypy needs these; ruff does not
 
 
 class UndoActionQuerySet(abstract.FrontendDashboardQuerySet["UndoAction"]):

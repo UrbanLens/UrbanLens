@@ -23,16 +23,12 @@ class IconPickerGridView(LoginRequiredMixin, View):
 
     GET /dashboard/ui/icon-picker-grid/?v=<hash>
 
-    Rendering this inline is what made the achievement admin cost tens of
-    megabytes per page load (P68). The response carries no picker id and no
-    per-user data, so one cached copy serves the whole session.
-
-    ``private`` rather than ``public`` despite being identical for everyone: the
-    view is behind ``LoginRequiredMixin``, and a shared cache holding a response
-    to an authenticated request is a habit worth not forming. Only a request
-    whose ``v`` matches the current catalogue is cached immutably - a stale or
-    absent version revalidates, so a link written by an older page can never
-    pin the browser to icons this deployment no longer has.
+    ``private`` rather than ``public`` despite being identical for everyone: the view is behind
+    ``LoginRequiredMixin``, and a shared cache holding a response to an authenticated request is a habit
+    worth not forming.
+    Only a request whose ``v`` matches the current catalogue is cached immutably - a stale or absent
+    version revalidates, so a link written by an older page can never pin the browser to icons this
+    deployment no longer has.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:

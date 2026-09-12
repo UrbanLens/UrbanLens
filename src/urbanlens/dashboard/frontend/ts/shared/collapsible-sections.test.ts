@@ -1,9 +1,5 @@
 /**
  * Behavioural tests for collapsible sections, against a real document.
- *
- * This logic spent its life as inline template JS where none of it could be
- * asserted - the persistence keying, the chevron injection, the restore list's
- * hidden-tab filtering. These cover the parts that decide what a user sees.
  */
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";

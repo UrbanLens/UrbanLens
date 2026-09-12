@@ -1,27 +1,4 @@
-{% comment %}
-Shared unified draw/edit side panel for map markup. Used identically by the
-Private Pin page, the Location wiki page, and the safety check-in map so a
-change to one lands on all three.
-
-Include directly inside the `position: relative` wrapper around the map
-(e.g. the pin detail/wiki `.map-wrapper`, or the safety check-in's
-`.safety-map-wrapper`) as a SIBLING of `.map-bottom-controls`, not nested
-inside it - `.map-dialog--side` positions itself absolutely relative to that
-map wrapper ancestor, and nesting it inside `.map-bottom-controls` (which is
-itself `position: absolute`) makes it position relative to that small
-button cluster instead. Opened by the top-right toolbar's markup_* buttons
-(see map_toolbar() / MAP_TOOL_REGISTRY in dashboard/templatetags/map_components.py)
-and backed by ts/shared/markup-toolbar.ts's createMarkupToolbar factory
-(called from ts/entries/map-annotations.ts and inline from _safety_map_script.html).
-
-Context:
-  markup_fill_color, markup_border_color - optional initial swatch values
-                       (defaults match the pre-existing hardcoded defaults).
-  custom_layers - optional list of this pin/wiki's CustomLayer rows, for the
-                       Layer picker below. Absent (e.g. the safety check-in
-                       map, which has no custom layers) simply renders no
-                       options beyond "No layer".
-{% endcomment %}
+{% comment %}Shared unified draw/edit side panel for map markup.{% endcomment %}
 <div id="markup-panel" class="map-dialog map-dialog--side" style="display:none">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Draw Arrow" title_id="markup-panel-title" closefn="closeMarkupPanel" %}
     <div class="markup-form-body">

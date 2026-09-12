@@ -1,10 +1,4 @@
-{% comment %}
-The wiki's field-edit history, one page at a time.
-
-Revert and Expunge re-render this same list through `_render_history`, so each
-sends the page it was fired from - without it, acting on a row would drop the
-user back to page one.
-{% endcomment %}
+{% comment %}The wiki's field-edit history, one page at a time.{% endcomment %}
 {% if edits %}
 <ul class="wiki-history-list">
     {% for edit in edits %}

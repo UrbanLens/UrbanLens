@@ -68,10 +68,7 @@ class MarkupMapUndoHandler(UndoHandler):
         """Recreate the maps and their annotations.
 
         Raises:
-            UndoExpiredError: If the owning profile was deleted during the
-                retention window. Nothing else can block - no unique
-                constraints, and every link restores leniently.
-        """
+            UndoExpiredError: If the owning profile was deleted during the retention window."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.models.markup.model import CustomLayer

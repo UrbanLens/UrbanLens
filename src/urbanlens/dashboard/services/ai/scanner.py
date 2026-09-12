@@ -1,5 +1,4 @@
-"""Prompt injection detection and sanitization for untrusted content passed to LLMs.
-Integrate at two levels: - Gateway level: call scan() on every user prompt before it reaches the model. - Construction level: call wrap_user_data() on each user-supplied field before embedding it in the prompt, so the model knows to treat it as inert data."""
+"""Prompt injection detection and sanitization for untrusted content passed to LLMs."""
 
 from __future__ import annotations
 
@@ -83,9 +82,7 @@ def scan(text: str, source: str = "unknown") -> ScanResult:
         source: Origin label used in log messages ("user", "web", or "unknown").
 
     Returns:
-        ScanResult with risk_score in [0, 1], match list, and pre-sanitized text.
-        When risk_score >= 0.3, sanitized replaces high-confidence matches with
-        [CONTENT FILTERED]; otherwise sanitized == original."""
+        ScanResult with risk_score in [0, 1], match list, and pre-sanitized text."""
     if not text or not text.strip():
         return ScanResult(original=text, sanitized=text, is_suspicious=False, risk_score=0.0, source=source)
 
@@ -141,8 +138,7 @@ def wrap_user_data(text: str) -> str:
         text: Raw user-supplied content (pin name, description, etc.).
 
     Returns:
-        Empty string if text is blank, otherwise the content wrapped in
-        <USER_DATA>...</USER_DATA> tags."""
+        Empty string if text is blank, otherwise the content wrapped in <USER_DATA>...</USER_DATA> tags."""
     if not text or not text.strip():
         return ""
     neutralized = _ESCAPE_PATTERN.sub("", text).strip()

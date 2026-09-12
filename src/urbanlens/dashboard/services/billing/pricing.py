@@ -1,8 +1,5 @@
 """Pure money/threshold helpers for paid subscriptions - no Stripe or network calls.
-
-Kept separate from ``models.subscriptions.model.SubscriptionRole`` so the model itself
-doesn't need a dependency on ``services.admin.cost_tracking``.
-"""
+Kept separate from ``models.subscriptions.model.SubscriptionRole`` so the model itself doesn't need a dependency on ``services.admin.cost_tracking``."""
 
 from __future__ import annotations
 
@@ -33,16 +30,10 @@ def role_pwyw_threshold_cents(role: SubscriptionRole, as_of: datetime.datetime |
 
     Args:
         role: The role to evaluate.
-        as_of: Point in time to evaluate the dynamic (cost-per-user) threshold against;
-            defaults to now. Ignored for the static-minimum case.
+        as_of: Point in time to evaluate the dynamic (cost-per-user) threshold against; defaults to now.
 
     Returns:
-        None when the role isn't pay-what-you-want (the concept doesn't apply - a fixed
-        or admin-only role's ``RoleSubscription.threshold_met`` should just stay True).
-        Otherwise the minimum pledge, in cents: the site's current cost-per-user when
-        ``pwyw_dynamic_threshold`` is on, else the role's static ``pwyw_minimum_cents``
-        (0 when unset - any pledge grants it).
-    """
+        None when the role isn't pay-what-you-want (the concept doesn't apply - a fixed or admin-only role's ``RoleSubscription.threshold_met`` should just stay True)."""
     if not role.pay_what_you_want:
         return None
     if role.pwyw_dynamic_threshold:
@@ -54,10 +45,6 @@ def role_pwyw_threshold_cents(role: SubscriptionRole, as_of: datetime.datetime |
 
 
 def pledge_meets_threshold(role: SubscriptionRole, pledged_amount_cents: int, as_of: datetime.datetime | None = None) -> bool:
-    """Whether a pledge currently clears *role*'s access threshold.
-
-    Non-PWYW roles (``role_pwyw_threshold_cents`` returns None) always meet it once the
-    subscription itself is active - there's no pledge-amount gate to fail.
-    """
+    """Whether a pledge currently clears *role*'s access threshold."""
     threshold = role_pwyw_threshold_cents(role, as_of)
     return threshold is None or pledged_amount_cents >= threshold

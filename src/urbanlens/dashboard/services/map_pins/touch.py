@@ -19,12 +19,10 @@ def touch_pins(pins: QuerySet[Pin]) -> int:
     """Mark every pin in a query as having changed, in one statement.
 
     Args:
-        pins: The pins to mark. Filtered, not sliced - this issues an `UPDATE`
-            against whatever the query selects.
+        pins: The pins to mark.
 
     Returns:
-        How many rows were written.
-    """
+        How many rows were written."""
     from urbanlens.dashboard.models.pin.model import Pin
 
     # Subquery on the pk: callers join through `labels`, and `.update()` across a
@@ -51,9 +49,7 @@ def touch_pins_for_labels(label_ids: Iterable[int]) -> int:
     Which is to say: after any bulk write to `Label`, since deciding otherwise per site is how three of them ended up wrong.
 
     Args:
-        label_ids: Primary keys of the labels that changed. Empty is a no-op
-            rather than an error, because the callers compute it from "which
-            rows actually moved".
+        label_ids: Primary keys of the labels that changed.
 
     Returns:
         How many pins were marked."""

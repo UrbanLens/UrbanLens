@@ -1,5 +1,4 @@
-"""Extensible registry of known Fact keys - the single place a new fact key is declared.
-Mirrors ``services.consensus.fields``'s ``ConsensusFieldStrategy`` registry and ``services.spotguessr.modes``'s ``ModeStrategy`` registry: adding a new fact key means adding one ``FactKeyDefinition`` here (or, for a future plugin-contributed key, calling ``register()`` at import time), never touching ``Fact.key``'s schema - it is a plain, unconstrained ``CharField`` (see ``models.facts.model``), specifically so new keys never require a migration."""
+"""Extensible registry of known Fact keys - the single place a new fact key is declared."""
 
 from __future__ import annotations
 
@@ -14,12 +13,9 @@ class FactKeyDefinition:
 
     Attributes:
         key: The ``Fact.key``/``FactEvidence`` value this definition governs.
-        data_type: Which ``FactDataType`` values recorded under this key are
-            stored/compared as.
-        allowed_subject_types: Which ``FactSubjectType`` values this key may
-            attach to - e.g. ``photo_coordinates`` is Image-only.
-        display_name: Human-readable label, for admin/debug UI and AI prompts.
-    """
+        data_type: Which ``FactDataType`` values recorded under this key are stored/compared as.
+        allowed_subject_types: Which ``FactSubjectType`` values this key may attach to - e.g. ``photo_coordinates`` is Image-only.
+        display_name: Human-readable label, for admin/debug UI and AI prompts."""
 
     key: str
     data_type: str

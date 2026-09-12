@@ -22,10 +22,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Free-text fields normalized to ``None`` when submitted blank, so "cleared in the UI" and
-#: "explicit JSON null" land on the same stored value.
-#: Without this a pin edited on the website would hold ``""`` where the same edit from the mobile
-#: app holds ``NULL``, and every ``field__isnull`` filter would disagree about which pins have one.
+#: Free-text fields normalized to ``None`` when submitted blank, so "cleared in the UI" and "explicit
+#: JSON null" land on the same stored value.
+#: Without this a pin edited on the website would hold ``""`` where the same edit from the mobile app
+#: holds ``NULL``, and every ``field__isnull`` filter would disagree about which pins have one.
 _TEXT_EDIT_FIELDS: frozenset[str] = frozenset({"name", "icon", "description", "color"})
 
 #: Fields written through exactly as handed over; the caller's parser is
@@ -62,8 +62,7 @@ ORGANIZE_LABEL_KINDS: tuple[str, ...] = (KIND_TAG, KIND_CATEGORY, KIND_STATUS)
 
 
 class PinEditError(ValueError):
-    """A submitted pin edit is self-contradictory or names a field we don't write.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """A submitted pin edit is self-contradictory or names a field we don't write."""
 
 
 class UnknownPinFieldsError(PinEditError):
@@ -72,24 +71,16 @@ class UnknownPinFieldsError(PinEditError):
 
 class ConflictingVisitedFieldsError(PinEditError):
     """``visited`` and an explicit ``last_visited`` were submitted together.
-
-    The two make contradictory claims about the same fact, so neither may be
-    allowed to silently win.
-    """
+    The two make contradictory claims about the same fact, so neither may be allowed to silently win."""
 
 
 class PinReparentError(ValueError):
-    """The requested parent change is invalid.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """The requested parent change is invalid."""
 
 
 class ReparentLocationConflictError(PinReparentError):
     """Detaching would leave two top-level pins sharing one Location.
-
-    Raised only when detaching (``new_parent=None``): the pin's own Location
-    already has another top-level pin for this profile, and two root pins may
-    never share one Location per profile.
-    """
+    Raised only when detaching (``new_parent=None``): the pin's own Location already has another top-level pin for this profile, and two root pins may never share one Location per profile."""
 
 
 class CircularParentChainError(PinReparentError):
@@ -97,16 +88,14 @@ class CircularParentChainError(PinReparentError):
 
 
 class PinMoveError(ValueError):
-    """The requested move can't be applied.
-    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch this and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
+    """The requested move can't be applied."""
 
 
 class PinHasChildrenError(ValueError):
     """A delete was requested without saying what to do with the pin's children.
 
     Attributes:
-        descendant_count: Size of the pin's subtree below it. Not log-only -
-            callers read this to tell the user how many pins are at stake."""
+        descendant_count: Size of the pin's subtree below it."""
 
     def __init__(self, pin: Pin, descendant_count: int, children_mode: str) -> None:
         self.descendant_count = descendant_count
@@ -127,12 +116,10 @@ def _normalize_text(value: Any) -> str | None:
 
 def _replace_pin_labels(pin: Pin, labels: Sequence[Label]) -> None:
     """Make *labels* the pin's complete set of organize labels.
-    Without it the removal does not stick: keyword and AI auto-tagging both re-derive labels from the pin's own text, so the next time either runs over this pin it would reattach the exact label the user just took off, and the user would watch it come back on its own.
 
     Args:
         pin: The pin whose labels are being replaced.
-        labels: The complete set the pin should end up with. Callers are
-            responsible for having resolved these to labels the owner may use."""
+        labels: The complete set the pin should end up with."""
     from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 
     keep_ids = {label.pk for label in labels}
@@ -162,29 +149,16 @@ def apply_pin_edits(
 
     Args:
         pin: The pin to edit, already known to belong to the caller.
-        fields: ``Pin`` field name -> already-parsed value, containing only the
-            fields this request actually submitted. Must be a subset of
-            :data:`EDITABLE_PIN_FIELDS`.
-        labels: The pin's complete new organize-label set, or ``None`` to leave
-            labels untouched. See :func:`_replace_pin_labels` for the tombstones
-            a removal writes.
-        visited: ``True`` to mark the pin visited, ``False`` to un-mark it (which
-            also clears ``last_visited``), or ``None`` to leave the marking
-            alone. Applied after *labels* so a replacement set that happens to
-            omit the "Visited" status label doesn't undo an explicit
-            ``visited: true`` in the same request.
+        fields: ``Pin`` field name -> already-parsed value, containing only the fields this request actually submitted.
+        labels: The pin's complete new organize-label set, or ``None`` to leave labels untouched.
+        visited: ``True`` to mark the pin visited, ``False`` to un-mark it (which also clears ``last_visited``), or ``None`` to leave the marking alone.
 
     Returns:
-        The ``Pin`` column names actually written, in submission order (the
-        implicit companion flags included). Empty when *fields* was empty.
+        The ``Pin`` column names actually written, in submission order (the implicit companion flags included).
 
     Raises:
-        UnknownPinFieldsError: *fields* names something outside
-            :data:`EDITABLE_PIN_FIELDS`.
-        ConflictingVisitedFieldsError: *visited* was combined with an explicit
-            ``last_visited`` in the same call - silently letting one win is
-            how a client ends up showing a visit date the server does not
-            have."""
+        UnknownPinFieldsError: *fields* names something outside :data:`EDITABLE_PIN_FIELDS`.
+        ConflictingVisitedFieldsError: *visited* was combined with an explicit ``last_visited`` in the same call - silently letting one win is how a client ends up showing a visit date the server does not have."""
     unknown = sorted(set(fields) - EDITABLE_PIN_FIELDS)
     if unknown:
         raise UnknownPinFieldsError(f"apply_pin_edits received non-editable field(s): {', '.join(unknown)}.")
@@ -240,10 +214,7 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
         longitude: New longitude, already validated to be in range.
 
     Raises:
-        PinMoveError: The owner already has a *top-level* pin at that exact
-            point. One root pin per Location per profile is a database
-            constraint, so without this check the move surfaces as an
-            unhandled IntegrityError."""
+        PinMoveError: The owner already has a *top-level* pin at that exact point."""
     from urbanlens.dashboard.models.location.model import Location
 
     location, _created = Location.objects.get_exact_or_create(latitude, longitude)
@@ -266,15 +237,11 @@ def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:
 
     Args:
         pin: The pin to reparent.
-        new_parent: The pin to become its new parent, or None to detach it
-            to a top-level pin of its own.
+        new_parent: The pin to become its new parent, or None to detach it to a top-level pin of its own.
 
     Raises:
-        ReparentLocationConflictError: Detaching *pin* would leave it sharing
-            its Location with another of this profile's top-level pins.
-        CircularParentChainError: *new_parent* is *pin* itself or one of its
-            own descendants.
-    """
+        ReparentLocationConflictError: Detaching *pin* would leave it sharing its Location with another of this profile's top-level pins.
+        CircularParentChainError: *new_parent* is *pin* itself or one of its own descendants."""
     if new_parent is None:
         if pin.parent_pin_id is None:
             return
@@ -341,20 +308,16 @@ class PinDeletion:
 
 def delete_pin(pin: Pin, *, children_mode: str = "") -> PinDeletion:
     """Delete *pin*, asking the caller what to do with its child pins first.
-    A pin with descendants requires an explicit ``children_mode``: ``"delete"`` removes the whole subtree (the pins and their photos restorable from Undo History; CASCADEd content - comments, albums, links - is not, see ``PinUndoHandler``); ``"keep"`` promotes the direct children to the deleted pin's own parent (or to top-level pins) and deletes only the pin itself.
 
     Args:
         pin: The pin to delete.
-        children_mode: ``"delete"``, ``"keep"``, or ``""`` when the pin is
-            known to have no descendants.
+        children_mode: ``"delete"``, ``"keep"``, or ``""`` when the pin is known to have no descendants.
 
     Returns:
-        The pins actually deleted (just ``pin`` in "keep" mode, the whole
-        subtree otherwise).
+        The pins actually deleted (just ``pin`` in "keep" mode, the whole subtree otherwise).
 
     Raises:
-        PinHasChildrenError: *pin* has descendants and ``children_mode`` is
-            neither ``"delete"`` nor ``"keep"``."""
+        PinHasChildrenError: *pin* has descendants and ``children_mode`` is neither ``"delete"`` nor ``"keep"``."""
     subtree = list(Pin.objects.filter(pk=pin.pk).with_descendants())
     descendant_count = len(subtree) - 1
 

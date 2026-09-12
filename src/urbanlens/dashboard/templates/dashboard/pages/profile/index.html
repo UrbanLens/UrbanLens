@@ -36,11 +36,7 @@
     {% endif %}
 
     {# -- Photo strip ----------------------------------------------------------- #}
-    {# Owner: photos attached to a wiki or a DM - i.e. not fully private (see  #}
-    {# services.profile_photos.strip_photos_for_owner). Other viewers: only    #}
-    {# wiki-attached photos for a location they've independently pinned       #}
-    {# themselves (strip_photos_visible_to) - never anything the viewer       #}
-    {# doesn't already have some other existing way to see.                   #}
+    {# Owner: photos attached to a wiki or a DM - i.e. not fully private. #}
     {% if profile_photos %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title">Photos</h3>
@@ -98,9 +94,7 @@
     {% endif %}
 
     {# -- Social links -------------------------------------------------------- #}
-    {# Same chip display for owner and visitor - adding/removing links is the #}
-    {# Edit Profile page's job (profile_social_links.html), not this page's;  #}
-    {# an empty list means nothing to show, owner or not. #}
+    {# Same chip display for owner and visitor - adding/removing links is the Edit Profile page's job (profile_social_links.html), not this. #}
     {% if social_links %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
@@ -133,10 +127,7 @@
     {% endif %}
 
     {# -- Contact Info -------------------------------------------------------- #}
-    {# Only rendered - as a whole section, and per-field within it - when a  #}
-    {# field actually has a value, owner or not; adding a first value for an #}
-    {# empty field is the Edit Profile page's job. Existing values stay      #}
-    {# click-to-edit in place for the owner. #}
+    {# Only rendered - as a whole section, and per-field within it - when a field actually has a value, owner or not. #}
     {% if contact_info %}
     {% with ci=contact_info %}
     {% if ci.phone_number or ci.signal_username or ci.discord_username or ci.whatsapp_number or ci.telegram_username or ci.matrix_handle %}
@@ -236,11 +227,7 @@
     {% endif %}
 
     {# -- Interaction preferences ---------------------------------------------- #}
-    {# Consent-based preferences the profile owner has stated for how they'd  #}
-    {# like others to interact with them, on or off this site. Shown to any   #}
-    {# viewer who can see the profile at all - purely informational, not      #}
-    {# gated by a separate visibility setting - and edited on the Edit        #}
-    {# Profile page, not inline here. #}
+    {# Consent-based preferences the profile owner has stated for how they'd like others to interact with them, on or off this site. #}
     {% if profile.interaction_preferences or profile.additional_preferences %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title">Interaction Preferences</h3>
@@ -267,10 +254,7 @@
     </div>
     {% endif %}
 
-    {# -- Additional account details (own profile only) - birth date, secondary #}
-    {# emails, and other stored data that has nowhere else to be shown. Hidden #}
-    {# entirely if there's neither a birthday nor a secondary email to show;   #}
-    {# an empty birthday is added via the Edit Profile page, not inline here.  #}
+    {# Additional account details (own profile only) - birth date, secondary emails, and other stored data that has nowhere else to be shown. #}
     {% if profile.user == request.user and profile.birth_date or profile.user == request.user and profile.secondary_emails.all %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title">Additional Details</h3>
@@ -301,8 +285,7 @@
     {% include "dashboard/partials/profile/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_labels=user_labels assigned_label_ids=assigned_label_ids %}
     {% endif %}
 
-    {# The activity dashboard moved to the logged-in homepage - see #}
-    {# pages/home/overview.html and partials/home/_widget_*.html. #}
+    {# The activity dashboard moved to the logged-in homepage - see pages/home/overview.html and partials/home/_widget_*.html. #}
 
 
     {# -- Achievements -------------------------------------------------------- #}

@@ -1,11 +1,4 @@
-{% comment %}
-Reaction bar for one direct message. Context: `message`, `reactions` (list of
-{emoji, count, slugs}), `my_slug`, `partner` (the conversation partner, whose
-slug scopes the react URL). Swapped by HTMX (outerHTML, target
-#dm-reactions-<message.id>) whenever the viewer toggles a reaction; live
-updates from the *other* party arrive over the WebSocket and are rebuilt by
-the page's inline JS (see pages/messages/index.html), mirroring this markup.
-{% endcomment %}
+{% comment %}Reaction bar for one direct message.{% endcomment %}
 <div class="dm-reactions" id="dm-reactions-{{ message.id }}">
   {% for r in reactions %}
   <button type="button" class="dm-reaction-pill{% if my_slug in r.slugs %} dm-reaction-pill--mine{% endif %}"
