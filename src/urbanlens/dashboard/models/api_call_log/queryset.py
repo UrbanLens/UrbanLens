@@ -23,8 +23,21 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
         return self.filter(created__gte=timezone.now() - delta)
 
     def today(self) -> Self:
-        """Filter to calls made today (UTC calendar day)."""
-        return self.filter(created__date=timezone.now().date())
+        """Filter to calls made today (UTC calendar day).
+
+        A half-open range over the stored column rather than ``created__date``.
+        The two ask the same question - TIME_ZONE is UTC, so the extraction
+        compared against these same instants - but a date extracted from the
+        column is a function of it, which ``idxdb_apilog_svc_cdt`` cannot
+        answer. This runs inside ``check_rate_limit`` on every outbound call,
+        against an append-only log kept for 400 days, so the scan it degraded
+        into grew with the whole site's history.
+
+        Returns:
+            Calls whose ``created`` falls in today's UTC day.
+        """
+        start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        return self.filter(created__gte=start, created__lt=start + timedelta(days=1))
 
     def this_week(self) -> Self:
         """Filter to calls made in the last 7 days."""
