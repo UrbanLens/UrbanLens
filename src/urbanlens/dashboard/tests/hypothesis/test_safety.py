@@ -6,6 +6,7 @@ import datetime
 from uuid import uuid4
 
 from django.db import IntegrityError, transaction
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -411,6 +412,31 @@ class SafetyContactPortalEscalationGateTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()["markup_items"]), 1)
+
+    @override_settings(MARKUP_MAX_ITEMS_PER_RESPONSE=3)
+    def test_markup_json_is_capped_like_the_signed_in_reader(self):
+        """This route is reachable by anyone holding the magic link.
+
+        It built its own listing, so the ceiling added to ``MarkupJsonView``
+        left the *less* guarded of the two readers unbounded.
+        """
+        markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)
+        self.checkin.markup_map = markup_map
+        self.checkin.save(update_fields=["markup_map", "updated"])
+        for _ in range(10):
+            baker.make(
+                "dashboard.PinMarkup",
+                parent_map=markup_map,
+                profile=self.profile,
+                markup_type="line",
+                geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            )
+        self._escalate()
+
+        body = self.client.get(reverse("safety.contact.markup.json", kwargs={"token": self.contact.token})).json()
+
+        self.assertEqual(len(body["markup_items"]), 3)
+        self.assertTrue(body["truncated"])
 
     def test_portal_is_a_404_for_an_unknown_token(self):
         self.assertEqual(self.client.get(reverse("safety.contact.portal", kwargs={"token": uuid4()})).status_code, 404)

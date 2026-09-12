@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponse, JsonResponse
@@ -108,6 +108,68 @@ _GEOMETRY_TYPES = {
     "circle": "Circle",  # Custom non-GeoJSON type stored as {"type":"Circle","coordinates":[lng,lat],"radius":m}
     "polygon": "Polygon",
 }
+
+
+def _coordinate_count(value: object, ceiling: int) -> int:
+    """Coordinate pairs in a GeoJSON ``coordinates`` value, stopping past *ceiling*.
+
+    Shape-agnostic on purpose: Point, LineString, Polygon rings and the custom
+    Circle all nest ``[lng, lat]`` pairs at different depths, and a counter that
+    knew the depths would need changing every time a markup type is added.
+
+    Args:
+        value: A ``coordinates`` value, at any nesting depth.
+        ceiling: Stop counting once past this - the caller only needs to know
+            whether it was exceeded, and a hostile body is exactly the one worth
+            not walking to the end of.
+
+    Returns:
+        The number of pairs found, which may stop short of the true total.
+    """
+    if not isinstance(value, list):
+        return 0
+    if value and all(isinstance(item, int | float) for item in value):
+        return 1
+    total = 0
+    for item in value:
+        total += _coordinate_count(item, ceiling)
+        if total > ceiling:
+            break
+    return total
+
+
+def _geometry_too_large(geometry: dict) -> JsonResponse | None:
+    """Refuse a geometry carrying more points than a drawn shape ever does.
+
+    Args:
+        geometry: The client-supplied geometry dict.
+
+    Returns:
+        A 400 when it is over ``settings.MARKUP_MAX_GEOMETRY_POINTS``, else None.
+    """
+    from django.conf import settings
+
+    ceiling = settings.MARKUP_MAX_GEOMETRY_POINTS
+    if _coordinate_count(geometry.get("coordinates"), ceiling) > ceiling:
+        return JsonResponse({"ok": False, "error": f"That shape has more than {ceiling} points."}, status=400)
+    return None
+
+
+def _bounded_markup_rows(items: Any) -> tuple[list[Any], bool]:
+    """The first page of a markup queryset, and whether anything was cut.
+
+    Args:
+        items: A ``PinMarkup`` queryset, already ordered by the caller.
+
+    Returns:
+        ``(rows, truncated)``, reading one past the ceiling so "there are more"
+        comes from the same query.
+    """
+    from django.conf import settings
+
+    ceiling = settings.MARKUP_MAX_ITEMS_PER_RESPONSE
+    rows = list(items[: ceiling + 1])
+    return rows[:ceiling], len(rows) > ceiling
 
 
 def _sanitize_text_box_corner(geometry: dict) -> None:
@@ -305,8 +367,9 @@ class MarkupJsonView(LoginRequiredMixin, View):
 
             visible_layer_ids = set(visible_rows(CustomLayer.objects.for_wiki(owner), owner, profile).values_list("pk", flat=True))
 
+        rows, truncated = _bounded_markup_rows(items.select_related("layer").order_by("created"))
         markup_items = []
-        for m in items.select_related("layer").order_by("created"):
+        for m in rows:
             entry = m.to_json()
             if visible_layer_ids is not None and m.layer_id is not None and m.layer_id not in visible_layer_ids:
                 # Ungroup rather than reference a layer this viewer cannot
@@ -318,7 +381,9 @@ class MarkupJsonView(LoginRequiredMixin, View):
             elif include_children and m.parent_wiki_id is not None and m.parent_wiki_id != owner.pk and m.parent_wiki is not None:
                 entry["owner_name"] = m.parent_wiki.name
             markup_items.append(entry)
-        payload: dict = {"markup_items": markup_items}
+        # Reported rather than left to be inferred from the length: a silent cut
+        # reads as "this pin has five drawings", which is a different claim.
+        payload: dict = {"markup_items": markup_items, "truncated": truncated}
         if isinstance(owner, MarkupMap):
             payload["view"] = {
                 "center_lat": owner.center_latitude,
@@ -363,8 +428,10 @@ class SafetyContactMarkupJsonView(View):
         markup_map = checkin.markup_map
         if markup_map is None:
             return JsonResponse({"markup_items": []})
-        items = PinMarkup.objects.for_map(markup_map)
-        return JsonResponse({"markup_items": [m.to_json() for m in items.order_by("created")]})
+        # Capped like the signed-in reader: this route is reachable by anyone
+        # holding the magic link, so it is the *less* guarded of the two.
+        rows, truncated = _bounded_markup_rows(PinMarkup.objects.for_map(markup_map).order_by("created"))
+        return JsonResponse({"markup_items": [m.to_json() for m in rows], "truncated": truncated})
 
 
 def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | None:
@@ -704,6 +771,8 @@ class MarkupView(LoginRequiredMixin, View):
                 {"ok": False, "error": f"{markup_type} requires {expected_geom_type} geometry"},
                 status=400,
             )
+        if too_large := _geometry_too_large(geometry):
+            return too_large
         if markup_type == "text":
             _sanitize_text_box_corner(geometry)
 
@@ -795,6 +864,8 @@ class MarkupEditView(LoginRequiredMixin, View):
 
         if "geometry" in body and isinstance(body["geometry"], dict):
             geometry = body["geometry"]
+            if too_large := _geometry_too_large(geometry):
+                return too_large
             if item.markup_type == "text":
                 _sanitize_text_box_corner(geometry)
             item.geometry = geometry

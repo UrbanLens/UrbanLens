@@ -4343,9 +4343,21 @@ approved decision asked for, already in place. H41's group-chat half already bui
 once per broadcast rather than once per member; what was left was the delivery, which is the part
 fixed above. Both went on the list because the audit was read rather than the code.
 
+**H39 is fixed** (2026-09-12), and it had a third door the finding did not name. Markup `geometry`
+is written from the request body into a JSONField after a type check and nothing else, so one shape
+could carry any number of coordinate pairs; and the reader answered for a whole pin/wiki subtree at
+once. On a community wiki both are read by everyone who opens the page, so one person's drawing set
+what every later viewer downloaded. Geometry is refused past `MARKUP_MAX_GEOMETRY_POINTS` at *both*
+write doors (create and update take the same body), and the listing is cut at
+`MARKUP_MAX_ITEMS_PER_RESPONSE` with a `truncated` marker — a silent cut reads as "this pin has five
+drawings", which is a different claim.
+
+The third door: `SafetyContactMarkupJsonView` builds its own listing, so capping `MarkupJsonView`
+would have left the *less* guarded of the two unbounded — that route is reachable by anyone holding
+the magic link, with no account at all. Both now read through one helper.
+
 Still open in family 4: the findings N21 lists beyond these, most of which are request-path
-loops over one account's data in surfaces nobody has measured yet. H39 (markup JSON returns a
-whole subtree, and geometry has no point cap at the sanitize layer) is verified real and next.
+loops over one account's data in surfaces nobody has measured yet.
 
 **H19 is fixed** (2026-09-11), and it is the one that could have taken the site down rather than
 slowed it. Upvoting an external photo materializes it - downloads up to 20MB and stores it on the

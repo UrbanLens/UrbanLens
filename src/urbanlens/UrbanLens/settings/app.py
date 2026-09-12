@@ -266,6 +266,23 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "first marker, not server memory - the document is streamed in batches either way."
         ),
     )
+    markup_max_geometry_points: int = Field(
+        default=10_000,
+        description=(
+            "How many coordinate pairs one markup shape may carry. `geometry` is written from the request body into "
+            "a JSONField, and on a community wiki it is read back by everyone who opens the page - so without this "
+            "one person's drawing sets what every later viewer downloads. Far above a shape somebody drew; a "
+            "million-point polygon is not one."
+        ),
+    )
+    markup_max_items_per_response: int = Field(
+        default=2_000,
+        description=(
+            "How many markup items one JSON response returns. The reader answers for a whole pin/wiki subtree at "
+            "once. Capped with a `truncated` marker rather than refused - a subtree that has genuinely grown past "
+            "this should still render what fits and say that it did."
+        ),
+    )
     label_bulk_edit_max_ids: int = Field(
         default=500,
         description=(
