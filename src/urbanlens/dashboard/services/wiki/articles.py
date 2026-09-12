@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import difflib
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from django.db import transaction
 from markdown_it import MarkdownIt
@@ -26,6 +26,9 @@ from mdit_py_plugins.footnote import footnote_plugin
 import nh3
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    import datetime
+
     from urbanlens.dashboard.models.article.model import Article, ArticleRevision
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -542,3 +545,81 @@ def diff_revisions(old_content: str, new_content: str, *, context: int = 3) -> l
             if tag in {"replace", "insert"}:
                 rows.extend(DiffRow(kind="add", text=line) for line in new_lines[new_start:new_end])
     return rows
+
+
+class AnnotatedRevision(Protocol):
+    """An ``ArticleRevision`` carrying the two lengths the history query adds.
+
+    The row builder below is only ever handed rows from the queryset built
+    beside it, which annotates both - but nothing in `ArticleRevision` itself
+    promises them, and saying so here is more honest than asserting it on the
+    model, where it would claim every instance has lengths that only a
+    `revision_history_page` queryset supplies.
+    """
+
+    pk: int
+    edit_summary: str
+    editor_id: int | None
+    editor: Profile | None
+    restored_from_id: int | None
+    created: datetime.datetime
+    #: LENGTH(content) for this revision.
+    content_length: int
+    #: The same for the revision before it, or 0 for the first.
+    previous_length: int
+
+
+def revision_history_page(revisions: Any, viewer: Profile) -> tuple[Any, Callable[[AnnotatedRevision], dict[str, Any]]]:
+    """A revision-history queryset and its row builder, for paginating in SQL.
+
+    The two callers (pin article, wiki article) both used to materialise the
+    whole history and build a row per revision before paginating, so the page
+    size bounded the response body and nothing else. Each row needs
+    ``size_delta``, which is ``len(content)`` - so every revision's complete
+    source was read out of the database to produce one integer per row.
+
+    ``size_delta`` is why this cannot be a plain slice: a row's delta is
+    measured against the revision before it, which on the last row of a page is
+    on the *next* page. A window function computes it against the true
+    neighbour before ``LIMIT`` applies, so paging never changes a number.
+
+    Args:
+        revisions: The revision queryset, already scoped and filtered by the
+            caller - the wiki door applies concealment, the pin door does not,
+            and the window must see exactly the rows the viewer will page
+            through for the deltas to add up.
+        viewer: The requesting profile, for editor-name masking.
+
+    Returns:
+        ``(queryset, row_builder)`` to hand straight to ``paginated_response``.
+    """
+    from django.db.models import F, Window
+    from django.db.models.functions import Lag, Length
+
+    from urbanlens.dashboard.services.wiki.wiki_detail import masked_editor_name
+
+    prepared = revisions.annotate(content_length=Length("content")).annotate(previous_length=Window(expression=Lag(Length("content"), default=0), order_by=[F("created").asc(), F("pk").asc()])).defer("content").order_by("-created", "-pk")
+    # One entry per editor rather than per revision: `masked_editor_name` calls
+    # `resolve_visible_identities`, which is written to take a batch, and a
+    # history is usually a handful of people over many revisions.
+    editor_names: dict[int, str | None] = {}
+
+    def build(revision: AnnotatedRevision) -> dict[str, Any]:
+        editor_id = revision.editor_id
+        if editor_id is None:
+            editor = None
+        elif editor_id in editor_names:
+            editor = editor_names[editor_id]
+        else:
+            editor = masked_editor_name(revision.editor, viewer)
+            editor_names[editor_id] = editor
+        return {
+            "id": revision.pk,
+            "edit_summary": revision.edit_summary,
+            "editor": editor,
+            "size_delta": revision.content_length - revision.previous_length,
+            "restored_from": revision.restored_from_id,
+            "created": revision.created.isoformat(),
+        }
+
+    return prepared, build

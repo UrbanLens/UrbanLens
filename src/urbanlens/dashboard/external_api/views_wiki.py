@@ -109,6 +109,7 @@ from urbanlens.dashboard.services.wiki.articles import (
     get_article,
     latest_revision_id,
     restore_revision,
+    revision_history_page,
     save_article_checked,
 )
 from urbanlens.dashboard.services.wiki.concealment import conceal_article, concealment_active, redact_edit_changes, visible_rows, writable_wiki
@@ -976,21 +977,8 @@ class WikiArticleRevisionsView(PaginatedListMixin, WikiApiView):
         if article is None:
             raise Http404
 
-        revisions = list(visible_rows(article.revisions.select_related("editor__user", "restored_from"), wiki, profile).order_by("-created", "-pk"))
-        rows = [
-            {
-                "id": revision.pk,
-                "edit_summary": revision.edit_summary,
-                "editor": masked_editor_name(revision.editor, profile),
-                # Delta against the revision immediately before this one;
-                # `revisions` is newest-first, so that is the next item.
-                "size_delta": revision.size_delta(revisions[index + 1] if index + 1 < len(revisions) else None),
-                "restored_from": revision.restored_from_id,
-                "created": revision.created.isoformat(),
-            }
-            for index, revision in enumerate(revisions)
-        ]
-        return self.paginated_response(rows, ArticleRevisionSerializer, request)
+        queryset, row_builder = revision_history_page(visible_rows(article.revisions.select_related("editor__user"), wiki, profile), profile)
+        return self.paginated_response(queryset, ArticleRevisionSerializer, request, row_builder=row_builder)
 
 
 class WikiArticleRevisionDetailView(WikiApiView):

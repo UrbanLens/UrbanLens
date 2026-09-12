@@ -60,6 +60,7 @@ from urbanlens.dashboard.services.wiki.articles import (
     diff_revisions,
     get_article,
     restore_revision,
+    revision_history_page,
     save_article_checked,
 )
 from urbanlens.dashboard.services.wiki.wiki_detail import masked_editor_name
@@ -232,21 +233,10 @@ class PinArticleRevisionsView(PaginatedListMixin, PinArticleApiView):
         _pin, article = self.pin_article(request, pin_slug)
         profile = request.user.profile
 
-        revisions = list(article.revisions.select_related("editor__user", "restored_from").order_by("-created", "-pk"))
-        rows = [
-            {
-                "id": revision.pk,
-                "edit_summary": revision.edit_summary,
-                "editor": masked_editor_name(revision.editor, profile),
-                # Delta against the revision immediately before this one;
-                # `revisions` is newest-first, so that is the next item.
-                "size_delta": revision.size_delta(revisions[index + 1] if index + 1 < len(revisions) else None),
-                "restored_from": revision.restored_from_id,
-                "created": revision.created.isoformat(),
-            }
-            for index, revision in enumerate(revisions)
-        ]
-        return self.paginated_response(rows, ArticleRevisionSerializer, request)
+        # select_related("editor__user") only: `restored_from` is read as an id,
+        # which is already on the row.
+        queryset, row_builder = revision_history_page(article.revisions.select_related("editor__user"), profile)
+        return self.paginated_response(queryset, ArticleRevisionSerializer, request, row_builder=row_builder)
 
 
 class PinArticleRevisionDetailView(PinArticleApiView):

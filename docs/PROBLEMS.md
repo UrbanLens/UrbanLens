@@ -4423,6 +4423,29 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**H46 is fixed, and it had a second door** (2026-09-12). Both revision-history endpoints - the pin
+article's and the wiki article's - ran `list(article.revisions...)` and built a row dict per revision
+*before* handing the result to `paginated_response`, so the page size bounded the response body and
+nothing else. Each row carries `size_delta`, which is `len(content)`, so every revision's complete
+source (200,000 characters is the field's own ceiling) was read out of the database to produce one
+integer per row. Measured: 48 extra model objects for 16 extra revisions behind a two-row page, on
+each door.
+
+`paginated_response`'s own docstring already described the anti-pattern and offered `row_builder` as
+the fix - "Passing a queryset plus this is strictly better than pre-building a list of dicts and
+paginating that" - so the tool was there and neither caller used it.
+
+`size_delta` is why this could not be a plain slice: a row's delta is measured against the revision
+before it, which on the last row of a page sits on the *next* page. A window function
+(`Lag(Length("content"))`) computes it against the true neighbour before `LIMIT` applies, so paging
+never changes a number - there is a test that pages to the second page and checks the deltas rather
+than only counting rows. `content` itself is deferred, so the bodies are never loaded at all.
+
+Two smaller things fell out: `select_related("restored_from")` was a join for a value read as
+`restored_from_id`, already on the row; and `masked_editor_name` calls `resolve_visible_identities`,
+a helper written to take a batch, once per revision with a single-item list - memoised per editor
+like H28.
+
 **H28's second half is fixed, and H07 and H28's first half were already done** (2026-09-12).
 `bound_map_layer` already caps both photo-map JSON endpoints with a `truncated` marker, which is
 what those entries mostly asked for - the sixth and seventh audit lines found already fixed. What
