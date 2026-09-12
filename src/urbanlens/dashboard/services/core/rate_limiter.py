@@ -32,6 +32,7 @@ from django.db import DatabaseError, transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.exceptions import DashboardError
+from urbanlens.dashboard.models.abstract.versioning import current_write_actor
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 logger = logging.getLogger(__name__)
@@ -638,6 +639,7 @@ def log_api_call(
     try:
         ApiCallLog.objects.create(
             service=service,
+            profile_id=current_write_actor(),
             success=success,
             response_ms=response_ms,
             endpoint=endpoint[:500] if endpoint else "",
@@ -702,6 +704,10 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
     from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 
     truncated_endpoint = endpoint[:500] if endpoint else ""
+    # Read once, outside the lock: who this call is being made for. Bound by
+    # WriteSourceMiddleware for a request and left unset for the site's own
+    # scheduled work, which belongs to nobody.
+    actor_id = current_write_actor()
 
     # Ensure the row exists (auto-created from defaults) before locking it -
     # get_or_create is safe to call outside the lock since it already handles
@@ -725,19 +731,19 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
                     elapsed,
                     config.min_interval_seconds,
                 )
-                ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
+                ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
                 to_raise = RateLimitExceededError(service)
 
         if to_raise is None and not check_rate_limit(service, config):
-            ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
+            ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
             to_raise = RateLimitExceededError(service)
 
         if to_raise is None and not service_is_enabled(service, config):
-            ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_service_disabled=True)
+            ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=False, was_service_disabled=True)
             to_raise = ServiceDisabledError(service)
 
         if to_raise is None:
-            entry = ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=True)
+            entry = ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=True)
             entry_pk = entry.pk
             if config.min_interval_seconds is not None:
                 config.last_call_at = timezone.now()

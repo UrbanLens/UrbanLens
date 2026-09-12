@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P115` · `T3` · `PL8` · `D14` · `X18` · `I5` · `R29` · `N22`
+**Next free id:** `P115` · `T3` · `PL8` · `D15` · `X18` · `I5` · `R29` · `N22`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -119,6 +119,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | D11 | accepted | 2026-09-10 | One user's expensive request must be unable to reach another user's request, and the way to guarantee that is bounded pools with named budgets | [`docs/designs/request-isolation-and-connection-budget.md`](designs/request-isolation-and-connection-budget.md) |
 | D12 | accepted | 2026-09-11 | The map cache becomes an accelerator the site can lose, and labels stop being copied into every pin; built, with the delta and viewport mode deferred | [`docs/designs/map-data-contract-v11.md`](designs/map-data-contract-v11.md) |
 | D13 | accepted | 2026-09-11 | Celery queue classes: one account's big job must not delay everyone's small ones | [`docs/designs/celery-queue-classes.md`](designs/celery-queue-classes.md) |
+| D14 | accepted | 2026-09-12 | A shared service budget is divided by who is actually competing for it, not by the user count | [`docs/designs/external-api-fair-share.md`](designs/external-api-fair-share.md) |
 | X1 | holds | 2026-08-27 | A release merge silently dropped --skip-undecryptable from DATA_ENCRYPTION.md; nothing else had drifted | [`docs/audits/DATA_ENCRYPTION_AUDIT.md`](audits/DATA_ENCRYPTION_AUDIT.md) |
 | X2 | holds | 2026-09-01 | A gate enforced in the web UI is repeatedly missing from the parallel external-API endpoint | [`docs/audits/FEATURES_CODE_AUDIT.md`](audits/FEATURES_CODE_AUDIT.md) |
 | X3 | holds | 2026-08-27 | GOALS.md contradicts the other docs on six points and states ten goals no other doc records at all | [`docs/audits/GOALS_AUDIT.md`](audits/GOALS_AUDIT.md) |

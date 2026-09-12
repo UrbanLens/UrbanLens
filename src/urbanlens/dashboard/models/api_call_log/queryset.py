@@ -63,6 +63,44 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
         """Filter to calls that were skipped due to service being disabled."""
         return self.filter(was_service_disabled=True)
 
+    def for_profile(self, profile) -> Self:
+        """Filter to calls made on one profile's behalf."""
+        return self.filter(profile=profile)
+
+    def usage_by_profile(self, window: timedelta) -> list[tuple[int, int]]:
+        """Who consumed this queryset's calls over ``window``, heaviest first.
+
+        Composable rather than self-filtering: chain ``for_service`` and
+        ``billable`` to ask about quota actually spent, or leave them off to
+        include the refusals, which are the record of demand that went unmet.
+
+        Unattributed rows are excluded rather than grouped under a null key -
+        the site's own scheduled work is not a user's consumption, and a
+        fair-share decision that counted it would restrain people for it.
+
+        Args:
+            window: How far back to look.
+
+        Returns:
+            ``(profile_id, calls)`` pairs, heaviest first, ties by profile id.
+        """
+        rows = self.since(window).exclude(profile__isnull=True).values("profile_id").annotate(calls=Count("id")).order_by("-calls", "profile_id")
+        return [(row["profile_id"], row["calls"]) for row in rows]
+
+    def active_consumers(self, window: timedelta) -> int:
+        """How many distinct people used this queryset's service over ``window``.
+
+        The denominator of a fair share: one active consumer may reasonably
+        have the whole budget, a hundred may not.
+
+        Args:
+            window: How far back to look.
+
+        Returns:
+            Count of distinct attributed profiles, ignoring unattributed rows.
+        """
+        return self.since(window).exclude(profile__isnull=True).values("profile_id").distinct().count()
+
     def summary_by_service(self) -> list[dict]:
         """Return per-service usage summary for the last 30 days."""
         return list(
