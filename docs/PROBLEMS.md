@@ -4266,32 +4266,49 @@ Two corrections to the audit came out of building it, both of which would have b
   normal deployment the route does not exist. Throttled anyway, because a demo instance is still a
   deployment.
 
-**H44 is real and measured, and deliberately not fixed in the same breath** (2026-09-12).
-Authorizing one media file costs **15 queries**, confirmed by capturing the SQL: four friendship
-lookups (both directions, for viewer *and* uploader), three `user_pins` scans, two trip-membership
-lookups, a site-wide aggregate over `dashboard_places`, and the final visibility check. A gallery
-tile is its own HTTP request, so a 30-photo gallery is ~450 queries, each holding a connection.
+**H44: the gate resolved the viewer's whole social graph before asking whether it mattered**
+(2026-09-12). Authorizing one media file cost **15 queries**, measured by capturing the SQL: four
+friendship lookups (both directions, viewer *and* uploader), three `user_pins` scans, two
+trip-membership lookups, a site-wide aggregate over `dashboard_places`, and the final check. A
+gallery tile is its own HTTP request, so a 30-photo gallery was ~450 queries, each holding a
+connection.
 
-`prime_viewer_scope` does not help here and cannot: it memoises on the `Profile` *instance*, which
+`prime_viewer_scope` does not help here and cannot: it memoises on the `Profile` instance, which
 lives for one request, and a media request authorizes exactly one image. There is nothing to share
-within the call. The audit's own suggested fix says as much, hedged — it is worth reading a
-suggested fix for what it concedes.
+within the call. The audit's own suggested fix concedes as much — worth reading a suggested fix for
+what it admits.
 
-Two ways to fix it, and they are not equally safe:
+Done in two steps, because this is a visibility gate and the failure mode of getting it wrong is
+someone seeing a photo they should not:
 
-- **Cache the viewer's scope across requests.** Cheapest, and wrong to reach for first: this is a
-  visibility gate, so a stale entry means someone sees a photo after losing access. That is a
-  security change wearing a performance change's clothes.
-- **Resolve only what the answer needs.** For one image there is exactly one uploader, so the
-  uploader's `photo_upload_visibility` decides which relationship even matters — `FRIENDS` needs one
-  friendship test, not the viewer's whole friend set, and a public photo needs none of it. Same
-  rules, narrower queries, no new staleness.
+1. **The answer was pinned first** (`test_photo_visibility_matrix_agreement.py`). Eight scenarios,
+   each asserting the exact set of (uploader setting, viewer filter) pairs that grant the photo,
+   every expectation measured rather than predicted. The structure that dominates it was not what
+   reading suggested: the container gate is independent of both settings and comes first, so with no
+   reach the entire 7x7 table is False.
+2. **Then the internals moved.** `visible_to` loaded the viewer's friends, pinned locations and trip
+   memberships up front, then evaluated the settings that decide which of the three the answer
+   depends on — `ANYONE` needs none, `FRIENDS` needs one, `ANYTHING_IN_COMMON` stops at the first
+   match. Now a `_ViewerScope` resolves each on first use, and the reach clause is skipped entirely
+   when no uploader passed the settings, since it could only ever match nothing.
 
-The second is right, but it is a rewrite of a gate's internals, and the rule here is that gates get
-an agreement test pinning the current answer across the full matrix of `photo_upload_visibility` x
-`viewer_photo_filter` x relationship *before* anything underneath moves — extract unchanged first,
-then optimise. Not started rather than half-started, and recorded with the measurement so the next
-person does not have to re-derive the 15.
+Measured after: **15 → 11** at the default settings, **→ 7** for anyone/anyone, **→ 3** when the
+uploader's setting refuses outright. The agreement test is unchanged throughout, which is the claim
+that matters.
+
+**Still open, with its measurement, so the next person does not re-derive it.** The remaining cost is
+the reach computation. `visible_wiki_location_ids` builds the viewer's whole reachable set in 4
+queries; `location_visible_to` answers the same question for one location in **1**. Using the cheap
+one on the media path would take 11 to about 8.
+
+The prerequisite — an agreement test between the two, since they are separate implementations of one
+rule — is now written (`test_wiki_reach_implementations_agree.py`), and it immediately earned its
+keep by failing: **the equivalence has a precondition.** The set form filters `wiki__isnull=False`,
+so it lists wikis that *exist*; `location_visible_to` answers "may you reach a wiki here" whether or
+not one was created. For a location with no wiki they disagree by construction, which is not a defect
+— there is nothing to show — but it does mean the substitution is sound only where a wiki exists.
+That happens to be exactly the media path's case, since a photo is attached to one. The boundary is
+asserted rather than left as folklore, so whoever does the swap knows what it rests on.
 
 **A cache whose key never repeats is not a cache** (2026-09-12, H01's last half). The Immich
 "Scan your library" sweep named three things and two were already closed: it declares `Queue.BULK`

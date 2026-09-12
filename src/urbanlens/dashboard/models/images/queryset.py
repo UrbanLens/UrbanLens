@@ -167,6 +167,118 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     return Q(wiki__location_id__in=location_ids)
 
 
+def _viewer_scoped(profile: Profile, attribute: str, compute: Callable[[], set[int]]) -> set[int]:
+    """Read a viewer-scoped id set, using a primed value when there is one.
+
+    These three sets describe the *viewer*, not the queryset, so every
+    ``visible_to`` call in one render wants the same answer - and a page can make
+    several. Album detail resolves the same visibility four times
+    (``visible_album_item_pairs``, ``album_images_page``, ``eligible_images_for``
+    and the picker payload), which cost four copies of all three lookups.
+
+    **Opt-in, and never self-populating.** An earlier version cached on first
+    read, which silently changed what ``visible_to`` means: a caller that creates
+    a pin and then asks about visibility got the answer from before the pin
+    existed. That is not a hypothetical -
+    ``test_gaining_a_pin_at_the_far_place_grants_the_photo`` is exactly that
+    sequence, and its docstring says the gate must track reachability rather than
+    anything cached earlier. So a value is used only when a caller has explicitly
+    said it is about to resolve the same viewer repeatedly, via
+    :func:`prime_viewer_scope`, and the default stays a fresh read.
+
+    Args:
+        profile: The viewing profile the set describes.
+        attribute: Instance attribute a primed value would be under.
+        compute: Builds the set when nothing is primed.
+
+    Returns:
+        The viewer's id set.
+    """
+    primed = getattr(profile, attribute, None)
+    return compute() if primed is None else primed
+
+
+def _friend_ids_for(profile: Profile) -> set[int]:
+    """Profile ids of *profile*'s accepted friends."""
+
+    def compute() -> set[int]:
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        accepted = FriendshipStatus.ACCEPTED
+        return set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True))
+
+    return _viewer_scoped(profile, _FRIEND_IDS_ATTR, compute)
+
+
+def _location_ids_for(profile: Profile) -> set[int]:
+    """Location ids *profile* has pinned."""
+
+    def compute() -> set[int]:
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        return set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True))
+
+    return _viewer_scoped(profile, _PINNED_LOCATION_IDS_ATTR, compute)
+
+
+def _trip_ids_for(profile: Profile) -> set[int]:
+    """Trip ids *profile* is a member of."""
+
+    def compute() -> set[int]:
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        return set(TripMembership.objects.trip_ids_for(profile))
+
+    return _viewer_scoped(profile, _TRIP_IDS_ATTR, compute)
+
+
+class _ViewerScope:
+    """The viewer's three relationship sets, each resolved on first use.
+
+    Which of them an answer depends on is decided by the settings being
+    evaluated, not known in advance: ``ANYONE`` and ``NO_ONE`` need none,
+    ``FRIENDS`` needs only the friend set, and ``ANYTHING_IN_COMMON`` stops at
+    the first of pin/friend/trip that matches. Reading all three up front cost
+    four queries on every call whether or not the answer used them - amortised
+    over a gallery listing, but paid in full per tile on the media path, where
+    each thumbnail is its own request authorizing one image.
+
+    Each read honours a primed value where a caller has set one (see
+    ``prime_viewer_scope``), so priming and laziness compose rather than
+    competing: priming decides whether a lookup is needed at all, this decides
+    whether it is reached for.
+    """
+
+    __slots__ = ("_friend_ids", "_location_ids", "_profile", "_trip_ids")
+
+    def __init__(self, profile: Profile) -> None:
+        self._profile = profile
+        self._friend_ids: set[int] | None = None
+        self._location_ids: set[int] | None = None
+        self._trip_ids: set[int] | None = None
+
+    @property
+    def friend_ids(self) -> set[int]:
+        """Profile ids of the viewer's accepted friends."""
+        if self._friend_ids is None:
+            self._friend_ids = _friend_ids_for(self._profile)
+        return self._friend_ids
+
+    @property
+    def location_ids(self) -> set[int]:
+        """Location ids the viewer has pinned."""
+        if self._location_ids is None:
+            self._location_ids = _location_ids_for(self._profile)
+        return self._location_ids
+
+    @property
+    def trip_ids(self) -> set[int]:
+        """Trip ids the viewer is a member of."""
+        if self._trip_ids is None:
+            self._trip_ids = _trip_ids_for(self._profile)
+        return self._trip_ids
+
+
 class ImageQuerySet(abstract.FrontendDashboardQuerySet):
     def visible_to(self, viewer_profile: Profile | None) -> Self:
         """Filter to images the given viewer is allowed to see.
@@ -228,7 +340,14 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         # enough either, which is the half that was missing: a photo filed under a
         # pin was reachable by anyone the setting happened to admit, and the
         # default admits whoever pinned the same place.
-        others_visible = Q(pending_scan=False) & (_named_this_viewer(viewer_profile) | (Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)))
+        if allowed_uploader_ids:
+            shared = Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)
+        else:
+            # No uploader passed the settings, so the clause could only ever match
+            # nothing - and building it resolves the viewer's whole wiki reach,
+            # which is the most expensive part of this gate.
+            shared = Q(pk__in=[])
+        others_visible = Q(pending_scan=False) & (_named_this_viewer(viewer_profile) | shared)
         return self.filter(Q(profile=viewer_profile) | others_visible)
 
     def _allowed_uploader_ids(self, viewer_profile: Profile, viewer_filter: str) -> set[int]:
@@ -244,88 +363,34 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         # the whole site - keeps the cost proportional to the gallery size.
         uploaders = Profile.objects.filter(pk__in=self.values_list("profile_id", flat=True).distinct()).exclude(pk=viewer_profile.pk).values_list("pk", "photo_upload_visibility")
 
-        viewer_friend_ids = self._get_friend_ids(viewer_profile)
-        viewer_loc_ids = self._get_location_ids(viewer_profile)
-        viewer_trip_ids = self._get_trip_ids(viewer_profile)
+        scope = _ViewerScope(viewer_profile)
 
         allowed: set[int] = set()
         for uploader_id, upload_vis in uploaders:
             # a) Uploader's own restriction
-            if not self._relationship_allows(upload_vis, uploader_id, viewer_friend_ids, viewer_loc_ids, viewer_trip_ids):
+            if not self._relationship_allows(upload_vis, uploader_id, scope):
                 continue
             # b) Viewer's own filter
-            if not self._relationship_allows(viewer_filter, uploader_id, viewer_friend_ids, viewer_loc_ids, viewer_trip_ids):
+            if not self._relationship_allows(viewer_filter, uploader_id, scope):
                 continue
             allowed.add(uploader_id)
         return allowed
 
     # -- Helpers ----------------------------------------------------------------
 
-    @staticmethod
-    def _viewer_scoped(profile: Profile, attribute: str, compute: Callable[[], set[int]]) -> set[int]:
-        """Read a viewer-scoped id set, using a primed value when there is one.
-
-        These three sets describe the *viewer*, not the queryset, so every
-        ``visible_to`` call in one render wants the same answer - and a page can
-        make several. Album detail resolves the same visibility four times
-        (``visible_album_item_pairs``, ``album_images_page``,
-        ``eligible_images_for``, and the picker payload), which cost four copies
-        of all three lookups.
-
-        **Opt-in, and never self-populating.** An earlier version cached on
-        first read, which silently changed what ``visible_to`` means: a caller
-        that creates a pin and then asks about visibility got the answer from
-        before the pin existed. That is not a hypothetical -
-        ``test_gaining_a_pin_at_the_far_place_grants_the_photo`` is exactly that
-        sequence, and its docstring says the gate must track reachability rather
-        than anything cached earlier. So a value is used only when a caller has
-        explicitly said it is about to resolve the same viewer repeatedly, via
-        :func:`prime_viewer_scope`, and the default stays a fresh read.
-
-        Args:
-            profile: The viewing profile the set describes.
-            attribute: Instance attribute a primed value would be under.
-            compute: Builds the set when nothing is primed.
-
-        Returns:
-            The viewer's id set.
-        """
-        primed = getattr(profile, attribute, None)
-        return compute() if primed is None else primed
-
     def _get_friend_ids(self, profile: Profile) -> set[int]:
-        def compute() -> set[int]:
-            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-            accepted = FriendshipStatus.ACCEPTED
-            return set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True))
-
-        return self._viewer_scoped(profile, _FRIEND_IDS_ATTR, compute)
+        """Profile ids of *profile*'s accepted friends."""
+        return _friend_ids_for(profile)
 
     def _get_location_ids(self, profile: Profile) -> set[int]:
-        def compute() -> set[int]:
-            from urbanlens.dashboard.models.pin.model import Pin
-
-            return set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True))
-
-        return self._viewer_scoped(profile, _PINNED_LOCATION_IDS_ATTR, compute)
+        """Location ids *profile* has pinned."""
+        return _location_ids_for(profile)
 
     def _get_trip_ids(self, profile: Profile) -> set[int]:
-        def compute() -> set[int]:
-            from urbanlens.dashboard.models.trips.model import TripMembership
+        """Trip ids *profile* is a member of."""
+        return _trip_ids_for(profile)
 
-            return set(TripMembership.objects.trip_ids_for(profile))
-
-        return self._viewer_scoped(profile, _TRIP_IDS_ATTR, compute)
-
-    def _relationship_allows(
-        self,
-        visibility: str,
-        uploader_id: int,
-        viewer_friend_ids: set[int],
-        viewer_loc_ids: set[int],
-        viewer_trip_ids: set[int],
-    ) -> bool:
+    def _relationship_allows(self, visibility: str, uploader_id: int, scope: _ViewerScope) -> bool:
         """Evaluate one VisibilityChoice for a (viewer, uploader) pair.
 
         Bulk twin of ``Profile.visibility_permits`` - the viewer's friend/
@@ -336,20 +401,20 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         Args:
             visibility: The VisibilityChoice being evaluated (either side's).
             uploader_id: Profile id of the image uploader.
-            viewer_friend_ids: The viewer's accepted-friend profile ids.
-            viewer_loc_ids: Location ids the viewer has pinned.
-            viewer_trip_ids: Trip ids the viewer is a member of.
+            scope: The viewer's relationship sets, each resolved on first use.
 
         Returns:
             True when the relationship satisfies the visibility requirement.
         """
         from urbanlens.dashboard.models.profile.model import VisibilityChoice
 
+        # Ordered so the two answers that depend on no relationship at all are
+        # returned before anything is resolved.
         if visibility == VisibilityChoice.ANYONE:
             return True
         if visibility == VisibilityChoice.NO_ONE:
             return False
-        if uploader_id in viewer_friend_ids:
+        if uploader_id in scope.friend_ids:
             return True
         if visibility == VisibilityChoice.FRIENDS:
             return False
@@ -358,13 +423,13 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
             from urbanlens.dashboard.models.pin.model import Pin
 
             uploader_loc_ids = set(Pin.objects.filter(profile_id=uploader_id, location__isnull=False).values_list("location_id", flat=True))
-            return bool(viewer_loc_ids & uploader_loc_ids)
+            return bool(scope.location_ids & uploader_loc_ids)
 
         def common_friend() -> bool:
-            return bool(viewer_friend_ids & self._get_friend_ids_by_id(uploader_id))
+            return bool(scope.friend_ids & self._get_friend_ids_by_id(uploader_id))
 
         def common_trip() -> bool:
-            return bool(viewer_trip_ids & self._get_trip_ids_by_id(uploader_id))
+            return bool(scope.trip_ids & self._get_trip_ids_by_id(uploader_id))
 
         if visibility == VisibilityChoice.COMMON_PIN:
             return common_pin()
