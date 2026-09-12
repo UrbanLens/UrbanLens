@@ -156,12 +156,18 @@ def build_comment_tree(trip: Trip, viewer: Profile) -> list[TripCommentData]:
                 if r.author is not None:
                     r.author = distinct_authors[r.author.pk]
 
+    # One verdict per author rather than per comment: `visible_comment_tree`
+    # keeps the same dict for pin/wiki threads, and for the same reason - at
+    # the COMMON_PIN setting this reads both accounts' whole pin sets, and a
+    # trip thread is exactly where one author appears many times.
+    can_view: dict[int, bool] = {pk: viewer.can_view_comments_from(author) for pk, author in distinct_authors.items()}
+
     rendered: list[TripCommentData] = []
     for c in top_comments:
         # The author's comment_visibility gates the whole comment for this
         # viewer, exactly as pin/wiki comments already do. A comment whose
         # author was deleted has no visibility preference left to enforce.
-        if c.author is not None and not viewer.can_view_comments_from(c.author):
+        if c.author is not None and not can_view.get(c.author.pk, False):
             continue
         # A newly-uploaded image is scanned asynchronously - until that clears
         # pending_scan, the comment stays visible only to its own author.
@@ -173,7 +179,7 @@ def build_comment_tree(trip: Trip, viewer: Profile) -> list[TripCommentData]:
         reactions = _aggregate_reactions(c.reactions.all())
         replies_rendered: list[TripReplyData] = []
         for r in c.replies.all():
-            if r.author is not None and not viewer.can_view_comments_from(r.author):
+            if r.author is not None and not can_view.get(r.author.pk, False):
                 continue
             if r.pending_scan and r.author != viewer:
                 continue

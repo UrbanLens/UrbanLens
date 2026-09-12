@@ -4423,6 +4423,30 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**The trip half of H43/H52 is fixed, and it led to a defect in a shared helper** (2026-09-12).
+`visible_comment_tree` - the pin and wiki path - builds a `can_view` dict keyed by author precisely
+because, in its own words, "each call runs up to 3 extra query pairs, which is redundant when one
+author appears several times in a thread". `trips.trip_comments.build_comment_tree` copied the gate
+and not the dict; its comment even says the check works "exactly as pin/wiki comments already do",
+which is true of the gate and false of the memo beside it. Measured before the fix: five extra
+queries per comment. The memo took it to one.
+
+That remaining one was the interesting part. `_aggregate_reactions` called
+`.select_related("profile")` on whatever queryset it was handed - and on a prefetched relation that
+is not a refinement but a **clone**, and a clone does not carry the result cache a prefetch
+populated. So every one of its six call sites, across the pin, wiki and trip comment surfaces, was
+paying a query per comment despite carefully prefetching `reactions`. `.all()` has the same effect
+for the same reason, which is why the first attempt at the fix changed nothing.
+
+The join was never needed: the aggregate reads `emoji` and `profile_id`, both columns on the
+reaction row. It now iterates the queryset exactly as given. Worth remembering as a shape: a
+prefetch is only free if nothing downstream refines the queryset, and `.all()` counts as refining.
+
+**H47's memo half was already fixed** - `visible_comment_tree` has had the dict all along. That is
+the eighth audit entry to turn out already done. Only its pagination half is open, and that needs a
+decision rather than a patch: `visible_comment_tree` filters in Python, so paginating the queryset
+would hand back short pages and change the API contract.
+
 **H33 is fixed** (2026-09-12) - the external twin of H26, which was capped at the internal door in
 an earlier batch and left this one open. `LabelBulkEditSerializer` gave `uuids` a literal
 `max_length=500` and gave `add_parent_uuids`/`add_child_uuids` no ceiling at all, so the real cost -

@@ -729,7 +729,12 @@ def _aggregate_reactions(reactions_qs, profile: Profile | None = None, *, concea
 
         reactions_qs = conceal_rows(reactions_qs, profile)
     result: dict[str, _ReactionData] = {}
-    for r in reactions_qs.select_related("profile"):
+    # Iterated as given, with no `.select_related()` and no `.all()`: either
+    # one clones the queryset, and a clone does not carry the result cache a
+    # prefetch populated - so every caller that carefully prefetched
+    # `reactions` was paying a query per comment regardless. The join was never
+    # needed either, since `emoji` and `profile_id` are columns on the row.
+    for r in reactions_qs:
         if r.emoji not in result:
             result[r.emoji] = {"count": 0, "reacted_by": []}
         result[r.emoji]["count"] += 1
