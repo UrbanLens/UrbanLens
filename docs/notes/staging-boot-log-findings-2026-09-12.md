@@ -98,25 +98,34 @@ against the unfixed module, because the suite imports the URLconf long before an
 Verified on staging — `URLconf warmed: 30 root patterns` now appears at boot and the slow-request
 line is gone.
 
-## H63 — the landing page costs ~1.4 s of CPU once per worker (open)
+## H63 — the landing page cost ~1.4 s of CPU once per worker (fixed 2026-09-12)
 
 `slow request view=index wall_ms=1458 cpu_ms=1415 sql_ms=17 sql_n=3` — three times after a
 restart, for three gunicorn workers, and never again. Reproduced in-container at **0.568 s CPU**
-for the first `GET /` against **0.005 s** for every later one, a ~100× cold cost.
+for the first `GET /` against **0.005 s** for every later one.
 
-It is **not** the URLconf: the app already warms that, and the measurement above was taken with it
-warm. `cProfile` puts the cost inside `TemplateResponse.rendered_content` — the render itself,
-not the lookup.
+**This entry first recorded the wrong cause, and the correction is the useful part.** `cProfile`
+sorted by *cumulative* time attributes the cost to `TemplateResponse.rendered_content`, which led
+to "it is the lazy `{% include %}` chain, so a fix needs a rendered request at boot". Sorting by
+*self* time names the real one: `URLResolver._populate`, 4,206 calls into
+`django/utils/regex_helper.normalize`. It is the **reverse-URL table**, which Django builds
+separately from the URLconf import, lazily, on the first `reverse()` or `{% url %}`. Every
+template opens with a `{% url %}`, so it landed on each process's first request to any view.
 
-**The obvious fix does not work, which is the useful part of this entry.** Warming the template
-with `get_template('dashboard/pages/home/index.html')` costs 0.018 s and moves the first request
-only from 0.568 s to 0.528 s. So it is not compilation of the top-level template; it is the
-lazily-loaded `{% include %}` chain and the tag-library imports those trigger during render.
-Warming it properly means rendering the page once at boot, which needs a request object.
+The existing warm-up read `resolver.url_patterns`, which imports the URLconf module and nothing
+else — so it warmed one of the two lazy halves and looked complete. Adding `resolver.reverse_dict`
+beside it takes the first `GET /` from **0.568 s to 0.067 s CPU** (88%), and the reverse table's
+own 0.364 s moves to boot. A second view (`/map/`) is then already warm at 0.006 s, because this
+was never about the landing page — it was every view's first request, in every process.
 
-Left open deliberately. Aggregate waste is small — one worker recycle per `--max-requests 1000` —
-but under gevent that 1.4 s is CPU that never yields, so up to 19 other in-flight requests on that
-worker wait for it. That is the standing requirement's own failure shape, at low severity.
+Both halves now live in `core/warmup.py::warm_urlconf`, called by gunicorn's `post_worker_init`
+and by `asgi.py`, and it returns both counts so the boot log carries proof each ran (31 root
+patterns, 1,440 reversible names). A warm-up whose result is discarded cannot be told apart from
+one that silently did nothing.
+
+Lesson worth keeping: for a one-time cost, `cumulative` tells you which caller waited and `tottime`
+tells you what actually burned the CPU. The first answer sent this entry to the wrong conclusion
+and nearly to an invasive fix for a one-line problem.
 
 ## H64 — a permanently unreadable file is retried hourly, forever (open)
 

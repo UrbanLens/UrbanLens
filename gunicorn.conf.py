@@ -192,13 +192,13 @@ def _warm_urlconf(worker):
         import django
 
         django.setup()
-        from django.urls import get_resolver
+        from urbanlens.core.warmup import warm_urlconf
 
-        # Reading url_patterns is what forces the ROOT_URLCONF import. Logging
-        # the count both uses the value (so it cannot be optimised away or read
-        # as a mistake) and puts proof in the boot log that this ran.
-        patterns = get_resolver().url_patterns
-        worker.log.info("URLconf warmed: %d root patterns", len(patterns))
+        # Logging the counts both uses the values (so neither half can be
+        # optimised away or read as a mistake) and puts proof in the boot log
+        # that each ran. See warm_urlconf for what the two halves are.
+        patterns, reversible = warm_urlconf()
+        worker.log.info("URLconf warmed: %d root patterns, %d reversible names", patterns, reversible)
     except Exception:
         # A warm-up is an optimisation. If it fails, the request path will do
         # the same work (and raise the same error) where it can be handled.
