@@ -115,6 +115,78 @@ class PinUndoHandler(UndoHandler):
         return None
 
     @classmethod
+    def assert_restorable(cls, payload: list[dict[str, Any]], in_batch: set[int]) -> None:
+        """Refuse the whole batch if anything it references has gone since.
+
+        Recreating a row whose profile, location, wiki or label was deleted
+        during the retention window would fail with an uncaught IntegrityError,
+        and a root pin whose location has been re-pinned collides with
+        ``db_pin_unique_location_per_profile``. Both are refused cleanly here,
+        before the first row is written.
+
+        Every question is asked once for the whole batch rather than once per
+        pin. A bulk delete is capped at 500 pins, and the per-pin form issued
+        five queries each before anything was recreated - inside the
+        transaction holding the undo row's lock.
+
+        Args:
+            payload: The serialized pins to restore.
+            in_batch: Old pks present in this batch, for the parent resolution.
+
+        Raises:
+            UndoExpiredError: When anything the batch references is missing, or
+                a root pin's location has been re-pinned by its profile.
+        """
+        # Deferred import: services.undo.service imports services.undo.handlers
+        # (which imports this module) before UndoExpiredError is defined there.
+        from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+        # One query per relation for the whole batch. Each set is what the batch
+        # references; what comes back is what survives.
+        profile_ids = {entry["profile_id"] for entry in payload}
+        location_ids = {entry["location_id"] for entry in payload}
+        wiki_ids = {entry["wiki_id"] for entry in payload if entry["wiki_id"] is not None}
+        label_ids = {label_id for entry in payload for label_id in entry["label_ids"]}
+        # Parents outside the batch, which `_resolved_parent_pk` would otherwise
+        # look up one at a time. Kept per (pk, profile) because the original
+        # scoped the lookup to the pin's own owner.
+        outside_parents = {(entry["parent_pin_old_pk"], entry["profile_id"]) for entry in payload if entry["parent_pin_old_pk"] and entry["parent_pin_old_pk"] not in in_batch}
+
+        live_profiles = set(Profile.objects.filter(pk__in=profile_ids).values_list("pk", flat=True))
+        live_locations = set(Location.objects.filter(pk__in=location_ids).values_list("pk", flat=True))
+        live_wikis = set(Wiki.objects.filter(pk__in=wiki_ids).values_list("pk", flat=True)) if wiki_ids else set()
+        live_labels = set(Label.objects.filter(pk__in=label_ids).values_list("pk", flat=True)) if label_ids else set()
+        live_parents = {(pk, profile_id) for pk, profile_id in Pin.objects.filter(pk__in={pk for pk, _ in outside_parents}).values_list("pk", "profile_id")} if outside_parents else set()
+        # Root pins already standing where this batch would restore one.
+        occupied_roots = (
+            {
+                (location_id, profile_id)
+                for location_id, profile_id in Pin.objects.filter(
+                    location_id__in=location_ids,
+                    profile_id__in=profile_ids,
+                    parent_pin__isnull=True,
+                ).values_list("location_id", "profile_id")
+            }
+            if payload
+            else set()
+        )
+
+        for entry in payload:
+            if entry["profile_id"] not in live_profiles:
+                raise UndoExpiredError("The profile that owned this pin no longer exists.")
+            if entry["location_id"] not in live_locations:
+                raise UndoExpiredError("The location this pin pointed at no longer exists.")
+            if entry["wiki_id"] is not None and entry["wiki_id"] not in live_wikis:
+                raise UndoExpiredError("The wiki this pin was linked to no longer exists.")
+            if not set(entry["label_ids"]) <= live_labels:
+                raise UndoExpiredError("One of the labels on this pin no longer exists.")
+            # Only root pins are covered by the constraint, so only they can be blocked.
+            parent_pk = entry["parent_pin_old_pk"]
+            resolves_to_parent = bool(parent_pk) and (parent_pk in in_batch or (parent_pk, entry["profile_id"]) in live_parents)
+            if not resolves_to_parent and (entry["location_id"], entry["profile_id"]) in occupied_roots:
+                raise UndoExpiredError("You have pinned this place again since deleting it, so the original can't be restored alongside it.")
+
+    @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Pin]:
         """Recreate pins with fresh pks/uuids/slugs, relinking hierarchy and labels.
 
@@ -138,28 +210,7 @@ class PinUndoHandler(UndoHandler):
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
         in_batch = {entry["old_pk"] for entry in payload}
-
-        for entry in payload:
-            if not Profile.objects.filter(pk=entry["profile_id"]).exists():
-                raise UndoExpiredError("The profile that owned this pin no longer exists.")
-            if not Location.objects.filter(pk=entry["location_id"]).exists():
-                raise UndoExpiredError("The location this pin pointed at no longer exists.")
-            wiki_id = entry["wiki_id"]
-            if wiki_id is not None and not Wiki.objects.filter(pk=wiki_id).exists():
-                raise UndoExpiredError("The wiki this pin was linked to no longer exists.")
-            label_ids = entry["label_ids"]
-            if label_ids and Label.objects.filter(pk__in=label_ids).count() != len(set(label_ids)):
-                raise UndoExpiredError("One of the labels on this pin no longer exists.")
-            # Only root pins are covered by the constraint, so only they can be blocked.
-            if (
-                cls._resolved_parent_pk(entry, in_batch) is None
-                and Pin.objects.filter(
-                    location_id=entry["location_id"],
-                    profile_id=entry["profile_id"],
-                    parent_pin__isnull=True,
-                ).exists()
-            ):
-                raise UndoExpiredError("You have pinned this place again since deleting it, so the original can't be restored alongside it.")
+        cls.assert_restorable(payload, in_batch)
 
         old_to_new: dict[int, Pin] = {}
         restored: list[Pin] = []

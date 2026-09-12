@@ -4423,6 +4423,31 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**H58 is fixed** (2026-09-12). Undoing a bulk pin delete validated the batch one row at a time:
+for every pin, a separate `.exists()` for its profile, its location, its wiki, a `.count()` for its
+labels, and another `.exists()` for the root-pin collision - with `_resolved_parent_pk` adding a
+sixth for a parent outside the batch. A bulk delete is capped at 500 pins, so an undo could issue
+thousands of queries before recreating the first row, inside the transaction holding the undo row's
+lock. Measured: three extra queries per pin on a batch with no wikis or labels, which is the floor
+rather than the typical case.
+
+The pre-flight is now one query per relation for the whole batch, extracted as
+`assert_restorable` so the cost has a seam that can be measured. The extraction was made first and
+run unchanged, so the query-count test failed on the real defect rather than on a missing method -
+worth doing deliberately, because an extraction that goes straight to the batched form proves only
+that the new code is fast, not that the old code was slow.
+
+**What this does not cover:** the create loop still calls `_resolved_parent_pk` per entry, so a
+parent *outside* the batch is still resolved one at a time there. For a bulk delete of a subtree
+most parents are in-batch and cost nothing, so this is a smaller residue than the pre-flight was -
+but it is a residue, not an absence.
+
+The refusals are the part that matters more than the count: they are what stands between an undo
+and an `IntegrityError` on `db_pin_unique_location_per_profile`. Fifteen existing tests across
+`test_undo_restore_conflicts` and `test_undo_pin_restore_conflict` already pin those semantics, and
+this file adds a case per refusal plus an intact-batch case, so a batched check that quietly stopped
+refusing fails here too.
+
 **H45 is fixed** (2026-09-12). `set_profile_avatar` runs the shared `image_upload_error` gauntlet
 without `skip_malware_scan`, so the antivirus scan happens inside the request - the file is copied
 into a BytesIO in the worker and streamed to the shared clamd daemon. The only size bound on it was
