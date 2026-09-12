@@ -45,7 +45,7 @@ class _CostAdminMixin(LoginRequiredMixin, PermissionRequiredMixin):
     request: HttpRequest
 
     def handle_no_permission(self) -> HttpResponseRedirect:
-        """Send anonymous users to login; return 403 for authenticated non-admins."""
+        """Send anonymous users to login; return 403 for non-admins."""
         if not self.request.user.is_authenticated:
             return redirect_to_login(
                 self.request.get_full_path(),
@@ -56,7 +56,7 @@ class _CostAdminMixin(LoginRequiredMixin, PermissionRequiredMixin):
 
 
 def _admin_context(**extra: Any) -> dict[str, Any]:
-    """Build the shared context for the site-admin cost tracking page and its body partial."""
+    """Build the shared context for the cost tracking page."""
     series = monthly_cost_series()
     api_spend = api_spend_summary_30d()
 
@@ -83,22 +83,14 @@ def _admin_context(**extra: Any) -> dict[str, Any]:
 
 
 def _toast_response(request: HttpRequest, *, level: str, message: str, status: int = 200) -> HttpResponse:
-    """Re-render the shared body partial with a toast fired via HX-Trigger."""
+    """Re-render the shared body partial with a toast."""
     response = render(request, _BODY_PARTIAL, _admin_context(), status=status)
     response["HX-Trigger"] = json.dumps({"showToast": {"level": level, "message": message}})
     return response
 
 
 def _apply_component_form(component: CostComponent, request: HttpRequest) -> None:
-    """Copy submitted form values onto *component* without saving it.
-
-    Args:
-        component: The instance to populate.
-        request: The request carrying the POSTed form.
-
-    Raises:
-        ValidationError: When a required field is missing or unparseable.
-    """
+    """Copy submitted form values onto *component* without saving."""
     name = (request.POST.get("name") or "").strip()
     if not name:
         raise ValidationError({"name": "Name is required."})
@@ -124,15 +116,7 @@ def _apply_component_form(component: CostComponent, request: HttpRequest) -> Non
 
 
 def _apply_operating_cost_form(cost: OperatingCost, request: HttpRequest) -> None:
-    """Copy submitted form values onto *cost* without saving it.
-
-    Args:
-        cost: The instance to populate.
-        request: The request carrying the POSTed form.
-
-    Raises:
-        ValidationError: When a required field is missing or unparseable.
-    """
+    """Copy submitted form values onto *cost* without saving."""
     name = (request.POST.get("name") or "").strip()
     if not name:
         raise ValidationError({"name": "Name is required."})
@@ -152,20 +136,14 @@ def _apply_operating_cost_form(cost: OperatingCost, request: HttpRequest) -> Non
 
 
 class SiteAdminCostsView(_CostAdminMixin, View):
-    """Site-admin page for cost tracking: components, operating costs, stats, and charts.
-
-    GET /site-admin/costs/
-    """
+    """Site-admin page for cost tracking."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
         return render(request, "dashboard/pages/site_admin_costs.html", _admin_context())
 
 
 class SiteAdminCostComponentsView(_CostAdminMixin, View):
-    """Create a depreciating cost component.
-
-    POST /site-admin/costs/components/
-    """
+    """Create a depreciating cost component."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
         component = CostComponent()
@@ -180,11 +158,7 @@ class SiteAdminCostComponentsView(_CostAdminMixin, View):
 
 
 class SiteAdminCostComponentEditView(_CostAdminMixin, View):
-    """Edit or delete one cost component.
-
-    POST   /site-admin/costs/components/<id>/  → save changes
-    DELETE /site-admin/costs/components/<id>/  → delete
-    """
+    """Edit or delete one cost component."""
 
     def post(self, request: HttpRequest, component_id: int) -> HttpResponse:
         component = get_object_or_404(CostComponent, pk=component_id)
@@ -206,10 +180,7 @@ class SiteAdminCostComponentEditView(_CostAdminMixin, View):
 
 
 class SiteAdminOperatingCostsView(_CostAdminMixin, View):
-    """Create a recurring operating cost.
-
-    POST /site-admin/costs/operating/
-    """
+    """Create a recurring operating cost."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
         cost = OperatingCost()
@@ -224,11 +195,7 @@ class SiteAdminOperatingCostsView(_CostAdminMixin, View):
 
 
 class SiteAdminOperatingCostEditView(_CostAdminMixin, View):
-    """Edit or delete one operating cost.
-
-    POST   /site-admin/costs/operating/<id>/  → save changes
-    DELETE /site-admin/costs/operating/<id>/  → delete
-    """
+    """Edit or delete one operating cost."""
 
     def post(self, request: HttpRequest, cost_id: int) -> HttpResponse:
         cost = get_object_or_404(OperatingCost, pk=cost_id)
@@ -250,10 +217,7 @@ class SiteAdminOperatingCostEditView(_CostAdminMixin, View):
 
 
 class SiteAdminCostsPublicToggleView(_CostAdminMixin, View):
-    """Toggle whether the public /costs/ page is visible.
-
-    POST /site-admin/costs/toggle-public/
-    """
+    """Toggle whether the public /costs/ page is visible."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
         settings_obj = SiteSettings.get_current()

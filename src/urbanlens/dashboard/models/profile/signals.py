@@ -27,11 +27,7 @@ def create_user_profile(sender: type[User], instance: User, created: bool, **kwa
 
 @receiver(user_logged_in, dispatch_uid="profile_warm_saved_filter_cache_on_login")
 def warm_saved_filter_cache_on_login(sender: type[User], request, user: User, **kwargs) -> None:
-    """Prewarm the map toolbar's saved-filter result cache right after login.
-
-    Best-effort: only enqueues when the profile actually has saved filters,
-    so most logins don't touch Celery at all.
-    """
+    """Prewarm the map toolbar's saved-filter cache after login."""
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import warm_saved_filter_cache

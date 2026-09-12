@@ -12,11 +12,10 @@ from urbanlens.dashboard.services.core.colors import clean_color
 
 
 class LabelCustomization(abstract.DashboardModel):
-    """Stores a user's display overrides for a global label (tag or category).
+    """Stores a user's display overrides for a global label.
 
-    Each field is nullable - null means "use the label's global value", non-null
-    means "override with this value".  The form normalises empty strings to None
-    before saving, so there is no ambiguity between "not set" and "cleared".
+    Each field is nullable - null means "use the label's global value",
+    non-null means "override with this value".
     """
 
     profile = ForeignKey(
@@ -40,12 +39,7 @@ class LabelCustomization(abstract.DashboardModel):
         label_id: int
 
     def coerce_colors(self) -> None:
-        """Drop `color` to NULL unless it is a colour this application stores.
-
-        Weaker than `Label.color` to begin with - this column carries no
-        `choices` - and it wins over the label's own value in
-        `Label.effective_color`, so it is the one that actually renders.
-        """
+        """Drop `color` to NULL unless it is a valid colour."""
         self.color = clean_color(self.color, default=None)
 
     def save(self, *args, **kwargs) -> None:

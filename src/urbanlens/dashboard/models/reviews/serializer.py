@@ -6,9 +6,7 @@ from urbanlens.dashboard.models.reviews.model import Review
 class ReviewSerializer(serializers.ModelSerializer):
     """Serializer for Review.
 
-    ``profile`` and ``pin`` are always set server-side (see
-    ``ReviewViewSet.create_or_update``) - never accepted from the client, or
-    a PATCH could create/reassign a review under an arbitrary profile or pin.
+    ``profile`` and ``pin`` are set server-side - never accepted from the client.
     """
 
     profile = serializers.PrimaryKeyRelatedField(read_only=True)

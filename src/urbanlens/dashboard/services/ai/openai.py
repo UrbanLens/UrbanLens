@@ -14,7 +14,7 @@ DEFAULT_MODEL = "gpt-5-nano"
 class OpenAIGateway(LLMGateway):
     PROVIDER: ClassVar[Provider] = "openai"
 
-    #: Cost per thousand (sent, received) tokens, in USD.
+    #: Cost per thousand tokens, in USD.
     MODEL_COSTS: ClassVar[dict[str, tuple[Decimal, Decimal]]] = {
         "gpt-5.2": (Decimal("0.00175"), Decimal("0.014")),
         "gpt-5-mini": (Decimal("0.00025"), Decimal("0.002")),

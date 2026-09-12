@@ -25,15 +25,7 @@ class EnvironmentOverrideChoice(TextChoices):
 
     @classmethod
     def to_environment_type(cls, value: str) -> EnvironmentTypes | None:
-        """Map an override value to ``EnvironmentTypes``.
-
-        Args:
-            value: A member of this choice class (not DEFAULT).
-
-        Returns:
-            The matching ``EnvironmentTypes``, or ``None`` when ``value`` is DEFAULT
-            or unrecognized.
-        """
+        """Map an override value to ``EnvironmentTypes``."""
         mapping: dict[str, EnvironmentTypes] = {
             cls.PRODUCTION: EnvironmentTypes.PRODUCTION,
             cls.DEVELOPMENT: EnvironmentTypes.DEVELOPMENT,

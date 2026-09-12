@@ -12,9 +12,8 @@ from urbanlens.dashboard.models.api_rate_limit.queryset import ApiRateLimitManag
 class ApiRateLimit(abstract.DashboardModel):
     """Rate limiting configuration for one external API service.
 
-    One row per service key (e.g. ``"nps"``, ``"wikipedia"``). Rows are
-    auto-created with sensible defaults the first time a service is checked.
-    Admins can override limits and toggle geo-filtering from the site-admin UI.
+    One row per service key. Rows are auto-created with sensible defaults;
+    admins can override limits and toggle geo-filtering from the site-admin UI.
     """
 
     service = CharField(

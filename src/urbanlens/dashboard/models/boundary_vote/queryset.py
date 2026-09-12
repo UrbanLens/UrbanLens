@@ -1,7 +1,6 @@
 """QuerySet/Manager for BoundaryVote.
 
-The recency-weighted tallying itself lives in ``services.geo.boundary_voting`` -
-these helpers only scope and fetch rows.
+The recency-weighted tallying lives in ``services.geo.boundary_voting``.
 """
 
 from __future__ import annotations

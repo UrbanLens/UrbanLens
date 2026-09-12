@@ -1,12 +1,4 @@
-"""Controllers for sharing a standalone MarkupMap with one friend.
-
-Modeled directly on ``controllers.pin_sharing`` - the standalone-dialog half
-of that module, not the simpler ``services.sharing.pin_sharing`` core - since this is
-likewise reached as its own action (from Memories > Maps) rather than folded
-into another flow. Unlike PinShare there is no accept/reject step: the
-recipient's only action is viewing the map and optionally cloning it via
-"Add to my maps" (see ``controllers.markup.MarkupMapCloneView``).
-"""
+"""Controllers for sharing a standalone MarkupMap with one friend."""
 
 from __future__ import annotations
 
@@ -36,15 +28,7 @@ class MarkupMapShareDialogView(LoginRequiredMixin, View):
     """GET /markup-maps/<uuid:map_uuid>/share/ - friend-picker dialog."""
 
     def get(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Render the friend-picker dialog for sharing one of the caller's own maps.
-
-        Args:
-            request: HttpRequest.
-            map_uuid: UUID of the map to share.
-
-        Returns:
-            Rendered dialog HTML.
-        """
+        """Render the friend-picker dialog."""
         profile, _ = Profile.objects.get_or_create(user=request.user)
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile=profile)
         return render(
@@ -58,15 +42,7 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
     """POST /markup-maps/<uuid:map_uuid>/share/send/"""
 
     def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Share the caller's map with a connected friend.
-
-        Args:
-            request: HttpRequest with ``profile_id`` and optional ``message``.
-            map_uuid: UUID of the map to share.
-
-        Returns:
-            Rendered dialog HTML confirming the share, or a 400/403 on error.
-        """
+        """Share the caller's map with a connected friend."""
         sender, _ = Profile.objects.get_or_create(user=request.user)
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile=sender)
         recipient = get_object_or_404(Profile, pk=request.POST.get("profile_id"))
@@ -106,15 +82,7 @@ class MarkupMapShareDetailView(LoginRequiredMixin, View):
     """GET /map-shares/<int:share_id>/ - the recipient's view of a shared map."""
 
     def get(self, request: HttpRequest, share_id: int) -> HttpResponse:
-        """Render the shared-map detail page for its recipient.
-
-        Args:
-            request: HttpRequest.
-            share_id: PK of the MarkupMapShare.
-
-        Returns:
-            Rendered detail page, scoped to the share's recipient.
-        """
+        """Render the shared-map detail page for its recipient."""
         profile, _ = Profile.objects.get_or_create(user=request.user)
         share = get_object_or_404(
             MarkupMapShare.objects.select_related("markup_map", "from_profile__user", "to_profile").prefetch_related("markup_map__items"),

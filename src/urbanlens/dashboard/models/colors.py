@@ -1,8 +1,4 @@
-"""Material Design 500-shade color palette as a Django TextChoices enum.
-
-Keep values in sync with the ``$color-*-500`` variables in
-``dashboard/frontend/sass/_tokens.scss``.
-"""
+"""Material Design 500-shade color palette as a Django TextChoices enum."""
 
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 

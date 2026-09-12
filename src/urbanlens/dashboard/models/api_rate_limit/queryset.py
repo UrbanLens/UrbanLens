@@ -9,7 +9,7 @@ class ApiRateLimitQuerySet(DashboardQuerySet):
     """QuerySet for ApiRateLimit."""
 
     def enabled(self) -> ApiRateLimitQuerySet:
-        """Return only enabled rate limit configs."""
+        """Return only enabled configs."""
         return self.filter(enabled=True)
 
 

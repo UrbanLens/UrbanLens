@@ -11,32 +11,17 @@ class VisitQuerySet(abstract.FrontendDashboardQuerySet):
     """QuerySet for PinVisit records."""
 
     def for_pin(self, pin_id: int) -> Self:
-        """Filter to visits for a specific pin.
-
-        Args:
-            pin_id: Primary key of the pin.
-
-        Returns:
-            Filtered queryset.
-        """
+        """Filter to visits for a specific pin."""
         return self.filter(pin_id=pin_id)
 
     def manual(self) -> Self:
-        """Filter to manually-recorded visits.
-
-        Returns:
-            Filtered queryset.
-        """
+        """Filter to manually-recorded visits."""
         from urbanlens.dashboard.models.visits.model import VisitSource
 
         return self.filter(source=VisitSource.MANUAL)
 
     def from_takeout(self) -> Self:
-        """Filter to visits imported from the user's location history (e.g. Google Takeout).
-
-        Returns:
-            Filtered queryset.
-        """
+        """Filter to visits from the user's location history."""
         from urbanlens.dashboard.models.visits.model import VisitSource
 
         return self.filter(source=VisitSource.HISTORY)

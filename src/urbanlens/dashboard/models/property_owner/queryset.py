@@ -15,14 +15,7 @@ class PinOwnerQuerySet(abstract.DashboardQuerySet):
     """QuerySet for PinOwner."""
 
     def for_pin(self, pin: Pin) -> Self:
-        """Return the owners private to a specific pin.
-
-        Args:
-            pin: The pin to filter by.
-
-        Returns:
-            Owners attached to that pin.
-        """
+        """Return the owners private to a specific pin."""
         return self.filter(pin=pin)
 
 
@@ -34,14 +27,7 @@ class WikiOwnerQuerySet(abstract.DashboardQuerySet):
     """QuerySet for WikiOwner."""
 
     def for_location(self, location: Location) -> Self:
-        """Return the owners shared for a specific location.
-
-        Args:
-            location: The Location to filter by.
-
-        Returns:
-            Owners linked to that location.
-        """
+        """Return the owners shared for a specific location."""
         return self.filter(locations=location)
 
 
@@ -53,14 +39,7 @@ class PinPropertySaleQuerySet(abstract.DashboardQuerySet):
     """QuerySet for PinPropertySale."""
 
     def for_pin(self, pin: Pin) -> Self:
-        """Return the sale records private to a specific pin.
-
-        Args:
-            pin: The pin to filter by.
-
-        Returns:
-            Sales for that pin, newest first (model default ordering).
-        """
+        """Return the sale records private to a specific pin."""
         return self.filter(pin=pin)
 
 
@@ -72,14 +51,7 @@ class WikiPropertySaleQuerySet(abstract.DashboardQuerySet):
     """QuerySet for WikiPropertySale."""
 
     def for_location(self, location: Location) -> Self:
-        """Return the sale records shared for a specific location.
-
-        Args:
-            location: The Location to filter by.
-
-        Returns:
-            Sales for that location, newest first (model default ordering).
-        """
+        """Return the sale records shared for a specific location."""
         return self.filter(location=location)
 
 

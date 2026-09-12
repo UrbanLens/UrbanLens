@@ -1,4 +1,4 @@
-"""The assistant's "what did I just dismiss" tools - grounded only in the client's own ring for this turn (services.ai.dismissals), never a server-side lookup."""
+"""The assistant's "what did I just dismiss" tools - grounded in the client's own ring."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _recent_dismissals(context: ToolContext, _args: RecentDismissalsArgs) -> dic
 register(
     ToolSpec(
         name="recent_dismissals",
-        description="List the page explainers and onboarding-tour cards the user has recently dismissed - from what the client just reported, not a database record. Use this before answering 'what did I just dismiss/close'.",
+        description="List the page explainers and onboarding-tour cards the user has recently dismissed.",
         args_model=RecentDismissalsArgs,
         handler=_recent_dismissals,
         features=frozenset({SiteFeature.AI}),

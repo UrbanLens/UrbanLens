@@ -1,4 +1,4 @@
-"""Reversible photo changes: album membership, map position, and metadata."""
+"""Reversible photo changes: album membership and metadata."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def _apply_fields(image: Image, fields: dict[str, Any]) -> None:
 
 @register
 class PhotoMutationUndoHandler(MutationUndoHandler):
-    """Undo/redo album membership and photo metadata/position changes."""
+    """Undo/redo album membership and photo metadata changes."""
 
     model_label = MODEL_LABEL
 

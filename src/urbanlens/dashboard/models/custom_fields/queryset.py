@@ -17,26 +17,11 @@ class CustomFieldQuerySet(abstract.FrontendDashboardQuerySet):
     """Query helpers for :class:`~urbanlens.dashboard.models.custom_fields.model.CustomField`."""
 
     def owned_by(self, profile: Profile) -> Self:
-        """Fields belonging to the given profile.
-
-        Args:
-            profile: The owning profile.
-
-        Returns:
-            Filtered queryset.
-        """
+        """Fields belonging to the given profile."""
         return self.filter(profile=profile)
 
     def for_entity(self, profile: Profile, entity_type: str) -> Self:
-        """The given profile's fields for one entity type, in display order.
-
-        Args:
-            profile: The owning profile.
-            entity_type: A :class:`CustomFieldEntity` value.
-
-        Returns:
-            Filtered queryset ordered by (order, name).
-        """
+        """The given profile's fields for one entity type, in display order."""
         return self.filter(profile=profile, entity_type=entity_type).order_by("order", "name")
 
 
@@ -48,25 +33,11 @@ class CustomFieldValueQuerySet(abstract.DashboardQuerySet):
     """Query helpers for :class:`~urbanlens.dashboard.models.custom_fields.model.CustomFieldValue`."""
 
     def owned_by(self, profile: Profile) -> Self:
-        """Values whose field belongs to the given profile.
-
-        Args:
-            profile: The field owner.
-
-        Returns:
-            Filtered queryset.
-        """
+        """Values whose field belongs to the given profile."""
         return self.filter(field__profile=profile)
 
     def for_target(self, target: Any) -> Self:
-        """Values attached to the given target object.
-
-        Args:
-            target: A Pin, Image, Profile, or MarkupMap instance.
-
-        Returns:
-            Filtered queryset (empty for unsupported target types).
-        """
+        """Values attached to the given target object."""
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.models.markup.model import MarkupMap
         from urbanlens.dashboard.models.pin.model import Pin

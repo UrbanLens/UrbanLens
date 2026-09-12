@@ -1,4 +1,4 @@
-"""The assistant's "how do I…" lookup tool - grounded in services.ai.page_help.PAGE_HELP only."""
+"""The assistant's "how do I…" lookup tool - grounded in services.ai.page_help."""
 
 from __future__ import annotations
 
@@ -27,10 +27,8 @@ register(
     ToolSpec(
         name="get_page_help",
         description=(
-            "Look up how-to help for one of UrbanLens's pages by its URL name - one of: "
-            "home.view, map.view, organize.index, trips.overview, memories.view, vault.home, "
-            "safety.home, games.overview, pin.details, trips.detail, settings.view. "
-            "This is the only source of 'how do I…' answers - never answer from anything else."
+            "Look up how-to help for one of UrbanLens's pages by its URL name. "
+            "This is the only source of 'how do I…' answers."
         ),
         args_model=GetPageHelpArgs,
         handler=_get_page_help,

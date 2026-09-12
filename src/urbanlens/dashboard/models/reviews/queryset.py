@@ -16,15 +16,7 @@ class QuerySet(abstract.DashboardQuerySet):
     """Custom queryset for Review."""
 
     def for_pair(self, profile: Profile, pin: Pin) -> QuerySet:
-        """The review row (at most one) for a pair.
-
-        Args:
-            profile: The reviewing profile.
-            pin: The reviewed pin.
-
-        Returns:
-            A queryset matching at most one row.
-        """
+        """The review row (at most one) for a pair."""
         return self.filter(profile=profile, pin=pin)
 
 

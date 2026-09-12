@@ -14,22 +14,11 @@ class PinImportFailureQuerySet(abstract.DashboardQuerySet):
     """QuerySet for PinImportFailure records."""
 
     def for_profile(self, profile: Profile) -> Self:
-        """Filter to failures belonging to a given profile.
-
-        Args:
-            profile: Owner profile.
-
-        Returns:
-            Filtered queryset.
-        """
+        """Filter to failures belonging to a given profile."""
         return self.filter(profile=profile)
 
     def pending(self) -> Self:
-        """Filter to failures still awaiting a response.
-
-        Returns:
-            Filtered queryset.
-        """
+        """Filter to failures still awaiting a response."""
         from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailureStatus
 
         return self.filter(status=PinImportFailureStatus.PENDING)

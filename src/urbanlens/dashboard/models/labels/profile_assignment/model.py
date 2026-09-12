@@ -11,11 +11,7 @@ from urbanlens.dashboard.models.labels.profile_assignment.queryset import Profil
 
 
 class ProfileLabelAssignment(abstract.DashboardModel):
-    """Records that *author* has privately applied a user-type Label to *subject*.
-
-    Only the author can see this assignment; the subject profile owner cannot.
-    The label must have kind='user'.
-    """
+    """Records that *author* has privately applied a user-type Label to *subject*."""
 
     author = ForeignKey(
         "dashboard.Profile",
