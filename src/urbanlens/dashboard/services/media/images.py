@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 import hashlib
 import io
@@ -36,9 +36,10 @@ from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
+    from django.db.models import QuerySet
     from django.http import HttpRequest
 
-    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.models.images.model import Image, Image as ImageModel, MediaKind
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -1028,6 +1029,30 @@ THUMBNAIL_MAX_DIMENSION = 400
 #: library drains across hours rather than in one stampede.
 THUMBNAIL_BACKFILL_BATCH = 50
 
+#: How long a sweep leaves an unreadable row alone before trying it again.
+#:
+#: The sweep runs hourly, so this is the difference between one retry a week and
+#: 168 of them. It is a backoff rather than a blacklist because the alternative
+#: fails catastrophically: a boolean "broken" flag set during a storage outage
+#: would mark every row in the library, silently, with nothing that ever
+#: revisits it. Coming back a week later costs one wasted read per genuinely
+#: dead row and makes a restored file heal on its own.
+THUMBNAIL_RETRY_AFTER_UNREADABLE = timedelta(days=7)
+
+
+def _readable_recently_enough(qs: QuerySet[ImageModel]) -> QuerySet[ImageModel]:
+    """Drop rows whose file was found unreadable inside the backoff window.
+
+    Args:
+        qs: An ``Image`` queryset.
+
+    Returns:
+        The subset a sweep should attempt now.
+    """
+    from django.db.models import Q
+
+    return qs.filter(Q(media_unreadable_at__isnull=True) | Q(media_unreadable_at__lt=timezone.now() - THUMBNAIL_RETRY_AFTER_UNREADABLE))
+
 
 def photos_missing_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
     """Primary keys of photos that still need a grid thumbnail.
@@ -1048,7 +1073,7 @@ def photos_missing_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKF
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
 
-    qs = Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(thumbnail="") | Q(thumbnail__isnull=True)).order_by("pk")
+    qs = _readable_recently_enough(Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(thumbnail="") | Q(thumbnail__isnull=True))).order_by("pk")
     if after_pk:
         qs = qs.filter(pk__gt=after_pk)
     return list(qs.values_list("pk", flat=True)[:limit])
@@ -1142,7 +1167,7 @@ def photos_missing_marker_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAI
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
 
-    qs = Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(marker_thumbnail="") | Q(marker_thumbnail__isnull=True)).order_by("pk")
+    qs = _readable_recently_enough(Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(marker_thumbnail="") | Q(marker_thumbnail__isnull=True))).order_by("pk")
     if after_pk:
         qs = qs.filter(pk__gt=after_pk)
     return list(qs.values_list("pk", flat=True)[:limit])

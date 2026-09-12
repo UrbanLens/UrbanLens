@@ -643,6 +643,13 @@ class Image(abstract.FrontendDashboardModel):
     # their original at creation and are cleared or removed alongside it,
     # since nothing else ever revisits a sibling row directly.
     pending_scan = BooleanField(default=False)
+    # When the stored file was last found unreadable, so the thumbnail sweeps
+    # can stop retrying a row whose bytes are gone. A timestamp rather than a
+    # flag on purpose: a flag is one storage outage away from marking the whole
+    # library permanently broken, where a timestamp lets the sweep back off for
+    # a window (THUMBNAIL_RETRY_AFTER_UNREADABLE) and pick the row up again on
+    # its own. Cleared the moment a read succeeds.
+    media_unreadable_at = DateTimeField(null=True, blank=True)
     # Media (kind='media') labels help the user find this photo/video/document
     # via the main site search; unlike Pin/Wiki labels, media labels have no
     # effect on map icons or filtering.

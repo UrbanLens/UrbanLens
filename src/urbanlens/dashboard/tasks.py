@@ -1426,9 +1426,20 @@ def generate_image_thumbnails(image_ids: list[int]) -> int:
     for image in Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO):
         try:
             if write_image_thumbnail(image):
-                image.save(update_fields=["thumbnail", "updated"])
+                fields = ["thumbnail", "updated"]
+                if image.media_unreadable_at is not None:
+                    # The file is back. Cleared in the same write, so a row
+                    # cannot carry a scar that outlives the fault.
+                    image.media_unreadable_at = None
+                    fields.append("media_unreadable_at")
+                image.save(update_fields=fields)
                 written += 1
         except (OSError, ValueError, PILDecompressionBombError) as exc:
+            # Recorded, not only logged: the sweep resets its cursor and comes
+            # round again, so without this a row whose bytes are gone is retried
+            # hourly forever (N22 H64). Written with `.update()` because the
+            # in-memory row is mid-failure and must not be saved wholesale.
+            Image.objects.filter(pk=image.pk).update(media_unreadable_at=timezone.now())
             logger.warning("Thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
     return written
 
@@ -1669,9 +1680,20 @@ def generate_image_marker_thumbnails(image_ids: list[int]) -> int:
     for image in Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO):
         try:
             if write_image_marker_thumbnail(image):
-                image.save(update_fields=["marker_thumbnail", "updated"])
+                fields = ["marker_thumbnail", "updated"]
+                if image.media_unreadable_at is not None:
+                    # The file is back. Cleared in the same write, so a row
+                    # cannot carry a scar that outlives the fault.
+                    image.media_unreadable_at = None
+                    fields.append("media_unreadable_at")
+                image.save(update_fields=fields)
                 written += 1
         except (OSError, ValueError, PILDecompressionBombError) as exc:
+            # Recorded, not only logged: the sweep resets its cursor and comes
+            # round again, so without this a row whose bytes are gone is retried
+            # hourly forever (N22 H64). Written with `.update()` because the
+            # in-memory row is mid-failure and must not be saved wholesale.
+            Image.objects.filter(pk=image.pk).update(media_unreadable_at=timezone.now())
             logger.warning("Marker thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
     return written
 
