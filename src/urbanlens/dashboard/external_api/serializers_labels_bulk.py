@@ -29,7 +29,31 @@ class LabelReorderSerializer(serializers.Serializer):
     matching ``OrganizePrioritySaveView``'s ``items`` semantics.
     """
 
-    uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=1000)
+    uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
+
+    def validate(self, attrs: dict) -> dict:
+        """Refuse a list over ``LABEL_REORDER_MAX_IDS``.
+
+        Read from settings rather than bound as a field ``max_length``, which is
+        fixed at import and so could be neither configured nor overridden - and
+        read from the *same* name the Organize page's priority save reads, so the
+        two doors onto one action cannot drift apart again.
+
+        Args:
+            attrs: The validated field values.
+
+        Returns:
+            ``attrs`` unchanged.
+
+        Raises:
+            ValidationError: When ``uuids`` is over the ceiling.
+        """
+        from django.conf import settings
+
+        ceiling = settings.LABEL_REORDER_MAX_IDS
+        if len(attrs.get("uuids") or []) > ceiling:
+            raise serializers.ValidationError({"uuids": f"Reorder at most {ceiling} labels at a time."})
+        return attrs
 
 
 class LabelReorderResponseSerializer(serializers.Serializer):

@@ -4319,6 +4319,31 @@ not one was created. For a location with no wiki they disagree by construction, 
 That happens to be exactly the media path's case, since a photo is attached to one. The boundary is
 asserted rather than left as folklore, so whoever does the swap knows what it rests on.
 
+**Found by sweeping for the defect class rather than the finding** (2026-09-12). With the N21 list
+closed, the remaining scope is the standing one — *find other places where one user's action can
+degrade the site*. Two sweeps, both starting from a defect this effort had already fixed once:
+
+- **Outbound network calls with no deadline** (the `EMAIL_TIMEOUT` class). Clean: all nine `requests`
+  call sites pass a timeout, and the one third-party library that calls `urlopen` with none —
+  Overture's STAC index — is already wrapped in `_STAC_LOOKUP_TIMEOUT_SECONDS` plus a per-worker
+  circuit breaker, wired and tested rather than merely declared. Recorded because a negative result
+  is worth as much here as a positive one: nobody needs to re-run this sweep.
+- **A ceiling on one door of an action but not the other** (the H39/H33 class). **One hit.**
+  `LabelReorderSerializer` caps `uuids` at a literal 1000 and its docstring says it mirrors
+  `OrganizePrioritySaveView`'s semantics — but that view had no ceiling at all, and it is the door
+  the application's own UI posts to. Two things scaled with the submitted list, neither bounded by
+  what the caller owns: `filter(id__in=item_ids)` carried every id into one statement for Postgres to
+  parse and plan on a held connection, and `skipped_global_ids` returned every unresolved id, making
+  the response as large as the request.
+
+  Fixed with one shared `LABEL_REORDER_MAX_IDS` that both doors read, not a second literal. Two
+  ceilings written independently for one action is how they drift, and this pair had already drifted.
+  The test asserts the two agree rather than trusting whoever edits one to remember the other.
+
+The sweep is the reusable part. "Where else does this exact defect live" found a real one in an area
+the sixteen-dimension audit had swept and missed, which is an argument for running the class outward
+from each fix rather than only working down a finding list.
+
 **A cache whose key never repeats is not a cache** (2026-09-12, H01's last half). The Immich
 "Scan your library" sweep named three things and two were already closed: it declares `Queue.BULK`
 since D13, so it no longer holds an interactive worker slot, and `ImmichLibraryScanStartView` claims

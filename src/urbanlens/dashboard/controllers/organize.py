@@ -6,6 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.db import transaction
@@ -216,6 +217,13 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
 
         if not item_ids:
             return JsonResponse({"error": "No items provided"}, status=400)
+        # Before any database work: the id list goes into one `id__in` statement
+        # whatever its length, and the unresolved ones come back out in the
+        # response, so an oversized request is expensive in both directions. The
+        # refusal deliberately does not name them.
+        ceiling = settings.LABEL_REORDER_MAX_IDS
+        if len(item_ids) > ceiling:
+            return JsonResponse({"error": f"Reorder at most {ceiling} labels at a time."}, status=400)
 
         profile = request.user.profile
         # for_profile, not visible_to: the latter includes globals by design.

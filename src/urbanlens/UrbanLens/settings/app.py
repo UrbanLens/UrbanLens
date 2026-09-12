@@ -326,6 +326,17 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "rejected snapshot as \"no map was submitted\", which deletes the map the user already had."
         ),
     )
+    label_reorder_max_ids: int = Field(
+        default=1000,
+        gt=0,
+        description=(
+            "How many label ids one reorder request may name. Both doors onto the action read this: the "
+            "Organize page's priority save and the external API's reorder serializer, which previously "
+            "carried a literal of its own while the internal view had no ceiling at all. A reorder is one "
+            "bulk_update of an order column rather than per-label graph work, so this is deliberately far "
+            "above label_bulk_edit_max_ids - it bounds the size of the id list itself, not the work per id."
+        ),
+    )
     label_bulk_edit_max_ids: int = Field(
         default=500,
         description=(
