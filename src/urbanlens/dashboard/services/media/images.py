@@ -1404,7 +1404,7 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *
     return None
 
 
-def _visible_uploader_name(img: Image, viewer_profile: Profile | None) -> str:
+def _visible_uploader_name(img: Image, viewer_profile: Profile | None, memo: dict[int, str] | None = None) -> str:
     """The uploader's name as this viewer is allowed to see it.
 
     A photo can be visible while the identity behind it is not: a profile that
@@ -1415,6 +1415,13 @@ def _visible_uploader_name(img: Image, viewer_profile: Profile | None) -> str:
     Args:
         img: The photo.
         viewer_profile: Who is looking, or None for an anonymous request.
+        memo: Optional per-uploader cache for one response. `can_view_profile`
+            at the `COMMON_PIN` setting reads both accounts' whole pin sets, and
+            the answer cannot vary between two photos by the same uploader for
+            the same viewer - so a caller rendering a list passes a fresh dict
+            and pays once per uploader instead of once per photo. Scoped to one
+            response deliberately: a visibility setting a user just changed must
+            take effect on their next page load, not when a TTL expires.
 
     Returns:
         The username, or the masked placeholder when the viewer may not see the
@@ -1426,14 +1433,19 @@ def _visible_uploader_name(img: Image, viewer_profile: Profile | None) -> str:
         return ""
     if viewer_profile is not None and img.profile_id == viewer_profile.pk:
         return img.profile.username
+    if memo is not None and img.profile_id in memo:
+        return memo[img.profile_id]
     # `can_view_profile` rather than the fuller `resolve_visible_identity`: the
     # answer wanted here is only the name, and that helper also builds an avatar
     # and a profile URL, which is work this caller throws away - and a reverse()
     # a caller holding an unsaved profile cannot satisfy.
-    return img.profile.username if img.profile.can_view_profile(viewer_profile) else DEFAULT_MASKED_PLACEHOLDER
+    name = img.profile.username if img.profile.can_view_profile(viewer_profile) else DEFAULT_MASKED_PLACEHOLDER
+    if memo is not None and img.profile_id is not None:
+        memo[img.profile_id] = name
+    return name
 
 
-def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:
+def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None, uploader_memo: dict[int, str] | None = None) -> dict:
     """Serialize an Image to a dict suitable for a photo gallery/map layer.
 
     Shared by the pin, location wiki, and safety check-in gallery views so
@@ -1443,6 +1455,9 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         img: The image to serialize.
         request: Current request, used to build an absolute image URL.
         viewer_profile: The requesting profile, if any - used to flag ``is_mine``.
+        uploader_memo: Optional per-uploader cache passed straight to
+            :func:`_visible_uploader_name`; a caller rendering a list should
+            pass one fresh dict for the whole list.
 
     Returns:
         Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the
@@ -1463,7 +1478,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         "caption": img.caption or "",
         "latitude": float(img.latitude) if img.latitude is not None else None,
         "longitude": float(img.longitude) if img.longitude is not None else None,
-        "uploader": _visible_uploader_name(img, viewer_profile),
+        "uploader": _visible_uploader_name(img, viewer_profile, uploader_memo),
         "is_mine": viewer_profile is not None and img.profile_id == viewer_profile.pk,
         "author": img.author or "",
         "source_url": img.source_url or "",

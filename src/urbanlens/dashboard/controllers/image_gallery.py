@@ -204,8 +204,9 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
         images, include_children = _pin_gallery_images(request, pin, profile)
         images, truncated, total = bound_map_layer(images.with_coords())
         data = []
+        uploader_memo: dict[int, str] = {}
         for img in images:
-            entry = image_to_gallery_json(img, request, profile)
+            entry = image_to_gallery_json(img, request, profile, uploader_memo)
             if include_children and img.pin_id is not None and img.pin_id != pin.pk and img.pin is not None:
                 # Child-pin photos render read-only on the parent's map layer;
                 # they are repositioned from their own pin's page.
@@ -549,8 +550,9 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
         # chose to keep.
         images, truncated, total = bound_map_layer(images)
         data = []
+        uploader_memo: dict[int, str] = {}
         for img in images:
-            entry = image_to_gallery_json(img, request, profile)
+            entry = image_to_gallery_json(img, request, profile, uploader_memo)
             if include_children and img.wiki_id is not None and img.wiki_id != wiki.pk and img.wiki is not None:
                 entry["child_pin_name"] = img.wiki.name
             data.append(entry)

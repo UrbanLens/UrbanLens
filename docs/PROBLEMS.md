@@ -4423,6 +4423,26 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**H28's second half is fixed, and H07 and H28's first half were already done** (2026-09-12).
+`bound_map_layer` already caps both photo-map JSON endpoints with a `truncated` marker, which is
+what those entries mostly asked for - the sixth and seventh audit lines found already fixed. What
+was left is the part the cap does not touch: every surviving photo still called
+`_visible_uploader_name` -> `Profile.can_view_profile`, and at the `COMMON_PIN` setting that reaches
+`_have_common_pin`, which reads *both* accounts' entire pin sets into Python. One viewer opening a
+community wiki paid that twice per photo, and a wiki collects photos from everyone who has been
+there.
+
+Memoised per uploader for the life of one response. Scoped to the response deliberately rather than
+cached across requests: a visibility setting a user has just changed must take effect on their next
+page load, not when a TTL expires - this is a privacy gate, and a stale yes is a leak.
+
+Writing the test taught the domain something worth recording: **photo visibility and identity
+visibility are two independent gates.** `Image.objects.visible_to(profile)` decides whether the row
+appears at all; `can_view_profile` only decides whether it carries a name. The first draft of the
+test conflated them - it removed the uploader's shared pin to make the identity invisible, which
+dropped the rows entirely and made the assertion fail for a reason that had nothing to do with
+masking. The tests now hold photo visibility fixed and vary only identity.
+
 **H31 and H37 are fixed** (2026-09-12) - the same page from two angles. The Maps subpage built a
 card per `MarkupMap` the profile owns with no pagination and no ceiling, and each card calls
 `to_snapshot()`, so the response carried every annotation of every map. The page's own advertised
