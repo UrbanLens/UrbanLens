@@ -103,6 +103,34 @@ def authenticate_api_key(raw_key: str) -> ApiKey | None:
         The matching, non-revoked ``ApiKey`` if the secret checks out; None
         for a malformed, unknown, revoked, or mismatched key.
     """
+    candidate = api_key_candidate(raw_key)
+    if candidate is None:
+        return None
+    api_key, secret = candidate
+    if not check_password(secret, api_key.key_hash):
+        return None
+    touch_api_key(api_key)
+    return api_key
+
+
+def api_key_candidate(raw_key: str) -> tuple[ApiKey, str] | None:
+    """The row a presented key *claims* to be, and the secret still to check.
+
+    The cheap half of :func:`authenticate_api_key`: parse the key's shape and
+    look the row up by its public prefix. Split out because the WebSocket path
+    has to run the two halves in different places - the lookup needs a database
+    connection, and the hash must not run on the single thread Channels shares
+    for database work (see ``websocket_auth.ApiKeyAuthMiddleware``).
+
+    Args:
+        raw_key: The full presented key.
+
+    Returns:
+        ``(row, secret)`` for a well-formed key naming a live row, else None.
+        **A returned row is not authenticated** - the secret has not been
+        checked yet, and a caller that skips that check has authenticated
+        nothing.
+    """
     label_prefix = f"{KEY_LABEL}_"
     if not raw_key.startswith(label_prefix):
         return None
@@ -112,11 +140,16 @@ def authenticate_api_key(raw_key: str) -> ApiKey | None:
     prefix, secret = remainder[:_PREFIX_LENGTH], remainder[_PREFIX_LENGTH:]
 
     api_key = ApiKey.objects.active().filter(prefix=prefix, user__is_active=True).select_related("user", "user__profile").first()
-    if api_key is None or not check_password(secret, api_key.key_hash):
-        return None
+    return (api_key, secret) if api_key is not None else None
 
+
+def touch_api_key(api_key: ApiKey) -> None:
+    """Record that *api_key* was just used to authenticate.
+
+    Args:
+        api_key: The row that passed its secret check.
+    """
     ApiKey.objects.filter(pk=api_key.pk).update(last_used_at=timezone.now())
-    return api_key
 
 
 def record_api_key_usage(api_key: ApiKey, endpoint: str) -> None:

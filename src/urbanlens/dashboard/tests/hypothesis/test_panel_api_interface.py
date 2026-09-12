@@ -140,16 +140,49 @@ class PanelApiRegistryConsistencyTests(TestCase):
             with self.subTest(source=key):
                 self.assertTrue(set(source.api_kinds) <= set(PanelApiKind))
 
-    def test_required_feature_is_only_set_where_the_web_gates_too(self) -> None:
-        """The gated set is exactly EPA's nearby-facility list, today.
+    def test_every_gated_panel_is_actually_gated(self) -> None:
+        """A panel declaring a feature must be refused to a viewer without it.
 
-        This is a "notice when it changes" test rather than a rule: adding a
-        gated panel is fine, but it has to be a deliberate edit here, because
-        ``PinController._NEARBY_RESEARCH_TABS`` needs the matching entry or the
-        web and the API will disagree about who may see it.
+        This replaces an assertion that the gated set was exactly
+        ``{"epa_echo"}``, whose docstring said membership of
+        ``PinController._NEARBY_RESEARCH_TABS`` was what kept the web and the
+        API agreeing about who may see a panel. That is the opposite of what
+        the code does, and the comment on that dict says so in as many words:
+        it "decides *ordering and labels only*", and the gate is each source's
+        own ``required_feature``, read through ``panel_visible_to`` by both
+        surfaces. So the old test drifted the moment a third panel became
+        gated, and its stated reason would have sent the next reader to edit
+        the wrong file.
+
+        Asserting the property instead of the membership means new gated panels
+        are covered the day they are added rather than breaking a list.
         """
-        gated = {key for key, source in panel_sources().items() if source.required_feature is not None}
-        self.assertEqual(gated, {"epa_echo"})
+        from urbanlens.dashboard.services.pins.external_data import panel_visible_to
+
+        # The first user is auto-promoted to site admin, and an admin holds
+        # every feature - so a fixture that skips the throwaway proves nothing.
+        baker.make(User)
+        without_features = baker.make(User)
+        gated = {key: source for key, source in panel_sources().items() if source.required_feature is not None}
+        self.assertTrue(gated, "no panel declares a required_feature - the gate may have been removed")
+
+        for key, source in gated.items():
+            with self.subTest(source=key):
+                self.assertFalse(
+                    panel_visible_to(without_features, source),
+                    f"{key} declares {source.required_feature} but is visible without it",
+                )
+
+    def test_an_ungated_panel_is_visible_without_any_feature(self) -> None:
+        """The anti-vacuity half: a gate that refused everything would pass the test above."""
+        from urbanlens.dashboard.services.pins.external_data import panel_visible_to
+
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        without_features = baker.make(User)
+        ungated = [source for source in panel_sources().values() if source.required_feature is None]
+        self.assertTrue(ungated, "every panel is gated, which is not the shape this asserts")
+
+        self.assertTrue(panel_visible_to(without_features, ungated[0]))
 
 
 class InfoPanelApiPayloadTests(TestCase):

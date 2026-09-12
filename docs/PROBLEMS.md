@@ -4423,6 +4423,40 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**H40 is fixed** (2026-09-12). `ApiKeyAuthMiddleware._resolve` was decorated
+`@database_sync_to_async`, whose `thread_sensitive` defaults to True - verified against the
+installed asgiref rather than taken from the finding - so it ran in the single shared executor
+thread that every other `database_sync_to_async` call in the daphne process uses for its database
+work. Inside it, `authenticate_api_key` calls `check_password`, a deliberately expensive hash. One
+client reconnecting in a loop with `?key=` occupied that thread a hash at a time and every other
+socket's database work queued behind it.
+
+The cost is not the problem; where it is paid is. The hash must stay expensive, so it moved rather
+than shrank: the lookup is one indexed query by the key's public prefix and stays where the
+connection handling is, and only the hash runs on a plain worker thread. `api_key_candidate` and
+`touch_api_key` split the two halves out, and `authenticate_api_key` is rebuilt from them so the
+HTTP path still runs the same parsing and lookup rules. `api_key_candidate`'s docstring says in as
+many words that a row it returns is **not** authenticated.
+
+Deliberately not fixed by caching the verdict: a cached credential check means a revoked key keeps
+working until the entry expires, which trades an availability problem for a security one.
+
+**A test whose stated reason was the opposite of what the code does** (2026-09-12).
+`test_required_feature_is_only_set_where_the_web_gates_too` asserted the gated panel set was exactly
+`{"epa_echo"}`, and its docstring said membership of `PinController._NEARBY_RESEARCH_TABS` was what
+kept the web and the API agreeing about who may see a panel. The comment on that dict says the
+reverse explicitly - it "decides *ordering and labels only*", and the gate is each source's own
+`required_feature`, read through one shared `panel_visible_to` by both surfaces. Three panels
+legitimately became gated, the hardcoded set drifted, and the docstring would have sent the next
+reader to edit the wrong file. Replaced with the property: every gated panel must be refused to a
+viewer without its feature, so new gated panels are covered the day they are added.
+
+Worth recording how close that came to being reported as a leak. The property assertion failed for
+all four gated panels, which reads alarmingly - but `user_has_feature` grants every feature to site
+admins, and this codebase auto-promotes the *first* user. The fixture created its user without the
+throwaway other tests in the repo use, so it was testing an admin. `default_features` is blank by
+default, so the promotion was the whole explanation. The gate is enforced.
+
 **H35/H22/H13 are fixed** (2026-09-12) - three audit lines about one `cache.set`. The basemap tile
 proxy stored raw vendor bytes with no size check, into the same 512MB Valkey that holds sessions,
 the Channels layer and the Celery broker. One oversized tile, or a vendor answering a tile request

@@ -41,10 +41,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
+from asgiref.sync import sync_to_async
 from channels.auth import AuthMiddlewareStack
 from channels.db import database_sync_to_async
+from django.contrib.auth.hashers import check_password
 
-from urbanlens.dashboard.services.auth.api_keys import KEY_LABEL, authenticate_api_key
+from urbanlens.dashboard.services.auth.api_keys import KEY_LABEL, api_key_candidate, touch_api_key
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractBaseUser
@@ -97,8 +99,7 @@ class ApiKeyAuthMiddleware:
         values = parse_qs(query_string).get("key")
         return values[0] if values else None
 
-    @database_sync_to_async
-    def _resolve(self, token: str) -> tuple[AbstractBaseUser, Any] | None:
+    async def _resolve(self, token: str) -> tuple[AbstractBaseUser, Any] | None:
         """Resolve *token* as either a PAT key or an OAuth2 access token.
 
         Args:
@@ -111,9 +112,37 @@ class ApiKeyAuthMiddleware:
             applied to it verbatim. None when the token doesn't resolve.
         """
         if token.startswith(f"{KEY_LABEL}_"):
-            api_key = authenticate_api_key(token)
-            return (api_key.user, api_key) if api_key is not None else None
-        return self._resolve_oauth2_token(token)
+            return await self._resolve_api_key(token)
+        return await database_sync_to_async(self._resolve_oauth2_token)(token)
+
+    async def _resolve_api_key(self, token: str) -> tuple[AbstractBaseUser, Any] | None:
+        """Resolve a PAT key, keeping the password hash off the shared thread.
+
+        ``database_sync_to_async`` is thread-sensitive by default, so every call
+        to it in this process runs in one shared executor thread - the thread
+        all of Channels' database work queues on. ``check_password`` is a
+        deliberately expensive hash, and running it there means one client
+        reconnecting in a loop stalls every other socket's database access.
+
+        The hash has to stay expensive, so it moves instead: the lookup is one
+        indexed query and stays where the connection handling is, and only the
+        hash runs on a plain worker thread.
+
+        Args:
+            token: The raw ``?key=`` value, already known to carry the PAT label.
+
+        Returns:
+            ``(user, key)`` when the secret checks out, else None.
+        """
+        candidate = await database_sync_to_async(api_key_candidate)(token)
+        if candidate is None:
+            return None
+        api_key, secret = candidate
+        # thread_sensitive=False: not holding the shared thread is the point.
+        if not await sync_to_async(check_password, thread_sensitive=False)(secret, api_key.key_hash):
+            return None
+        await database_sync_to_async(touch_api_key)(api_key)
+        return (api_key.user, api_key)
 
     @staticmethod
     def _resolve_oauth2_token(token: str) -> tuple[AbstractBaseUser, Any] | None:
