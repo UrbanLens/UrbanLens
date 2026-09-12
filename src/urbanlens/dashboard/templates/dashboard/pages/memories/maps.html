@@ -81,6 +81,7 @@
             {% endwith %}
             {% endfor %}
         </div>
+        {% include "dashboard/partials/ui/_pagination_controls.html" with page_obj=page_obj page_links=True page_noun="maps" %}
         {% else %}
         <section class="visits-empty-state" aria-labelledby="maps-empty-title">
             <div class="visits-empty-hero">

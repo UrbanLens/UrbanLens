@@ -4423,6 +4423,20 @@ per view, uncached, for a page a crawler can hold open. Only the figures are cac
 response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
 gate runs every request and the window only covers numbers that are trailing aggregates anyway.
 
+**H31 and H37 are fixed** (2026-09-12) - the same page from two angles. The Maps subpage built a
+card per `MarkupMap` the profile owns with no pagination and no ceiling, and each card calls
+`to_snapshot()`, so the response carried every annotation of every map. The page's own advertised
+workflow - draw a route on a check-in, a comment, a visit - is what makes an account have many of
+them. The per-map half was already bounded by the `to_snapshot()` ceiling above; what was left was
+the number of maps.
+
+Paginated rather than capped: a map the user drew and can no longer reach is worse than a second
+page, and unlike a map layer a list of cards has an obvious place to put a Next button. The slice
+happens before any card is built, so an off-page map costs nothing rather than being built and
+discarded. The reusable `_pagination_controls.html` has a `page_links` mode written for exactly this
+case - a full-page view, where an `hx-get` would swap a whole HTML document into one div, and where
+plain links keep the back button working.
+
 **A stale performance record, not a regression** (2026-09-12). `test_pin_list_query_fingerprint` was
 failing on the branch before any of this work - confirmed by reverting to HEAD and re-running. Two
 committed improvements changed the external-API pin list's SQL and nobody re-recorded the fixture:

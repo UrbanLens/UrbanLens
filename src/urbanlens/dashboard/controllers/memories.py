@@ -828,6 +828,10 @@ _SHARE_GROUPS_PER_PAGE = 20
 #: Journal entries per page.
 _JOURNAL_PAGE_SIZE = 25
 
+#: Map cards per page. Each one carries that map's whole snapshot, so this
+#: bounds annotations sent, not just cards drawn.
+_MEMORIES_MAPS_PAGE_SIZE = 24
+
 
 def _place_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tuple[list[list[PinShare]], Page]:
     """One page of pin shares, grouped by the place each is about.
@@ -1115,13 +1119,18 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             )
             .order_by("-updated")
         )
+        # Sliced before any card is built: `_card` calls `to_snapshot()`, so an
+        # unpaginated page sent every annotation of every map the account ever
+        # drew - and this page's own workflow is what makes an account have many.
+        page_obj = get_page(request, maps, _MEMORIES_MAPS_PAGE_SIZE)
         return render(
             request,
             "dashboard/pages/memories/maps.html",
             {
                 "profile": profile,
                 "page_name": "memories",
-                "map_cards": [self._card(markup_map) for markup_map in maps],
+                "map_cards": [self._card(markup_map) for markup_map in page_obj.object_list],
+                "page_obj": page_obj,
             },
         )
 
