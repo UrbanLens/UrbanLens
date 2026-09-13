@@ -23,6 +23,7 @@ from urbanlens.dashboard.services.core.message_limits import charge_message, ref
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from uuid import UUID
 
     from django.db.models import QuerySet
@@ -232,6 +233,26 @@ def can_direct_message(sender: Profile, recipient: Profile) -> bool:
     if not sender.community_enabled or not recipient.community_enabled:
         return False
     return recipient.accepts_direct_messages_from(sender)
+
+
+def messageable_profile_pks(sender: Profile, recipients: Sequence[Profile]) -> set[int]:
+    """Batch equivalent of :func:`can_direct_message` over many recipients at once.
+
+    Args:
+        sender: The profile attempting to send.
+        recipients: The profiles being considered.
+
+    Returns:
+        The pks of the recipients ``sender`` is allowed to message.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    if not sender.community_enabled:
+        return set()
+    candidates = [recipient for recipient in recipients if recipient.pk != sender.pk and recipient.community_enabled]
+    if not candidates:
+        return set()
+    return Profile.accepting_direct_messages_pks(sender, candidates)
 
 
 def direct_message_images_visible_to(message: DirectMessage, viewer: Profile) -> bool:

@@ -57,7 +57,37 @@ def directives_by_context(text: str) -> list[tuple[tuple[str, ...], str, int]]:
         reported in its parent's context, so ``http`` itself comes back as
         ``((), "http", n)``.
     """
-    found: list[tuple[tuple[str, ...], str, int]] = []
+    return [(context, tokens[0], line) for context, tokens, line in parsed_directives(text)]
+
+
+def directive_arguments(text: str, name: str) -> list[list[str]]:
+    """Every argument list given to *name*, in file order.
+
+    ``directives_by_context`` answers where a directive sits; this answers what
+    it was set to, which is what a ceiling written in one file and relied on by
+    another has to be checked against.
+
+    Args:
+        text: The config file's contents.
+        name: The directive to collect, e.g. ``client_max_body_size``.
+
+    Returns:
+        One list of arguments per occurrence, without the directive name.
+    """
+    return [tokens[1:] for _, tokens, _ in parsed_directives(text) if tokens[0] == name]
+
+
+def parsed_directives(text: str) -> list[tuple[tuple[str, ...], list[str], int]]:
+    """Parse an nginx config into ``(context, tokens, line)`` triples.
+
+    Args:
+        text: The config file's contents.
+
+    Returns:
+        One triple per directive and per block header, ``tokens`` holding the
+        directive name followed by its arguments.
+    """
+    found: list[tuple[tuple[str, ...], list[str], int]] = []
     stack: list[str] = []
     pending: list[str] = []
     line = 1
@@ -69,7 +99,7 @@ def directives_by_context(text: str) -> list[tuple[tuple[str, ...], str, int]]:
         token = match.group()
         if token == "{":
             if pending:
-                found.append((tuple(stack), pending[0], line))
+                found.append((tuple(stack), pending, line))
                 stack.append(pending[0])
             pending = []
         elif token == "}":
@@ -78,7 +108,7 @@ def directives_by_context(text: str) -> list[tuple[tuple[str, ...], str, int]]:
             pending = []
         elif token == ";":
             if pending:
-                found.append((tuple(stack), pending[0], line))
+                found.append((tuple(stack), pending, line))
             pending = []
         else:
             pending.append(token)

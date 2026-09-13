@@ -49,6 +49,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     is_safe_reaction_emoji,
     key_change_events_for,
     mark_thread_open,
+    messageable_profile_pks,
     reaction_summary,
     search_direct_messages,
     set_conversation_muted,
@@ -860,8 +861,14 @@ class RecipientSearchView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()
         results: list[Profile] = []
         if len(query) >= 2:
-            candidates = Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: RECIPIENT_SEARCH_LIMIT * 4]
-            results = [candidate for candidate in candidates if can_direct_message(profile, candidate) and candidate.can_view_profile(profile)][:RECIPIENT_SEARCH_LIMIT]
+            candidates = list(Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: RECIPIENT_SEARCH_LIMIT * 4])
+            # Both gates in batch. Per candidate they each rebuild the
+            # requester's own pinned-place set, so a substring matching a lot
+            # of people cost a full scan of the requester's pins per match, on
+            # every keystroke.
+            messageable = messageable_profile_pks(profile, candidates)
+            identifiable = Profile.visible_profile_pks(profile, candidates)
+            results = [candidate for candidate in candidates if candidate.pk in messageable and candidate.pk in identifiable][:RECIPIENT_SEARCH_LIMIT]
             for candidate in results:
                 candidate.ensure_slug()
         return render(

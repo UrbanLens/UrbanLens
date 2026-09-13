@@ -4255,15 +4255,15 @@ H24 H25 H26 H27 H28 H29 H30 H31 H32 H33 H35 H36 H37 H38 H39 H40 H41 H42 H43 H45 
 H52 H53 H57 H58 H59 H60 H61 H62 H63 H64. H16 was overstated and needs nothing. H08 closed with H26 —
 one cap on one view, entered twice at different severities.
 
-**Open, and what is actually left of each:**
+**Open, and what is actually left of each** (struck rows closed since the board was written):
 
 | ref | severity | what remains | why it is not done |
 |---|---|---|---|
-| H05 | medium | The DM recipient picker evaluates `can_direct_message` **and** `can_view_profile` per candidate, for up to `RECIPIENT_SEARCH_LIMIT * 4` candidates, on every keystroke past two characters | — |
-| H06 | medium | `pinned_place_keys` reads a profile's whole `Pin` table into a Python set, and the pair check calls it for both sides. The galleries memoise it now; the picker, the profile page and trip comments still pay it | — |
+| ~~H05~~ | medium | Fixed 2026-09-13. Both pickers batch both gates: 240 queries for 24 candidates → 41, flat | — |
+| H06 | medium | Narrowed 2026-09-13, not closed. The pickers no longer pay it. What remains is one evaluation per *distinct* author or commenter, each reading both pin tables: `controllers/comments.py:223` (`can_view_photos_from`), `services/comments/comments.py:166` and `services/trips/trip_comments.py:216` (`can_view_comments_from`), `services/media/images.py:1467` | Needs a batch form of the photo and comment gates, as `visible_profile_pks` is of the identity one |
 | H23 | medium | The saved-filter uuid list is keyed by a fingerprint of the profile's pins, so every pin edit strands the previous copy in Valkey for a day | Coupled to H54: the fix is either a key registry or the cache split |
 | H54 | high | One 512MB Valkey holds sessions, Channels, the Django cache and the broker in one keyspace under `volatile-lru`, and only the broker's keys have no TTL | PL7 phase 4, designed and unbuilt |
-| H55 | high | `client_max_body_size 200m` with `client_body_temp_path /tmp/client_temp`, so an unauthenticated POST body spools to the container's writable layer | — |
+| ~~H55~~ | high | Fixed 2026-09-13. Both nginx `/tmp` mounts are sized tmpfs; response buffering bounded at 64m | — |
 | H56 | high | Under gevent a request that spends its timeout in non-yielding CPU takes the whole worker down. `--worker-connections 20` bounds the blast radius to 19 requests; it does not remove it | D11 phase 3a (gthread), designed and unbuilt |
 
 **Parked by decision, not forgotten:**
@@ -5064,6 +5064,79 @@ does not reach it. `services/media/access.py` authorizes an ordinary photo throu
 `Profile` instance for the life of the request. What remains is that the cost grows with total site
 data rather than with the requester's, which is worth fixing when the aggregate count justifies it -
 and is not the per-fetch full-table scan the finding describes.
+
+**H05 is fixed, on both pickers, and the batch form already existed for half of it**
+(2026-09-13). `RecipientSearchView` asked `can_direct_message` and then `can_view_profile` once per
+candidate, for up to `RECIPIENT_SEARCH_LIMIT * 4` of them, on every keystroke past the second
+character. Both reach `visibility_permits`, and at `COMMON_PIN` or `ANYTHING_IN_COMMON` that reads
+*both* accounts' entire `Pin` tables into Python — so the requester's own pin table was scanned four
+times per candidate, and the candidates are whoever else happens to match the substring.
+
+Measured on the endpoint: **51 queries for 3 candidates, 240 for 24**, the pinned-place read alone
+running 96 times. After: **41 and 41**. Flat, not merely smaller.
+
+`Profile.visible_profile_pks` — the batch form of the *identity* gate — has existed since the
+2026-08-17 audit, with an agreement test, and the picker never used it. The message gate had no
+batch form, so `Profile.accepting_direct_messages_pks` is new and got the same treatment: held to
+`accepts_direct_messages_from` across every `VisibilityChoice`, with and without a friendship, with
+and without a shared place, blocked in each direction, and with a prior message that triggers the
+reply exception. A batch permission check that disagrees with the single one offers someone as
+messageable who would refuse the send, or hides someone who would accept.
+
+Two things worth keeping from building it:
+
+- **The group-chat member picker is the same comprehension over the same queryset**, and says so in
+  its own comment. Fixing one door would have left the other paying the full cost — the H36 shape
+  again. The scaling test is parameterised over both URLs rather than duplicated.
+- **The first scaling seed measured nothing.** It gave every candidate a pin at its own location, so
+  nobody shared a place, so both gates refused everyone and the picker rendered an empty list at
+  both sizes. `QueryScalingMixin`'s "the seed does not exercise this endpoint" guard is what caught
+  it, which is the second time that guard has earned its place.
+
+**H06 is narrowed rather than closed** by the same work, and the residue is worth naming: one
+evaluation per *distinct* author still reads both pin tables. `controllers/comments.py:223` builds
+its blurred-commenter set with `can_view_photos_from` per commenter;
+`services/comments/comments.py:166` and `services/trips/trip_comments.py:216` memoise repeats but
+still pay one full pair of scans per distinct author. Those need a batch form of the photo and
+comment gates, the way `visible_profile_pks` is one of the identity gate.
+
+**H55 is fixed** (2026-09-13). nginx buffers a request body past `client_body_buffer_size` to
+`client_body_temp_path` before the upstream sees a byte, and that path is `/tmp` — the image's
+writable layer, which on this host is the same 501GB logical volume that holds the `postgres-data`
+volume. No login is required to send a body and nothing bounds how many are in flight, so anonymous
+POST volume was unbounded write pressure on the disk the database lives on. Response buffering is
+the same hazard read backwards: `proxy_max_temp_file_size` defaults to **1024m per connection** and
+was never set.
+
+Both nginx services now mount `/tmp` as a sized tmpfs — 512m for the app vhost, which has to hold
+one maximum-size body (`client_max_body_size 200m`) plus the response ceiling, and 64m for the media
+vhost, which caps a body at 64k and whose only `proxy_pass` returns a header. `proxy_max_temp_file_size`
+is 64m: past it nginx stops buffering and streams at the client's pace, so a large response costs a
+held upstream connection rather than a spool — bounded either way.
+
+**`mem_limit` had to move with it, and that is the part that would have been missed.** tmpfs pages
+are charged to the container's cgroup, so a tmpfs that can fill past the memory limit converts one
+oversized upload into an OOM-killed nginx — the whole site, which is a worse outage than the one
+being prevented. The app vhost's limit is 768m against a 512m spool. The test asserts the two
+numbers against each other in both directions, because neither file can see the other: the tmpfs
+must be at least the vhost's own `client_max_body_size`, or a legitimate maximum-size upload starts
+failing, and it must be under `mem_limit`.
+
+Verified by running it rather than by reading it. A 120MB POST put **117,192 KB into the tmpfs** and
+Django answered 403; the disk was untouched. Three concurrent 200MB uploads deliberately overflowed
+the 512m spool: two got 500, one succeeded, **other users' requests served 200 in 53ms throughout**,
+nginx stayed healthy and the tmpfs drained to zero. That is the invariant stated as an experiment —
+one user's excess is bounded to that user.
+
+What this does not do is stop a body being *accepted* that nothing needs. `client_max_body_size` is
+one number for every route, so an anonymous `POST /signup/` may still spool 200MB before Django
+rejects it — now into RAM that frees immediately rather than onto the database's disk. Making the
+ceiling per-route needs a route list, and building a second one now would drift from the
+`heavy_routes.txt` mechanism PL7 phase 3c already specifies. Recorded there rather than guessed at
+here.
+
+One rough edge left alone: nginx answers `ENOSPC` on the spool with a 500. A 413 or 507 would tell
+the uploader something true, and there is no directive to change it.
 
 ## P114 — Staging outranks production for CPU on the host they share
 

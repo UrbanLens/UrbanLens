@@ -1257,6 +1257,53 @@ class Profile(abstract.PublicDashboardModel):
         return Profile._visible_subject_pks(viewer, subjects, field="contact_visibility", allow_pending_request=False, temporary_access=False)
 
     @staticmethod
+    def accepting_direct_messages_pks(sender: Profile, subjects: Sequence[Profile]) -> set[int]:
+        """Batch equivalent of :meth:`accepts_direct_messages_from` over many subjects.
+
+        The recipient picker resolves this for every candidate a substring
+        turns up, so the per-pair form re-read the *sender's* whole pin table
+        once per candidate. Semantics must match
+        :meth:`accepts_direct_messages_from` exactly - a divergence offers
+        someone as messageable who would refuse the send, or hides someone who
+        would accept it - so ``test_recipient_picker_is_flat`` holds this to
+        that method rather than to written expectations.
+
+        Args:
+            sender: The profile attempting to send.
+            subjects: The profiles being messaged.
+
+        Returns:
+            The pks of the subjects who would accept a message from ``sender``.
+        """
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        subjects = [subject for subject in subjects if subject.pk != sender.pk]
+        if not subjects:
+            return set()
+        subject_pks = {subject.pk for subject in subjects}
+
+        # Both directions, and before anything else: a block is an absolute
+        # veto that beats even the reply exception below.
+        blocked = set(
+            Friendship.objects.filter(
+                models.Q(from_profile=sender, to_profile_id__in=subject_pks) | models.Q(from_profile_id__in=subject_pks, to_profile=sender),
+                status=FriendshipStatus.BLOCKED,
+            ).values_list("from_profile_id", "to_profile_id"),
+        )
+        vetoed = {pk for pair in blocked for pk in pair} - {sender.pk}
+
+        allowed = [subject for subject in subjects if subject.pk not in vetoed]
+        permitted = Profile._visible_subject_pks(sender, allowed, field="direct_message_visibility", allow_pending_request=True, temporary_access=False)
+
+        # Whoever the settings refused may still be replied to, if they opened
+        # the conversation - the same exception, asked once for the whole list.
+        remaining = {subject.pk for subject in allowed} - permitted
+        if remaining:
+            permitted |= set(DirectMessage.objects.filter(sender_id__in=remaining, recipient=sender).values_list("sender_id", flat=True))
+        return permitted
+
+    @staticmethod
     def _visible_subject_pks(
         viewer: Profile | None,
         subjects: Sequence[Profile],
