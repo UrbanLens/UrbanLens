@@ -975,6 +975,32 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
+// Shown only when a markup listing was capped, so a cut map is not read as a
+// complete one. Below the line-finish tip's slot, so the two never overlap.
+.markup-truncation-note {
+    position: absolute;
+    top: 58px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1040;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    max-width: min(90%, 420px);
+    padding: .4rem .75rem;
+    border-radius: 999px;
+    background: rgba(17, 24, 39, .82);
+    color: rgba(255, 255, 255, .88);
+    font-size: .8rem;
+    line-height: 1.25;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+}
+
 .markup-line-finish-tip {
     position: absolute;
     top: 14px;

@@ -4281,7 +4281,7 @@ is that a vulnerability gets a failing test reproducing the attack first, always
 Recorded rather than fixed because 26 findings across five rule families is its own piece of work,
 and doing it badly — dismissing in bulk to make a gate green — is worse than leaving it red.
 
-## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else - 6 still open
+## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else - 2 still open
 
 `id: P113` · `status: open` · `updated: 2026-09-13`
 
@@ -4337,9 +4337,19 @@ one cap on one view, entered twice at different severities.
 | H44 | 15 queries → 11. The remaining cut makes the gallery path worse, so it is a trade-off to decide rather than an optimisation to apply — numbers above |
 | H47 | Only the pagination half. `visible_comment_tree` filters in Python, so paginating the queryset returns short pages and changes the API contract |
 
-One residual with no row of its own: the markup listing reports `truncated` in JSON and three
-consumers ignore it, so a cut map looks like a complete one. `map-annotations.ts` already solved
-this shape for the photo layer.
+**The markup listing's `truncated` flag is read now** (2026-09-13). It had no row of its own. Both
+readers — `MarkupJsonView` and the safety contact route — cap at `MARKUP_MAX_ITEMS_PER_RESPONSE` and
+report `truncated`, and nothing in the browser read it, so a cut map looked like a complete one.
+There are two code paths, not three: `markup-toolbar.ts` renders the Private Pin, wiki and safety
+detail maps (`static/.../core.js` is its bundle, not a separate reader), and an inline read-only
+loader in `_safety_map_script.html` renders the contact portal. Both now call
+`MarkupEngine.reportMarkupTruncation`, which puts one note on the map wrapper and removes it on a
+reload that is no longer cut.
+
+The note names how many are shown, not how many exist. The reader fetches one row past its ceiling
+instead of counting, and a total would put the COUNT back on a route the magic link makes public.
+It sits below the line-finish tip's slot, because the bottom centre of these maps already holds the
+offline, tile-fetch and place-info pills.
 
 **The one with no existing design** is the first. `external_api/throttling.py` is rich and
 DRF-only; `services/core/rate_limiter.py` caps *outbound* third-party spend, not inbound load. So

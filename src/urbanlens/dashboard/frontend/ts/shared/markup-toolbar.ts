@@ -1,6 +1,6 @@
 import { getCsrfToken } from "./csrf";
 import { toast, confirmAction } from "./dialogs";
-import { safeColor } from "./markup-engine";
+import { reportMarkupTruncation, safeColor } from "./markup-engine";
 import type { ShapeSpec } from "./markup-engine";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
@@ -439,6 +439,11 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         groups.forEach((g) => g.clearLayers());
     }
 
+    // Every host mounts its map in one of these; the notes this toolbar owns attach there.
+    function mapWrapper(): Element | null {
+        return document.querySelector(".map-wrapper") || document.querySelector(".safety-map-wrapper");
+    }
+
     function loadMarkup(): void {
         if (!markupJsonUrl) return; // lazy mode - nothing to load until the map is created
         fetch(markupJsonUrl)
@@ -450,6 +455,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                     renderMarkupItem(item);
                     markupItems.push(item);
                 });
+                reportMarkupTruncation(mapWrapper(), data);
                 config.onBuildDetailList?.();
             })
             .catch((err) => console.warn("Could not load markup:", err));
@@ -478,7 +484,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     }
     function maybeShowLineFinishTip(): void {
         if (lineFinishTipDismissed() || document.getElementById("markup-line-finish-tip")) return;
-        const wrapper = document.querySelector(".map-wrapper") || document.querySelector(".safety-map-wrapper");
+        const wrapper = mapWrapper();
         if (!wrapper) return;
         const el = document.createElement("div");
         el.id = "markup-line-finish-tip";
@@ -655,6 +661,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                     renderMarkupItem(item);
                     markupItems.push(item);
                 });
+                reportMarkupTruncation(mapWrapper(), markupData);
                 config.onBuildDetailList?.();
                 const newItem = markupItems.find((i) => i.uuid === newUuid);
                 if (newItem) openMarkupEditDialog(newItem);

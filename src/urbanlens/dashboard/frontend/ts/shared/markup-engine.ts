@@ -624,6 +624,42 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
     return { startTool, deactivate, cancelShape, getCurrentTool, isBusy, canFinish, finishCurrent, destroy };
 }
 
+/**
+ * The capped-listing note's text, or null when the listing was complete.
+ *
+ * It can name how many are shown but not how many exist: the reader fetches one
+ * row past its ceiling instead of counting.
+ */
+export function markupTruncationNotice(shown: number, truncated: unknown): string | null {
+    if (truncated !== true) return null;
+    const count = Math.max(0, Math.floor(shown));
+    return `Showing the first ${count} ${count === 1 ? "drawing" : "drawings"}. This map has more than can be shown at once.`;
+}
+
+/**
+ * Show, replace or clear the capped-listing note on a map wrapper.
+ *
+ * At most one note per wrapper, so a reload replaces it and a response that is no
+ * longer capped removes it.
+ */
+export function reportMarkupTruncation(wrapper: Element | null, payload: { markup_items?: unknown[]; truncated?: unknown }): void {
+    if (!wrapper) return;
+    wrapper.querySelector(".markup-truncation-note")?.remove();
+    const message = markupTruncationNotice((payload.markup_items ?? []).length, payload.truncated);
+    if (!message) return;
+    const note = document.createElement("div");
+    note.className = "markup-truncation-note";
+    note.setAttribute("role", "status");
+    const icon = document.createElement("i");
+    icon.className = "material-symbols-outlined";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "info";
+    const text = document.createElement("span");
+    text.textContent = message;
+    note.append(icon, text);
+    wrapper.appendChild(note);
+}
+
 export const MarkupEngine = {
     bearing,
     arrowheadSvg,
@@ -631,6 +667,8 @@ export const MarkupEngine = {
     textLabelHtml,
     renderShape,
     createDrawSession,
+    markupTruncationNotice,
+    reportMarkupTruncation,
 };
 
 export function installGlobalMarkupEngine(): void {

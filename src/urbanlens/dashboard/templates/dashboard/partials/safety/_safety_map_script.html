@@ -302,6 +302,7 @@ so it's always available by the time this script runs - no typeof guard needed.
                 }
                 window.MarkupEngine.renderShape(shape, markupLayer, map.getZoom());
             });
+            window.MarkupEngine.reportMarkupTruncation(document.querySelector('.safety-map-wrapper'), data);
         }).catch(function () {});
     }
     loadMarkup();
