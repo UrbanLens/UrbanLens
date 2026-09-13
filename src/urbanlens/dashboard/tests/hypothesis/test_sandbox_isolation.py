@@ -52,6 +52,9 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
         "render_media_preview",
         "scan_comment_image",
         "scan_trip_comment_image",
+        # A person is waiting on the import dialog, so not the batch queue a data import
+        # can hold for an hour; its own time limit bounds how long it can hold a slot here.
+        "parse_import_preview_task",
     },
     "SANDBOX_BATCH_QUEUE": {
         "run_user_data_import",

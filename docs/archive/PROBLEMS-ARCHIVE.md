@@ -11,6 +11,49 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-13: The import preview parsed uploads inside the web request, blocking `UL_UNTRUSTED_PARSE_POLICY=deny`
+
+`id: P2` · `status: fixed` · `resolved: 2026-09-13`
+
+`controllers/pin.parse_for_preview` read every uploaded file inside the request: `extract_archive`
+(zipfile/tarfile), the gateway's per-format parsers (fastkml/lxml, gpxpy, GDAL/Shapely) and
+`extract_text` (python-docx). Each is an `untrusted_parse` operation, so `deny` would have turned every
+preview into a 500. Reproduced before the fix: a preview posted as the `web` process under `deny`
+raised `UnsandboxedParseError: Untrusted-parse operation 'geo.kml' ran in the 'web' process`.
+
+`services/pins/import_preview.py` owns it now. The request streams the upload to
+`MEDIA_ROOT/import_previews/<job_id>/`, claims a one-preview-per-account guard and answers 202.
+`parse_import_preview_task` runs on the sandbox queue and does everything that reads the bytes -
+archive extraction, every format parser, `extract_text`, and `_preview_pins`' legacy-repair checks,
+which need only the database the sandbox already reaches. The dialog polls a status URL for the result,
+which carries the same lists, total and cap warning the request used to return.
+
+**What this entry used to say, and what the code said instead.** It held that the CSV branch geocodes
+and `_preview_pins` resolves places, so moving the gateway into a container without internet would break
+CSV import. `_preview_pins` makes database queries and nothing else. `_csv_row_iter` places almost
+every Takeout row with no request at all - from a `/search/lat,lon` URL or the S2 cell in a place URL's
+data segment. Only a place URL carrying neither falls back to a CID lookup and then geocoding by name.
+So the split is narrower than the entry proposed: `extract_coordinates_from_url(offline=True)` raises
+`CoordinatesNeedNetworkError` for exactly those rows, the parse sets them aside, and
+`finish_import_preview_task` places them on an interactive worker. That task also runs AI extraction on
+the text the sandbox pulled out of documents, and sends the parse-failure notice - `notify()` sends
+mail synchronously, which the sandbox has no route for. It is queued only when there is such work, so
+a KML or GeoJSON preview is one hop.
+
+A lookup service that cannot answer - disabled, rate-limited or unreachable, the ordinary state of a small
+deployment - ends the lookup pass and adds a warning; the rest of the preview is still shown. The first
+live run on the development stack found this: its geocoder is disabled, and the finishing task turned that
+one refusal into "The files could not be read" for a whole upload that had parsed.
+
+The tests run each half under `deny` in its own role - the request as `web`, the parse as `sandbox`,
+the finishing task as `worker` - so a parser reached from the wrong side raises instead of passing.
+
+**Not changed:** `UL_UNTRUSTED_PARSE_POLICY` stays at `warn`; flipping it is its own decision, and P103's
+undecorated `_resize_custom_icon` still decodes on a request path where the guard cannot see it.
+Previews now depend on `media-worker`, and CSV lookups and document extraction on `celery-worker`; with
+either missing, the dialog waits on "Waiting to read your files..." until the preview expires after an
+hour.
+
 ## RESOLVED 2026-09-13: The site-admin system panel walked the whole media tree on every poll
 
 `id: P98` · `status: fixed` · `resolved: 2026-09-13`

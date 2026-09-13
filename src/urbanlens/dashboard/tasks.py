@@ -35,7 +35,7 @@ from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's aut
 )
 from urbanlens.dashboard.services.core.celery import update_task_progress
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
-from urbanlens.dashboard.services.pins import confirmed_import
+from urbanlens.dashboard.services.pins import confirmed_import, import_preview
 from urbanlens.dashboard.services.sandbox import sandbox_queue
 from urbanlens.dashboard.services.sandbox.queues import Queue
 
@@ -409,6 +409,18 @@ def cleanup_import_artifacts_task(import_dir_path: str, job_id: str | None = Non
 def run_confirmed_pin_import(profile_id: int, job_id: str) -> dict[str, Any]:
     """Run one account's confirmed pin import from the selection stored under *job_id*."""
     return confirmed_import.run_confirmed_import(profile_id, job_id)
+
+
+@shared_task(queue=SANDBOX_QUEUE, soft_time_limit=import_preview.PARSE_SOFT_TIME_LIMIT_SECONDS, time_limit=import_preview.PARSE_TIME_LIMIT_SECONDS)
+def parse_import_preview_task(profile_id: int, job_id: str) -> None:
+    """Read an import preview's uploaded files in the sandbox worker."""
+    import_preview.parse_import_preview(profile_id, job_id)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def finish_import_preview_task(profile_id: int, job_id: str) -> None:
+    """Finish the part of an import preview that needs the network."""
+    import_preview.finish_import_preview(profile_id, job_id)
 
 
 @shared_task(queue=Queue.MAINTENANCE)

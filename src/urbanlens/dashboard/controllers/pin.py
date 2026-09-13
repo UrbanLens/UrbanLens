@@ -28,7 +28,6 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.core.bounded_cache import set_if_small
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
@@ -1180,11 +1179,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=False, methods=["post"])
     def parse_for_preview(self, request: HttpRequest):
-        """Parse uploaded files and return pin preview data as JSON without importing."""
+        """Store uploaded files for the sandbox worker to read, and answer with where to follow them.
 
-        from urbanlens.dashboard.models.labels.model import Label
-        from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
-        from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, extract_archive, is_archive
+        Nothing here opens an upload: every format the preview reads is an ``untrusted_parse``
+        operation, so the reading happens in ``services.pins.import_preview``'s tasks.
+
+        Returns:
+            202 with ``job_id`` and ``status_url``. 400 for an invalid form, 409 while the
+            account's previous upload is still being read, 503 when it could not be queued.
+        """
+        from django.urls import reverse
+
+        from urbanlens.dashboard.services.pins.import_preview import ImportPreviewRefusedError, start_import_preview
 
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)
@@ -1193,118 +1199,29 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not form.is_valid():
             return JsonResponse({"error": "Invalid form."}, status=400)
 
-        from urbanlens.dashboard.services.ai.document_import import (
-            DocumentTooLargeError,
-            extract_pins_from_document,
-            is_supported_document_filename,
-        )
-
-        uploaded_files = form.cleaned_data["upload_files"]
-
-        all_files: list[tuple[str, bytes]] = []
-        document_files: list[tuple[str, bytes]] = []
-        # One allowance for the whole upload. The extractor's limits are
-        # per-archive, and this loop calls it again for every nested archive it
-        # finds - so without sharing a budget an outer ZIP holding N nested
-        # bombs bought N x the cap, entirely inside one request.
-        extraction_budget = ExtractionBudget()
-        for uploaded_file in uploaded_files:
-            try:
-                data = uploaded_file.read()
-            except OSError as exc:
-                logger.warning("Failed to read uploaded file %s -> %s", uploaded_file.name, exc)
-                return JsonResponse({"error": f"Failed to read {uploaded_file.name}."}, status=400)
-
-            # .txt/.docx are routed to the AI extraction pipeline below rather than the
-            # geo-format dispatch - a .docx in particular starts with ZIP magic bytes and
-            # would otherwise be misidentified as a location-data archive.
-            if is_supported_document_filename(uploaded_file.name or ""):
-                document_files.append((uploaded_file.name, data))
-            elif is_archive(data):
-                try:
-                    extracted = extract_archive(data, extraction_budget)
-                except ValueError as exc:
-                    logger.warning("Could not extract archive: %s", exc)
-                    return JsonResponse({"error": "Invalid archive."}, status=400)
-                non_archive_entries = [entry for entry in extracted if not is_archive(entry.data)]
-                # A KMZ is just a ZIP wrapping a single "doc.kml" - Google's own
-                # fixed internal filename, unrelated to what the user actually
-                # named the .kmz. Using that inner name as the suggested list/
-                # category name always produced the same generic "doc"
-                # regardless of the uploaded file - substitute the outer
-                # archive's own filename instead whenever extraction yields
-                # exactly one non-archive entry named that way.
-                if len(extracted) == 1 and len(non_archive_entries) == 1 and _filename_stem(non_archive_entries[0].name) == "doc":
-                    entry = non_archive_entries[0]
-                    outer_stem = _filename_stem(uploaded_file.name or "")
-                    inner_suffix = entry.name.rsplit(".", 1)[-1] if "." in entry.name else ""
-                    renamed = f"{outer_stem}.{inner_suffix}" if inner_suffix else outer_stem
-                    all_files.append((renamed, entry.data))
-                else:
-                    for entry in extracted:
-                        if is_archive(entry.data):
-                            try:
-                                inner = extract_archive(entry.data, extraction_budget)
-                                all_files.extend((x.name, x.data) for x in inner)
-                            except ValueError:
-                                logger.warning("Could not extract nested archive during preview")
-                        else:
-                            all_files.append((entry.name, entry.data))
-            else:
-                all_files.append((uploaded_file.name, data))
-
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        gateway = GoogleMapsGateway()
+        try:
+            job_id = start_import_preview(profile, form.cleaned_data["upload_files"])
+        except ImportPreviewRefusedError as refused:
+            return JsonResponse({"error": refused.message}, status=refused.status)
+        return JsonResponse({"job_id": job_id, "status_url": reverse("pin.import.preview.status", kwargs={"job_id": job_id})}, status=202)
 
-        lists = gateway.parse_for_preview(all_files, profile)
+    def import_preview_status(self, request: HttpRequest, job_id: UUID):
+        """Report one of the requesting user's import previews, with its lists and labels once read."""
+        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.services.pins.import_preview import read_preview
 
-        document_warnings: list[str] = []
-        for doc_name, doc_data in document_files:
-            try:
-                doc_list, doc_warning = extract_pins_from_document(doc_name, doc_data, profile)
-            except DocumentTooLargeError:
-                document_warnings.append(f"Document too large: {doc_name}")
-                continue
-            if doc_warning:
-                document_warnings.append(doc_warning)
-            if doc_list:
-                lists.append(doc_list)
-
-        if not lists:
-            return JsonResponse(
-                {"error": document_warnings[0] if document_warnings else "No valid location files found in the upload."},
-                status=400,
-            )
-
-        labels = Label.objects.pin_assignable_by(profile).in_display_order()
-
-        previewed = sum(len(lst["pins"]) for lst in lists)
-        if previewed >= gateway.MAX_PREVIEW_PINS:
-            # Said out loud rather than silently shown: a preview that stops at
-            # the cap looks exactly like a file that only had that many pins.
-            # An upload landing on the boundary exactly gets this message
-            # without having been truncated, which is a harmless over-warning
-            # and the reason it says "at the limit" rather than "some were
-            # dropped".
-            document_warnings.append(f"This upload is at the preview limit of {gateway.MAX_PREVIEW_PINS:,} pins - anything beyond that is not shown.")
-
-        return JsonResponse(
-            {
-                "lists": lists,
-                "total": previewed,
-                "labels": [
-                    {
-                        "id": b.id,
-                        "name": b.name,
-                        "color": b.color or "",
-                        "icon": b.icon or "",
-                        "kind": b.kind,
-                    }
-                    for b in labels
-                ],
-                "warnings": document_warnings,
-            },
-        )
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
+        state = read_preview(request.user.pk, str(job_id))
+        if state is None:
+            return JsonResponse({"error": "Preview not found or expired."}, status=404)
+        result = state.get("result")
+        if isinstance(result, dict):
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+            labels = Label.objects.pin_assignable_by(profile).in_display_order()
+            result["labels"] = [{"id": b.id, "name": b.name, "color": b.color or "", "icon": b.icon or "", "kind": b.kind} for b in labels]
+        return JsonResponse(state)
 
     # -- External-data HTMX endpoints -------------------------------------------
 

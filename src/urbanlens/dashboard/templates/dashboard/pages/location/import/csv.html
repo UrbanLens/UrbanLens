@@ -837,8 +837,9 @@ $('iw-btn-upload').addEventListener('click', async function () {
     formData.append('csrfmiddlewaretoken', getCsrfToken());
     locationFiles.forEach(function (f) { formData.append('upload_files', f); });
 
+    abortCtrl = new AbortController();
     try {
-        var res = await fetch('{% url "pin.import.preview" %}', { method: 'POST', body: formData });
+        var res = await fetch('{% url "pin.import.preview" %}', { method: 'POST', body: formData, signal: abortCtrl.signal });
         if (!res.ok) {
             if (res.status === 413) {
                 throw new Error('That upload is too large. Try removing some files or splitting them into smaller batches.');
@@ -846,7 +847,8 @@ $('iw-btn-upload').addEventListener('click', async function () {
             var err = await res.json().catch(function () { return {}; });
             throw new Error(err.error || 'Server error ' + res.status);
         }
-        parsedData = await res.json();
+        parsedData = await followPreview(await res.json(), abortCtrl.signal);
+        if (!parsedData) return;
         needsConfirm = true;
         $('closeImportDialog').disabled = false;
         renderPreview(parsedData);
@@ -858,11 +860,29 @@ $('iw-btn-upload').addEventListener('click', async function () {
             toastr.warning(w, 'Import warning');
         });
     } catch (err) {
+        if (err.name === 'AbortError') return;
         $('closeImportDialog').disabled = false;
         showStep('upload', 0);
         toastr.error(err.message, 'Could not read files');
     }
 });
+
+async function followPreview(job, signal) {
+    var failures = 0;
+    while (true) {
+        await new Promise(function (resolve) { setTimeout(resolve, IMPORT_POLL_MS); });
+        if (signal.aborted) return null;
+        var state = await readImportState(job.status_url, signal);
+        if (state === null) {
+            failures += 1;
+            if (failures >= IMPORT_POLL_GIVE_UP_AFTER) throw new Error('Lost track of reading your files. Please try again.');
+            continue;
+        }
+        failures = 0;
+        if (state.status === 'done') return state.result;
+        if (state.status === 'error') throw new Error(state.message || 'Could not read files');
+    }
+}
 
 /* -- Step 2: Render preview -------------------------------------------- */
 function renderPreview(data) {

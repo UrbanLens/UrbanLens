@@ -40,6 +40,10 @@ from contextlib import ExitStack, contextmanager
 import sys
 from typing import TYPE_CHECKING
 from unittest import mock
+from uuid import uuid4
+
+from celery import states
+from celery.result import EagerResult
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -69,7 +73,9 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
         # body takes.
         kwargs.pop("queue", None)
         if task in selected:
-            return task(*args, **kwargs)
+            # A result, as the real enqueue returns - not the task's return value, which is None for
+            # a task that returns nothing and would read to the caller as a broker that refused it.
+            return EagerResult(uuid4().hex, task(*args, **kwargs), states.SUCCESS)
         return None
 
     original = celery_module.safely_enqueue_task

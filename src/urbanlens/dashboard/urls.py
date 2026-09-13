@@ -1042,6 +1042,11 @@ urlpatterns = [
                                             name="pin.import.preview",
                                         ),
                                         path(
+                                            "preview/<uuid:job_id>/status/",
+                                            pin.PinController.as_view({"get": "import_preview_status"}),
+                                            name="pin.import.preview.status",
+                                        ),
+                                        path(
                                             "confirmed/",
                                             pin.PinController.as_view({"post": "import_confirmed"}),
                                             name="pin.import.confirmed",

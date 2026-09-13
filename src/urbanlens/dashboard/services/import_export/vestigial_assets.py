@@ -12,7 +12,7 @@ from django.conf import settings as django_settings
 
 from urbanlens.dashboard.services.import_export.export import EXPORT_TTL_SECONDS
 from urbanlens.dashboard.services.import_export.import_data import IMPORT_TTL_SECONDS
-from urbanlens.dashboard.services.pins import confirmed_import
+from urbanlens.dashboard.services.pins import confirmed_import, import_preview
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ _MANAGED_ARTIFACT_DIRS = {
     "exports": EXPORT_TTL_SECONDS,
     "imports": IMPORT_TTL_SECONDS,
     confirmed_import.ARTIFACT_DIRNAME: confirmed_import.GUARD_TTL_SECONDS,
+    import_preview.ARTIFACT_DIRNAME: import_preview.KEEP_SECONDS,
 }
 
 

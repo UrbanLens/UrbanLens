@@ -202,9 +202,7 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
             later in the file - the caller should surface the message so the
             user can shorten the file and retry.
     """
-    from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
-
-    if not user_has_feature(profile.user, SiteFeature.AI) or not profile.ai_enabled or not profile.external_apis_enabled:
+    if not ai_document_import_available(profile):
         return None, None
 
     if len(data) > MAX_DOCUMENT_BYTES:
@@ -215,6 +213,59 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
     text = extract_text(filename, data)
     if not text:
         return None, None
+    return extract_pins_from_text(filename, text, profile)
+
+
+def ai_document_import_available(profile: Profile) -> bool:
+    """Whether AI document extraction may run for *profile*.
+
+    Args:
+        profile: Profile the import is being run for.
+
+    Returns:
+        True when the site offers AI to this account and the profile has both AI and
+        external APIs switched on.
+    """
+    return bool(user_has_feature(profile.user, SiteFeature.AI) and profile.ai_enabled and profile.external_apis_enabled)
+
+
+def read_document_text(filename: str, data: bytes) -> tuple[str | None, bool]:
+    """The half of document import that parses bytes, for the sandbox worker.
+
+    Args:
+        filename: Uploaded filename, used to pick the extraction method.
+        data: Raw file bytes.
+
+    Returns:
+        ``(text, too_large)``: the extracted text, or None when there is none, and whether
+        the file is too large to import.
+    """
+    if len(data) > MAX_DOCUMENT_BYTES:
+        return None, True
+    try:
+        return extract_text(filename, data), False
+    except DocumentTooLargeError:
+        return None, True
+
+
+def extract_pins_from_text(filename: str, text: str, profile: Profile) -> tuple[dict[str, Any] | None, str | None]:
+    """Ask AI for pin candidates in a document's extracted text, and geocode them.
+
+    The half of document import that needs the network. The caller has already checked
+    :func:`ai_document_import_available`.
+
+    Args:
+        filename: Uploaded filename, used for the list's display name.
+        text: The document's extracted text.
+        profile: Profile the import is being run for.
+
+    Returns:
+        As :func:`extract_pins_from_document`.
+
+    Raises:
+        DocumentTooLargeError: The text is longer than the configured limit.
+    """
+    from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
 
     max_chars = _get_max_document_chars()
     if len(text) > max_chars:

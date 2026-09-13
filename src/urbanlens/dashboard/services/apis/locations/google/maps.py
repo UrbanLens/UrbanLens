@@ -26,7 +26,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
-from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.apis.locations.google.geocoding import CoordinatesNeedNetworkError, GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
 # TEMPORARY: legacy CID coordinate repair - remove this import together with the
@@ -318,6 +318,21 @@ def _google_maps_api_key() -> str:
     return settings.google_unrestricted_api_key or ""
 
 
+@dataclass
+class PreviewParse:
+    """What parsing a preview's files produced, and what is left for a process with network access.
+
+    Attributes:
+        lists: ``{"stem", "pins"}`` per file, pins in the preview shape.
+        unresolved: CSV rows only a lookup can place, each carrying its file's ``stem``.
+        failed_formats: The format of each file that failed to parse, for the admin notice.
+    """
+
+    lists: list[dict[str, Any]] = field(default_factory=list)
+    unresolved: list[dict[str, Any]] = field(default_factory=list)
+    failed_formats: list[str] = field(default_factory=list)
+
+
 @dataclass(kw_only=True)
 class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     """
@@ -539,7 +554,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         heading = math.degrees(math.atan2(y, x))
         return (heading + 360) % 360
 
-    def _csv_row_iter(self, file_contents: str, user_profile: Profile) -> Generator[dict[str, Any] | None, None, None]:
+    def _csv_row_iter(self, file_contents: str, user_profile: Profile, *, offline: bool = False) -> Generator[dict[str, Any] | None, None, None]:
         """Generator yielding one pin_data dict per CSV row. Yields None for rows that fail.
 
         Supports two CSV shapes:
@@ -555,6 +570,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         Args:
             file_contents: Raw CSV text.
             user_profile: The profile to associate with each pin.
+            offline: Make no network request. A Takeout row only a lookup could place is
+                yielded with ``needs_lookup`` set and no coordinates.
 
         Yields:
             dict with pin fields, or None when a row cannot be resolved to coordinates.
@@ -568,28 +585,11 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             lowered_row = {normalize_header_key(k): v for k, v in row.items() if k is not None}
             url = next((lowered_row[key] for key in _TAKEOUT_URL_COLUMN_KEYS if lowered_row.get(key)), "")
             if url:
-                try:
-                    latitude, longitude = gateway.extract_coordinates_from_url(url)
-                except ValueError as exc:
-                    logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
-                    yield None
-                    continue
-
-                if latitude is None or longitude is None:
-                    logger.warning("Could not resolve coordinates for URL: %s", url)
-                    yield None
-                    continue
-
                 cid_match = _CID_RE.search(url)
-                cid = int(cid_match.group(1), 16) if cid_match else None
-
-                yield {
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "profile": user_profile,
+                takeout = {
                     "name": row.get("Title", "")[:255],
                     "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
-                    "cid": cid,
+                    "cid": int(cid_match.group(1), 16) if cid_match else None,
                     # Carried through to a deferred cid lookup (see
                     # cid_resolution.resolve_cids) - REData resolves faster and
                     # more reliably from a place's own URL than from cid alone.
@@ -602,6 +602,22 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     # has been repaired.
                     "s2_guess": bool(cid_match),
                 }
+                try:
+                    latitude, longitude = gateway.extract_coordinates_from_url(url, offline=offline)
+                except CoordinatesNeedNetworkError:
+                    yield {**takeout, "needs_lookup": True}
+                    continue
+                except ValueError as exc:
+                    logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
+                    yield None
+                    continue
+
+                if latitude is None or longitude is None:
+                    logger.warning("Could not resolve coordinates for URL: %s", url)
+                    yield None
+                    continue
+
+                yield {"latitude": latitude, "longitude": longitude, "profile": user_profile, **takeout}
                 continue
 
             coords = pick_latlon(row)
@@ -764,10 +780,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 _notify_pin_import_parse_failure(fmt)
 
         if not parsed and not location_history_files and not my_activity_files:
-            yield ({"type": "error", "message": "No valid location files found in the upload."})
+            yield sse({"type": "error", "message": "No valid location files found in the upload."})
             return
 
-        yield ({"type": "start", "total": grand_total})
+        yield sse({"type": "start", "total": grand_total})
 
         created_count = 0
         exists_count = 0
@@ -853,7 +869,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             skipped_count += 1
 
                     percent = min(100, int(current / grand_total * 100)) if grand_total > 0 else 100
-                    yield (
+                    yield sse(
                         {
                             "type": "progress",
                             "current": current,
@@ -894,10 +910,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         logger.exception("Unable to add label to pins: %s", exc)
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
-            yield ({"type": "error", "message": "Import failed unexpectedly."})
+            yield sse({"type": "error", "message": "Import failed unexpectedly."})
             return
 
-        yield (
+        yield sse(
             {
                 "type": "complete",
                 "total": grand_total,
@@ -949,18 +965,20 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         self,
         files: list[tuple[str, bytes]],
         user_profile: Profile,
-    ) -> list[dict[str, Any]]:
-        """Parse uploaded files without importing, returning serialisable preview data.
+    ) -> PreviewParse:
+        """Parse uploaded files without importing, and without any network request.
+
+        Runs in the sandbox worker, which has no route out: a CSV row only a lookup could
+        place is set aside for :meth:`resolve_preview_rows`, and a file that fails to parse
+        is recorded rather than reported, because the admin notice sends mail.
 
         Args:
             files: List of ``(filename, raw_bytes)`` pairs (archives already expanded).
-            user_profile: The profile associated with the import (used by CSV geocoding).
+            user_profile: The profile the import is for.
 
         Returns:
-            List of dicts, one per file, each with keys:
-                - ``stem`` (str): filename without extension, used as list/category name.
-                - ``pins`` (list[dict]): serialisable pin dicts with keys
-                  ``name``, ``lat``, ``lng``, ``description``, ``cid``.
+            The lists - one ``{"stem", "pins"}`` per file, pins with ``name``, ``lat``,
+            ``lng``, ``description`` and ``cid`` - and what a networked process has left to do.
         """
         from urbanlens.dashboard.services.import_export.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
@@ -968,7 +986,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, shapefile_to_dict
         from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 
-        result: list[dict[str, Any]] = []
+        parse = PreviewParse()
         previewed = 0
 
         # Shapefiles ship as a set of same-stem sidecar files rather than one file,
@@ -979,14 +997,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 raw_pins = shapefile_to_dict(bundle, user_profile)
             except (OSError, ValueError, ShapefileDataSourceError) as exc:
                 logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", bundle.stem, exc)
-                _notify_pin_import_parse_failure("shapefile")
+                parse.failed_formats.append("shapefile")
                 continue
             pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
             if pins:
                 previewed += len(pins)
-                result.append({"stem": bundle.stem, "pins": pins})
+                parse.lists.append({"stem": bundle.stem, "pins": pins})
             if previewed >= self.MAX_PREVIEW_PINS:
-                return result
+                return parse
 
         for filename, raw_bytes in files:
             fmt = validate_content_type(filename, raw_bytes)
@@ -1000,8 +1018,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 elif fmt == "kml":
                     raw_pins = self.takeout_kml_to_dict(raw_bytes, user_profile)
                 elif fmt == "csv":
-                    text = raw_bytes.decode("utf-8-sig")
-                    raw_pins = [row for row in self._csv_row_iter(text, user_profile) if row is not None]
+                    rows = [row for row in self._csv_row_iter(raw_bytes.decode("utf-8-sig"), user_profile, offline=True) if row is not None]
+                    parse.unresolved.extend({**row, "stem": stem} for row in rows if row.get("needs_lookup"))
+                    raw_pins = [row for row in rows if not row.get("needs_lookup")]
                 elif fmt == "gpx":
                     raw_pins = gpx_to_dict(raw_bytes, user_profile)
                 elif fmt == "wkt":
@@ -1014,17 +1033,58 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     continue
             except (UnicodeDecodeError, ValueError, KeyError, AttributeError, GPXException, ShapelyError, XMLParseError) as exc:
                 logger.warning("Failed to parse '%s' for preview: %s", filename, exc)
-                _notify_pin_import_parse_failure(fmt)
+                parse.failed_formats.append(fmt)
                 continue
 
             pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
             if pins:
                 previewed += len(pins)
-                result.append({"stem": stem, "pins": pins})
+                parse.lists.append({"stem": stem, "pins": pins})
             if previewed >= self.MAX_PREVIEW_PINS:
                 break
 
-        return result
+        return parse
+
+    def resolve_preview_rows(self, rows: list[dict[str, Any]], user_profile: Profile, *, room: int) -> tuple[list[dict[str, Any]], int]:
+        """Place the CSV rows :meth:`parse_for_preview` set aside, making the lookups it could not.
+
+        A lookup service that cannot answer - disabled, rate-limited or unreachable - ends the
+        pass, because every remaining row would fail the same way.
+
+        Args:
+            rows: :attr:`PreviewParse.unresolved`.
+            user_profile: The profile the import is for.
+            room: How many more pins the preview may hold.
+
+        Returns:
+            ``{"stem", "pins"}`` for each stem that gained pins, in the order its rows came, and
+            how many rows were left unplaced because the lookup was unavailable.
+        """
+        from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+
+        geocoder = GoogleGeocodingGateway()
+        placed: dict[str, list[dict[str, Any]]] = {}
+        unavailable = 0
+        for index, row in enumerate(rows):
+            if room <= 0:
+                break
+            try:
+                latitude, longitude = geocoder.extract_coordinates_from_url(row["maps_url"])
+            except (RequestCancelledError, OSError) as exc:
+                logger.warning("Location lookups are unavailable for this preview: %s", exc)
+                unavailable = len(rows) - index
+                break
+            except ValueError as exc:
+                logger.warning("Failed to extract coordinates from URL %s: %s", row["maps_url"], exc)
+                continue
+            if latitude is None or longitude is None:
+                continue
+            raw = {key: value for key, value in row.items() if key not in {"stem", "needs_lookup"}}
+            pins = self._preview_pins([{**raw, "latitude": latitude, "longitude": longitude}], user_profile)
+            if pins:
+                placed.setdefault(row["stem"], []).extend(pins)
+                room -= len(pins)
+        return [{"stem": stem, "pins": pins} for stem, pins in placed.items()], unavailable
 
     @staticmethod
     def _preview_pins(raw_pins: Iterable[dict[str, Any] | None], user_profile: Profile) -> list[dict[str, Any]]:

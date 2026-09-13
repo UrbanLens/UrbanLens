@@ -82,6 +82,10 @@ def parse_address_components(address_components: list[dict[str, Any]]) -> dict[s
     return type_map
 
 
+class CoordinatesNeedNetworkError(LookupError):
+    """Only a network lookup could place this URL, and the caller asked for none."""
+
+
 @dataclass(slots=True, kw_only=True)
 class GoogleGeocodingGateway(Gateway):
     service_key: ClassVar[str] = "google_geocoding"
@@ -414,7 +418,7 @@ class GoogleGeocodingGateway(Gateway):
             return lat, lon
         return None, None
 
-    def extract_coordinates_from_url(self, url: str) -> tuple[float | None, float | None]:
+    def extract_coordinates_from_url(self, url: str, *, offline: bool = False) -> tuple[float | None, float | None]:
         """Extract latitude and longitude from a Google Maps URL.
 
         Handles:
@@ -427,9 +431,14 @@ class GoogleGeocodingGateway(Gateway):
 
         Args:
             url: Google Maps URL to parse.
+            offline: Make no network request. A CID is then read from the cache only, and a
+                URL that could only be placed by a lookup raises instead of being geocoded.
 
         Returns:
             Tuple of (latitude, longitude), or (None, None) when extraction fails.
+
+        Raises:
+            CoordinatesNeedNetworkError: *offline* was set and only a lookup could place the URL.
         """
         # Direct coordinates: .../maps/search/42.960773,-74.250664
         m = re.search(
@@ -464,12 +473,20 @@ class GoogleGeocodingGateway(Gateway):
                 except (ValueError, OSError) as exc:
                     logger.warning("S2 cell decode failed for %s: %s", url, exc)
 
-                try:
-                    lat, lon = self.get_coordinates_by_cid(cid)
-                    if lat is not None and lon is not None:
-                        return lat, lon
-                except (ValueError, OSError) as exc:
-                    logger.warning("CID lookup failed for %s: %s", url, exc)
+                if offline:
+                    cached = self.get_cached_coordinates_by_cid(cid)
+                    if cached:
+                        return cached
+                else:
+                    try:
+                        lat, lon = self.get_coordinates_by_cid(cid)
+                        if lat is not None and lon is not None:
+                            return lat, lon
+                    except (ValueError, OSError) as exc:
+                        logger.warning("CID lookup failed for %s: %s", url, exc)
+
+            if offline:
+                raise CoordinatesNeedNetworkError(url)
 
             # Fall back to geocoding by place name.
             lat, lon = self.get_coordinates(place_name)

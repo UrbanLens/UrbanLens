@@ -37,19 +37,20 @@ conflating them overstates what is actually enforced:
 | ffmpeg / ffprobe | video | sandbox | yes |
 | LibreOffice (`soffice`) | doc/spreadsheet conversion | sandbox | yes |
 | poppler + tesseract | PDF text/OCR, preview render | sandbox | yes |
-| `zipfile` / `tarfile` | data import (routed), **import preview (request)** | mixed | yes |
-| python-docx | AI document import, **import preview (request)** | mixed | yes |
-| lxml / fastkml / gpxpy | KML, GPX, OSM XML | routed via `run_user_data_import` | yes |
-| GDAL / GeoPandas / Shapely | shapefile, WKT/WKB | routed via `run_user_data_import` | yes |
+| `zipfile` / `tarfile` | data import, import preview | routed via `run_user_data_import` and `parse_import_preview_task` | yes |
+| python-docx | AI document import, via the import preview | routed via `parse_import_preview_task`; the AI call runs on an interactive worker | yes |
+| lxml / fastkml / gpxpy | KML, GPX, OSM XML | routed via `run_user_data_import` and `parse_import_preview_task` | yes |
+| GDAL / GeoPandas / Shapely | shapefile, WKT/WKB | routed via `run_user_data_import` and `parse_import_preview_task` | yes |
 | clamd | everything, except VirusTotal-eligible fetched assets (see below) | sandbox (its own container for the daemon) | n/a |
 
 Not every parser is guarded (corrected 2026-09-10, P103 — this used to claim
-"every parser is now guarded", which was false). `controllers/pin.parse_for_preview`
-is the last *sandboxing* blocker standing between here and
-`UL_UNTRUSTED_PARSE_POLICY=deny` (P2), but `controllers/labels._resize_custom_icon`
-calls bare `PIL.Image.open()` on a request path with no decorator and no sandbox
-routing at all — a gap `warn` cannot even log, since nothing marks that call
-site as one it should be watching. See `docs/PROBLEMS.md` P2 and P103.
+"every parser is now guarded", which was false). The import preview was the last
+*sandboxing* blocker before `UL_UNTRUSTED_PARSE_POLICY=deny`; since 2026-09-13 it
+parses in `parse_import_preview_task` and finishes its lookups on an interactive
+worker (P2). `controllers/labels._resize_custom_icon` still calls bare
+`PIL.Image.open()` on a request path with no decorator and no sandbox routing at
+all — a gap `warn` cannot even log, since nothing marks that call site as one it
+should be watching. See `docs/PROBLEMS.md` P103.
 
 ## The tiers
 
@@ -336,14 +337,15 @@ about to parse an upload:
 - `allow` disables the check. What the test settings use, because the suite
   calls the parsers directly.
 
-One thing left before `deny`: `controllers/pin.parse_for_preview` still parses
-archives, KML/GPX/shapefiles and `.docx` inside the request. Everything else has
-moved - `prepare_photo_upload` no longer decodes, the two `render_preview`
-callers go through `tasks.render_media_preview`, enrichment photos go through
-`process_image_upload`, and the one legitimate exemption
-(`strip_exif_from_stored_photos`, a backfill over already-scanned files) is
-written down as an `allow_untrusted_parse` block rather than left implicit.
-Tracked in `docs/PROBLEMS.md`.
+The import preview, which this section used to name as the one thing left before
+`deny`, parses in `parse_import_preview_task` now and finishes its lookups on an
+interactive worker (P2). The earlier moves stand: `prepare_photo_upload` no longer
+decodes, the two `render_preview` callers go through `tasks.render_media_preview`,
+enrichment photos go through `process_image_upload`, and the one legitimate
+exemption (`strip_exif_from_stored_photos`, a backfill over already-scanned files) is
+written down as an `allow_untrusted_parse` block rather than left implicit. What
+`warn` cannot show is an undecorated parser on a request path - P103's
+`_resize_custom_icon` is one. Tracked in `docs/PROBLEMS.md`.
 
 ## Media previews
 
