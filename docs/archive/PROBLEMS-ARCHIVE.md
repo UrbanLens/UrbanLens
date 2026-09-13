@@ -13355,6 +13355,9 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
 - **A review of that** found overlapping duplicate publishes shared the one mark: a duplicate handed to a retry cleared
   it while the first was still decoding, and the sweep dropped the upload. One publish of an upload runs at a time; a
   duplicate that finds one running returns without counting a start.
+- **A review of that lock** found nothing a killed worker leaves can block a redelivery (a lost child is acked, and a
+  lost worker's message returns after the two-hour visibility timeout, past the one-hour mark), but that no test held
+  a publish to going ahead while the cache is down, and the docs said starts never overlap, which an outage allows.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

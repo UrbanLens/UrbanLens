@@ -18,11 +18,14 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.cache.backends.redis import RedisCache
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage, default_storage
 from django.db import connection
 from django.test import override_settings
+from redis.exceptions import ConnectionError as RedisConnectionError
 
+from urbanlens.core.cache_backend import ResilientRedisCache
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
@@ -220,6 +223,26 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
             published = tasks.publish_held_upload(key, profile.pk, held)
 
         self.assertTrue(published, "the sweep dropped the upload while its first publish was still decoding it")
+        profile.refresh_from_db()
+        self.assertEqual(profile.avatar_upload, "")
+        self.assertTrue(profile.avatar)
+
+    def test_a_publish_goes_ahead_while_the_cache_is_down(self) -> None:
+        """The running mark is a lock nothing can take in an outage; waiting on it would hold every upload."""
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        down = ResilientRedisCache("redis://127.0.0.1:6379/0", {"OPTIONS": {}})
+        outage = [
+            mock.patch.object(RedisCache, method, side_effect=RedisConnectionError("valkey is down"))
+            for method in ("get", "set", "add", "delete")
+        ]
+        with outage[0], outage[1], outage[2], outage[3], mock.patch("django.core.cache.cache", down):
+            self.assertFalse(down.add("held-upload-probe", 1), "the cache under test is not down")
+            self.assertIsNone(down.get("held-upload-probe"), "the cache under test is not down")
+            with override_settings(**SANDBOX):
+                published = tasks.publish_held_upload("dashboard.Profile.avatar", profile.pk, held)
+
+        self.assertTrue(published, "a publish waited on a lock the cache could not hold")
         profile.refresh_from_db()
         self.assertEqual(profile.avatar_upload, "")
         self.assertTrue(profile.avatar)
