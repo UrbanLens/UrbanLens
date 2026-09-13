@@ -62,7 +62,12 @@ class ExtractionBudget:
     Charging is against bytes actually read rather than the size the archive declares."""
 
     def __init__(self, max_bytes: int = _MAX_UNCOMPRESSED_BYTES, max_files: int = _MAX_FILE_COUNT) -> None:
-        """Start an allowance."""
+        """Start an allowance.
+
+        Args:
+            max_bytes: Total uncompressed bytes permitted across the upload.
+            max_files: Total supported entries permitted across the upload.
+        """
         self.remaining_bytes = max_bytes
         self.remaining_files = max_files
 
@@ -79,8 +84,12 @@ class ExtractionBudget:
     def claim_bytes(self, size: int) -> None:
         """Account for *size* uncompressed bytes.
 
+        Args:
+            size: Bytes to deduct from the remaining allowance.
+
         Raises:
-            ValueError: The upload expands past the permitted total."""
+            ValueError: The upload expands past the permitted total.
+        """
         self.remaining_bytes -= size
         if self.remaining_bytes < 0:
             raise ValueError(f"Archive exceeds {_MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB uncompressed.")

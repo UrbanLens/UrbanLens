@@ -36,7 +36,13 @@ class CeleryEventMetrics:
     Holds its own registry rather than using the global default, so a test can build one per case and assert on it without the leakage that makes module-level metrics awkward to test."""
 
     def __init__(self, registry: CollectorRegistry | None = None, max_task_labels: int = MAX_TASK_LABELS) -> None:
-        """Build the metric families."""
+        """Build the metric families.
+
+        Args:
+            registry: Registry to attach to; a fresh one when omitted.
+            max_task_labels: How many distinct task names may hold their own
+                series before the rest collapse into :data:`OVERFLOW`.
+        """
         self.registry = registry if registry is not None else CollectorRegistry()
         self._max_task_labels = max_task_labels
         self._seen_tasks: set[str] = set()
@@ -69,8 +75,13 @@ class CeleryEventMetrics:
     def task_label(self, name: str | None) -> str:
         """Map a task name from the wire onto a bounded label value.
 
+        Args:
+            name: Task name as the worker reported it, possibly ``None`` when
+                the event arrived before the name was known.
+
         Returns:
-            :data:`UNKNOWN` when there is no name, the name itself while fewer than ``max_task_labels`` distinct names have been seen, and :data:`OVERFLOW` once that cap is reached."""
+            :data:`UNKNOWN` when there is no name, the name itself while fewer than ``max_task_labels`` distinct names have been seen, and :data:`OVERFLOW` once that cap is reached.
+        """
         if not name:
             return UNKNOWN
         if name in self._seen_tasks:
@@ -82,7 +93,15 @@ class CeleryEventMetrics:
         return name
 
     def on_task_event(self, event: dict[str, Any], task_name: str | None) -> None:
-        """Record one task event."""
+        """Record one task event.
+
+        Args:
+            event: The raw Celery event mapping. ``type`` names the transition;
+                ``runtime`` is present on ``task-succeeded``.
+            task_name: Resolved task name for the task this event belongs to,
+                which the caller looks up in Celery's ``State`` because only the
+                ``task-received`` event carries it.
+        """
         event_type = str(event.get("type", ""))
         self.events_total.labels(type=event_type or "unknown").inc()
 
@@ -103,7 +122,11 @@ class CeleryEventMetrics:
                 self.task_runtime.labels(task=label).observe(float(runtime))
 
     def on_worker_count(self, count: int) -> None:
-        """Record how many workers are currently heartbeating."""
+        """Record how many workers are currently heartbeating.
+
+        Args:
+            count: Number of workers Celery's state considers alive.
+        """
         self.workers_online.set(count)
 
 

@@ -254,8 +254,12 @@ def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
     def materialise(child_share: PinShare) -> Pin:
         """Create (or reuse) the recipient-side pin for one bundled child share.
 
+        Args:
+            child_share: The bundled share to materialise.
+
         Returns:
-            The recipient-side pin for that share."""
+            The recipient-side pin for that share.
+        """
         source = child_share.pin
         if source is None:  # pragma: no cover - excluded by the pin__isnull filter above
             return target_root

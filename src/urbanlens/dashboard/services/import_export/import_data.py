@@ -1552,7 +1552,12 @@ class ImportContext:
     scratch: dict[str, Any] = field(default_factory=dict)
 
     def bump(self, key: str, amount: int = 1) -> None:
-        """Increment a named counter in :attr:`scratch`."""
+        """Increment a named counter in :attr:`scratch`.
+
+        Args:
+            key: Counter name.
+            amount: How much to add.
+        """
         self.scratch[key] = self.scratch.get(key, 0) + amount
 
 
@@ -1571,13 +1576,22 @@ class ImportType(ABC):
     def load(self, data_dir: str) -> Any:
         """Read this step's file from the archive.
 
+        Args:
+            data_dir: Directory holding the extracted archive's data files.
+
         Returns:
-            The parsed JSON, or None when the file is absent."""
+            The parsed JSON, or None when the file is absent.
+        """
         return _read_json(data_dir, self.filename)
 
     @abstractmethod
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Apply the loaded archive data to the importing profile."""
+        """Apply the loaded archive data to the importing profile.
+
+        Args:
+            data: Whatever :meth:`load` returned (never empty/None).
+            ctx: The shared import context.
+        """
 
     def __call__(
         self,
@@ -1589,7 +1603,16 @@ class ImportType(ABC):
         label_uuid_map: dict[str, int],
         report_progress: ProgressReporter | None = None,
     ) -> None:
-        """Run this import step."""
+        """Run this import step.
+
+        Args:
+            profile: The profile being imported into.
+            data_dir: Directory holding the extracted archive's data files.
+            result: The shared created/skipped/warning tally.
+            pin_uuid_map: Archive pin uuid -> local pk.
+            label_uuid_map: Archive label uuid -> local pk.
+            report_progress: Optional throttled progress callback.
+        """
         data = self.load(data_dir)
         if not data:
             return
@@ -1612,22 +1635,40 @@ class RowImportType(ImportType):
     def allowed(self, ctx: ImportContext) -> bool:
         """Whether this step may run at all for the importing profile.
 
+        Args:
+            ctx: The shared import context.
+
         Returns:
-            True to process rows; False to skip the whole step."""
+            True to process rows; False to skip the whole step.
+        """
         return True
 
     @abstractmethod
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
         """Apply one archive row.
 
+        Args:
+            row: The exported row.
+            ctx: The shared import context.
+
         Returns:
-            True when a record was created, False when the row was skipped."""
+            True when a record was created, False when the row was skipped.
+        """
 
     def finish(self, ctx: ImportContext) -> None:
-        """Hook for a summary warning once every row has been handled."""
+        """Hook for a summary warning once every row has been handled.
+
+        Args:
+            ctx: The shared import context.
+        """
 
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Iterate the archive's rows, tallying and reporting as it goes."""
+        """Iterate the archive's rows, tallying and reporting as it goes.
+
+        Args:
+            data: The parsed JSON list.
+            ctx: The shared import context.
+        """
         rows = [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
         total = len(rows)
         if not total:
@@ -1707,7 +1748,12 @@ class ProfileImport(ImportType):
     )
 
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Apply the exported profile content to the importing profile."""
+        """Apply the exported profile content to the importing profile.
+
+        Args:
+            data: The parsed ``profile.json`` object.
+            ctx: The shared import context.
+        """
         from django.utils.dateparse import parse_date
 
         from urbanlens.dashboard.models.profile.model import Profile
@@ -1747,7 +1793,12 @@ class ProfileImport(ImportType):
         self._import_secondary_emails(data.get("secondary_emails"), ctx)
 
     def _import_social_links(self, rows: Any, ctx: ImportContext) -> None:
-        """Restore one link per platform, never overwriting one already set."""
+        """Restore one link per platform, never overwriting one already set.
+
+        Args:
+            rows: The exported ``social_links`` list.
+            ctx: The shared import context.
+        """
         from urbanlens.dashboard.models.social_link.model import SocialLink
 
         if not isinstance(rows, list):
@@ -1769,7 +1820,12 @@ class ProfileImport(ImportType):
                 ctx.result.inc_skipped("social_links")
 
     def _import_secondary_emails(self, rows: Any, ctx: ImportContext) -> None:
-        """Restore additional addresses as unverified rows."""
+        """Restore additional addresses as unverified rows.
+
+        Args:
+            rows: The exported ``secondary_emails`` list.
+            ctx: The shared import context.
+        """
         from django.core.exceptions import ValidationError
         from django.core.validators import validate_email
 
@@ -1815,8 +1871,13 @@ class SafetyCheckinsImport(RowImportType):
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
         """Restore one check-in with its contacts and the owner's own messages.
 
+        Args:
+            row: The exported check-in row.
+            ctx: The shared import context.
+
         Returns:
-            True when a check-in was created."""
+            True when a check-in was created.
+        """
         from datetime import timedelta
 
         from django.utils.dateparse import parse_datetime
@@ -1884,8 +1945,13 @@ class SafetyCheckinsImport(RowImportType):
     def _resolve_trip(self, trip_uuid: Any, ctx: ImportContext) -> Any:
         """Resolve an exported trip uuid to one of the importer's own trips.
 
+        Args:
+            trip_uuid: The exported uuid, if any.
+            ctx: The shared import context.
+
         Returns:
-            The Trip, or None when it isn't the importer's."""
+            The Trip, or None when it isn't the importer's.
+        """
         from urbanlens.dashboard.models.trips.model import Trip
 
         parsed = _safe_uuid(trip_uuid)
@@ -1897,8 +1963,13 @@ class SafetyCheckinsImport(RowImportType):
         """Resolve an exported markup-map uuid to one of the importer's own maps.
         The map annotations step runs first and preserves archive uuids where they were free, so a same-archive restore re-links; a uuid pointing at someone else's map resolves to nothing rather than borrowing it.
 
+        Args:
+            map_uuid: The exported uuid, if any.
+            ctx: The shared import context.
+
         Returns:
-            The MarkupMap, or None."""
+            The MarkupMap, or None.
+        """
         from urbanlens.dashboard.models.markup.model import MarkupMap
 
         parsed = _safe_uuid(map_uuid)
@@ -1907,7 +1978,13 @@ class SafetyCheckinsImport(RowImportType):
         return MarkupMap.objects.filter(uuid=parsed, profile=ctx.profile).first()
 
     def _import_contacts(self, checkin: Any, rows: Any, ctx: ImportContext) -> None:
-        """Re-create the check-in's emergency contact snapshots."""
+        """Re-create the check-in's emergency contact snapshots.
+
+        Args:
+            checkin: The freshly created check-in.
+            rows: The exported ``contacts`` list.
+            ctx: The shared import context.
+        """
         from django.utils.dateparse import parse_datetime
 
         from urbanlens.dashboard.models.profile.model import Profile
@@ -1941,7 +2018,13 @@ class SafetyCheckinsImport(RowImportType):
             ctx.result.inc_created("safety_contacts")
 
     def _import_messages(self, checkin: Any, rows: Any, ctx: ImportContext) -> None:
-        """Restore only the messages the check-in's owner wrote themselves."""
+        """Restore only the messages the check-in's owner wrote themselves.
+
+        Args:
+            checkin: The freshly created check-in.
+            rows: The exported ``messages`` list.
+            ctx: The shared import context.
+        """
         from urbanlens.dashboard.models.safety.model import SafetyCheckinMessage
 
         if not isinstance(rows, list):
@@ -1961,7 +2044,11 @@ class SafetyCheckinsImport(RowImportType):
             ctx.result.inc_created("safety_messages")
 
     def finish(self, ctx: ImportContext) -> None:
-        """Explain the two ways a restored check-in differs from the exported one."""
+        """Explain the two ways a restored check-in differs from the exported one.
+
+        Args:
+            ctx: The shared import context.
+        """
         disarmed = ctx.scratch.get("disarmed", 0)
         if disarmed:
             ctx.result.warnings.append(
@@ -1982,7 +2069,12 @@ class MapAnnotationsImport(ImportType):
     message = "Importing map annotations..."
 
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Restore the three annotation sections in dependency order."""
+        """Restore the three annotation sections in dependency order.
+
+        Args:
+            data: The parsed ``map_annotations.json`` object.
+            ctx: The shared import context.
+        """
         if not isinstance(data, dict):
             return
 
@@ -2017,7 +2109,12 @@ class MapAnnotationsImport(ImportType):
             )
 
     def _import_map(self, row: dict[str, Any], ctx: ImportContext) -> None:
-        """Restore one standalone markup map and the items drawn on it."""
+        """Restore one standalone markup map and the items drawn on it.
+
+        Args:
+            row: The exported map row.
+            ctx: The shared import context.
+        """
         from urbanlens.dashboard.models.markup.model import MarkupMap
 
         uuid_str = _safe_uuid(row.get("uuid"))
@@ -2046,7 +2143,12 @@ class MapAnnotationsImport(ImportType):
                 ctx.result.inc_created("map_annotation_items")
 
     def _import_standalone_markup(self, row: dict[str, Any], ctx: ImportContext) -> None:
-        """Restore one annotation drawn directly on the importer's own pin."""
+        """Restore one annotation drawn directly on the importer's own pin.
+
+        Args:
+            row: The exported markup row.
+            ctx: The shared import context.
+        """
         from urbanlens.dashboard.models.markup.model import PinMarkup
 
         uuid_str = _safe_uuid(row.get("uuid"))
@@ -2066,7 +2168,12 @@ class MapAnnotationsImport(ImportType):
             ctx.result.inc_created("map_annotation_items")
 
     def _import_overlay(self, row: dict[str, Any], ctx: ImportContext) -> None:
-        """Restore one georeferenced image overlay onto the importer's own pin."""
+        """Restore one georeferenced image overlay onto the importer's own pin.
+
+        Args:
+            row: The exported overlay row.
+            ctx: The shared import context.
+        """
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
         from urbanlens.dashboard.services.media.previews import is_web_safe
         from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
@@ -2127,8 +2234,13 @@ class MapAnnotationsImport(ImportType):
     def _restore_overlay_image(self, row: dict[str, Any], ctx: ImportContext) -> Any:
         """Re-upload an overlay's archived image file, honoring the storage quota.
 
+        Args:
+            row: The exported overlay row.
+            ctx: The shared import context.
+
         Returns:
-            The created Image, or None when the archive had no usable file."""
+            The created Image, or None when the archive had no usable file.
+        """
         from django.core.files import File
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
@@ -2263,8 +2375,13 @@ class SavedFiltersImport(RowImportType):
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
         """Restore one saved filter.
 
+        Args:
+            row: The exported filter row.
+            ctx: The shared import context.
+
         Returns:
-            True when a filter was created."""
+            True when a filter was created.
+        """
         from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
         uuid_str = _safe_uuid(row.get("uuid"))
@@ -2303,8 +2420,12 @@ class RoutesImport(RowImportType):
     def allowed(self, ctx: ImportContext) -> bool:
         """Whether route data may be created for the importing profile.
 
+        Args:
+            ctx: The shared import context.
+
         Returns:
-            True when the profile has route tracking enabled."""
+            True when the profile has route tracking enabled.
+        """
         from urbanlens.dashboard.services.visits.visits import route_import_allowed
 
         return route_import_allowed(ctx.profile)
@@ -2312,8 +2433,13 @@ class RoutesImport(RowImportType):
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
         """Restore one route.
 
+        Args:
+            row: The exported route row.
+            ctx: The shared import context.
+
         Returns:
-            True when a route was created."""
+            True when a route was created.
+        """
         from django.utils.dateparse import parse_datetime
 
         from urbanlens.dashboard.models.routes.model import Route, RouteSource

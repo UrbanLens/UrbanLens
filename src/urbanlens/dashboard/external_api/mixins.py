@@ -103,6 +103,20 @@ class _ReactionMixin:
     Why PUT/DELETE rather than a single toggling POST: the underlying services all *flip* state, which
     is unusable over a flaky mobile link - a retried POST silently undoes the reaction the first
     (successful but unacknowledged) attempt applied.
+
+    Example:
+        ::
+
+            class PinCommentReactionView(_ReactionMixin, ExternalApiView):
+                reaction_target_field = "comment"
+                reaction_allowed_emojis = ALLOWED_EMOJIS
+                # staticmethod() is mandatory - see reaction_toggle below.
+                reaction_toggle = staticmethod(toggle_reaction)
+                reaction_summarizer = staticmethod(aggregate_reactions)
+
+                def resolve_reaction_target(self, request, **kwargs):
+                    pin = self.get_owned_pin_lite(request, kwargs["pin_slug"])
+                    ...
     """
 
     #: Which ``Reaction`` foreign key names this endpoint's target - one of ``"comment"``, ``"trip_comment"``,

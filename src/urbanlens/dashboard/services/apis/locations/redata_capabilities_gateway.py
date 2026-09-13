@@ -26,11 +26,18 @@ class RedataCapabilitiesGateway(RedataLocationContextGateway):
     def get_capabilities(self, *, latitude: float | None = None, longitude: float | None = None) -> dict[str, Any]:
         """Fetch the capability index, optionally scoped to a point.
 
+        Args:
+            latitude: With ``longitude``, adds ``applicable_providers`` to each
+                near-point domain - which of its sources cover that point,
+                from the registries' own cheap bounds test (no external call).
+            longitude: See ``latitude``.
+
         Returns:
             ``{"domains": [...], "text_domains": [...]}``.
 
         Raises:
-            LocationContextUnavailableError: The request failed."""
+            LocationContextUnavailableError: The request failed.
+        """
         params: dict[str, Any] = {}
         if latitude is not None and longitude is not None:
             params = {"lat": latitude, "lng": longitude}

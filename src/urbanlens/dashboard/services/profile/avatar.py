@@ -148,8 +148,13 @@ class AvatarService:
     def generate_emoji_svg(cls, emoji: str, color: str) -> str:
         """Return an SVG string: a filled circle with a centered emoji.
 
+        Args:
+            emoji: The Unicode emoji character to render.
+            color: A CSS hex color string for the circle background.
+
         Returns:
-            UTF-8-safe SVG markup."""
+            UTF-8-safe SVG markup.
+        """
         return (
             '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">'
             f'<circle cx="100" cy="100" r="100" fill="{color}"/>'
@@ -164,8 +169,12 @@ class AvatarService:
         """Return *n* random (animal, emoji, color) dicts for the avatar picker.
         Both animals and colors are sampled without replacement so that no two suggestions share the same animal or the same background color.
 
+        Args:
+            n: Number of options to generate.
+
         Returns:
-            List of dicts with keys ``animal``, ``emoji``, and ``color``."""
+            List of dicts with keys ``animal``, ``emoji``, and ``color``.
+        """
         import random as _random
 
         candidates = list(cls.ANIMAL_EMOJIS.items())
@@ -178,8 +187,14 @@ class AvatarService:
     def resolve_provider_url(cls, backend: Any, user: User, response: dict[str, Any]) -> str | None:
         """Return the provider-specific or Gravatar avatar URL for this user.
 
+        Args:
+            backend: The social-auth backend in use.
+            user: The authenticated Django User.
+            response: Raw OAuth response payload.
+
         Returns:
-            A URL string or None if no avatar could be determined."""
+            A URL string or None if no avatar could be determined.
+        """
         name = getattr(backend, "name", "")
 
         if name == "google-oauth2":
@@ -210,8 +225,13 @@ class AvatarService:
         """Fetch image bytes from a URL, returning None on any failure.
         Only http and https URLs are accepted; any other scheme is rejected before the network request is made.
 
+        Args:
+            url: The full URL of the image to download.
+            timeout: Request timeout in seconds.
+
         Returns:
-            Raw image bytes, or None if the download failed or returned a non-200 status."""
+            Raw image bytes, or None if the download failed or returned a non-200 status.
+        """
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
             logger.warning("Rejecting avatar URL with unexpected scheme: %s", parsed.scheme)

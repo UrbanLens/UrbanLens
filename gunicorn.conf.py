@@ -8,7 +8,11 @@ from pathlib import Path
 
 
 def _multiproc_dir():
-    """Return the Prometheus multiprocess dir, if set."""
+    """Return the Prometheus multiprocess dir, if set.
+
+    Returns:
+        A ``Path`` when ``PROMETHEUS_MULTIPROC_DIR`` is set, else ``None``.
+    """
     configured = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
     return Path(configured) if configured else None
 
@@ -63,12 +67,20 @@ def post_fork(server, worker):
 
 
 def post_worker_init(worker):
-    """Warm the URLconf after gevent patching has run."""
+    """Warm the URLconf after gevent patching has run.
+
+    Args:
+        worker: The freshly initialised worker, used for its logger.
+    """
     _warm_urlconf(worker)
 
 
 def _warm_urlconf(worker):
-    """Import the URLconf now so the first request does not pay for it."""
+    """Import the URLconf now so the first request does not pay for it.
+
+    Args:
+        worker: The freshly forked worker, used for its logger.
+    """
     try:
         import django
 

@@ -15,7 +15,18 @@ class SavedFilterQuerySet(abstract.DashboardQuerySet):
     """Custom queryset for SavedFilter models."""
 
     def name_taken_for(self, profile: Profile, name: str, *, exclude_pk: int | None = None) -> bool:
-        """Whether ``profile`` already has a saved filter with ``name``."""
+        """Whether ``profile`` already has a saved filter with ``name``.
+
+        Args:
+            profile: The owning profile.
+            name: The candidate name (matched case-sensitively, as stored).
+            exclude_pk: A saved filter pk to exclude from the check - pass the
+                filter's own pk when validating a rename so it doesn't
+                collide with itself.
+
+        Returns:
+            True if another saved filter of ``profile``'s already has that name.
+        """
         qs = self.filter(profile=profile, name=name)
         if exclude_pk is not None:
             qs = qs.exclude(pk=exclude_pk)

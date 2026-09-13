@@ -86,4 +86,9 @@ class UrbanLensPlugin:
         return []
 
     def register(self, hooks: HookRegistry) -> None:
-        """Attach action/filter callbacks to the shared hook bus."""
+        """Attach action/filter callbacks to the shared hook bus.
+
+        Args:
+            hooks: The shared :data:`~urbanlens.dashboard.plugins.hooks.hooks`
+                registry.
+        """

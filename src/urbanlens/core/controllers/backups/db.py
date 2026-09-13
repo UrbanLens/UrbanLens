@@ -29,12 +29,26 @@ _SCHEDULE_LOCK_TIMEOUT_SECONDS = 300
 
 
 def is_backup_filename(name: str) -> bool:
-    """Return True when name matches this class's backup naming scheme."""
+    """Return True when name matches this class's backup naming scheme.
+
+    Args:
+        name: A bare filename (no directory component) to check.
+
+    Returns:
+        True if the name looks like a backup this class created.
+    """
     return bool(BACKUP_FILENAME_RE.match(name))
 
 
 def is_backup_temp_filename(name: str) -> bool:
-    """Return True for an in-progress ``.tmp`` backup file."""
+    """Return True for an in-progress ``.tmp`` backup file.
+
+    Args:
+        name: A bare filename (no directory component) to check.
+
+    Returns:
+        True if the name is the ``.tmp`` path a backup is written to before being renamed.
+    """
     return name.endswith(".tmp") and is_backup_filename(name.removesuffix(".tmp"))
 
 
@@ -54,7 +68,12 @@ class DatabaseBackup:
             self.schedule_backup()
 
     def create_backup_dir(self) -> bool:
-        """Create the backup directory if missing; return True if created."""
+        """Create the backup directory if missing; return True if created.
+
+        Returns:
+            True if the directory was just created, False if it already existed or
+            creation failed.
+        """
         if os.path.exists(self.backup_dir):
             return False
 
@@ -104,7 +123,11 @@ class DatabaseBackup:
                 logger.exception("Failed to remove stale partial backup: %s. Error: %s", name, e)
 
     def run(self) -> bool:
-        """Run ``pg_dump`` and purge old backups; return True on success."""
+        """Run ``pg_dump`` and purge old backups; return True on success.
+
+        Returns:
+            True if the backup completed successfully, False otherwise.
+        """
         # Also safe to call standalone, not just via the task wrapper.
         self.create_backup_dir()
 
@@ -162,7 +185,12 @@ class DatabaseBackup:
         return True
 
     def schedule_backup(self) -> bool:
-        """Enqueue a backup if due and none is already pending."""
+        """Enqueue a backup if due and none is already pending.
+
+        Returns:
+            True if a backup task was enqueued, False if none was due or one is already
+            pending.
+        """
         from urbanlens.dashboard.services.admin.backups import scheduled_backup_due
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_scheduled_database_backup

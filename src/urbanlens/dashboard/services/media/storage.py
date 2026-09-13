@@ -279,7 +279,11 @@ def estimate_bytes_per_photo(max_dimension: int | None, convert_webp: bool) -> i
 
     Args:
         max_dimension: Longest-edge cap in pixels; None means original size, for which a 12 MP phone photo is assumed.
-        convert_webp: Whether uploads are re-encoded as WebP."""
+        convert_webp: Whether uploads are re-encoded as WebP.
+
+    Returns:
+        Estimated stored bytes per photo (always at least 50 KB).
+    """
     dimension = max_dimension or _ORIGINAL_ASSUMED_DIMENSION
     pixels = dimension * dimension * _ASSUMED_ASPECT
     bytes_per_pixel = _WEBP_BYTES_PER_PIXEL if convert_webp else _JPEG_BYTES_PER_PIXEL

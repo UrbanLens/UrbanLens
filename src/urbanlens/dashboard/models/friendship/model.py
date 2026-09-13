@@ -63,7 +63,15 @@ class Friendship(DashboardModel):
         relationship_type: str = FriendshipType.FRIEND,
         message: str | None = None,
     ) -> Friendship | None:
-        """Create a friendship request."""
+        """Create a friendship request.
+
+        Args:
+            from_profile: Profile sending the request.
+            to_profile: Profile being requested.
+            relationship_type: Requested relationship tier.
+            message: Optional note from the requester, stored on the row and
+                surfaced in the recipient's notification.
+        """
         if isinstance(from_profile, int):
             from_profile = Profile.objects.get(pk=from_profile)
         if isinstance(to_profile, int):
@@ -143,7 +151,15 @@ class Friendship(DashboardModel):
 
     @staticmethod
     def profile_at_max_friends(profile: Profile) -> bool:
-        """Whether ``profile`` already reached its max-friends limit."""
+        """Whether ``profile`` already reached its max-friends limit.
+
+        Args:
+            profile: Profile to check.
+
+        Returns:
+            True when the site's ``max_friends_per_user`` is set (non-zero)
+            and ``profile`` already has that many accepted friends.
+        """
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
         max_friends = SiteSettings.get_current().max_friends_per_user
@@ -152,7 +168,14 @@ class Friendship(DashboardModel):
         return Friendship.objects.profile(profile).is_friend().count() >= max_friends
 
     def accept(self) -> bool:
-        """Accept the request; no-op when Community is off or friends are maxed."""
+        """Accept the request; no-op when Community is off or friends are maxed.
+
+        Returns:
+            True if accepted, False (no-op) if either profile has Community
+            disabled - accepting would create a mutual, visible friendship,
+            which a Community-disabled profile cannot have - or if either
+            profile is already at the site's max-friends limit.
+        """
         if not self.from_profile.community_enabled or not self.to_profile.community_enabled:
             logger.info("Friendship accept blocked: Community disabled for from=%s or to=%s", self.from_profile_id, self.to_profile_id)
             return False
@@ -166,7 +189,11 @@ class Friendship(DashboardModel):
         return True
 
     def _set_status(self, status: str) -> None:
-        """Write one status transition; keeps mute columns and signals intact."""
+        """Write one status transition; keeps mute columns and signals intact.
+
+        Args:
+            status: The ``FriendshipStatus`` to move to.
+        """
         self.status = status
         self.save(update_fields=["status", "updated"])
 
@@ -210,7 +237,20 @@ class Friendship(DashboardModel):
         )
 
     def _mute_field_for(self, viewer: Profile | int) -> str:
-        """Mute column belonging to ``viewer``."""
+        """Mute column belonging to ``viewer``.
+
+        Args:
+            viewer: The profile whose own preference is being read or written,
+                or its pk.
+
+        Returns:
+            ``"muted_by_from_profile"`` or ``"muted_by_to_profile"``.
+
+        Raises:
+            ValueError: ``viewer`` is not one of this row's two profiles.
+                Raised rather than defaulted, because every wrong answer here
+                silences somebody who did not ask to be silenced.
+        """
         viewer_id = viewer if isinstance(viewer, int) else viewer.pk
         if viewer_id == self.from_profile_id:
             return "muted_by_from_profile"
@@ -219,15 +259,39 @@ class Friendship(DashboardModel):
         raise ValueError(f"Profile {viewer_id} is not part of friendship {self.pk}")
 
     def is_muted_by(self, viewer: Profile | int) -> bool:
-        """Whether ``viewer`` silenced notifications from the other side."""
+        """Whether ``viewer`` silenced notifications from the other side.
+
+        Args:
+            viewer: The profile whose own preference to read, or its pk.
+
+        Returns:
+            True when that profile muted this relationship.
+
+        Raises:
+            ValueError: ``viewer`` is not part of this relationship.
+        """
         return bool(getattr(self, self._mute_field_for(viewer)))
 
     def mute(self, viewer: Profile | int) -> None:
-        """Silence notifications ``viewer`` would receive from the other side."""
+        """Silence notifications ``viewer`` would receive from the other side.
+
+        Args:
+            viewer: The profile doing the muting, or its pk.
+
+        Raises:
+            ValueError: ``viewer`` is not part of this relationship.
+        """
         self._set_muted(viewer, muted=True)
 
     def unmute(self, viewer: Profile | int) -> None:
-        """Restore notifications ``viewer`` had silenced."""
+        """Restore notifications ``viewer`` had silenced.
+
+        Args:
+            viewer: The profile doing the unmuting, or its pk.
+
+        Raises:
+            ValueError: ``viewer`` is not part of this relationship.
+        """
         self._set_muted(viewer, muted=False)
 
     def _set_muted(self, viewer: Profile | int, *, muted: bool) -> None:

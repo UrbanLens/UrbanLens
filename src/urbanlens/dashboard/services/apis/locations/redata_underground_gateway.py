@@ -43,11 +43,23 @@ class RedataUndergroundGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch mapped subsurface structures near a coordinate.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            kinds: Restrict to these ``kind`` tags (see
+                :data:`UNDERGROUND_KIND_LABELS`). An unknown kind is a REData
+                ``400``, surfaced as :class:`LocationContextUnavailableError`.
+            enterable_only: Only structures a person could be inside
+                (REData's derived ``is_enterable``).
+            limit: Maximum number of structures to return.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
             The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: The source failed to answer, the request itself failed, or a filter value was rejected."""
+            LocationContextUnavailableError: The source failed to answer, the request itself failed, or a filter value was rejected.
+        """
         extra_params: dict[str, Any] = {}
         if kinds:
             extra_params["kind"] = kinds

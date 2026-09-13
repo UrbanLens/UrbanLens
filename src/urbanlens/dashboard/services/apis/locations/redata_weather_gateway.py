@@ -21,11 +21,16 @@ class RedataWeatherGateway(RedataLocationContextGateway):
     def get_weather(self, latitude: float, longitude: float) -> list[dict[str, Any]]:
         """Fetch every registered weather provider's current/forecast/sun data for a point.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
         Returns:
             One entry per provider that answered - each a dict with ``provider``, ``current``, ``forecast``, ``sun`` keys (REData's own shape - see the module docstring).
 
         Raises:
-            LocationContextUnavailableError: A total blackout (every source failed), a REData-side validation error, or the request itself failed outright."""
+            LocationContextUnavailableError: A total blackout (every source failed), a REData-side validation error, or the request itself failed outright.
+        """
         envelope = self.near_point("/api/v1/weather/", latitude, longitude)
         return envelope.results
 
@@ -39,11 +44,18 @@ class RedataWeatherHistoryGateway(RedataLocationContextGateway):
     def get_history(self, latitude: float, longitude: float, *, start: date, end: date) -> list[dict[str, Any]]:
         """Fetch one recorded day's weather per day in a date range.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            start: First day to ask for, inclusive.
+            end: Last day to ask for, inclusive.
+
         Returns:
             One dict per day REData could answer for, each carrying its own ``date`` plus ``temperature_max_c``/``temperature_min_c``/ ``temperature_mean_c``, ``precipitation_mm``, ``snowfall_cm``, ``wind_speed_max_kmh`` and ``wind_gusts_max_kmh``.
 
         Raises:
-            LocationContextUnavailableError: The source was unavailable or rate-limited, REData rejected the parameters, or the request itself failed."""
+            LocationContextUnavailableError: The source was unavailable or rate-limited, REData rejected the parameters, or the request itself failed.
+        """
         envelope = self.near_point(
             "/api/v1/weather/history/",
             latitude,

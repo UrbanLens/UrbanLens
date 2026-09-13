@@ -41,8 +41,12 @@ class HaveIBeenPwnedGateway(Gateway):
     def endpoint_for_log(url: str) -> str:
         """Record the range endpoint, never the prefix that identifies the password.
 
+        Args:
+            url: The range URL about to be requested.
+
         Returns:
-            The URL truncated at the ``/range/`` segment."""
+            The URL truncated at the ``/range/`` segment.
+        """
         marker = "/range/"
         prefix, sep, _rest = url.partition(marker)
         return f"{prefix}{marker}" if sep else url
@@ -50,8 +54,12 @@ class HaveIBeenPwnedGateway(Gateway):
     def is_password_pwned(self, password: str) -> bool | None:
         """Return whether ``password`` appears in HIBP's breach list.
 
+        Args:
+            password: The plaintext password to check. Never logged or transmitted in full.
+
         Returns:
-            ``True`` if the password is known-compromised, ``False`` if it is not found, or ``None`` if the API could not be reached (caller should decide fail-open/closed)."""
+            ``True`` if the password is known-compromised, ``False`` if it is not found, or ``None`` if the API could not be reached (caller should decide fail-open/closed).
+        """
         digest = hashlib.sha1(password.encode("utf-8"), usedforsecurity=False).hexdigest().upper()
         prefix, suffix = digest[:5], digest[5:]
         try:

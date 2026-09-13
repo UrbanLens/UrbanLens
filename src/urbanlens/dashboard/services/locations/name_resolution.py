@@ -35,7 +35,12 @@ class NameProvider:
     """One source of place-name candidates, contributed by a plugin."""
 
     def __init__(self, *, source: str, verbose_name: str = "") -> None:
-        """Initialize the provider."""
+        """Initialize the provider.
+
+        Args:
+            source: Stable slug identifying this source (e.g. ``"wikipedia"``).
+            verbose_name: Human-readable name for admin UI; defaults to the slug.
+        """
         self.source = source
         self.verbose_name = verbose_name or source
 
@@ -43,8 +48,12 @@ class NameProvider:
         """Return raw name candidates for a location.
         Values are cleaned and quality-gated by the caller, so returning ``None`` or junk entries is acceptable.
 
+        Args:
+            location: The location to name.
+
         Returns:
-            Raw candidate values in this provider's own preference order."""
+            Raw candidate values in this provider's own preference order.
+        """
         return []
 
 
@@ -52,7 +61,15 @@ class LocationCacheNameProvider(NameProvider):
     """Declarative provider reading top-level keys from a fresh LocationCache row."""
 
     def __init__(self, *, source: str, cache_source: str, keys: tuple[str, ...], verbose_name: str = "") -> None:
-        """Initialize the provider."""
+        """Initialize the provider.
+
+        Args:
+            source: Stable slug identifying this source.
+            cache_source: The ``LocationCache.source`` value to read.
+            keys: Top-level keys of the cached payload that may hold a name,
+                in preference order.
+            verbose_name: Human-readable name for admin UI; defaults to the slug.
+        """
         super().__init__(source=source, verbose_name=verbose_name)
         self.cache_source = cache_source
         self.keys = keys
@@ -60,8 +77,12 @@ class LocationCacheNameProvider(NameProvider):
     def candidates(self, location: Location) -> list[str | None]:
         """Read the configured keys from the location's fresh cache row.
 
+        Args:
+            location: The location to name.
+
         Returns:
-            The raw values at each configured key, or an empty list when no fresh cache row exists or the payload is not a dict."""
+            The raw values at each configured key, or an empty list when no fresh cache row exists or the payload is not a dict.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         cached = LocationCache.get_fresh(location, self.cache_source)
@@ -78,8 +99,15 @@ class NameResolver(ABC):
     def resolve(self, candidates: Sequence[NameCandidate], location: Location) -> NameCandidate | None:
         """Pick the best candidate for a location.
 
+        Args:
+            candidates: Cleaned, quality-gated candidates in source-priority
+                arrival order (plugin ``(order, name)`` order).
+            location: The location being named, for resolvers that want
+                address or geographic context.
+
         Returns:
-            The winning candidate, or None when there is no acceptable one."""
+            The winning candidate, or None when there is no acceptable one.
+        """
 
 
 class RuleBasedNameResolver(NameResolver):
@@ -87,7 +115,15 @@ class RuleBasedNameResolver(NameResolver):
     Candidates are grouped by :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison` so trivially different spellings of the same name count as agreement."""
 
     def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None) -> None:
-        """Initialize the resolver."""
+        """Initialize the resolver.
+
+        Args:
+            priority: Source slugs in descending priority. Unknown slugs are
+                ignored; sources missing from the list rank after listed ones.
+            override_source: When set and at least one candidate comes from
+                this source, that candidate wins outright, bypassing the
+                agreement/priority ranking entirely.
+        """
         self._priority_rank: dict[str, int] = {slug: rank for rank, slug in enumerate(priority)}
         self._override_source = override_source
 
@@ -101,8 +137,13 @@ class RuleBasedNameResolver(NameResolver):
     def resolve(self, candidates: Sequence[NameCandidate], location: Location) -> NameCandidate | None:
         """Pick the best candidate per the agreement-then-priority rules.
 
+        Args:
+            candidates: Cleaned, quality-gated candidates in arrival order.
+            location: The location being named (unused by this resolver).
+
         Returns:
-            The winning candidate, or None when ``candidates`` is empty."""
+            The winning candidate, or None when ``candidates`` is empty.
+        """
         if self._override_source is not None:
             override = next((candidate for candidate in candidates if candidate.source == self._override_source), None)
             if override is not None:

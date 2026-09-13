@@ -47,7 +47,17 @@ _FALLBACK_MAX_FRAME_CHARS = 65_536
 
 
 def _credential_is_still_valid(credential: Any) -> bool:
-    """Whether *credential* can still authenticate, re-read from the DB."""
+    """Whether *credential* can still authenticate, re-read from the DB.
+
+    Args:
+        credential: The ``ApiKey``/``AccessToken`` resolved at connect time, or
+            None for a session-authenticated connection.
+
+    Returns:
+        True when the connection may continue - including for None, since a
+        session connection has no credential to revoke and its own separate
+        checks (if any) are unaffected by this one.
+    """
     if credential is None:
         return True
     refreshed = type(credential).objects.filter(pk=credential.pk).first()
@@ -68,7 +78,19 @@ class CredentialScopeMixin(_CredentialScopeBase):
         return self.scope.get(CREDENTIAL_SCOPE_KEY)
 
     def credential_allows(self, *scopes: str) -> bool:
-        """Whether this connection may exercise *scopes*."""
+        """Whether this connection may exercise *scopes*.
+
+        Args:
+            *scopes: The :class:`~urbanlens.dashboard.models.account.model.ApiKeyScope`
+                values required for the operation being attempted.
+
+        Returns:
+            True for a session connection (no credential, nothing to restrict)
+            and for a credential granting every requested scope; False
+            otherwise. Note that ``credential_grants`` independently refuses
+            ``OAUTH2_ONLY_SCOPES`` to PAT-kind credentials, which is what keeps
+            a ``ulk_`` key out of ``ws/messages/``.
+        """
         from urbanlens.dashboard.external_api.permissions import credential_grants
 
         credential = self.credential
@@ -124,7 +146,19 @@ class InboundVolumeMixin(_CredentialScopeBase):
         return min(candidates) if candidates else _FALLBACK_MAX_FRAME_CHARS
 
     async def accept_frame(self, text_data: str | None, bytes_data: bytes | None = None) -> dict[str, Any] | None:
-        """Size-check, budget-check, and decode one inbound frame."""
+        """Size-check, budget-check, and decode one inbound frame.
+
+        Args:
+            text_data: The raw frame, as Channels delivered it.
+            bytes_data: Set instead of *text_data* for a binary frame. These
+                sockets are JSON-text-only, so a binary frame is discarded -
+                but it is charged first, or flipping the opcode would buy an
+                unmetered flood.
+
+        Returns:
+            The decoded frame object, or None when the caller must stop -
+            having already replied with an error frame where one is owed.
+        """
         if text_data is None:
             if bytes_data is not None:
                 await self._charge_frame()
@@ -149,7 +183,12 @@ class InboundVolumeMixin(_CredentialScopeBase):
         return data
 
     async def charge_fanout(self) -> bool:
-        """Charge one fanout frame that writes no row."""
+        """Charge one fanout frame that writes no row.
+
+        Returns:
+            True when the frame may proceed. False once the budget is spent,
+            having already told the sender.
+        """
         budget = FrameBudget(name="fanout", limit=int(getattr(settings, "UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE", 0) or 0))
         if await budget.aconsume(self.volume_identity()):
             return True
@@ -225,12 +264,20 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """Ignore client frames; server-to-client only."""
 
     async def notification_new(self, event):
-        """Deliver one broadcasted notification."""
+        """Deliver one broadcasted notification.
+
+        Args:
+            event: The group-send event, with a ``notification`` dict payload.
+        """
         await self.send(text_data=json.dumps({"type": "notification", "notification": event["notification"]}))
 
     @database_sync_to_async
     def _get_profile_id(self):
-        """Resolve the session user's profile id."""
+        """Resolve the session user's profile id.
+
+        Returns:
+            The primary key of the user's Profile.
+        """
         from urbanlens.dashboard.models.profile.model import Profile
 
         profile, _ = Profile.objects.get_or_create(user=self.scope["user"])

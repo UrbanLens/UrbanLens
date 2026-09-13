@@ -24,7 +24,15 @@ _OWN_APP_PREFIX = "urbanlens."
 
 
 def _declared_family(field: FileField) -> tuple[str | None, str | None]:
-    """Resolve the media family a file field writes into."""
+    """Resolve the media family a file field writes into.
+
+    Args:
+        field: The model field to inspect.
+
+    Returns:
+        Tuple of (family, error_hint). Exactly one is None: a resolved family
+        means no error, and a hint means the family could not be determined.
+    """
     upload_to = field.upload_to
     if callable(upload_to):
         family = getattr(upload_to, MEDIA_FAMILY_ATTR, None)
@@ -42,7 +50,15 @@ def _declared_family(field: FileField) -> tuple[str | None, str | None]:
 
 @register()
 def check_media_authorizers(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when a file field has no registered media authorizer."""
+    """Fail startup when a file field has no registered media authorizer.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error per file field whose family has no registered authorizer.
+    """
     known = registered_families()
     errors: list[CheckMessage] = []
 
@@ -81,7 +97,15 @@ def check_media_authorizers(app_configs: Sequence[AppConfig] | None = None, **kw
 
 @register()
 def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when a configured media origin cannot issue its cookie."""
+    """Fail startup when a configured media origin cannot issue its cookie.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error when a media origin is configured but unusable.
+    """
     from urllib.parse import urlsplit
 
     from urbanlens.dashboard.services.media.origin import PUBLIC_SUFFIXES, cookie_domain, media_origin, media_origin_host, shared_suffix
@@ -132,7 +156,16 @@ _LOCAL_ONLY_MEDIA_SUBTREES = (
 
 @register()
 def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when the object-store backend is incomplete or bypasses the media gate."""
+    """Fail startup when the object-store backend is incomplete or bypasses the media gate.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        Errors for an unusable configuration, and one warning naming what stays
+        on local disk regardless.
+    """
     if getattr(settings, "UL_MEDIA_STORAGE_BACKEND", "filesystem") != "s3":
         if getattr(settings, "MEDIA_X_ACCEL_OBJECT_PREFIX", ""):
             return [
@@ -200,7 +233,16 @@ _PROVIDER_KEY_SETTINGS = ("anthropic_api_key", "openai_api_key", "cloudflare_ai_
 
 @register()
 def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Warn when a provider key is readable on the app tier instead of ai-inference."""
+    """Warn when a provider key is readable on the app tier instead of ai-inference.
+
+    Args:
+        app_configs: Unused; part of Django's check signature.
+        **kwargs: Unused; part of Django's check signature.
+
+    Returns:
+        One warning naming every provider key that should have been in
+        ``.env.ai`` instead, or an empty list.
+    """
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     if not getattr(app_settings, "ai_inference_url", None):
@@ -234,7 +276,15 @@ _LOCAL_REDATA_MARKERS = (".dev.", "urbanlens_redata", "redata-", "_redata")
 
 
 def _redata_host_is_local(url: str) -> bool:
-    """Whether *url* points at a local or dev REData instance."""
+    """Whether *url* points at a local or dev REData instance.
+
+    Args:
+        url: The configured ``redata_api_url``.
+
+    Returns:
+        True when the host is this machine, a container beside it, a private
+        address, or a dev environment.
+    """
     from urllib.parse import urlparse
 
     host = (urlparse(url).hostname or "").lower()
@@ -251,7 +301,15 @@ def _redata_host_is_local(url: str) -> bool:
 
 @register()
 def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Warn when a dev deployment points at a non-local REData."""
+    """Warn when a dev deployment points at a non-local REData.
+
+    Args:
+        app_configs: Unused; part of Django's check signature.
+        **kwargs: Unused; part of Django's check signature.
+
+    Returns:
+        One warning, or an empty list.
+    """
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     environment = str(getattr(settings, "ENVIRONMENT_NAME", "")).lower()
@@ -280,7 +338,16 @@ def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] |
 
 @register()
 def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when /metrics is enabled without a token or allowlist on production."""
+    """Fail startup when /metrics is enabled without a token or allowlist on production.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error when the endpoint is enabled, unguarded, and on a deployment
+        that counts as production.
+    """
     if not getattr(settings, "UL_METRICS_ENABLED", False):
         return []
     if getattr(settings, "UL_METRICS_TOKEN", "") or getattr(settings, "UL_METRICS_ALLOWED_CIDRS", ""):
@@ -300,7 +367,15 @@ def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = 
 
 @register()
 def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when Celery settings allow unbounded task requeue."""
+    """Fail startup when Celery settings allow unbounded task requeue.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error per settings combination that can requeue without bound.
+    """
     if not getattr(settings, "CELERY_TASK_ACKS_LATE", False):
         return []
 
@@ -328,7 +403,12 @@ def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig
 
 
 def websocket_frame_cap_conflict() -> str | None:
-    """Report when daphne flags cap frames below the app-level limit."""
+    """Report when daphne flags cap frames below the app-level limit.
+
+    Returns:
+        A description of the conflict, or None when there is none - including
+        when this process was not started with the flags at all.
+    """
     required = int(getattr(settings, "UL_WEBSOCKET_MAX_MESSAGE_BYTES", 0) or 0)
     for flag in ("--websocket-max-message-size", "--websocket-max-frame-size"):
         if flag not in sys.argv:

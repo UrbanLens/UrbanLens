@@ -61,11 +61,15 @@ class CensusTigerwebGateway(Gateway):
     def get_state_boundary(self, state_abbr: str) -> dict[str, Any] | None:
         """Return the raw Esri ring geometry of one US state's boundary.
 
+        Args:
+            state_abbr: Two-letter USPS state abbreviation (e.g. ``"NY"``).
+
         Returns:
             The raw ``{"rings": [...]}`` Esri geometry dict, or None when the state isn't found or the request fails.
 
         Raises:
-            ValueError: ``state_abbr`` isn't exactly two letters - guards the ``where`` clause below, which interpolates it directly."""
+            ValueError: ``state_abbr`` isn't exactly two letters - guards the ``where`` clause below, which interpolates it directly.
+        """
         if len(state_abbr) != 2 or not state_abbr.isalpha():
             raise ValueError(f"state_abbr must be a two-letter USPS abbreviation, got {state_abbr!r}")
         params: dict[str, str | int] = {
@@ -90,8 +94,13 @@ class CensusTigerwebGateway(Gateway):
     def get_geography(self, latitude: float, longitude: float) -> dict[str, Any]:
         """Return the US Census geography containing a coordinate.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
         Returns:
-            Dict with ``state``, ``county``, ``place``, ``tract``, ``zcta``, ``urban_area``, ``cbsa``, ``tribal_land`` sub-dicts (each ``{"name": ..., "geoid": ...}``, or None when the point isn't in that geography type, e.g. an unincorporated area with no..."""
+            Dict with ``state``, ``county``, ``place``, ``tract``, ``zcta``, ``urban_area``, ``cbsa``, ``tribal_land`` sub-dicts (each ``{"name": ..., "geoid": ...}``, or None when the point isn't in that geography type, e.g. an unincorporated area with no...
+        """
         state = self._normalize(self._query_layer(_LAYER_STATE, latitude, longitude))
         if not state:
             return {}

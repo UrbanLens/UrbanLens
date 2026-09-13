@@ -57,8 +57,13 @@ class LabelView:
     def from_model(cls, label: Label) -> LabelView:
         """Build a view from a `Label`, reading the customization it prefetched.
 
+        Args:
+            label: A label from a queryset built by
+                :meth:`~urbanlens.dashboard.models.labels.queryset.LabelQuerySet.with_customizations_for`.
+
         Returns:
-            The same facts the projection path derives from columns."""
+            The same facts the projection path derives from columns.
+        """
         return cls(
             id=label.id,
             kind=label.kind,
@@ -81,8 +86,18 @@ class LabelView:
     def from_row(cls, row: dict[str, Any], customization: dict[str, Any] | None) -> LabelView:
         """Build a view from a label's columns and this profile's override row.
 
+        Args:
+            row: ``id``, ``kind``, ``name``, ``order``, ``icon``, ``color`` and
+                ``custom_icon`` for one label.
+            customization: The profile's ``LabelCustomization`` columns for that
+                label, or None. An override's ``icon``/``color`` count when they
+                are set at all, including to the empty string - that is how a
+                user clears an inherited icon. Its ``name`` is deliberately not
+                read; see the note on the ``name`` field below.
+
         Returns:
-            The same facts :meth:`from_model` derives from an instance."""
+            The same facts :meth:`from_model` derives from an instance.
+        """
         override_icon = customization["icon"] if customization else None
         override_color = customization["color"] if customization else None
         return cls(
@@ -306,8 +321,12 @@ class MapPinPayloadService:
         """Annotate and join *query* for the model-instance path.
         The map's own paths use :meth:`page` and :meth:`all`, which read columns instead.
 
+        Args:
+            query: Pins to serialize.
+
         Returns:
-            The queryset with the payload's annotations and joins applied."""
+            The queryset with the payload's annotations and joins applied.
+        """
         return (
             # location__wiki as well as location: every pin serialized here reads effective_name,
             # which falls through to Location.display_name, which reads the reverse OneToOne `wiki`
@@ -323,8 +342,12 @@ class MapPinPayloadService:
     def _label_views_for(self, pin_ids: Sequence[int]) -> dict[int, list[LabelView]]:
         """This batch's labels, resolved once per distinct label and shared by pin.
 
+        Args:
+            pin_ids: The pins to resolve labels for.
+
         Returns:
-            Each pin's labels in `Label.Meta.ordering` (``-order``, ``name``)."""
+            Each pin's labels in `Label.Meta.ordering` (``-order``, ``name``).
+        """
         if not pin_ids:
             return {}
         pairs = list(Pin.labels.through.objects.filter(pin_id__in=pin_ids).values_list("pin_id", "label_id"))
@@ -340,7 +363,12 @@ class MapPinPayloadService:
         return by_pin
 
     def _resolve_label_views(self, label_ids: set[int]) -> None:
-        """Build a :class:`LabelView` for each of these labels not already held."""
+        """Build a :class:`LabelView` for each of these labels not already held.
+
+        Args:
+            label_ids: The labels to resolve. Views this service instance has
+                already built are reused rather than re-read.
+        """
         missing = label_ids - self._label_views.keys()
         if not missing:
             return
@@ -352,8 +380,12 @@ class MapPinPayloadService:
         """The labels *payloads* name, resolved from what building them already read.
         Prefer this wherever the payloads exist before the response is written, which is everywhere except the streamed document - whose head goes out before its first pin, so it has to ask :meth:`label_dictionary` instead.
 
+        Args:
+            payloads: Map payloads carrying ``label_ids``.
+
         Returns:
-            ``{"<id>": {id, kind, name, color, icon}}``, covering exactly the ids these payloads use."""
+            ``{"<id>": {id, kind, name, color, icon}}``, covering exactly the ids these payloads use.
+        """
         entries: dict[str, dict[str, Any]] = {}
         for payload in payloads:
             for label_id in payload.get("label_ids", ()):
@@ -419,8 +451,15 @@ class MapPinPayloadService:
     def page(self, query: QuerySet[Pin], *, cursor: int | None = None, limit: int | None = None, include_total: bool = False) -> MapPinPage:
         """One keyset page of payloads, built without instantiating a model.
 
+        Args:
+            query: Pins to serialize, already scoped to the requesting profile.
+            cursor: Exclusive lower bound on pin pk, from a previous page.
+            limit: Page size, clamped to :attr:`MAX_LIMIT`.
+            include_total: Also count every matching row (one extra query).
+
         Returns:
-            The page, and the cursor to continue from when more remain."""
+            The page, and the cursor to continue from when more remain.
+        """
         limit = min(max(int(limit or self.DEFAULT_LIMIT), 1), self.MAX_LIMIT)
         if cursor:
             query = query.filter(pk__gt=cursor)
@@ -434,8 +473,12 @@ class MapPinPayloadService:
     def all(self, query: QuerySet[Pin]) -> list[dict[str, Any]]:
         """Every matching pin's payload, read in bounded batches.
 
+        Args:
+            query: Pins to serialize, already scoped to the requesting profile.
+
         Returns:
-            One payload per pin, ordered by pk."""
+            One payload per pin, ordered by pk.
+        """
         return [payload for batch in self._batched_rows(query) for payload in self._serialize_rows(batch)]
 
     def _batched_rows(self, query: QuerySet[Pin]) -> Iterator[list[dict[str, Any]]]:
@@ -455,16 +498,25 @@ class MapPinPayloadService:
         """The pin's labels that display as chips, in prefetch order.
         Reads ``pin.labels.all()``, which ``prepare_queryset`` prefetches with the profile's per-label customizations applied - so calling this on a prepared pin costs no additional query.
 
+        Args:
+            pin: The pin whose labels to filter. Should come from a queryset
+                prepared by :meth:`prepare_queryset`, or this triggers a query.
+
         Returns:
-            The pin's tag, category, and status labels."""
+            The pin's tag, category, and status labels.
+        """
         return display_label_views(list(pin.labels.all()))
 
     def serialize(self, pin: Pin) -> dict[str, Any]:
         """The payload for one already-loaded pin.
         The map uses :meth:`page`/:meth:`all` instead, which produce the identical dict from columns.
 
+        Args:
+            pin: A pin from a queryset prepared by :meth:`prepare_queryset`.
+
         Returns:
-            The map payload."""
+            The map payload.
+        """
         labels = [LabelView.from_model(label) for label in pin.labels.all()]
         return _build_payload(
             pk=pin.pk,

@@ -643,11 +643,15 @@ class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Call REData and, on success, upsert OFFICIAL owner/sale rows.
 
+        Args:
+            location: The location to fetch a property record for.
+
         Returns:
             Tuple of (payload, coordinate query key) - the base class persists ``payload`` to the shared ``LocationCache`` row.
 
         Raises:
-            PropertyRecordsUnavailableError: For a transient source outage - the enrichment runner logs it and retries the location on a later cycle instead of marking it done."""
+            PropertyRecordsUnavailableError: For a transient source outage - the enrichment runner logs it and retries the location on a later cycle instead of marking it done.
+        """
         lat = float(location.latitude or 0)
         lng = float(location.longitude or 0)
         payload = _fetch_payload(location, lat, lng)

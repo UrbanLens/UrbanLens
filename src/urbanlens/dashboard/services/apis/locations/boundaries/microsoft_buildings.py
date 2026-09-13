@@ -76,7 +76,14 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
         return {row["Location"] for row in self._load_dataset_links() if row.get("Location")}
 
     def get_buildings(self, bbox: BBox, *, country: str | None = None) -> list[dict]:
-        """Download and return building footprint Features overlapping ``bbox``."""
+        """Download and return building footprint Features overlapping ``bbox``.
+
+        Args:
+            bbox: Area of interest.
+            country: Optional exact match against the dataset's ``Location``
+                column (see ``list_available_locations``) to disambiguate
+                shards near country borders and skip irrelevant downloads.
+        """
         validate_bbox(bbox)
         candidate_quadkeys = quadkeys_for_bbox(bbox, zoom=self.quadkey_zoom)
         rows = self._load_dataset_links()

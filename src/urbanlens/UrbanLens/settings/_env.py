@@ -9,7 +9,15 @@ _FALSE_VALUES = frozenset({"0", "false", "f", "no", "n", "off", ""})
 
 
 def env_bool(name: str, default: bool) -> bool:
-    """Read a boolean env var; fall back to default when unset or unrecognised."""
+    """Read a boolean env var; fall back to default when unset or unrecognised.
+
+    Args:
+        name: The environment variable to read.
+        default: Value to use when the variable is unset or unrecognised.
+
+    Returns:
+        The parsed boolean.
+    """
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -26,7 +34,14 @@ PRODUCTION_ENVIRONMENT_NAMES = frozenset({"production"})
 
 
 def is_production_environment(name: str | None) -> bool:
-    """Return True only for a recognised production environment name."""
+    """Return True only for a recognised production environment name.
+
+    Args:
+        name: The environment name to classify, typically ``UL_ENVIRONMENT``.
+
+    Returns:
+        True only for a recognised production environment name.
+    """
     if not name:
         return False
     return name.strip().lower() in PRODUCTION_ENVIRONMENT_NAMES

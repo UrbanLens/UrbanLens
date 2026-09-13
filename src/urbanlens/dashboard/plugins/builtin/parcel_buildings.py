@@ -445,8 +445,14 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         """Every building on the pin's parcel, each paired with its child pin.
         It is resolved server-side through the very same :func:`building_rows` the web panel renders, so both surfaces agree on which buildings are still unpinned.
 
+        Args:
+            pin: The pin whose parcel is being read. Its direct children are
+                the markers matched against - a child pin nested deeper is not
+                a candidate, matching what the web panel offers to create.
+
         Returns:
-            ``{"buildings": [...], "provider": ..., "unpinned_count": ...}``, or None when nothing has landed yet, the gate rejects this pin (a child pin has no sub-buildings), or the parcel has no buildings."""
+            ``{"buildings": [...], "provider": ..., "unpinned_count": ...}``, or None when nothing has landed yet, the gate rejects this pin (a child pin has no sub-buildings), or the parcel has no buildings.
+        """
         if not self.gate(pin):
             return None
         data = self.cached_data(pin)

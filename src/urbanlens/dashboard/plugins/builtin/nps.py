@@ -300,8 +300,12 @@ class NpsPanelSource(LocationCachePanelSource):
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The nearest NPS unit as an information card, or None.
 
+        Args:
+            pin: The pin whose panel is being read.
+
         Returns:
-            ``{"info": {...}}``, or None when nothing has landed yet or no park unit was found within range."""
+            ``{"info": {...}}``, or None when nothing has landed yet or no park unit was found within range.
+        """
         data = self.cached_data(pin)
         if not data or not data.get("full_name"):
             return None
@@ -345,8 +349,12 @@ class NpsEnrichmentSource(LocationCacheEnrichmentSource):
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Look up the nearest NPS unit to a location, if any is within range.
 
+        Args:
+            location: The location to check.
+
         Returns:
-            Tuple of (park payload or None, coordinate query key)."""
+            Tuple of (park payload or None, coordinate query key).
+        """
         from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
 
         lat = float(location.latitude or 0)

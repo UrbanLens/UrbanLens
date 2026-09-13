@@ -38,7 +38,11 @@ class UndoHandler(abc.ABC):
 
     @classmethod
     def redo_delete(cls, payload: dict[str, Any]) -> None:
-        """Re-delete rows that ``restore`` just recreated (the redo of a delete-undo)."""
+        """Re-delete rows that ``restore`` just recreated (the redo of a delete-undo).
+
+        Args:
+            payload: Wrapped stash of the form ``{"entries": ..., "restored_pks": [...]}``.
+        """
         pks = payload.get("restored_pks") or []
         if cls.model is None or not pks:
             return
@@ -50,12 +54,20 @@ class UndoHandler(abc.ABC):
 
     @classmethod
     def undo_mutation(cls, payload: dict[str, Any]) -> None:  # noqa: ARG003 - interface; override uses payload
-        """Apply the inverse of a stashed mutation."""
+        """Apply the inverse of a stashed mutation.
+
+        Args:
+            payload: The dict previously given to ``stash_mutation``.
+        """
         raise TypeError(f"{cls.model_label} does not support mutations.")
 
     @classmethod
     def redo_mutation(cls, payload: dict[str, Any]) -> None:  # noqa: ARG003 - interface; override uses payload
-        """Re-apply a stashed mutation after it was undone."""
+        """Re-apply a stashed mutation after it was undone.
+
+        Args:
+            payload: The dict previously given to ``stash_mutation``.
+        """
         raise TypeError(f"{cls.model_label} does not support mutations.")
 
 
@@ -105,7 +117,11 @@ def describe_batch(singular_label: str, plural_label: str, names: list[str], max
         singular_label: Label for a single instance, e.g. ``"Pin"``.
         plural_label: Label for the plural count, e.g. ``"pins"``.
         names: Display name of every instance in the batch, in order.
-        max_shown: Maximum number of names to list before collapsing the rest into a "(+N more)" suffix."""
+        max_shown: Maximum number of names to list before collapsing the rest into a "(+N more)" suffix.
+
+    Returns:
+        e.g. ``"Pin: Old Mill"``, or ``"5 pins: Old Mill, Grain Silo, Water Tower (+2 more)"``.
+    """
     if len(names) == 1:
         return f"{singular_label}: {names[0]}"
     shown = ", ".join(names[:max_shown])

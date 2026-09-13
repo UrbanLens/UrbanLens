@@ -218,8 +218,16 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         """Slides for dated captures from the imagery timeline.
         ``_slide_from_result`` already materializes one representative date per ``time_series`` provider from the plain ``/imagery/`` call above, so nothing is lost; this loop only ever sees ``"capture"`` offerings.
 
+        Args:
+            gateway: The imagery gateway to reuse.
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            seen_urls: Slide sources already yielded, so a capture that is also
+                the current image is not shown twice.
+
         Yields:
-            One slide per dated capture, newest first."""
+            One slide per dated capture, newest first.
+        """
         from urbanlens.dashboard.services.locations.imagery_timeline import flatten_timeline
 
         # Swallowed on purpose, unlike the current-imagery call above: the
@@ -289,8 +297,16 @@ class RedataSatelliteProvider(SatelliteViewProvider):
     def _composed_tile_image(self, gateway: RedataImageryGateway, result: dict[str, Any], url: str, latitude: float, longitude: float) -> str:
         """``img_src`` for a ``tile_template`` result: REData's composed photo, or a raw tile as a fallback.
 
+        Args:
+            gateway: The imagery gateway to reuse.
+            result: The ``tile_template`` result.
+            url: The result's own tile-template ``url``, for the fallback.
+            latitude: WGS-84 latitude, for the fallback.
+            longitude: WGS-84 longitude, for the fallback.
+
         Returns:
-            A ``data:`` URI with REData's composed image, or a concrete (still directly-fetchable) tile URL when there is no ``uuid`` to ask for or the composed download fails."""
+            A ``data:`` URI with REData's composed image, or a concrete (still directly-fetchable) tile URL when there is no ``uuid`` to ask for or the composed download fails.
+        """
         asset_uuid = result.get("uuid")
         if isinstance(asset_uuid, str) and asset_uuid:
             try:
@@ -307,8 +323,14 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         """Materialize and embed one date from a continuous (``time_series``) source.
         This shows exactly one: the range's most recent date (see ``_most_recent_interval_end``), so this provider gets one carousel slide framed the same "current conditions" way every other slide here is, rather than being skipped outright.
 
+        Args:
+            gateway: The imagery gateway to reuse.
+            result: The ``time_series`` result.
+            name: The already-resolved display name for this provider.
+
         Returns:
-            A slide for the materialized date, or None when there is no interval to pick a date from, or REData can't produce an image for it - a documented "nothing here" answer or a transient failure are both treated as an ordinary provider gap here, same..."""
+            A slide for the materialized date, or None when there is no interval to pick a date from, or REData can't produce an image for it - a documented "nothing here" answer or a transient failure are both treated as an ordinary provider gap here, same...
+        """
         asset_uuid = result.get("uuid")
         end_date = _most_recent_interval_end(result.get("attributes") or {})
         if not isinstance(asset_uuid, str) or not asset_uuid or end_date is None:

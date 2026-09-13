@@ -136,7 +136,11 @@ def _anchor_slug(title: str, used: set[str]) -> str:
 
     Args:
         title: The heading's plain text.
-        used: Anchors already assigned in this document (mutated in place)."""
+        used: Anchors already assigned in this document (mutated in place).
+
+    Returns:
+        A unique anchor like ``"history"`` or ``"history-2"``.
+    """
     base = _SLUG_DASH.sub("-", _SLUG_STRIP.sub("", title.strip().lower())).strip("-") or "section"
     candidate = base
     counter = 2

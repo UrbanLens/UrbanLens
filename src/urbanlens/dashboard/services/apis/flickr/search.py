@@ -194,8 +194,12 @@ class FlickrSearchGateway(MediaProvider):
     def _search(self, text: str) -> list[dict[str, Any]]:
         """Run one ``flickr.photos.search`` call and return raw photo dicts.
 
+        Args:
+            text: The full boolean query text, from :func:`build_search_query`.
+
         Returns:
-            Raw photo dicts from Flickr's response, or ``[]`` on any failure."""
+            Raw photo dicts from Flickr's response, or ``[]`` on any failure.
+        """
         try:
             api_key, _secret = _consumer_credentials()
         except FlickrNotConfiguredError:
@@ -255,8 +259,13 @@ class FlickrFeedSearchGateway(MediaProvider):
     def _fetch_tagged(self, tags_csv: str) -> list[dict[str, Any]]:
         """Run one public-feed request for a comma-joined, ANDed tag set.
 
+        Args:
+            tags_csv: A ``"tag1,tag2,tag3"`` string from
+                :func:`build_feed_tag_queries`.
+
         Returns:
-            The feed's raw item dicts, or ``[]`` on any failure."""
+            The feed's raw item dicts, or ``[]`` on any failure.
+        """
         params = {"tags": tags_csv, "tagmode": "all", "format": "json", "nojsoncallback": "1"}
         try:
             response = self.session.get(FEED_ENDPOINT, params=params, timeout=_FEED_TIMEOUT)
@@ -300,8 +309,13 @@ class FlickrMediaPanelSource(MediaPanelSource):
     def search_terms(pin: Pin, gateway: MediaProvider) -> list[str]:
         """This pin's Flickr query terms, shaped for whichever gateway is active.
 
+        Args:
+            pin: The pin to build search queries for.
+            gateway: The active gateway - determines which query shape to build.
+
         Returns:
-            The query terms for ``gateway``, or ``[]`` when the pin has no usable name or state."""
+            The query terms for ``gateway``, or ``[]`` when the pin has no usable name or state.
+        """
         if isinstance(gateway, FlickrFeedSearchGateway):
             return build_feed_tag_queries(pin)
         query = build_search_query(pin)

@@ -45,16 +45,24 @@ class PhotoKeywordProvider(ABC):
     def is_available_for(self, image: Image) -> bool:
         """Whether this provider should run for this image's uploader.
 
+        Args:
+            image: The freshly uploaded image (``profile`` is populated).
+
         Returns:
-            True when the provider can and may run."""
+            True when the provider can and may run.
+        """
         return True
 
     @abstractmethod
     def generate(self, image: Image) -> list[KeywordResult]:
         """Produce keywords for one image.
 
+        Args:
+            image: The image to keyword; read its bytes via ``image.image``.
+
         Returns:
-            Keyword candidates (normalization/dedup happens in the pipeline)."""
+            Keyword candidates (normalization/dedup happens in the pipeline).
+        """
         raise NotImplementedError
 
 

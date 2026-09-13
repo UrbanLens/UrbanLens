@@ -197,11 +197,15 @@ class GooglePhotosGateway(Gateway):
     def get_session(self, session_id: str) -> PickerSession:
         """Fetch the current state of a picker session.
 
+        Args:
+            session_id: The session id from :meth:`create_session`.
+
         Returns:
             The session's current state.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response.
+        """
         response = self.session.get(f"{PICKER_API_BASE}/sessions/{session_id}", headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
         if not response.ok:
             logger.warning("Google Photos get_session failed (%s): %s", response.status_code, response.text[:500])
@@ -221,11 +225,15 @@ class GooglePhotosGateway(Gateway):
     def list_session_media_items(self, session_id: str) -> list[PickedMediaItem]:
         """List every item the user selected in a completed picker session.
 
+        Args:
+            session_id: The session id from :meth:`create_session`.
+
         Returns:
             The picked media items, across all pages.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response.
+        """
         items: list[PickedMediaItem] = []
         page_token: str | None = None
         while True:
@@ -256,11 +264,18 @@ class GooglePhotosGateway(Gateway):
     def download_media_item(self, base_url: str, *, original: bool = True) -> bytes:
         """Download a picked item's bytes.
 
+        Args:
+            base_url: The item's ``base_url`` from :meth:`list_session_media_items`.
+            original: When True (default), request the original file (``=d``
+                suffix per Google's documented download convention); when
+                False, request a :data:`PREVIEW_MAX_DIMENSION` preview instead.
+
         Returns:
             The file bytes.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response."""
+            GatewayRequestError: On a network error or non-2xx response.
+        """
         suffix = "=d" if original else f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}"
         response = self.session.get(f"{base_url}{suffix}", headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
         if not response.ok:

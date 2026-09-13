@@ -119,8 +119,15 @@ class WikipediaGateway(Gateway):
     ) -> list[dict[str, Any]]:
         """Return Wikipedia articles near the given coordinates as place dicts.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_m: Search radius in metres (max 10 000 per Wikipedia API).
+            limit: Maximum articles to return.
+
         Returns:
-            List of place dicts compatible with the Places layer marker format."""
+            List of place dicts compatible with the Places layer marker format.
+        """
         params: dict[str, str | int] = {
             "action": "query",
             "list": "geosearch",
@@ -168,8 +175,20 @@ class WikipediaGateway(Gateway):
     ) -> dict[str, Any] | None:
         """Find a Wikipedia article near the coordinates that matches the place.
 
+        Args:
+            latitude: WGS-84 latitude of the location.
+            longitude: WGS-84 longitude of the location.
+            address_components: Dict with optional keys 'locality', 'route',
+                'street_number', 'administrative_area_level_1'.
+            name: The place's own name (e.g. pin/wiki name), when known.
+                Checked against each candidate's title first, since a title
+                match is a far stronger signal than an address mention -- a
+                same-block article that happens to reference the street or
+                city is not necessarily the article for this specific place.
+
         Returns:
-            A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``, ``description``, ``page_id``, ``infobox`` (ordered ``[label, value]`` pairs, possibly empty - see ``_fetch_infobox``) - or None if no matching article found."""
+            A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``, ``description``, ``page_id``, ``infobox`` (ordered ``[label, value]`` pairs, possibly empty - see ``_fetch_infobox``) - or None if no matching article found.
+        """
         candidates = self._geo_search(latitude, longitude)
         for candidate in candidates:
             summary = self._fetch_summary(candidate["title"])
@@ -183,8 +202,13 @@ class WikipediaGateway(Gateway):
     def get_article_media(self, title: str) -> list[dict[str, Any]]:
         """Return the images actually shown on a specific Wikipedia article.
 
+        Args:
+            title: Exact Wikipedia article title (as returned by
+                ``get_article_for_location``'s ``title`` key).
+
         Returns:
-            List of dicts with keys ``title`` (the Commons ``File:`` page title, useful for cross-provider dedup), ``url`` (largest available rendition), and ``thumb_url`` (smallest)."""
+            List of dicts with keys ``title`` (the Commons ``File:`` page title, useful for cross-provider dedup), ``url`` (largest available rendition), and ``thumb_url`` (smallest).
+        """
         url = _MEDIA_LIST_URL.format(title=title.replace(" ", "_"))
         try:
             resp = self.session.get(url, timeout=10)
@@ -248,8 +272,12 @@ class WikipediaGateway(Gateway):
         """Fetch and extract an article's infobox as ordered label/value fact pairs.
         This instead requests the article's real rendered HTML (``action=parse``) and pulls just the infobox table out of it, since that's the only Wikipedia response that contains it.
 
+        Args:
+            title: Exact Wikipedia article title.
+
         Returns:
-            Ordered ``[label, value]`` pairs for infobox rows that have both a label and real text content - skips the infobox's own title row, section-divider rows (e.g. "Details"), and any image/map-only row (the embedded Kartographer map has no Markdown equivalent)."""
+            Ordered ``[label, value]`` pairs for infobox rows that have both a label and real text content - skips the infobox's own title row, section-divider rows (e.g. "Details"), and any image/map-only row (the embedded Kartographer map has no Markdown equivalent).
+        """
         params: dict[str, str] = {
             "action": "parse",
             "page": title,

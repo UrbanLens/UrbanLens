@@ -84,8 +84,12 @@ class GooglePlacesNameProvider(NameProvider):
     def candidates(self, location: Location) -> list[str | None]:
         """Return the cached Google place name and the cached details name.
 
+        Args:
+            location: The location to name.
+
         Returns:
-            Raw candidate values; empty entries are filtered by the caller."""
+            Raw candidate values; empty entries are filtered by the caller.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         values: list[str | None] = [location.cached_place_name]
@@ -117,8 +121,12 @@ class GooglePlaceLinkEnrichmentSource(EnrichmentSource):
     def enrich(self, location: Location) -> bool:
         """Link the location to its GooglePlace row, fetching the name if needed.
 
+        Args:
+            location: The location to link.
+
         Returns:
-            True when the location is linked afterwards."""
+            True when the location is linked afterwards.
+        """
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
         GooglePlaceService().ensure_linked(location)

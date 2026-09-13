@@ -20,10 +20,21 @@ class SessionBroadcaster:
     def session_group_name(self, session_id: int) -> str:
         """The channel-layer group every participant's WebSocket joins for one session.
 
+        Args:
+            session_id: Primary key of the session.
+
         Returns:
-            The group name, namespaced by this broadcaster's game prefix."""
+            The group name, namespaced by this broadcaster's game prefix.
+        """
         return f"{self.prefix}_session_{session_id}"
 
     def broadcast(self, session_id: int, event_type: str, payload: dict[str, Any]) -> None:
-        """Send ``payload`` to every connected participant of ``session_id``."""
+        """Send ``payload`` to every connected participant of ``session_id``.
+
+        Args:
+            session_id: Primary key of the session to broadcast to.
+            event_type: Dot-notation Channels event type (e.g. ``"round.revealed"``),
+                dispatched by the consumer to the matching ``round_revealed`` handler.
+            payload: Event body, merged into the message alongside ``type``.
+        """
         send_group_message(self.session_group_name(session_id), {"type": event_type, **payload})

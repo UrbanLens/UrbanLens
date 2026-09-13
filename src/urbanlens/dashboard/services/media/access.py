@@ -205,7 +205,11 @@ def authorize_avatar(profile: Profile, rel_path: str) -> bool:
 
     Args:
         profile: The authenticated requester's profile (unused).
-        rel_path: Path relative to ``MEDIA_ROOT`` (unused)."""
+        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
+
+    Returns:
+        True.
+    """
     return True
 
 
@@ -218,5 +222,9 @@ def authorize_icon(profile: Profile, rel_path: str) -> bool:
 
     Args:
         profile: The authenticated requester's profile (unused).
-        rel_path: Path relative to ``MEDIA_ROOT`` (unused)."""
+        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
+
+    Returns:
+        True.
+    """
     return True

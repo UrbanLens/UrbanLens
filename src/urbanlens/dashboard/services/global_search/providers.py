@@ -401,16 +401,36 @@ class SearchProvider(ABC):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         """Run this provider's search.
 
+        Args:
+            profile: The requesting user's profile; results must be scoped to
+                content this profile owns or has direct access to.
+            parsed: The structured query.
+            limit: Maximum number of results to return.
+
         Returns:
-            Results ordered most relevant first."""
+            Results ordered most relevant first.
+        """
         raise NotImplementedError
 
     def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None, tag_path: str | None = None) -> _QS:
         """Apply term matching plus fuzzy title matching and relevance ordering.
         "Belnear Medical Center" matches "near me" as a literal substring), since otherwise a result literally named after the phrase could be silently dropped.
 
+        Args:
+            queryset: The access-scoped queryset.
+            parsed: The structured query.
+            fields: ORM field paths for exact (icontains) term matching.
+            location_path: ORM path to this row's Location relation, enabling
+                near-me handling; omit for models with no location.
+            tag_path: ORM path to this row's ``PlaceExternalTag`` relation
+                (e.g. ``"location__place__external_tags"``), enabling
+                external-tag matching alongside the plain field list - see
+                :func:`~urbanlens.dashboard.services.locations.external_tag_groups.tag_match_q`.
+                Omit for models with no place-tagged location.
+
         Returns:
-            Filtered queryset annotated with ``search_sim``/``near_hit`` where applicable, ordered most relevant first."""
+            Filtered queryset annotated with ``search_sim``/``near_hit`` where applicable, ordered most relevant first.
+        """
         # parsed.near_me is required explicitly, not just near_lat/lng being set: `sort:nearest`
         # alone (no "near me" wording) also needs a resolved point (for apply_sort's Distance()
         # ordering below), but must NOT also impose the near-me radius filter/boost - sort:nearest

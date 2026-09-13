@@ -80,8 +80,12 @@ class Metric:
     def values_for_many(self, profiles: Sequence[Profile]) -> dict[int, int]:
         """Return this metric's current value for every profile, never raising.
 
+        Args:
+            profiles: The profiles to measure.
+
         Returns:
-            Mapping of profile pk to current value."""
+            Mapping of profile pk to current value.
+        """
         if self.compute_bulk is not None:
             profile_ids = [profile.pk for profile in profiles]
             try:

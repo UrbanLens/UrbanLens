@@ -23,9 +23,15 @@ class RedataSoilGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch the soil-survey components of the map unit at a point.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
             The parsed envelope, dominant component first.
 
         Raises:
-            LocationContextUnavailableError: The source failed to answer, or the request itself failed."""
+            LocationContextUnavailableError: The source failed to answer, or the request itself failed.
+        """
         return self.near_point(_SOIL_PATH, latitude, longitude, force_refresh=force_refresh)

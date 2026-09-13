@@ -28,8 +28,17 @@ class RedataPublicLocationsGateway(RedataLocationContextGateway):
     def list_public_locations(self, *, kind: str | None = None, country: str | None = None, state: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         """List catalog entries, optionally filtered - no coordinate required.
 
+        Args:
+            kind: One of :data:`PUBLIC_LOCATION_KINDS`, or None for every kind.
+            country: ISO 3166-1 alpha-2, case-insensitive.
+            state: USPS state abbreviation, case-insensitive (only
+                ``state_capitol``/``county_seat`` rows carry one).
+            limit: Bounded positive integer; REData defaults to 50 and caps at
+                200 for this endpoint.
+
         Returns:
-            ``PublicLocationSerializer``-shaped dicts (``uuid``, ``kind``, ``name``, ``country``, ``state``, ``county_name``, ``latitude``, ``longitude``, ``source``, ``catalog_synced_at``) - possibly empty, including when REData does not have this endpoint yet."""
+            ``PublicLocationSerializer``-shaped dicts (``uuid``, ``kind``, ``name``, ``country``, ``state``, ``county_name``, ``latitude``, ``longitude``, ``source``, ``catalog_synced_at``) - possibly empty, including when REData does not have this endpoint yet.
+        """
         params: dict[str, Any] = {"limit": limit}
         if kind is not None:
             params["kind"] = kind

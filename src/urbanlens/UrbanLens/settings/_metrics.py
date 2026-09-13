@@ -11,12 +11,28 @@ INSTRUMENTED_PROCESS_ROLES = frozenset({"web", "unspecified"})
 
 
 def instrumentation_wanted(*, metrics_enabled: bool, process_role: str) -> bool:
-    """Return True when metrics are on and this process is scraped."""
+    """Return True when metrics are on and this process is scraped.
+
+    Args:
+        metrics_enabled: The value of ``UL_METRICS_ENABLED``.
+        process_role: The value of ``UL_PROCESS_ROLE``.
+
+    Returns:
+        ``True`` only when metrics are on *and* this process is one that can be
+        scraped.
+    """
     return metrics_enabled and process_role in INSTRUMENTED_PROCESS_ROLES
 
 
 def require_django_prometheus() -> None:
-    """Fail when metrics are on but django-prometheus is missing."""
+    """Fail when metrics are on but django-prometheus is missing.
+
+    Raises:
+        ImproperlyConfigured: When ``django_prometheus`` cannot be imported. The
+            message names ``UL_METRICS_ENABLED`` because that is the thing the
+            operator changed and the thing they can change back; the underlying
+            ``ImportError`` is chained for anyone who needs it.
+    """
     try:
         import django_prometheus  # noqa: F401  (imported for its side effect of proving it is installed)
     except ImportError as exc:

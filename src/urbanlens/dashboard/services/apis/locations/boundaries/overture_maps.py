@@ -132,8 +132,18 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         """Refuse the lookup unless the STAC index can narrow it first.
         `overturemaps.core` catches every exception from the index lookup, prints it, and returns ``None``; the caller then opens the theme's whole path instead of the intersecting partitions.
 
+        Args:
+            overture_type: The Overture type being fetched.
+            bbox: The bounding box being looked up.
+
+        The lookup is given its own deadline because the library gives it none -
+        `_get_files_from_stac` calls `urlopen` with no timeout, so a stalled
+        connection parks the calling thread indefinitely. This is reached from
+        the request path as well as from tasks.
+
         Raises:
-            GatewayRateLimitedError: The index is unavailable, now or recently."""
+            GatewayRateLimitedError: The index is unavailable, now or recently.
+        """
         global _stac_unavailable_until  # noqa: PLW0603
 
         if _overture_core is None:  # pragma: no cover - import guard above covers the real case
@@ -219,8 +229,13 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
     def get_building_attributes(self, latitude: float, longitude: float) -> dict[str, Any] | None:
         """Return the pinned building's physical attributes from Overture's Buildings theme.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
         Returns:
-            Dict with ``class_``, ``subtype``, ``height_m``, ``num_floors``, ``roof_shape``, ``roof_material``, ``primary_name`` (each ``None`` when Overture has no value), or None when no building footprint contains the point."""
+            Dict with ``class_``, ``subtype``, ``height_m``, ``num_floors``, ``roof_shape``, ``roof_material``, ``primary_name`` (each ``None`` when Overture has no value), or None when no building footprint contains the point.
+        """
         point = Point(float(longitude), float(latitude), srid=4326)
         best_area: float | None = None
         best_properties: dict[str, Any] | None = None
@@ -250,8 +265,15 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
     def get_nearby_places(self, latitude: float, longitude: float, *, radius_m: float = 150.0, limit: int = 5) -> list[dict[str, Any]]:
         """Return named points of interest near a coordinate from Overture's Places theme.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_m: Search radius in meters.
+            limit: Maximum number of places to return, nearest first.
+
         Returns:
-            Dicts with ``name``, ``category``, ``confidence``, ``operating_status``, ``distance_m``, nearest first; empty when nothing named is within range."""
+            Dicts with ``name``, ``category``, ``confidence``, ``operating_status``, ``distance_m``, nearest first; empty when nothing named is within range.
+        """
         candidates: list[dict[str, Any]] = []
         for feature in _features_from_geodataframe(self.get_places(create_bbox(latitude, longitude, self.bbox_delta))):
             geometry = feature.get("geometry") or {}

@@ -85,8 +85,14 @@ class BoundaryProviderChain:
     def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> ResolvedBoundaries:
         """Run the chain and return typed boundaries for a coordinate.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            name: Optional place name forwarded to name-aware providers.
+
         Returns:
-            ResolvedBoundaries; either polygon may be None when no provider found that boundary type."""
+            ResolvedBoundaries; either polygon may be None when no provider found that boundary type.
+        """
         resolved = ResolvedBoundaries()
         for provider in self.providers:
             if resolved.complete:
@@ -120,8 +126,14 @@ class BoundaryProviderChain:
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | MultiPolygon | None:
         """Untyped convenience lookup: the property boundary, else the building one.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            name: Optional place name forwarded to name-aware providers.
+
         Returns:
-            The best available polygon, or None when nothing was found."""
+            The best available polygon, or None when nothing was found.
+        """
         resolved = self.get_boundaries(latitude, longitude, name=name)
         return resolved.property_polygon or resolved.building_polygon
 

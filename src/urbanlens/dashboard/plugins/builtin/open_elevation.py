@@ -55,8 +55,12 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
     def has_content(self, data: dict | None) -> bool:
         """Mirror of :meth:`render_context`'s own emptiness test.
 
+        Args:
+            data: The cached payload.
+
         Returns:
-            True when there is an elevation to show."""
+            True when there is an elevation to show.
+        """
         return (data or {}).get("elevation_m") is not None
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:

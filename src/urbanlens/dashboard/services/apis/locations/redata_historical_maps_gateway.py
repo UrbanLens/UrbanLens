@@ -33,11 +33,27 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
         """Fetch georeferenced historical maps covering (or near) a point.
         Reads only REData's own spatial index - never an external source - so it is cheap enough to call per page view.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: How far beyond the point to accept a nearby sheet
+                (REData default 1000, max 50000).
+            covering_only: Require the point to fall inside the map's
+                footprint.
+            kinds: Comma-separated sheet kinds (``fire_insurance``,
+                ``cadastral``, ``topographic``, ``panoramic``, ``nautical``,
+                ``other``).
+            overlay_grade_only: Restrict to georeferences with real control
+                points (see :data:`OVERLAY_GRADE_SOURCES`). Off, approximate
+                ``derived_bounds`` placements are included too.
+            limit: Maximum matches (REData default 25, max 200).
+
         Returns:
             Match dicts ordered by containment then tightest footprint, so the first is the most detailed map of the spot.
 
         Raises:
-            LocationContextUnavailableError: The request failed or REData rejected a parameter."""
+            LocationContextUnavailableError: The request failed or REData rejected a parameter.
+        """
         params: dict[str, Any] = {"lat": latitude, "lng": longitude}
         if radius_meters is not None:
             params["radius_meters"] = radius_meters
@@ -55,8 +71,15 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
     def download_tile(self, georeference_uuid: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
         """Fetch one warped overlay tile from REData.
 
+        Args:
+            georeference_uuid: The georeference whose tile pyramid to read.
+            z: Tile zoom level.
+            x: Tile column.
+            y: Tile row.
+
         Returns:
-            ``(status_code, body, content_type)``."""
+            ``(status_code, body, content_type)``.
+        """
         base_url = (self.base_url or "").rstrip("/")
         url = f"{base_url}/api/v1/maps/georeferences/{georeference_uuid}/tiles/{z}/{x}/{y}.png"
         response = self.session.get(url, headers=self._headers, timeout=30)

@@ -29,8 +29,12 @@ class OllamaGateway(Gateway):
     def describe_photo_keywords(self, image_bytes: bytes) -> list[str]:
         """Ask the local Ollama vision model for photo keywords.
 
+        Args:
+            image_bytes: JPEG bytes, already downscaled (never the full upload).
+
         Returns:
-            Raw keyword strings; empty when no server is configured or the call fails."""
+            Raw keyword strings; empty when no server is configured or the call fails.
+        """
         if not self.base_url:
             return []
 

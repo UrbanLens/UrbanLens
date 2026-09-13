@@ -26,6 +26,13 @@ class RedataRoutingGateway(RedataLocationContextGateway):
     def get_route(self, waypoints: list[tuple[float, float]], *, capability: RoutingCapability = "as_given", profile: RoutingProfile = "driving") -> dict[str, Any] | None:
         """Route between an ordered list of waypoints.
 
+        Args:
+            waypoints: Ordered ``(latitude, longitude)`` pairs, 2-20 per
+                REData's own limit.
+            capability: ``"as_given"`` or ``"optimized"`` - see the module
+                docstring; never substituted for one another server-side.
+            profile: ``"driving"``, ``"walking"``, or ``"cycling"``.
+
         Returns:
             ``{"distance_meters", "duration_seconds"}`` for the whole route (matching ``OSRMGateway.get_route``'s shape, its direct-fallback counterpart), or None when REData confirmed no route connects these points (``route: null``), or found nothing to report.
 
@@ -33,7 +40,8 @@ class RedataRoutingGateway(RedataLocationContextGateway):
             LocationContextUnavailableError: The requested ``capability`` isn't configured on REData's end, or the request itself failed outright.
 
         Note:
-            REData's own ``../REData/docs/api-reference.md`` documents the request body for this endpoint and the ``route: null``/``waypoint_order``/ ``available_capabilities`` fields, but doesn't show a full worked example of a non-null ``route`` object's own fields."""
+            REData's own ``../REData/docs/api-reference.md`` documents the request body for this endpoint and the ``route: null``/``waypoint_order``/ ``available_capabilities`` fields, but doesn't show a full worked example of a non-null ``route`` object's own fields.
+        """
         body = self.post_json(
             "/api/v1/routes/",
             {

@@ -180,8 +180,12 @@ class MapDocumentCache:
     def key(self, etag: str) -> str:
         """Where one version of this profile's document lives.
 
+        Args:
+            etag: The document's identity.
+
         Returns:
-            The Valkey key."""
+            The Valkey key.
+        """
         return f"{self.PREFIX}:{FORMAT_VERSION}:{self.profile_id}:{etag}"
 
     @staticmethod
@@ -197,15 +201,23 @@ class MapDocumentCache:
     def _decoded(stored: Any) -> bytes:
         """Normalise whatever the client returned into bytes.
 
+        Args:
+            stored: A value read back from the cache.
+
         Returns:
-            The stored bytes."""
+            The stored bytes.
+        """
         return stored.encode("latin-1") if isinstance(stored, str) else bytes(stored)
 
     def get(self, etag: str) -> bytes | None:
         """The stored document for this exact version, if there is one.
 
+        Args:
+            etag: The document's identity.
+
         Returns:
-            Gzipped NDJSON, or None on a miss or any cache failure."""
+            Gzipped NDJSON, or None on a miss or any cache failure.
+        """
         if not self.client or self.ttl() <= 0:
             return None
         try:
@@ -232,8 +244,13 @@ class MapDocumentCache:
     def set(self, etag: str, body: bytes) -> bool:
         """Store a built document, if nobody else already did.
 
+        Args:
+            etag: The document's identity.
+            body: Gzipped NDJSON.
+
         Returns:
-            Whether this call was the one that stored it."""
+            Whether this call was the one that stored it.
+        """
         if not self.client or self.ttl() <= 0:
             return False
         try:

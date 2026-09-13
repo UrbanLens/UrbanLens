@@ -54,8 +54,14 @@ class FrameBudget:
     def consume(self, identity: str) -> bool:
         """Charge one event against *identity*'s budget.
 
+        Args:
+            identity: Who to charge. Callers build this from ids they already
+                hold, never from client-supplied text, so one sender cannot
+                spend another's budget.
+
         Returns:
-            True when the event is within budget, False once it is spent."""
+            True when the event is within budget, False once it is spent.
+        """
         if self.limit <= 0:
             return True
         try:
@@ -66,7 +72,11 @@ class FrameBudget:
 
     def refund(self, identity: str) -> None:
         """Give back one charge, for an event that turned out not to happen.
-        A decrement can race the window rolling over, and the honest failure mode for a *refund* is being off by one in the sender's favour rather than holding a lock over a counter whose whole point is that it costs nothing."""
+        A decrement can race the window rolling over, and the honest failure mode for a *refund* is being off by one in the sender's favour rather than holding a lock over a counter whose whole point is that it costs nothing.
+
+        Args:
+            identity: The identity that was charged.
+        """
         if self.limit <= 0:
             return
         key = f"{_KEY_PREFIX}:{self.name}:{identity}"

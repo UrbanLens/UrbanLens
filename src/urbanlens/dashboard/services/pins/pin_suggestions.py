@@ -447,7 +447,15 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
     Args:
         profile: Owner the hits belong to.
         hits: Discovered (latitude, longitude, taken_at) data points.
-        origin: Which batch scan produced these hits."""
+        origin: Which batch scan produced these hits.
+
+    Returns:
+        Summary counts for the calling task/view to report - all zero when
+        the profile has turned off visit-history tracking (a PinSuggestion is
+        itself a location-history trail) or has turned off pin suggestions
+        entirely or for this particular ``origin`` - see
+        ``excluded_suggestion_origins``.
+    """
     if not visit_logging_allowed(profile):
         return IngestSummary(matched_suggestions=0, new_pin_suggestions=0, hits_processed=0)
     if not profile.pin_suggestions_enabled or origin in excluded_suggestion_origins(profile):

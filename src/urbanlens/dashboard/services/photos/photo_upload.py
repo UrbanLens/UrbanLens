@@ -28,7 +28,12 @@ class PhotoUploadError(Exception):
         status: The HTTP status the calling view should respond with (400 for an unusable file, 403 for a feature the account lacks, 409 for a duplicate, 413 for a quota overrun)."""
 
     def __init__(self, message: str, status: int) -> None:
-        """Store the user-facing message and the HTTP status it maps to."""
+        """Store the user-facing message and the HTTP status it maps to.
+
+        Args:
+            message: User-facing explanation of the refusal.
+            status: HTTP status code the caller should respond with.
+        """
         super().__init__(message)
         self.message = message
         self.status = status

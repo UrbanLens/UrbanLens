@@ -150,8 +150,14 @@ def create_pin_and_log_visit(
         longitude: Optional longitude to place the pin at (defaults to the photo's).
         name: Optional user-provided pin name; left unset to fall back to the Location's canonical name via ``Pin.effective_name``.
 
+    Returns:
+        The Pin (new or reused), and the new PinVisit - or None if profile has
+        turned off visit-history tracking (the pin/photo association still
+        happens; only the visit row is skipped).
+
     Raises:
-        ValueError: If neither an override nor the image supplies coordinates."""
+        ValueError: If neither an override nor the image supplies coordinates.
+    """
     lat = latitude if latitude is not None else image.effective_latitude
     lng = longitude if longitude is not None else image.effective_longitude
     if lat is None or lng is None:
@@ -191,7 +197,12 @@ def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit | Non
     Args:
         profile: The owner the visit belongs to (also the pin owner).
         image: The photo to file.
-        pin: The pin to log the visit against."""
+        pin: The pin to log the visit against.
+
+    Returns:
+        The newly created PinVisit, or None if profile has turned off
+        visit-history tracking (the photo is still attached to the pin).
+    """
     visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO) if visit_logging_allowed(profile) else None
     update_fields = ["pin", "visit", "updated"]
     image.pin = pin

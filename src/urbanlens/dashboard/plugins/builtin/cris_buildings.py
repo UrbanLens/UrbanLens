@@ -220,8 +220,13 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
     def _resource_detail(gateway, resource: dict) -> dict:
         """One resource's detail record, degrading to the search row on failure.
 
+        Args:
+            gateway: The :class:`RedataGateway` to fetch through.
+            resource: The resource dict from the near-point lookup.
+
         Returns:
-            The detail record, or ``resource`` unchanged."""
+            The detail record, or ``resource`` unchanged.
+        """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
 
         resource_uuid = resource.get("uuid")
@@ -238,8 +243,15 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         """Best-effort OCR/AI-extract each document attachment's embedded photos.
         One attachment's extraction failing (not extractable yet, or REData/the AI provider being unavailable) must not drop the others - each is attempted independently and just keeps ``extracted_images: []`` on failure.
 
+        Args:
+            resource_uuid: The resource's REData uuid, or None when it
+                couldn't be resolved (skips extraction entirely - the
+                attachments are still returned unmodified).
+            attachments: The resource's raw attachment list (photo + document kinds).
+
         Returns:
-            The same attachments, each carrying the ``resource_uuid`` it belongs to (one payload now aggregates attachments from more than one resource - see :meth:`fetch`) and each document-kind entry augmented with an ``extracted_images`` list (possibly empty)."""
+            The same attachments, each carrying the ``resource_uuid`` it belongs to (one payload now aggregates attachments from more than one resource - see :meth:`fetch`) and each document-kind entry augmented with an ``extracted_images`` list (possibly empty).
+        """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
         if not resource_uuid:
@@ -287,8 +299,15 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
     def media_items(self, data: dict) -> list[MediaItem]:
         """Turn cached CRIS attachments (photos, documents, and extracted images) into gallery items.
 
+        Args:
+            data: This source's cached payload (see :meth:`fetch`). Each
+                attachment carries the ``resource_uuid`` it belongs to, since
+                one payload aggregates the nearest building's attachments and
+                the site-level record's.
+
         Returns:
-            One item per attachment, proxied through ``PinCrisAttachmentView`` (never a raw REData URL)."""
+            One item per attachment, proxied through ``PinCrisAttachmentView`` (never a raw REData URL).
+        """
         from django.urls import reverse
 
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
@@ -318,8 +337,14 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         """The CRIS record as both an information card and its attachments.
         Neither inherited ``api_payload`` would do on its own - ``InfoPanelSource``'s would drop the attachments and ``GalleryMediaSource``'s would drop the eligibility card - so this composes both from the *one* cached row rather than reading it twice.
 
+        Args:
+            pin: The pin whose panel is being read. ``render_context`` branches
+                on it - a parcel-scope pin gets the historic-district record
+                rather than an arbitrary building from the same lookup.
+
         Returns:
-            ``{"info": ..., "media": [...]}`` with ``info`` possibly None (a location inside a historic district but with no surveyed building of its own still has attachments worth serving), or None when nothing has landed yet or the record yields neither."""
+            ``{"info": ..., "media": [...]}`` with ``info`` possibly None (a location inside a historic district but with no surveyed building of its own still has attachments worth serving), or None when nothing has landed yet or the record yields neither.
+        """
         data = self.cached_data(pin)
         if data is None:
             return None

@@ -34,8 +34,28 @@ class RedataMediaGateway(RedataLocationContextGateway):
     ) -> list[dict[str, Any]]:
         """Look up media items near a coordinate.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            kind: Restrict to one or more ``MediaItemKind`` tags (e.g.
+                ``"photo"``) - repeatable, matching REData's ``?kind=``.
+            provider: Restrict to one or more provider tags (e.g.
+                ``"mapillary"``) - repeatable, matching REData's ``?provider=``.
+            radius_meters: Search radius in meters. Mapillary/KartaView/Panoramax
+                are fixed at 100m on REData's own side regardless of this value;
+                harmless to pass for the other registered media providers.
+            limit: Bounded positive integer (REData caps at 200).
+            is_aerial: Keep only drone/aerial footage, which REData flags on
+                each item from the publisher's own title and description.
+                Applied here rather than sent as a query parameter: ``is_aerial``
+                is a ``filterset_fields`` entry on REData's ``/media/`` viewset,
+                not something ``/media/lookup/`` reads, so passing it did
+                nothing and the whole nearby set came back as "aerial".
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
-            The envelope's ``results`` list, provider-tagged dicts per REData's ``MediaItemSerializer`` shape (``provider``, ``external_id``, ``kind``, ``title``, ``description``, ``url``, ``thumbnail_url``, ``credit``, ``latitude``, ``longitude``, ``attributes``, ...)."""
+            The envelope's ``results`` list, provider-tagged dicts per REData's ``MediaItemSerializer`` shape (``provider``, ``external_id``, ``kind``, ``title``, ``description``, ``url``, ``thumbnail_url``, ``credit``, ``latitude``, ``longitude``, ``attributes``, ...).
+        """
         extra_params: dict[str, Any] = {}
         if kind is not None:
             extra_params["kind"] = kind
@@ -68,8 +88,16 @@ class _RedataStreetViewProvider(StreetViewProvider):
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
         """Yield one dated slide per capture *date* from this provider, newest first.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius: Unused - REData pins the street-view search at 100 m per
+                provider; kept for the ``StreetViewProvider`` signature.
+            limit: Maximum number of dated slides to yield.
+
         Yields:
-            ``StreetViewSlide`` entries, newest capture date first."""
+            ``StreetViewSlide`` entries, newest capture date first.
+        """
         from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
 
         timeline = RedataStreetViewGateway().get_timeline(latitude, longitude, provider=self._redata_provider)

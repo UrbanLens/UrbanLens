@@ -21,8 +21,16 @@ class GatedS3Storage(S3Storage):
     def url(self, name: str, parameters: dict[str, Any] | None = None, expire: int | timedelta | None = None, http_method: str | None = None) -> str:
         """Return the gated ``/media/`` URL for *name*.
 
+        Args:
+            name: The stored object's key.
+            parameters: Ignored. Presigning parameters have no meaning for a
+                URL that is not presigned.
+            expire: Ignored, for the same reason.
+            http_method: Ignored, for the same reason.
+
         Returns:
-            ``MEDIA_URL`` joined with the URL-quoted name."""
+            ``MEDIA_URL`` joined with the URL-quoted name.
+        """
         quoted = filepath_to_uri(name)
         if quoted is not None:
             quoted = quoted.lstrip("/")
@@ -32,6 +40,12 @@ class GatedS3Storage(S3Storage):
         """Return a presigned URL for *name*, for server-side use only.
         The one caller is the gate's ``X-Accel-Redirect`` hand-off, where the URL is put in a response header that nginx consumes and strips: it reaches the object store from inside the cluster and never reaches the client.
 
+        Args:
+            name: The stored object's key, already authorized.
+            expire: Lifetime in seconds. Seconds, not minutes: this is consumed
+                by the same request that mints it.
+
         Returns:
-            A presigned GET URL."""
+            A presigned GET URL.
+        """
         return super().url(name, expire=expire)

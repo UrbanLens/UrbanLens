@@ -26,17 +26,26 @@ class RedataInfoPanelSource(CoordinateGatedInfoPanelSource):
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
         """Make this panel's one REData call.
 
+        Args:
+            latitude: WGS-84 latitude of the pin.
+            longitude: WGS-84 longitude of the pin.
+
         Returns:
             The parsed near-point envelope, whose ``complete`` flag decides whether the result may be cached.
 
         Raises:
-            LocationContextUnavailableError: The request failed outright."""
+            LocationContextUnavailableError: The request failed outright.
+        """
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
         """Shape the envelope's rows before they are cached.
 
+        Args:
+            rows: The envelope's ``results``.
+
         Returns:
-            The rows to store."""
+            The rows to store.
+        """
         return rows
 
     def gate(self, pin: Pin) -> bool:
@@ -46,7 +55,11 @@ class RedataInfoPanelSource(CoordinateGatedInfoPanelSource):
         return super().gate(pin) and redata_configured()
 
     def fetch(self, pin: Pin) -> None:
-        """Call REData and cache the rows, unless the answer is an outage."""
+        """Call REData and cache the rows, unless the answer is an outage.
+
+        Args:
+            pin: The pin whose location is being filled.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         latitude = float(pin.effective_latitude or 0)

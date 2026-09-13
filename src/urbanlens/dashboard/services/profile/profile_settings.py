@@ -38,7 +38,11 @@ class SettingsValidationError(Exception):
         errors: Field name -> human-readable reason, shaped to be returned directly as a 400 body."""
 
     def __init__(self, errors: dict[str, str]) -> None:
-        """Store the per-field errors."""
+        """Store the per-field errors.
+
+        Args:
+            errors: Field name -> human-readable reason.
+        """
         self.errors = errors
         super().__init__("; ".join(f"{field}: {message}" for field, message in sorted(errors.items())))
 

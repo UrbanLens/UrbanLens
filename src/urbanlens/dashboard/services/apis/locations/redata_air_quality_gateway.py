@@ -26,11 +26,24 @@ class RedataAirQualityGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch air-quality readings near a coordinate.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            include_indoor: Also return indoor sensors (excluded by default
+                because an indoor particulate reading measures a room, not
+                the air at an address). Needs no refetch - they are stored
+                either way.
+            limit: Maximum number of readings to return.
+            force_refresh: Bypass REData's cache and re-query live. Cached
+                for one to three hours regardless - the shortest window in
+                REData's API.
+
         Returns:
             The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: Every covering source failed to answer, or the request itself failed."""
+            LocationContextUnavailableError: Every covering source failed to answer, or the request itself failed.
+        """
         extra_params: dict[str, Any] = {}
         if include_indoor:
             extra_params["include_indoor"] = "true"

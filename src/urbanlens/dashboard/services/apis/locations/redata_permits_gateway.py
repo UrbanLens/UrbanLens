@@ -33,11 +33,21 @@ class RedataPermitsGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch permit/violation/site-plan filings near a coordinate.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            kinds: Restrict to these ``kind`` tags (see
+                :data:`PERMIT_KIND_LABELS`).
+            years: How many years of filings to search.
+            limit: Maximum number of filings to return.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
             The parsed envelope, ordered by ``issued_at`` (issued for a permit, cited for a violation).
 
         Raises:
-            LocationContextUnavailableError: The covering source failed to answer, or the request itself failed."""
+            LocationContextUnavailableError: The covering source failed to answer, or the request itself failed.
+        """
         extra_params: dict[str, Any] = {}
         if kinds:
             extra_params["kind"] = kinds

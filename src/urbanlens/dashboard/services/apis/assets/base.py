@@ -74,15 +74,34 @@ class MediaProvider(Gateway, ABC):
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
         """Yield MediaItems for ``search_term``.
 
+        Args:
+            search_term: The search term to use to find media.
+            address: The address of the location, if any. Some media providers
+                may use this, or quote it, differently than others.
+
         Returns:
-            Generator of ``MediaItem``s."""
+            Generator of ``MediaItem``s.
+        """
         ...
 
     def get_media(self, location: Location, search_terms: list[str], *, address: str | None = None, limit: int = 24) -> tuple[list[MediaItem], bool]:
         """Return captioned media for ``location``, using the 7-day LocationCache.
 
+        Args:
+            location: The shared Location to cache results against.
+            search_terms: Ordered queries passed to ``_generate_media``, most
+                specific first. Every term is tried and results are merged
+                (deduped by URL) up to ``limit`` -- some search engines return
+                nothing for an overly specific query (e.g. a full street
+                address) but do match a broader one, so a single provider may
+                be given more than one candidate query to widen recall.
+            address: The address of the location, if any. Some media providers
+                may use this, or quote it, differently than others.
+            limit: Maximum number of items to return.
+
         Returns:
-            Tuple of (list of ``MediaItem``s, empty when the provider found nothing or failed; whether the result was served from cache)."""
+            Tuple of (list of ``MediaItem``s, empty when the provider found nothing or failed; whether the result was served from cache).
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         if (service_key := self.service_key) is None:

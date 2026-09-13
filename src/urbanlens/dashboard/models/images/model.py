@@ -47,7 +47,11 @@ _UPLOAD_BUCKET_CHARS = 2
 
 
 def _random_upload_dir() -> str:
-    """Return a fresh ``<bucket>/<token>`` directory for one stored file."""
+    """Return a fresh ``<bucket>/<token>`` directory for one stored file.
+
+    Returns:
+        Two path segments, e.g. ``"a7/Kd3xq8Lm2Zpq"``.
+    """
     token = secrets.token_urlsafe(_UPLOAD_TOKEN_BYTES)
     return f"{token[:_UPLOAD_BUCKET_CHARS]}/{token[_UPLOAD_BUCKET_CHARS:]}"
 
@@ -57,6 +61,13 @@ def anonymized_media_stem(instance: Image | None) -> str:
 
     The uploaded filename never reaches storage, since device names can leak
     capture details; only the year is kept for downloaded files.
+
+    Args:
+        instance: The Image being saved, or None/a bare instance for a
+            standalone call (tests, or a migration's historical model).
+
+    Returns:
+        ``"<year>-<uuid4 hex>"`` when a capture year is known, else the bare token.
     """
     taken = getattr(instance, "taken_at", None) or getattr(instance, "filename_taken_at", None)
     token = uuid4().hex
@@ -120,7 +131,11 @@ class ImageSource(TextChoices):
 
     @classmethod
     def personal_library(cls) -> frozenset[str]:
-        """Sources that mean this profile's own picture."""
+        """Sources that mean this profile's own picture.
+
+        Returns:
+            The ``ImageSource`` values that denote the profile's own picture.
+        """
         return frozenset({cls.UPLOAD, cls.IMMICH, cls.GOOGLE_PHOTOS, cls.FLICKR})
 
 
@@ -343,7 +358,11 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def is_own_contribution(self) -> bool:
-        """Whether ``profile`` photographed this rather than up-voting it."""
+        """Whether ``profile`` photographed this rather than up-voting it.
+
+        Returns:
+            True when this profile contributed the picture itself.
+        """
         return self.profile_id is not None and self.source in ImageSource.personal_library() and not self.media_source_key
 
     @property
@@ -358,28 +377,46 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def display_url(self) -> str:
-        """Stored file URL, falling back to the remote source."""
+        """Stored file URL, falling back to the remote source.
+
+        Returns:
+            The stored file's URL, the remote source URL, or "" when neither
+            is set.
+        """
         if self.image:
             return self.image.url
         return self.source_url or ""
 
     @property
     def thumb_url(self) -> str:
-        """Grid thumbnail URL, falling back to the original."""
+        """Grid thumbnail URL, falling back to the original.
+
+        Returns:
+            The thumbnail URL, the original's URL, or "".
+        """
         if self.thumbnail:
             return self.thumbnail.url
         return self.display_url
 
     @property
     def marker_thumb_url(self) -> str:
-        """Marker thumbnail URL, falling back through larger images."""
+        """Marker thumbnail URL, falling back through larger images.
+
+        Returns:
+            The marker thumbnail's URL, then the grid thumbnail's, then the
+            original's, or "".
+        """
         if self.marker_thumbnail:
             return self.marker_thumbnail.url
         return self.thumb_url
 
     @property
     def effective_taken_at(self) -> datetime | None:
-        """Best-known capture time: EXIF first, then filename date."""
+        """Best-known capture time: EXIF first, then filename date.
+
+        Returns:
+            The capture time, or None when neither source has one.
+        """
         return self.taken_at or self.filename_taken_at
 
     #: Extension -> icon name for document tiles without thumbnails.
@@ -401,7 +438,11 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def display_caption(self) -> str:
-        """Stripped caption, or ``""``; whitespace alone counts as none."""
+        """Stripped caption, or ``""``; whitespace alone counts as none.
+
+        Returns:
+            The caption with surrounding whitespace removed, or an empty string.
+        """
         return (self.caption or "").strip()
 
     @property
@@ -413,7 +454,12 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def effective_latitude(self) -> Decimal | None:
-        """Best-known latitude: real GPS, then estimate, then Location."""
+        """Best-known latitude: real GPS, then estimate, then Location.
+
+        Returns:
+            The latitude, or None when the photo has no position of any kind
+            and its location doesn't either.
+        """
         if self.latitude is not None:
             return self.latitude
         if self.estimated_latitude is not None:
@@ -425,7 +471,12 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def effective_longitude(self) -> Decimal | None:
-        """Best-known longitude: real GPS, then estimate, then Location."""
+        """Best-known longitude: real GPS, then estimate, then Location.
+
+        Returns:
+            The longitude, or None when the photo has no position of any
+            kind and its location doesn't either.
+        """
         if self.longitude is not None:
             return self.longitude
         if self.estimated_longitude is not None:

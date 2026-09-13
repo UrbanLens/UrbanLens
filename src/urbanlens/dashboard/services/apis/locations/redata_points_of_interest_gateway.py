@@ -22,11 +22,30 @@ class RedataPointsOfInterestGateway(RedataLocationContextGateway):
     def find_near(self, latitude: float, longitude: float, *, provider: str | list[str], radius_meters: float | None = None, force_refresh: bool = False) -> list[dict[str, Any]]:
         """Return points of interest from named REData providers near a coordinate.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            provider: One registered provider tag (e.g. ``"yelp"``,
+                ``"epa_echo"``) or a list of them. Required rather than
+                optional: this registry has two dozen providers and a caller
+                that names none fans out across all of them, which is a
+                decision worth writing down at the call site rather than
+                getting by omission. A caller that genuinely wants breadth
+                should ask :func:`applicable_provider_tags` which ones cover
+                the point and pass that list, so the fan-out is bounded by
+                coverage rather than by the whole registry.
+            radius_meters: Requested search radius; most providers in this
+                registry pin their own radius regardless (see the module
+                docstring), so this is often a no-op honored only by
+                providers that don't.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
             ``PointOfInterestSerializer``-shaped dicts (``provider``, ``external_id``, ``name``, ``category``, ``description``, ``url``, ``latitude``, ``longitude``, ``attributes``, ``record_retrieved_at``) - possibly empty.
 
         Raises:
-            LocationContextUnavailableError: The request failed outright or REData reported a transient failure (including the requested provider being rate-limited)."""
+            LocationContextUnavailableError: The request failed outright or REData reported a transient failure (including the requested provider being rate-limited).
+        """
         envelope = self.near_point(_PATH, latitude, longitude, radius_meters=radius_meters, provider=provider, force_refresh=force_refresh)
         return envelope.results
 

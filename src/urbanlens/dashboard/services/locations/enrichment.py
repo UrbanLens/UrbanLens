@@ -86,8 +86,12 @@ class EnrichmentSource(ABC):
     def enrich(self, location: Location) -> bool:
         """Fetch and persist this source's data for one location.
 
+        Args:
+            location: The location to enrich.
+
         Returns:
-            True when data (or an empty "nothing found" marker) was stored."""
+            True when data (or an empty "nothing found" marker) was stored.
+        """
 
 
 class LocationCacheEnrichmentSource(EnrichmentSource):
@@ -116,8 +120,12 @@ class LocationCacheEnrichmentSource(EnrichmentSource):
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Fetch this source's payload for one location.
 
+        Args:
+            location: The location to fetch data for.
+
         Returns:
-            Tuple of (payload dict or None when nothing was found, query key recorded on the cache row)."""
+            Tuple of (payload dict or None when nothing was found, query key recorded on the cache row).
+        """
 
 
 class AddressEnrichmentSource(EnrichmentSource):

@@ -174,11 +174,17 @@ class OverpassGateway(Gateway, BoundaryProvider):
         """Run a raw Overpass QL query and return the decoded JSON payload.
         Any endpoint that fails that way is taken out of rotation until the next day (:func:`_mark_endpoint_down`), so a chronically overloaded instance stops being tried at all.
 
+        Args:
+            query: The Overpass QL program to execute.
+            timeout: Optional HTTP timeout override in seconds; defaults to
+                ``self.timeout``.
+
         Returns:
             The decoded JSON payload, or an empty dict if the response was not a JSON object or every endpoint is currently down.
 
         Raises:
-            requests.RequestException: If every available endpoint fails transiently, or on the first non-retryable HTTP error."""
+            requests.RequestException: If every available endpoint fails transiently, or on the first non-retryable HTTP error.
+        """
         http_timeout = timeout or self.timeout
         candidates = self._available_endpoints()
         if not candidates:
@@ -277,8 +283,13 @@ class OverpassGateway(Gateway, BoundaryProvider):
         """Return every OSM building whose footprint falls inside a polygon.
         Overpass's own ``poly:`` filter takes the real boundary instead, so a 40-acre campus is queried exactly, in one request.
 
+        Args:
+            polygon: The property boundary to search inside (WGS-84). A
+                MultiPolygon is queried by its largest ring.
+
         Returns:
-            One dict per building - ``{"name", "latitude", "longitude", "osm_id", "source"}`` - matching the record shape ``plugins.builtin.parcel_buildings`` caches."""
+            One dict per building - ``{"name", "latitude", "longitude", "osm_id", "source"}`` - matching the record shape ``plugins.builtin.parcel_buildings`` caches.
+        """
         ring = self._largest_exterior_ring(polygon)
         if ring is None:
             return []
@@ -319,8 +330,12 @@ out center tags;
         """The exterior ring of the largest part of a polygonal geometry, as (lon, lat) pairs.
         Overpass's ``poly:`` filter accepts a single ring, so a MultiPolygon (the shape every stored ``Boundary`` uses) has to be reduced to one - its largest part is the parcel proper, any others being outbuildings or slivers.
 
+        Args:
+            polygon: The geometry to reduce; None is tolerated.
+
         Returns:
-            The ring's coordinates, or None when there is no usable ring."""
+            The ring's coordinates, or None when there is no usable ring.
+        """
         if polygon is None:
             return None
         largest: GEOSGeometry | None = polygon
@@ -400,8 +415,14 @@ out center tags;
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | None]:
         """Return the smallest containing building footprint and property perimeter.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            name: Unused; Overpass matches spatially.
+
         Returns:
-            Mapping with "building" and "property" keys (values may be None)."""
+            Mapping with "building" and "property" keys (values may be None).
+        """
         candidates = self._containing_polygons_by_kind(latitude, longitude)
         return {kind: (min(polygons, key=lambda polygon: polygon.area) if polygons else None) for kind, polygons in candidates.items()}
 

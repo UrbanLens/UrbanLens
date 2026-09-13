@@ -80,8 +80,17 @@ class ProvisionResult:
         """The JSON document ``UL_E2E_ACCOUNTS_FILE`` points at.
         Keys are snake_case to match the rest of this codebase; the TypeScript loader in ``tests/integration/lib/accounts.ts`` maps them to camelCase rather than having Python emit a foreign convention.
 
+        Args:
+            site_url: Absolute URL the accounts were provisioned on.
+            environment: ``UL_ENVIRONMENT`` of the provisioning instance.
+            seeds: What was seeded into which role, keyed by role name. The
+                load harness reads label ids and row counts out of here, so a
+                run against an unseeded target can say so rather than measuring
+                an empty account and passing.
+
         Returns:
-            A JSON-serialisable manifest."""
+            A JSON-serialisable manifest.
+        """
         return {
             "generated_at": timezone.now().isoformat(),
             "site_url": site_url,

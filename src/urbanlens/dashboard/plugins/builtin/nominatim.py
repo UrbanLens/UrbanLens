@@ -107,8 +107,12 @@ class NominatimPanelSource(LocationCachePanelSource):
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The reverse-geocoded OSM place metadata as an information card, or None.
 
+        Args:
+            pin: The pin whose panel is being read.
+
         Returns:
-            ``{"info": {...}}``, or None when nothing has landed yet or the geocode found no metadata worth showing."""
+            ``{"info": {...}}``, or None when nothing has landed yet or the geocode found no metadata worth showing.
+        """
         data = self.cached_data(pin)
         if not data or not any(data.get(field) for field in _USEFUL_FIELDS):
             return None
@@ -148,7 +152,13 @@ class NominatimPanelSource(LocationCachePanelSource):
 
     @staticmethod
     def _add_osm_link(pin: Pin, location: Location, osm_url: str) -> None:
-        """Add the OSM way/node/relation URL to the pin's (and wiki's) links, if not already there."""
+        """Add the OSM way/node/relation URL to the pin's (and wiki's) links, if not already there.
+
+        Args:
+            pin: The pin whose links should include this URL.
+            location: The pin's location, for reaching its wiki (if any).
+            osm_url: The OSM element URL from the reverse-geocode result.
+        """
         from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
 
         add_pin_and_wiki_link(pin, location, osm_url, "OpenStreetMap")
@@ -165,8 +175,12 @@ class NominatimEnrichmentSource(LocationCacheEnrichmentSource):
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Reverse-geocode a location's coordinates via Nominatim.
 
+        Args:
+            location: The location to reverse-geocode.
+
         Returns:
-            Tuple of (place payload or None, coordinate query key)."""
+            Tuple of (place payload or None, coordinate query key).
+        """
         from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
 
         lat = float(location.latitude or 0)

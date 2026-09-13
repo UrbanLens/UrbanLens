@@ -185,11 +185,19 @@ class GoogleCalendarGateway(Gateway):
     ) -> dict[str, Any] | None:
         """Perform an authenticated request against the Calendar API.
 
+        Args:
+            method: HTTP method.
+            url: Absolute URL.
+            params: Optional query parameters.
+            json_body: Optional JSON request body.
+            ok_statuses: Statuses treated as success.
+
         Returns:
             Decoded JSON body, or None for empty (204) responses.
 
         Raises:
-            GoogleAuthExpiredError: When Google rejects the current credentials (401/403)."""
+            GoogleAuthExpiredError: When Google rejects the current credentials (401/403).
+        """
         response = self.session.request(
             method,
             url,
@@ -224,8 +232,14 @@ class GoogleCalendarGateway(Gateway):
     ) -> list[dict[str, Any]]:
         """List (non-recurring-expanded) upcoming events on the user's calendar.
 
+        Args:
+            time_min: Lower bound (inclusive) for the event end time.
+            time_max: Optional upper bound for the event start time.
+            max_results: Page size cap; a single page is fetched.
+
         Returns:
-            Event resource dicts ordered by start time."""
+            Event resource dicts ordered by start time.
+        """
         params: dict[str, Any] = {
             "timeMin": time_min.isoformat(),
             "singleEvents": "true",
@@ -240,11 +254,15 @@ class GoogleCalendarGateway(Gateway):
     def get_event(self, event_id: str) -> dict[str, Any]:
         """Fetch a single event by id.
 
+        Args:
+            event_id: Google event identifier.
+
         Returns:
             The event resource dict.
 
         Raises:
-            CalendarEventNotFoundError: When the event does not exist."""
+            CalendarEventNotFoundError: When the event does not exist.
+        """
         body = self._request("GET", f"{self._events_url}/{event_id}")
         if body is None:
             raise GatewayRequestError("Google Calendar returned an empty event.")
@@ -253,11 +271,15 @@ class GoogleCalendarGateway(Gateway):
     def create_event(self, body: dict[str, Any]) -> dict[str, Any]:
         """Create an event on the user's calendar.
 
+        Args:
+            body: Event resource payload.
+
         Returns:
             The created event resource dict.
 
         Raises:
-            GatewayRequestError: On API failure."""
+            GatewayRequestError: On API failure.
+        """
         created = self._request("POST", self._events_url, json_body=body)
         if created is None:
             raise GatewayRequestError("Google Calendar returned an empty response for event creation.")
@@ -266,11 +288,16 @@ class GoogleCalendarGateway(Gateway):
     def update_event(self, event_id: str, body: dict[str, Any]) -> dict[str, Any]:
         """Update an existing event (PATCH semantics).
 
+        Args:
+            event_id: Google event identifier.
+            body: Partial event resource payload.
+
         Returns:
             The updated event resource dict.
 
         Raises:
-            CalendarEventNotFoundError: When the event no longer exists."""
+            CalendarEventNotFoundError: When the event no longer exists.
+        """
         updated = self._request("PATCH", f"{self._events_url}/{event_id}", json_body=body)
         if updated is None:
             raise GatewayRequestError("Google Calendar returned an empty response for event update.")
@@ -279,8 +306,12 @@ class GoogleCalendarGateway(Gateway):
     def delete_event(self, event_id: str) -> None:
         """Delete an event from the user's calendar.
 
+        Args:
+            event_id: Google event identifier.
+
         Raises:
-            GatewayRequestError: On API failure other than 404/410."""
+            GatewayRequestError: On API failure other than 404/410.
+        """
         try:
             self._request("DELETE", f"{self._events_url}/{event_id}", ok_statuses=(200, 204, 404, 410))
         except CalendarEventNotFoundError:

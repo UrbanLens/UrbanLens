@@ -162,7 +162,12 @@ class WikiUndoHandler(UndoHandler):
     @classmethod
     def redo_delete(cls, payload: dict[str, Any]) -> None:
         """Re-delete the wikis ``restore`` recreated, and re-take what it re-granted.
-        The inherited implementation only deletes the rows."""
+        The inherited implementation only deletes the rows.
+
+        Args:
+            payload: Wrapped stash of the form
+                ``{"entries": [...], "restored_pks": [...]}``.
+        """
         for entry in payload.get("entries") or []:
             regranted = entry.get("regranted_image_ids") or []
             if regranted:

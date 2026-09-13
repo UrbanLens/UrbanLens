@@ -41,30 +41,59 @@ class HookRegistry:
         self._sequence = itertools.count()
 
     def add_action(self, name: str, callback: Callable[..., Any], *, priority: int = DEFAULT_PRIORITY) -> None:
-        """Register a callback for an action hook."""
+        """Register a callback for an action hook.
+
+        Args:
+            name: The action hook name (e.g. ``"plugins_loaded"``).
+            callback: Called with the arguments passed to :meth:`do_action`.
+            priority: Execution order; lower runs earlier. Defaults to 10.
+        """
         self._add(self._actions, name, callback, priority)
 
     def add_filter(self, name: str, callback: Callable[..., Any], *, priority: int = DEFAULT_PRIORITY) -> None:
-        """Register a callback for a filter hook."""
+        """Register a callback for a filter hook.
+
+        Args:
+            name: The filter hook name.
+            callback: Called with the current value (plus any extra arguments
+                passed to :meth:`apply_filters`); must return the next value.
+            priority: Execution order; lower runs earlier. Defaults to 10.
+        """
         self._add(self._filters, name, callback, priority)
 
     def remove_action(self, name: str, callback: Callable[..., Any]) -> bool:
         """Unregister an action callback.
 
+        Args:
+            name: The action hook name.
+            callback: The exact callable previously registered.
+
         Returns:
-            True when a registration was found and removed."""
+            True when a registration was found and removed.
+        """
         return self._remove(self._actions, name, callback)
 
     def remove_filter(self, name: str, callback: Callable[..., Any]) -> bool:
         """Unregister a filter callback.
 
+        Args:
+            name: The filter hook name.
+            callback: The exact callable previously registered.
+
         Returns:
-            True when a registration was found and removed."""
+            True when a registration was found and removed.
+        """
         return self._remove(self._filters, name, callback)
 
     def do_action(self, name: str, *args: Any, **kwargs: Any) -> None:
         """Run every callback registered for an action hook.
-        Callbacks run in priority order; exceptions are logged and swallowed so one broken plugin cannot break the others or the caller."""
+        Callbacks run in priority order; exceptions are logged and swallowed so one broken plugin cannot break the others or the caller.
+
+        Args:
+            name: The action hook name.
+            *args: Positional arguments passed to each callback.
+            **kwargs: Keyword arguments passed to each callback.
+        """
         for entry in sorted(self._actions.get(name, [])):
             try:
                 entry.callback(*args, **kwargs)
@@ -74,8 +103,15 @@ class HookRegistry:
     def apply_filters(self, name: str, value: Any, *args: Any, **kwargs: Any) -> Any:
         """Pass a value through every callback registered for a filter hook.
 
+        Args:
+            name: The filter hook name.
+            value: The initial value to filter.
+            *args: Extra positional arguments passed to each callback.
+            **kwargs: Extra keyword arguments passed to each callback.
+
         Returns:
-            The value after all callbacks have been applied."""
+            The value after all callbacks have been applied.
+        """
         for entry in sorted(self._filters.get(name, [])):
             try:
                 value = entry.callback(value, *args, **kwargs)
@@ -84,7 +120,12 @@ class HookRegistry:
         return value
 
     def clear(self, name: str | None = None) -> None:
-        """Remove registered callbacks, primarily for test isolation."""
+        """Remove registered callbacks, primarily for test isolation.
+
+        Args:
+            name: Clear only this hook name (actions and filters); clear
+                everything when None.
+        """
         if name is None:
             self._actions.clear()
             self._filters.clear()

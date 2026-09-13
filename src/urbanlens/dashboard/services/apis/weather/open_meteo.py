@@ -66,8 +66,13 @@ class OpenMeteoGateway(Gateway):
     def get_weather_forecast(self, latitude: float, longitude: float) -> list[ForecastSlot] | None:
         """Return a morning/evening forecast strip for the next few days.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
         Returns:
-            ``date`` stays the naive local wall clock ``timezone=auto`` returns (the pin weather panels display local time); ``date_utc`` anchors each slot in UTC using the response's ``utc_offset_seconds``, and is omitted if that field is missing or malformed."""
+            ``date`` stays the naive local wall clock ``timezone=auto`` returns (the pin weather panels display local time); ``date_utc`` anchors each slot in UTC using the response's ``utc_offset_seconds``, and is omitted if that field is missing or malformed.
+        """
         params: dict[str, Any] = {
             "latitude": latitude,
             "longitude": longitude,
@@ -136,8 +141,13 @@ class OpenMeteoGateway(Gateway):
     def get_sun_times(self, latitude: float, longitude: float) -> SunTimes | None:
         """Return today's sunrise/sunset and approximate golden-hour windows.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
         Returns:
-            Today's sun times, or None on failure."""
+            Today's sun times, or None on failure.
+        """
         params: dict[str, Any] = {
             "latitude": latitude,
             "longitude": longitude,

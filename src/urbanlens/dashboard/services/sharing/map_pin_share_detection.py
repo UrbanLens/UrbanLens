@@ -66,15 +66,24 @@ class MapBounds:
     def contains_point(self, lat: float, lng: float) -> bool:
         """Whether ``(lat, lng)`` falls within this box.
 
+        Args:
+            lat: Latitude to test.
+            lng: Longitude to test.
+
         Returns:
-            True if the point is inside (inclusive of the edges)."""
+            True if the point is inside (inclusive of the edges).
+        """
         return self.south <= lat <= self.north and self.west <= lng <= self.east
 
     def expanded(self, factor: float) -> MapBounds:
         """Return a copy of this box scaled about its own center.
 
+        Args:
+            factor: Scale factor (e.g. 5 returns a box 5x as wide/tall).
+
         Returns:
-            The expanded box."""
+            The expanded box.
+        """
         lat_pad = (self.north - self.south) * (factor - 1) / 2
         lng_pad = (self.east - self.west) * (factor - 1) / 2
         return MapBounds(self.south - lat_pad, self.west - lng_pad, self.north + lat_pad, self.east + lng_pad)

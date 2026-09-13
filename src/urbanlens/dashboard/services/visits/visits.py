@@ -294,7 +294,13 @@ def create_visit_suggestion(
         origin_image: The uploaded photo, for the geotagged-photo flow (a self-directed suggestion where ``suggested_to`` is the uploader).
         origin_pin: The suggester's own pin, used only as a message fallback when there is no Location (e.g. a private, unlinked pin).
         from_my_activity: Whether this suggestion was raised from a Google Takeout My Activity (Maps) "Directions to X" entry with no matching pin (a self-directed suggestion, like origin_image, but with no backing row).
-        destination_label: The destination name parsed from the My Activity entry, used only as a message fallback (like origin_pin.official_name) when there is no Location - never stored."""
+        destination_label: The destination name parsed from the My Activity entry, used only as a message fallback (like origin_pin.official_name) when there is no Location - never stored.
+
+    Returns:
+        The created VisitSuggestion, or None if nothing would change for
+        suggested_to, or if suggested_to has turned off visit-history
+        tracking - a pending suggestion is itself a location-history record.
+    """
     if not visit_logging_allowed(suggested_to):
         return None
 
@@ -377,7 +383,14 @@ def _visit_source_for(suggestion: VisitSuggestion) -> str:
     """Return the VisitSource the resulting PinVisit should use.
 
     Args:
-        suggestion: The suggestion being accepted."""
+        suggestion: The suggestion being accepted.
+
+    Returns:
+        VisitSource.TRIP, VisitSource.SAFETY_CHECKIN, VisitSource.PHOTO,
+        VisitSource.HISTORY, or VisitSource.USER depending on which origin is
+        set (the model's check constraint guarantees exactly one of the five
+        is set).
+    """
     if suggestion.trip_activity_id:
         return VisitSource.TRIP
     if suggestion.safety_checkin_id:
@@ -394,7 +407,13 @@ def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Prof
 
     Args:
         suggestion: The pending suggestion being accepted.
-        accepting_profile: The profile accepting (must be suggestion.suggested_to)."""
+        accepting_profile: The profile accepting (must be suggestion.suggested_to).
+
+    Returns:
+        The newly created PinVisit for the accepting profile, or None (no-op,
+        suggestion left pending) if accepting_profile has turned off visit-history
+        tracking.
+    """
     if not visit_logging_allowed(accepting_profile):
         return None
 

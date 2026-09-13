@@ -34,7 +34,14 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(Exists(Image.objects.filter(location_id=OuterRef("location_id"), media_type=MediaKind.PHOTO)))
 
     def filter_by_security_indicators(self, criteria) -> Self:
-        """Filter by exact match on each ``security_<field>`` criterion; ignores unset values."""
+        """Filter by exact match on each ``security_<field>`` criterion; ignores unset values.
+
+        Args:
+            criteria: The same criteria dict ``filter_by_criteria`` receives.
+
+        Returns:
+            Filtered QuerySet.
+        """
         from urbanlens.dashboard.models.abstract.choices import SecurityLevel
         from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 
@@ -51,7 +58,11 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(parent_pin__isnull=False)
 
     def with_descendants(self) -> Self:
-        """Include the full detail-pin subtree of each pin."""
+        """Include the full detail-pin subtree of each pin.
+
+        Returns:
+            A fresh QuerySet over this queryset's pins plus every descendant.
+        """
         from urbanlens.dashboard.models.pin.model import Pin
 
         root_ids = set(self.values_list("pk", flat=True))
@@ -72,7 +83,12 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(visited_q).distinct()
 
     def visited_without_record(self) -> Self:
-        """Visited pins with no dated visit row, excluding dismissed ones."""
+        """Visited pins with no dated visit row, excluding dismissed ones.
+
+        Returns:
+            Distinct top-level pins that are marked visited but have zero rows in
+            their ``visit_history``.
+        """
         return self.root_pins().visited().filter(visit_history__isnull=True).exclude(unlogged_visit_dismissed=True).distinct()
 
     def by_priority(self, priority):
@@ -82,22 +98,54 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(name__icontains=name)
 
     def with_placeholder_names(self) -> Self:
-        """Pins with a stored non-user name; callers check meaningfulness."""
+        """Pins with a stored non-user name; callers check meaningfulness.
+
+        Returns:
+            Filtered queryset, with ``location`` (and its wiki) preselected.
+        """
         return self.filter(name_is_user_provided=False).exclude(name__isnull=True).exclude(name="").select_related("location__wiki")
 
     def by_profile(self, profile):
         return self.filter(profile=profile)
 
     def modified_since(self, since) -> Self:
-        """Pins created or edited at or after ``since``."""
+        """Pins created or edited at or after ``since``.
+
+        Args:
+            since: Inclusive lower bound on the last-modified time.
+
+        Returns:
+            This queryset filtered to pins modified at or after ``since``.
+        """
         return self.filter(updated__gte=since)
 
     def near_point(self, point: Point, radius_km: float) -> Self:
-        """Root pins within ``radius_km`` of ``point``, closest first."""
+        """Root pins within ``radius_km`` of ``point``, closest first.
+
+        Args:
+            point: PostGIS point to measure distance from.
+            radius_km: Search radius in kilometers.
+
+        Returns:
+            Root pins ordered nearest-first, annotated with ``distance`` (a
+            ``django.contrib.gis.measure.Distance``).
+        """
         return self.root_pins().filter(location__point__distance_lte=(point, D(km=radius_km))).annotate(distance=Distance("location__point", point)).order_by("distance")
 
     def within_bounds(self, south: float, west: float, north: float, east: float) -> Self:
-        """Pins whose location falls within a lat/lng box."""
+        """Pins whose location falls within a lat/lng box.
+
+        Args:
+            south: Southern (minimum) latitude.
+            west: Western edge longitude. May exceed +/-180 (Leaflet reports
+                unwrapped bounds when the map is panned across the date line)
+                and may be greater than ``east`` when the viewport crosses it.
+            north: Northern (maximum) latitude.
+            east: Eastern edge longitude, same caveats as ``west``.
+
+        Returns:
+            This queryset filtered to pins within the box.
+        """
         from django.contrib.gis.geos import Polygon
 
         from urbanlens.dashboard.services.geo.longitude import normalize_longitude
@@ -123,7 +171,18 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(labels__id__in=tag_ids).distinct()
 
     def apply_label_groups(self, groups: list[dict]) -> Self:
-        """Apply structured label filter groups; caller must call ``distinct()``."""
+        """Apply structured label filter groups; caller must call ``distinct()``.
+
+        Args:
+            groups: List of ``{"op": "and"|"or"|"not", "ids": [int, ...]}``. An
+                ``"or"`` group may additionally carry ``"min_priority"``,
+                which joins that group's disjunction - the only way to express
+                "has this label *or* is at least this important", since groups
+                themselves are ANDed.
+
+        Returns:
+            Filtered QuerySet (not yet distinct - caller must call ``.distinct()``).
+        """
         from urbanlens.dashboard.models.labels.model import Label as _Label
 
         qs = self
@@ -153,7 +212,26 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return qs
 
     def filter_by_criteria(self, criteria) -> Self:
-        """Filter pins by a ``SearchForm`` criteria dict."""
+        """Filter pins by a ``SearchForm`` criteria dict.
+
+        Args:
+            criteria: Dict with optional keys: name, status (list), tags (QuerySet),
+                exclude_tags (QuerySet), label_groups (list of group dicts from
+                ``SearchForm.parse_label_groups()``), min_rating (int), max_rating (int),
+                has_visits ('yes'|'no'|''), min_priority (int), max_priority (int),
+                min_danger (int), max_danger (int), min_vulnerability (int), max_vulnerability (int),
+                created_after (date), created_before (date),
+                visited_after (date), visited_before (date), overlapping_pins (bool),
+                date_built_after (date), date_built_before (date),
+                date_abandoned_after (date), date_abandoned_before (date),
+                last_viewed_after (date), last_viewed_before (date),
+                security_<field> (SecurityLevel value, one per SECURITY_FIELDS entry),
+                has_links ('yes'|'no'|''), min_detail_pins (int), max_detail_pins (int),
+                include_regions (MultiPolygon | None), exclude_regions (MultiPolygon | None).
+
+        Returns:
+            Filtered QuerySet (distinct).
+        """
         qs = self
         if name := (criteria.get("name") or "").strip():
             qs = qs.filter(
@@ -268,7 +346,18 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return qs.distinct()
 
     def filter_by_custom_fields(self, custom_field_criteria) -> Self:
-        """Filter pins by the owner's custom field values."""
+        """Filter pins by the owner's custom field values.
+
+        Args:
+            custom_field_criteria: List of dicts from
+                ``SearchForm.parse_custom_field_criteria()``: each has ``field``
+                plus ``contains`` (text/url), ``min``/``max`` (number),
+                ``after``/``before`` (date), ``after_time``/``before_time``
+                (time), ``equals`` (select), or ``checked`` (checkbox).
+
+        Returns:
+            Filtered QuerySet.
+        """
         qs = self
         for criterion in custom_field_criteria:
             field = criterion.get("field")
@@ -308,7 +397,12 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return qs
 
     def overlapping(self) -> Self:
-        """Pins whose footprint overlaps another pin in this queryset."""
+        """Pins whose footprint overlaps another pin in this queryset.
+
+        Returns:
+            Pins (from this queryset) that overlap at least one other pin also
+            in this queryset.
+        """
         from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
         from urbanlens.dashboard.models.pin.model import Pin
 
@@ -354,7 +448,18 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
     """Manager for Pin."""
 
     def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):
-        """Get or create a pin, treating nearby coordinates as the same place."""
+        """Get or create a pin, treating nearby coordinates as the same place.
+
+        Args:
+            latitude (float): Latitude of the pin.
+            longitude (float): Longitude of the pin.
+            profile (Profile): The profile associated with the pin.
+            threshold_meters (float): Distance threshold in meters for considering pins as the same.
+            defaults (dict, optional): Defaults to use for object creation.
+
+        Returns:
+            (Pin, bool): Tuple of (Pin instance, created boolean)
+        """
         if latitude is None or longitude is None:
             logger.warning("get_nearby_or_create called with None coordinates, skipping.")
             return None, False

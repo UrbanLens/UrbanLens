@@ -44,8 +44,12 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
     def has_content(self, data: dict | None) -> bool:
         """Mirror of :meth:`render_context`'s own emptiness test.
 
+        Args:
+            data: The cached payload.
+
         Returns:
-            True when there is an address to show."""
+            True when there is an address to show.
+        """
         return bool(data and (data.get("locality") or data.get("region") or data.get("country")))
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:

@@ -21,8 +21,12 @@ class RedataBasemapTilesGateway(RedataLocationContextGateway):
     def endpoint_for_log(url: str) -> str:
         """Record the layer, never the tile coordinate.
 
+        Args:
+            url: The tile or catalogue URL about to be requested.
+
         Returns:
-            The URL truncated at the layer segment."""
+            The URL truncated at the layer segment.
+        """
         marker = "/api/v1/tiles/"
         if marker not in url:
             return url
@@ -55,8 +59,15 @@ class RedataBasemapTilesGateway(RedataLocationContextGateway):
     def download_tile(self, layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
         """Fetch one basemap tile.
 
+        Args:
+            layer: Layer id from :meth:`list_sources`.
+            z: Tile zoom level.
+            x: Tile column.
+            y: Tile row.
+
         Returns:
-            ``(status_code, body, content_type)``."""
+            ``(status_code, body, content_type)``.
+        """
         base_url = (self.base_url or "").rstrip("/")
         url = f"{base_url}/api/v1/tiles/{layer}/{z}/{x}/{y}/"
         response = self.session.get(url, headers=self._headers, timeout=30)

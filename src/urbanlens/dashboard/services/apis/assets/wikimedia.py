@@ -49,8 +49,12 @@ class WikimediaGateway(MediaProvider):
     def search_images(self, query: str) -> list[dict[str, Any]]:
         """Search Commons for images matching *query* and return thumbnail info.
 
+        Args:
+            query: Human-readable wiki/place name used as the search term.
+
         Returns:
-            List of dicts with keys ``title``, ``url``, ``thumb``, ``description_url``, ``mime``."""
+            List of dicts with keys ``title``, ``url``, ``thumb``, ``description_url``, ``mime``.
+        """
         page_ids = self._search_files(query)
         if not page_ids:
             return []

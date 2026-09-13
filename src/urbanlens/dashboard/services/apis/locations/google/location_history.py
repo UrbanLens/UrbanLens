@@ -26,7 +26,13 @@ def detect_location_history_format(data: dict) -> str | None:
     """Identify the Google Location History JSON variant.
 
     Args:
-        data: Parsed top-level JSON dict."""
+        data: Parsed top-level JSON dict.
+
+    Returns:
+        ``'semantic'`` for Semantic Location History (``timelineObjects``),
+        ``'raw'`` for raw Records.json (``locations``),
+        ``None`` if neither pattern is found.
+    """
     if "timelineObjects" in data:
         return "semantic"
     if "locations" in data:

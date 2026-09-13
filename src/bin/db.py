@@ -402,7 +402,11 @@ class DbInitializer:
         return subprocess.run(cmd, env=self._psql_env(), check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # nosec B603
 
     def _check_role_exists(self) -> bool:
-        """Return True when the role exists (COUNT(*) distinguishes empty SELECT)."""
+        """Return True when the role exists (COUNT(*) distinguishes empty SELECT).
+
+        Returns:
+            bool: True if the role exists, False otherwise.
+        """
         result = self.execute_sql(
             "SELECT COUNT(*) FROM pg_roles WHERE rolname = :'role_name'",
             check=False,
@@ -426,7 +430,11 @@ class DbInitializer:
         self.execute_sql(f"CREATE ROLE {self._quote_identifier(self.db_user)} WITH LOGIN SUPERUSER")
 
     def check_db(self) -> bool:
-        """Return True when the database exists (direct connect; missing DB exits non-zero)."""
+        """Return True when the database exists (direct connect; missing DB exits non-zero).
+
+        Returns:
+            bool: True if the database exists and is reachable, False otherwise.
+        """
         result = subprocess.run(  # nosec B603
             [
                 _resolve_executable(PSQL_EXE),
@@ -477,7 +485,15 @@ class DbInitializer:
 
 
 class Actions(Enum):
-    """Command-line actions for this script."""
+    """Command-line actions for this script.
+
+    Attributes:
+        status: check the DB status
+        start: start the DB (if it is not already running)
+        restart: stop the DB (if it is running) and start it again.
+        stop: stop the DB (if it is running)
+        init: initialize the project (create DB, run migrations)
+    """
 
     start = "start"
     restart = "restart"

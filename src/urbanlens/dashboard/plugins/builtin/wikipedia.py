@@ -64,8 +64,12 @@ class WikipediaPanelSource(LocationCachePanelSource):
         """Campus fallback: search again from each ancestor pin's own point.
         A child pin for an outbuilding can easily sit more than the geosearch radius away from that point, so its own coordinates find nothing even though the campus article is exactly what its panel should show.
 
+        Args:
+            pin: The pin whose own-coordinate search came up empty.
+
         Returns:
-            The first ancestor's matched article dict, or None."""
+            The first ancestor's matched article dict, or None.
+        """
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
 
         seen: set[int] = {pin.pk}
@@ -105,8 +109,12 @@ class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Find the best-matching Wikipedia article for a location.
 
+        Args:
+            location: The location to fetch an article for.
+
         Returns:
-            Tuple of (article payload or None, query key)."""
+            Tuple of (article payload or None, query key).
+        """
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
 
         lat = float(location.latitude or 0)

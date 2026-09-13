@@ -84,11 +84,16 @@ class FlickrPublicGateway(Gateway):
     def _call(self, method: str, extra_params: dict[str, Any]) -> dict[str, Any]:
         """Call one public ``flickr.*`` REST method and return its decoded JSON body.
 
+        Args:
+            method: The Flickr API method name (e.g. ``flickr.photosets.getInfo``).
+            extra_params: Additional method-specific parameters.
+
         Returns:
             The decoded JSON response body.
 
         Raises:
-            FlickrNotConfiguredError: When the site has no Flickr API key."""
+            FlickrNotConfiguredError: When the site has no Flickr API key.
+        """
         api_key, _secret = _consumer_credentials()
         params = {"method": method, "format": "json", "nojsoncallback": "1", "api_key": api_key, **extra_params}
         try:
@@ -107,11 +112,16 @@ class FlickrPublicGateway(Gateway):
     def _resolve_user_nsid(self, user_path_segment: str) -> str:
         """Resolve a Flickr URL path segment (NSID or path-alias) to a real NSID.
 
+        Args:
+            user_path_segment: The path segment right after ``/photos/`` in
+                the album URL - either already an NSID, or a custom alias.
+
         Returns:
             The user's NSID.
 
         Raises:
-            FlickrNotConfiguredError: When the site has no Flickr API key."""
+            FlickrNotConfiguredError: When the site has no Flickr API key.
+        """
         if _NSID_RE.fullmatch(user_path_segment):
             return user_path_segment
         body = self._call("flickr.urls.lookupUser", {"url": f"https://www.flickr.com/photos/{user_path_segment}/"})
@@ -120,11 +130,17 @@ class FlickrPublicGateway(Gateway):
     def get_album(self, url: str, limit: int = MAX_ALBUM_PHOTOS) -> FlickrAlbum:
         """Resolve a public Flickr album URL into its metadata and photo list.
 
+        Args:
+            url: The album/photoset URL as pasted by the user.
+            limit: Maximum number of photos to return (this feature caps
+                imports at :data:`MAX_ALBUM_PHOTOS` regardless of caller input).
+
         Returns:
             The album's metadata and up to ``limit`` photos.
 
         Raises:
-            ValueError: When the URL isn't a recognizable Flickr album URL."""
+            ValueError: When the URL isn't a recognizable Flickr album URL.
+        """
         parsed = parse_album_url(url)
         if parsed is None:
             raise ValueError("That doesn't look like a Flickr album URL.")
@@ -167,11 +183,15 @@ class FlickrPublicGateway(Gateway):
     def download_photo(self, photo: FlickrAlbumPhoto) -> tuple[bytes, str, str]:
         """Download one album photo's file bytes.
 
+        Args:
+            photo: The photo to download (from a prior :meth:`get_album` call).
+
         Returns:
             Tuple of (file bytes, filename, content-type).
 
         Raises:
-            GatewayRequestError: When the photo has no downloadable URL, or the download fails."""
+            GatewayRequestError: When the photo has no downloadable URL, or the download fails.
+        """
         if not photo.download_url:
             raise GatewayRequestError(f"Flickr photo {photo.id} has no downloadable size available.")
         try:

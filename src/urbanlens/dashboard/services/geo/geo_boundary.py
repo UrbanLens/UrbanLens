@@ -76,8 +76,13 @@ class GeoBoundary:
     def contains(self, lat: float | None, lng: float | None) -> bool:
         """Return True if (lat, lng) falls within this boundary.
 
+        Args:
+            lat: WGS-84 latitude.
+            lng: WGS-84 longitude.
+
         Returns:
-            True when inside (or touching the edge of) the boundary."""
+            True when inside (or touching the edge of) the boundary.
+        """
         if lat is None or lng is None:
             return False
         geometry = self._geometry()
@@ -93,8 +98,12 @@ class GeoBoundary:
     def from_bboxes(cls, boxes: Sequence[BBox]) -> GeoBoundary:
         """Build a boundary from a union of lat/lng bounding boxes (pure math, no I/O).
 
+        Args:
+            boxes: Each box as (lat_min, lat_max, lng_min, lng_max).
+
         Returns:
-            A ``GeoBoundary`` covering the union of all boxes."""
+            A ``GeoBoundary`` covering the union of all boxes.
+        """
 
         def _load() -> MultiPolygon:
             polygons = []
@@ -110,8 +119,12 @@ class GeoBoundary:
     def from_wkt(cls, wkt: str) -> GeoBoundary:
         """Build a boundary from a hand-authored WKT polygon/multipolygon (pure parsing, no I/O).
 
+        Args:
+            wkt: Well-known text, e.g. ``"POLYGON((...))"``.
+
         Returns:
-            A ``GeoBoundary`` wrapping the parsed geometry."""
+            A ``GeoBoundary`` wrapping the parsed geometry.
+        """
 
         def _load() -> Polygon | MultiPolygon:
             from django.contrib.gis.geos import GEOSGeometry

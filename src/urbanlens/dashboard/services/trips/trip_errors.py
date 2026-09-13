@@ -8,7 +8,11 @@ class TripError(ValueError):
     Subclasses ``ValueError`` so a caller that has not been taught about the trip vocabulary still treats it as bad input rather than letting it escape as a 500."""
 
     def __init__(self, message: str) -> None:
-        """Store the human-readable, unescaped failure message."""
+        """Store the human-readable, unescaped failure message.
+
+        Args:
+            message: What went wrong, phrased for the end user.
+        """
         super().__init__(message)
         self.message = message
 
@@ -35,6 +39,11 @@ class TripMemberNotFoundError(TripNotFoundError):
     Carries the submitted ``username`` separately from the formatted message so each caller can present it safely in its own medium: the internal HTMX view HTML-escapes it, while the external API puts it into a JSON string unescaped."""
 
     def __init__(self, message: str, username: str) -> None:
-        """Record the message plus the raw username that could not be resolved."""
+        """Record the message plus the raw username that could not be resolved.
+
+        Args:
+            message: Human-readable failure message, unescaped.
+            username: The username exactly as the caller submitted it.
+        """
         super().__init__(message)
         self.username = username

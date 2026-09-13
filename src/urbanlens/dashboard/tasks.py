@@ -37,7 +37,15 @@ SANDBOX_BATCH_QUEUE = sandbox_queue(batch=True)
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def ensure_wiki_for_location(location_id: int) -> int | None:
-    """Auto-create the Wiki for a Location when missing."""
+    """Auto-create the Wiki for a Location when missing.
+
+    Args:
+        location_id: PK of the Location that just gained a pin.
+
+    Returns:
+        PK of the Wiki (new or pre-existing), or None if the Location no
+        longer exists.
+    """
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
@@ -58,7 +66,14 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def enrich_wiki_location(self, wiki_id: int) -> bool:
-    """Enrich a Wiki's Location with place link, name, and boundaries."""
+    """Enrich a Wiki's Location with place link, name, and boundaries.
+
+    Args:
+        wiki_id: PK of the Wiki to enrich.
+
+    Returns:
+        True when the wiki still existed and enrichment ran.
+    """
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
     from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
@@ -103,7 +118,16 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
-    """Mirror imported buildings onto the community wiki off-request."""
+    """Mirror imported buildings onto the community wiki off-request.
+
+    Args:
+        pin_id: The parent pin whose buildings were imported.
+        selection_keys: ``building_selection_key`` values for the imported
+            buildings.
+
+    Returns:
+        How many child wikis were created.
+    """
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.locations import site_scope
     from urbanlens.dashboard.services.pins import pin_restructure
@@ -119,7 +143,15 @@ def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def auto_nest_building_pins(pin_id: int) -> int:
-    """Build a new pin's default child-pin structure from cached buildings."""
+    """Build a new pin's default child-pin structure from cached buildings.
+
+    Args:
+        pin_id: The freshly-created root pin.
+
+    Returns:
+        How many child pins were created, or 0 when the pin is gone or not
+        eligible.
+    """
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.pins.auto_nest import auto_nest_pin
 
@@ -131,7 +163,15 @@ def auto_nest_building_pins(pin_id: int) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def generate_boundaries_for_location(location_id: int) -> bool:
-    """Generate or refresh default boundaries for a Location."""
+    """Generate or refresh default boundaries for a Location.
+
+    Args:
+        location_id: PK of the Location.
+
+    Returns:
+        True when the location existed and generation ran (or was already
+        fresh).
+    """
     from django.core.cache import cache
 
     from urbanlens.dashboard.models.location.model import Location
@@ -152,7 +192,15 @@ def generate_boundaries_for_location(location_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def classify_detail_marker(kind: str, marker_id: int) -> bool:
-    """Decide whether a new child pin/wiki stands on a building."""
+    """Decide whether a new child pin/wiki stands on a building.
+
+    Args:
+        kind: ``"pin"`` or ``"wiki"``.
+        marker_id: PK of the Pin or Wiki to classify.
+
+    Returns:
+        True when the marker was reclassified as a building.
+    """
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
@@ -175,7 +223,15 @@ def classify_detail_marker(kind: str, marker_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def warm_saved_filter_cache(profile_id: int) -> int:
-    """Precompute a profile's saved-filter match lists."""
+    """Precompute a profile's saved-filter match lists.
+
+    Args:
+        profile_id: PK of the ``Profile`` to warm - never a bare user-supplied
+            uuid, so this can't be used to warm (or probe) another user's data.
+
+    Returns:
+        Number of saved filters warmed, or 0 if the profile no longer exists.
+    """
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.search.saved_filter_cache import warm_all_for_profile
 
@@ -187,7 +243,14 @@ def warm_saved_filter_cache(profile_id: int) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def push_trip_to_calendar(trip_id: int) -> int:
-    """Push a changed trip to its auto-synced calendars."""
+    """Push a changed trip to its auto-synced calendars.
+
+    Args:
+        trip_id: PK of the trip that changed.
+
+    Returns:
+        The number of calendars the trip was successfully pushed to.
+    """
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.services.trips.calendar_sync import push_auto_synced_trip_changes
 
@@ -364,7 +427,15 @@ def backfill_location_address(location_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
-    """Best-effort archive a link URL to the Wayback Machine."""
+    """Best-effort archive a link URL to the Wayback Machine.
+
+    Args:
+        link_model: ``"PinLink"`` or ``"WikiLink"``.
+        link_id: PK of the link row to archive.
+
+    Returns:
+        True when a wayback_url was saved, False otherwise.
+    """
     import requests
 
     from urbanlens.dashboard.models.links.model import PinLink, WikiLink
@@ -496,7 +567,19 @@ class _UploadProcessResult:
 
 
 def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max_dimension_override: int | None = None) -> _UploadProcessResult | None:
-    """Extract photo metadata and downscale; None on unreadable file."""
+    """Extract photo metadata and downscale; None on unreadable file.
+
+    Args:
+        image: The row to process.
+        image_id: Its pk, for log lines that must survive a deleted row.
+        strip_location: Whether to discard the coordinates rather than record them.
+        max_dimension_override: Longest-edge cap for a row with no profile to
+            derive a plan policy from - see :func:`process_image_upload`.
+
+    Returns:
+        The fields to write back, or None on unrecoverable read failure (the
+        caller treats that as a failed task run).
+    """
     from decimal import Decimal
 
     from PIL.Image import DecompressionBombError as PILDecompressionBombError

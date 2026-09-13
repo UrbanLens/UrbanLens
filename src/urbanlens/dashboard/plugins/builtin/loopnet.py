@@ -33,8 +33,12 @@ class LoopnetPanelSource(GalleryMediaSource):
     def address(pin: Pin) -> str:
         """Street + city + state search address, or ``""`` when insufficient.
 
+        Args:
+            pin: The pin whose location's address should be assembled.
+
         Returns:
-            A comma-joined address string; empty when the location lacks a street route (LoopNet needs at least street-level precision)."""
+            A comma-joined address string; empty when the location lacks a street route (LoopNet needs at least street-level precision).
+        """
         location = pin.location
         if not location or not location.route:
             return ""
@@ -81,8 +85,12 @@ class LoopnetPanelSource(GalleryMediaSource):
     def media_items(self, data: dict) -> list[MediaItem]:
         """Turn cached LoopNet listing photos into gallery items.
 
+        Args:
+            data: This source's cached ``{"listings": [...]}`` dict.
+
         Returns:
-            One item per listing photo, proxied through ``PinLoopnetPhotoView`` (never a raw REData URL - the API key can't reach the browser)."""
+            One item per listing photo, proxied through ``PinLoopnetPhotoView`` (never a raw REData URL - the API key can't reach the browser).
+        """
         from django.urls import reverse
 
         from urbanlens.dashboard.services.apis.assets.base import MediaItem

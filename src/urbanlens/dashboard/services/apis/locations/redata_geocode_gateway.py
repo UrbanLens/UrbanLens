@@ -17,11 +17,21 @@ class RedataGeocodeGateway(RedataLocationContextGateway):
     def geocode(self, query: str, *, latitude: float | None = None, longitude: float | None = None, limit: int | None = None, provider: str | list[str] | None = None) -> LocationContextEnvelope:
         """Resolve free text to places (``GET /geocode/``).
 
+        Args:
+            query: The free-text search string.
+            latitude: Optional bias center - narrows results toward this
+                point without excluding others. Only meaningful together with
+                ``longitude``.
+            longitude: Optional bias center - see ``latitude``.
+            limit: Bounded positive integer.
+            provider: Restrict which source(s) actually run.
+
         Returns:
             The parsed envelope - ``results`` in registry order, one entry per provider's own hit (not merged/re-ranked - see the module docstring).
 
         Note:
-            REData's own ``../REData/docs/api-reference.md`` documents this endpoint's request parameters and its shared envelope, but doesn't show a full worked example of one result entry's own fields."""
+            REData's own ``../REData/docs/api-reference.md`` documents this endpoint's request parameters and its shared envelope, but doesn't show a full worked example of one result entry's own fields.
+        """
         params: dict[str, Any] = {"q": query}
         if latitude is not None:
             params["lat"] = latitude
@@ -36,6 +46,13 @@ class RedataGeocodeGateway(RedataLocationContextGateway):
     def reverse_geocode(self, latitude: float, longitude: float, *, provider: str | list[str] | None = None, force_refresh: bool = False) -> LocationContextEnvelope:
         """Resolve a coordinate to the place there (``GET /geocode/reverse/``).
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            provider: Restrict which source(s) actually run.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
-            The parsed envelope - ``radius_meters`` is nominal here (no vendor exposes a search radius for reverse geocoding)."""
+            The parsed envelope - ``radius_meters`` is nominal here (no vendor exposes a search radius for reverse geocoding).
+        """
         return self.near_point("/api/v1/geocode/reverse/", latitude, longitude, provider=provider, force_refresh=force_refresh)

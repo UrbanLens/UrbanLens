@@ -73,8 +73,12 @@ class Gateway(Service, ABC):
     def endpoint_for_log(url: str) -> str:
         """How this gateway's URLs are described in ``ApiCallLog``.
 
+        Args:
+            url: The URL about to be requested.
+
         Returns:
-            The string to record as the call's endpoint."""
+            The string to record as the call's endpoint.
+        """
         return url
 
 

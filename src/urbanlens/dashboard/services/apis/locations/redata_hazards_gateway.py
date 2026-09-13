@@ -28,11 +28,29 @@ class RedataHazardsGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch recorded natural-hazard events near a coordinate.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: Search radius in meters. Each provider applies its
+                own default/ceiling when omitted (earthquakes 100/250 km,
+                wildfires 2/25 km, FEMA fixed).
+            providers: Restrict which sources actually run (REData's
+                ``?provider=`` semantics) - a panel wanting only one hazard
+                family should say so rather than fetching and discarding.
+            min_magnitude: Minimum event magnitude to include. Narrows the
+                *fetch*, not the cache - a lower floor than a cached search
+                used returns the cached set until it expires (pair with
+                ``force_refresh`` when that matters).
+            years: How many years back to search.
+            limit: Maximum number of events to return.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
             The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: Every source covering the coordinate failed to answer, or the request to REData failed outright."""
+            LocationContextUnavailableError: Every source covering the coordinate failed to answer, or the request to REData failed outright.
+        """
         extra_params: dict[str, Any] = {}
         if min_magnitude is not None:
             extra_params["min_magnitude"] = min_magnitude

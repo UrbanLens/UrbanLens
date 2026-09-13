@@ -131,11 +131,16 @@ class NominatimGateway(Gateway):
     def reverse_geocode_admin(self, latitude: float, longitude: float) -> dict[str, str] | None:
         """Reverse-geocode coordinates to just their country/state/city, for admin-level comparisons.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
         Returns:
             ``{"country": ..., "state": ..., "city": ...}`` (each possibly an empty string if Nominatim didn't report it), or None if Nominatim returned a genuine "nothing found" response.
 
         Raises:
-            Exception: on a request/transport failure (including a ``RateLimitExceededError`` from the shared rate-limited session) - deliberately NOT swallowed to None here, so a transient failure isn't indistinguishable from a real "no result" to..."""
+            Exception: on a request/transport failure (including a ``RateLimitExceededError`` from the shared rate-limited session) - deliberately NOT swallowed to None here, so a transient failure isn't indistinguishable from a real "no result" to...
+        """
         params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "format": "json", "addressdetails": 1}
         resp = self.session.get(
             f"{self.base_url}/reverse",
@@ -159,8 +164,13 @@ class NominatimGateway(Gateway):
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
         """Reverse-geocode coordinates and return structured place metadata.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
         Returns:
-            Dict with place metadata, or None if no result or an error occurred."""
+            Dict with place metadata, or None if no result or an error occurred.
+        """
         try:
             params: dict[str, str | int | float] = {
                 "lat": latitude,

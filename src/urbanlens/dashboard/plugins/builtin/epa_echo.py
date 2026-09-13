@@ -252,7 +252,13 @@ class EpaEchoDetailPanelSource(_EpaEchoPanelSourceBase):
 
     @staticmethod
     def _add_echo_report_link(pin: Pin, location: Location, registry_id: str) -> None:
-        """Add the EPA ECHO compliance report URL to the pin's (and wiki's) links, if not already there."""
+        """Add the EPA ECHO compliance report URL to the pin's (and wiki's) links, if not already there.
+
+        Args:
+            pin: The pin whose links should include this URL.
+            location: The pin's location, for reaching its wiki (if any).
+            registry_id: The EPA FRS Registry ID of the matched facility.
+        """
         from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
 
         url = f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}"
@@ -304,8 +310,12 @@ class EpaFacilityNameProvider(NameProvider):
     def candidates(self, location: Location) -> list[str | None]:
         """Return the exact-site facility's name, when one was matched.
 
+        Args:
+            location: The location to name.
+
         Returns:
-            A single-item list with the facility name, or empty when no exact-site match exists yet (or ever)."""
+            A single-item list with the facility name, or empty when no exact-site match exists yet (or ever).
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         cache_row = LocationCache.get_fresh(location, _CACHE_SOURCE)

@@ -217,8 +217,13 @@ class GoogleGeocodingGateway(Gateway):
     def get_place_name(self, latitude: float | Decimal, longitude: float | Decimal) -> str | None:
         """Return the formatted address of the most relevant non-administrative geocoding result.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
         Returns:
-            The winning result's formatted address, or None when geocoding failed or every result was purely administrative."""
+            The winning result's formatted address, or None when geocoding failed or every result was purely administrative.
+        """
         if latitude is None or longitude is None:
             logger.error("Latitude and longitude must be provided to get_place_name.")
             return None
@@ -276,8 +281,13 @@ class GoogleGeocodingGateway(Gateway):
     def get_cached_coordinates_by_cid(cid: int) -> tuple[float, float] | None:
         """Read a previously-resolved CID's coordinates from the cache, without ever calling the API.
 
+        Args:
+            cid: Decimal CID value derived from the hex identifier in a Google
+                Maps place URL.
+
         Returns:
-            ``(latitude, longitude)`` on a cache hit, else ``None``."""
+            ``(latitude, longitude)`` on a cache hit, else ``None``.
+        """
         cache_key = f"cid:{cid}"
         cached = GeocodedLocation.objects.filter(place_name=cache_key).first()
         if not cached:
@@ -299,8 +309,12 @@ class GoogleGeocodingGateway(Gateway):
     def get_coordinates_by_cid(self, cid: int) -> tuple[float | None, float | None]:
         """Look up coordinates by Google Maps CID via the Places Details API.
 
+        Args:
+            cid: Decimal CID value derived from the hex identifier in the URL.
+
         Returns:
-            Tuple of (latitude, longitude), or (None, None) if the lookup fails."""
+            Tuple of (latitude, longitude), or (None, None) if the lookup fails.
+        """
         cached = self.get_cached_coordinates_by_cid(cid)
         if cached:
             return cached
@@ -356,8 +370,12 @@ class GoogleGeocodingGateway(Gateway):
         """Decode an S2 cell ID hex string to (latitude, longitude).
         Only use it for quick previews of likely coordinates when we don't want to contact an external API to get precise ones.
 
+        Args:
+            s2_hex: Hex string of the S2 cell ID (without 0x prefix).
+
         Returns:
-            Tuple of (latitude, longitude), or (None, None) if decoding fails."""
+            Tuple of (latitude, longitude), or (None, None) if decoding fails.
+        """
         cell = s2sphere.CellId(int(s2_hex, 16))
         if not cell.is_valid():
             return None, None
@@ -371,8 +389,12 @@ class GoogleGeocodingGateway(Gateway):
     def extract_coordinates_from_url(self, url: str) -> tuple[float | None, float | None]:
         """Extract latitude and longitude from a Google Maps URL.
 
+        Args:
+            url: Google Maps URL to parse.
+
         Returns:
-            Tuple of (latitude, longitude), or (None, None) when extraction fails."""
+            Tuple of (latitude, longitude), or (None, None) when extraction fails.
+        """
         # Direct coordinates: .../maps/search/42.960773,-74.250664
         m = re.search(
             r"maps/search/(?P<lat>-?[0-9]+\.[0-9]+),(?P<lon>-?[0-9]+\.[0-9]+)",

@@ -66,7 +66,12 @@ def username_is_taken(username: str, *, exclude_user_id: int | None = None) -> b
 
 class UsernameGenerator:
     """Random username generator using adjective + animal + number patterns.
-    Word lists and generation parameters are class attributes so they can be overridden in a subclass without touching the generation logic."""
+    Word lists and generation parameters are class attributes so they can be overridden in a subclass without touching the generation logic.
+
+    Example::
+
+        username = UsernameGenerator.generate()
+    """
 
     ADJECTIVES: tuple[str, ...] = (
         "agile",

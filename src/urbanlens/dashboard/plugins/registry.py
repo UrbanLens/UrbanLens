@@ -54,7 +54,11 @@ class PluginRegistry:
 
     def discover(self, *, force: bool = False) -> None:
         """Load plugins from all discovery sources; idempotent.
-        Runs inside ``AppConfig.ready()``, so nothing here may touch the database."""
+        Runs inside ``AppConfig.ready()``, so nothing here may touch the database.
+
+        Args:
+            force: Re-run discovery from scratch, discarding current state.
+        """
         if self._discovered and not force:
             return
         self._plugins.clear()
@@ -75,8 +79,13 @@ class PluginRegistry:
     def register(self, plugin: UrbanLensPlugin | type[UrbanLensPlugin], *, source: str = "code") -> UrbanLensPlugin | None:
         """Register one plugin instance or class.
 
+        Args:
+            plugin: The plugin (a class is instantiated with no arguments).
+            source: Discovery source label recorded for the admin UI.
+
         Returns:
-            The registered instance, or None when the plugin was rejected (missing name, duplicate name, or failed instantiation)."""
+            The registered instance, or None when the plugin was rejected (missing name, duplicate name, or failed instantiation).
+        """
         try:
             instance = plugin() if isinstance(plugin, type) else plugin
         except Exception:
@@ -109,16 +118,24 @@ class PluginRegistry:
     def get(self, name: str) -> UrbanLensPlugin | None:
         """Look up a plugin by name.
 
+        Args:
+            name: The plugin slug.
+
         Returns:
-            The plugin instance, or None when not discovered."""
+            The plugin instance, or None when not discovered.
+        """
         info = self._plugins.get(name)
         return info.plugin if info else None
 
     def is_enabled(self, name: str) -> bool:
         """Whether a plugin is enabled for this install.
 
+        Args:
+            name: The plugin slug.
+
         Returns:
-            True unless the name appears in the ``UL_DISABLED_PLUGINS`` setting."""
+            True unless the name appears in the ``UL_DISABLED_PLUGINS`` setting.
+        """
         from urbanlens.UrbanLens.settings.app import settings
 
         return name not in settings.disabled_plugins

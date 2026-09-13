@@ -157,7 +157,11 @@ def allow_untrusted_parse(reason: str) -> Iterator[None]:
     For the cases where a parser is pointed at bytes the server itself produced - a thumbnail this app encoded, a test fixture - rather than at something a user uploaded.
 
     Args:
-        reason: Why these bytes are not untrusted."""
+        reason: Why these bytes are not untrusted.
+
+    Yields:
+        None.
+    """
     token = _exempt.set(reason)
     try:
         yield

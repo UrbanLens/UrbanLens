@@ -122,11 +122,17 @@ class OpenHistoricalMapGateway(Gateway):
         """Check whether OHM has any dated features near a point, and for which years.
         Requests tags only (``out tags``, no geometry) - this only needs to answer "does dated data exist nearby" and "what years", so there's no reason to pay for the geometry payload.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: Search radius around the point.
+
         Returns:
             The coverage summary.
 
         Raises:
-            OpenHistoricalMapUnavailableError: The request failed outright (network/timeout/malformed response)."""
+            OpenHistoricalMapUnavailableError: The request failed outright (network/timeout/malformed response).
+        """
         query = f'[out:json][timeout:15];\n(\n  nwr(around:{radius_meters},{latitude},{longitude})["start_date"];\n  nwr(around:{radius_meters},{latitude},{longitude})["end_date"];\n);\nout tags;'
         payload = self._query(query)
         elements = payload.get("elements")
@@ -150,11 +156,20 @@ class OpenHistoricalMapGateway(Gateway):
         """Fetch OHM features that existed at ``year``, as a GeoJSON FeatureCollection.
         Requests full inline geometry (``out geom``) so ways come back without a separate node-resolution pass.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            year: The calendar year to query for (a feature "existed" at
+                ``year`` when its ``start_date`` is on or before it and, if
+                present, its ``end_date`` is on or after it).
+            radius_meters: Search radius around the point.
+
         Returns:
             ``{"type": "FeatureCollection", "features": [...]}``.
 
         Raises:
-            ValueError: ``year`` is outside the plausible :data:`MIN_YEAR`- :data:`MAX_YEAR` range."""
+            ValueError: ``year`` is outside the plausible :data:`MIN_YEAR`- :data:`MAX_YEAR` range.
+        """
         if not MIN_YEAR <= year <= MAX_YEAR:
             raise ValueError(f"year must be between {MIN_YEAR} and {MAX_YEAR}, got {year}")
 
@@ -186,11 +201,15 @@ class OpenHistoricalMapGateway(Gateway):
     def _query(self, query: str) -> dict[str, Any]:
         """POST one Overpass QL query and return its decoded JSON body.
 
+        Args:
+            query: A complete Overpass QL query string.
+
         Returns:
             The decoded JSON response body.
 
         Raises:
-            OpenHistoricalMapUnavailableError: Connection/timeout failure, a non-200 response, an unparseable/malformed body, or this service's own rate limit/disablement being hit (``RequestCancelledError`` and its ``RateLimitExceededError``/..."""
+            OpenHistoricalMapUnavailableError: Connection/timeout failure, a non-200 response, an unparseable/malformed body, or this service's own rate limit/disablement being hit (``RequestCancelledError`` and its ``RateLimitExceededError``/...
+        """
         try:
             response = self.session.post(_OVERPASS_URL, data={"data": query}, timeout=20)
         except OSError as exc:

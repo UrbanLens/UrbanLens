@@ -65,8 +65,12 @@ class MetadataKeywordProvider(PhotoKeywordProvider):
     def generate(self, image: Image) -> list[KeywordResult]:
         """Extract XMP dc:subject and IPTC 2:25 keyword tags from the stored file.
 
+        Args:
+            image: The uploaded image.
+
         Returns:
-            Embedded keywords; empty when the file carries none."""
+            Embedded keywords; empty when the file carries none.
+        """
         from PIL import Image as PILImage, IptcImagePlugin
 
         keywords: list[str] = []
@@ -118,8 +122,12 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
     def is_available_for(self, image: Image) -> bool:
         """Gate on the AI photo processing subscription and every AI toggle.
 
+        Args:
+            image: The uploaded image.
+
         Returns:
-            True when the AI vision call is allowed for this uploader."""
+            True when the AI vision call is allowed for this uploader.
+        """
         from urbanlens.dashboard.models.site_settings import SiteSettings
         from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
@@ -133,8 +141,12 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
     def generate(self, image: Image) -> list[KeywordResult]:
         """Downscale the photo and ask the AI provider for descriptive keywords.
 
+        Args:
+            image: The uploaded image.
+
         Returns:
-            AI-described keywords; empty when the call fails (errors logged)."""
+            AI-described keywords; empty when the call fails (errors logged).
+        """
         from urbanlens.dashboard.services.ai.vision import describe_photo_keywords
 
         small = analysis_jpeg_bytes(image)
@@ -178,8 +190,12 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
     def is_available_for(self, image: Image) -> bool:
         """Requires configured Cloudflare credentials and the uploader's external-APIs toggle.
 
+        Args:
+            image: The uploaded image.
+
         Returns:
-            True when the classifier call is allowed for this uploader."""
+            True when the classifier call is allowed for this uploader.
+        """
         from urbanlens.UrbanLens.settings.app import settings
 
         profile = image.profile
@@ -190,8 +206,12 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
     def generate(self, image: Image) -> list[KeywordResult]:
         """Downscale the photo and classify its content into keyword labels.
 
+        Args:
+            image: The uploaded image.
+
         Returns:
-            Scored keywords above ``CLASSIFIER_MIN_CONFIDENCE``."""
+            Scored keywords above ``CLASSIFIER_MIN_CONFIDENCE``.
+        """
         from urbanlens.dashboard.services.ai.vision import classify_photo
 
         small = analysis_jpeg_bytes(image)

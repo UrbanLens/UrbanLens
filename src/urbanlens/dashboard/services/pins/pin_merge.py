@@ -53,7 +53,11 @@ class UnresolvedMergeConflictError(ValueError):
     """
 
     def __init__(self, keys: list[str]) -> None:
-        """Store the unresolved keys and build a descriptive message."""
+        """Store the unresolved keys and build a descriptive message.
+
+        Args:
+            keys: The conflict keys missing a resolution.
+        """
         self.keys = keys
         super().__init__(f"Unresolved merge conflicts: {', '.join(keys)}")
 

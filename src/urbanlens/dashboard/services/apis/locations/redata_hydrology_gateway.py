@@ -32,11 +32,18 @@ class RedataHydrologyGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch streams, waterbodies, wetlands and the containing watershed.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            limit: Maximum number of features to return.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
             The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: Every covering source failed to answer, or the request itself failed."""
+            LocationContextUnavailableError: Every covering source failed to answer, or the request itself failed.
+        """
         return self.near_point(
             _HYDROLOGY_PATH,
             latitude,

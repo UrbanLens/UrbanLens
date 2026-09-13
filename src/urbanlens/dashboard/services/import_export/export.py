@@ -944,11 +944,24 @@ class ExportType(ABC):
     def payload(self, profile: Any, temp_dir: str, base_url: str) -> Any:
         """Build the JSON-serializable content of :attr:`filename`.
 
+        Args:
+            profile: The profile being exported.
+            temp_dir: The archive's staging directory - for a type that also
+                writes media files alongside its JSON.
+            base_url: Absolute site root URL, for types that emit links.
+
         Returns:
-            Any JSON-serializable value."""
+            Any JSON-serializable value.
+        """
 
     def __call__(self, profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-        """Run this export step."""
+        """Run this export step.
+
+        Args:
+            profile: The profile being exported.
+            temp_dir: The archive's staging directory.
+            base_url: Absolute site root URL.
+        """
         _write_json(temp_dir, self.filename, self.payload(profile, temp_dir, base_url))
 
 
@@ -960,21 +973,35 @@ class ModelExportType[ExportedModelT: Model](ExportType):
     def queryset(self, profile: Any) -> Iterable[ExportedModelT]:
         """Return this profile's rows, deterministically ordered and prefetched.
 
+        Args:
+            profile: The profile being exported.
+
         Returns:
-            An iterable of model instances."""
+            An iterable of model instances.
+        """
 
     @abstractmethod
     def row(self, obj: ExportedModelT) -> dict[str, Any]:
         """Return the exported dict for one object.
 
+        Args:
+            obj: A model instance from :meth:`queryset`.
+
         Returns:
-            A JSON-serializable dict."""
+            A JSON-serializable dict.
+        """
 
     def payload(self, profile: Any, temp_dir: str, base_url: str) -> list[dict[str, Any]]:
         """Return one row per object in :meth:`queryset`.
 
+        Args:
+            profile: The profile being exported.
+            temp_dir: Unused by the single-queryset shape.
+            base_url: Unused by the single-queryset shape.
+
         Returns:
-            The exported rows."""
+            The exported rows.
+        """
         return [self.row(obj) for obj in self.queryset(profile)]
 
 
@@ -1016,8 +1043,12 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
     def queryset(self, profile: Any) -> Iterable[SafetyCheckin]:
         """Return this profile's check-ins, oldest first.
 
+        Args:
+            profile: The profile being exported.
+
         Returns:
-            Check-ins with contacts, messages and attached maps prefetched."""
+            Check-ins with contacts, messages and attached maps prefetched.
+        """
         from urbanlens.dashboard.models.safety.model import SafetyCheckin
 
         return SafetyCheckin.objects.filter(profile=profile).select_related("trip", "markup_map").prefetch_related("contacts__contact_profile", "messages__sender_profile", "messages__sender_contact", "markup_maps").order_by("created")
@@ -1025,8 +1056,12 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
     def row(self, obj: SafetyCheckin) -> dict[str, Any]:
         """Return the exported dict for one check-in.
 
+        Args:
+            obj: The check-in to serialize.
+
         Returns:
-            A JSON-serializable dict including nested contacts and messages."""
+            A JSON-serializable dict including nested contacts and messages.
+        """
         return {
             "uuid": str(obj.uuid),
             "title": obj.title,
@@ -1088,8 +1123,15 @@ class MapAnnotationsExport(ExportType):
     def payload(self, profile: Any, temp_dir: str, base_url: str) -> dict[str, Any]:
         """Build the three annotation sections, copying overlay files as it goes.
 
+        Args:
+            profile: The profile being exported.
+            temp_dir: The archive's staging directory (overlay files land in
+                ``<temp_dir>/map_annotations/``).
+            base_url: Unused.
+
         Returns:
-            A dict with ``maps``, ``markup`` and ``overlays`` keys."""
+            A dict with ``maps``, ``markup`` and ``overlays`` keys.
+        """
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
         from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 
@@ -1120,8 +1162,13 @@ class MapAnnotationsExport(ExportType):
     def _overlay_row(self, overlay: MapImageOverlay, temp_dir: str) -> dict[str, Any]:
         """Return the exported dict for one image overlay, copying its file into the archive.
 
+        Args:
+            overlay: The overlay to serialize.
+            temp_dir: The archive's staging directory.
+
         Returns:
-            A JSON-serializable dict; ``filename`` is None for an overlay that references a remote ``image_url`` rather than a stored file."""
+            A JSON-serializable dict; ``filename`` is None for an overlay that references a remote ``image_url`` rather than a stored file.
+        """
         files_dir = os.path.join(temp_dir, self.files_dir_name)
         os.makedirs(files_dir, exist_ok=True)
         stored = overlay.image.image if overlay.image_id and overlay.image and overlay.image.image else None
@@ -1172,8 +1219,12 @@ class SavedFiltersExport(ModelExportType["SavedFilter"]):
     def queryset(self, profile: Any) -> Iterable[SavedFilter]:
         """Return this profile's saved filters in display order.
 
+        Args:
+            profile: The profile being exported.
+
         Returns:
-            Saved filters ordered by ``order`` then creation time."""
+            Saved filters ordered by ``order`` then creation time.
+        """
         from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
         return SavedFilter.objects.filter(profile=profile).order_by("order", "created")
@@ -1181,8 +1232,12 @@ class SavedFiltersExport(ModelExportType["SavedFilter"]):
     def row(self, obj: SavedFilter) -> dict[str, Any]:
         """Return the exported dict for one saved filter.
 
+        Args:
+            obj: The saved filter to serialize.
+
         Returns:
-            A JSON-serializable dict."""
+            A JSON-serializable dict.
+        """
         return {
             "uuid": str(obj.uuid),
             "name": obj.name,
@@ -1208,8 +1263,12 @@ class RoutesExport(ModelExportType["Route"]):
     def queryset(self, profile: Any) -> Iterable[Route]:
         """Return this profile's routes, oldest first.
 
+        Args:
+            profile: The profile being exported.
+
         Returns:
-            The profile's routes ordered by creation time."""
+            The profile's routes ordered by creation time.
+        """
         from urbanlens.dashboard.models.routes.model import Route
 
         return Route.objects.for_profile(profile).order_by("created")
@@ -1217,8 +1276,12 @@ class RoutesExport(ModelExportType["Route"]):
     def row(self, obj: Route) -> dict[str, Any]:
         """Return the exported dict for one route.
 
+        Args:
+            obj: The route to serialize.
+
         Returns:
-            A JSON-serializable dict with the path as a GeoJSON LineString."""
+            A JSON-serializable dict with the path as a GeoJSON LineString.
+        """
         return {
             "uuid": str(obj.uuid),
             "name": obj.name or "",

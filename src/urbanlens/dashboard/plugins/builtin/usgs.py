@@ -56,8 +56,12 @@ class UsgsTopoPanelSource(LocationCachePanelSource):
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The nearby historical topo scans, as both a summary card and media items.
 
+        Args:
+            pin: The pin whose panel is being read.
+
         Returns:
-            ``{"info": {...}, "media": [...]}``, or None when nothing has landed yet or the search area contains no scanned maps (the same condition the web panel 204s on)."""
+            ``{"info": {...}, "media": [...]}``, or None when nothing has landed yet or the search area contains no scanned maps (the same condition the web panel 204s on).
+        """
         data = self.cached_data(pin)
         if data is None:
             return None
@@ -90,8 +94,12 @@ class UsgsTopoPanelSource(LocationCachePanelSource):
         """Title plus survey year for one scanned map.
         The year is what actually distinguishes two otherwise identically-named editions of the same quadrangle, so it is folded into the caption rather than left as a separate field the media contract has no room for.
 
+        Args:
+            topo_map: One TNM HTMC product record.
+
         Returns:
-            A caption like ``"Poughkeepsie, NY (1893)"``, possibly without the parenthetical when TNM reported no publication date."""
+            A caption like ``"Poughkeepsie, NY (1893)"``, possibly without the parenthetical when TNM reported no publication date.
+        """
         title = topo_map.get("title") or "Untitled map"
         year = (topo_map.get("publicationDate") or "")[:4]
         return f"{title} ({year})" if year else title

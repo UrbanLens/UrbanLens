@@ -36,8 +36,21 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
     ) -> list[dict[str, Any]]:
         """Search archival/reference material by name.
 
+        Args:
+            query: Free-text search string - a clean name (optionally with a
+                locality), never pre-quoted; REData applies each provider's own
+                quoting per its ``query_styles``.
+            latitude: WGS-84 latitude - a region hint only, never sent as a
+                coordinate search (see the module docstring).
+            longitude: WGS-84 longitude - see ``latitude``.
+            limit: Bounded positive integer.
+            provider: Restrict to one or more provider tags (e.g.
+                ``"smithsonian"``) - repeatable, matching REData's ``?provider=``.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
-            The envelope's ``results`` list - dicts carrying at least ``provider``, ``title``, ``url``, ``thumbnail_url``, ``date_text`` and ``license`` (REData's own field names - see the "reference documents" section of ``api-reference.md``)."""
+            The envelope's ``results`` list - dicts carrying at least ``provider``, ``title``, ``url``, ``thumbnail_url``, ``date_text`` and ``license`` (REData's own field names - see the "reference documents" section of ``api-reference.md``).
+        """
         params: dict[str, Any] = {"q": query}
         if latitude is not None and longitude is not None:
             params["lat"] = latitude
@@ -63,11 +76,21 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
         """Archival/encyclopaedic material about a coordinate.
         Two providers, both with a real geosearch index (unlike :meth:`search`'s four name-only archives) - see ``../REData/docs/api-reference.md``, "GET /reference-documents/ - archival material about a coordinate":
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: Search radius in meters. REData defaults to 1 km and caps at
+                10 km.
+            provider: Restrict to ``"wikipedia"``, ``"wikidata"``, or both (a list) -
+                omit to ask both.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
             The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: A total blackout (every source covering the coordinate failed), a REData-side validation error, or the request itself failed outright."""
+            LocationContextUnavailableError: A total blackout (every source covering the coordinate failed), a REData-side validation error, or the request itself failed outright.
+        """
         return self.near_point(_NEAR_PATH, latitude, longitude, radius_meters=radius_meters, provider=provider, force_refresh=force_refresh)
 
 
@@ -78,7 +101,16 @@ class _RedataReferenceDocumentProvider(MediaProvider):
     _redata_provider: ClassVar[str] = ""
 
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
-        """Yield this archive's matches for ``search_term``, via REData."""
+        """Yield this archive's matches for ``search_term``, via REData.
+
+        Args:
+            search_term: A clean, unquoted query built by
+                ``MediaPanelSource.search_terms`` per this class's
+                ``include_address``/``search_with_country``/``quote_*`` flags.
+            address: Unused - REData has no separate address parameter; any
+                address this provider wants is already folded into
+                ``search_term`` (see ``include_address``).
+        """
         if not search_term:
             return
         gateway = RedataReferenceDocumentsGateway()

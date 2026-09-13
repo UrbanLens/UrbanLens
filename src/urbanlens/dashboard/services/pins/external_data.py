@@ -166,8 +166,12 @@ class PanelSource(ABC):
         """Cache-key scope identifying which rows/entries this pin's fetch fills.
         Location-scoped by default, because most panels cache per shared Location (two users pinning the same place share one fetch).
 
+        Args:
+            pin: The pin whose panel is being fetched.
+
         Returns:
-            A short string unique to the fetch target."""
+            A short string unique to the fetch target.
+        """
         return f"loc{pin.location_id}"
 
     def flight_key(self, pin: Pin) -> str:
@@ -182,28 +186,47 @@ class PanelSource(ABC):
         """Whether this source has enough information to fetch for ``pin``.
         Checked before scheduling a fetch so a source with nothing to work with (e.g. no coordinates, no address, no name) degrades to a quiet 204 instead of polling forever.
 
+        Args:
+            pin: The pin whose panel is being rendered.
+
         Returns:
-            True when a fetch is worth scheduling."""
+            True when a fetch is worth scheduling.
+        """
         return True
 
     @abstractmethod
     def is_ready(self, pin: Pin) -> bool:
         """Whether the panel's data has already been fetched and persisted.
 
+        Args:
+            pin: The pin whose panel is being rendered.
+
         Returns:
-            True when the controller can render directly from the store."""
+            True when the controller can render directly from the store.
+        """
 
     @abstractmethod
     def fetch(self, pin: Pin) -> None:
         """Fetch from the upstream provider(s) and persist to the panel's store.
-        Runs inside a Celery worker, never on the request path."""
+        Runs inside a Celery worker, never on the request path.
+
+        Args:
+            pin: The pin whose panel data should be fetched.
+        """
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """This panel's already-landed data as a JSON body, or None.
         See the module docstring: this interface is reachable by third-party plugin code, so the failure mode of forgetting about it has to be an absent panel and not an unreviewed dump of whatever that plugin cached.
 
+        Args:
+            pin: The pin whose panel is being read. Sources that need the
+                viewer's own scope (e.g. which child pins exist) read it from
+                here rather than from a request, since this also runs from
+                background code paths that have no request.
+
         Returns:
-            A JSON-serializable body whose top-level keys are the source's declared :attr:`api_kinds` (see :class:`PanelApiKind`), or None when this source is not exposed, has no data yet, or has data that isn't worth showing (the JSON equivalent of the web panel's 204)."""
+            A JSON-serializable body whose top-level keys are the source's declared :attr:`api_kinds` (see :class:`PanelApiKind`), or None when this source is not exposed, has no data yet, or has data that isn't worth showing (the JSON equivalent of the web panel's 204).
+        """
         return None
 
 
@@ -225,8 +248,12 @@ class LocationCachePanelSource(PanelSource, ABC):
         """Whether a fetched payload has anything worth showing a tab for.
         Only consulted when :attr:`inspects_content` is set.
 
+        Args:
+            data: The cached payload, or None.
+
         Returns:
-            True when a tab for this panel would render something."""
+            True when a tab for this panel would render something.
+        """
         return bool(data)
 
     def is_ready(self, pin: Pin) -> bool:
@@ -241,8 +268,12 @@ class LocationCachePanelSource(PanelSource, ABC):
     def cached_data(self, pin: Pin) -> dict | None:
         """This source's fresh cached payload, or None when nothing has landed.
 
+        Args:
+            pin: The pin whose panel is being read.
+
         Returns:
-            The row's ``data`` dict - possibly ``{}``, which means "we searched and found nothing", a real answer - or None when no fresh row exists (never fetched, or gone stale)."""
+            The row's ``data`` dict - possibly ``{}``, which means "we searched and found nothing", a real answer - or None when no fresh row exists (never fetched, or gone stale).
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         if pin.location_id is None:
@@ -260,18 +291,34 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build ``_simple_info_panel.html``'s context from cached data.
 
+        Args:
+            pin: The pin whose panel is being rendered.
+            data: The ``LocationCache`` row's ``data`` dict (``{}`` when the
+                fetch found nothing).
+
         Returns:
-            A context dict (may include ``heading_name``, ``chips``, ``meta``, ``header_link``, ``footer_link``), or None when there's nothing worth showing (renders a 204)."""
+            A context dict (may include ``heading_name``, ``chips``, ``meta``, ``header_link``, ``footer_link``), or None when there's nothing worth showing (renders a 204).
+        """
 
     def debug_count(self, data: dict) -> int:
-        """Item count reported in the debug overlay."""
+        """Item count reported in the debug overlay.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict.
+        """
         return 1
 
     def api_info(self, pin: Pin, data: dict) -> dict[str, Any] | None:
         """This source's cached data as an :attr:`PanelApiKind.INFO` card.
 
+        Args:
+            pin: The pin whose panel is being read (``render_context`` may
+                branch on it - see the CRIS plugin's site-scope handling).
+            data: The ``LocationCache`` row's ``data`` dict.
+
         Returns:
-            The info card, or None when ``render_context`` decided there is nothing worth showing."""
+            The info card, or None when ``render_context`` decided there is nothing worth showing.
+        """
         context = self.render_context(pin, data)
         return None if context is None else info_card_from_render_context(context)
 
@@ -309,21 +356,34 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
     def media_items(self, data: dict) -> list[MediaItem]:
         """Turn this source's cached ``LocationCache.data`` into gallery items.
 
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source
+                (``{}`` when the fetch found nothing).
+
         Returns:
-            The items to render as ``.media-item`` tiles; may be empty."""
+            The items to render as ``.media-item`` tiles; may be empty.
+        """
 
     def media_is_ready(self, data: dict) -> bool:
         """Whether a cached row's *media* half has actually been filled in.
 
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source.
+
         Returns:
-            True when ``media_items`` can be trusted for this row."""
+            True when ``media_items`` can be trusted for this row.
+        """
         return True
 
     def api_media(self, data: dict) -> list[dict[str, Any]]:
         """This source's cached data as plain JSON media dicts.
 
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source.
+
         Returns:
-            One dict per :class:`MediaItem`, field-for-field."""
+            One dict per :class:`MediaItem`, field-for-field.
+        """
         return [asdict(item) for item in self.media_items(data)]
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
@@ -338,7 +398,14 @@ class MediaPanelSource(GalleryMediaSource):
     """One provider of the combined Media gallery (Smithsonian, Wikimedia, LOC)."""
 
     def __init__(self, key: str, cache_source: str, gateway_factory) -> None:
-        """Bind this source to one media provider."""
+        """Bind this source to one media provider.
+
+        Args:
+            key: Registry key, matching the URL's ``source`` segment.
+            cache_source: The provider gateway's ``service_key`` (its
+                LocationCache source).
+            gateway_factory: Zero-argument callable building the gateway.
+        """
         # Per-instance rather than ClassVar: three providers share this class.
         self.key = key
         self.cache_source = cache_source
@@ -352,8 +419,13 @@ class MediaPanelSource(GalleryMediaSource):
     def search_terms(pin: Pin, gateway: MediaProvider) -> list[str]:
         """Candidate search queries for this pin, most specific first.
 
+        Args:
+            pin: The pin to build search queries for.
+            gateway: The provider gateway (controls quoting/country flags).
+
         Returns:
-            Ordered, de-duplicated list of query strings; may be empty."""
+            Ordered, de-duplicated list of query strings; may be empty.
+        """
         if gateway.reject_address_derived_names and pin.location is not None:
             from urbanlens.dashboard.services.locations.naming import is_address_derived_name
 
@@ -443,8 +515,12 @@ class BoundaryPanelSource(PanelSource):
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The pin's effective property and building geometry as GeoJSON.
 
+        Args:
+            pin: The pin whose boundaries are being read.
+
         Returns:
-            ``{"boundary": {"property": ..., "building": ...}}`` with each side either a ``{"geometry", "source", "is_fallback_circle"}`` dict or None, or None overall when the pin has no location or neither side resolved to anything."""
+            ``{"boundary": {"property": ..., "building": ...}}`` with each side either a ``{"geometry", "source", "is_fallback_circle"}`` dict or None, or None overall when the pin has no location or neither side resolved to anything.
+        """
         if pin.location_id is None:
             return None
 
@@ -460,8 +536,13 @@ class BoundaryPanelSource(PanelSource):
     def _boundary_side(pin: Pin, boundary_type: str) -> dict[str, Any] | None:
         """One boundary type's resolved geometry plus its provenance.
 
+        Args:
+            pin: The pin to resolve for.
+            boundary_type: A :class:`BoundaryType` value.
+
         Returns:
-            ``{"geometry", "source", "is_fallback_circle"}``, or None when nothing resolved for this type (which for BUILDING is the normal case - a missing building boundary means "no known building", and unlike PROPERTY it has no circle fallback)."""
+            ``{"geometry", "source", "is_fallback_circle"}``, or None when nothing resolved for this type (which for BUILDING is the normal case - a missing building boundary means "no known building", and unlike PROPERTY it has no circle fallback).
+        """
         from urbanlens.dashboard.models.boundary.model import Boundary
         from urbanlens.dashboard.services.geo.geo import geometry_to_geojson
 

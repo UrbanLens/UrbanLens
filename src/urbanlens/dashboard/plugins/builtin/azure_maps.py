@@ -47,8 +47,12 @@ class AzureMapsPanelSource(LocationCachePanelSource):
         """The reverse-geocoded address and nearest POI as an information card, or None.
         Applies ``PinController.azure_maps_info``'s own emptiness rule: with neither a formatted address nor a POI the payload is coordinates echoed back, which the client already has - suppressed on both surfaces rather than rendered as an empty card.
 
+        Args:
+            pin: The pin whose panel is being read.
+
         Returns:
-            ``{"info": {...}}``, or None when nothing has landed yet or neither Azure call found anything."""
+            ``{"info": {...}}``, or None when nothing has landed yet or neither Azure call found anything.
+        """
         data = self.cached_data(pin)
         if not data or not (data.get("formatted_address") or data.get("poi")):
             return None
@@ -86,8 +90,12 @@ class AzureMapsNameProvider(NameProvider):
     def candidates(self, location: Location) -> list[str | None]:
         """Return the cached nearest-POI name and the reverse-geocoded locality.
 
+        Args:
+            location: The location to name.
+
         Returns:
-            Raw candidate values; empty when no fresh Azure Maps cache row exists for this location."""
+            Raw candidate values; empty when no fresh Azure Maps cache row exists for this location.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         cached = LocationCache.get_fresh(location, "azure_maps")

@@ -37,6 +37,15 @@ class App(scripts.App):
 
         Returns:
             The argument value, if it exists. Otherwise, None.
+
+        Examples:
+            >>> class Foo(App):
+            >>>     def change_page(self, *args, **kwargs):
+            >>>         argument = self.get_argument('page_name', args, kwargs)
+            >>>         print('page_name = ' + argument)
+            >>> foo = Foo()
+            >>> foo.change_page('home')
+            page_name = home
         """
         # TODO: This duplicates new functionality from djangofoundry. When the package is updated to version 0.8, remove this method without any other changes.
         if len(args) == 1:
@@ -54,6 +63,18 @@ class App(scripts.App):
 
         Raises:
             ValueError: If package_name contains more than one package.
+
+        Examples:
+            >>> app = App()
+            >>> app.pip_install('requests')
+            True
+
+            >>> app.pip_install('requests==2.26.0')
+            True
+
+            >>> app.pip_install('requests==2.26.0 git')
+            Traceback (most recent call last):
+                ...
         """
         # TODO: This duplicates new functionality from djangofoundry. When the package is updated to version 0.8, remove this method without any other changes.
 

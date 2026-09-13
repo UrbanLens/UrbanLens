@@ -72,11 +72,19 @@ class SessionChat[SessionT: Model, MessageT]:
     def send(self, session: SessionT, profile: Profile, body: str) -> MessageT:
         """Save a chat message and broadcast it to every connected participant.
 
+        Args:
+            session: The session this message belongs to.
+            profile: Who sent it - the caller is responsible for confirming they are an
+                actual participant (each game's controller and consumer both check
+                before calling).
+            body: Raw message text, trimmed and truncated to ``max_message_length``.
+
         Returns:
             The saved message.
 
         Raises:
-            MessageRateLimitedError: This participant's budget for this session is spent."""
+            MessageRateLimitedError: This participant's budget for this session is spent.
+        """
         from urbanlens.dashboard.services.core.message_limits import charge_message, session_chat_identity
 
         # The rate limit this class's own docstring says belongs here rather
@@ -90,8 +98,13 @@ class SessionChat[SessionT: Model, MessageT]:
     def recent(self, session: SessionT, *, limit: int | None = None) -> list[MessageT]:
         """The most recent messages in ``session``, returned oldest first.
 
+        Args:
+            session: The session to read chat for.
+            limit: How many messages to return; defaults to ``history_limit``.
+
         Returns:
-            Up to ``limit`` messages, oldest first."""
+            Up to ``limit`` messages, oldest first.
+        """
         count = self.history_limit if limit is None else limit
         messages: list[MessageT] = list(self.manager.for_session(session).select_related("profile__user").order_by("-created")[:count])
         messages.reverse()

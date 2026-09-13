@@ -169,8 +169,14 @@ class BoundaryProvider(Service, ABC):
         """Return this provider's boundaries keyed by boundary type.
         `Mapping` rather than `dict`, because `dict` is invariant in its value type: a provider that only ever yields Polygons could not otherwise declare that narrower return.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            name: Optional place name for name-aware providers.
+
         Returns:
-            Mapping of boundary type value to polygon (or None)."""
+            Mapping of boundary type value to polygon (or None).
+        """
         return {self.boundary_kind: self.get_boundary(latitude, longitude, name=name)}
 
 

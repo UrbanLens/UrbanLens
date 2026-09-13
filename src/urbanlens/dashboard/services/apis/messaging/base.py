@@ -37,8 +37,13 @@ class TwilioGateway(Gateway):
     def send(self, to_number: str, body: str) -> bool:
         """Send a text message, returning whether Twilio accepted it.
 
+        Args:
+            to_number: Destination phone number, in E.164 format (e.g. ``+15551234567``).
+            body: Message text.
+
         Returns:
-            True if Twilio accepted the message for delivery, False on failure (logged, never raised - a failed notification shouldn't break the caller's own request/task)."""
+            True if Twilio accepted the message for delivery, False on failure (logged, never raised - a failed notification shouldn't break the caller's own request/task).
+        """
         # Narrowed to local variables (rather than trusting __post_init__'s check
         # of the instance attributes) so the type checker can see these are
         # non-None at the point of use.

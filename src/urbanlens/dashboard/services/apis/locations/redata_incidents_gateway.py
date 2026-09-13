@@ -47,11 +47,27 @@ class RedataIncidentsGateway(RedataLocationContextGateway):
     ) -> LocationContextEnvelope:
         """Fetch reported police incidents near a coordinate.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            categories: Restrict to these ``category`` tags (see
+                :data:`INCIDENT_CATEGORY_LABELS`). Applied to the result
+                only, so narrowing never prunes REData's cached set.
+            years: How many years back to search (REData default 3, max 25).
+                Bounds the fetch as well as the result.
+            arrests_only: Only incidents with a published arrest. Returns
+                nothing for the seven cities that publish no arrest flag -
+                deliberately, because treating silence as "no arrest" would
+                manufacture a statistic.
+            limit: Maximum number of incidents to return.
+            force_refresh: Bypass REData's cache and re-query live.
+
         Returns:
             The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: The covering source failed to answer, the request itself failed, or a filter value was rejected."""
+            LocationContextUnavailableError: The covering source failed to answer, the request itself failed, or a filter value was rejected.
+        """
         extra_params: dict[str, Any] = {}
         if categories:
             extra_params["category"] = categories

@@ -27,10 +27,22 @@ class MediaOriginCookieMiddleware:
     """Mint and refresh the media-origin cookie for authenticated requests."""
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        """Store the next handler in the chain.
+
+        Args:
+            get_response: The downstream handler.
+        """
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        """Add, refresh, or clear the media cookie on the response."""
+        """Add, refresh, or clear the media cookie on the response.
+
+        Args:
+            request: The current request.
+
+        Returns:
+            The downstream response, with the cookie adjusted where needed.
+        """
         from urbanlens.dashboard.services.media.origin import MEDIA_COOKIE_NAME, clear_media_cookie, is_media_origin_request, media_origin, needs_refresh, set_media_cookie
 
         response = self.get_response(request)
@@ -75,10 +87,22 @@ class ProfilePreviewMiddleware:
     """Render the owner's profile page as a throwaway ghost viewer during preview."""
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        """Store the downstream handler.
+
+        Args:
+            get_response: The next middleware/view callable in the chain.
+        """
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        """Dispatch the request, simulating the ghost viewer when in scope."""
+        """Dispatch the request, simulating the ghost viewer when in scope.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            The (possibly simulated and banner-decorated) response.
+        """
         state = request.session.get(SESSION_KEY)
         if not state or not request.user.is_authenticated:
             return self.get_response(request)
@@ -95,7 +119,15 @@ class ProfilePreviewMiddleware:
         return self._respond_as_ghost(request, state)
 
     def _in_scope(self, request: HttpRequest, state: dict) -> bool:
-        """Whether this request belongs to the previewed page."""
+        """Whether this request belongs to the previewed page.
+
+        Args:
+            request: The incoming HTTP request.
+            state: The preview session state.
+
+        Returns:
+            Whether the request belongs to the previewed page.
+        """
         preview_path = state.get("path", "")
         if not preview_path:
             return False
@@ -106,13 +138,27 @@ class ProfilePreviewMiddleware:
         return False
 
     def _is_page_navigation(self, request: HttpRequest) -> bool:
-        """Whether this looks like a full-page navigation."""
+        """Whether this looks like a full-page navigation.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            Whether the request looks like the user navigating to a new page.
+        """
         if request.method != "GET" or request.headers.get("HX-Request"):
             return False
         return "text/html" in request.headers.get("Accept", "")
 
     def _blocked_response(self, request: HttpRequest) -> HttpResponse:
-        """Reject a write attempted during preview."""
+        """Reject a write attempted during preview.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            A 403 response carrying a toast trigger for HTMX callers.
+        """
         response = HttpResponse("Actions are disabled while previewing your profile.", status=403)
         if request.headers.get("HX-Request"):
             response["HX-Trigger"] = json.dumps(
@@ -126,7 +172,16 @@ class ProfilePreviewMiddleware:
         return response
 
     def _respond_as_ghost(self, request: HttpRequest, state: dict) -> HttpResponse:
-        """Run the request as a ghost user inside a rolled-back transaction."""
+        """Run the request as a ghost user inside a rolled-back transaction.
+
+        Args:
+            request: The incoming HTTP request.
+            state: The preview session state.
+
+        Returns:
+            The response as the ghost saw it, with the preview banner injected
+            into full HTML pages.
+        """
         from urbanlens.dashboard.models.profile.model import Profile
 
         real_user = request.user
@@ -151,7 +206,12 @@ class ProfilePreviewMiddleware:
         return response
 
     def _inject_banner(self, response: HttpResponse, mode: str) -> None:
-        """Insert the preview banner before </body> of an HTML response."""
+        """Insert the preview banner before </body> of an HTML response.
+
+        Args:
+            response: The rendered response to decorate (modified in place).
+            mode: The active preview mode, used for the banner label.
+        """
         content_type = response.get("Content-Type", "")
         if response.streaming or "text/html" not in content_type:
             return
@@ -230,7 +290,16 @@ class RequestTelemetryMiddleware:
         cpu_ms: float,
         stats: _SqlStats,
     ) -> None:
-        """Emit one line with wall, CPU, and SQL time for a slow request."""
+        """Emit one line with wall, CPU, and SQL time for a slow request.
+
+        Args:
+            request: The request being reported.
+            response: The response, or None when the request raised.
+            wall_ms: Total time, which is what the user experienced.
+            cpu_ms: Time this process spent running, which separates a busy
+                worker from one that was waiting.
+            stats: The request's accumulated query time, count and rows.
+        """
         match = getattr(request, "resolver_match", None)
         user = getattr(request, "user", None)
         logger.warning(

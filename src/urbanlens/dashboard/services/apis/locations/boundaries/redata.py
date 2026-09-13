@@ -60,8 +60,14 @@ class RedataBoundaryProvider(BoundaryProvider):
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | MultiPolygon | None]:
         """Fetch REData's parcel record for this coordinate and convert its geometry fields.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            name: Unused - REData is looked up strictly by coordinate.
+
         Returns:
-            ``{"property": ..., "building": ...}``, both possibly None."""
+            ``{"property": ..., "building": ...}``, both possibly None.
+        """
         if not settings.redata_api_url or not settings.redata_api_key:
             return {}
 
@@ -87,8 +93,14 @@ class RedataBoundaryProvider(BoundaryProvider):
         """REData's own best boundary for this parcel, when it has no cadastral line.
         ``parcel_geometry`` is null for every New York parcel by construction - the state's Tier 1 source is a centroid point layer, so there is no ring to extract - which is why this path, not the cadastral one, is what a NY pin actually resolves through.
 
+        Args:
+            gateway: The already-constructed gateway to reuse.
+            parcel_uuid: The parcel's REData uuid, or None when the lookup
+                resolved no parcel at all.
+
         Returns:
-            The suggested boundary, or None when REData offers no candidate or the request failed."""
+            The suggested boundary, or None when REData offers no candidate or the request failed.
+        """
         if not parcel_uuid:
             return None
         try:
@@ -102,8 +114,17 @@ class RedataBoundaryProvider(BoundaryProvider):
         """Approximate the property boundary as the convex hull of the parcel's own buildings.
         A jurisdiction that never digitized a parcel-boundary shapefile can still publish individual building locations (county GIS or NY SHPO's CRIS inventory), since those only need a point each.
 
+        Args:
+            gateway: The already-constructed ``RedataGateway`` to reuse - the
+                parcel lookup and this buildings lookup are for the same
+                parcel, no need to re-resolve credentials/base URL.
+            parcel_uuid: The parcel's REData uuid, or None if the parcel
+                lookup didn't resolve one (e.g. no parcel at this coordinate
+                at all).
+
         Returns:
-            A convex-hull ``Polygon`` around the parcel's building coordinates, or None when there's no uuid, fewer than 3 usable coordinates, the points are collinear (the hull degenerates to a line or point), or the buildings lookup itself failed."""
+            A convex-hull ``Polygon`` around the parcel's building coordinates, or None when there's no uuid, fewer than 3 usable coordinates, the points are collinear (the hull degenerates to a line or point), or the buildings lookup itself failed.
+        """
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
 
         if not parcel_uuid:
