@@ -1,4 +1,4 @@
-"""One-off backfill: re-encode photos stored before every upload was re-encoded.
+"""One-off backfill: re-encode photos, comment images, label icons and avatars stored before uploads of them were.
 
 TEMPORARY - delete this command once it has been run against production. Run it once: each run re-encodes again.
 
@@ -7,11 +7,16 @@ XMP (which can carry GPS), IPTC, a comment or PNG text. Each photo's EXIF and em
 when they never were, then the file is re-encoded under the uploader's format policy, and an existing analysis copy is
 rewritten from the clean file.
 
-Dimensions are kept. Shrinking cannot be undone, and this pass cleans files rather than applying a size cap to photos
-uploaded before one existed.
+Comment and trip comment images, label icons and avatars were always stored as uploaded (P119). They go through the
+same re-encode as new uploads of them; an undecodable one is removed, and a published comment keeps its text.
+
+Photo and comment image dimensions are kept. Shrinking cannot be undone, and this pass cleans files rather than
+applying a size cap to photos uploaded before one existed.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from django.core.management.base import BaseCommand
 from django.db import DatabaseError
@@ -29,11 +34,14 @@ from urbanlens.dashboard.services.media.storage import get_stored_photo_policy
 from urbanlens.dashboard.services.sandbox import allow_untrusted_parse
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 class Command(BaseCommand):
     """Re-encode every stored photo, recording its metadata on the row first."""
 
-    help = "Re-encode photos already in storage so no metadata stays in the file, keeping EXIF and keywords on the row. Run once."
+    help = "Re-encode photos, comment images, label icons and avatars already in storage so no metadata stays in the file, keeping photo EXIF and keywords on the row. Run once."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Report how many photos would be re-encoded without reading or writing any.")
@@ -46,7 +54,7 @@ class Command(BaseCommand):
             queryset = queryset[: options["limit"]]
 
         if options["dry_run"]:
-            self.stdout.write(f"Would re-encode {queryset.count()} stored photo(s).")
+            self.stdout.write(f"Would re-encode {queryset.count()} stored photo(s), then every published comment image, label icon and uploaded avatar.")
             return
 
         reencoded = 0
@@ -63,8 +71,67 @@ class Command(BaseCommand):
                     failed += 1
                     continue
                 reencoded += 1
+            rewritten, other_failed = self._reencode_other_images()
 
         self.stdout.write(f"Done. Re-encoded {reencoded}, exif_data recorded {recorded}, failed {failed}.")
+        self.stdout.write(f"Comment images, label icons and avatars: rewritten or removed {rewritten}, failed {other_failed}.")
+
+    def _reencode_other_images(self) -> tuple[int, int]:
+        """Re-encode every published comment image, label icon and uploaded avatar.
+
+        Returns:
+            How many were rewritten or removed, and how many failed on storage or the database.
+        """
+        from urbanlens.dashboard.models.comments.model import Comment
+        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.models.trips.model import TripComment
+        from urbanlens.dashboard.services.labels.icons import resize_stored_icon
+        from urbanlens.dashboard.services.media.storage import get_downscale_policy
+        from urbanlens.dashboard.services.media.stored_field import Reencoded, clear_stored_field, reencode_stored_field
+        from urbanlens.dashboard.services.profile.avatar import reencode_stored_avatar
+
+        rewritten = 0
+        failed = 0
+
+        def attempt(label: str, pk: int, rewrite: Callable[[], bool]) -> None:
+            nonlocal rewritten, failed
+            try:
+                rewritten += rewrite()
+            except (OSError, DatabaseError) as exc:
+                self.stderr.write(f"  [{label} pk={pk}] {type(exc).__name__}: {exc}")
+                failed += 1
+
+        for model, owner_field in ((Comment, "profile"), (TripComment, "author")):
+            # A pending comment is its scan task's to re-encode.
+            comments = model.objects.filter(pending_scan=False).exclude(image="").exclude(image__isnull=True).select_related(owner_field).order_by("pk")
+            for comment in comments.iterator():
+                name = comment.image.name
+                if not name:
+                    continue
+                owner = getattr(comment, owner_field)
+                convert_webp = get_downscale_policy(owner)[1] if owner is not None else True
+
+                def rewrite_comment(model=model, comment=comment, name=name, convert_webp=convert_webp) -> bool:
+                    rows = model.objects.all()
+                    outcome = reencode_stored_field(rows, comment.pk, "image", name, max_dimension=None, convert_webp=convert_webp, only_if={"pending_scan": False})
+                    if outcome is Reencoded.UNDECODABLE:
+                        # Already seen by others, so the comment keeps its text and loses only the image.
+                        return clear_stored_field(rows, comment.pk, "image", name)
+                    return outcome is Reencoded.REPLACED
+
+                attempt(model.__name__, comment.pk, rewrite_comment)
+
+        for label in Label.objects.exclude(custom_icon="").exclude(custom_icon__isnull=True).order_by("pk").iterator():
+            if icon_name := label.custom_icon.name:
+                attempt("Label", label.pk, lambda label_id=label.pk, icon_name=icon_name: resize_stored_icon(label_id, icon_name))
+
+        # A generated emoji SVG is the site's own template, not uploaded bytes.
+        for profile in Profile.objects.exclude(avatar="").exclude(avatar__isnull=True).exclude(avatar__iendswith=".svg").order_by("pk").iterator():
+            if avatar_name := profile.avatar.name:
+                attempt("Profile", profile.pk, lambda profile_id=profile.pk, avatar_name=avatar_name: reencode_stored_avatar(profile_id, avatar_name))
+
+        return rewritten, failed
 
     def _reencode(self, image: Image) -> bool:
         """Record one photo's metadata on its row, then re-encode its file and analysis copy.

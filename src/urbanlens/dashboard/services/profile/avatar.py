@@ -27,6 +27,7 @@ import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+from django.db import transaction
 import requests
 
 from urbanlens.dashboard.models.colors import MaterialColor
@@ -362,7 +363,51 @@ def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile
 
     profile.avatar = uploaded_file
     profile.save(update_fields=["avatar"])
+    queue_avatar_reencode(profile)
     return profile
+
+
+#: The longest side a stored avatar keeps.
+AVATAR_MAX_PX = 512
+
+
+def queue_avatar_reencode(profile: Profile) -> None:
+    """Ask the sandbox worker to re-encode *profile*'s avatar once this transaction commits.
+
+    A generated emoji SVG is skipped: its bytes are the site's own template.
+
+    Args:
+        profile: A saved profile whose ``avatar`` was just set from uploaded or downloaded bytes.
+    """
+    name = profile.avatar.name if profile.avatar else ""
+    if not name or name.lower().endswith(".svg"):
+        return
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import reencode_profile_avatar
+
+    profile_id = profile.pk
+    transaction.on_commit(lambda: safely_enqueue_task(reencode_profile_avatar, profile_id, name))
+
+
+def reencode_stored_avatar(profile_id: int, avatar_name: str) -> bool:
+    """Re-encode a profile's stored avatar, if it still has the one the re-encode was queued for.
+
+    An avatar that cannot be decoded is removed rather than served as it came.
+
+    Args:
+        profile_id: The profile.
+        avatar_name: The stored name its avatar had when the re-encode was queued.
+
+    Returns:
+        Whether the avatar was replaced or removed.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.media.stored_field import Reencoded, clear_stored_field, reencode_stored_field
+
+    outcome = reencode_stored_field(Profile.objects.all(), profile_id, "avatar", avatar_name, max_dimension=AVATAR_MAX_PX, convert_webp=True)
+    if outcome is Reencoded.UNDECODABLE:
+        return clear_stored_field(Profile.objects.all(), profile_id, "avatar", avatar_name)
+    return outcome is Reencoded.REPLACED
 
 
 def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> Profile:

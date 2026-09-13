@@ -588,7 +588,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
 
         from django.core.files.base import ContentFile
 
-        from urbanlens.dashboard.services.profile.avatar import AvatarService
+        from urbanlens.dashboard.services.profile.avatar import AvatarService, queue_avatar_reencode
 
         email = request.user.email or ""
         if not email:
@@ -599,6 +599,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         if not img:
             return JsonResponse({"error": "No Gravatar found for your email address."}, status=404)
         profile.avatar.save(f"gravatar_{request.user.pk}.jpg", ContentFile(img), save=True)
+        queue_avatar_reencode(profile)
         return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
 
     def _save_avatar_emoji(self, request: HttpRequest, profile: Profile) -> JsonResponse:

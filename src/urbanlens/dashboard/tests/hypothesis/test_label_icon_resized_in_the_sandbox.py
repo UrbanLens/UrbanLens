@@ -12,6 +12,7 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models.fields.files import FieldFile
 from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
@@ -31,6 +32,11 @@ def _png(width: int, height: int, name: str = "icon.png") -> SimpleUploadedFile:
     buffer = io.BytesIO()
     PIL.Image.new("RGB", (width, height), (200, 40, 40)).save(buffer, format="PNG")
     return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+
+def _stored_name(stored: FieldFile) -> str:
+    assert stored.name, "the label has no icon"
+    return stored.name
 
 
 class LabelIconIsNotDecodedInTheRequestTests(TestCase):
@@ -99,7 +105,7 @@ class LabelIconIsShrunkInTheSandboxTests(TestCase):
 
         label = Label.objects.get(profile=self.profile, name="Urbex")
         resizes = [call.args for call in enqueue.call_args_list if call.args and call.args[0] is resize_label_icon]
-        self.assertEqual(resizes, [(resize_label_icon, label.pk, label.custom_icon.name)])
+        self.assertEqual(resizes, [(resize_label_icon, label.pk, _stored_name(label.custom_icon))])
 
     def test_replacing_an_icon_on_edit_queues_its_resize(self) -> None:
         label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Urbex")
@@ -112,26 +118,26 @@ class LabelIconIsShrunkInTheSandboxTests(TestCase):
 
         label.refresh_from_db()
         resizes = [call.args for call in enqueue.call_args_list if call.args and call.args[0] is resize_label_icon]
-        self.assertEqual(resizes, [(resize_label_icon, label.pk, label.custom_icon.name)])
+        self.assertEqual(resizes, [(resize_label_icon, label.pk, _stored_name(label.custom_icon))])
 
     def test_a_shrunk_icon_does_not_leave_the_original_on_disk(self) -> None:
         """Label files are not managed by the cleanup receivers, so the swap is the only thing that removes it."""
         label = self._label_with_icon(600, 400)
-        original = label.custom_icon.name
+        original = _stored_name(label.custom_icon)
         storage = label.custom_icon.storage
 
         with self._in_sandbox():
             resize_stored_icon(label.pk, original)
 
         label.refresh_from_db()
-        self.assertNotEqual(label.custom_icon.name, original)
+        self.assertNotEqual(_stored_name(label.custom_icon), original)
         self.assertFalse(storage.exists(original))
-        self.assertTrue(storage.exists(label.custom_icon.name))
+        self.assertTrue(storage.exists(_stored_name(label.custom_icon)))
 
     def test_a_label_deleted_before_its_resize_keeps_the_original_for_undo(self) -> None:
         """Deleting a label stashes its icon's name for undo, so the file has to still be there to restore."""
         label = self._label_with_icon(600, 400)
-        original, storage, label_id = label.custom_icon.name, label.custom_icon.storage, label.pk
+        original, storage, label_id = _stored_name(label.custom_icon), label.custom_icon.storage, label.pk
         label.delete()
 
         with self._in_sandbox():
@@ -143,7 +149,7 @@ class LabelIconIsShrunkInTheSandboxTests(TestCase):
         label = self._label_with_icon(600, 400)
 
         with self._in_sandbox():
-            self.assertTrue(resize_stored_icon(label.pk, label.custom_icon.name))
+            self.assertTrue(resize_stored_icon(label.pk, _stored_name(label.custom_icon)))
 
         label.refresh_from_db()
         with label.custom_icon.open("rb") as stored:
@@ -157,27 +163,30 @@ class LabelIconIsShrunkInTheSandboxTests(TestCase):
             override_settings(UL_PROCESS_ROLE="web", UL_UNTRUSTED_PARSE_POLICY="deny"),
             self.assertRaises(UnsandboxedParseError),
         ):
-            resize_stored_icon(label.pk, label.custom_icon.name)
+            resize_stored_icon(label.pk, _stored_name(label.custom_icon))
 
     def test_an_icon_replaced_since_the_resize_was_queued_is_left_alone(self) -> None:
         label = self._label_with_icon(600, 400)
-        stale = label.custom_icon.name
+        stale = _stored_name(label.custom_icon)
         label.custom_icon = _png(64, 64, "newer.png")
         label.save()
-        current = label.custom_icon.name
+        current = _stored_name(label.custom_icon)
 
         with self._in_sandbox():
             self.assertFalse(resize_stored_icon(label.pk, stale))
 
         label.refresh_from_db()
-        self.assertEqual(label.custom_icon.name, current)
+        self.assertEqual(_stored_name(label.custom_icon), current)
 
-    def test_a_small_icon_is_kept_as_uploaded(self) -> None:
+    def test_a_small_icon_is_still_reencoded(self) -> None:
+        """Its size needs nothing, but whatever metadata the upload carried would be served with it (P119)."""
         label = self._label_with_icon(64, 64)
-        name = label.custom_icon.name
+        name = _stored_name(label.custom_icon)
 
         with self._in_sandbox():
-            self.assertFalse(resize_stored_icon(label.pk, name))
+            self.assertTrue(resize_stored_icon(label.pk, name))
 
         label.refresh_from_db()
-        self.assertEqual(label.custom_icon.name, name)
+        self.assertNotEqual(_stored_name(label.custom_icon), name)
+        with label.custom_icon.open("rb") as stored:
+            self.assertEqual(PIL.Image.open(stored).size, (64, 64))

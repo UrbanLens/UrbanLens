@@ -1044,11 +1044,49 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     if not old_name:
         return None
     with image.image.open("rb") as stored_file:
-        source: PILImage.Image = PILImage.open(stored_file)
-        target_format = _stored_format(source, convert_webp)
-        icc_profile = source.info.get("icc_profile")
-        loop = source.info.get("loop")
-        frames, durations = _stored_frames(source, max_dimension, target_format)
+        data, target_format = _encode_stored(stored_file, max_dimension, convert_webp)
+
+    from django.core.files.base import ContentFile
+
+    stem = posixpath.splitext(posixpath.basename(old_name))[0]
+    image.image.save(f"{stem}{_FORMAT_EXTENSIONS[target_format]}", ContentFile(data), save=False)
+    logger.info("Re-encoded image %s: %s bytes (%s)", image.pk, len(data), target_format)
+    return StoredFileReplacement(len(data), old_name if image.image.name != old_name else None)
+
+
+@untrusted_parse("image.decode")
+def reencode_image_file(stored_file: IO[bytes], name: str, *, max_dimension: int | None, convert_webp: bool) -> tuple[bytes, str]:
+    """Re-encode a stored image that is not a library photo (a comment image, an icon, an avatar) from its pixels.
+
+    Args:
+        stored_file: The stored file, open for reading.
+        name: Its stored name, whose stem the new name keeps.
+        max_dimension: Longest-edge cap in pixels, or None to keep dimensions.
+        convert_webp: Whether to encode as WebP rather than in the file's own format.
+
+    Returns:
+        The encoded bytes, and a file name with the extension of the format they are in.
+
+    Raises:
+        OSError: When the file cannot be read, or is not an image.
+        ValueError: When Pillow cannot decode or encode it.
+    """
+    data, target_format = _encode_stored(stored_file, max_dimension, convert_webp)
+    stem = posixpath.splitext(posixpath.basename(name))[0] or "image"
+    return data, f"{stem}{_FORMAT_EXTENSIONS[target_format]}"
+
+
+def _encode_stored(stored_file: IO[bytes], max_dimension: int | None, convert_webp: bool) -> tuple[bytes, str]:
+    """Decode a stored file and encode its pixels, colour profile and animation timing into a new one.
+
+    Returns:
+        The encoded bytes, and the Pillow format they are in.
+    """
+    source: PILImage.Image = PILImage.open(stored_file)
+    target_format = _stored_format(source, convert_webp)
+    icc_profile = source.info.get("icc_profile")
+    loop = source.info.get("loop")
+    frames, durations = _stored_frames(source, max_dimension, target_format)
 
     save_kwargs: dict[str, Any] = dict(_SAVE_PARAMS.get(target_format, {}))
     if icc_profile and target_format in _ICC_FORMATS:
@@ -1060,14 +1098,7 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
 
     buffer = io.BytesIO()
     frames[0].save(buffer, format=target_format, **save_kwargs)
-    new_size = buffer.tell()
-
-    from django.core.files.base import ContentFile
-
-    stem = posixpath.splitext(posixpath.basename(old_name))[0]
-    image.image.save(f"{stem}{_FORMAT_EXTENSIONS[target_format]}", ContentFile(buffer.getvalue()), save=False)
-    logger.info("Re-encoded image %s: %s bytes (%s)", image.pk, new_size, target_format)
-    return StoredFileReplacement(new_size, old_name if image.image.name != old_name else None)
+    return buffer.getvalue(), target_format
 
 
 #: Longest edge of the grid thumbnail written by :func:`write_image_thumbnail`.

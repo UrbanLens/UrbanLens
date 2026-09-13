@@ -180,9 +180,20 @@ keywords are read first and kept on the row. Animated GIF, PNG and WebP keep the
 frames; HEIF, MPO and anything else Pillow opens are transcoded. A pending upload
 that cannot be re-encoded is retried and then removed, never published as uploaded.
 `tests/hypothesis/test_every_stored_photo_is_reencoded.py` plants a marker in every
-carrier and format and searches every output for it. Photos are the only stored
-images this covers so far: comment images, icons, avatars and imported photos are
-still stored as uploaded (P119).
+carrier and format and searches every output for it.
+
+Comment and trip comment images, label icons and uploaded or downloaded avatars go
+through the same encoder (`images.reencode_image_file`), swapped in by
+`stored_field.reencode_stored_field`: a conditional update on the stored name, which
+deletes whichever file lost. A comment image is re-encoded before its `pending_scan`
+clears, in the same update, and a comment whose image cannot be decoded is rejected.
+An icon is re-encoded as WebP at 256px or less, and an avatar as WebP at 512px or
+less. An icon or avatar that cannot be decoded is removed. Neither has a
+`pending_scan`, so both show the upload until the sandbox worker has run.
+`test_every_stored_user_image_is_reencoded.py` runs the same fixtures through each
+path. The one-off `strip_exif_from_stored_photos` backfill re-encodes the ones stored
+before this, after the photos. Pin and achievement icons and imported photos are still stored as uploaded
+(P119).
 The practical effect is the one that matters here: what gets served is bytes this
 server's encoder wrote, not bytes the uploader sent. A disguised non-image
 fails to decode; data appended after the end-of-image marker does not survive

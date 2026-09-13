@@ -15,14 +15,22 @@ import tempfile
 
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.db.models.fields.files import FieldFile
 from django.test import override_settings
 from model_bakery import baker
 from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.trips.model import Trip, TripComment
 
 _MAKE_TAG = 0x010F
 _GPS_IFD = 0x8825
@@ -147,3 +155,101 @@ class StripExifBackfillTests(TestCase):
         self.assertNotEqual(image.image.name, original_name)
         with image.image.open("rb") as handle:
             self.assertNotIn(b"Old Mill House", handle.read())
+
+
+class OtherStoredImagesBackfillTests(TestCase):
+    """Comment images, label icons and avatars stored before uploads of them were re-encoded (P119)."""
+
+    def setUp(self) -> None:
+        self._media_root = tempfile.mkdtemp(prefix="ul_other_backfill_")
+        self.addCleanup(shutil.rmtree, self._media_root, ignore_errors=True)
+        overrides = override_settings(MEDIA_ROOT=self._media_root)
+        overrides.enable()
+        self.addCleanup(overrides.disable)
+        self.profile = baker.make(User).profile
+
+    def _upload(self, data: bytes | None = None, name: str = "old.jpg") -> SimpleUploadedFile:
+        return SimpleUploadedFile(name, _jpeg_with_comment() if data is None else data, content_type="image/jpeg")
+
+    def _carries_the_comment(self, stored: FieldFile) -> bool:
+        with stored.open("rb") as handle:
+            return b"Old Mill House" in handle.read()
+
+    def _comment(self, **fields: object) -> Comment:
+        return Comment.objects.create(
+            pin=baker.make(Pin, profile=self.profile), profile=self.profile, text="look", image=self._upload(), **fields
+        )
+
+    def test_the_fixture_carries_what_the_backfill_must_remove(self) -> None:
+        self.assertTrue(self._carries_the_comment(self._comment().image))
+
+    def test_a_published_comment_image_is_reencoded(self) -> None:
+        comment = self._comment()
+
+        call_command("strip_exif_from_stored_photos")
+
+        comment.refresh_from_db()
+        self.assertFalse(self._carries_the_comment(comment.image))
+
+    def test_a_published_trip_comment_image_is_reencoded(self) -> None:
+        comment = TripComment.objects.create(
+            trip=baker.make(Trip, creator=self.profile), author=self.profile, text="look", image=self._upload()
+        )
+
+        call_command("strip_exif_from_stored_photos")
+
+        comment.refresh_from_db()
+        self.assertFalse(self._carries_the_comment(comment.image))
+
+    def test_a_label_icon_is_reencoded(self) -> None:
+        label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Urbex")
+        Label.objects.filter(pk=label.pk).update(
+            custom_icon=default_storage.save("label_icons/old.jpg", self._upload())
+        )
+
+        call_command("strip_exif_from_stored_photos")
+
+        label.refresh_from_db()
+        self.assertFalse(self._carries_the_comment(label.custom_icon))
+
+    def test_an_avatar_is_reencoded(self) -> None:
+        Profile.objects.filter(pk=self.profile.pk).update(
+            avatar=default_storage.save("avatars/old.jpg", self._upload())
+        )
+
+        call_command("strip_exif_from_stored_photos")
+
+        self.profile.refresh_from_db()
+        self.assertFalse(self._carries_the_comment(self.profile.avatar))
+
+    def test_a_generated_emoji_avatar_is_left_alone(self) -> None:
+        name = default_storage.save("avatars/emoji_1.svg", ContentFile(b"<svg xmlns='http://www.w3.org/2000/svg'/>"))
+        Profile.objects.filter(pk=self.profile.pk).update(avatar=name)
+
+        call_command("strip_exif_from_stored_photos")
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.avatar.name, name)
+
+    def test_a_comment_still_pending_is_left_to_its_scan_task(self) -> None:
+        comment = self._comment(pending_scan=True)
+        original_name = comment.image.name
+
+        call_command("strip_exif_from_stored_photos")
+
+        comment.refresh_from_db()
+        self.assertEqual(comment.image.name, original_name)
+
+    def test_a_published_comment_whose_image_cannot_be_decoded_keeps_its_text(self) -> None:
+        """The comment has been seen already; losing the image is enough, and rejecting it would delete the text too."""
+        comment = Comment.objects.create(
+            pin=baker.make(Pin, profile=self.profile),
+            profile=self.profile,
+            text="look",
+            image=self._upload(b"\xff\xd8\xff\xe0 not really a jpeg"),
+        )
+
+        call_command("strip_exif_from_stored_photos")
+
+        comment.refresh_from_db()
+        self.assertFalse(comment.image)

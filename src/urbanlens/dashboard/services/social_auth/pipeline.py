@@ -29,7 +29,7 @@ from django.urls import reverse
 
 from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT, SESSION_WEBAUTHN_PENDING_USER, has_second_factor
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, UsernameGenerator, username_is_taken
-from urbanlens.dashboard.services.profile.avatar import AvatarService
+from urbanlens.dashboard.services.profile.avatar import AvatarService, queue_avatar_reencode
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -151,6 +151,7 @@ def fetch_and_save_avatar(
 
     filename = f"sso_avatar_{user.pk}.jpg"
     profile.avatar.save(filename, ContentFile(image_bytes), save=True)
+    queue_avatar_reencode(profile)
     logger.info("Saved SSO avatar for user %s from %s", user.username, backend.name)
 
 

@@ -379,15 +379,17 @@ class CopiesMadeFromAFileStoredBeforeThePipelineTests(_MetadataCase):
                 self.assertClean(rendered[0], "the preview")
 
     def test_a_shrunk_label_icon_is_clean(self) -> None:
-        from urbanlens.dashboard.services.labels.icons import shrink_icon
+        from urbanlens.dashboard.services.labels.icons import ICON_MAX_PX
+        from urbanlens.dashboard.services.media.images import reencode_image_file
 
         for slug, (name, data) in _fixtures((300, 200)).items():
             with self.subTest(slug):
                 with override_settings(**SANDBOX):
-                    shrunk = shrink_icon(io.BytesIO(data), name)
+                    shrunk, _ = reencode_image_file(
+                        io.BytesIO(data), name, max_dimension=ICON_MAX_PX, convert_webp=True
+                    )
 
-                assert shrunk is not None
-                self.assertClean(shrunk[0], "the icon")
+                self.assertClean(shrunk, "the icon")
 
 
 class APhotoUploadedThroughTheSiteTests(_MetadataCase):

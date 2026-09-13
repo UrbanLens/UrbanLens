@@ -431,6 +431,14 @@ def resize_label_icon(label_id: int, icon_name: str) -> bool:
     return resize_stored_icon(label_id, icon_name)
 
 
+@shared_task(queue=SANDBOX_QUEUE)
+def reencode_profile_avatar(profile_id: int, avatar_name: str) -> bool:
+    """Re-encode an uploaded or downloaded avatar in the sandbox worker."""
+    from urbanlens.dashboard.services.profile.avatar import reencode_stored_avatar
+
+    return reencode_stored_avatar(profile_id, avatar_name)
+
+
 @shared_task(queue=Queue.MAINTENANCE)
 def measure_media_usage_task() -> float:
     """Measure the media volume for the site-admin system panel."""
@@ -2048,8 +2056,26 @@ def _run_comment_image_scan(task, comment, model) -> bool:
         _reject_comment_upload(comment, malware_error)
         return False
 
-    model.objects.filter(pk=comment.pk).update(pending_scan=False)
-    return True
+    from urbanlens.dashboard.services.media.storage import get_downscale_policy
+    from urbanlens.dashboard.services.media.stored_field import Reencoded, reencode_stored_field
+
+    owner = getattr(comment, "profile", None) or getattr(comment, "author", None)
+    max_dimension, convert_webp = get_downscale_policy(owner) if owner is not None else (None, True)
+    # pending_scan clears in the update that swaps in the re-encoded file, so the upload as sent is never shown.
+    outcome = reencode_stored_field(
+        model.objects.all(),
+        comment.pk,
+        "image",
+        comment.image.name,
+        max_dimension=max_dimension,
+        convert_webp=convert_webp,
+        only_if={"pending_scan": True},
+        also_set={"pending_scan": False},
+    )
+    if outcome is Reencoded.UNDECODABLE:
+        _reject_comment_upload(comment, "That photo couldn't be processed.")
+        return False
+    return outcome is Reencoded.REPLACED
 
 
 def _reject_comment_upload(comment, reason: str) -> None:

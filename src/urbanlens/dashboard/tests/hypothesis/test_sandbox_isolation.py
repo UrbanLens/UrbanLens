@@ -57,6 +57,8 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
         "parse_import_preview_task",
         # The label-icon resize that used to decode inside the label create/edit request.
         "resize_label_icon",
+        # An uploaded or downloaded avatar, re-encoded so no metadata is served with it.
+        "reencode_profile_avatar",
     },
     "SANDBOX_BATCH_QUEUE": {
         "run_user_data_import",
