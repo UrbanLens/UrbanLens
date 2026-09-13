@@ -423,20 +423,19 @@ def finish_import_preview_task(profile_id: int, job_id: str) -> None:
     import_preview.finish_import_preview(profile_id, job_id)
 
 
-@shared_task(queue=SANDBOX_QUEUE)
-def resize_label_icon(label_id: int, icon_name: str) -> bool:
-    """Shrink a label's uploaded icon in the sandbox worker."""
-    from urbanlens.dashboard.services.labels.icons import resize_stored_icon
+@shared_task(bind=True, queue=SANDBOX_QUEUE, max_retries=5)
+def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
+    """Re-encode a held icon or avatar in the sandbox worker and show it."""
+    from urbanlens.dashboard.services.media.held_upload import drop_held, publish_held
 
-    return resize_stored_icon(label_id, icon_name)
-
-
-@shared_task(queue=SANDBOX_QUEUE)
-def reencode_profile_avatar(profile_id: int, avatar_name: str) -> bool:
-    """Re-encode an uploaded or downloaded avatar in the sandbox worker."""
-    from urbanlens.dashboard.services.profile.avatar import reencode_stored_avatar
-
-    return reencode_stored_avatar(profile_id, avatar_name)
+    try:
+        return publish_held(key, pk, held_name)
+    except OSError as exc:
+        if self.request.retries >= self.max_retries:
+            logger.exception("The upload held for %s %s could not be read after %s retries", key, pk, self.request.retries)
+            drop_held(key, pk, held_name)
+            return False
+        raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 900)) from exc
 
 
 @shared_task(queue=Queue.MAINTENANCE)

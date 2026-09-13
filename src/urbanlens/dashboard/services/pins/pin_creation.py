@@ -311,7 +311,6 @@ def create_pin_for_profile(
         # external API's pin create and the import paths all arrive through
         # this one function.
         "icon": clean_icon(icon),
-        "custom_icon": custom_icon,
         "color": color,
         "profile": profile,
         "parent_pin": new_parent,
@@ -346,6 +345,12 @@ def create_pin_for_profile(
         if Pin.objects.filter(profile=profile, location=location, parent_pin__isnull=True).exists():
             raise DuplicatePropertyError("Duplicate root pin at this location (race with a concurrent create).") from exc
         raise
+
+    if custom_icon:
+        from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
+
+        pin.save(update_fields=[hold_upload(pin, "custom_icon", custom_icon)])
+        queue_held_upload(pin, "custom_icon")
 
     # visible_to keeps the id__in lookups from resolving another user's
     # private labels - a guessed foreign label id would otherwise attach (and

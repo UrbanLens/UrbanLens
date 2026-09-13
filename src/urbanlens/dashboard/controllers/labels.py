@@ -541,28 +541,29 @@ def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
     return custom_icon, None
 
 
-def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> tuple[bool, str | None]:
+def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> tuple[list[str], str | None]:
     """Update label custom_icon from POST (upload or clear).
 
     Returns:
-        A tuple of (whether custom_icon was actually touched, a user-facing
-        error message if the uploaded icon failed a size/content-type/malware
-        check - the icon is left unchanged in that case).
+        A tuple of (the fields it set, a user-facing error message if the
+        uploaded icon failed a size/content-type/malware check - the icon is
+        left unchanged in that case).
     """
+    from urbanlens.dashboard.services.media.held_upload import discard_held_upload, hold_upload
+
     custom_icon, error = _validated_custom_icon(request)
     if error:
-        return False, error
+        return [], error
     if custom_icon:
-        label.custom_icon = custom_icon
-        return True, None
+        return [hold_upload(label, "custom_icon", custom_icon)], None
     if request.POST.get("clear_custom_icon"):
         # See achievements' equivalent: clearing the field does not remove the
         # stored file, so an explicitly-removed icon stayed fetchable.
         if label.custom_icon:
             label.custom_icon.delete(save=False)
         label.custom_icon = None
-        return True, None
-    return False, None
+        return ["custom_icon", discard_held_upload(label, "custom_icon")], None
+    return [], None
 
 
 def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> bool:
@@ -672,12 +673,13 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
             description=request.POST.get("description", "").strip() or None,
             icon=clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None,
             color=clean_color(request.POST.get("color"), default=DEFAULT_LABEL_COLOR),
-            custom_icon=custom_icon,
             order=order,
         )
-        from urbanlens.dashboard.services.labels.icons import queue_icon_resize
+        if custom_icon:
+            from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
 
-        queue_icon_resize(label)
+            label.save(update_fields=[hold_upload(label, "custom_icon", custom_icon)])
+            queue_held_upload(label, "custom_icon")
         if parent_ids:
             valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=label.id)
             safe_parent_ids = [p.id for p in valid_parents if not _would_create_cycle(label, p.id)]
@@ -812,20 +814,19 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 label.allow_auto_tag = "disable_auto_tag" not in request.POST
                 changed_fields.append("allow_auto_tag")
 
-        icon_changed, icon_error = _apply_custom_icon_from_post(label, request)
+        icon_fields, icon_error = _apply_custom_icon_from_post(label, request)
         if icon_error:
             return HttpResponse(icon_error, status=400)
-        if icon_changed:
-            changed_fields.append("custom_icon")
+        changed_fields.extend(icon_fields)
 
         kind_changed = _apply_kind_conversion(label, new_kind, profile)
         if kind_changed:
             changed_fields.extend(["kind", "profile"])
         label.save(update_fields=changed_fields)
-        if icon_changed:
-            from urbanlens.dashboard.services.labels.icons import queue_icon_resize
+        if icon_fields:
+            from urbanlens.dashboard.services.media.held_upload import queue_held_upload
 
-            queue_icon_resize(label)
+            queue_held_upload(label, "custom_icon")
 
         if kind_changed:
             label.parents.clear()

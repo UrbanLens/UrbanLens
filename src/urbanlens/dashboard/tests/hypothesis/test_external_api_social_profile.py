@@ -179,14 +179,14 @@ class AvatarUploadTests(_SocialProfileTestCase):
             _bearer(raw_key or self.raw_key),
         )
 
-    def test_put_stores_the_avatar_and_returns_the_profile(self) -> None:
-        """A valid upload lands on the model and comes back in the payload."""
+    def test_put_holds_the_avatar_and_says_it_is_processing(self) -> None:
+        """A valid upload is held for the sandbox worker, and the payload says so rather than showing it."""
         response = self._put_png(self.profile)
 
         self.assertEqual(response.status_code, 200)
         self.profile.refresh_from_db()
-        self.assertTrue(self.profile.avatar)
-        self.assertTrue(response.json()["avatar_url"])
+        self.assertTrue(self.profile.avatar_upload)
+        self.assertIs(response.json()["avatar_pending"], True)
 
     def test_put_on_another_profile_is_indistinguishable_from_an_unknown_slug(self) -> None:
         """Never 403: a refusal must not confirm the slug belongs to somebody."""

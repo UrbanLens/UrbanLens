@@ -244,6 +244,7 @@ class LabelIconUploadValidationTests(TestCase):
         self.assertEqual(response.status_code, 400)
         label.refresh_from_db()
         self.assertFalse(label.custom_icon)
+        self.assertFalse(label.custom_icon_upload)
 
     def test_a_real_image_is_still_accepted(self) -> None:
         """Anti-vacuity: the guard must not refuse the ordinary case."""
@@ -254,7 +255,7 @@ class LabelIconUploadValidationTests(TestCase):
         self.assertIn(response.status_code, (200, 204, 302))
         label = Label.objects.filter(profile=self.profile, name="Rooftops").first()
         assert label is not None
-        self.assertTrue(label.custom_icon)
+        self.assertTrue(label.custom_icon_upload)
 
     def test_a_label_with_no_icon_is_unaffected(self) -> None:
         response = self._create()

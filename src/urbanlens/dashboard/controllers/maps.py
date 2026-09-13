@@ -908,13 +908,16 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if color is not None:
             pin.color = color or None
             touched.append("color")
+        from urbanlens.dashboard.services.media.held_upload import discard_held_upload, hold_upload, queue_held_upload
+
         if custom_icon:
-            pin.custom_icon = custom_icon
-            touched.append("custom_icon")
+            touched.append(hold_upload(pin, "custom_icon", custom_icon))
         elif request.POST.get("clear_custom_icon"):
             pin.custom_icon = None
-            touched.append("custom_icon")
+            touched += ["custom_icon", discard_held_upload(pin, "custom_icon")]
         pin.save(update_fields=[*touched, "updated"])
+        if custom_icon:
+            queue_held_upload(pin, "custom_icon")
 
         if label_ids:
             from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval

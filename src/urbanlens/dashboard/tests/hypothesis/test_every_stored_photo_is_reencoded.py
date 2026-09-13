@@ -379,7 +379,7 @@ class CopiesMadeFromAFileStoredBeforeThePipelineTests(_MetadataCase):
                 self.assertClean(rendered[0], "the preview")
 
     def test_a_shrunk_label_icon_is_clean(self) -> None:
-        from urbanlens.dashboard.services.labels.icons import ICON_MAX_PX
+        from urbanlens.dashboard.services.media.held_upload import ICON_MAX_PX
         from urbanlens.dashboard.services.media.images import reencode_image_file
 
         for slug, (_, data) in _fixtures((300, 200)).items():

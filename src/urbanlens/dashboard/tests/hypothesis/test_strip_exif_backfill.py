@@ -25,6 +25,7 @@ from model_bakery import baker
 from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.achievements.model import Achievement
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
@@ -159,7 +160,7 @@ class StripExifBackfillTests(TestCase):
 
 
 class OtherStoredImagesBackfillTests(TestCase):
-    """Comment images, label icons and avatars stored before uploads of them were re-encoded (P119)."""
+    """Comment images, custom icons and avatars stored before uploads of them were re-encoded (P119)."""
 
     def setUp(self) -> None:
         self._media_root = tempfile.mkdtemp(prefix="ul_other_backfill_")
@@ -212,6 +213,23 @@ class OtherStoredImagesBackfillTests(TestCase):
 
         label.refresh_from_db()
         self.assertFalse(self._carries_the_comment(label.custom_icon))
+
+    def test_a_pin_and_an_achievement_icon_are_reencoded(self) -> None:
+        pin = baker.make(Pin, profile=self.profile)
+        achievement = Achievement.objects.create(name="ZzOld Award", metric="photos_uploaded", threshold=1)
+        Pin.objects.filter(pk=pin.pk).update(
+            custom_icon=default_storage.save("pin_custom_icons/old.jpg", self._upload())
+        )
+        Achievement.objects.filter(pk=achievement.pk).update(
+            custom_icon=default_storage.save("achievement_icons/old.jpg", self._upload())
+        )
+
+        call_command("strip_exif_from_stored_photos")
+
+        for row in (pin, achievement):
+            with self.subTest(type(row).__name__):
+                row.refresh_from_db()
+                self.assertFalse(self._carries_the_comment(row.custom_icon))
 
     def test_an_avatar_is_reencoded(self) -> None:
         Profile.objects.filter(pk=self.profile.pk).update(

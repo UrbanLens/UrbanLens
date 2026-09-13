@@ -265,7 +265,8 @@ class AchievementAdmin(admin.ModelAdmin):
     list_editable = ["threshold", "is_active", "is_secret", "order"]
     list_filter = ["is_active", "is_secret", "metric"]
     search_fields = ["name", "description", "metric"]
-    readonly_fields = ["uuid", "slug", "created", "updated", "earned_count"]
+    # Uploaded through the site admin page, which re-encodes it; a file stored here would be served as it came.
+    readonly_fields = ["uuid", "slug", "created", "updated", "earned_count", "custom_icon"]
     ordering = ["order", "metric", "threshold"]
     actions = ["backfill_selected"]
     fieldsets = [

@@ -5225,34 +5225,3 @@ fields. It belongs in the `infrastructure` repo beside the other host timers, no
 Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
-
-## P119 — Pin and achievement icons and imported photos are stored as uploaded, and icons and avatars show the upload until re-encoded
-
-`id: P119` · `status: open` · `updated: 2026-09-13`
-
-Photos go through `downscale_stored_image`, which re-encodes every one from its pixels (P118). Since 2026-09-13,
-comment and trip comment images, label icons of any size and avatars (uploaded, social login, Gravatar) go through
-the same encoder in the sandbox worker; `test_every_stored_user_image_is_reencoded.py` reproduced each before the fix.
-The files already stored are re-encoded by `strip_exif_from_stored_photos`, which Jess runs once on production.
-A review of that fix found and closed six more gaps, each reproduced first: the re-encoded file kept the name it was
-uploaded with, which can say as much as the metadata and is served to every member for icons and avatars; the profile
-form stored an avatar
-past every check (decoded in the request, never scanned or re-encoded); a storage read failure was treated as an
-undecodable file, rejecting a pending comment or removing an icon, avatar or published comment image; a label
-restored by undo before its icon was re-encoded kept the upload; the profile form and bulk label convert saved every
-column from a row read before a re-encode, naming the deleted file; and the backfill skipped every SVG avatar rather
-than only generated ones.
-What remains:
-
-- **Pin and achievement custom icons.** Neither passes through any re-encode.
-- **Data import.** `import_data.py` creates photo rows and map overlay images with no `pending_scan` and no
-  `process_image_upload`, so an imported archive's files are stored exactly as they were exported.
-- **Icons and avatars are shown before they are re-encoded.** Neither `Label` nor `Profile` has a `pending_scan`,
-  so the upload is served until the sandbox worker swaps in the clean file: seconds normally, longer while that
-  worker is backlogged or down. Comment images do not have this gap; their `pending_scan` clears in the same update
-  as the swap.
-
-The first two were found by reading those paths and are not yet reproduced with a test. Fix shape: route each through
-`stored_field.reencode_stored_field`, and give icons and avatars a hidden-until-processed state as photos and comments
-have. The metadata matrix is the detector to reuse for the reproductions.
-

@@ -2064,6 +2064,8 @@ class ProfileDetailSerializer(serializers.Serializer):
     username = serializers.CharField(read_only=True)
     slug = serializers.CharField(read_only=True, allow_null=True)
     avatar_url = serializers.CharField(read_only=True, allow_null=True)
+    #: The caller's own profile only: an uploaded avatar is being processed, and ``avatar_url`` still shows the previous one.
+    avatar_pending = serializers.BooleanField(read_only=True)
     bio = serializers.CharField(read_only=True, allow_null=True)
     area = serializers.CharField(read_only=True, allow_null=True)
     started_exploring = serializers.DateField(read_only=True, allow_null=True)

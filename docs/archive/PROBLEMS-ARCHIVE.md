@@ -13316,3 +13316,35 @@ is legitimately held is meant to keep that access forever. No code changed - the
 was the fix. Added alongside the split-family one in
 `tests/hypothesis/test_grandfathered_parcel_split_access.py`'s module docstring, so both permanent
 mechanisms now carry the confirmation the original filing asked for.
+
+## RESOLVED 2026-09-13: custom icons, avatars, comment images and imported photos were served as uploaded
+
+`id: P119` · `status: fixed` · `resolved: 2026-09-13`
+
+Photos were re-encoded from their pixels (P118), but every other stored user image was served as the uploader sent
+it, metadata included: comment and trip comment images, label, pin and achievement icons, avatars from every writer
+(upload, external API, social login, Gravatar, the profile form), and the photos and map overlay images a data import
+restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing test first.
+
+- **Comment images, label icons and avatars** (`e10d6ed45`) went through `images.reencode_image_file` in the sandbox
+  worker, swapped in by `stored_field.reencode_stored_field`.
+- **A review of that pass** (`048486deb`) found six more. The re-encoded file kept its uploaded name, which can say
+  as much as the metadata. The profile form stored an avatar past every check. A storage read failure was taken for
+  an undecodable file and rejected or removed it. A label restored by undo before its icon was re-encoded kept the
+  upload. The profile form and bulk label convert saved every column from a row read before the swap, naming the
+  deleted file. The backfill skipped every SVG avatar rather than only generated ones.
+- **The rest.** Pin and achievement icons were never re-encoded, and the Django admin stored achievement icons
+  straight into the field. `import_data.py` created photo and overlay rows with no `pending_scan` and no
+  `process_image_upload`. Icons and avatars were served from the moment of upload. Holding them (below) opened a
+  race: a full `save()` of a row read before the publish wrote the old names back, so `HeldUploadModel` leaves those
+  columns out of a full save the instance did not change them in.
+
+The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
+not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file
+being fetched. Uploads are now held under `unprocessed/`, which has no media authorizer, and named in a
+`<field>_upload` column (`services/media/held_upload.py`); `publish_held_upload` writes the re-encoded file into the
+field, so the field only ever names a file this server encoded. See `docs/MEDIA_PIPELINE.md`.
+
+`test_every_icon_and_avatar_is_hidden_until_reencoded.py` walks media storage after each writer and fails on any
+file carrying the fixture marker that another member could be served. Files stored before these fixes are re-encoded
+by `strip_exif_from_stored_photos`, which Jess runs once on production.

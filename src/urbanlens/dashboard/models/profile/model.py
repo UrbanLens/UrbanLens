@@ -25,6 +25,7 @@ from django.db.models import (
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.held_upload import HeldUploadModel
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.profile.meta import (
@@ -137,11 +138,13 @@ def _units_for_point(lat: float, lng: float) -> str:
     return DistanceUnit.KILOMETERS
 
 
-class Profile(abstract.PublicDashboardModel):
+class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     # Global uniqueness with a shorter cap to fit within username length limits.
     slug = SlugField(max_length=150, null=True, blank=True, unique=True)
 
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
+    #: An uploaded avatar the sandbox worker has not re-encoded yet; see services.media.held_upload.
+    avatar_upload = CharField(max_length=255, blank=True, default="")
     profile_setup_complete = BooleanField(default=True)
     # Default False so every newly-created profile shows /welcome/ once with no
     # signup-path race; the migration that adds this field backfills existing

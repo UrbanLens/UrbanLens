@@ -10,6 +10,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.media.held_upload import queue_held_upload
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
 if TYPE_CHECKING:
@@ -77,6 +78,7 @@ class PinUndoHandler(UndoHandler):
     def _serialize_one(cls, pin: Pin) -> dict[str, Any]:
         fields = {name: getattr(pin, name) for name in _RESTORABLE_FIELDS}
         fields["custom_icon"] = pin.custom_icon.name if pin.custom_icon else None
+        fields["custom_icon_upload"] = pin.custom_icon_upload
         return {
             "old_pk": pin.pk,
             "fields": fields,
@@ -234,6 +236,7 @@ class PinUndoHandler(UndoHandler):
                     parent_pin_id=parent_pk,
                     **entry["fields"],
                 )
+                queue_held_upload(pin, "custom_icon")
                 old_to_new[entry["old_pk"]] = pin
                 restored.append(pin)
                 progressed = True

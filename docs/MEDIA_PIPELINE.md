@@ -33,7 +33,7 @@ conflating them overstates what is actually enforced:
 | Parser | Reached by | Runs in | Guarded? |
 |---|---|---|---|
 | Pillow (+ pillow-heif) | photos, media previews | sandbox | yes |
-| Pillow (bare `PIL.Image`) | custom label icon resize | routed via `resize_label_icon` | yes |
+| Pillow (bare `PIL.Image`) | custom icon and avatar re-encode | routed via `publish_held_upload` | yes |
 | Pillow (bare `PIL.Image`) | embedded XMP/IPTC photo keywords | sandbox, read with the EXIF snapshot in `process_image_upload` | yes |
 | ffmpeg / ffprobe | video | sandbox | yes |
 | LibreOffice (`soffice`) | doc/spreadsheet conversion | sandbox | yes |
@@ -75,8 +75,9 @@ ClamAV is *not* in that list any more. It runs in the sandbox worker
 blocks on a clamd round-trip, and the row is invisible to everyone but its
 uploader until the scan clears it. The four paths that still scan
 synchronously (avatars, marker icons, achievement art) store their file on
-something that is not an `Image` row, so no task will ever run over it and
-there is no `pending_scan` to gate it with; a test pins that split
+something that is not an `Image` row, so there is no `pending_scan` to gate it
+with; the upload is held unserved until the sandbox worker re-encodes it
+instead (see "Stored photo normalisation"); a test pins that split
 (`tests/hypothesis/test_async_malware_scan.py`).
 
 For `Image` rows fetched by our server from a public external host (Media
@@ -182,25 +183,41 @@ that cannot be re-encoded is retried and then removed, never published as upload
 `tests/hypothesis/test_every_stored_photo_is_reencoded.py` plants a marker in every
 carrier and format and searches every output for it.
 
-Comment and trip comment images, label icons and uploaded or downloaded avatars go
-through the same encoder (`images.reencode_image_file`), swapped in by
-`stored_field.reencode_stored_field`: a conditional update on the stored name, which
-deletes whichever file lost. The new file gets a random name, not the uploaded one.
-A comment image is re-encoded before its `pending_scan`
-clears, in the same update. A comment whose image cannot be decoded is rejected; one
-storage cannot read is retried, then rejected. An icon is re-encoded as WebP at 256px
-or less, and an avatar as WebP at 512px or less. An icon or avatar that cannot be
-decoded is removed; one storage cannot read is left for a later attempt. Neither has a
-`pending_scan`, so both show the upload until the sandbox worker has run. Every avatar
-writer (upload, external API, social login, Gravatar) queues the re-encode; the
-profile form takes no avatar. A label restored by undo queues its icon again, and
-writes that load a profile or label and save it back name their columns, so a file
-swapped in meanwhile is not written over.
-`test_every_stored_user_image_is_reencoded.py` runs the same fixtures through each
-path. The one-off `strip_exif_from_stored_photos` backfill re-encodes the ones stored
-before this, after the photos, skipping only avatars generated from the emoji picker
-(`avatar.GENERATED_AVATAR_PATTERN`). Pin and achievement icons and imported photos are
-still stored as uploaded (P119).
+Comment and trip comment images, custom icons (label, pin, achievement) and avatars
+from every writer go through the same encoder (`images.reencode_image_file`), under a
+random name rather than the uploaded one. A comment image is re-encoded by
+`stored_field.reencode_stored_field` before its `pending_scan` clears, in the same
+update; one that cannot be decoded is rejected, and one storage cannot read is
+retried, then rejected.
+
+An icon or avatar cannot be hidden by a flag on its row, because the media gate
+serves any icon or avatar path to every member, so the upload is held instead.
+`services/media/held_upload.py` stores it under `unprocessed/`, which has no
+authorizer, and names it in the row's `<field>_upload` column. `publish_held_upload`
+writes the re-encoded file (WebP, at most 256px for an icon and 512px for an avatar)
+into the field and clears the column in one conditional update, so the field only
+ever names a file this server encoded and nothing that renders it needs a check. An
+upload replaced, cleared or superseded (an emoji avatar, a removed avatar) before the
+worker runs is never published; one that cannot be decoded is dropped and the field
+keeps what it showed; one storage cannot read is retried, then dropped. A replaced
+avatar or achievement icon is deleted; a replaced label or pin icon is kept, because
+undo restores by stored name, and undo queues a held upload again. A publish lands
+while other requests hold the row in memory, so `models/abstract/held_upload.py`'s
+`HeldUploadModel` leaves the field and its `_upload` column out of a full `save()`
+unless that instance changed them; otherwise a settings form or the external API's
+profile PATCH would write back an empty field and a held name whose file is gone.
+The owner's page says the avatar is processing, and the external API's profile
+detail carries `avatar_pending` for the caller's own profile.
+`test_every_icon_and_avatar_is_hidden_until_reencoded.py` fails on any stored file
+carrying the fixture marker that another member could be served before the worker
+runs; `test_every_stored_user_image_is_reencoded.py` and
+`test_held_icon_and_avatar_uploads.py` cover the encoder and the wait.
+
+Photos and map overlay images restored by a data import are `pending_scan` rows
+handed to `process_image_upload`, like any upload. The one-off
+`strip_exif_from_stored_photos` backfill re-encodes images stored before these
+changes, after the photos, skipping only avatars generated from the emoji picker
+(`avatar.GENERATED_AVATAR_PATTERN`).
 The practical effect is the one that matters here: what gets served is bytes this
 server's encoder wrote, not bytes the uploader sent. A disguised non-image
 fails to decode; data appended after the end-of-image marker does not survive
@@ -443,7 +460,9 @@ Three boundaries, each of which the obvious version gets wrong:
   undo within its window restoring a row that names a file no longer there - a
   broken icon with nothing to explain it. Those want the unlink deferred to when
   the `UndoAction` is pruned, which is a different mechanism rather than a
-  longer list.
+  longer list. A held upload (`<field>_upload`) follows the same split: deleted
+  with an achievement or profile, kept with a deleted label or pin, and deleted
+  by account deletion for all four.
 - **`Image`'s columns are not managed here.** `services/media/images.py`'s
   `delete_stored_file` handles `image`, `thumbnail` and `marker_thumbnail`, and
   knows when two rows legitimately share a file; this module does not.
