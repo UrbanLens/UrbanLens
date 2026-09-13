@@ -10,12 +10,14 @@ Each test here runs the request as the web process and the parse as the sandbox,
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -182,7 +184,35 @@ class PreviewParsesOutsideTheWebProcessTests(TestCase):
     def test_someone_else_cannot_read_the_preview(self) -> None:
         job = self._upload("Urbex Sites.kml", KML.encode())
         self._parse_in_sandbox(job)
+        self.assertEqual(self._state(job)["status"], "done", "the owner cannot read it either, so a 404 proves nothing")
 
         self.client.force_login(baker.make(User))
 
         self.assertEqual(self.client.get(job["status_url"]).status_code, 404)
+
+    def test_a_preview_no_worker_answers_stops_waiting_and_frees_the_account(self) -> None:
+        """With media-worker down, or a parse killed at its hard limit, nothing else would ever end it."""
+        job = self._upload("Urbex Sites.kml", KML.encode())
+
+        with mock.patch("django.utils.timezone.now", return_value=timezone.now() + timedelta(minutes=30)):
+            state = self._state(job)
+
+        self.assertEqual(state["status"], "error", state)
+        self.assertIsNone(single_flight.holder(import_preview.guard_key(self.profile.pk)))
+
+    def test_a_preview_inside_its_time_is_left_waiting(self) -> None:
+        """Anti-vacuity for the test above: an ordinary wait must not be ended."""
+        job = self._upload("Urbex Sites.kml", KML.encode())
+
+        self.assertEqual(self._state(job)["status"], "pending")
+        self.assertEqual(single_flight.holder(import_preview.guard_key(self.profile.pk)), job["job_id"])
+
+    def test_a_stalled_preview_finishing_late_leaves_a_newer_ones_guard_alone(self) -> None:
+        old = self._upload("Urbex Sites.kml", KML.encode())
+        with mock.patch("django.utils.timezone.now", return_value=timezone.now() + timedelta(minutes=30)):
+            self._state(old)
+        new = self._upload("Other.kml", KML.encode())
+
+        self._parse_in_sandbox(old)
+
+        self.assertEqual(single_flight.holder(import_preview.guard_key(self.profile.pk)), new["job_id"])

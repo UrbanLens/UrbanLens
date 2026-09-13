@@ -847,7 +847,9 @@ $('iw-btn-upload').addEventListener('click', async function () {
             var err = await res.json().catch(function () { return {}; });
             throw new Error(err.error || 'Server error ' + res.status);
         }
-        parsedData = await followPreview(await res.json(), abortCtrl.signal);
+        var job = await res.json();
+        $('closeImportDialog').disabled = false;
+        parsedData = await followPreview(job, abortCtrl.signal);
         if (!parsedData) return;
         needsConfirm = true;
         $('closeImportDialog').disabled = false;

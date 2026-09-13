@@ -45,14 +45,16 @@ deployment - ends the lookup pass and adds a warning; the rest of the preview is
 live run on the development stack found this: its geocoder is disabled, and the finishing task turned that
 one refusal into "The files could not be read" for a whole upload that had parsed.
 
-The tests run each half under `deny` in its own role - the request as `web`, the parse as `sandbox`,
-the finishing task as `worker` - so a parser reached from the wrong side raises instead of passing.
+The tests run the request as `web` and the parse as `sandbox` under `deny`, and one runs the finishing
+task as `worker` too, so a parser reached from the wrong side raises instead of passing.
 
 **Not changed:** `UL_UNTRUSTED_PARSE_POLICY` stays at `warn`; flipping it is its own decision, and P103's
 undecorated `_resize_custom_icon` still decodes on a request path where the guard cannot see it.
 Previews now depend on `media-worker`, and CSV lookups and document extraction on `celery-worker`; with
-either missing, the dialog waits on "Waiting to read your files..." until the preview expires after an
-hour.
+either missing - or a parse killed at its hard limit, which skips its own cleanup - a preview still
+unfinished after ten minutes is ended as an error and frees the account for another. The dialog can be
+closed from the moment the upload is accepted; the first version of this fix kept its close button
+disabled and the account locked for the hour the status lived.
 
 ## RESOLVED 2026-09-13: The site-admin system panel walked the whole media tree on every poll
 

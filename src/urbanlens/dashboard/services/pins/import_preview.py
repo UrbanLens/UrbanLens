@@ -11,6 +11,7 @@ only when there is some. The dialog polls for the result.
 from __future__ import annotations
 
 import contextlib
+from datetime import datetime, timedelta
 import json
 import logging
 import os
@@ -19,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from django.conf import settings
+from django.utils import timezone
 
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus
@@ -42,6 +44,11 @@ KEEP_SECONDS = 60 * 60
 #: One preview per account at a time, held no longer than its files are kept.
 GUARD_TTL_SECONDS = KEEP_SECONDS
 
+#: How long a preview may stay unfinished before the dialog stops waiting and the account is freed:
+#: the parse's hard limit, a queue wait, and the finishing lookups. Past it a worker is missing or was
+#: killed, and nothing else would ever end the preview.
+STALL_AFTER = timedelta(minutes=10)
+
 ARTIFACT_DIRNAME = "import_previews"
 
 _UPLOADS = "uploads"
@@ -53,6 +60,9 @@ _NO_LISTS = "No valid location files found in the upload."
 _NOT_FOUND = "This upload could not be found. Please upload it again."
 _UNREADABLE = "The files could not be read."
 _UNFINISHED = "Part of this upload needs a lookup that is unavailable right now, so it is not shown."
+_STALLED = "Reading these files did not finish. Please try again."
+
+_WAITING = frozenset({"pending", "running"})
 
 
 class ImportPreviewStatus(ImportJobStatus):
@@ -135,7 +145,7 @@ def start_import_preview(profile: Profile, uploads: Iterable[UploadedFile]) -> s
                 handle.writelines(upload.chunks())
             names.append(upload.name or "")
         _write_json(directory, _MANIFEST, names)
-        status.write("pending", 0, "Waiting to read your files...", user_id=profile.user_id)
+        status.write("pending", 0, "Waiting to read your files...", user_id=profile.user_id, result={"started_at": timezone.now().isoformat(), "profile_id": profile.pk})
         # Recorded before the enqueue: a task that finishes first releases the guard, and adopting after would re-take it.
         single_flight.adopt(guard, job_id, GUARD_TTL_SECONDS)
     except OSError:
@@ -195,7 +205,7 @@ def parse_import_preview(profile_id: int, job_id: str) -> None:
     finally:
         shutil.rmtree(os.path.join(directory, _UPLOADS), ignore_errors=True)
         if not handed_off:
-            single_flight.release(guard_key(profile_id))
+            _release_guard(profile_id, job_id)
 
 
 def finish_import_preview(profile_id: int, job_id: str) -> None:
@@ -255,7 +265,7 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
     finally:
         with contextlib.suppress(OSError):
             os.remove(os.path.join(directory, _PARSED))
-        single_flight.release(guard_key(profile_id))
+        _release_guard(profile_id, job_id)
 
 
 def read_preview(user_id: int, job_id: str) -> dict[str, Any] | None:
@@ -273,6 +283,12 @@ def read_preview(user_id: int, job_id: str) -> dict[str, Any] | None:
     if not data or data.get("user_id") != user_id:
         return None
     state = {key: value for key, value in data.items() if key != "user_id"}
+    if state.get("status") in _WAITING and _stalled(state):
+        ImportPreviewStatus(job_id).write("error", 100, _STALLED)
+        profile_id = (state.get("result") or {}).get("profile_id")
+        if isinstance(profile_id, int):
+            _release_guard(profile_id, job_id)
+        return {"status": "error", "progress": 100, "message": _STALLED}
     if state.get("status") == "done":
         result = _read_json(job_dir(job_id), _RESULT)
         if not isinstance(result, dict):
@@ -340,6 +356,22 @@ def _write_result(job_id: str, directory: str, lists: list[dict[str, Any]], warn
         warnings = [*warnings, f"This upload is at the preview limit of {ceiling:,} pins - anything beyond that is not shown."]
     _write_json(directory, _RESULT, {"lists": lists, "total": total, "warnings": warnings})
     status.write("done", 100, "Ready.")
+
+
+def _stalled(state: dict[str, Any]) -> bool:
+    started = (state.get("result") or {}).get("started_at")
+    if not isinstance(started, str):
+        return False
+    try:
+        return timezone.now() - datetime.fromisoformat(started) > STALL_AFTER
+    except ValueError:
+        return False
+
+
+def _release_guard(profile_id: int, job_id: str) -> None:
+    guard = guard_key(profile_id)
+    if single_flight.holder(guard) == job_id:
+        single_flight.release(guard)
 
 
 def _merge(lists: list[dict[str, Any]], placed: dict[str, Any]) -> None:
