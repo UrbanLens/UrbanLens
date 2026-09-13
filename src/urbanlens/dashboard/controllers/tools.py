@@ -9,6 +9,7 @@ import os
 from typing import Any
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -301,10 +302,29 @@ class ExportDownloadView(LoginRequiredMixin, View):
         logger.info("Export complete, serving file: job %s, user %s", job_id, request.user.pk)
 
         today = timezone.localdate().isoformat()
+        disposition = f'attachment; filename="urbanlens_export_{today}.zip"'
+
+        if getattr(settings, "MEDIA_X_ACCEL", False):
+            # An export is every photo the account owns, and nginx only absorbs
+            # a response up to proxy_max_temp_file_size before matching the
+            # client's pace - so streaming it through here holds a worker for
+            # the length of somebody's download. Hand nginx the path instead,
+            # exactly as the media gate does. Content-Disposition is on the set
+            # nginx forwards through an X-Accel-Redirect (measured; see
+            # config/nginx/media.conf.template), so the filename survives.
+            #
+            # job_id is a parsed uuid by this point, so the path cannot escape
+            # the internal location.
+            handoff = HttpResponse()
+            del handoff["Content-Type"]
+            handoff["X-Accel-Redirect"] = f"{settings.MEDIA_X_ACCEL_PREFIX}exports/{job_id}/export.zip"
+            handoff["Content-Disposition"] = disposition
+            return handoff
+
         fh = open(zip_path, "rb")  # noqa: SIM115 - FileResponse takes ownership and closes the handle
-        response = FileResponse(fh, content_type="application/zip")
-        response["Content-Disposition"] = f'attachment; filename="urbanlens_export_{today}.zip"'
-        return response
+        streamed = FileResponse(fh, content_type="application/zip")
+        streamed["Content-Disposition"] = disposition
+        return streamed
 
 
 class ExportFormatDownloadView(LoginRequiredMixin, View):

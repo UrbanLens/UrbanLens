@@ -41,7 +41,18 @@ HTTP_ONLY_DIRECTIVES = frozenset(
 )
 
 _COMMENT = re.compile(r"#.*?$", re.MULTILINE)
-_TOKEN = re.compile(r"[{};]|[^\s{};]+")
+# Quoted strings first, and as one token: nginx's own tokenizer treats a bare
+# `{`/`}` as a block delimiter even mid-token, which is why django.conf quotes
+# the hashed-static regex around its `{8,32}` quantifier. Reading that file
+# without this splits the regex on its own quantifier and unbalances the stack.
+_TOKEN = re.compile(r"\"[^\"]*\"|'[^']*'|[{};]|[^\s{};]+")
+_QUOTED = re.compile(r"^([\"'])(.*)\1$", re.DOTALL)
+
+
+def _unquote(token: str) -> str:
+    """Strip a token's surrounding quotes, so a value compares as it reads."""
+    match = _QUOTED.match(token)
+    return match.group(2) if match else token
 
 
 def directives_by_context(text: str) -> list[tuple[tuple[str, ...], str, int]]:
@@ -57,7 +68,9 @@ def directives_by_context(text: str) -> list[tuple[tuple[str, ...], str, int]]:
         reported in its parent's context, so ``http`` itself comes back as
         ``((), "http", n)``.
     """
-    return [(context, tokens[0], line) for context, tokens, line in parsed_directives(text)]
+    return [
+        (tuple(frame[0] for frame in context), tokens[0], line) for context, tokens, line in parsed_directives(text)
+    ]
 
 
 def directive_arguments(text: str, name: str) -> list[list[str]]:
@@ -77,8 +90,12 @@ def directive_arguments(text: str, name: str) -> list[list[str]]:
     return [tokens[1:] for _, tokens, _ in parsed_directives(text) if tokens[0] == name]
 
 
-def parsed_directives(text: str) -> list[tuple[tuple[str, ...], list[str], int]]:
+def parsed_directives(text: str) -> list[tuple[tuple[tuple[str, ...], ...], list[str], int]]:
     """Parse an nginx config into ``(context, tokens, line)`` triples.
+
+    The context frames carry each enclosing block's whole header, not just its
+    name, so ``location /_protected_media/`` is distinguishable from any other
+    location. :func:`directives_by_context` projects them back to names.
 
     Args:
         text: The config file's contents.
@@ -87,8 +104,8 @@ def parsed_directives(text: str) -> list[tuple[tuple[str, ...], list[str], int]]
         One triple per directive and per block header, ``tokens`` holding the
         directive name followed by its arguments.
     """
-    found: list[tuple[tuple[str, ...], list[str], int]] = []
-    stack: list[str] = []
+    found: list[tuple[tuple[tuple[str, ...], ...], list[str], int]] = []
+    stack: list[tuple[str, ...]] = []
     pending: list[str] = []
     line = 1
     position = 0
@@ -100,7 +117,7 @@ def parsed_directives(text: str) -> list[tuple[tuple[str, ...], list[str], int]]
         if token == "{":
             if pending:
                 found.append((tuple(stack), pending, line))
-                stack.append(pending[0])
+                stack.append(tuple(pending))
             pending = []
         elif token == "}":
             if stack:
@@ -111,7 +128,7 @@ def parsed_directives(text: str) -> list[tuple[tuple[str, ...], list[str], int]]
                 found.append((tuple(stack), pending, line))
             pending = []
         else:
-            pending.append(token)
+            pending.append(_unquote(token))
     return found
 
 

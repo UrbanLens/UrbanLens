@@ -4265,7 +4265,7 @@ one cap on one view, entered twice at different severities.
 | H54 | high | One 512MB Valkey holds sessions, Channels, the Django cache and the broker in one keyspace under `volatile-lru`, and only the broker's keys have no TTL | PL7 phase 4, designed and unbuilt |
 | ~~H55~~ | high | Fixed 2026-09-13. Both nginx `/tmp` mounts are sized tmpfs; response buffering bounded at 64m | — |
 | H56 | high | Under gevent a request that spends its timeout in non-yielding CPU takes the whole worker down. `--worker-connections 20` bounds the blast radius to 19 requests; it does not remove it | D11 phase 3a (gthread), designed and unbuilt |
-| H65 | high | `ExportDownloadView` (`controllers/tools.py:305`) streams the export ZIP through gunicorn as a `FileResponse`. Every other large file in this app is handed to nginx with `X-Accel-Redirect`, and exports already live under `MEDIA_ROOT/exports/`, which nginx serves at `/_protected_media/` | Found 2026-09-13 reviewing H55; needs the security headers moved into the vhost with it |
+| ~~H65~~ | high | Fixed 2026-09-13, same day it was found. The export is handed to nginx, and the four headers X-Accel drops are stated on the internal location | — |
 
 **Parked by decision, not forgotten:**
 
@@ -5173,6 +5173,44 @@ The test that nearly passed for the wrong reason is the warm-hit one: it asserte
 untouched on the second call, and `pins_fingerprint` legitimately runs a `Pin` aggregate when the
 caller does not pass one in. Passing the fingerprint explicitly is what makes the assertion mean
 what it says.
+
+**H65: a download that held a worker, found by reviewing H55** (2026-09-13).
+`ExportDownloadView` answered with a `FileResponse` over the export ZIP, so the bytes travelled
+through gunicorn. nginx absorbs a response up to `proxy_max_temp_file_size` and then matches the
+client's pace, so past that ceiling one person on a slow connection holds a worker for as long as
+their download takes — and an export is every photo the account owns, copied. Every other large
+file here is handed to nginx instead, and exports already sit under `MEDIA_ROOT/exports/`, which is
+the volume the internal `/_protected_media/` location aliases. The hand-off was available the whole
+time and this one path did not use it.
+
+Found by asking what H55's `proxy_max_temp_file_size 64m` newly exposed. It narrowed the window
+rather than opening it — the ceiling was nginx's 1024m default before, so the same hold existed for
+anything over a gigabyte — but narrowing it is what made the question worth asking.
+
+**Two things had to move with it, and the second was nearly missed.**
+
+`media.conf.template` already records, measured on this image, which headers survive nginx following
+an `X-Accel-Redirect`: `Cache-Control`, `Content-Type`, `Content-Disposition`, `ETag`,
+`Last-Modified` and `Accept-Ranges` do; `Content-Security-Policy`, `X-Frame-Options`,
+`X-Content-Type-Options` and `Referrer-Policy` do not. So the filename survives — but the security
+headers Django sets would have vanished.
+
+The media *host* states them at server level for exactly this reason. The app's own vhost states
+none, so this is not a regression the export would have introduced: **every file already served
+through `django.conf`'s `/_protected_media/` has been losing those four headers** — which is every
+media file on any deployment where `UL_MEDIA_BASE_URL` is unset, since `MEDIA_URL` is then relative
+and the app's own vhost is what answers. They are stated on that location now. In the location rather than at server level, because nginx's `add_header`
+replaces everything inherited the moment a block declares one of its own, and two locations in that
+file already do — a server-level set would have silently skipped them.
+
+**And the parser this is tested with was wrong.** `core/tests/nginx_config.py` tokenised `{` and `}`
+as block delimiters wherever they appeared, including inside a quoted string — and `django.conf`
+quotes its hashed-static regex specifically because of the `{8,32}` quantifier in it, with a comment
+saying an unquoted one once took the whole nginx container down. Reading that file split the regex
+on its own quantifier and unbalanced the block stack, so every context after it was wrong. Nothing
+caught it because the only caller read `nginx.conf`, which has no quoted braces. Fixed, and the
+context frames now carry each block's whole header, so a test can name
+`("location", "/_protected_media/")` rather than hoping there is only one location.
 
 ## P114 — Staging outranks production for CPU on the host they share
 
