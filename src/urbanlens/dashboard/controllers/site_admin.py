@@ -82,17 +82,6 @@ def _app_uptime() -> str:
     return _format_duration(max(0, time.monotonic() - _APP_STARTED_MONOTONIC))
 
 
-def _dir_size_mb(path: str) -> float:
-    """Return disk usage of ``path`` in megabytes."""
-    total = 0
-    with contextlib.suppress(OSError):
-        for dirpath, _dirs, files in os.walk(path):
-            for fname in files:
-                with contextlib.suppress(OSError):
-                    total += os.path.getsize(os.path.join(dirpath, fname))
-    return round(total / 1_048_576, 1)
-
-
 class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Site admin settings page.
 
@@ -1624,7 +1613,6 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
     """
 
     def get(self, request: HttpRequest):
-        from django.conf import settings as django_settings
 
         from urbanlens.core.version import (
             format_short_commit,
@@ -1634,10 +1622,10 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
         )
         from urbanlens.dashboard.services.admin.backups import collect_backup_stats
         from urbanlens.dashboard.services.admin.infrastructure_stats import collect_infrastructure_service_stats
+        from urbanlens.dashboard.services.admin.media_usage import measured_media_usage
 
         uptime = _app_uptime()
-        media_root = getattr(django_settings, "MEDIA_ROOT", "")
-        media_size_mb = _dir_size_mb(media_root) if media_root else None
+        media = measured_media_usage()
 
         git_update = get_git_update_status(get_git_commit_at_start())
 
@@ -1646,7 +1634,8 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
             "dashboard/partials/admin/admin_stats_system.html",
             {
                 "uptime": uptime,
-                "media_size_mb": media_size_mb,
+                "media_size_mb": media.megabytes if media else None,
+                "media_measured_at": media.measured_at if media else None,
                 "python_version": sys.version.split()[0],
                 "django_version": django.__version__,
                 "app_version": app_settings.app_version,

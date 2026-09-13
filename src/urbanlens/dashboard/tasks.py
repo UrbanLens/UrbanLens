@@ -411,6 +411,14 @@ def run_confirmed_pin_import(profile_id: int, job_id: str) -> dict[str, Any]:
     return confirmed_import.run_confirmed_import(profile_id, job_id)
 
 
+@shared_task(queue=Queue.MAINTENANCE)
+def measure_media_usage_task() -> float:
+    """Measure the media volume for the site-admin system panel."""
+    from urbanlens.dashboard.services.admin.media_usage import measure_media_usage
+
+    return measure_media_usage().megabytes
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def cleanup_vestigial_assets_task() -> dict[str, int]:
     """Sweep stale import/export artifacts missed by per-job cleanup tasks."""

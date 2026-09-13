@@ -3636,21 +3636,6 @@ Worth recording for whoever does revisit it: GEOS answers this natively.
 cases this function's own tests cover - chained overlaps merge to one component, disjoint stay
 separate, touching merge, SRID preserved - in one call instead of the pairwise loop.
 
-## P98 — The site-admin system panel re-walks the whole media tree on every load, gated only by admin permission
-
-`id: P98` · `status: open` · `updated: 2026-09-10`
-
-`controllers/site_admin.py:1617` `SiteAdminStatsSystemPartialView.get` calls
-`_dir_size_mb(media_root)` (`site_admin.py:85-93`, called at `site_admin.py:1637`) - an uncached
-`os.walk` plus `os.path.getsize` per file - on every HTMX poll of that partial, gated only by
-`_AdminPermissionMixin` with no additional dev-only or rate gate. gevent's monkey-patching covers
-sockets, not filesystem syscalls, so `os.walk`/`os.path.getsize` block the worker's shared OS
-thread for their full duration regardless of the WSGI worker class (see P104/R28). Cost scales
-with total files under `MEDIA_ROOT` - the whole site's stored media - not with anything scoped to
-the admin viewing the page.
-
-Not fixed. Not measured this session - no timing taken against a production-sized media tree.
-
 ## P100 — Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them
 
 `id: P100` · `status: open` · `updated: 2026-09-10`

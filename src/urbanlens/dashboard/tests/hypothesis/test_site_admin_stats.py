@@ -3,7 +3,7 @@
 Covers:
 - _monthly_series() label count, ordering, and accuracy
 - _app_uptime() monotonic uptime formatting
-- _dir_size_mb() size computation and error handling
+- directory_size_mb() size computation and error handling
 - SiteAdminStatsView access control and context completeness
 """
 
@@ -24,11 +24,11 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.site_admin import (
     _app_uptime,
-    _dir_size_mb,
     _monthly_series,
 )
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.site_settings.meta import EnvironmentOverrideChoice
+from urbanlens.dashboard.services.admin.media_usage import directory_size_mb
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
 # -- _monthly_series -----------------------------------------------------------
@@ -124,26 +124,26 @@ class ServerUptimeTests(SimpleTestCase):
         self.assertEqual(result, "0d 0h 0m")
 
 
-# -- _dir_size_mb --------------------------------------------------------------
+# -- directory_size_mb --------------------------------------------------------------
 
 
 class DirSizeMbTests(SimpleTestCase):
-    """_dir_size_mb returns megabytes and handles missing paths gracefully."""
+    """directory_size_mb returns megabytes and handles missing paths gracefully."""
 
     def test_nonexistent_path_returns_zero(self) -> None:
-        result = _dir_size_mb("/no/such/path/exists/12345")
+        result = directory_size_mb("/no/such/path/exists/12345")
         self.assertEqual(result, 0.0)
 
     def test_empty_directory_returns_zero(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = _dir_size_mb(tmpdir)
+            result = directory_size_mb(tmpdir)
         self.assertEqual(result, 0.0)
 
     def test_single_file_size_is_correct(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = os.path.join(tmpdir, "sample.bin")
             pathlib.Path(path).write_bytes(b"x" * 1_048_576)  # exactly 1 MiB
-            result = _dir_size_mb(tmpdir)
+            result = directory_size_mb(tmpdir)
         self.assertAlmostEqual(result, 1.0, places=1)
 
     def test_multiple_files_are_summed(self) -> None:
@@ -151,12 +151,12 @@ class DirSizeMbTests(SimpleTestCase):
             for i in range(3):
                 path = os.path.join(tmpdir, f"file{i}.bin")
                 pathlib.Path(path).write_bytes(b"x" * 524_288)  # 0.5 MiB each → 1.5 MiB total
-            result = _dir_size_mb(tmpdir)
+            result = directory_size_mb(tmpdir)
         self.assertAlmostEqual(result, 1.5, places=1)
 
     def test_returns_float(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = _dir_size_mb(tmpdir)
+            result = directory_size_mb(tmpdir)
         self.assertIsInstance(result, float)
 
 

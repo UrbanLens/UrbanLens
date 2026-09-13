@@ -148,15 +148,17 @@
             </div>
         </div>
         {% endif %}
-        {% if media_size_mb is not None %}
         <div class="stats-health-item">
             <i class="material-icons stats-health-icon" style="color:#d97706">storage</i>
             <div>
-                <div class="stats-health-value">{{ media_size_mb }} MB</div>
+                {% if media_size_mb is not None %}
+                <div class="stats-health-value" title="Measured {{ media_measured_at|timesince }} ago">{{ media_size_mb }} MB</div>
+                {% else %}
+                <div class="stats-health-value">Measuring…</div>
+                {% endif %}
                 <div class="stats-health-label">Media Storage</div>
             </div>
         </div>
-        {% endif %}
         {% if backup_stats %}
         <div class="stats-health-item">
             <i class="material-icons stats-health-icon" style="color:#2563eb">backup</i>

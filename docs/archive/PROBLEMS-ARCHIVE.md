@@ -11,6 +11,26 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-13: The site-admin system panel walked the whole media tree on every poll
+
+`id: P98` · `status: fixed` · `resolved: 2026-09-13`
+
+`SiteAdminStatsSystemPartialView` called `_dir_size_mb(MEDIA_ROOT)` - an `os.walk` and a `getsize`
+per file - on every load, and the stats page reloads that partial every 60 seconds for as long as an
+admin has it open. The cost was set by every file the site stores, not by anything the admin asked
+for, and it ran on a web worker. Reproduced before the fix: with enqueueing stubbed, one panel load
+walked `MEDIA_ROOT` (`test_site_admin_media_usage.py`).
+
+`services/admin/media_usage.py` keeps the last measurement for a week, and the panel only reads it.
+When it is missing or over an hour old, the read claims a `single_flight` guard and queues
+`measure_media_usage_task` on the maintenance queue, so however many admins are polling, one walk runs
+at a time and none runs on a request. A failed enqueue releases the guard instead of leaving it to
+expire. Until the first measurement lands, the tile reads "Measuring…" rather than disappearing.
+
+Never measured against a production-sized tree, before or after. Still true of this panel: it runs
+`git` subprocesses on each load (`get_current_git_branch`, `get_git_update_status`), each bounded by a
+5-second timeout; `git fetch` itself runs once per process.
+
 ## RESOLVED 2026-09-13: `import_confirmed` created as many pins as the client sent, inside the web request
 
 `id: P96` · `status: fixed` · `resolved: 2026-09-13`

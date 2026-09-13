@@ -93,7 +93,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P93 | open | 2026-09-08 | Nine REData plugins declare no rate-limit defaults for their own gateway's service key | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P95 | open | 2026-09-10 | `ExtractionBudget` cannot bound a single file's decompression, and nothing prices what parsing one costs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P97 | open | 2026-09-10 | `dissolve_polygons` is O(n^3) GEOS work over an uncapped user-supplied polygon count | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P98 | open | 2026-09-10 | The site-admin system panel re-walks the whole media tree on every load, gated only by admin permission | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P103 | open | 2026-09-10 | `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P104 | open | 2026-09-10 | Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
