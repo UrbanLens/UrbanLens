@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from django.core.files import File
     from django.core.files.storage import Storage
-    from django.db.models import Model
+    from django.db.models import Model, QuerySet
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +213,12 @@ def publish_held(key: str, pk: int, held_name: str) -> bool:
         drop_held(key, pk, held_name)
         return False
 
-    new_name = storage.save(shown.field.generate_filename(row, f"{uuid.uuid4().hex}{extension}"), ContentFile(data))
+    try:
+        new_name = storage.save(shown.field.generate_filename(row, f"{uuid.uuid4().hex}{extension}"), ContentFile(data))
+    except OSError:
+        # Finished, and handed to a retry: only a publish that never comes back is counted against the upload.
+        cache.set(_starts_key(held_name), max(0, cache.get(_starts_key(held_name), 1) - 1), timeout=int(timedelta(days=2).total_seconds()))
+        raise
     also_set: dict[str, Any] = {held.field: new_name, held.upload_column: ""}
     if held.bump_updated:
         also_set["updated"] = timezone.now()
@@ -276,6 +281,18 @@ def reencode_shown(key: str, pk: int, name: str) -> bool:
     return changed
 
 
+def held_rows(held: HeldField) -> QuerySet[Any, tuple[int, str]]:
+    """The ``(pk, held name)`` of every row holding an upload for *held*, served by the partial index on its column.
+
+    Args:
+        held: The field.
+
+    Returns:
+        An unordered queryset of pairs.
+    """
+    return apps.get_model(held.model).objects.exclude(**{held.upload_column: ""}).order_by().values_list("pk", held.upload_column)
+
+
 def sweep_held_uploads() -> tuple[int, int]:
     """Queue held uploads whose publish never ran, drop ones queued too often, and remove held files nothing names.
 
@@ -296,8 +313,7 @@ def sweep_held_uploads() -> tuple[int, int]:
     storages: dict[int, Storage] = {}
     for held in HELD_FIELDS.values():
         storage = storages.setdefault(id(held.storage), held.storage)
-        rows = apps.get_model(held.model).objects.exclude(**{held.upload_column: ""}).order_by().values_list("pk", held.upload_column)
-        for pk, name in rows.iterator():
+        for pk, name in held_rows(held).iterator():
             named.add(name)
             try:
                 if not storage.exists(name):

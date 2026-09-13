@@ -14,7 +14,6 @@ import time
 from unittest import mock
 import uuid
 
-from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
@@ -28,8 +27,14 @@ from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.undo.model import UNDO_RETENTION
-from urbanlens.dashboard.services.media.held_upload import HELD_FIELDS, HELD_PREFIX, hold_upload, queue_held_upload
-from urbanlens.dashboard.tests.hypothesis.test_every_stored_photo_is_reencoded import SANDBOX
+from urbanlens.dashboard.services.media.held_upload import (
+    HELD_FIELDS,
+    HELD_PREFIX,
+    held_rows,
+    hold_upload,
+    queue_held_upload,
+)
+from urbanlens.dashboard.tests.hypothesis.test_every_stored_photo_is_reencoded import SANDBOX, _fixtures
 
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 _REENCODE = "urbanlens.dashboard.services.media.images.reencode_image_file"
@@ -57,7 +62,7 @@ class _Case(TestCase):
 
     def _held_while_the_broker_was_down(self, profile: Profile) -> str:
         with mock.patch(_ENQUEUE, return_value=None), self.captureOnCommitCallbacks(execute=True):
-            profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(b"an avatar"))])
+            profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(_fixtures()["png-text"][1]))])
             queue_held_upload(profile, "avatar")
         return profile.avatar_upload
 
@@ -123,6 +128,30 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
         self.assertEqual(profile.avatar_upload, held)
         self.assertTrue(default_storage.exists(held))
 
+    def test_a_publish_retried_through_a_storage_outage_is_still_published(self) -> None:
+        """A start that ended in a storage error handed itself to a retry; it finished, so it is not a killed worker."""
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        _age(held, _HOUR)
+        key = "dashboard.Profile.avatar"
+
+        for attempt in range(4):
+            with (
+                override_settings(**SANDBOX),
+                mock.patch.object(FileSystemStorage, "save", side_effect=OSError("storage unavailable")),
+                self.assertRaises(
+                    OSError, msg=f"attempt {attempt} published nothing, so the upload was already dropped"
+                ),
+            ):
+                tasks.publish_held_upload(key, profile.pk, held)
+            self._sweep()
+
+        with override_settings(**SANDBOX):
+            self.assertTrue(tasks.publish_held_upload(key, profile.pk, held))
+        profile.refresh_from_db()
+        self.assertEqual(profile.avatar_upload, "")
+        self.assertTrue(profile.avatar)
+
     def test_one_file_storage_cannot_stat_does_not_stop_the_rest_being_recovered(self) -> None:
         unreadable, recoverable = self._profile(), self._profile()
         broken = self._held_while_the_broker_was_down(unreadable)
@@ -170,12 +199,7 @@ class TheSweepsLookupTests(_Case):
     def test_finding_held_uploads_does_not_read_every_row(self) -> None:
         """The sweep runs hourly and almost nothing is held, so it must not scan the pin table to learn that."""
         for held in HELD_FIELDS.values():
-            model = apps.get_model(held.model)
-            sql, params = (
-                model.objects.exclude(**{held.upload_column: ""})
-                .values_list("pk", held.upload_column)
-                .query.sql_with_params()
-            )
+            sql, params = held_rows(held).query.sql_with_params()
             with self.subTest(held.key), connection.cursor() as cursor:
                 cursor.execute("SET LOCAL enable_seqscan = off")
                 cursor.execute(f"EXPLAIN {sql}", params)

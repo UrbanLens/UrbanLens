@@ -13345,6 +13345,10 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
 - **A review of the sweep** found it counted its own re-queues, so a sandbox queue backed up for three hours behind
   someone's import dropped everyone's waiting icons and avatars; it now counts publishes that started. One file
   storage could not stat ended the whole sweep, and finding held rows scanned every table hourly; both fixed.
+- **A review of that pass** found a publish retried through a storage outage still counted each start, so the sweep
+  dropped a healthy upload three failed writes in, and that the concurrent index migration could not run again after
+  an interrupted deploy ("already exists"). A retried start is no longer counted; each index is dropped before it is
+  built.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file
