@@ -13,6 +13,7 @@ from pathlib import Path
 import shutil
 import tempfile
 
+from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.core.management import call_command
 from django.test import override_settings
@@ -21,6 +22,7 @@ from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.profile.model import Profile
 
 _MAKE_TAG = 0x010F
 _GPS_IFD = 0x8825
@@ -57,6 +59,12 @@ class StripExifBackfillTests(TestCase):
         image.image.save(name, ContentFile(data), save=True)
         return image
 
+    def _recorded(self, image: Image) -> dict:
+        image.refresh_from_db()
+        self.assertIsInstance(image.exif_data, dict, "no EXIF was recorded on the row")
+        assert isinstance(image.exif_data, dict)
+        return image.exif_data
+
     def _read_back(self, image: Image) -> PILImage.Image:
         image.refresh_from_db()
         with image.image.open("rb") as handle:
@@ -76,9 +84,7 @@ class StripExifBackfillTests(TestCase):
 
         call_command("strip_exif_from_stored_photos")
 
-        image.refresh_from_db()
-        self.assertIsNotNone(image.exif_data, "the provenance was destroyed rather than moved")
-        self.assertEqual(image.exif_data.get("Make"), "ACME Cameras")
+        self.assertEqual(self._recorded(image).get("Make"), "ACME Cameras")
 
     def test_an_already_recorded_row_is_not_overwritten(self) -> None:
         """A photo whose EXIF was captured on upload keeps what it captured."""
@@ -87,8 +93,7 @@ class StripExifBackfillTests(TestCase):
 
         call_command("strip_exif_from_stored_photos")
 
-        image.refresh_from_db()
-        self.assertEqual(image.exif_data.get("Make"), "recorded earlier")
+        self.assertEqual(self._recorded(image).get("Make"), "recorded earlier")
 
     def test_a_dry_run_changes_nothing(self) -> None:
         image = self._stored_image(_jpeg_with_exif())
@@ -99,6 +104,37 @@ class StripExifBackfillTests(TestCase):
         self.assertEqual(out.getexif().get(_MAKE_TAG), "ACME Cameras", "--dry-run rewrote the file")
         image.refresh_from_db()
         self.assertIsNone(image.exif_data, "--dry-run wrote to the row")
+
+    def test_a_photo_still_pending_is_left_to_its_upload_task(self) -> None:
+        """The upload task is rewriting that file, and two writers can leave the row naming a deleted one."""
+        image = self._stored_image(_jpeg_with_exif())
+        Image.objects.filter(pk=image.pk).update(pending_scan=True)
+        original_name = image.image.name
+
+        call_command("strip_exif_from_stored_photos")
+
+        image.refresh_from_db()
+        self.assertEqual(image.image.name, original_name)
+
+    def test_gps_is_recorded_for_someone_who_keeps_location_on(self) -> None:
+        """Guards the test below: it would pass if the GPS block were never recorded under that key."""
+        image = self._stored_image(_jpeg_with_exif())
+
+        call_command("strip_exif_from_stored_photos")
+
+        self.assertIn("GPSInfo", self._recorded(image))
+
+    def test_gps_is_not_recorded_for_someone_who_turned_location_off(self) -> None:
+        owner = baker.make(User).profile
+        Profile.objects.filter(pk=owner.pk).update(track_pin_visits=False)
+        image = self._stored_image(_jpeg_with_exif())
+        Image.objects.filter(pk=image.pk).update(profile=owner)
+
+        call_command("strip_exif_from_stored_photos")
+
+        recorded = self._recorded(image)
+        self.assertEqual(recorded.get("Make"), "ACME Cameras")
+        self.assertNotIn("GPSInfo", recorded)
 
     def test_a_photo_with_no_exif_is_still_reencoded(self) -> None:
         """A comment, XMP or IPTC can name the place as well as EXIF can, so no stored photo is kept as it was."""

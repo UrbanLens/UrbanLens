@@ -5226,7 +5226,7 @@ Not recommended: relying on staging's limits alone. Lower limits bound what stag
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
 
-## P119 — Comment images, small label icons and social-login avatars are stored as uploaded, metadata and all
+## P119 — Comment images, icons, avatars and imported photos are stored as uploaded, metadata and all
 
 `id: P119` · `status: open` · `updated: 2026-09-13`
 
@@ -5239,6 +5239,16 @@ user images do not:
   enough, so the upload is kept byte for byte.
 - **Social-login avatars.** `social_auth/pipeline.fetch_and_save_avatar` saves the provider's bytes.
 
-Found while fixing P118 on 2026-09-13, from reading those paths; not yet reproduced with a test. Fix shape: route
-each through the same sandbox re-encode, with the file hidden until it has run, as photos are.
+The review of P118 found more on the same day:
+
+- **Trip comment images.** `TripComment.image` takes the same scan-only path as comment images.
+- **Pin and achievement custom icons.** Neither passes through `shrink_icon` or any re-encode.
+- **Every other avatar path.** `services/profile/avatar.py` assigns the uploaded file, and
+  `controllers/userprofile.py` saves the Gravatar response.
+- **Data import.** `import_data.py` creates photo rows and map overlay images with no `pending_scan` and no
+  `process_image_upload`, so an imported archive's files are stored exactly as they were exported.
+
+Found by reading those paths; not yet reproduced with a test. Fix shape: route each through the same sandbox
+re-encode, with the file hidden until it has run, as photos are. The metadata matrix in
+`tests/hypothesis/test_every_stored_photo_is_reencoded.py` is the detector to reuse for the reproductions.
 

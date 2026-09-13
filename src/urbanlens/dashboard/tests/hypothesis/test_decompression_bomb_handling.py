@@ -34,6 +34,7 @@ from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.tasks import _process_photo_upload
 
 
@@ -78,7 +79,7 @@ class DecompressionBombHandlingTests(TestCase):
         ):
             _process_photo_upload(self.image, self.image.pk, strip_location=False)
 
-        self.assertTrue(any("Downscaling failed" in line for line in logs.output), logs.output)
+        self.assertTrue(any("Re-encoding failed" in line for line in logs.output), logs.output)
 
     def test_an_ordinary_image_is_unaffected(self) -> None:
         """The guard must not change the normal path."""
@@ -125,34 +126,31 @@ class EnrichmentPathBombHandlingTests(TestCase):
         self.assertFalse(issubclass(PILImage.DecompressionBombError, OSError))
         self.assertFalse(issubclass(PILImage.DecompressionBombError, ValueError))
 
-    def test_the_enrichment_path_degrades_instead_of_raising(self) -> None:
-        # The enrichment downscale moved into tasks.process_image_upload (the
-        # decode belongs in the sandbox worker, not in the API-key-holding
-        # enrichment task), so this is where the bomb now lands - and it must
-        # still degrade to a logged warning rather than take the task down.
+    def test_the_enrichment_path_rejects_instead_of_raising(self) -> None:
+        # The enrichment downscale runs in tasks.process_image_upload, on a row still pending. A photo that cannot be
+        # re-encoded is never published as fetched, so it is retried, then rejected with a logged warning.
         from urbanlens.dashboard.services.photos.photo_enrichment import _save_enriched_image
         from urbanlens.dashboard.tasks import process_image_upload
 
-        location = baker.make("dashboard.Location", latitude=44.5, longitude=-73.2)
+        location: Location = baker.make(Location, latitude=44.5, longitude=-73.2)
         saved = _save_enriched_image(location, _jpeg(), source="wikimedia", max_dimension=800)
 
         with (
             patch.object(PILImage, "MAX_IMAGE_PIXELS", 16),
             self.assertLogs("urbanlens.dashboard.tasks", level="WARNING") as logs,
         ):
-            process_image_upload(saved.pk, 800)
+            result = process_image_upload.apply(args=(saved.pk, 800))
 
-        self.assertTrue(
-            Image.objects.filter(pk=saved.pk).exists(), "the enrichment path should keep the stored image, not abort"
-        )
-        self.assertTrue(any("Downscaling failed" in line for line in logs.output), logs.output)
+        self.assertFalse(result.get())
+        self.assertFalse(Image.objects.filter(pk=saved.pk).exists(), "a photo that was never re-encoded was published")
+        self.assertTrue(any("Re-encoding failed" in line for line in logs.output), logs.output)
 
     def test_an_ordinary_enriched_image_is_unaffected(self) -> None:
         """The guard must not change the normal path."""
         from urbanlens.dashboard.services.photos.photo_enrichment import _save_enriched_image
         from urbanlens.dashboard.tasks import process_image_upload
 
-        location = baker.make("dashboard.Location", latitude=44.6, longitude=-73.3)
+        location: Location = baker.make(Location, latitude=44.6, longitude=-73.3)
 
         saved = _save_enriched_image(location, _jpeg(), source="wikimedia", max_dimension=800)
         process_image_upload(saved.pk, 800)

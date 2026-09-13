@@ -27,6 +27,7 @@ from urbanlens.dashboard.services.media.images import (
 )
 from urbanlens.dashboard.services.media.storage import get_stored_photo_policy
 from urbanlens.dashboard.services.sandbox import allow_untrusted_parse
+from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
 
 class Command(BaseCommand):
@@ -39,7 +40,8 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=None, help="Stop after this many rows (for a first cautious pass).")
 
     def handle(self, *args, **options):
-        queryset = Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).order_by("pk")
+        # A pending row is the upload task's to rewrite; two writers can leave the row naming a deleted file.
+        queryset = Image.objects.filter(media_type=MediaKind.PHOTO, pending_scan=False).exclude(image="").exclude(image__isnull=True).select_related("profile").order_by("pk")
         if options["limit"] is not None:
             queryset = queryset[: options["limit"]]
 
@@ -81,6 +83,9 @@ class Command(BaseCommand):
         if image.exif_data is None:
             with image.image.open("rb") as handle:
                 extracted = extract_exif_data(handle)
+            if extracted and image.profile is not None and not visit_logging_allowed(image.profile):
+                # The upload task drops it for the same opt-out; see _process_photo_upload.
+                extracted.pop("GPSInfo", None)
             if extracted:
                 Image.objects.filter(pk=image.pk).update(exif_data=extracted)
                 recorded = True

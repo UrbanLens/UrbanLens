@@ -33,9 +33,18 @@ the analysis JPEG, sent to outside AI providers, did carry a legacy file's comme
 
 `strip_exif_from_stored_photos` now re-encodes every stored photo, not only those with EXIF, under the format
 policy but keeping dimensions, and rewrites an existing analysis copy. It has to be run once on production. Every
-run re-encodes again.
+run re-encodes again. It skips a photo still pending, whose upload task owns that file, and records no GPS for an
+owner who turned location off, as the upload task does; the first review of the fix found both.
 
-**Not changed:** comment images, small label icons and social avatars are still stored as uploaded (P119).
+`tests/hypothesis/test_every_stored_photo_is_reencoded.py` guards all of it. It plants a unique marker in 34 fixtures:
+EXIF (IFD0, GPS and Exif sub-IFDs), XMP, IPTC, JPEG and GIF comments, PNG text, compressed zTXt and iTXt, Photoshop
+tags, per-page TIFF tags and trailing bytes, across every stored format including animated ones. It then searches the
+raw bytes, every inflated zlib stream and everything Pillow reads back from each frame. Covered: the stored file under
+both format policies and a resize, every thumbnail, preview and icon, and a real upload through the vault endpoint,
+upload task and media gate. The detector's own tests prove each marker is findable before the pipeline runs.
+
+**Not changed:** comment images, small label icons, avatars, custom pin and achievement icons and imported photos
+are still stored as uploaded (P119).
 
 ## RESOLVED 2026-09-13: The external API's SpotGuessr round image decoded and re-encoded a user's photo inside the request
 

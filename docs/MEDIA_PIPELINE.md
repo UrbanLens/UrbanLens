@@ -179,6 +179,10 @@ a stored photo can be served without a metadata check of its own. EXIF and embed
 keywords are read first and kept on the row. Animated GIF, PNG and WebP keep their
 frames; HEIF, MPO and anything else Pillow opens are transcoded. A pending upload
 that cannot be re-encoded is retried and then removed, never published as uploaded.
+`tests/hypothesis/test_every_stored_photo_is_reencoded.py` plants a marker in every
+carrier and format and searches every output for it. Photos are the only stored
+images this covers so far: comment images, icons, avatars and imported photos are
+still stored as uploaded (P119).
 The practical effect is the one that matters here: what gets served is bytes this
 server's encoder wrote, not bytes the uploader sent. A disguised non-image
 fails to decode; data appended after the end-of-image marker does not survive
