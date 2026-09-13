@@ -13342,6 +13342,9 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   it and nothing to remove held files a deleted row left behind, and that the full-save guard made Django's copy
   idiom (`pk = None; save()`) raise. `sweep_held_uploads` recovers and removes them; a row with no primary key is
   inserted whole.
+- **A review of the sweep** found it counted its own re-queues, so a sandbox queue backed up for three hours behind
+  someone's import dropped everyone's waiting icons and avatars; it now counts publishes that started. One file
+  storage could not stat ended the whole sweep, and finding held rows scanned every table hourly; both fixed.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

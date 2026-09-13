@@ -1845,5 +1845,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         db_table = "dashboard_profiles"
 
         indexes = [
+            # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
+            Index(fields=["avatar_upload"], name="idxdb_profile_held_avatar", condition=~Q(avatar_upload="")),
             Index(fields=["user"], name="idxdb_profile_user"),
         ]

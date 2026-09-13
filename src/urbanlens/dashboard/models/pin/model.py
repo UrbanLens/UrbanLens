@@ -1022,6 +1022,8 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [
+            # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
+            Index(fields=["custom_icon_upload"], name="idxdb_pin_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["profile", "priority"], name="idxdb_pin_pfile_prio"),
             Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),

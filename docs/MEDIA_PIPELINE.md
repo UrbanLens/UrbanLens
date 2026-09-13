@@ -208,8 +208,12 @@ unless that instance changed them (a row saved with no primary key is still inse
 whole); otherwise a settings form or the external API's profile PATCH would write
 back an empty field and a held name whose file is gone. `sweep_held_uploads` (beat,
 hourly) queues the publish again for an upload held longer than 15 minutes, since a
-failed enqueue would otherwise leave it "processing" for ever, and drops one it has
-queued three times. It also removes `unprocessed/` files no row names once they are
+failed enqueue would otherwise leave it "processing" for ever. It drops one whose
+publish has started three times without finishing, so a file that kills the worker is
+not fed to it every hour; counting starts rather than queues means a sandbox queue
+backed up behind a bulk import costs nobody their upload. A file storage cannot stat
+is skipped rather than ending the sweep, and a partial index on each `_upload` column
+means finding the held rows never reads the pin table. It also removes `unprocessed/` files no row names once they are
 older than the undo window, which is how long a deleted label or pin can still come
 back with its held upload.
 The owner's page says the avatar is processing, and the external API's profile

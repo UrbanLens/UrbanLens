@@ -383,6 +383,8 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
         get_latest_by = "updated"
         permissions = [("edit_global_label", "Can edit global labels")]
         indexes = [
+            # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
+            Index(fields=["custom_icon_upload"], name="idxdb_label_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
         ]
         constraints = [

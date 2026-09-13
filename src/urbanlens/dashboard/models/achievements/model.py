@@ -18,6 +18,7 @@ from django.db.models import (
     Index,
     IntegerField,
     PositiveIntegerField,
+    Q,
     TextField,
     UniqueConstraint,
 )
@@ -122,6 +123,8 @@ class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
         ordering = ["order", "metric", "threshold", "name"]
         get_latest_by = "created"
         indexes = [
+            # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
+            Index(fields=["custom_icon_upload"], name="idxdb_achv_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["metric", "threshold"], name="idxdb_achv_metric_thresh"),
             Index(fields=["is_active"], name="idxdb_achv_active"),
         ]

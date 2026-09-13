@@ -41,8 +41,13 @@ AVATAR_MAX_PX = 512
 #: How long a held upload waits before the sweep takes it that its publish was never queued.
 STALLED_HELD_AGE = timedelta(minutes=15)
 
-#: How many times the sweep queues one held upload before dropping it.
-MAX_HELD_SWEEPS = 3
+#: How many publishes of one held upload may start without finishing before the sweep drops it. Counted when a publish
+#: starts rather than when it is queued, so a queue backed up behind someone else's import costs nobody their upload.
+MAX_HELD_STARTS = 3
+
+
+def _starts_key(held_name: str) -> str:
+    return f"held-upload-starts:{held_name}"
 
 
 def _touch_label_pins(label_id: int) -> None:
@@ -198,6 +203,9 @@ def publish_held(key: str, pk: int, held_name: str) -> bool:
     storage = shown.storage
     with storage.open(held_name, "rb") as handle:
         raw = handle.read()
+    from django.core.cache import cache
+
+    cache.set(_starts_key(held_name), cache.get(_starts_key(held_name), 0) + 1, timeout=int(timedelta(days=2).total_seconds()))
     try:
         data, extension = reencode_image_file(io.BytesIO(raw), max_dimension=held.max_dimension, convert_webp=True)
     except (OSError, ValueError, EOFError, SyntaxError, DecompressionBombError) as exc:
@@ -288,23 +296,24 @@ def sweep_held_uploads() -> tuple[int, int]:
     storages: dict[int, Storage] = {}
     for held in HELD_FIELDS.values():
         storage = storages.setdefault(id(held.storage), held.storage)
-        rows = apps.get_model(held.model).objects.exclude(**{held.upload_column: ""}).values_list("pk", held.upload_column)
+        rows = apps.get_model(held.model).objects.exclude(**{held.upload_column: ""}).order_by().values_list("pk", held.upload_column)
         for pk, name in rows.iterator():
             named.add(name)
             try:
+                if not storage.exists(name):
+                    handled += drop_held(held.key, pk, name)
+                    continue
                 stalled = now - storage.get_modified_time(name) >= STALLED_HELD_AGE
-            except FileNotFoundError:
-                handled += drop_held(held.key, pk, name)
+            except OSError:
+                logger.warning("Could not check the upload held for %s %s", held.key, pk, exc_info=True)
                 continue
             if not stalled:
                 continue
-            attempts_key = f"held-upload-sweeps:{name}"
-            attempts = cache.get(attempts_key, 0)
-            if attempts >= MAX_HELD_SWEEPS:
-                logger.warning("Dropping the upload held for %s %s: its publish was queued %s times and never ran", held.key, pk, attempts)
+            starts = cache.get(_starts_key(name), 0)
+            if starts >= MAX_HELD_STARTS:
+                logger.warning("Dropping the upload held for %s %s: its publish started %s times and never finished", held.key, pk, starts)
                 drop_held(held.key, pk, name)
             else:
-                cache.set(attempts_key, attempts + 1, timeout=int(timedelta(days=2).total_seconds()))
                 safely_enqueue_task(publish_held_upload, held.key, pk, name)
             handled += 1
 
@@ -312,7 +321,7 @@ def sweep_held_uploads() -> tuple[int, int]:
     for storage in storages.values():
         try:
             _directories, files = storage.listdir(HELD_PREFIX)
-        except FileNotFoundError:
+        except OSError:
             continue
         for file in files:
             name = f"{HELD_PREFIX}/{file}"
@@ -320,7 +329,7 @@ def sweep_held_uploads() -> tuple[int, int]:
                 continue
             try:
                 age = now - storage.get_modified_time(name)
-            except FileNotFoundError:
+            except OSError:
                 continue
             if age >= UNDO_RETENTION + timedelta(days=1):
                 _delete_quietly(storage, name)

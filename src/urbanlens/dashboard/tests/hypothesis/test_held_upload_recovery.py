@@ -14,10 +14,12 @@ import time
 from unittest import mock
 import uuid
 
+from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
+from django.core.files.storage import FileSystemStorage, default_storage
+from django.db import connection
 from django.test import override_settings
 
 from urbanlens.core.tests.testcase import TestCase
@@ -26,9 +28,11 @@ from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.undo.model import UNDO_RETENTION
-from urbanlens.dashboard.services.media.held_upload import HELD_PREFIX, hold_upload, queue_held_upload
+from urbanlens.dashboard.services.media.held_upload import HELD_FIELDS, HELD_PREFIX, hold_upload, queue_held_upload
+from urbanlens.dashboard.tests.hypothesis.test_every_stored_photo_is_reencoded import SANDBOX
 
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
+_REENCODE = "urbanlens.dashboard.services.media.images.reencode_image_file"
 _SWEEP = "urbanlens.dashboard.tasks.sweep_held_uploads"
 _owners = count()
 _HOUR = 3600
@@ -84,18 +88,67 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
 
         self.assertEqual(self._publishes(self._sweep()), [])
 
-    def test_one_that_keeps_stalling_is_dropped_rather_than_queued_for_ever(self) -> None:
-        """A file that kills the worker never reaches the task's own give-up, so the sweep has to stop feeding it."""
+    def test_one_that_kills_the_worker_is_dropped_rather_than_fed_to_it_for_ever(self) -> None:
+        """A publish that never finishes never reaches the task's own give-up, so the sweep has to stop queueing it."""
         profile = self._profile()
         held = self._held_while_the_broker_was_down(profile)
         _age(held, _HOUR)
 
-        queued = [len(self._publishes(self._sweep())) for _ in range(10)]
+        started = 0
+        for _ in range(10):
+            for _task, *args in self._publishes(self._sweep()):
+                started += 1
+                with (
+                    override_settings(**SANDBOX),
+                    mock.patch(_REENCODE, side_effect=MemoryError),
+                    self.assertRaises(MemoryError),
+                ):
+                    tasks.publish_held_upload(*args)
 
         profile.refresh_from_db()
         self.assertEqual(profile.avatar_upload, "")
         self.assertFalse(default_storage.exists(held))
-        self.assertLess(sum(queued), 10, queued)
+        self.assertLess(started, 10)
+
+    def test_a_backed_up_worker_does_not_cost_an_upload_its_publish(self) -> None:
+        """Queued many times but never started is a queue behind a bulk import, not a file that kills the worker."""
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        _age(held, _HOUR)
+
+        for _ in range(10):
+            self._sweep()
+
+        profile.refresh_from_db()
+        self.assertEqual(profile.avatar_upload, held)
+        self.assertTrue(default_storage.exists(held))
+
+    def test_one_file_storage_cannot_stat_does_not_stop_the_rest_being_recovered(self) -> None:
+        unreadable, recoverable = self._profile(), self._profile()
+        broken = self._held_while_the_broker_was_down(unreadable)
+        held = self._held_while_the_broker_was_down(recoverable)
+        for name in (broken, held):
+            _age(name, _HOUR)
+        real = FileSystemStorage.get_modified_time
+
+        def stat(storage: FileSystemStorage, name: str):
+            if name == broken:
+                raise PermissionError(name)
+            return real(storage, name)
+
+        with mock.patch.object(FileSystemStorage, "get_modified_time", stat):
+            queued = self._publishes(self._sweep())
+
+        self.assertIn((tasks.publish_held_upload, "dashboard.Profile.avatar", recoverable.pk, held), queued)
+
+    def test_a_held_file_a_row_still_names_is_never_removed_as_left_behind(self) -> None:
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        _age(held, (UNDO_RETENTION.days + 2) * 24 * _HOUR)
+
+        self._sweep()
+
+        self.assertTrue(default_storage.exists(held))
 
 
 class AHeldFileNothingNamesTests(_Case):
@@ -111,6 +164,23 @@ class AHeldFileNothingNamesTests(_Case):
         self._sweep()
 
         self.assertEqual((default_storage.exists(expired), default_storage.exists(restorable)), (False, True))
+
+
+class TheSweepsLookupTests(_Case):
+    def test_finding_held_uploads_does_not_read_every_row(self) -> None:
+        """The sweep runs hourly and almost nothing is held, so it must not scan the pin table to learn that."""
+        for held in HELD_FIELDS.values():
+            model = apps.get_model(held.model)
+            sql, params = (
+                model.objects.exclude(**{held.upload_column: ""})
+                .values_list("pk", held.upload_column)
+                .query.sql_with_params()
+            )
+            with self.subTest(held.key), connection.cursor() as cursor:
+                cursor.execute("SET LOCAL enable_seqscan = off")
+                cursor.execute(f"EXPLAIN {sql}", params)
+                plan = "\n".join(row[0] for row in cursor.fetchall())
+                self.assertNotIn("Seq Scan", plan)
 
 
 class ARowSavedAsACopyTests(_Case):
