@@ -4261,10 +4261,11 @@ one cap on one view, entered twice at different severities.
 |---|---|---|---|
 | ~~H05~~ | medium | Fixed 2026-09-13. Both pickers batch both gates: 240 queries for 24 candidates → 41, flat | — |
 | H06 | medium | Narrowed 2026-09-13, not closed. The pickers no longer pay it. What remains is one evaluation per *distinct* author or commenter, each reading both pin tables: `controllers/comments.py:223` (`can_view_photos_from`), `services/comments/comments.py:166` and `services/trips/trip_comments.py:216` (`can_view_comments_from`), `services/media/images.py:1467` | Needs a batch form of the photo and comment gates, as `visible_profile_pks` is of the identity one |
-| H23 | medium | The saved-filter uuid list is keyed by a fingerprint of the profile's pins, so every pin edit strands the previous copy in Valkey for a day | Coupled to H54: the fix is either a key registry or the cache split |
+| ~~H23~~ | medium | Fixed 2026-09-13. A pointer key drops the copy each write supersedes; the value is capped and the cache can no longer 500 a map load | — |
 | H54 | high | One 512MB Valkey holds sessions, Channels, the Django cache and the broker in one keyspace under `volatile-lru`, and only the broker's keys have no TTL | PL7 phase 4, designed and unbuilt |
 | ~~H55~~ | high | Fixed 2026-09-13. Both nginx `/tmp` mounts are sized tmpfs; response buffering bounded at 64m | — |
 | H56 | high | Under gevent a request that spends its timeout in non-yielding CPU takes the whole worker down. `--worker-connections 20` bounds the blast radius to 19 requests; it does not remove it | D11 phase 3a (gthread), designed and unbuilt |
+| H65 | high | `ExportDownloadView` (`controllers/tools.py:305`) streams the export ZIP through gunicorn as a `FileResponse`. Every other large file in this app is handed to nginx with `X-Accel-Redirect`, and exports already live under `MEDIA_ROOT/exports/`, which nginx serves at `/_protected_media/` | Found 2026-09-13 reviewing H55; needs the security headers moved into the vhost with it |
 
 **Parked by decision, not forgotten:**
 
@@ -5137,6 +5138,41 @@ here.
 
 One rough edge left alone: nginx answers `ENOSPC` on the spool with a 500. A 413 or 507 would tell
 the uploader something true, and there is no directive to change it.
+
+**H23 is fixed, and it had two other things wrong with it** (2026-09-13). The saved-filter cache
+keys its matching-uuid list on a fingerprint of the profile's pins, so an entry self-invalidates on
+any create, edit or delete. That makes it *unreadable*, not *gone*: the superseded copy holds its
+bytes for the full day of the TTL, in the 512MB instance that also holds sessions, the Channels
+layer and the Celery broker under `volatile-lru`. One afternoon of editing pins leaves one dead copy
+per edit per saved filter, and the eviction that makes room for them takes other people's sessions.
+
+A pointer key now names the entry currently live for each `(profile, filter)`, so writing a
+replacement drops the one it replaces. No lock is needed and none is used: a key names the exact pin
+state it describes, so any key that is not the one being written describes state that has already
+moved. The guard that matters is `superseded != key` — without it, recomputing after an eviction
+would delete the entry it had just written.
+
+Editing the filter's *criteria* is cleaned up by the same mechanism, which was not the goal: the
+filter's own `updated` is in the key too, so a criteria edit strands a copy exactly as a pin edit
+did.
+
+The two things found while fixing it are the same defect class twice:
+
+- **A bare `cache.set` raises**, and nothing here caught it, so a full or unreachable Valkey turned a
+  map toolbar load into a 500. This is the third place in this effort with that shape — the tile
+  proxy had it (H35), and `bounded_cache` exists because of it. `get_or_none`, `set_or_skip` and
+  `delete_quietly` are now beside `set_if_small` there, and `set_if_small` is rebuilt on one of
+  them rather than keeping its own copy of the try/except.
+- **The value had no ceiling.** One uuid per matching pin, with nothing bounding how many pins an
+  account has: a 200,000-pin account would put a multi-megabyte value into a single key, and Valkey
+  runs commands on one thread, so the cost of reading it is paid by everyone. Past
+  `SAVED_FILTER_MAX_CACHED_UUIDS` the toolbar recomputes from the database instead. Refusing to
+  cache never changes the answer, which is the property the test asserts alongside the refusal.
+
+The test that nearly passed for the wrong reason is the warm-hit one: it asserted `Pin.objects` was
+untouched on the second call, and `pins_fingerprint` legitimately runs a `Pin` aggregate when the
+caller does not pass one in. Passing the fingerprint explicitly is what makes the assertion mean
+what it says.
 
 ## P114 — Staging outranks production for CPU on the host they share
 

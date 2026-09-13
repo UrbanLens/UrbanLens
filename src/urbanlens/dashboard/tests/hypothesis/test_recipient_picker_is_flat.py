@@ -163,16 +163,17 @@ class MessageablePksAgreementTests(TestCase):
         self._assert_agrees(recipients)
 
 
-class PickerQueryScalingTests(TestCase):
+class PickerQueryScalingMixin:
     """The pickers' cost must not track how many people match the substring.
 
     Both pickers run the identical comprehension over the identical queryset -
     the group one says so in its own comment - so a fix to one and not the
-    other leaves the cheaper door open.
+    other leaves the cheaper door open. A mixin rather than a base test case,
+    so there is no case here that permanently skips.
     """
 
-    #: Set by each subclass. None here so this base class contributes no cases.
-    url_name: str | None = None
+    #: Named by each subclass.
+    url_name: str
 
     def setUp(self) -> None:
         super().setUp()
@@ -208,8 +209,6 @@ class PickerQueryScalingTests(TestCase):
         return len(captured), len(response.content), list(captured)
 
     def test_query_count_does_not_grow_with_the_number_of_candidates(self) -> None:
-        if self.url_name is None:
-            self.skipTest("base class - the subclasses name the two pickers")
         self._seed(_FIRST_BATCH, offset=0)
         first_queries, first_bytes, first_sql = self._measure()
 
@@ -231,13 +230,13 @@ class PickerQueryScalingTests(TestCase):
         )
 
 
-class RecipientPickerQueryScalingTests(PickerQueryScalingTests):
+class RecipientPickerQueryScalingTests(PickerQueryScalingMixin, TestCase):
     """The new-message recipient picker."""
 
     url_name = "messages.recipients"
 
 
-class GroupMemberPickerQueryScalingTests(PickerQueryScalingTests):
+class GroupMemberPickerQueryScalingTests(PickerQueryScalingMixin, TestCase):
     """The group-chat member picker, which is the same code behind another URL."""
 
     url_name = "messages.group.member_search"

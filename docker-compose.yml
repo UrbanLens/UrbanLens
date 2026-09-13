@@ -281,7 +281,7 @@ services:
     # reach the disk. mem_limit must stay above the size: tmpfs pages are
     # charged to this cgroup, and an OOM-killed nginx is the whole site.
     tmpfs:
-      - /tmp:size=${TMPFS_SIZE__NGINX:-512m},mode=1777,nosuid,nodev
+      - /tmp:size=${TMPFS_SIZE__NGINX:-512m},mode=1777,noexec,nosuid,nodev
     cpus: ${CPU_LIMIT__NGINX:-${CPU_LIMIT:-2}}
     cpu_shares: ${CPU_SHARES__NGINX:-1024}
     mem_limit: ${MEM_LIMIT__NGINX:-768m}
@@ -319,7 +319,7 @@ services:
     # Same hazard, far smaller appetite: this vhost caps a body at 64k and its
     # only proxy_pass returns an X-Accel-Redirect header, not a payload.
     tmpfs:
-      - /tmp:size=${TMPFS_SIZE__MEDIA_NGINX:-64m},mode=1777,nosuid,nodev
+      - /tmp:size=${TMPFS_SIZE__MEDIA_NGINX:-64m},mode=1777,noexec,nosuid,nodev
     cpus: ${CPU_LIMIT__MEDIA_NGINX:-${CPU_LIMIT:-2}}
     cpu_shares: ${CPU_SHARES__MEDIA_NGINX:-1024}
     mem_limit: ${MEM_LIMIT__MEDIA_NGINX:-${MEM_LIMIT:-128m}}

@@ -814,6 +814,7 @@ MAX_REQUEST_BODY_BYTES = max(0, _app_settings.max_request_body_mb) * 1_000_000
 MAP_DOCUMENT_MAX_PINS = _app_settings.map_document_max_pins
 MAP_DOCUMENT_CACHE_SECONDS = _app_settings.map_document_cache_seconds
 EXTERNAL_MEDIA_DAILY_BYTES = _app_settings.external_media_daily_bytes
+SAVED_FILTER_MAX_CACHED_UUIDS = _app_settings.saved_filter_max_cached_uuids
 MARKUP_MAX_GEOMETRY_POINTS = _app_settings.markup_max_geometry_points
 MARKUP_MAX_ITEMS_PER_RESPONSE = _app_settings.markup_max_items_per_response
 MARKUP_MAX_SHAPES_PER_SNAPSHOT = _app_settings.markup_max_shapes_per_snapshot
