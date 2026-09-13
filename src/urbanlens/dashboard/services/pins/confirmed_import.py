@@ -254,6 +254,9 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
         if profile is None or payload is None:
             status.write("error", 0, "This import could not be found. Please start it again.", result=counts)
             return counts
+        if get_or_none(_cancel_key(job_id), label=_CANCEL_LABEL):
+            status.write("cancelled", 0, "Cancelled before it started.", result=counts)
+            return counts
 
         events = GoogleMapsGateway().iter_confirmed_import_events(payload["lists"], profile, auto_tag=bool(payload.get("auto_tag", True)))
         try:

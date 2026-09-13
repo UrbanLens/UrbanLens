@@ -131,12 +131,32 @@ class ConfirmedImportJobTests(TestCase):
         self.assertFalse(os.path.exists(job_dir(job["job_id"])))
         self.assertIsNone(single_flight.holder(guard_key(self.profile.pk)))
 
-    def test_a_cancel_stops_the_import_at_its_next_progress_write(self) -> None:
+    def test_an_import_cancelled_before_its_worker_starts_creates_nothing(self) -> None:
+        """Closing the dialog while the job waits in the queue is the ordinary way to cancel."""
         response, _ = self._queued(3)
         job = response.json()
 
         self.assertEqual(self.client.post(job["cancel_url"]).status_code, 202)
-        with mock.patch.object(confirmed_import, "PROGRESS_EVERY", 1):
+        run_confirmed_import(self.profile.pk, job["job_id"])
+
+        self.assertEqual(self._pins(), 0)
+        self.assertEqual(self.client.get(job["status_url"]).json()["status"], "cancelled")
+        self.assertFalse(os.path.exists(job_dir(job["job_id"])))
+        self.assertIsNone(single_flight.holder(guard_key(self.profile.pk)))
+
+    def test_a_cancel_stops_the_import_at_its_next_progress_write(self) -> None:
+        response, _ = self._queued(3)
+        job = response.json()
+        looks: list[str] = []
+
+        def cancelled_once_it_has_started(key: str, **_kwargs: object) -> bool:
+            looks.append(key)
+            return len(looks) > 1
+
+        with (
+            mock.patch.object(confirmed_import, "PROGRESS_EVERY", 1),
+            mock.patch.object(confirmed_import, "get_or_none", side_effect=cancelled_once_it_has_started),
+        ):
             run_confirmed_import(self.profile.pk, job["job_id"])
 
         self.assertEqual(self.client.get(job["status_url"]).json()["status"], "cancelled")

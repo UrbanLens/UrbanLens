@@ -57,7 +57,7 @@ minutes matching what they already had.
   with sessions. The deferred CID handoff still carries its payload through the broker (H21).
 - **The dialog polls** a status URL and feeds each state through the event handler it already had.
   Closing it cancels - the SSE version stopped by losing its connection - and the task looks for a
-  cancel every 25 pins. A failed poll is retried; only a 404, or two minutes of failures, ends tracking.
+  cancel before its first pin and every 25 pins after. A failed poll is retried; only a 404, or two minutes of failures, ends tracking.
 - **A selection can wait for a worker longer than an hour.** Two full-size imports hold both bulk
   slots for over an hour each. The first version of this fix kept both the selection and the status
   on the data import's one-hour clock, so a third import queued behind them would have had its
