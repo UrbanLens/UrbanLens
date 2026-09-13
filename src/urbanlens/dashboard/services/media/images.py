@@ -26,7 +26,7 @@ import re
 from typing import IO, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Collection, Sequence
 
 from django.utils import timezone
 from PIL import Image as PILImage, ImageOps
@@ -1468,6 +1468,35 @@ def _visible_uploader_name(img: Image, viewer_profile: Profile | None, memo: dic
     if memo is not None and img.profile_id is not None:
         memo[img.profile_id] = name
     return name
+
+
+def prime_uploader_memo(images: Sequence[Image], viewer_profile: Profile | None, memo: dict[int, str]) -> None:
+    """Fill *memo* for every uploader in *images* in one resolution.
+
+    The memo already stops the same uploader being resolved twice; this stops
+    each *distinct* uploader costing its own pass, which at the ``COMMON_PIN``
+    setting reads both accounts' whole ``Pin`` table. A wiki gallery collects
+    photos from everyone who has been to the place, so distinct uploaders is
+    the axis that grows.
+
+    Args:
+        images: The photos about to be serialized.
+        viewer_profile: Who is looking. None resolves with no queries at all -
+            an anonymous viewer passes only ``ANYONE`` - so there is nothing to
+            batch and the per-photo path is left to it.
+        memo: The dict :func:`image_to_gallery_json` will read, filled in place.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.profile.identity_visibility import DEFAULT_MASKED_PLACEHOLDER
+
+    if viewer_profile is None:
+        return
+    uploaders = {img.profile.pk: img.profile for img in images if img.profile is not None and img.profile_id != viewer_profile.pk}
+    if not uploaders:
+        return
+    visible = Profile.visible_profile_pks(viewer_profile, list(uploaders.values()))
+    for pk, uploader in uploaders.items():
+        memo[pk] = uploader.username if pk in visible else DEFAULT_MASKED_PLACEHOLDER
 
 
 def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None, uploader_memo: dict[int, str] | None = None) -> dict:

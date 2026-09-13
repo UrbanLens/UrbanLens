@@ -219,8 +219,11 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
     for c in top_level:
         all_commenters.add(c.profile)
         all_commenters.update(r.profile for r in c.replies.all())
-    # Set of profile IDs whose images should be blurred for this viewer.
-    blurred_profiles: set[int] = {p.pk for p in all_commenters if p != profile and not profile.can_view_photos_from(p)}
+    # Set of profile IDs whose images should be blurred for this viewer. In
+    # batch: the per-pair gate reads both accounts' whole Pin table at
+    # COMMON_PIN, so this cost a pair of scans per distinct commenter.
+    admitted = Profile.visible_photo_uploader_pks(profile, list(all_commenters))
+    blurred_profiles: set[int] = {p.pk for p in all_commenters if p.pk != profile.pk and p.pk not in admitted}
 
     # Every visibility decision - comment-visibility, pending-scan, the @loc
     # mention gate, and author-identity masking - lives in this one call, shared

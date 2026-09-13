@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.geo.sampling import bound_map_layer
-from urbanlens.dashboard.services.media.images import apply_image_map_update, delete_stored_file, detach_image_from_wiki, image_to_gallery_json
+from urbanlens.dashboard.services.media.images import apply_image_map_update, delete_stored_file, detach_image_from_wiki, image_to_gallery_json, prime_uploader_memo
 from urbanlens.dashboard.services.photos.uploads import UploadRejection, record_photo_upload_failure, upload_photo_for_owner
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
@@ -205,6 +205,10 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
         images, truncated, total = bound_map_layer(images.with_coords())
         data = []
         uploader_memo: dict[int, str] = {}
+        # Materialised first: the primer and the loop both walk this, and a
+        # queryset walked twice is two queries.
+        images = list(images)
+        prime_uploader_memo(images, profile, uploader_memo)
         for img in images:
             entry = image_to_gallery_json(img, request, profile, uploader_memo)
             if include_children and img.pin_id is not None and img.pin_id != pin.pk and img.pin is not None:
@@ -551,6 +555,10 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
         images, truncated, total = bound_map_layer(images)
         data = []
         uploader_memo: dict[int, str] = {}
+        # Materialised first: the primer and the loop both walk this, and a
+        # queryset walked twice is two queries.
+        images = list(images)
+        prime_uploader_memo(images, profile, uploader_memo)
         for img in images:
             entry = image_to_gallery_json(img, request, profile, uploader_memo)
             if include_children and img.wiki_id is not None and img.wiki_id != wiki.pk and img.wiki is not None:

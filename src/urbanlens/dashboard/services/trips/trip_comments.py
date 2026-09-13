@@ -209,11 +209,13 @@ def build_comment_tree(trip: Trip, viewer: Profile, *, comments: Any = None) -> 
                 if r.author is not None:
                     r.author = distinct_authors[r.author.pk]
 
-    # One verdict per author rather than per comment: `visible_comment_tree`
-    # keeps the same dict for pin/wiki threads, and for the same reason - at
-    # the COMMON_PIN setting this reads both accounts' whole pin sets, and a
-    # trip thread is exactly where one author appears many times.
-    can_view: dict[int, bool] = {pk: viewer.can_view_comments_from(author) for pk, author in distinct_authors.items()}
+    # One resolution for the whole thread: `visible_comment_tree` resolves
+    # pin/wiki threads the same way, and for the same reason - at COMMON_PIN
+    # the per-pair gate reads both accounts' whole pin sets.
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    admitted = Profile.visible_comment_author_pks(viewer, list(distinct_authors.values()))
+    can_view: dict[int, bool] = {pk: pk in admitted for pk in distinct_authors}
 
     rendered: list[TripCommentData] = []
     for c in top_comments:

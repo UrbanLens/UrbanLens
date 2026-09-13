@@ -4260,7 +4260,7 @@ one cap on one view, entered twice at different severities.
 | ref | severity | what remains | why it is not done |
 |---|---|---|---|
 | ~~H05~~ | medium | Fixed 2026-09-13. Both pickers batch both gates: 240 queries for 24 candidates → 41, flat | — |
-| H06 | medium | Narrowed 2026-09-13, not closed. The pickers no longer pay it. What remains is one evaluation per *distinct* author or commenter, each reading both pin tables: `controllers/comments.py:223` (`can_view_photos_from`), `services/comments/comments.py:166` and `services/trips/trip_comments.py:216` (`can_view_comments_from`), `services/media/images.py:1467` | Needs a batch form of the photo and comment gates, as `visible_profile_pks` is of the identity one |
+| ~~H06~~ | medium | Fixed 2026-09-13. All four sites resolve their whole list once; `viewers_who_can_see` was parameterised to make the two-sided photo gate expressible | — |
 | ~~H23~~ | medium | Fixed 2026-09-13. A pointer key drops the copy each write supersedes; the value is capped and the cache can no longer 500 a map load | — |
 | H54 | high | One 512MB Valkey holds sessions, Channels, the Django cache and the broker in one keyspace under `volatile-lru`, and only the broker's keys have no TTL | PL7 phase 4, designed and unbuilt |
 | ~~H55~~ | high | Fixed 2026-09-13. Both nginx `/tmp` mounts are sized tmpfs; response buffering bounded at 64m | — |
@@ -5211,6 +5211,50 @@ on its own quantifier and unbalanced the block stack, so every context after it 
 caught it because the only caller read `nginx.conf`, which has no quoted braces. Fixed, and the
 context frames now carry each block's whole header, so a test can name
 `("location", "/_protected_media/")` rather than hoping there is only one location.
+
+**H06 is closed, and the memo was the thing that made it look closed** (2026-09-13). The finding is
+that `pinned_place_keys` reads a profile's whole `Pin` table into Python and the pair check calls it
+for both sides. Every surface that renders a list of people had already been "fixed" by memoising
+the verdict per distinct author or uploader — which stops one person being resolved twice and does
+nothing about the resolution. A thread with twenty distinct authors still paid twenty pairs of full
+scans, and a community wiki collects photos from everyone who has been to the place.
+
+So the memo turned an O(rows) cost into an O(distinct people) one and stopped there, because the
+axis it removed is the visible one. Distinct people is the axis these surfaces actually grow along.
+
+Four sites, one resolution each now:
+
+| site | gate |
+|---|---|
+| `controllers/comments.py` blurred-commenter set | `can_view_photos_from` |
+| `services/comments/comments.py` pin and wiki threads | `can_view_comments_from` |
+| `services/trips/trip_comments.py` | `can_view_comments_from` |
+| the two photo-map layers, via `prime_uploader_memo` | `can_view_profile` |
+
+The vault's two list callers are deliberately untouched: the uploader there is the viewer, so
+`_visible_uploader_name` returns before any gate runs, and both call sites already say so.
+
+**`viewers_who_can_see` had to be split to make one of these possible.** `can_view_photos_from` is
+two-sided — the uploader's `photo_upload_visibility` must admit the viewer *and* the viewer's own
+`viewer_photo_filter` must admit the uploader — and those are opposite shapes: many subjects against
+one viewer, then one subject against many viewers. The first had a parameterised batch
+(`_visible_subject_pks`); the second existed only hardcoded to `profile_visibility`. It is
+`_permitting_viewer_pks` now, parameterised the same way, with `viewers_who_can_see` as a one-line
+caller — so there is still exactly one implementation of each direction rather than a third copy of
+the relationship queries.
+
+Held to the per-pair functions rather than to written expectations, across every `VisibilityChoice`
+with no relationship, with a friendship, with a shared place, with a shared trip, with the viewer in
+their own list, and in mixed lists — a batch is far likelier to smear one row's answer across its
+neighbours than to get a single-row list wrong. The two-sided gate gets four more: each half
+refusing while the other permits, and both permitting, because a batch that applied only one half
+would pass every one-sided case.
+
+The scenarios carry an anti-vacuity check of their own. `_assert_both_outcomes` fails a scenario
+where every subject agrees, since a batch that returned nothing at all would satisfy it — and the
+photo case tripped it immediately: `viewer_photo_filter` defaults to `ANYTHING_IN_COMMON`, so with
+the inherited scenarios' unrelated strangers the viewer's own half refused everyone and the
+uploader's setting never mattered.
 
 ## P114 — Staging outranks production for CPU on the host they share
 

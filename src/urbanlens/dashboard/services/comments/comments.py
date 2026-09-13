@@ -156,14 +156,17 @@ def visible_comment_tree(comments: list[Comment], profile: Profile) -> list[Visi
     """
     pinned = viewer_pinned_uuids(profile)
 
-    # Cache can_view_comments_from per unique author rather than recomputing it
-    # once per comment/reply - each call runs up to 3 extra query pairs, which
-    # is redundant when one author appears several times in a thread.
+    # One resolution for the whole thread rather than one per unique author:
+    # the per-pair gate reads both accounts' whole Pin table at COMMON_PIN, so
+    # a memo alone still paid a pair of scans per distinct author.
     authors: set[Profile] = set()
     for comment in comments:
         authors.add(comment.profile)
         authors.update(reply.profile for reply in comment.replies.all())
-    can_view: dict[int, bool] = {author.pk: profile.can_view_comments_from(author) for author in authors}
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    admitted = Profile.visible_comment_author_pks(profile, list(authors))
+    can_view: dict[int, bool] = {author.pk: author.pk in admitted for author in authors}
 
     # Gate 4. A comment's *content* is all-or-nothing gated by
     # can_view_comments_from below, but once it passes, the author's own

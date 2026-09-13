@@ -1257,6 +1257,47 @@ class Profile(abstract.PublicDashboardModel):
         return Profile._visible_subject_pks(viewer, subjects, field="contact_visibility", allow_pending_request=False, temporary_access=False)
 
     @staticmethod
+    def visible_comment_author_pks(viewer: Profile, authors: Sequence[Profile]) -> set[int]:
+        """Batch equivalent of :meth:`can_view_comments_from` over many authors.
+
+        The comment surfaces memoise this per distinct author, which stops one
+        author being resolved twice but not the resolution itself: at
+        ``COMMON_PIN`` each one reads both accounts' whole ``Pin`` table, so a
+        thread with twenty distinct authors paid twenty pairs of scans.
+
+        Args:
+            viewer: The profile reading the thread.
+            authors: The profiles who wrote in it.
+
+        Returns:
+            The pks of the authors whose comments ``viewer`` may see.
+        """
+        return Profile._visible_subject_pks(viewer, authors, field="comment_visibility", allow_pending_request=True, temporary_access=False)
+
+    @staticmethod
+    def visible_photo_uploader_pks(viewer: Profile, uploaders: Sequence[Profile]) -> set[int]:
+        """Batch equivalent of :meth:`can_view_photos_from` over many uploaders.
+
+        Both directions, as the single-pair form enforces them: the uploader's
+        ``photo_upload_visibility`` must admit the viewer, **and** the viewer's
+        own ``viewer_photo_filter`` must admit the uploader. The second reads
+        one profile's setting against many others, which is
+        :meth:`_permitting_viewer_pks`' shape rather than
+        :meth:`_visible_subject_pks`'.
+
+        Args:
+            viewer: The profile looking at the photos.
+            uploaders: The profiles who uploaded them.
+
+        Returns:
+            The pks of the uploaders whose photos ``viewer`` may see.
+        """
+        uploaders = list(uploaders)
+        admitted_by_uploader = Profile._visible_subject_pks(viewer, uploaders, field="photo_upload_visibility", allow_pending_request=True, temporary_access=False)
+        admitted_by_viewer = Profile._permitting_viewer_pks(viewer, uploaders, field="viewer_photo_filter", allow_pending_request=True, temporary_access=False)
+        return admitted_by_uploader & admitted_by_viewer
+
+    @staticmethod
     def accepting_direct_messages_pks(sender: Profile, subjects: Sequence[Profile]) -> set[int]:
         """Batch equivalent of :meth:`accepts_direct_messages_from` over many subjects.
 
@@ -1638,6 +1679,35 @@ class Profile(abstract.PublicDashboardModel):
         Returns:
             The pks of the viewers who may see ``subject``'s identity.
         """
+        return Profile._permitting_viewer_pks(subject, viewers, field="profile_visibility", allow_pending_request=True, temporary_access=True)
+
+    @staticmethod
+    def _permitting_viewer_pks(
+        subject: Profile,
+        viewers: Sequence[Profile],
+        *,
+        field: str,
+        allow_pending_request: bool,
+        temporary_access: bool,
+    ) -> set[int]:
+        """Resolve one of ``subject``'s ``VisibilityChoice`` fields over many viewers.
+
+        The mirror of :meth:`_visible_subject_pks`, parameterised the same way
+        and for the same reason: a second copy of this is a second place for
+        the semantics to drift from :meth:`visibility_permits`.
+
+        Args:
+            subject: The profile whose setting is being evaluated.
+            viewers: The profiles the setting is being evaluated against.
+            field: Name of the ``VisibilityChoice`` field on ``subject``.
+            allow_pending_request: Whether an unanswered request from
+                ``subject`` to a viewer opens ``subject``'s gate to them.
+            temporary_access: Whether a ``DirectMessageTemporaryAccess`` grant
+                can pass a viewer the setting would otherwise refuse.
+
+        Returns:
+            The pks of the viewers ``subject``'s setting permits.
+        """
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
         from urbanlens.dashboard.models.pin.model import Pin
@@ -1646,7 +1716,7 @@ class Profile(abstract.PublicDashboardModel):
         viewer_pks = {viewer.pk for viewer in viewers}
         if not viewer_pks:
             return set()
-        if subject.profile_visibility == VisibilityChoice.ANYONE:
+        if getattr(subject, field) == VisibilityChoice.ANYONE:
             return set(viewer_pks)
 
         # Checked before the visibility setting, exactly as can_view_profile
@@ -1656,7 +1726,7 @@ class Profile(abstract.PublicDashboardModel):
 
         # NO_ONE skips the gates but must still reach the temporary-access
         # fallback below, which is where an early return would go wrong.
-        if pending and subject.profile_visibility != VisibilityChoice.NO_ONE:
+        if pending and getattr(subject, field) != VisibilityChoice.NO_ONE:
             accepted = FriendshipStatus.ACCEPTED
             connected = set(
                 Friendship.objects.filter(from_profile=subject, to_profile__in=pending, status=accepted).values_list("to_profile_id", flat=True),
@@ -1666,17 +1736,18 @@ class Profile(abstract.PublicDashboardModel):
             # Directional, matching has_pending_request_to(subject, viewer): a
             # request the subject sent opens their own gates to its recipient,
             # one way. The other direction is not the same courtesy.
-            connected |= set(
-                Friendship.objects.filter(
-                    from_profile=subject,
-                    to_profile__in=pending,
-                    status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
-                ).values_list("to_profile_id", flat=True),
-            )
+            if allow_pending_request:
+                connected |= set(
+                    Friendship.objects.filter(
+                        from_profile=subject,
+                        to_profile__in=pending,
+                        status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
+                    ).values_list("to_profile_id", flat=True),
+                )
             visible |= connected
 
             undecided = pending - connected
-            visibility = subject.profile_visibility
+            visibility = getattr(subject, field)
             wants_pin = undecided and visibility in (VisibilityChoice.COMMON_PIN, VisibilityChoice.ANYTHING_IN_COMMON)
             wants_friend = undecided and visibility in (VisibilityChoice.COMMON_FRIEND, VisibilityChoice.ANYTHING_IN_COMMON)
             wants_trip = undecided and visibility in (VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON)
@@ -1708,6 +1779,9 @@ class Profile(abstract.PublicDashboardModel):
                 subject_trips = set(TripMembership.objects.trip_ids_for(subject))
                 if subject_trips:
                     visible |= set(TripMembership.objects.filter(profile_id__in=undecided, trip_id__in=subject_trips).values_list("profile_id", flat=True))
+
+        if not temporary_access:
+            return visible
 
         remaining = viewer_pks - visible
         if remaining:
