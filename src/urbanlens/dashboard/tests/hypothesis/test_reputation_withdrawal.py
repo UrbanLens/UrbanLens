@@ -219,11 +219,8 @@ class RemovalWeightTests(TestCase):
 class CascadeKeepsBenefitsTests(TestCase):
     """A cascade must not strip a contributor who did nothing.
 
-    Jess, 2026-09-07: "I'd rather err on the side of keeping positive benefits
-    awarded to users who contributed rather than stripping them." Deleting a
-    detail pin deletes a child `Wiki`, and `Comment.wiki` is CASCADE - so
-    somebody else's comments go with it, through no act of theirs. This is the
-    test that stops a future blanket `post_delete` quietly reversing that ruling.
+    Err on the side of keeping positive benefits
+    awarded to users who contributed rather than stripping them.
     """
 
     def setUp(self) -> None:

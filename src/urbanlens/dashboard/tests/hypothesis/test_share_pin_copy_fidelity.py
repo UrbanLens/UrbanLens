@@ -209,7 +209,6 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         "cover_photo": "set afterwards by _carry_cover_photo, pointing at the recipient's copy",
         # The owner's side of the line. A share carries what is true about the
         # *site*; how one person recorded, rated or decorated it stays with them.
-        # Ruled by Jess 2026-08-23, field by field, after each was found travelling.
         "description": "the owner's personal notes - and nothing in the product lets somebody consent to passing them on",
         "vulnerability": "the owner's rating of the place, not a property of it",
         "danger": "the owner's rating of the place, not a property of it",
