@@ -46,43 +46,26 @@ logger = logging.getLogger(__name__)
 
 _EXIF_DATETIME_FORMAT = "%Y:%m:%d %H:%M:%S"
 
-# Formats the downscale pipeline will re-encode. Anything else (animated GIFs,
-# exotic formats) is stored untouched - only its size is counted.
-_PROCESSABLE_FORMATS = {"JPEG", "PNG", "WEBP", "TIFF"}
+# Formats a photo stays in when the uploader's policy does not ask for WebP. Anything else is transcoded: HEIF because
+# browsers outside Safari cannot render it, MPO because it is a JPEG holding several images that browsers show only the
+# first of, and whatever else Pillow opens because nothing serves it.
+_STORED_FORMATS = {"JPEG", "PNG", "WEBP", "GIF", "TIFF", "AVIF", "BMP"}
+_TRANSCODE_TARGET = "JPEG"
+_TRANSCODE_TARGET_WITH_ALPHA = "PNG"
 
-_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif", "AVIF": ".avif", "HEIF": ".heic", "MPO": ".jpg"}
+_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "GIF": ".gif", "TIFF": ".tif", "AVIF": ".avif", "BMP": ".bmp"}
 
-# Formats whose stored file we can rewrite carrying modified EXIF. A superset of
-# _PROCESSABLE_FORMATS on purpose: those are the formats the *downscaler* will
-# re-encode, whereas these are the ones a GPS strip can be honoured for. Keeping
-# the two separate is what stops "we would never resize an AVIF" from silently
-# turning into "we never scrub an AVIF's coordinates either".
-# HEIF covers both .heic and .heif - pillow-heif registers one opener reporting
-# format "HEIF" for both, so the extension a phone happens to use does not
-# change what this pipeline sees.
-_EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF", "HEIF", "MPO"}
+# Formats that keep an animation. Anything else stores the first frame.
+_ANIMATED_FORMATS = {"GIF", "PNG", "WEBP"}
 
-# Formats never stored as uploaded, whatever the downscale policy says.
-# `_MUST_TRANSCODE_TARGET` is what they land in when the uploader's policy does
-# not already pick one (a subscriber with downscaling off and no WebP
-# conversion, which is the default). Two separate reasons to be in here:
-#
-# HEIF, because no mainstream browser outside Safari renders it and stored
-# photos are served through a plain <img src>. Keeping the bytes verbatim swaps
-# an explicit "convert it to JPEG first" refusal for a broken image, which is
-# strictly worse. AVIF is deliberately absent: browser support for it is broad,
-# so re-encoding one would cost quality for nothing.
-#
-# MPO, because it is a JPEG container holding *several* images - the depth or
-# second-lens frame phones record alongside the picture - and Pillow only ever
-# loads and rewrites the first. Every later frame carries its own APP1 block, so
-# there is no rewriting an MPO in place with the metadata gone; the EXIF strip
-# either drops the extra frames or does not happen. It used to not happen: MPO
-# was in no list here, so the whole pass returned early and the file was kept
-# byte-for-byte, GPS and all. Browsers show the first frame, so transcoding to
-# JPEG loses nothing a viewer ever saw.
-_MUST_TRANSCODE_FORMATS = {"HEIF", "MPO"}
-_MUST_TRANSCODE_TARGET = "JPEG"
+# The colour profile is kept where the format carries one: dropping it shifts a wide-gamut photo's colours.
+_ICC_FORMATS = {"JPEG", "PNG", "WEBP", "TIFF", "AVIF"}
+
+_SAVE_PARAMS: dict[str, dict[str, Any]] = {
+    "WEBP": {"quality": 85, "method": 4},
+    "JPEG": {"quality": 85, "optimize": True},
+    "PNG": {"optimize": True},
+}
 
 # EXIF tag 34853 - the GPSInfo IFD pointer.
 _GPS_IFD_TAG = 0x8825
@@ -892,31 +875,6 @@ def extract_embedded_keywords(image_file: IO[bytes]) -> list[str] | None:
     return [result.keyword for result in normalize_keywords([KeywordResult(keyword=keyword) for keyword in found])]
 
 
-#: Extensions that reach `_MUST_TRANSCODE_FORMATS`. Used only to decide whether
-#: the downscale pass is worth entering at all - the authoritative check is
-#: Pillow's reported format once the file is open, so a mislabelled file costs
-#: one wasted open and nothing else. ``.mpo`` is listed for completeness, but a
-#: phone almost always names a multi-picture file ``.jpg``; those reach the pass
-#: through the ordinary JPEG extension and are identified once open.
-_MUST_TRANSCODE_EXTENSIONS = {".heic", ".heif", ".mpo"}
-
-
-def stored_file_needs_transcode(name: str) -> bool:
-    """Whether a stored upload must be re-encoded regardless of downscale policy.
-
-    A subscriber with downscaling off, WebP conversion off and location
-    stripping off never entered the downscale pass, so their HEIC was served
-    verbatim to browsers that cannot render it.
-
-    Args:
-        name: The stored file's name.
-
-    Returns:
-        True when the file's extension is one that must be transcoded.
-    """
-    return posixpath.splitext(name or "")[1].lower() in _MUST_TRANSCODE_EXTENSIONS
-
-
 def file_still_referenced(field: str, name: str, *, exclude_pks: Collection[int] = ()) -> bool:
     """Whether any *other* Image row stores *name* in *field*.
 
@@ -986,112 +944,129 @@ def discard_superseded_file(image: Image, superseded_name: str | None) -> None:
         image.image.storage.delete(superseded_name)
 
 
+def pixels_only(img: PILImage.Image) -> PILImage.Image:
+    """Copy *img* without anything a Pillow writer would carry into the file it encodes.
+
+    Passing no metadata to ``save`` is not enough: the JPEG and GIF writers copy the source's comment, and the TIFF
+    writer copies XMP, IPTC and Photoshop tags from a TIFF source. The copy is a plain ``Image`` whose ``info`` keeps only
+    ``transparency``, which belongs to the pixels of a palette image.
+
+    Args:
+        img: A decoded image.
+
+    Returns:
+        A copy that is safe to encode.
+    """
+    clean = img.copy()
+    clean.info = {key: value for key, value in img.info.items() if key == "transparency"}
+    return clean
+
+
+def _has_alpha(img: PILImage.Image) -> bool:
+    return "A" in img.mode or "transparency" in img.info
+
+
+def _stored_format(source: PILImage.Image, convert_webp: bool) -> str:
+    if convert_webp:
+        return "WEBP"
+    source_format = (source.format or "").upper()
+    if source_format in _STORED_FORMATS:
+        return source_format
+    return _TRANSCODE_TARGET_WITH_ALPHA if _has_alpha(source) else _TRANSCODE_TARGET
+
+
+def _encodable(frame: PILImage.Image, target_format: str) -> PILImage.Image:
+    if target_format in {"WEBP", "AVIF"} and frame.mode not in ("RGB", "RGBA"):
+        return frame.convert("RGBA" if _has_alpha(frame) else "RGB")
+    if target_format == "JPEG" and frame.mode not in ("RGB", "L"):
+        return frame.convert("RGB")
+    return frame
+
+
+def _stored_frames(source: PILImage.Image, max_dimension: int | None, target_format: str) -> tuple[list[PILImage.Image], list[int]]:
+    """Decode the frames to store: oriented, resized, and holding nothing but pixels.
+
+    An animation is kept only in a format that can carry one, and only while its resized frames fit Pillow's
+    decompression-bomb pixel budget; past that the first frame is stored rather than every frame held in memory.
+
+    Args:
+        source: The opened stored file.
+        max_dimension: Longest-edge cap in pixels, or None.
+        target_format: The format the frames will be encoded in.
+
+    Returns:
+        The frames, and each frame's duration in milliseconds.
+    """
+    width, height = source.size
+    scale = min(1.0, max_dimension / max(width, height)) if max_dimension else 1.0
+    frame_count = getattr(source, "n_frames", 1) if target_format in _ANIMATED_FORMATS else 1
+    budget = PILImage.MAX_IMAGE_PIXELS
+    if budget and frame_count * width * height * scale * scale > budget:
+        frame_count = 1
+
+    frames: list[PILImage.Image] = []
+    durations: list[int] = []
+    for index in range(frame_count):
+        source.seek(index)
+        # The orientation tag is spent on the pixels here, while it can still be read.
+        frame = pixels_only(ImageOps.exif_transpose(source) or source)
+        if max_dimension is not None and max(frame.size) > max_dimension:
+            frame.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+        frames.append(_encodable(frame, target_format))
+        durations.append(int(source.info.get("duration") or 100))
+    return frames, durations
+
+
 @untrusted_parse("image.decode")
 def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> StoredFileReplacement | None:
-    """Downscale, re-encode, and strip EXIF from an Image's stored file in place.
+    """Re-encode an Image's stored file from its pixels, under the uploader's size and format policy.
 
-    The stored file is replaced when processing shrinks it, when a WebP
-    conversion was requested, **or** when it carries an EXIF block - that last
-    one regardless of the resulting size, since leaving the original in place is
-    exactly the leak. The caller persists ``image.image.name`` and the returned
-    size; this function only touches storage.
-
-    EXIF removal is unconditional and not a setting. The block identifies the
-    camera and often the place, and a stored file is served to everybody who can
-    reach the container it was contributed to. The values are kept on the
-    ``Image`` row (``exif_data``, ``latitude``/``longitude``, ``taken_at``),
-    where the app's own visibility rules apply to them.
+    Every photo is rewritten, whatever it carries. Only the pixels and the colour profile reach the new file, so a
+    stored photo can be served to anyone allowed to see it without a metadata check of its own. What the app keeps of
+    the metadata lives on the row (``exif_data``, ``embedded_keywords``, ``latitude``/``longitude``, ``taken_at``),
+    where its visibility rules apply. The caller persists ``image.image.name`` and the returned size; this function
+    only touches storage.
 
     Args:
         image: The Image row whose stored file to process.
         max_dimension: Longest-edge cap in pixels, or None to keep dimensions.
-        convert_webp: Whether to re-encode the file as WebP.
+        convert_webp: Whether to store the photo as WebP rather than in its own format.
 
     Returns:
-        The replacement when the file was rewritten, else None. Its
-        ``superseded_name`` is still on disk - see
+        The replacement, or None when the row has no stored file. Its ``superseded_name`` is still on disk - see
         :func:`discard_superseded_file` for why, and when to delete it.
 
     Raises:
-        OSError: When the file cannot be read from or written to storage.
+        OSError: When the file cannot be read from or written to storage, or is not an image.
+        ValueError: When Pillow cannot decode or encode it.
     """
     old_name = image.image.name
     if not old_name:
         return None
-    old_size = image.image.size
     with image.image.open("rb") as stored_file:
-        img: PILImage.Image = PILImage.open(stored_file)
-        source_format = (img.format or "").upper()
-        processable = source_format in _PROCESSABLE_FORMATS
-        if not processable and source_format not in _EXIF_REWRITABLE_FORMATS:
-            return None
-        # Resizing/converting stays limited to _PROCESSABLE_FORMATS. A GPS strip
-        # does not: it has to happen for any format we can rewrite at all, since
-        # the alternative is leaving coordinates in a file the user asked us to
-        # scrub. AVIF is the case that matters - phones produce it, it carries a
-        # GPS IFD, and it is not a format this pipeline would otherwise touch.
-        must_transcode = source_format in _MUST_TRANSCODE_FORMATS
-        # A format being re-encoded anyway can be resized in the same pass, so
-        # the resize gate follows "will this file be rewritten", not the narrower
-        # "would the downscaler normally touch this format".
-        rewriting = processable or must_transcode
-        needs_resize = rewriting and max_dimension is not None and max(img.size) > max_dimension
-        needs_convert = (processable and convert_webp and source_format != "WEBP") or must_transcode
-        # Checked off getexif() as well as info["exif"], because TIFF carries EXIF
-        # in its own native IFD and leaves info["exif"] unset - gating on that key
-        # alone meant a tagged TIFF was never even examined.
-        has_exif = bool(img.info.get("exif")) or bool(img.getexif())
-        # A file needing neither a resize nor a conversion is still rewritten when
-        # it carries EXIF, since leaving the original in place is the whole leak.
-        if not needs_resize and not needs_convert and not has_exif:
-            return None
-        icc_profile = img.info.get("icc_profile")
-        img.load()
-        # Orientation is the one tag that changes what the file looks like, so it
-        # is applied to the pixels here - before the block is dropped on save,
-        # and while the tag is still there to read. A no-op when absent.
-        img = ImageOps.exif_transpose(img) or img
+        source: PILImage.Image = PILImage.open(stored_file)
+        target_format = _stored_format(source, convert_webp)
+        icc_profile = source.info.get("icc_profile")
+        loop = source.info.get("loop")
+        frames, durations = _stored_frames(source, max_dimension, target_format)
 
-    if needs_resize and max_dimension is not None:
-        img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
-
-    target_format = "WEBP" if convert_webp else (_MUST_TRANSCODE_TARGET if must_transcode else source_format)
-    save_kwargs: dict[str, Any] = {}
-    if target_format == "WEBP":
-        if img.mode not in ("RGB", "RGBA"):
-            img = img.convert("RGBA" if "A" in img.mode or img.mode == "P" else "RGB")
-        save_kwargs.update(quality=85, method=4)
-    elif target_format == "JPEG":
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-        save_kwargs.update(quality=85, optimize=True)
-    elif target_format == "PNG":
-        save_kwargs.update(optimize=True)
-    # No `exif=` is ever passed: the block is recorded on the Image row and must
-    # not travel with a file we serve to a whole wiki. Orientation was the reason
-    # it used to be re-attached, and exif_transpose above has already spent it on
-    # the pixels. Note this is an omission that has to stay an omission - Pillow
-    # writes nothing unless asked, but an encoder that carries EXIF through on its
-    # own (pillow-heif does) would need the block cleared rather than merely not
-    # supplied, which is why HEIF is transcoded rather than rewritten in place.
-    if icc_profile:
+    save_kwargs: dict[str, Any] = dict(_SAVE_PARAMS.get(target_format, {}))
+    if icc_profile and target_format in _ICC_FORMATS:
         save_kwargs["icc_profile"] = icc_profile
+    if len(frames) > 1:
+        save_kwargs.update(save_all=True, append_images=frames[1:], duration=durations)
+        if loop is not None:
+            save_kwargs["loop"] = loop
 
     buffer = io.BytesIO()
-    img.save(buffer, format=target_format, **save_kwargs)
+    frames[0].save(buffer, format=target_format, **save_kwargs)
     new_size = buffer.tell()
-
-    # A pure resize that somehow grew the file is not worth keeping - unless the
-    # EXIF strip was the whole reason we're here, in which case keeping the
-    # smaller-but-still-tagged original would defeat the point.
-    if not needs_convert and not has_exif and new_size >= old_size:
-        return None
 
     from django.core.files.base import ContentFile
 
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     image.image.save(f"{stem}{_FORMAT_EXTENSIONS[target_format]}", ContentFile(buffer.getvalue()), save=False)
-    logger.info("Downscaled image %s: %s -> %s bytes (%s)", image.pk, old_size, new_size, target_format)
+    logger.info("Re-encoded image %s: %s bytes (%s)", image.pk, new_size, target_format)
     return StoredFileReplacement(new_size, old_name if image.image.name != old_name else None)
 
 
@@ -1193,7 +1168,7 @@ def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DI
         img = img.convert("RGBA" if "A" in img.mode or img.mode == "P" else "RGB")
 
     buffer = io.BytesIO()
-    img.save(buffer, format="WEBP", quality=75, method=4)
+    pixels_only(img).save(buffer, format="WEBP", quality=75, method=4)
 
     from django.core.files.base import ContentFile
 
@@ -1288,7 +1263,7 @@ def write_image_marker_thumbnail(image: Image, *, max_dimension: int = MARKER_TH
         img = img.convert("RGBA" if "A" in img.mode or img.mode == "P" else "RGB")
 
     buffer = io.BytesIO()
-    img.save(buffer, format="WEBP", quality=_MARKER_THUMBNAIL_QUALITY, method=6)
+    pixels_only(img).save(buffer, format="WEBP", quality=_MARKER_THUMBNAIL_QUALITY, method=6)
 
     from django.core.files.base import ContentFile
 
@@ -1400,7 +1375,7 @@ def write_image_analysis_thumbnail(image: Image, *, max_dimension: int = ANALYSI
         img = img.convert("RGB")
 
     buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=_ANALYSIS_THUMBNAIL_QUALITY)
+    pixels_only(img).save(buffer, format="JPEG", quality=_ANALYSIS_THUMBNAIL_QUALITY)
 
     from django.core.files.base import ContentFile
 

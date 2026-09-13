@@ -35,7 +35,6 @@ conflating them overstates what is actually enforced:
 | Pillow (+ pillow-heif) | photos, media previews | sandbox | yes |
 | Pillow (bare `PIL.Image`) | custom label icon resize | routed via `resize_label_icon` | yes |
 | Pillow (bare `PIL.Image`) | embedded XMP/IPTC photo keywords | sandbox, read with the EXIF snapshot in `process_image_upload` | yes |
-| Pillow (bare `PIL.Image`) | **external API SpotGuessr round image** | request, unsandboxed | **no — P117** |
 | ffmpeg / ffprobe | video | sandbox | yes |
 | LibreOffice (`soffice`) | doc/spreadsheet conversion | sandbox | yes |
 | poppler + tesseract | PDF text/OCR, preview render | sandbox | yes |
@@ -52,9 +51,10 @@ parses in `parse_import_preview_task` and finishes its lookups on an interactive
 worker (P2), and the label-icon resize that decoded in the request moved there too
 (P103). The embedded-metadata keyword provider decoded the stored photo in the
 credentialed interactive worker until the same day (P116); the keywords are now read
-in the sandbox before the rewrite and kept on `Image.embedded_keywords`. One Pillow
-call site still carries no decorator — a gap `warn` cannot even log, since nothing
-marks it: the external API's SpotGuessr round image, which decodes in the request (P117).
+in the sandbox before the rewrite and kept on `Image.embedded_keywords`. The external
+API's SpotGuessr round image decoded and re-encoded the photo in the request, with no
+decorator for `warn` to log (P117); it now serves the stored file through the media
+gate's hand-off, since every stored photo is already re-encoded (P118).
 
 ## The tiers
 
@@ -170,10 +170,16 @@ thing to do if this tier is ever hardened further.
 
 ### 3. Normalisation
 
-`downscale_stored_image` is called unconditionally for every photo, even where
-the uploader's plan applies no size cap and no WebP conversion, because it is
-also what removes EXIF and what transcodes formats browsers cannot render. The
-practical effect is the one that matters here: what gets served is bytes this
+`downscale_stored_image` re-encodes every photo, whatever its format and whatever
+it carries, under the uploader's size and format policy (`get_stored_photo_policy`:
+plan, subscription and the user's own cap; WebP unless exempt). Only the pixels and
+the ICC colour profile reach the new file - `pixels_only` also drops what Pillow's
+writers would otherwise copy across (JPEG and GIF comments, TIFF XMP/IPTC tags) - so
+a stored photo can be served without a metadata check of its own. EXIF and embedded
+keywords are read first and kept on the row. Animated GIF, PNG and WebP keep their
+frames; HEIF, MPO and anything else Pillow opens are transcoded. A pending upload
+that cannot be re-encoded is retried and then removed, never published as uploaded.
+The practical effect is the one that matters here: what gets served is bytes this
 server's encoder wrote, not bytes the uploader sent. A disguised non-image
 fails to decode; data appended after the end-of-image marker does not survive
 re-encoding; polyglot tricks stop working because the container is rebuilt.
@@ -348,7 +354,7 @@ decodes, the two `render_preview` callers go through `tasks.render_media_preview
 enrichment photos go through `process_image_upload`, and the one legitimate
 exemption (`strip_exif_from_stored_photos`, a backfill over already-scanned files) is
 written down as an `allow_untrusted_parse` block rather than left implicit. What
-`warn` cannot show is an undecorated parser - P116 and P117 are the two known.
+`warn` cannot show is an undecorated parser - P116 and P117 were the two known, both fixed.
 Tracked in `docs/PROBLEMS.md`.
 
 ## Media previews

@@ -151,23 +151,3 @@ class HeicIsStoredInARenderableFormatTests(TestCase):
         image.save()
 
         self.assertEqual(self._stored_format(image), "WEBP")
-
-    def test_the_transcode_pass_is_entered_at_all(self) -> None:
-        """The gate in tasks.py skipped the whole pass when no policy switch was on."""
-        from urbanlens.dashboard.services.media.images import stored_file_needs_transcode
-
-        self.assertTrue(stored_file_needs_transcode("IMG_0001.heic"))
-        self.assertTrue(stored_file_needs_transcode("IMG_0001.HEIF"))
-        self.assertFalse(stored_file_needs_transcode("IMG_0001.jpg"))
-        self.assertFalse(stored_file_needs_transcode(""))
-
-    def test_a_jpeg_is_not_re_encoded_for_no_reason(self) -> None:
-        """Only formats browsers cannot render are forced through the encoder."""
-        image = baker.make(Image, profile=self.profile)
-        buffer = io.BytesIO()
-        PILImage.new("RGB", (48, 48), (10, 20, 30)).save(buffer, format="JPEG")
-        image.image.save(
-            "plain.jpg", SimpleUploadedFile("plain.jpg", buffer.getvalue(), content_type="image/jpeg"), save=True
-        )
-
-        self.assertIsNone(downscale_stored_image(image, None, convert_webp=False))

@@ -1,85 +1,77 @@
-"""One-off backfill: remove the EXIF block from photos stored before it was stripped on upload.
+"""One-off backfill: re-encode photos stored before every upload was re-encoded.
 
-TEMPORARY - delete this command once it has been run against production.
+TEMPORARY - delete this command once it has been run against production. Run it once: each run re-encodes again.
 
-Uploads stop carrying EXIF from the commit that added this, but every file
-already in storage still has its block, and those are the ones that have had
-time to be contributed to wikis. The values are preserved on the row first
-(``exif_data``) for any photo that never recorded them, so the provenance
-survives even though the file no longer carries it.
+A photo used to be stored as uploaded unless it was resized, converted or carried EXIF, so older files can still hold
+XMP (which can carry GPS), IPTC, a comment or PNG text. Each photo's EXIF and embedded keywords are recorded on its row
+when they never were, then the file is re-encoded under the uploader's format policy, and an existing analysis copy is
+rewritten from the clean file.
 
-Deliberately passes ``max_dimension=None, convert_webp=False`` rather than each
-uploader's policy: this is a scrub, not a re-processing run, and resizing or
-re-encoding somebody's existing photos is a bigger change than they asked for.
+Dimensions are kept. Shrinking cannot be undone, and this pass cleans files rather than applying a size cap to photos
+uploaded before one existed.
 """
 
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand
 from django.db import DatabaseError
-from PIL import UnidentifiedImageError
+from PIL.Image import DecompressionBombError
 
-from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.media.images import discard_superseded_file, downscale_stored_image, extract_embedded_keywords, extract_exif_data
+from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.services.media.images import (
+    discard_superseded_file,
+    downscale_stored_image,
+    extract_embedded_keywords,
+    extract_exif_data,
+    write_image_analysis_thumbnail,
+)
+from urbanlens.dashboard.services.media.storage import get_stored_photo_policy
 from urbanlens.dashboard.services.sandbox import allow_untrusted_parse
 
 
 class Command(BaseCommand):
-    """Strip embedded EXIF from every stored photo, recording it on the row first."""
+    """Re-encode every stored photo, recording its metadata on the row first."""
 
-    help = "Remove the EXIF block from photos already in storage, keeping the values on Image.exif_data."
+    help = "Re-encode photos already in storage so no metadata stays in the file, keeping EXIF and keywords on the row. Run once."
 
     def add_arguments(self, parser):
-        parser.add_argument("--dry-run", action="store_true", help="Report what would change without writing.")
+        parser.add_argument("--dry-run", action="store_true", help="Report how many photos would be re-encoded without reading or writing any.")
         parser.add_argument("--limit", type=int, default=None, help="Stop after this many rows (for a first cautious pass).")
 
     def handle(self, *args, **options):
-        dry_run = options["dry_run"]
-        limit = options["limit"]
+        queryset = Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).order_by("pk")
+        if options["limit"] is not None:
+            queryset = queryset[: options["limit"]]
 
-        queryset = Image.objects.exclude(image="").exclude(image__isnull=True).order_by("pk")
-        total = queryset.count()
-        self.stdout.write(f"Scanning {total} stored photo(s){' (limit ' + str(limit) + ')' if limit else ''}.")
+        if options["dry_run"]:
+            self.stdout.write(f"Would re-encode {queryset.count()} stored photo(s).")
+            return
 
-        stripped = 0
+        reencoded = 0
         recorded = 0
-        skipped = 0
         failed = 0
-
-        # A management command has no UL_PROCESS_ROLE, so the sandbox guard sees
-        # 'unspecified' and would refuse the very decode this command exists to
-        # perform. The exemption is narrow and honest: these are files already in
-        # storage, already scanned, already served - not a fresh upload arriving
-        # from a stranger. Scoped to the loop so nothing else inherits it.
+        # A management command has no UL_PROCESS_ROLE, so the sandbox guard would refuse the decode. These files are
+        # already stored, scanned and served rather than a stranger's fresh upload; the exemption is scoped to the loop.
         with allow_untrusted_parse("strip_exif_from_stored_photos: already-stored, already-scanned files"):
-            for index, image in enumerate(queryset.iterator()):
-                if limit is not None and index >= limit:
-                    break
+            for image in queryset.iterator():
                 try:
-                    changed, recorded_here = self._scrub(image, dry_run=dry_run)
-                except (OSError, ValueError, UnidentifiedImageError, DatabaseError) as exc:
+                    recorded += self._reencode(image)
+                except (OSError, ValueError, EOFError, SyntaxError, DecompressionBombError, DatabaseError) as exc:
                     self.stderr.write(f"  [pk={image.pk}] {type(exc).__name__}: {exc}")
                     failed += 1
                     continue
-                if changed:
-                    stripped += 1
-                else:
-                    skipped += 1
-                if recorded_here:
-                    recorded += 1
+                reencoded += 1
 
-        verb = "Would strip" if dry_run else "Stripped"
-        self.stdout.write(f"Done. {verb} {stripped}, already clean {skipped}, exif_data recorded {recorded}, failed {failed}.")
+        self.stdout.write(f"Done. Re-encoded {reencoded}, exif_data recorded {recorded}, failed {failed}.")
 
-    def _scrub(self, image: Image, *, dry_run: bool) -> tuple[bool, bool]:
-        """Record then remove one photo's EXIF.
+    def _reencode(self, image: Image) -> bool:
+        """Record one photo's metadata on its row, then re-encode its file and analysis copy.
 
         Args:
-            image: The row whose stored file to scrub.
-            dry_run: When True, report without writing anything.
+            image: The row whose stored file to re-encode.
 
         Returns:
-            (whether the file was (or would be) rewritten, whether exif_data was recorded).
+            Whether exif_data was recorded.
 
         Raises:
             OSError: The file cannot be read from or written to storage.
@@ -90,27 +82,24 @@ class Command(BaseCommand):
             with image.image.open("rb") as handle:
                 extracted = extract_exif_data(handle)
             if extracted:
+                Image.objects.filter(pk=image.pk).update(exif_data=extracted)
                 recorded = True
-                if not dry_run:
-                    Image.objects.filter(pk=image.pk).update(exif_data=extracted)
-        if image.embedded_keywords is None and not dry_run:
+        if image.embedded_keywords is None:
             with image.image.open("rb") as handle:
                 keywords = extract_embedded_keywords(handle)
             if keywords is not None:
                 Image.objects.filter(pk=image.pk).update(embedded_keywords=keywords)
 
-        if dry_run:
-            # Reading is enough to know whether there is a block to remove; the
-            # rewrite itself is what we are not doing.
-            with image.image.open("rb") as handle:
-                return bool(extract_exif_data(handle)), recorded
-
-        replacement = downscale_stored_image(image, max_dimension=None, convert_webp=False)
+        _, convert_webp = get_stored_photo_policy(image)
+        replacement = downscale_stored_image(image, max_dimension=None, convert_webp=convert_webp)
         if replacement is None:
-            return False, recorded
+            return recorded
 
         Image.objects.filter(pk=image.pk).update(image=image.image.name, file_size=replacement.size)
-        # After the update, never before: until the row names the rewritten file,
-        # deleting the old one leaves an authorized request with nothing to open.
+        # After the update, never before: until the row names the rewritten file, deleting the old one leaves an
+        # authorized request with nothing to open.
         discard_superseded_file(image, replacement.superseded_name)
-        return True, recorded
+
+        if image.analysis_thumbnail and write_image_analysis_thumbnail(image, force=True):
+            Image.objects.filter(pk=image.pk).update(analysis_thumbnail=image.analysis_thumbnail.name)
+        return recorded

@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.subscriptions.model import active_subscription_r
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
 
+    from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole
 
@@ -334,6 +335,24 @@ def get_downscale_policy(profile: Profile) -> tuple[int | None, bool]:
     entitled_dimension, convert_webp = get_entitled_policy(profile)
     dimensions = [d for d in (entitled_dimension, profile.image_downscale_max_dimension) if d]
     return (min(dimensions) if dimensions else None), convert_webp
+
+
+def get_stored_photo_policy(image: Image, max_dimension_override: int | None = None) -> tuple[int | None, bool]:
+    """The size and format a photo is stored in.
+
+    Args:
+        image: The photo's row.
+        max_dimension_override: Longest-edge cap for a row with no profile, from the code that created it.
+
+    Returns:
+        (max_dimension, convert_webp) as in :func:`get_entitled_policy`.
+    """
+    if image.profile is not None:
+        return get_downscale_policy(image.profile)
+    # A profile-less row is a provider photo kept for a location's gallery, with no plan to read a policy from.
+    from urbanlens.dashboard.services.photos.photo_enrichment import DEFAULT_ENRICHED_MAX_DIMENSION
+
+    return (max_dimension_override if max_dimension_override is not None else DEFAULT_ENRICHED_MAX_DIMENSION), True
 
 
 def get_entitled_video_policy(profile: Profile) -> int | None:

@@ -11,6 +11,46 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-13: A stored photo kept its XMP, IPTC, comment or PNG text unless it also carried EXIF
+
+`id: P118` · `status: fixed` · `resolved: 2026-09-13`
+
+`images.downscale_stored_image` rewrote a photo only when it resized, converted to WebP, or found an EXIF block, and
+kept the original when a plain resize came out larger. A photo whose only metadata was XMP (which can carry GPS),
+IPTC, a JPEG comment or PNG text was stored and served exactly as uploaded. GIF, BMP and animated images were never
+rewritten at all, whatever they carried. A rewrite was not clean either: on Pillow 12.3 the JPEG and GIF writers copy
+the source's comment unless told otherwise, and the TIFF writer copies XMP, IPTC and Photoshop tags from a TIFF
+source. Reproduced before the fix, across JPEG, PNG, WebP, GIF, animated GIF, TIFF and AVIF fixtures, with and
+without WebP conversion.
+
+Every photo is now re-encoded, under one policy (`storage.get_stored_photo_policy`: the uploader's plan,
+subscription and own cap, WebP unless exempt). `images.pixels_only` hands each writer a plain `Image` holding only
+pixels and palette transparency; the ICC profile is passed explicitly where the format carries one. Animated GIF,
+PNG and WebP keep their frames while the resized frames fit Pillow's pixel budget. HEIF, MPO and any other format
+Pillow opens are transcoded. A pending upload whose re-encode fails is retried and then removed rather than
+published. The grid, marker and analysis thumbnails, media previews and shrunk label icons use `pixels_only` too;
+the analysis JPEG, sent to outside AI providers, did carry a legacy file's comment.
+
+`strip_exif_from_stored_photos` now re-encodes every stored photo, not only those with EXIF, under the format
+policy but keeping dimensions, and rewrites an existing analysis copy. It has to be run once on production. Every
+run re-encodes again.
+
+**Not changed:** comment images, small label icons and social avatars are still stored as uploaded (P119).
+
+## RESOLVED 2026-09-13: The external API's SpotGuessr round image decoded and re-encoded a user's photo inside the request
+
+`id: P117` · `status: fixed` · `resolved: 2026-09-13`
+
+`SpotGuessrRoundImageView` called `services/spotguessr/round_image.stripped_round_image`, which decoded the round's
+stored photo with Pillow and re-encoded it in the API request, with no `untrusted_parse` decorator and no cache.
+The re-encode existed because the stored file could still carry GPS. That was the real defect (P118), not something
+for one endpoint to paper over.
+
+With every stored photo re-encoded in the sandbox, the endpoint serves the stored file as it is, through
+`controllers.media.resolve_media_path` and `serve_media_file`, the same `X-Accel-Redirect` hand-off the media gate
+and the safety portal use. A photo still pending its scan is a 404, since until then the file is the raw upload.
+`round_image.py` is deleted. The response is still a 200 with the image bytes, so the Android client needs no change.
+
 ## RESOLVED 2026-09-13: The embedded-metadata photo keyword provider decoded the stored upload in the credentialed interactive worker
 
 `id: P116` · `status: fixed` · `resolved: 2026-09-13`

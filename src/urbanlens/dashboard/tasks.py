@@ -761,7 +761,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
         write_image_marker_thumbnail,
         write_image_thumbnail,
     )
-    from urbanlens.dashboard.services.media.storage import get_downscale_policy
+    from urbanlens.dashboard.services.media.storage import get_stored_photo_policy
 
     try:
         with image.image.open("rb") as image_file:
@@ -877,44 +877,20 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
 
     new_stored_size: int | None = None
     superseded_name: str | None = None
-    if image.profile is not None:
-        downscale_policy: tuple[int | None, bool] | None = get_downscale_policy(image.profile)
+    max_dimension, convert_webp = get_stored_photo_policy(image, max_dimension_override)
+    try:
+        replacement = downscale_stored_image(image, max_dimension, convert_webp)
+    except (OSError, ValueError, EOFError, SyntaxError, PILDecompressionBombError) as exc:
+        # DecompressionBombError derives from Exception alone, so it needs naming.
+        logger.warning("Re-encoding failed for image %s: %s", image_id, exc, exc_info=True)
+        if image.pending_scan:
+            # Publishing a fresh upload that was never re-encoded would publish whatever metadata it carries.
+            return None
     else:
-        # A profile-less row (location enrichment) has no plan to read a policy
-        # from; its caller passes the cap instead. Falling back to a default
-        # rather than skipping, because this call is also what strips the
-        # provider's EXIF - "no cap given" must not silently mean "publish the
-        # provider's original, GPS and all". WebP conversion is not optional
-        # here either: these are provider photos kept as gallery thumbnails.
-        from urbanlens.dashboard.services.photos.photo_enrichment import DEFAULT_ENRICHED_MAX_DIMENSION
-
-        downscale_policy = (max_dimension_override if max_dimension_override is not None else DEFAULT_ENRICHED_MAX_DIMENSION, True)
-    if downscale_policy is not None:
-        max_dimension, convert_webp = downscale_policy
-        # Called unconditionally. It used to be gated on there being a resize, a
-        # conversion, a location opt-out or a HEIC to transcode - reasonable while
-        # this function existed to resize, but it is also what removes EXIF now,
-        # and "no cap, no conversion" is exactly the policy a downscale-exempt
-        # subscriber gets. Gating it left their photos carrying the block.
-        # downscale_stored_image decides for itself whether anything needs doing,
-        # including the HEIC case (`stored_file_needs_transcode`), where the stored
-        # bytes are what a plain <img src> gets and most browsers cannot render them.
-        try:
-            replacement = downscale_stored_image(image, max_dimension, convert_webp)
-        except (OSError, ValueError, PILDecompressionBombError) as exc:
-            # DecompressionBombError inherits straight from Exception, not from
-            # OSError/ValueError like the rest of Pillow's failures (Unidentified-
-            # ImageError does), so it escaped this handler and took the whole
-            # photo-processing task down with it. Pillow's own 89MP ceiling already
-            # prevents the memory exhaustion; what was missing was degrading to the
-            # same logged warning every other unprocessable image gets, leaving the
-            # upload stored and the rest of the pipeline intact.
-            logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
-        else:
-            if replacement is not None:
-                update_fields["image"] = image.image.name
-                new_stored_size = replacement.size
-                superseded_name = replacement.superseded_name
+        if replacement is not None:
+            update_fields["image"] = image.image.name
+            new_stored_size = replacement.size
+            superseded_name = replacement.superseded_name
 
     try:
         if write_image_thumbnail(image):

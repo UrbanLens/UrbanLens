@@ -18,6 +18,7 @@ from django.utils import timezone
 from PIL import Image as PILImage
 from PIL.Image import DecompressionBombError
 
+from urbanlens.dashboard.services.media.images import pixels_only
 from urbanlens.dashboard.services.sandbox.guard import untrusted_parse
 
 if TYPE_CHECKING:
@@ -64,7 +65,7 @@ def shrink_icon(stored: IO[bytes], name: str) -> tuple[bytes, str] | None:
         img.thumbnail((ICON_MAX_PX, ICON_MAX_PX), PILImage.Resampling.LANCZOS)
         fmt = "PNG" if img.mode == "RGBA" else "JPEG"
         out = io.BytesIO()
-        img.save(out, format=fmt, quality=88, optimize=True)
+        pixels_only(img).save(out, format=fmt, quality=88, optimize=True)
     except (OSError, ValueError, DecompressionBombError):
         logger.info("Label icon %s could not be decoded for resizing", name)
         return None

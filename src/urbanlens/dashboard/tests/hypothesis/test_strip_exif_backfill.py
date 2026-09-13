@@ -37,9 +37,9 @@ def _jpeg_with_exif() -> bytes:
     return buffer.getvalue()
 
 
-def _jpeg_without_exif() -> bytes:
+def _jpeg_with_comment() -> bytes:
     buffer = io.BytesIO()
-    PILImage.new("RGB", (320, 240), (10, 20, 30)).save(buffer, format="JPEG")
+    PILImage.new("RGB", (320, 240), (10, 20, 30)).save(buffer, format="JPEG", comment=b"Old Mill House")
     return buffer.getvalue()
 
 
@@ -100,12 +100,14 @@ class StripExifBackfillTests(TestCase):
         image.refresh_from_db()
         self.assertIsNone(image.exif_data, "--dry-run wrote to the row")
 
-    def test_a_clean_photo_is_left_alone(self) -> None:
-        """No block to remove means no rewrite, so the stored name does not change."""
-        image = self._stored_image(_jpeg_without_exif(), name="clean.jpg")
+    def test_a_photo_with_no_exif_is_still_reencoded(self) -> None:
+        """A comment, XMP or IPTC can name the place as well as EXIF can, so no stored photo is kept as it was."""
+        image = self._stored_image(_jpeg_with_comment(), name="commented.jpg")
         original_name = image.image.name
 
         call_command("strip_exif_from_stored_photos")
 
         image.refresh_from_db()
-        self.assertEqual(image.image.name, original_name)
+        self.assertNotEqual(image.image.name, original_name)
+        with image.image.open("rb") as handle:
+            self.assertNotIn(b"Old Mill House", handle.read())

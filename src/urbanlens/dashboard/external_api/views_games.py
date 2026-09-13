@@ -39,11 +39,12 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.contrib.gis.gdal.error import GDALException
 from django.contrib.gis.geos import GEOSException
-from django.http import HttpResponse
+from django.http import Http404, HttpResponseBase
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 
+from urbanlens.dashboard.controllers.media import resolve_media_path, serve_media_file
 from urbanlens.dashboard.external_api.pagination import PaginatedListMixin
 from urbanlens.dashboard.external_api.permissions import credential_grants
 from urbanlens.dashboard.external_api.serializers import ErrorSerializer
@@ -94,7 +95,6 @@ from urbanlens.dashboard.services.profile.identity_visibility import resolve_vis
 from urbanlens.dashboard.services.spotguessr import (
     overview as spotguessr_overview,
     relevance as spotguessr_relevance,
-    round_image as spotguessr_round_image,
     session as spotguessr_session,
 )
 from urbanlens.dashboard.services.spotguessr.social import visible_friend_ratings
@@ -772,16 +772,14 @@ def _summary_payload(session: GameSession) -> dict[str, Any]:
 
 
 class SpotGuessrRoundImageView(SoloSessionOnlyMixin, ExternalApiView):
-    """GET: the round's photo as bytes, with every metadata block removed.
+    """GET: the round's photo as bytes.
 
-    A native client cannot render the ``image_url`` on the round payload
-    without also holding ``media:read`` and following the media gate, and even
-    then it would receive the *original* file. That file routinely still
-    carries the camera's GPS tags, which point straight at the answer - so this
-    endpoint exists specifically to hand over a copy that does not, and it
-    requires both ``games:read`` (this is game content) and ``media:read``
-    (these are the user's own photo bytes). ``HasApiKeyScope`` requires every
-    declared scope, so a credential holding only one of the pair gets nothing.
+    The stored file is served as it is, through the same hand-off as the media
+    gate: the upload pipeline re-encodes every photo from its pixels, so it
+    carries no GPS or other metadata naming the answer. Requires both
+    ``games:read`` (this is game content) and ``media:read`` (these are the
+    user's own photo bytes). ``HasApiKeyScope`` requires every declared scope,
+    so a credential holding only one of the pair gets nothing.
 
     Charged against the media budget rather than the API read budget, for the
     same reason the media gate is: a screen of images is a burst of file
@@ -795,8 +793,8 @@ class SpotGuessrRoundImageView(SoloSessionOnlyMixin, ExternalApiView):
     throttle_classes: ClassVar[list] = [ExternalApiBurstThrottle, ExternalApiMediaThrottle]
 
     @extend_schema(responses={200: bytes, 404: ErrorSerializer, 409: ErrorSerializer})
-    def get(self, request: Request, session_id: int, round_id: int) -> HttpResponse | Response:
-        """Return the EXIF-stripped bytes of one round's photo."""
+    def get(self, request: Request, session_id: int, round_id: int) -> HttpResponseBase | Response:
+        """Return one round's stored photo."""
         participant = GameSessionParticipant.objects.filter(session_id=session_id, profile__user=request.user).select_related("session").first()
         if participant is None:
             return Response({"error": "Not found."}, status=404)
@@ -804,20 +802,13 @@ class SpotGuessrRoundImageView(SoloSessionOnlyMixin, ExternalApiView):
         if refusal is not None:
             return refusal
 
-        round_ = GameRound.objects.filter(pk=round_id, session_id=session_id).select_related("image").first()
+        # A text-only round has no image, and a photo still pending its scan is the raw upload; both read as "no such
+        # image", identically to a round that isn't the caller's.
+        round_ = GameRound.objects.filter(pk=round_id, session_id=session_id, image__pending_scan=False).exclude(image__image="").select_related("image").first()
         if round_ is None or round_.image is None:
-            # A round in a text-only mode is genuinely "no such image" here,
-            # and is reported identically to a round that isn't the caller's.
             return Response({"error": "Not found."}, status=404)
 
         try:
-            payload, content_type = spotguessr_round_image.stripped_round_image(round_.image)
-        except spotguessr_round_image.RoundImageUnavailableError:
+            return serve_media_file(resolve_media_path(round_.image.image.name))
+        except Http404:
             return Response({"error": "Not found."}, status=404)
-
-        response = HttpResponse(payload, content_type=content_type)
-        # Private: these bytes are one user's photo served under their own
-        # credential, and a shared cache holding them would serve them to the
-        # next caller of the same URL.
-        response["Cache-Control"] = "private, max-age=300"
-        return response
