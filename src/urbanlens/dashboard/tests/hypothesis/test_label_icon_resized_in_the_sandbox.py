@@ -101,6 +101,44 @@ class LabelIconIsShrunkInTheSandboxTests(TestCase):
         resizes = [call.args for call in enqueue.call_args_list if call.args and call.args[0] is resize_label_icon]
         self.assertEqual(resizes, [(resize_label_icon, label.pk, label.custom_icon.name)])
 
+    def test_replacing_an_icon_on_edit_queues_its_resize(self) -> None:
+        label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Urbex")
+
+        with self.captureOnCommitCallbacks(execute=True), mock.patch(ENQUEUE, return_value=mock.Mock()) as enqueue:
+            self.client.post(
+                reverse("label.edit", kwargs={"label_kind": "tag", "label_id": label.id}),
+                data={"name": "Urbex", f"custom_icon-{label.id}": _png(600, 400)},
+            )
+
+        label.refresh_from_db()
+        resizes = [call.args for call in enqueue.call_args_list if call.args and call.args[0] is resize_label_icon]
+        self.assertEqual(resizes, [(resize_label_icon, label.pk, label.custom_icon.name)])
+
+    def test_a_shrunk_icon_does_not_leave_the_original_on_disk(self) -> None:
+        """Label files are not managed by the cleanup receivers, so the swap is the only thing that removes it."""
+        label = self._label_with_icon(600, 400)
+        original = label.custom_icon.name
+        storage = label.custom_icon.storage
+
+        with self._in_sandbox():
+            resize_stored_icon(label.pk, original)
+
+        label.refresh_from_db()
+        self.assertNotEqual(label.custom_icon.name, original)
+        self.assertFalse(storage.exists(original))
+        self.assertTrue(storage.exists(label.custom_icon.name))
+
+    def test_a_label_deleted_before_its_resize_keeps_the_original_for_undo(self) -> None:
+        """Deleting a label stashes its icon's name for undo, so the file has to still be there to restore."""
+        label = self._label_with_icon(600, 400)
+        original, storage, label_id = label.custom_icon.name, label.custom_icon.storage, label.pk
+        label.delete()
+
+        with self._in_sandbox():
+            self.assertFalse(resize_stored_icon(label_id, original))
+
+        self.assertTrue(storage.exists(original))
+
     def test_the_sandbox_worker_shrinks_an_oversized_icon(self) -> None:
         label = self._label_with_icon(600, 400)
 
