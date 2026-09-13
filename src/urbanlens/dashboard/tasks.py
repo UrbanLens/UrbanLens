@@ -423,6 +423,14 @@ def finish_import_preview_task(profile_id: int, job_id: str) -> None:
     import_preview.finish_import_preview(profile_id, job_id)
 
 
+@shared_task(queue=SANDBOX_QUEUE)
+def resize_label_icon(label_id: int, icon_name: str) -> bool:
+    """Shrink a label's uploaded icon in the sandbox worker."""
+    from urbanlens.dashboard.services.labels.icons import resize_stored_icon
+
+    return resize_stored_icon(label_id, icon_name)
+
+
 @shared_task(queue=Queue.MAINTENANCE)
 def measure_media_usage_task() -> float:
     """Measure the media volume for the site-admin system panel."""

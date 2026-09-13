@@ -11,6 +11,25 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-13: A label's uploaded icon was decoded and resized inside the request, with no parse guard
+
+`id: P103` · `status: fixed` · `resolved: 2026-09-13`
+
+`controllers/labels._resize_custom_icon` opened every uploaded label icon with `PIL.Image.open`, then converted
+and thumbnailed it, inside the label create and edit requests. It carried no `untrusted_parse` decorator, so
+`warn` never logged it and `deny` would not have stopped it. Reproduced before the fix: posting a 600x400 PNG to
+either view called `PIL.Image.open` on the upload inside the request.
+
+The request now stores the icon as uploaded, after the same size, content-sniff and malware checks, and queues
+`tasks.resize_label_icon` on the sandbox queue once the save commits. `services/labels/icons.shrink_icon` is the
+decorated decode. The swap is a conditional update on the icon's stored name, so a label edited or deleted
+meanwhile keeps what it has and whichever file lost is deleted, and the label's pins are touched so maps redraw.
+Until the task runs, the label shows the upload itself - decoded by the browser, not by the server.
+
+This entry asked for the other undecorated Pillow sites to be counted again before "two more" was trusted. Swept on
+2026-09-13 by enclosing function and decorator: the `images.py` EXIF helpers a name-only search flags are reached
+only from decorated functions in `process_image_upload`, and two real sites remain, recorded as P116 and P117.
+
 ## RESOLVED 2026-09-13: The import preview parsed uploads inside the web request, blocking `UL_UNTRUSTED_PARSE_POLICY=deny`
 
 `id: P2` · `status: fixed` · `resolved: 2026-09-13`

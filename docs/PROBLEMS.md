@@ -3576,24 +3576,6 @@ observation, downgraded from a hazard.
 
 Not fixed. Not measured this session.
 
-## P103 — `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request
-
-`id: P103` · `status: open` · `updated: 2026-09-10`
-
-`docs/MEDIA_PIPELINE.md:46` stated "Every parser is now guarded" - corrected in place this session
-(see `MEDIA_PIPELINE.md`'s guard table and N-record on doc corrections). It was false:
-`controllers/labels.py:253` `_resize_custom_icon` imports `PIL.Image` directly and calls
-`Image.open(uploaded_file)` with no `@untrusted_parse` decorator, no sandbox routing, and no
-size/pixel-bomb guard beyond Pillow's own defaults - it runs inline in whatever request calls it
-(`_apply_custom_icon_upload`, `labels.py:556`), decoding and re-encoding any icon file over
-`_ICON_MAX_PX` on the label create/edit path. Two further undecorated Pillow call sites were named
-by this investigation but not re-confirmed independently this session - re-grep
-`dashboard/services`/`dashboard/controllers` for `from PIL import`/`PIL.Image` sites lacking
-`@untrusted_parse` before trusting the count is still exactly three.
-
-Not fixed: `_resize_custom_icon` needs the same `@untrusted_parse`/sandbox routing as the other
-Pillow call sites, or an explicit, documented reason it is exempt.
-
 ## P104 — Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage
 
 `id: P104` · `status: open` · `updated: 2026-09-10`
@@ -5243,3 +5225,36 @@ fields. It belongs in the `infrastructure` repo beside the other host timers, no
 Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
+
+## P116 — The embedded-metadata photo keyword provider decodes the stored upload in the credentialed interactive worker
+
+`id: P116` · `status: open` · `updated: 2026-09-13`
+
+`plugins/builtin/photo_keywords.py` `MetadataKeywordProvider.generate` opens the photo's stored file with
+`PIL.Image.open` and reads XMP (`getxmp`) and IPTC (`IptcImagePlugin.getiptcinfo`) from it. It carries no
+`untrusted_parse` decorator, and it runs in `tasks.generate_image_keywords` on `Queue.INTERACTIVE` - the
+`celery-worker` container, which holds REData and OAuth credentials and has full egress. That is the process
+`test_sandbox_isolation.py` records the analysis-thumbnail decode being moved out of, for this reason.
+
+The stored file is not always sandbox output. `images.downscale_stored_image` rewrites it only when it resizes,
+converts, or finds an EXIF block, so a small photo carrying XMP and no EXIF stays exactly as uploaded. Found by the
+P103 sweep of Pillow call sites on 2026-09-13; not yet reproduced with a test.
+
+Fix shape: read the embedded keywords where the file is already being decoded - `process_image_upload`, in the
+sandbox - and store them for the provider, instead of decoding again in the credentialed worker.
+
+## P117 — The external API's SpotGuessr round image decodes and re-encodes a user's photo inside the request
+
+`id: P117` · `status: open` · `updated: 2026-09-13`
+
+`external_api/views_games.py` (the round image endpoint, around line 814) calls
+`services/spotguessr/round_image.stripped_round_image`, which opens the round's stored photo with `PIL.Image.open`,
+forces a full decode with `.load()` and re-encodes it, inside the API request. There is no `untrusted_parse`
+decorator, so `warn` cannot log it and `deny` would not stop it, and nothing caches the result: every call decodes
+again, bounded only by `ExternalApiMediaThrottle`. The stored photo can be the uploader's original bytes (see P116
+on when a stored file is left as uploaded). Found by the P103 sweep on 2026-09-13; not yet reproduced with a test.
+
+Fix shape: produce the stripped copy in the sandbox and serve that - once per image, or on first request in the
+fire-and-forget shape `previews.request_sandbox_render` uses. A cold call can then no longer return the bytes
+synchronously, which changes the endpoint's contract for the mobile client, so it is a decision as much as a fix.
+

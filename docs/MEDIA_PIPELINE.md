@@ -33,7 +33,9 @@ conflating them overstates what is actually enforced:
 | Parser | Reached by | Runs in | Guarded? |
 |---|---|---|---|
 | Pillow (+ pillow-heif) | photos, media previews | sandbox | yes |
-| Pillow (bare `PIL.Image`) | **custom label/pin icon resize (request)** | request, unsandboxed | **no — P103** |
+| Pillow (bare `PIL.Image`) | custom label icon resize | routed via `resize_label_icon` | yes |
+| Pillow (bare `PIL.Image`) | **embedded-metadata photo keywords** | interactive worker, credentialed | **no — P116** |
+| Pillow (bare `PIL.Image`) | **external API SpotGuessr round image** | request, unsandboxed | **no — P117** |
 | ffmpeg / ffprobe | video | sandbox | yes |
 | LibreOffice (`soffice`) | doc/spreadsheet conversion | sandbox | yes |
 | poppler + tesseract | PDF text/OCR, preview render | sandbox | yes |
@@ -47,10 +49,11 @@ Not every parser is guarded (corrected 2026-09-10, P103 — this used to claim
 "every parser is now guarded", which was false). The import preview was the last
 *sandboxing* blocker before `UL_UNTRUSTED_PARSE_POLICY=deny`; since 2026-09-13 it
 parses in `parse_import_preview_task` and finishes its lookups on an interactive
-worker (P2). `controllers/labels._resize_custom_icon` still calls bare
-`PIL.Image.open()` on a request path with no decorator and no sandbox routing at
-all — a gap `warn` cannot even log, since nothing marks that call site as one it
-should be watching. See `docs/PROBLEMS.md` P103.
+worker (P2), and the label-icon resize that decoded in the request moved there too
+(P103). Two Pillow call sites still carry no decorator — a gap `warn` cannot even
+log, since nothing marks them: the embedded-metadata photo keyword provider, which
+decodes in the credentialed interactive worker (P116), and the external API's
+SpotGuessr round image, which decodes in the request (P117).
 
 ## The tiers
 
@@ -344,8 +347,8 @@ decodes, the two `render_preview` callers go through `tasks.render_media_preview
 enrichment photos go through `process_image_upload`, and the one legitimate
 exemption (`strip_exif_from_stored_photos`, a backfill over already-scanned files) is
 written down as an `allow_untrusted_parse` block rather than left implicit. What
-`warn` cannot show is an undecorated parser on a request path - P103's
-`_resize_custom_icon` is one. Tracked in `docs/PROBLEMS.md`.
+`warn` cannot show is an undecorated parser - P116 and P117 are the two known.
+Tracked in `docs/PROBLEMS.md`.
 
 ## Media previews
 

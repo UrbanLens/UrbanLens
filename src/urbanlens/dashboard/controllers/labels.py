@@ -6,9 +6,7 @@ Views read ``label_kind`` from the URL (see ``urls.py``).
 
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
-import io
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -20,7 +18,6 @@ from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.utils.html import escape
 from django.views import View
-from PIL.Image import DecompressionBombError as PILDecompressionBombError
 
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.images.model import Image
@@ -67,7 +64,6 @@ def _request_profile(request: HttpRequest) -> Profile:
 
 
 _PERM = "dashboard.edit_global_label"
-_ICON_MAX_PX = 256
 _ORGANIZE_KINDS = frozenset({KIND_TAG, KIND_CATEGORY, KIND_STATUS})
 
 # URL segment (tag/category/status) aliases → model kind constants.
@@ -247,41 +243,6 @@ def _label_id_from_kwargs(kwargs: dict[str, Any]) -> int:
             return int(kwargs[key])
     msg = "No label id in URL kwargs"
     raise KeyError(msg)
-
-
-def _resize_custom_icon(uploaded_file: UploadedFile) -> UploadedFile:
-    """Resize an uploaded icon to at most _ICON_MAX_PX pixels per side.
-
-    Args:
-        uploaded_file: Uploaded image file.
-
-    Returns:
-        Resized file, or the original if already small enough or unreadable.
-    """
-    try:
-        from django.core.files.uploadedfile import InMemoryUploadedFile
-        from PIL import Image
-
-        img: Image.Image = Image.open(uploaded_file)
-        if max(img.width, img.height) <= _ICON_MAX_PX:
-            uploaded_file.seek(0)
-            return uploaded_file
-
-        img = img.convert("RGBA") if img.mode in {"RGBA", "P", "PA"} else img.convert("RGB")
-        img.thumbnail((_ICON_MAX_PX, _ICON_MAX_PX), Image.Resampling.LANCZOS)
-        fmt = "PNG" if img.mode == "RGBA" else "JPEG"
-        out = io.BytesIO()
-        img.save(out, format=fmt, quality=88, optimize=True)
-        out.seek(0)
-        name = uploaded_file.name or "icon"
-        ext = ".png" if fmt == "PNG" else ".jpg"
-        if not name.lower().endswith(ext):
-            name = name.rsplit(".", 1)[0] + ext
-        return InMemoryUploadedFile(out, "ImageField", name, f"image/{fmt.lower()}", out.getbuffer().nbytes, None)
-    except (OSError, ValueError, PILDecompressionBombError):
-        with contextlib.suppress(OSError):
-            uploaded_file.seek(0)
-        return uploaded_file
 
 
 def _queryset_for_kind(kind: str, profile: Profile) -> QuerySet[Label]:
@@ -550,13 +511,12 @@ def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
 
 
 def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
-    """The submitted icon, checked and resized, or the reason it was refused.
+    """The submitted icon, checked, or the reason it was refused.
 
     **Every path that stores a label icon must go through this.** The edit view
     validated its upload and the create view did not, so the same file that was
     refused with a 400 on one URL was written to disk from the other - a
-    scripted SVG among them, since ``_resize_custom_icon`` deliberately returns
-    the file untouched when PIL cannot open it, and ``label_icons/`` is served
+    scripted SVG among them, since the file is stored as uploaded, and ``label_icons/`` is served
     to any authenticated user with a Content-Type nginx derives from the
     extension.
 
@@ -578,7 +538,7 @@ def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
     upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
     if upload_error:
         return None, upload_error[0]
-    return _resize_custom_icon(custom_icon), None
+    return custom_icon, None
 
 
 def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> tuple[bool, str | None]:
@@ -715,6 +675,9 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
             custom_icon=custom_icon,
             order=order,
         )
+        from urbanlens.dashboard.services.labels.icons import queue_icon_resize
+
+        queue_icon_resize(label)
         if parent_ids:
             valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=label.id)
             safe_parent_ids = [p.id for p in valid_parents if not _would_create_cycle(label, p.id)]
@@ -859,6 +822,10 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         if kind_changed:
             changed_fields.extend(["kind", "profile"])
         label.save(update_fields=changed_fields)
+        if icon_changed:
+            from urbanlens.dashboard.services.labels.icons import queue_icon_resize
+
+            queue_icon_resize(label)
 
         if kind_changed:
             label.parents.clear()
