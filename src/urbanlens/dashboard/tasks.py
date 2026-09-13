@@ -745,6 +745,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
         extract_camera_info,
         extract_caption_from_metadata,
         extract_copyright_notice,
+        extract_embedded_keywords,
         extract_exif_data,
         extract_focal_length,
         extract_gps_altitude,
@@ -776,6 +777,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
             taken_at = extract_taken_at(image_file)
             checksum = compute_checksum(image_file) if not image.checksum else None
             exif_data = extract_exif_data(image_file) if image.exif_data is None else None
+            embedded_keywords = extract_embedded_keywords(image_file) if image.embedded_keywords is None else None
             author = extract_author(image_file) if not image.author else None
             copyright_notice = extract_copyright_notice(image_file) if not image.copyright else None
             metadata_caption = extract_caption_from_metadata(image_file) if not image.caption else None
@@ -851,6 +853,9 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
     if exif_data:
         image.exif_data = exif_data
         update_fields["exif_data"] = exif_data
+    if embedded_keywords is not None:
+        image.embedded_keywords = embedded_keywords
+        update_fields["embedded_keywords"] = embedded_keywords
     if author:
         image.author = author
         update_fields["author"] = author
@@ -1026,6 +1031,7 @@ def _sync_deduped_siblings(image: Image) -> None:
         "longitude": image.longitude,
         "direction": image.direction,
         "exif_data": image.exif_data,
+        "embedded_keywords": image.embedded_keywords,
         "file_size": image.file_size,
         "thumbnail": image.thumbnail.name if image.thumbnail else "",
         "marker_thumbnail": image.marker_thumbnail.name if image.marker_thumbnail else "",

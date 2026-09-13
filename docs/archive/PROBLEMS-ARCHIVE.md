@@ -11,6 +11,33 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-13: The embedded-metadata photo keyword provider decoded the stored upload in the credentialed interactive worker
+
+`id: P116` · `status: fixed` · `resolved: 2026-09-13`
+
+`plugins/builtin/photo_keywords.MetadataKeywordProvider.generate` opened the photo's stored file with
+`PIL.Image.open` to read XMP and IPTC keywords. It carried no `untrusted_parse` decorator, and it ran in
+`tasks.generate_image_keywords` on `Queue.INTERACTIVE` - the `celery-worker` container, which holds REData and
+OAuth credentials and has full egress. Reproduced before the fix: calling the provider on an uploaded photo
+called `PIL.Image.open` on it.
+
+It was also reading a file with nothing left in it. Keywording is queued after `downscale_stored_image`, which
+rewrites any photo carrying an EXIF block, and a Pillow rewrite keeps no XMP: a probe on Pillow 12.3 found it
+gone from every JPEG and WebP source rewritten to JPEG, PNG or WebP. So for nearly every camera photo the provider
+decoded a copy whose keywords were already lost. This half was found while fixing, from that probe and the
+rewrite's EXIF gate, not by running the new test against the old code.
+
+`images.extract_embedded_keywords` (guarded as `image.exif`) now reads them in `_process_photo_upload`, beside
+the EXIF snapshot and before the rewrite, normalizes and caps them as provider output is, and stores them on the
+encrypted `Image.embedded_keywords`. The provider reads that column and opens nothing. It reports itself
+unavailable while the column is None, so a photo processed before the column existed keeps the keywords it has
+instead of having them replaced with none. Dedup siblings copy the column wherever they copy `exif_data`, and
+`strip_exif_from_stored_photos` records it before stripping.
+
+**Not changed:** existing photos are not backfilled - the ones already rewritten have no keywords left to read,
+and a small photo with no EXIF that still carries XMP would need a sandbox sweep nobody has asked for.
+`UL_UNTRUSTED_PARSE_POLICY` stays at `warn`.
+
 ## RESOLVED 2026-09-13: A label's uploaded icon was decoded and resized inside the request, with no parse guard
 
 `id: P103` · `status: fixed` · `resolved: 2026-09-13`

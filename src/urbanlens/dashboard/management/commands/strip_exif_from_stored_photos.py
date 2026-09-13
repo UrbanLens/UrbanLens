@@ -20,7 +20,7 @@ from django.db import DatabaseError
 from PIL import UnidentifiedImageError
 
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.media.images import discard_superseded_file, downscale_stored_image, extract_exif_data
+from urbanlens.dashboard.services.media.images import discard_superseded_file, downscale_stored_image, extract_embedded_keywords, extract_exif_data
 from urbanlens.dashboard.services.sandbox import allow_untrusted_parse
 
 
@@ -93,6 +93,11 @@ class Command(BaseCommand):
                 recorded = True
                 if not dry_run:
                     Image.objects.filter(pk=image.pk).update(exif_data=extracted)
+        if image.embedded_keywords is None and not dry_run:
+            with image.image.open("rb") as handle:
+                keywords = extract_embedded_keywords(handle)
+            if keywords is not None:
+                Image.objects.filter(pk=image.pk).update(embedded_keywords=keywords)
 
         if dry_run:
             # Reading is enough to know whether there is a block to remove; the

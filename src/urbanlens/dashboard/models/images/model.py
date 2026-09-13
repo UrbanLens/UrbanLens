@@ -588,6 +588,9 @@ class Image(abstract.FrontendDashboardModel):
     # must degrade this one field rather than break every gallery that loads a
     # photo row. Never filter on its contents; ciphertext does not compare.
     exif_data = EncryptedJSONField(null=True, blank=True, fail_soft=True)
+    # XMP/IPTC keywords, read alongside exif_data for the same reason: the rewrite drops them. None until the
+    # upload task has read the file.
+    embedded_keywords = EncryptedJSONField(null=True, blank=True, fail_soft=True)
     # Extracted text for a document upload: the PDF's native text layer plus
     # OCR output from any embedded raster images (see services.media.documents).
     # Searched by the Media section's search box (labels__name, caption, etc.)

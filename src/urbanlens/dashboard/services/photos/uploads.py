@@ -218,6 +218,7 @@ def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: P
         longitude=existing.longitude,
         direction=existing.direction,
         exif_data=existing.exif_data,
+        embedded_keywords=existing.embedded_keywords,
         source=existing.source,
         media_type=existing.media_type,
         map_hidden=existing.map_hidden,

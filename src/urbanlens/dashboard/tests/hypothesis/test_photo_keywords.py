@@ -184,19 +184,19 @@ class MetadataKeywordHelpersTests(SimpleTestCase):
     """XMP subject extraction handles the common packet shapes."""
 
     def test_bag_of_li_entries(self):
-        from urbanlens.dashboard.plugins.builtin.photo_keywords import _xmp_subjects
+        from urbanlens.dashboard.services.media.images import _xmp_subjects
 
         xmp = {"xmpmeta": {"RDF": {"Description": {"subject": {"Bag": {"li": ["decay", "brick"]}}}}}}
         self.assertEqual(_xmp_subjects(xmp), ["decay", "brick"])
 
     def test_flat_string_subject(self):
-        from urbanlens.dashboard.plugins.builtin.photo_keywords import _xmp_subjects
+        from urbanlens.dashboard.services.media.images import _xmp_subjects
 
         xmp = {"Description": {"subject": "graffiti"}}
         self.assertEqual(_xmp_subjects(xmp), ["graffiti"])
 
     def test_no_subject_yields_empty(self):
-        from urbanlens.dashboard.plugins.builtin.photo_keywords import _xmp_subjects
+        from urbanlens.dashboard.services.media.images import _xmp_subjects
 
         self.assertEqual(_xmp_subjects({"Description": {"title": "x"}}), [])
 

@@ -34,7 +34,7 @@ conflating them overstates what is actually enforced:
 |---|---|---|---|
 | Pillow (+ pillow-heif) | photos, media previews | sandbox | yes |
 | Pillow (bare `PIL.Image`) | custom label icon resize | routed via `resize_label_icon` | yes |
-| Pillow (bare `PIL.Image`) | **embedded-metadata photo keywords** | interactive worker, credentialed | **no — P116** |
+| Pillow (bare `PIL.Image`) | embedded XMP/IPTC photo keywords | sandbox, read with the EXIF snapshot in `process_image_upload` | yes |
 | Pillow (bare `PIL.Image`) | **external API SpotGuessr round image** | request, unsandboxed | **no — P117** |
 | ffmpeg / ffprobe | video | sandbox | yes |
 | LibreOffice (`soffice`) | doc/spreadsheet conversion | sandbox | yes |
@@ -50,10 +50,11 @@ Not every parser is guarded (corrected 2026-09-10, P103 — this used to claim
 *sandboxing* blocker before `UL_UNTRUSTED_PARSE_POLICY=deny`; since 2026-09-13 it
 parses in `parse_import_preview_task` and finishes its lookups on an interactive
 worker (P2), and the label-icon resize that decoded in the request moved there too
-(P103). Two Pillow call sites still carry no decorator — a gap `warn` cannot even
-log, since nothing marks them: the embedded-metadata photo keyword provider, which
-decodes in the credentialed interactive worker (P116), and the external API's
-SpotGuessr round image, which decodes in the request (P117).
+(P103). The embedded-metadata keyword provider decoded the stored photo in the
+credentialed interactive worker until the same day (P116); the keywords are now read
+in the sandbox before the rewrite and kept on `Image.embedded_keywords`. One Pillow
+call site still carries no decorator — a gap `warn` cannot even log, since nothing
+marks it: the external API's SpotGuessr round image, which decodes in the request (P117).
 
 ## The tiers
 

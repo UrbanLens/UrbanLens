@@ -5226,23 +5226,6 @@ Not recommended: relying on staging's limits alone. Lower limits bound what stag
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
 
-## P116 — The embedded-metadata photo keyword provider decodes the stored upload in the credentialed interactive worker
-
-`id: P116` · `status: open` · `updated: 2026-09-13`
-
-`plugins/builtin/photo_keywords.py` `MetadataKeywordProvider.generate` opens the photo's stored file with
-`PIL.Image.open` and reads XMP (`getxmp`) and IPTC (`IptcImagePlugin.getiptcinfo`) from it. It carries no
-`untrusted_parse` decorator, and it runs in `tasks.generate_image_keywords` on `Queue.INTERACTIVE` - the
-`celery-worker` container, which holds REData and OAuth credentials and has full egress. That is the process
-`test_sandbox_isolation.py` records the analysis-thumbnail decode being moved out of, for this reason.
-
-The stored file is not always sandbox output. `images.downscale_stored_image` rewrites it only when it resizes,
-converts, or finds an EXIF block, so a small photo carrying XMP and no EXIF stays exactly as uploaded. Found by the
-P103 sweep of Pillow call sites on 2026-09-13; not yet reproduced with a test.
-
-Fix shape: read the embedded keywords where the file is already being decoded - `process_image_upload`, in the
-sandbox - and store them for the provider, instead of decoding again in the credentialed worker.
-
 ## P117 — The external API's SpotGuessr round image decodes and re-encodes a user's photo inside the request
 
 `id: P117` · `status: open` · `updated: 2026-09-13`

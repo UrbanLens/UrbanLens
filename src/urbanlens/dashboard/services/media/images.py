@@ -817,6 +817,81 @@ def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
             image_file.seek(0)
 
 
+def _xmp_subjects(xmp: dict[str, Any]) -> list[str]:
+    """Pull dc:subject keyword entries out of Pillow's parsed XMP dict.
+
+    Args:
+        xmp: The dict returned by ``PIL.Image.Image.getxmp()``.
+
+    Returns:
+        Keyword strings found in the XMP packet (may be empty).
+    """
+    keywords: list[str] = []
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key.lower() == "subject":
+                    _collect(value)
+                else:
+                    _walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    def _collect(value: Any) -> None:
+        # subject is usually {"Bag": {"li": [...]}} but flat forms exist too.
+        if isinstance(value, str):
+            keywords.append(value)
+        elif isinstance(value, list):
+            for item in value:
+                _collect(item)
+        elif isinstance(value, dict):
+            for item in value.values():
+                _collect(item)
+
+    _walk(xmp)
+    return keywords
+
+
+@untrusted_parse("image.exif")
+def extract_embedded_keywords(image_file: IO[bytes]) -> list[str] | None:
+    """Read the XMP ``dc:subject`` and IPTC 2:25 keywords a photographer embedded.
+
+    Read with the EXIF snapshot, before the stored file is rewritten: the rewrite keeps no XMP or IPTC.
+
+    Args:
+        image_file: The uploaded file or opened FieldFile to read.
+
+    Returns:
+        The normalized keywords, empty when the file carries none, or None when it cannot be parsed.
+    """
+    from PIL import IptcImagePlugin
+
+    from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, normalize_keywords
+
+    found: list[str] = []
+    try:
+        image_file.seek(0)
+        img = PILImage.open(image_file)
+        with contextlib.suppress(Exception):  # Pillow raises varied errors on malformed XMP
+            found.extend(_xmp_subjects(img.getxmp()))
+        with contextlib.suppress(OSError, SyntaxError):
+            entries = (IptcImagePlugin.getiptcinfo(img) or {}).get((2, 25)) or []
+            for entry in entries if isinstance(entries, list) else [entries]:
+                if isinstance(entry, bytes):
+                    found.append(entry.decode("utf-8", errors="replace"))
+                elif isinstance(entry, str):
+                    found.append(entry)
+    except Exception as exc:
+        logger.debug("Embedded keyword read failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    return [result.keyword for result in normalize_keywords([KeywordResult(keyword=keyword) for keyword in found])]
+
+
 #: Extensions that reach `_MUST_TRANSCODE_FORMATS`. Used only to decide whether
 #: the downscale pass is worth entering at all - the authoritative check is
 #: Pillow's reported format once the file is open, so a mislabelled file costs
