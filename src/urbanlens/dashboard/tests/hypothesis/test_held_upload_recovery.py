@@ -6,6 +6,7 @@ failed is never published: the owner is told it is processing for ever, and the 
 
 from __future__ import annotations
 
+from contextlib import suppress
 from itertools import count
 import os
 import shutil
@@ -181,6 +182,44 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
             published = tasks.publish_held_upload(key, profile.pk, held)
 
         self.assertTrue(published, "the sweep dropped the upload while its publish was decoding it")
+        profile.refresh_from_db()
+        self.assertEqual(profile.avatar_upload, "")
+        self.assertTrue(profile.avatar)
+
+    def test_a_duplicate_publish_ending_early_does_not_expose_the_one_still_decoding(self) -> None:
+        """A duplicate queued while the worker was backed up overlaps the publish, and hands itself to a retry first."""
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        _age(held, _HOUR)
+        key = "dashboard.Profile.avatar"
+        for _ in range(2):
+            with (
+                override_settings(**SANDBOX),
+                mock.patch(_REENCODE, side_effect=MemoryError),
+                self.assertRaises(MemoryError),
+            ):
+                tasks.publish_held_upload(key, profile.pk, held)
+
+        from urbanlens.dashboard.services.media import images
+
+        decode = images.reencode_image_file
+
+        def duplicate_then_sweep(
+            stored_file: IO[bytes], *, max_dimension: int | None, convert_webp: bool
+        ) -> tuple[bytes, str]:
+            with (
+                mock.patch(_REENCODE, side_effect=decode),
+                mock.patch.object(FileSystemStorage, "save", side_effect=OSError("storage unavailable")),
+                suppress(OSError),
+            ):
+                tasks.publish_held_upload(key, profile.pk, held)
+            self._sweep()
+            return decode(stored_file, max_dimension=max_dimension, convert_webp=convert_webp)
+
+        with override_settings(**SANDBOX), mock.patch(_REENCODE, side_effect=duplicate_then_sweep):
+            published = tasks.publish_held_upload(key, profile.pk, held)
+
+        self.assertTrue(published, "the sweep dropped the upload while its first publish was still decoding it")
         profile.refresh_from_db()
         self.assertEqual(profile.avatar_upload, "")
         self.assertTrue(profile.avatar)

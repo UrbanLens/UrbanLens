@@ -13352,6 +13352,9 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
 - **A review of that fix** found the sweep counted a publish still decoding as unfinished, so after two starts a deploy
   killed it dropped a third that was about to succeed. A running publish is marked in the cache for up to the task's
   hard time limit, and the sweep leaves it alone.
+- **A review of that** found overlapping duplicate publishes shared the one mark: a duplicate handed to a retry cleared
+  it while the first was still decoding, and the sweep dropped the upload. One publish of an upload runs at a time; a
+  duplicate that finds one running returns without counting a start.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

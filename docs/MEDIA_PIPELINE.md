@@ -212,7 +212,8 @@ failed enqueue would otherwise leave it "processing" for ever. It drops one whos
 publish has started three times without finishing, so a file that kills the worker is
 not fed to it every hour (a start that failed to write to storage and was handed to a
 retry finished, and is not counted, and one still running, for as long as the task's
-hard time limit allows, is left alone); counting starts rather than queues means a sandbox queue
+hard time limit allows, is left alone; a duplicate publish that finds one running
+returns without starting, so starts never overlap); counting starts rather than queues means a sandbox queue
 backed up behind a bulk import costs nobody their upload. A file storage cannot stat
 is skipped rather than ending the sweep, and a partial index on each `_upload` column
 means finding the held rows never reads the pin table. It also removes `unprocessed/` files no row names once they are

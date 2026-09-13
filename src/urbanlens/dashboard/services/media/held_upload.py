@@ -198,22 +198,26 @@ def publish_held(key: str, pk: int, held_name: str) -> bool:
     Raises:
         OSError: Storage could not hand back the held file.
     """
+    from django.conf import settings
+    from django.core.cache import cache
+
     held = HELD_FIELDS[key]
     row = apps.get_model(held.model).objects.filter(pk=pk, **{held.upload_column: held_name}).first()
     if row is None:
         return False
-    with getattr(row, held.field).storage.open(held_name, "rb") as handle:
-        raw = handle.read()
-    from django.conf import settings
-    from django.core.cache import cache
-
-    cache.set(_starts_key(held_name), cache.get(_starts_key(held_name), 0) + 1, timeout=_STARTS_TTL)
-    # A worker killed mid-publish never clears this, so it lasts only as long as the task may run.
-    cache.set(_running_key(held_name), 1, timeout=settings.CELERY_TASK_TIME_LIMIT)
+    running, token = _running_key(held_name), uuid.uuid4().hex
+    # A worker killed mid-publish never clears this, so it lasts only as long as the task may run. An unreachable cache
+    # neither adds nor reads it, and the publish goes ahead.
+    if not cache.add(running, token, timeout=settings.CELERY_TASK_TIME_LIMIT) and cache.get(running) is not None:
+        return False
     try:
+        with getattr(row, held.field).storage.open(held_name, "rb") as handle:
+            raw = handle.read()
+        cache.set(_starts_key(held_name), cache.get(_starts_key(held_name), 0) + 1, timeout=_STARTS_TTL)
         return _publish_read(held, key, row, raw)
     finally:
-        cache.delete(_running_key(held_name))
+        if cache.get(running) == token:
+            cache.delete(running)
 
 
 def _publish_read(held: HeldField, key: str, row: Model, raw: bytes) -> bool:
