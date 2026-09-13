@@ -158,14 +158,15 @@ class ImportConfirmedDoesTheWorkOffTheRequestTests(TestCase):
         """
         with (
             mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", TEST_CAP),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=None),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=mock.Mock()),
         ):
-            self.client.post(
+            response = self.client.post(
                 self.url,
                 data=json.dumps({"lists": _lists(TEST_CAP - 1), "auto_tag": False}),
                 content_type="application/json",
             )
 
+        self.assertEqual(response.status_code, 202, "the import was refused, so its pin count proves nothing")
         self.assertEqual(
             Pin.objects.filter(profile=self.user.profile).count(),
             0,

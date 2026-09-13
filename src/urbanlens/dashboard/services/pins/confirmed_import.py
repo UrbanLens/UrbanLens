@@ -17,9 +17,11 @@ import shutil
 from typing import TYPE_CHECKING, Any
 import uuid
 
+from django.conf import settings
+
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.core.bounded_cache import delete_quietly, get_or_none, set_or_skip
-from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus, import_dir
+from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -39,9 +41,31 @@ PROGRESS_EVERY = 25
 
 PAYLOAD_FILENAME = "confirmed.json"
 
+#: Its own subtree of ``MEDIA_ROOT``, because a selection can wait for a worker longer than the
+#: data import's hour; the vestigial sweep ages this one by the guard instead.
+ARTIFACT_DIRNAME = "confirmed_imports"
+
 TERMINAL_STATES = frozenset({"done", "error", "cancelled"})
 
 _CANCEL_LABEL = "confirmed import cancel"
+
+
+class ConfirmedImportStatus(ImportJobStatus):
+    """Job status that outlives the longest a confirmed import can wait for a worker."""
+
+    ttl_seconds = GUARD_TTL_SECONDS
+
+
+def job_dir(job_id: str) -> str:
+    """Where a confirmed import's selection waits for its task.
+
+    Args:
+        job_id: The import.
+
+    Returns:
+        An absolute path under ``MEDIA_ROOT``.
+    """
+    return os.path.join(settings.MEDIA_ROOT, ARTIFACT_DIRNAME, job_id)
 
 
 class ConfirmedImportRefusedError(Exception):
@@ -147,8 +171,8 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
         raise ConfirmedImportRefusedError("An import is already running.", 409, job_id=None if running in {None, single_flight.PENDING} else running)
 
     job_id = str(uuid.uuid4())
-    directory = import_dir(job_id)
-    status = ImportJobStatus(job_id)
+    directory = job_dir(job_id)
+    status = ConfirmedImportStatus(job_id)
     try:
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, PAYLOAD_FILENAME), "w", encoding="utf-8") as handle:
@@ -178,7 +202,7 @@ def read_status(user_id: int, job_id: str) -> dict[str, Any] | None:
         ``status``, ``progress``, ``message`` and ``result``, or None when there
         is no such import or it is someone else's - deliberately the same answer.
     """
-    data = ImportJobStatus(job_id).read()
+    data = ConfirmedImportStatus(job_id).read()
     if not data or data.get("user_id") != user_id:
         return None
     return {key: value for key, value in data.items() if key != "user_id"}
@@ -220,8 +244,8 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
-    status = ImportJobStatus(job_id)
-    directory = import_dir(job_id)
+    status = ConfirmedImportStatus(job_id)
+    directory = job_dir(job_id)
     counts: dict[str, Any] = {"total": 0, "current": 0, "created": 0, "exists": 0, "skipped": 0, "deferred": 0}
     percent = 0
     try:

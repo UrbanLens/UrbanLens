@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 import json
 import os
 from typing import Any
@@ -9,6 +10,7 @@ from unittest import mock
 
 from celery.exceptions import SoftTimeLimitExceeded
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.urls import reverse
 from model_bakery import baker
 
@@ -16,9 +18,15 @@ from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.core import single_flight
-from urbanlens.dashboard.services.import_export.import_data import import_dir
+from urbanlens.dashboard.services.import_export.import_data import IMPORT_TTL_SECONDS
+from urbanlens.dashboard.services.import_export.vestigial_assets import cleanup_vestigial_assets
 from urbanlens.dashboard.services.pins import confirmed_import
-from urbanlens.dashboard.services.pins.confirmed_import import PAYLOAD_FILENAME, guard_key, run_confirmed_import
+from urbanlens.dashboard.services.pins.confirmed_import import (
+    PAYLOAD_FILENAME,
+    guard_key,
+    job_dir,
+    run_confirmed_import,
+)
 from urbanlens.dashboard.tasks import run_confirmed_pin_import
 
 ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
@@ -68,7 +76,7 @@ class ConfirmedImportJobTests(TestCase):
         self.assertEqual(response.status_code, 202, response.content)
         job_id = response.json()["job_id"]
         enqueue.assert_called_once_with(run_confirmed_pin_import, self.profile.pk, job_id)
-        with open(os.path.join(import_dir(job_id), PAYLOAD_FILENAME), encoding="utf-8") as handle:
+        with open(os.path.join(job_dir(job_id), PAYLOAD_FILENAME), encoding="utf-8") as handle:
             self.assertEqual(json.load(handle)["lists"], _lists(3))
         self.assertEqual(self._pins(), 0)
 
@@ -91,7 +99,7 @@ class ConfirmedImportJobTests(TestCase):
         enqueue.assert_called_once()
 
     def test_an_unavailable_queue_leaves_nothing_behind(self) -> None:
-        root = os.path.dirname(import_dir("probe"))
+        root = os.path.dirname(job_dir("probe"))
         before = set(os.listdir(root)) if os.path.isdir(root) else set()
 
         with mock.patch(ENQUEUE, return_value=None):
@@ -120,7 +128,7 @@ class ConfirmedImportJobTests(TestCase):
         status = self.client.get(job["status_url"]).json()
         self.assertEqual(status["status"], "done")
         self.assertEqual(status["result"]["created"], 3)
-        self.assertFalse(os.path.exists(import_dir(job["job_id"])))
+        self.assertFalse(os.path.exists(job_dir(job["job_id"])))
         self.assertIsNone(single_flight.holder(guard_key(self.profile.pk)))
 
     def test_a_cancel_stops_the_import_at_its_next_progress_write(self) -> None:
@@ -164,7 +172,7 @@ class ConfirmedImportJobTests(TestCase):
         status = self.client.get(job["status_url"]).json()
         self.assertEqual(status["status"], "error")
         self.assertEqual(status["result"]["current"], 1)
-        self.assertFalse(os.path.exists(import_dir(job["job_id"])))
+        self.assertFalse(os.path.exists(job_dir(job["job_id"])))
         self.assertIsNone(single_flight.holder(guard_key(self.profile.pk)))
 
     def test_a_task_that_finishes_before_the_request_does_still_frees_the_account(self) -> None:
@@ -176,3 +184,24 @@ class ConfirmedImportJobTests(TestCase):
         self.assertEqual(self._pins(), 2)
         self.assertEqual(self.client.get(response.json()["status_url"]).json()["status"], "done")
         self.assertIsNone(single_flight.holder(guard_key(self.profile.pk)))
+
+    def test_a_selection_waiting_for_a_worker_outlives_the_data_import_sweep(self) -> None:
+        """Two full-size imports hold both bulk slots for over an hour, so a third can wait that long."""
+        response, _ = self._queued()
+        payload = os.path.join(job_dir(response.json()["job_id"]), PAYLOAD_FILENAME)
+        stored = datetime.fromtimestamp(os.stat(os.path.dirname(payload)).st_mtime, tz=UTC)
+
+        cleanup_vestigial_assets(now=stored + timedelta(seconds=IMPORT_TTL_SECONDS + 60))
+        self.assertTrue(os.path.exists(payload), "the sweep deleted a selection still waiting for its worker")
+
+        cleanup_vestigial_assets(now=stored + timedelta(seconds=confirmed_import.GUARD_TTL_SECONDS + 60))
+        self.assertFalse(os.path.exists(payload), "an abandoned selection was never swept")
+
+    def test_its_status_outlives_the_longest_it_can_wait(self) -> None:
+        with mock.patch.object(cache, "set", wraps=cache.set) as cache_set:
+            response, _ = self._queued()
+
+        job_id = response.json()["job_id"]
+        timeouts = [call.kwargs.get("timeout") for call in cache_set.call_args_list if job_id in str(call.args[0])]
+        self.assertTrue(timeouts, "no status was written for the job")
+        self.assertTrue(all(timeout >= confirmed_import.TIME_LIMIT_SECONDS for timeout in timeouts), timeouts)

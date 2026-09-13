@@ -149,7 +149,7 @@ export function importConfirmed(session, fixtures, tags) {
     }
 
     const statusPath = accepted.json("status_url");
-    const deadline = Date.now() + parseInt(fixtures.importTimeout, 10) * 1000;
+    const deadline = Date.now() + durationMs(fixtures.importTimeout);
     let polled = accepted;
     while (Date.now() < deadline) {
         sleep(1);
@@ -160,6 +160,16 @@ export function importConfirmed(session, fixtures, tags) {
         }
     }
     return polled;
+}
+
+/** A k6 duration such as `"230s"`, `"4m"` or `"1h"`, in milliseconds. A bare number is seconds. */
+function durationMs(value) {
+    const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)?$/.exec(String(value).trim());
+    if (!match) {
+        throw new Error(`Unreadable duration: ${value}`);
+    }
+    const scale = { ms: 1, s: 1000, m: 60000, h: 3600000 }[match[2] || "s"];
+    return Number(match[1]) * scale;
 }
 
 /** Every action by the name `schedule.js` refers to it by. */

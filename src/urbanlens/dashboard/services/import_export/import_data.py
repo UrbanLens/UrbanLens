@@ -52,7 +52,13 @@ class ImportResult:
 
 
 class ImportJobStatus:
-    """Cache-backed progress state for a user import job."""
+    """Cache-backed progress state for a user import job.
+
+    Attributes:
+        ttl_seconds: How long a status survives its last write.
+    """
+
+    ttl_seconds = IMPORT_TTL_SECONDS
 
     def __init__(self, job_id: str) -> None:
         self.job_id = job_id
@@ -77,7 +83,7 @@ class ImportJobStatus:
             data["result"] = result
         elif "result" in existing:
             data["result"] = existing["result"]
-        cache.set(self.cache_key, data, timeout=IMPORT_TTL_SECONDS)
+        cache.set(self.cache_key, data, timeout=self.ttl_seconds)
 
     def read(self) -> dict[str, Any]:
         """Return the current job status dict, or an empty dict when not found."""

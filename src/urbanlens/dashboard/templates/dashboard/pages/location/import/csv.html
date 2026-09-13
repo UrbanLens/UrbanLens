@@ -1187,16 +1187,38 @@ $('iw-btn-confirm').addEventListener('click', async function () {
 /* -- Follow the import the server is running --------------------------- */
 var importJob = null;
 var IMPORT_POLL_MS = 1000;
+var IMPORT_POLL_GIVE_UP_AFTER = 120;
+
+async function readImportState(url, signal) {
+    var res;
+    try {
+        res = await fetch(url, { signal: signal });
+    } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        return null;
+    }
+    if (res.status === 404) throw new Error('This import is no longer being tracked.');
+    if (!res.ok) return null;
+    try { return await res.json(); } catch (_) { return null; }
+}
 
 async function followImport(job, signal) {
     var shown = 0;
+    var failures = 0;
     while (true) {
         await new Promise(function (resolve) { setTimeout(resolve, IMPORT_POLL_MS); });
         if (signal.aborted) return;
-        var res = await fetch(job.status_url, { signal: signal });
-        if (!res.ok) throw new Error('Lost track of the import (' + res.status + ')');
-        var state = await res.json();
+        var state = await readImportState(job.status_url, signal);
+        if (state === null) {
+            failures += 1;
+            if (failures >= IMPORT_POLL_GIVE_UP_AFTER) {
+                throw new Error('Lost track of the import. It may still finish - check your map shortly.');
+            }
+            continue;
+        }
+        failures = 0;
         var r = state.result || {};
+        if (state.status === 'pending') $('iw-current-name').textContent = state.message || '';
         if (r.current && r.current !== shown) {
             shown = r.current;
             handleProgressEvent({
