@@ -1,9 +1,4 @@
-"""QuerySets/Managers for Consensus models.
-
-Points/leveling math lives in ``services.consensus.points``; trust scoring in
-``services.consensus.trust``; eligibility in ``services.consensus.eligibility``.
-These classes only scope and fetch rows.
-"""
+"""QuerySets/Managers for Consensus models (only scope/fetch rows; math lives in services.consensus)."""
 
 from __future__ import annotations
 

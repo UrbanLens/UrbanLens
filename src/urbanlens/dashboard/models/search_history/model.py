@@ -14,11 +14,7 @@ MAX_SEARCH_QUERY_LENGTH = 255
 
 
 class SearchHistory(abstract.DashboardModel):
-    """One remembered global-search query for a profile.
-
-    A (profile, query) pair is stored once; re-running bumps ``last_used``
-    and ``use_count`` instead of creating a duplicate row.
-    """
+    """One remembered global-search query per profile; re-running bumps last_used/use_count."""
 
     query = CharField(max_length=MAX_SEARCH_QUERY_LENGTH)
     last_used = DateTimeField(auto_now=True, db_index=True)

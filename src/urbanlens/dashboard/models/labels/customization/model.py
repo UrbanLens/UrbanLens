@@ -12,11 +12,7 @@ from urbanlens.dashboard.services.core.colors import clean_color
 
 
 class LabelCustomization(abstract.DashboardModel):
-    """Stores a user's display overrides for a global label.
-
-    Each field is nullable - null means "use the label's global value",
-    non-null means "override with this value".
-    """
+    """Per-user display overrides for a global label (null = use global value)."""
 
     profile = ForeignKey(
         "dashboard.Profile",
@@ -29,7 +25,6 @@ class LabelCustomization(abstract.DashboardModel):
         related_name="customizations",
         db_column="label_id",
     )
-    # Null = use global value.  Non-null = override.
     name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=50, null=True, blank=True)
     color = CharField(max_length=50, null=True, blank=True)
