@@ -429,7 +429,7 @@ def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
     from urbanlens.dashboard.services.media.held_upload import drop_held, publish_held
 
     try:
-        return publish_held(key, pk, held_name)
+        return publish_held(key, pk, held_name, attempt=self.request.id)
     except OSError as exc:
         if self.request.retries >= self.max_retries:
             logger.exception("The upload held for %s %s could not be read after %s retries", key, pk, self.request.retries)

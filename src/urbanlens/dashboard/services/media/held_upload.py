@@ -182,7 +182,7 @@ def queue_held_upload(instance: Model, field: str) -> None:
     transaction.on_commit(lambda: safely_enqueue_task(publish_held_upload, key, pk, name))
 
 
-def publish_held(key: str, pk: int, held_name: str) -> bool:
+def publish_held(key: str, pk: int, held_name: str, attempt: str | None = None) -> bool:
     """Write a re-encoded copy of a held upload into its field, if the row still holds that upload.
 
     One that cannot be decoded is dropped, and the field keeps what it showed.
@@ -191,6 +191,7 @@ def publish_held(key: str, pk: int, held_name: str) -> bool:
         key: The :attr:`HeldField.key`.
         pk: The row.
         held_name: The held upload's stored name.
+        attempt: The task id, which a redelivery or retry of the same publish keeps and a duplicate does not.
 
     Returns:
         Whether the field now shows the re-encoded upload.
@@ -205,11 +206,13 @@ def publish_held(key: str, pk: int, held_name: str) -> bool:
     row = apps.get_model(held.model).objects.filter(pk=pk, **{held.upload_column: held_name}).first()
     if row is None:
         return False
-    running, token = _running_key(held_name), uuid.uuid4().hex
-    # A worker killed mid-publish never clears this, so it lasts only as long as the task may run. An unreachable cache
-    # neither adds nor reads it, and the publish goes ahead.
-    if not cache.add(running, token, timeout=settings.CELERY_TASK_TIME_LIMIT) and cache.get(running) is not None:
-        return False
+    running, token = _running_key(held_name), attempt or uuid.uuid4().hex
+    # A worker killed mid-publish never clears this, so it lasts only as long as the task may run, and a redelivery takes
+    # back its own. An unreachable cache neither adds nor reads it, and the publish goes ahead.
+    if not cache.add(running, token, timeout=settings.CELERY_TASK_TIME_LIMIT):
+        if cache.get(running) not in {None, token}:
+            return False
+        cache.set(running, token, timeout=settings.CELERY_TASK_TIME_LIMIT)
     try:
         with getattr(row, held.field).storage.open(held_name, "rb") as handle:
             raw = handle.read()

@@ -18,6 +18,7 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.cache.backends.locmem import LocMemCache
 from django.core.cache.backends.redis import RedisCache
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage, default_storage
@@ -227,6 +228,29 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
         self.assertEqual(profile.avatar_upload, "")
         self.assertTrue(profile.avatar)
 
+    def test_a_publish_redelivered_after_a_cold_shutdown_is_published(self) -> None:
+        """A cold shutdown hands a running publish back unacknowledged, and the child it killed never cleared the mark."""
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        args = ("dashboard.Profile.avatar", profile.pk, held)
+        with (
+            override_settings(**SANDBOX),
+            mock.patch(_REENCODE, side_effect=MemoryError),
+            mock.patch.object(LocMemCache, "delete", return_value=False),
+            self.assertRaises(MemoryError),
+        ):
+            tasks.publish_held_upload.apply(args=args, task_id="delivery", throw=True)
+
+        with override_settings(**SANDBOX):
+            duplicate = tasks.publish_held_upload.apply(args=args, task_id="duplicate", throw=True).get()
+            self.assertFalse(duplicate, "the killed delivery left no mark, so nothing here tests a redelivery")
+            redelivered = tasks.publish_held_upload.apply(args=args, task_id="delivery", throw=True).get()
+
+        self.assertTrue(redelivered, "the redelivered publish took its own killed delivery for a duplicate")
+        profile.refresh_from_db()
+        self.assertEqual(profile.avatar_upload, "")
+        self.assertTrue(profile.avatar)
+
     def test_a_publish_goes_ahead_while_the_cache_is_down(self) -> None:
         """The running mark is a lock nothing can take in an outage; waiting on it would hold every upload."""
         profile = self._profile()
@@ -239,9 +263,14 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
         with outage[0], outage[1], outage[2], outage[3], mock.patch("django.core.cache.cache", down):
             self.assertFalse(down.add("held-upload-probe", 1), "the cache under test is not down")
             self.assertIsNone(down.get("held-upload-probe"), "the cache under test is not down")
-            with override_settings(**SANDBOX):
+            with override_settings(**SANDBOX), mock.patch.object(down, "add", wraps=down.add) as add:
                 published = tasks.publish_held_upload("dashboard.Profile.avatar", profile.pk, held)
 
+        self.assertIn(
+            f"held-upload-running:{held}",
+            [call.args[0] for call in add.call_args_list],
+            "the publish never asked the cache that is down",
+        )
         self.assertTrue(published, "a publish waited on a lock the cache could not hold")
         profile.refresh_from_db()
         self.assertEqual(profile.avatar_upload, "")

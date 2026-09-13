@@ -13358,6 +13358,10 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
 - **A review of that lock** found nothing a killed worker leaves can block a redelivery (a lost child is acked, and a
   lost worker's message returns after the two-hour visibility timeout, past the one-hour mark), but that no test held
   a publish to going ahead while the cache is down, and the docs said starts never overlap, which an outage allows.
+- **A review of that** found the redelivery reasoning missed a cold shutdown (SIGQUIT, or a second SIGTERM): the
+  worker kills its children and restores their unacknowledged messages at once, so the publish came straight back to
+  the mark its killed child left and returned without publishing, until the mark expired and a sweep re-queued it. The
+  mark now carries the Celery task id, which a redelivery keeps, and a publish takes back a mark with its own id.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file
