@@ -204,8 +204,14 @@ avatar or achievement icon is deleted; a replaced label or pin icon is kept, bec
 undo restores by stored name, and undo queues a held upload again. A publish lands
 while other requests hold the row in memory, so `models/abstract/held_upload.py`'s
 `HeldUploadModel` leaves the field and its `_upload` column out of a full `save()`
-unless that instance changed them; otherwise a settings form or the external API's
-profile PATCH would write back an empty field and a held name whose file is gone.
+unless that instance changed them (a row saved with no primary key is still inserted
+whole); otherwise a settings form or the external API's profile PATCH would write
+back an empty field and a held name whose file is gone. `sweep_held_uploads` (beat,
+hourly) queues the publish again for an upload held longer than 15 minutes, since a
+failed enqueue would otherwise leave it "processing" for ever, and drops one it has
+queued three times. It also removes `unprocessed/` files no row names once they are
+older than the undo window, which is how long a deleted label or pin can still come
+back with its held upload.
 The owner's page says the avatar is processing, and the external API's profile
 detail carries `avatar_pending` for the caller's own profile.
 `test_every_icon_and_avatar_is_hidden_until_reencoded.py` fails on any stored file

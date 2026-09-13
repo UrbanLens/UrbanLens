@@ -49,7 +49,7 @@ class HeldUploadModel(django_models.Model):
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         loaded: dict[str, str] = self.__dict__.get("_held_loaded", {})
-        if loaded and not args and not self._state.adding and kwargs.get("update_fields") is None and not kwargs.get("force_insert"):
+        if loaded and not args and not self._state.adding and self.pk is not None and kwargs.get("update_fields") is None and not kwargs.get("force_insert"):
             unchanged = {column for column, value in loaded.items() if self._held_value(column) == value}
             if unchanged:
                 kwargs["update_fields"] = [field.name for field in self._meta.concrete_fields if not field.primary_key and not field.generated and field.name not in unchanged and field.attname in self.__dict__]

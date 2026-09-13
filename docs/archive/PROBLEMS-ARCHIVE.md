@@ -13338,6 +13338,10 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   `process_image_upload`. Icons and avatars were served from the moment of upload. Holding them (below) opened a
   race: a full `save()` of a row read before the publish wrote the old names back, so `HeldUploadModel` leaves those
   columns out of a full save the instance did not change them in.
+- **A review of the held design** found that a failed enqueue left an upload held for ever, with nothing to re-queue
+  it and nothing to remove held files a deleted row left behind, and that the full-save guard made Django's copy
+  idiom (`pk = None; save()`) raise. `sweep_held_uploads` recovers and removes them; a row with no primary key is
+  inserted whole.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

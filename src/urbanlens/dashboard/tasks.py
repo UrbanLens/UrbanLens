@@ -1512,6 +1512,23 @@ def sweep_stale_preview_sources() -> int:
 
 
 @shared_task(queue=Queue.MAINTENANCE)
+def sweep_held_uploads() -> int:
+    """Recover held icons and avatars whose publish never ran, and remove held files nothing names.
+
+    Deliberately not on the sandbox queue - it enqueues, it does not parse.
+
+    Returns:
+        How many held uploads were queued or dropped, plus how many files were removed.
+    """
+    from urbanlens.dashboard.services.media.held_upload import sweep_held_uploads as sweep
+
+    handled, removed = sweep()
+    if handled or removed:
+        logger.info("Held uploads: %s queued or dropped, %s unnamed file(s) removed", handled, removed)
+    return handled + removed
+
+
+@shared_task(queue=Queue.MAINTENANCE)
 def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     """Re-enqueue uploads whose processing task never ran.
 

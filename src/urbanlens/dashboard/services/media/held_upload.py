@@ -8,6 +8,7 @@ field only ever names a file this server encoded, and nothing that shows it need
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 import io
 import logging
 from typing import TYPE_CHECKING, Any
@@ -36,6 +37,12 @@ ICON_MAX_PX = 256
 
 #: The longest side a stored avatar keeps.
 AVATAR_MAX_PX = 512
+
+#: How long a held upload waits before the sweep takes it that its publish was never queued.
+STALLED_HELD_AGE = timedelta(minutes=15)
+
+#: How many times the sweep queues one held upload before dropping it.
+MAX_HELD_SWEEPS = 3
 
 
 def _touch_label_pins(label_id: int) -> None:
@@ -259,3 +266,63 @@ def reencode_shown(key: str, pk: int, name: str) -> bool:
     if changed and held.after_publish is not None:
         held.after_publish(pk)
     return changed
+
+
+def sweep_held_uploads() -> tuple[int, int]:
+    """Queue held uploads whose publish never ran, drop ones queued too often, and remove held files nothing names.
+
+    A file whose row was deleted is kept past the undo window, because undo restores the row with the held name.
+
+    Returns:
+        How many held uploads were queued or dropped, and how many unnamed files were removed.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.undo.model import UNDO_RETENTION
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import publish_held_upload
+
+    now = timezone.now()
+    handled = 0
+    named: set[str] = set()
+    storages: dict[int, Storage] = {}
+    for held in HELD_FIELDS.values():
+        storage = storages.setdefault(id(held.storage), held.storage)
+        rows = apps.get_model(held.model).objects.exclude(**{held.upload_column: ""}).values_list("pk", held.upload_column)
+        for pk, name in rows.iterator():
+            named.add(name)
+            try:
+                stalled = now - storage.get_modified_time(name) >= STALLED_HELD_AGE
+            except FileNotFoundError:
+                handled += drop_held(held.key, pk, name)
+                continue
+            if not stalled:
+                continue
+            attempts_key = f"held-upload-sweeps:{name}"
+            attempts = cache.get(attempts_key, 0)
+            if attempts >= MAX_HELD_SWEEPS:
+                logger.warning("Dropping the upload held for %s %s: its publish was queued %s times and never ran", held.key, pk, attempts)
+                drop_held(held.key, pk, name)
+            else:
+                cache.set(attempts_key, attempts + 1, timeout=int(timedelta(days=2).total_seconds()))
+                safely_enqueue_task(publish_held_upload, held.key, pk, name)
+            handled += 1
+
+    removed = 0
+    for storage in storages.values():
+        try:
+            _directories, files = storage.listdir(HELD_PREFIX)
+        except FileNotFoundError:
+            continue
+        for file in files:
+            name = f"{HELD_PREFIX}/{file}"
+            if name in named:
+                continue
+            try:
+                age = now - storage.get_modified_time(name)
+            except FileNotFoundError:
+                continue
+            if age >= UNDO_RETENTION + timedelta(days=1):
+                _delete_quietly(storage, name)
+                removed += 1
+    return handled, removed
