@@ -104,7 +104,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P110 | open | 2026-09-10 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-10 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P112 | open | 2026-09-10 | `bun run codeql:gate` fails with 26 untriaged findings, so nobody runs it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P113 | open | 2026-09-11 | 54 verified places where one account's ordinary use can degrade the site for everyone else | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P113 | open | 2026-09-13 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 6 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |

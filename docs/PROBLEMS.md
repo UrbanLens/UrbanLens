@@ -4220,9 +4220,9 @@ is that a vulnerability gets a failing test reproducing the attack first, always
 Recorded rather than fixed because 26 findings across five rule families is its own piece of work,
 and doing it badly — dismissing in bulk to make a gate green — is worse than leaving it red.
 
-## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else
+## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else - 6 still open
 
-`id: P113` · `status: open` · `updated: 2026-09-11`
+`id: P113` · `status: open` · `updated: 2026-09-13`
 
 A sixteen-dimension sweep of the application, re-judged by hostile reviewers who were given the
 claim but not the finder's evidence, returned **54 real findings**: 10 critical, 41 high, 3 medium.
@@ -4242,6 +4242,42 @@ The count is the least interesting part. They fall into five families, and the f
 
 Three of those five already have a written design that has not been built. That is the finding worth
 acting on: this is not 54 unrelated bugs, it is mostly three unbuilt phases, measured.
+
+## The work list
+
+Re-verified against the code on 2026-09-13, because neither of the two documents about this effort
+was a status board and the register had drifted badly: of the first eight rows opened that day,
+three were already fixed, one was half-fixed and two were split across other entries. **Check a row
+against the code before starting it. Twelve entries so far have turned out already closed.**
+
+**Closed** — 55 of the 64: H01 H02 H03 H04 H07 H08 H09 H10 H11 H12 H13 H14 H15 H17 H18 H19 H20 H22
+H24 H25 H26 H27 H28 H29 H30 H31 H32 H33 H35 H36 H37 H38 H39 H40 H41 H42 H43 H45 H46 H48 H49 H50 H51
+H52 H53 H57 H58 H59 H60 H61 H62 H63 H64. H16 was overstated and needs nothing. H08 closed with H26 —
+one cap on one view, entered twice at different severities.
+
+**Open, and what is actually left of each:**
+
+| ref | severity | what remains | why it is not done |
+|---|---|---|---|
+| H05 | medium | The DM recipient picker evaluates `can_direct_message` **and** `can_view_profile` per candidate, for up to `RECIPIENT_SEARCH_LIMIT * 4` candidates, on every keystroke past two characters | — |
+| H06 | medium | `pinned_place_keys` reads a profile's whole `Pin` table into a Python set, and the pair check calls it for both sides. The galleries memoise it now; the picker, the profile page and trip comments still pay it | — |
+| H23 | medium | The saved-filter uuid list is keyed by a fingerprint of the profile's pins, so every pin edit strands the previous copy in Valkey for a day | Coupled to H54: the fix is either a key registry or the cache split |
+| H54 | high | One 512MB Valkey holds sessions, Channels, the Django cache and the broker in one keyspace under `volatile-lru`, and only the broker's keys have no TTL | PL7 phase 4, designed and unbuilt |
+| H55 | high | `client_max_body_size 200m` with `client_body_temp_path /tmp/client_temp`, so an unauthenticated POST body spools to the container's writable layer | — |
+| H56 | high | Under gevent a request that spends its timeout in non-yielding CPU takes the whole worker down. `--worker-connections 20` bounds the blast radius to 19 requests; it does not remove it | D11 phase 3a (gthread), designed and unbuilt |
+
+**Parked by decision, not forgotten:**
+
+| ref | parked because |
+|---|---|
+| H21 | Bounded at `MAX_PREVIEW_PINS`. The two real fixes are a schema change or PL7 phase 4; choosing here pre-empts that plan |
+| H34 | The attribution half is built; the fair-share limiter is designed as D14 and not started |
+| H44 | 15 queries → 11. The remaining cut makes the gallery path worse, so it is a trade-off to decide rather than an optimisation to apply — numbers above |
+| H47 | Only the pagination half. `visible_comment_tree` filters in Python, so paginating the queryset returns short pages and changes the API contract |
+
+One residual with no row of its own: the markup listing reports `truncated` in JSON and three
+consumers ignore it, so a cut map looks like a complete one. `map-annotations.ts` already solved
+this shape for the photo layer.
 
 **The one with no existing design** is the first. `external_api/throttling.py` is rich and
 DRF-only; `services/core/rate_limiter.py` caps *outbound* third-party spend, not inbound load. So
