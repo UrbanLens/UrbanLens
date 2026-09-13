@@ -131,6 +131,31 @@ class TheListingIsCappedTests(_MarkupCase):
         self.assertEqual(len(body["markup_items"]), 3)
         self.assertFalse(body["truncated"])
 
+    @override_settings(**{ITEMS_SETTING: 5})
+    def test_a_shape_drawn_past_the_ceiling_comes_back(self) -> None:
+        """Pin markup has no create ceiling, so a cut that keeps the oldest hides every new shape as it is saved."""
+        self._seed(20)
+        response = self._create(
+            {"type": "LineString", "coordinates": [[-74.0, 40.0], [-74.1, 40.1]]}, markup_type="line"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        newest = PinMarkup.objects.order_by("-created", "-pk").first()
+        assert newest is not None  # nosec B101
+
+        uuids = [item["uuid"] for item in self._read().json()["markup_items"]]
+
+        self.assertIn(str(newest.uuid), uuids)
+
+    @override_settings(**{ITEMS_SETTING: 5})
+    def test_the_kept_page_is_the_newest_still_drawn_oldest_first(self) -> None:
+        """Later shapes render over earlier ones, so keeping the newest must not flip that."""
+        self._seed(20)
+        newest_first = PinMarkup.objects.order_by("-created", "-pk").values_list("uuid", flat=True)[:5]
+
+        uuids = [item["uuid"] for item in self._read().json()["markup_items"]]
+
+        self.assertEqual(uuids, [str(uuid) for uuid in reversed(newest_first)])
+
 
 class AMapCannotOutgrowItsReaderTests(_MarkupCase):
     """Items are created one at a time, and nothing counted how many there were.

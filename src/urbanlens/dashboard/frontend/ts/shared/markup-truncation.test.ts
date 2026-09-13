@@ -1,7 +1,7 @@
 /**
  * A capped markup listing has to say it was capped.
  *
- * `MarkupJsonView` and the safety contact route stop at
+ * `MarkupJsonView` and the safety contact route keep the newest
  * `MARKUP_MAX_ITEMS_PER_RESPONSE` and report `truncated`, reading one row past
  * the ceiling so the flag costs no COUNT - which is also why there is no total
  * to show. Nothing in the browser read the flag, so a cut map rendered exactly
@@ -33,12 +33,12 @@ describe("markupTruncationNotice", () => {
         expect(markupTruncationNotice(12, 1)).toBeNull();
     });
 
-    test("names how many are shown when the listing was cut", () => {
-        expect(markupTruncationNotice(500, true)).toContain("first 500 drawings");
+    test("names how many are shown, and that they are the newest", () => {
+        expect(markupTruncationNotice(500, true)).toContain("500 most recent drawings");
     });
 
     test("uses the singular for one", () => {
-        expect(markupTruncationNotice(1, true)).toContain("first 1 drawing.");
+        expect(markupTruncationNotice(1, true)).toContain("1 most recent drawing.");
     });
 
     test("does not claim a total the server never sent", () => {
@@ -54,7 +54,7 @@ describe("reportMarkupTruncation", () => {
 
         const notes = host.querySelectorAll(NOTE);
         expect(notes.length).toBe(1);
-        expect(notes[0]!.textContent).toContain("first 5 drawings");
+        expect(notes[0]!.textContent).toContain("5 most recent drawings");
     });
 
     test("a complete listing leaves no note", () => {
@@ -73,7 +73,7 @@ describe("reportMarkupTruncation", () => {
 
         const notes = host.querySelectorAll(NOTE);
         expect(notes.length).toBe(1);
-        expect(notes[0]!.textContent).toContain("first 6 drawings");
+        expect(notes[0]!.textContent).toContain("6 most recent drawings");
     });
 
     test("a reload that is no longer cut clears the note", () => {

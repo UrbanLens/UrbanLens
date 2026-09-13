@@ -4346,6 +4346,16 @@ loader in `_safety_map_script.html` renders the contact portal. Both now call
 `MarkupEngine.reportMarkupTruncation`, which puts one note on the map wrapper and removes it on a
 reload that is no longer cut.
 
+Reading the flag exposed what the cut kept. Both readers ordered by `created` and sliced, so a
+capped listing was the *oldest* page. Pin and wiki markup have no create ceiling (`_map_is_full`
+covers standalone maps only), so once a pin passed the ceiling every new shape was saved and never
+shown — including the one the toolbar had just saved and was about to open for editing.
+`_bounded_markup_rows` now owns the order: the newest page, returned oldest first so later shapes
+still draw on top. `MarkupMap.to_snapshot` still slices oldest-first. That differs only for a map
+holding more than the ceiling, which the create door has refused since H39; a map that already held
+more before then would round-trip through the composer without its newest shapes, where newest-first
+would lose its oldest instead.
+
 The note names how many are shown, not how many exist. The reader fetches one row past its ceiling
 instead of counting, and a total would put the COUNT back on a route the magic link makes public.
 It sits below the line-finish tip's slot, because the bottom centre of these maps already holds the

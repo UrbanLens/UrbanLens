@@ -633,7 +633,7 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
 export function markupTruncationNotice(shown: number, truncated: unknown): string | null {
     if (truncated !== true) return null;
     const count = Math.max(0, Math.floor(shown));
-    return `Showing the first ${count} ${count === 1 ? "drawing" : "drawings"}. This map has more than can be shown at once.`;
+    return `Showing the ${count} most recent ${count === 1 ? "drawing" : "drawings"}. This map has more than can be shown at once.`;
 }
 
 /**

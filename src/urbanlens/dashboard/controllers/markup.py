@@ -156,20 +156,25 @@ def _geometry_too_large(geometry: dict) -> JsonResponse | None:
 
 
 def _bounded_markup_rows(items: Any) -> tuple[list[Any], bool]:
-    """The first page of a markup queryset, and whether anything was cut.
+    """The newest page of a markup queryset, and whether anything was cut.
+
+    The newest rather than the first: pin and wiki markup have no create
+    ceiling, so a page of the oldest would hide every shape drawn once a
+    subtree passed it, including the one just saved.
 
     Args:
-        items: A ``PinMarkup`` queryset, already ordered by the caller.
+        items: A ``PinMarkup`` queryset. Its ordering is replaced.
 
     Returns:
-        ``(rows, truncated)``, reading one past the ceiling so "there are more"
-        comes from the same query.
+        ``(rows, truncated)`` with rows oldest first, so later shapes still
+        render on top, reading one past the ceiling so "there are more" comes
+        from the same query.
     """
     from django.conf import settings
 
     ceiling = settings.MARKUP_MAX_ITEMS_PER_RESPONSE
-    rows = list(items[: ceiling + 1])
-    return rows[:ceiling], len(rows) > ceiling
+    rows = list(items.order_by("-created", "-pk")[: ceiling + 1])
+    return rows[:ceiling][::-1], len(rows) > ceiling
 
 
 def _map_is_full(owner_kwargs: dict) -> JsonResponse | None:
@@ -395,7 +400,7 @@ class MarkupJsonView(LoginRequiredMixin, View):
 
             visible_layer_ids = set(visible_rows(CustomLayer.objects.for_wiki(owner), owner, profile).values_list("pk", flat=True))
 
-        rows, truncated = _bounded_markup_rows(items.select_related("layer").order_by("created"))
+        rows, truncated = _bounded_markup_rows(items.select_related("layer"))
         markup_items = []
         for m in rows:
             entry = m.to_json()
@@ -458,7 +463,7 @@ class SafetyContactMarkupJsonView(View):
             return JsonResponse({"markup_items": []})
         # Capped like the signed-in reader: this route is reachable by anyone
         # holding the magic link, so it is the *less* guarded of the two.
-        rows, truncated = _bounded_markup_rows(PinMarkup.objects.for_map(markup_map).order_by("created"))
+        rows, truncated = _bounded_markup_rows(PinMarkup.objects.for_map(markup_map))
         return JsonResponse({"markup_items": [m.to_json() for m in rows], "truncated": truncated})
 
 

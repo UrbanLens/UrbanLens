@@ -438,6 +438,29 @@ class SafetyContactPortalEscalationGateTests(TestCase):
         self.assertEqual(len(body["markup_items"]), 3)
         self.assertTrue(body["truncated"])
 
+    @override_settings(MARKUP_MAX_ITEMS_PER_RESPONSE=3)
+    def test_a_capped_route_map_shows_its_newest_drawings(self):
+        """Route changes are drawn last, so a cut that keeps the oldest shows a contact the first draft."""
+        markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)
+        self.checkin.markup_map = markup_map
+        self.checkin.save(update_fields=["markup_map", "updated"])
+        for _ in range(10):
+            baker.make(
+                "dashboard.PinMarkup",
+                parent_map=markup_map,
+                profile=self.profile,
+                markup_type="line",
+                geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            )
+        self._escalate()
+        newest_first = markup_map.items.order_by("-created", "-pk").values_list("uuid", flat=True)[:3]
+
+        body = self.client.get(reverse("safety.contact.markup.json", kwargs={"token": self.contact.token})).json()
+
+        self.assertEqual(
+            [item["uuid"] for item in body["markup_items"]], [str(uuid) for uuid in reversed(newest_first)]
+        )
+
     def test_portal_is_a_404_for_an_unknown_token(self):
         self.assertEqual(self.client.get(reverse("safety.contact.portal", kwargs={"token": uuid4()})).status_code, 404)
 
