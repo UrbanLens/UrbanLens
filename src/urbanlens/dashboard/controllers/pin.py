@@ -173,7 +173,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
         from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
-        from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.comments.comments import visible_comment_count
 
         try:
@@ -307,7 +306,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_alias_suggestions": pin.aliases.order_by(Case(When(kind=AliasType.OFFICIAL, then=0), default=1), "name"),
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
-                "all_categories": Label.objects.categories().in_display_order(),
                 "default_map_view": profile.default_map_view,
                 "markup_fill_color": profile.markup_fill_color,
                 "markup_fill_opacity": profile.markup_fill_opacity,

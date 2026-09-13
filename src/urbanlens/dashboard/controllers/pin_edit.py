@@ -127,7 +127,6 @@ def _overview_context(pin: Pin) -> dict:
         "pin": pin,
         "client_version": _pin_version(pin),
         "pin_type_choices": PinType.choices,
-        "all_categories": Label.objects.categories().in_display_order(),
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,

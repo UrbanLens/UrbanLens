@@ -187,7 +187,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         tags = Label.objects.tags().visible_to(profile).in_display_order()
-        categories = Label.objects.categories().in_display_order()
         filter_labels = Label.objects.exclude(kind=KIND_USER).visible_to(profile).in_display_order()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
@@ -228,7 +227,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             {
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "tags": tags,
-                "categories": categories,
                 "filter_labels": filter_labels_list,
                 "filter_labels_json": filter_labels_json,
                 "custom_filter_fields": custom_filter_fields,
