@@ -23,6 +23,7 @@ from django.db.models import (
 from django.db.models.functions import Lower
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.held_upload import HeldUploadModel
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CHOICES, KIND_TAG
 from urbanlens.dashboard.models.labels.queryset import LabelManager
 from urbanlens.dashboard.services.core.colors import clean_color
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class Label(abstract.FrontendDashboardModel):
+class Label(HeldUploadModel, abstract.FrontendDashboardModel):
     """A named label that can be applied to pins.
 
     Labels are either global (profile=None, visible to all users) or user-specific
@@ -59,6 +60,8 @@ class Label(abstract.FrontendDashboardModel):
     color = CharField(max_length=50, null=True, blank=True, choices=COLOR_CHOICES)
     icon = CharField(max_length=50, null=True, blank=True)  # emoji char or Material Icons name
     custom_icon = ImageField(upload_to="label_icons/", null=True, blank=True)
+    #: An uploaded icon the sandbox worker has not re-encoded yet; see services.media.held_upload.
+    custom_icon_upload = CharField(max_length=255, blank=True, default="")
     # Discriminates tags from categories (and any future kinds).
     kind = CharField(max_length=20, choices=KIND_CHOICES, default=KIND_TAG, db_index=True)
     # Higher order = checked first in the icon priority chain.
@@ -380,6 +383,8 @@ class Label(abstract.FrontendDashboardModel):
         get_latest_by = "updated"
         permissions = [("edit_global_label", "Can edit global labels")]
         indexes = [
+            # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
+            Index(fields=["custom_icon_upload"], name="idxdb_label_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
         ]
         constraints = [

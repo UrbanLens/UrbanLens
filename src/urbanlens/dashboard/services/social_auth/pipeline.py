@@ -29,6 +29,7 @@ from django.urls import reverse
 
 from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT, SESSION_WEBAUTHN_PENDING_USER, has_second_factor
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, UsernameGenerator, username_is_taken
+from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
 from urbanlens.dashboard.services.profile.avatar import AvatarService
 
 if TYPE_CHECKING:
@@ -138,7 +139,7 @@ def fetch_and_save_avatar(
         logger.warning("No profile found for user %s; skipping avatar fetch", user.pk)
         return
 
-    if profile.avatar:
+    if profile.avatar or profile.avatar_upload:
         return
 
     avatar_url = AvatarService.resolve_provider_url(backend, user, response)
@@ -149,8 +150,8 @@ def fetch_and_save_avatar(
     if not image_bytes:
         return
 
-    filename = f"sso_avatar_{user.pk}.jpg"
-    profile.avatar.save(filename, ContentFile(image_bytes), save=True)
+    profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(image_bytes))])
+    queue_held_upload(profile, "avatar")
     logger.info("Saved SSO avatar for user %s from %s", user.username, backend.name)
 
 

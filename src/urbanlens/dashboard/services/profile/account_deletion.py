@@ -125,10 +125,12 @@ def _delete_file_field(instance, field_name: str, *, label: str) -> None:
         label: Short description for the failure log line.
     """
     field_file = getattr(instance, field_name)
-    if not field_file:
-        return
+    held = getattr(instance, f"{field_name}_upload", "")
     try:
-        field_file.delete(save=False)
+        if field_file:
+            field_file.delete(save=False)
+        if held:
+            field_file.storage.delete(held)
     except OSError:
         logger.exception("Failed to delete %s file for %s %s", field_name, label, instance.pk)
 

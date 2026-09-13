@@ -135,4 +135,4 @@ class EmbeddedKeywordsAreReadInTheSandboxTests(TestCase):
         copy = attach_deduped_copy(self.image, self.profile, self.profile, "")
 
         copy.refresh_from_db()
-        self.assertEqual(copy.embedded_keywords, self.image.embedded_keywords)
+        self.assertEqual(copy.embedded_keywords, ["abandoned", "sanatorium"])

@@ -24,6 +24,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.addressable import collapse_identity_fields
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoices
+from urbanlens.dashboard.models.abstract.held_upload import HeldUploadModel
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
@@ -105,7 +106,7 @@ PIN_TYPE_ICONS: dict[str, str] = {
 }
 
 
-class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
+class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """A user's personal record for a physical location.
 
     Pin is the *personal* half of the two-model design:
@@ -141,6 +142,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # queue finite without affecting whether the pin counts as visited elsewhere.
     unlogged_visit_dismissed = BooleanField(default=False)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
+    #: An uploaded icon the sandbox worker has not re-encoded yet; see services.media.held_upload.
+    custom_icon_upload = CharField(max_length=255, blank=True, default="")
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
     # True when ``pin_type`` was explicitly chosen by the user, exactly like
     # name_is_user_provided guards ``name``. Automatic classification (see
@@ -1019,6 +1022,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [
+            # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
+            Index(fields=["custom_icon_upload"], name="idxdb_pin_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["profile", "priority"], name="idxdb_pin_pfile_prio"),
             Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),

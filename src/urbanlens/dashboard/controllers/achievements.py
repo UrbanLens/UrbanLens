@@ -30,6 +30,7 @@ from urbanlens.dashboard.services.achievements.metrics import all_metrics, group
 # App Imports
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.numbers import safe_int
+from urbanlens.dashboard.services.media.held_upload import discard_held_upload, hold_upload, queue_held_upload
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -177,12 +178,19 @@ def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
     return None
 
 
-def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
+#: The fields :func:`_apply_form` always sets.
+_FORM_FIELDS = ("name", "description", "metric", "threshold", "icon", "color", "order", "is_active", "is_secret")
+
+
+def _apply_form(achievement: Achievement, request: HttpRequest) -> list[str]:
     """Copy submitted form values onto *achievement* without saving it.
 
     Args:
         achievement: The instance to populate.
         request: The request carrying the POSTed form.
+
+    Returns:
+        The fields it set, for the save.
 
     Raises:
         ValidationError: When a required field is missing or unparseable, so the
@@ -218,16 +226,20 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
         upload_error = image_upload_error(uploaded, MediaKind.PHOTO)
         if upload_error:
             raise ValidationError({"custom_icon": upload_error[0]})
-        achievement.custom_icon = uploaded
-    elif request.POST.get("clear_custom_icon"):
+        achievement.full_clean(exclude=["slug", "uuid"])
+        return [*_FORM_FIELDS, hold_upload(achievement, "custom_icon", uploaded)]
+    if request.POST.get("clear_custom_icon"):
         # Clearing the field alone leaves the file on disk (Django never
         # deletes FileField storage), where the media gate's icon branch keeps
         # serving it - the same orphan class as deleted comment photos.
         if achievement.custom_icon:
             achievement.custom_icon.delete(save=False)
         achievement.custom_icon = None
+        achievement.full_clean(exclude=["slug", "uuid"])
+        return [*_FORM_FIELDS, "custom_icon", discard_held_upload(achievement, "custom_icon")]
 
     achievement.full_clean(exclude=["slug", "uuid"])
+    return list(_FORM_FIELDS)
 
 
 class SiteAdminAchievementsView(_AchievementAdminMixin, View):
@@ -253,6 +265,7 @@ class SiteAdminAchievementsView(_AchievementAdminMixin, View):
             )
 
         achievement.save()
+        queue_held_upload(achievement, "custom_icon")
         messages.success(request, f"Created achievement “{achievement.name}”. Backfilling existing users…")
         return render(request, "dashboard/partials/admin/_achievement_rows.html", _admin_context())
 
@@ -267,7 +280,7 @@ class SiteAdminAchievementEditView(_AchievementAdminMixin, View):
     def post(self, request: HttpRequest, achievement_id: int) -> HttpResponse:
         achievement = get_object_or_404(Achievement, pk=achievement_id)
         try:
-            _apply_form(achievement, request)
+            fields = _apply_form(achievement, request)
         except ValidationError as exc:
             return render(
                 request,
@@ -276,7 +289,9 @@ class SiteAdminAchievementEditView(_AchievementAdminMixin, View):
                 status=400,
             )
 
-        achievement.save()
+        # Named, so an icon the sandbox published since the achievement was read is not written back.
+        achievement.save(update_fields=[*fields, "updated"])
+        queue_held_upload(achievement, "custom_icon")
         messages.success(request, f"Updated achievement “{achievement.name}”.")
         return render(request, "dashboard/partials/admin/_achievement_rows.html", _admin_context())
 

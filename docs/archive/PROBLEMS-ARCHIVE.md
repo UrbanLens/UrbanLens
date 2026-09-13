@@ -11,6 +11,55 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-13: A stored photo kept its XMP, IPTC, comment or PNG text unless it also carried EXIF
+
+`id: P118` · `status: fixed` · `resolved: 2026-09-13`
+
+`images.downscale_stored_image` rewrote a photo only when it resized, converted to WebP, or found an EXIF block, and
+kept the original when a plain resize came out larger. A photo whose only metadata was XMP (which can carry GPS),
+IPTC, a JPEG comment or PNG text was stored and served exactly as uploaded. GIF, BMP and animated images were never
+rewritten at all, whatever they carried. A rewrite was not clean either: on Pillow 12.3 the JPEG and GIF writers copy
+the source's comment unless told otherwise, and the TIFF writer copies XMP, IPTC and Photoshop tags from a TIFF
+source. Reproduced before the fix, across JPEG, PNG, WebP, GIF, animated GIF, TIFF and AVIF fixtures, with and
+without WebP conversion.
+
+Every photo is now re-encoded, under one policy (`storage.get_stored_photo_policy`: the uploader's plan,
+subscription and own cap, WebP unless exempt). `images.pixels_only` hands each writer a plain `Image` holding only
+pixels and palette transparency; the ICC profile is passed explicitly where the format carries one. Animated GIF,
+PNG and WebP keep their frames while the resized frames fit Pillow's pixel budget. HEIF, MPO and any other format
+Pillow opens are transcoded. A pending upload whose re-encode fails is retried and then removed rather than
+published. The grid, marker and analysis thumbnails, media previews and shrunk label icons use `pixels_only` too;
+the analysis JPEG, sent to outside AI providers, did carry a legacy file's comment.
+
+`strip_exif_from_stored_photos` now re-encodes every stored photo, not only those with EXIF, under the format
+policy but keeping dimensions, and rewrites an existing analysis copy. It has to be run once on production. Every
+run re-encodes again. It skips a photo still pending, whose upload task owns that file, and records no GPS for an
+owner who turned location off, as the upload task does; the first review of the fix found both.
+
+`tests/hypothesis/test_every_stored_photo_is_reencoded.py` guards all of it. It plants a unique marker in 34 fixtures:
+EXIF (IFD0, GPS and Exif sub-IFDs), XMP, IPTC, JPEG and GIF comments, PNG text, compressed zTXt and iTXt, Photoshop
+tags, per-page TIFF tags and trailing bytes, across every stored format including animated ones. It then searches the
+raw bytes, every inflated zlib stream and everything Pillow reads back from each frame. Covered: the stored file under
+both format policies and a resize, every thumbnail, preview and icon, and a real upload through the vault endpoint,
+upload task and media gate. The detector's own tests prove each marker is findable before the pipeline runs.
+
+**Not changed:** comment images, small label icons, avatars, custom pin and achievement icons and imported photos
+are still stored as uploaded (P119).
+
+## RESOLVED 2026-09-13: The external API's SpotGuessr round image decoded and re-encoded a user's photo inside the request
+
+`id: P117` · `status: fixed` · `resolved: 2026-09-13`
+
+`SpotGuessrRoundImageView` called `services/spotguessr/round_image.stripped_round_image`, which decoded the round's
+stored photo with Pillow and re-encoded it in the API request, with no `untrusted_parse` decorator and no cache.
+The re-encode existed because the stored file could still carry GPS. That was the real defect (P118), not something
+for one endpoint to paper over.
+
+With every stored photo re-encoded in the sandbox, the endpoint serves the stored file as it is, through
+`controllers.media.resolve_media_path` and `serve_media_file`, the same `X-Accel-Redirect` hand-off the media gate
+and the safety portal use. A photo still pending its scan is a 404, since until then the file is the raw upload.
+`round_image.py` is deleted. The response is still a 200 with the image bytes, so the Android client needs no change.
+
 ## RESOLVED 2026-09-13: The embedded-metadata photo keyword provider decoded the stored upload in the credentialed interactive worker
 
 `id: P116` · `status: fixed` · `resolved: 2026-09-13`
@@ -13267,3 +13316,42 @@ is legitimately held is meant to keep that access forever. No code changed - the
 was the fix. Added alongside the split-family one in
 `tests/hypothesis/test_grandfathered_parcel_split_access.py`'s module docstring, so both permanent
 mechanisms now carry the confirmation the original filing asked for.
+
+## RESOLVED 2026-09-13: custom icons, avatars, comment images and imported photos were served as uploaded
+
+`id: P119` · `status: fixed` · `resolved: 2026-09-13`
+
+Photos were re-encoded from their pixels (P118), but every other stored user image was served as the uploader sent
+it, metadata included: comment and trip comment images, label, pin and achievement icons, avatars from every writer
+(upload, external API, social login, Gravatar, the profile form), and the photos and map overlay images a data import
+restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing test first.
+
+- **Comment images, label icons and avatars** (`e10d6ed45`) went through `images.reencode_image_file` in the sandbox
+  worker, swapped in by `stored_field.reencode_stored_field`.
+- **A review of that pass** (`048486deb`) found six more. The re-encoded file kept its uploaded name, which can say
+  as much as the metadata. The profile form stored an avatar past every check. A storage read failure was taken for
+  an undecodable file and rejected or removed it. A label restored by undo before its icon was re-encoded kept the
+  upload. The profile form and bulk label convert saved every column from a row read before the swap, naming the
+  deleted file. The backfill skipped every SVG avatar rather than only generated ones.
+- **The rest.** Pin and achievement icons were never re-encoded, and the Django admin stored achievement icons
+  straight into the field. `import_data.py` created photo and overlay rows with no `pending_scan` and no
+  `process_image_upload`. Icons and avatars were served from the moment of upload. Holding them (below) opened a
+  race: a full `save()` of a row read before the publish wrote the old names back, so `HeldUploadModel` leaves those
+  columns out of a full save the instance did not change them in.
+- **A review of the held design** found that a failed enqueue left an upload held for ever, with nothing to re-queue
+  it and nothing to remove held files a deleted row left behind, and that the full-save guard made Django's copy
+  idiom (`pk = None; save()`) raise. `sweep_held_uploads` recovers and removes them; a row with no primary key is
+  inserted whole.
+- **A review of the sweep** found it counted its own re-queues, so a sandbox queue backed up for three hours behind
+  someone's import dropped everyone's waiting icons and avatars; it now counts publishes that started. One file
+  storage could not stat ended the whole sweep, and finding held rows scanned every table hourly; both fixed.
+
+The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
+not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file
+being fetched. Uploads are now held under `unprocessed/`, which has no media authorizer, and named in a
+`<field>_upload` column (`services/media/held_upload.py`); `publish_held_upload` writes the re-encoded file into the
+field, so the field only ever names a file this server encoded. See `docs/MEDIA_PIPELINE.md`.
+
+`test_every_icon_and_avatar_is_hidden_until_reencoded.py` walks media storage after each writer and fails on any
+file carrying the fixture marker that another member could be served. Files stored before these fixes are re-encoded
+by `strip_exif_from_stored_photos`, which Jess runs once on production.

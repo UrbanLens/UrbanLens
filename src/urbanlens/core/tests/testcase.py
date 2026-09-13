@@ -114,14 +114,21 @@ class _CacheIsolationMixin:
     The failure is order-dependent, so it shows up as a test that passes alone
     and fails in a suite - and points at whichever test happened to run first
     rather than at itself.
+
+    The request-scoped ``SiteSettings`` memo is reset for the same reason: a
+    response the test client never finished sends no ``request_finished``, which
+    leaves the memo holding a row a rolled-back test created.
     """
 
     def setUp(self) -> None:
-        """Clear the cache, then run the subclass's own setUp."""
-        super().setUp()
+        """Clear the caches, then run the subclass's own setUp."""
         from django.core.cache import cache
 
+        from urbanlens.dashboard.models.site_settings import request_cache
+
+        request_cache.end_scope()
         cache.clear()
+        super().setUp()
 
 
 class TestCase(_CacheIsolationMixin, _MessagePrefixMixin, _HypothesisMixin, test.TestCase):

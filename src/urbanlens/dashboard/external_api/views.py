@@ -4273,6 +4273,7 @@ class ProfileDetailView(ExternalApiView):
             "username": target.username,
             "slug": target.slug,
             "avatar_url": target.avatar.url if target.avatar else None,
+            "avatar_pending": is_self and bool(target.avatar_upload),
             "bio": target.bio,
             "area": target.area,
             "started_exploring": target.started_exploring,

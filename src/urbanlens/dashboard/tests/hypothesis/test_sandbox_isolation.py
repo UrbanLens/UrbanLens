@@ -55,8 +55,8 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
         # A person is waiting on the import dialog, so not the batch queue a data import
         # can hold for an hour; its own time limit bounds how long it can hold a slot here.
         "parse_import_preview_task",
-        # The label-icon resize that used to decode inside the label create/edit request.
-        "resize_label_icon",
+        # A custom icon or avatar, held unserved until it is re-encoded here.
+        "publish_held_upload",
     },
     "SANDBOX_BATCH_QUEUE": {
         "run_user_data_import",

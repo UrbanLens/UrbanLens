@@ -79,6 +79,7 @@ class TheUploadIsBoundedTests(_AvatarCase):
 
         self.profile.refresh_from_db()
         self.assertFalse(self.profile.avatar)
+        self.assertFalse(self.profile.avatar_upload)
 
 
 @override_settings(**{CEILING_SETTING: 4096})
@@ -90,7 +91,7 @@ class OrdinaryAvatarsStillWorkTests(_AvatarCase):
             set_profile_avatar(self.profile, _upload(1024))
 
         self.profile.refresh_from_db()
-        self.assertTrue(self.profile.avatar)
+        self.assertTrue(self.profile.avatar_upload)
 
     def test_an_ordinary_avatar_is_still_scanned(self) -> None:
         """Bounded, not skipped - the scan must still happen for what is accepted."""

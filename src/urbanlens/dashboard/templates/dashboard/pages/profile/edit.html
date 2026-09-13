@@ -379,7 +379,7 @@ function closeDateErrorDialog() {
             .then(function (data) {
                 if (data.ok) {
                     if (guard) guard.markClean();
-                    setStatus(field, 'saved', '✓ Saved');
+                    setStatus(field, 'saved', data.avatar_pending ? '✓ Processing…' : '✓ Saved');
                     if (data.avatar_url) {
                         updateAvatarPreview(data.avatar_url);
                     }
@@ -486,7 +486,7 @@ function closeDateErrorDialog() {
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     if (d.ok) {
-                        setStatus('avatar', 'saved', '✓ Saved');
+                        setStatus('avatar', 'saved', d.avatar_pending ? '✓ Processing…' : '✓ Saved');
                         updateAvatarPreview(d.avatar_url);
                     } else {
                         setStatus('avatar', 'error', '✗');

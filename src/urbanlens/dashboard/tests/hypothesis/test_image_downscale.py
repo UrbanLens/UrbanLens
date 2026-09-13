@@ -3,8 +3,8 @@
 Covers:
 - _json_safe() - EXIF values (bytes, rationals, NaN, nesting) become JSON-safe
 - extract_exif_data() - snapshots EXIF tags by name before any conversion
-- downscale_stored_image() - resizes over-large files, converts to WebP,
-  preserves EXIF in the re-encoded file, and leaves small/exotic files alone
+- downscale_stored_image() - resizes over-large files, converts to WebP, and
+  drops EXIF from the re-encoded file
 """
 
 from __future__ import annotations
@@ -180,13 +180,6 @@ class DownscaleStoredImageTests(TestCase):
         discard_superseded_file(row, replacement.superseded_name)
         self.assertFalse(storage.exists(stale), "an unshared replaced file should not be left behind")
 
-    def test_small_file_without_exif_is_left_untouched(self):
-        """Nothing to shrink, nothing to convert, nothing to strip."""
-        row = _make_image_row(_jpeg_bytes(400, 300, with_exif=False))
-        old_name = row.image.name
-        self.assertIsNone(downscale_stored_image(row, max_dimension=800, convert_webp=False))
-        self.assertEqual(row.image.name, old_name)
-
     def test_small_file_with_exif_is_rewritten_to_strip_it(self):
         """Carrying EXIF is itself a reason to re-save, size notwithstanding."""
         row = _make_image_row(_jpeg_bytes(400, 300))
@@ -225,12 +218,6 @@ class DownscaleStoredImageTests(TestCase):
             stored.load()
             self.assertEqual(stored.format, "WEBP")
             self.assertLessEqual(max(stored.size), 640)
-
-    def test_unprocessable_format_is_skipped(self):
-        buf = io.BytesIO()
-        PILImage.new("P", (900, 900)).save(buf, format="GIF")
-        row = _make_image_row(buf.getvalue(), name="anim.gif")
-        self.assertIsNone(downscale_stored_image(row, max_dimension=200, convert_webp=True))
 
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)

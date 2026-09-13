@@ -182,6 +182,8 @@ def delete_removed_file(sender, instance, **kwargs) -> None:
         stored = getattr(instance, field)
         if stored and stored.name:
             _discard(instance, field, stored.name)
+        if held := getattr(instance, f"{field}_upload", ""):
+            _discard(instance, field, held)
 
 
 def connect() -> None:

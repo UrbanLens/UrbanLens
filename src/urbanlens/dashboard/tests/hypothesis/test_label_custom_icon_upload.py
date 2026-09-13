@@ -49,14 +49,14 @@ class LabelCreateCustomIconTests(TestCase):
         resp = self.client.post(self.url, data={"name": "Urbex", "custom_icon-new-tag": _png()})
         self.assertEqual(resp.status_code, 200)
         label = Label.objects.get(profile=self.profile, name="Urbex")
-        self.assertTrue(label.custom_icon)
+        self.assertTrue(label.custom_icon_upload)
 
     def test_bare_field_name_still_accepted(self) -> None:
         """Backward compatible: any client posting the old bare field name still works."""
         resp = self.client.post(self.url, data={"name": "Urbex", "custom_icon": _png()})
         self.assertEqual(resp.status_code, 200)
         label = Label.objects.get(profile=self.profile, name="Urbex")
-        self.assertTrue(label.custom_icon)
+        self.assertTrue(label.custom_icon_upload)
 
     def test_unrelated_file_field_is_ignored(self) -> None:
         """A file under some other field name must not be mistaken for the icon."""
@@ -64,6 +64,7 @@ class LabelCreateCustomIconTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         label = Label.objects.get(profile=self.profile, name="Urbex")
         self.assertFalse(label.custom_icon)
+        self.assertFalse(label.custom_icon_upload)
 
 
 class LabelEditCustomIconTests(TestCase):
@@ -82,7 +83,7 @@ class LabelEditCustomIconTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.label.refresh_from_db()
-        self.assertTrue(self.label.custom_icon)
+        self.assertTrue(self.label.custom_icon_upload)
 
     def test_no_file_leaves_existing_custom_icon_untouched(self) -> None:
         self.label.custom_icon = _png()

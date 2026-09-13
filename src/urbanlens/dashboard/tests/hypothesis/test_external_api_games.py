@@ -21,10 +21,13 @@ from datetime import timedelta
 import io
 from itertools import count
 import json
+from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -52,6 +55,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
 )
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.media.images import downscale_stored_image
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session, start_solo_session
 
 _coordinate_counter = count()
@@ -67,12 +71,17 @@ def _bearer(raw_key: str) -> dict:
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
+def _body(response) -> bytes:
+    """The bytes a response delivers, streamed or not."""
+    return b"".join(response.streaming_content) if response.streaming else response.content
+
+
 def _gps_jpeg_bytes() -> bytes:
     """A JPEG carrying GPS coordinates and a place-naming description in its EXIF.
 
-    This is what a phone actually stores, and every one of these tags points at
-    the round's answer - which is why the round-image endpoint re-encodes rather
-    than deleting known-bad tags one at a time.
+    This is what a phone actually uploads, and every one of these tags points at
+    the round's answer - which is why the upload pipeline re-encodes every photo
+    from its pixels rather than deleting known-bad tags one at a time.
     """
     img = PILImage.new("RGB", (16, 16), color=(120, 60, 30))
     exif = PILImage.Exif()
@@ -538,43 +547,73 @@ class SpotGuessrRoundImageTests(_SpotGuessrApiTestCase):
     """The round photo's bytes, which must not carry the answer in their metadata."""
 
     def setUp(self) -> None:
-        """Give the round a real JPEG whose EXIF points straight at the answer."""
+        """Give the round a phone JPEG whose EXIF pointed at the answer, stored the way the upload pipeline stores it."""
         super().setUp()
         self.session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig())
         self.image.image.save(
             "gps.jpg", SimpleUploadedFile("gps.jpg", _gps_jpeg_bytes(), content_type="image/jpeg"), save=True
         )
+        downscale_stored_image(self.image, None, convert_webp=False)
+        self.image.save(update_fields=["image"])
         self.round = GameRound.objects.create(
             session=self.session, sequence_index=0, location=self.location, image=self.image
         )
         self.media_key = self._key_with_scopes([*_GAME_SCOPES, ApiKeyScope.MEDIA_READ.value])
 
     def _fetch(self, key: str | None = None):
-        """GET the round image with the given (default: fully scoped) key."""
-        return self._get(
-            "external_api:games.spotguessr.sessions.rounds.image",
-            self.session.pk,
-            self.round.pk,
-            key=key or self.media_key,
-        )
+        """GET the round image with the given (default: fully scoped) key, with the file streamed rather than handed to nginx."""
+        with override_settings(MEDIA_X_ACCEL=False):
+            return self._get(
+                "external_api:games.spotguessr.sessions.rounds.image",
+                self.session.pk,
+                self.round.pk,
+                key=key or self.media_key,
+            )
 
-    def test_the_stored_file_really_does_carry_gps(self) -> None:
-        """Guards the test itself: a fixture with no EXIF would make the next test vacuous."""
-        with self.image.image.open("rb") as handle:
-            stored = PILImage.open(handle)
-            self.assertTrue(stored.getexif().get_ifd(0x8825))
+    def test_the_upload_really_did_carry_gps(self) -> None:
+        """Guards the test below: a fixture with no EXIF would make it vacuous."""
+        self.assertTrue(PILImage.open(io.BytesIO(_gps_jpeg_bytes())).getexif().get_ifd(0x8825))
 
     def test_the_served_bytes_have_no_exif_at_all(self) -> None:
         response = self._fetch()
         self.assertEqual(response.status_code, 200)
-        served = PILImage.open(io.BytesIO(response.content))
+        body = _body(response)
+        served = PILImage.open(io.BytesIO(body))
         self.assertFalse(served.getexif().get_ifd(0x8825))
         self.assertFalse(dict(served.getexif()))
-        self.assertNotIn(_ANSWER_NAMING_CAPTION.encode(), response.content)
+        self.assertNotIn(_ANSWER_NAMING_CAPTION.encode(), body)
+
+    def test_the_stored_file_is_served_without_being_decoded(self) -> None:
+        """The request only authorizes and hands over bytes; the sandbox already made them safe to serve."""
+        with mock.patch.object(PILImage, "open", side_effect=AssertionError("the request decoded the photo")):
+            response = self._fetch()
+
+        self.assertEqual(response.status_code, 200)
+        with self.image.image.open("rb") as stored:
+            self.assertEqual(_body(response), stored.read())
+
+    def test_behind_nginx_the_file_is_handed_off_like_any_other_media(self) -> None:
+        self.assertTrue(hasattr(settings, "MEDIA_X_ACCEL"))
+        with override_settings(MEDIA_X_ACCEL=True):
+            response = self._get(
+                "external_api:games.spotguessr.sessions.rounds.image",
+                self.session.pk,
+                self.round.pk,
+                key=self.media_key,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["X-Accel-Redirect"], settings.MEDIA_X_ACCEL_PREFIX + self.image.image.name)
+
+    def test_a_photo_still_waiting_on_its_scan_is_a_404(self) -> None:
+        """Until the upload task has run, the stored file is the raw upload."""
+        Image.objects.filter(pk=self.image.pk).update(pending_scan=True)
+
+        self.assertEqual(self._fetch().status_code, 404)
 
     def test_the_image_is_still_the_same_picture(self) -> None:
         """Stripping metadata must not degrade the thing the player is judging."""
-        served = PILImage.open(io.BytesIO(self._fetch().content))
+        served = PILImage.open(io.BytesIO(_body(self._fetch())))
         self.assertEqual(served.size, (16, 16))
 
     def test_media_read_alone_is_not_enough(self) -> None:

@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P118` · `T3` · `PL8` · `D15` · `X18` · `I5` · `R29` · `N23`
+**Next free id:** `P120` · `T3` · `PL8` · `D15` · `X18` · `I5` · `R29` · `N23`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -102,7 +102,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P112 | open | 2026-09-10 | `bun run codeql:gate` fails with 26 untriaged findings, so nobody runs it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P113 | open | 2026-09-13 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 2 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P117 | open | 2026-09-13 | The external API's SpotGuessr round image decodes and re-encodes a user's photo inside the request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |

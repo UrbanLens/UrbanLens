@@ -101,7 +101,7 @@ class FetchAndSaveAvatarTests(TestCase):
         ):
             fetch_and_save_avatar(_backend(), user, {}, is_new=True)
         user.profile.refresh_from_db()
-        self.assertTrue(user.profile.avatar)
+        self.assertTrue(user.profile.avatar_upload)
 
     def test_unresolvable_provider_url_is_a_no_op(self) -> None:
         user = baker.make(User)

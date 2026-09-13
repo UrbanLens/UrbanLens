@@ -1443,6 +1443,21 @@ def _import_comments(
         result.warnings.append(f"Skipped {unresolved} comment(s) whose pin or wiki could not be matched on this instance.")
 
 
+def _queue_import_processing(image: Any) -> None:
+    """Hand a restored file to the upload pipeline, which re-encodes it and clears ``pending_scan``.
+
+    Args:
+        image: The saved ``Image`` row, stored pending.
+    """
+    from django.db import transaction
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import process_image_upload
+
+    image_id = image.pk
+    transaction.on_commit(lambda: safely_enqueue_task(process_image_upload, image_id))
+
+
 def _import_photos(
     profile: Any,
     data_dir: str,
@@ -1521,11 +1536,13 @@ def _import_photos(
                 latitude=_decimal(row.get("latitude")),
                 longitude=_decimal(row.get("longitude")),
                 file_size=size,
+                pending_scan=True,
             )
             if uuid_str and not Image.objects.filter(uuid=uuid_str).exists():
                 image.uuid = uuid_str
             with open(src_path, "rb") as fh:
                 image.image.save(filename, File(fh), save=True)
+        _queue_import_processing(image)
 
         label_pks = [label_uuid_map[label_uuid] for label_uuid in (row.get("label_uuids") or []) if label_uuid in label_uuid_map]
         if label_pks:
@@ -2548,9 +2565,10 @@ class MapAnnotationsImport(ImportType):
                 ctx.result.warnings.append("A map overlay image was skipped because it would exceed your storage quota or the maximum upload size.")
                 return None
 
-            image = Image(profile=ctx.profile, media_type=MediaKind.PHOTO, file_size=size)
+            image = Image(profile=ctx.profile, media_type=MediaKind.PHOTO, file_size=size, pending_scan=True)
             with open(src_path, "rb") as fh:
                 image.image.save(filename, File(fh), save=True)
+        _queue_import_processing(image)
         return image
 
 

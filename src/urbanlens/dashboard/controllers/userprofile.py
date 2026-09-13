@@ -509,7 +509,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             except AvatarUploadError as exc:
                 logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
                 return JsonResponse({"error": "That avatar couldn't be uploaded."}, status=400)
-            return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
+            return JsonResponse({"ok": True, "avatar_url": profile.avatar.url if profile.avatar else None, "avatar_pending": bool(profile.avatar_upload)})
 
         if field == "avatar_gravatar":
             return self._save_avatar_gravatar(request, profile)
@@ -588,6 +588,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
 
         from django.core.files.base import ContentFile
 
+        from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
         from urbanlens.dashboard.services.profile.avatar import AvatarService
 
         email = request.user.email or ""
@@ -598,8 +599,9 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         img = AvatarService.download(url)
         if not img:
             return JsonResponse({"error": "No Gravatar found for your email address."}, status=404)
-        profile.avatar.save(f"gravatar_{request.user.pk}.jpg", ContentFile(img), save=True)
-        return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
+        profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(img))])
+        queue_held_upload(profile, "avatar")
+        return JsonResponse({"ok": True, "avatar_url": profile.avatar.url if profile.avatar else None, "avatar_pending": True})
 
     def _save_avatar_emoji(self, request: HttpRequest, profile: Profile) -> JsonResponse:
         """Generate and store an emoji avatar from the inline picker.
@@ -703,7 +705,8 @@ class EditProfileView(LoginRequiredMixin, View):
             return redirect("login")
         form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
-            form.save()
+            # Named, so an avatar the sandbox re-encoded since the profile was read is not written back.
+            form.save(commit=False).save(update_fields=list(form.fields))
             # Truncated to the column width, matching how every other free-text field
             # here is handled (e.g. albums' name). These two are assigned straight from
             # POST rather than through the form above, so nothing else bounds them, and

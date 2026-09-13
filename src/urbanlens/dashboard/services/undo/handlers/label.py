@@ -62,6 +62,7 @@ class LabelUndoHandler(UndoHandler):
     def _serialize_one(cls, label: Label) -> dict[str, Any]:
         fields = {name: getattr(label, name) for name in _RESTORABLE_FIELDS}
         fields["custom_icon"] = label.custom_icon.name if label.custom_icon else None
+        fields["custom_icon_upload"] = label.custom_icon_upload
         return {
             "old_pk": label.pk,
             "fields": fields,
@@ -99,6 +100,7 @@ class LabelUndoHandler(UndoHandler):
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.media.held_upload import queue_held_upload
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
         for entry in payload:
@@ -117,6 +119,8 @@ class LabelUndoHandler(UndoHandler):
         restored: list[Label] = []
         for entry in payload:
             label = Label.objects.create(profile_id=entry["profile_id"], **entry["fields"])
+            # A label deleted while its icon waited left that task nothing to publish.
+            queue_held_upload(label, "custom_icon")
             old_to_new[entry["old_pk"]] = label
             restored.append(label)
 

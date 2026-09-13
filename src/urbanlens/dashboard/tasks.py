@@ -423,12 +423,19 @@ def finish_import_preview_task(profile_id: int, job_id: str) -> None:
     import_preview.finish_import_preview(profile_id, job_id)
 
 
-@shared_task(queue=SANDBOX_QUEUE)
-def resize_label_icon(label_id: int, icon_name: str) -> bool:
-    """Shrink a label's uploaded icon in the sandbox worker."""
-    from urbanlens.dashboard.services.labels.icons import resize_stored_icon
+@shared_task(bind=True, queue=SANDBOX_QUEUE, max_retries=5)
+def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
+    """Re-encode a held icon or avatar in the sandbox worker and show it."""
+    from urbanlens.dashboard.services.media.held_upload import drop_held, publish_held
 
-    return resize_stored_icon(label_id, icon_name)
+    try:
+        return publish_held(key, pk, held_name)
+    except OSError as exc:
+        if self.request.retries >= self.max_retries:
+            logger.exception("The upload held for %s %s could not be read after %s retries", key, pk, self.request.retries)
+            drop_held(key, pk, held_name)
+            return False
+        raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 900)) from exc
 
 
 @shared_task(queue=Queue.MAINTENANCE)
@@ -761,7 +768,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
         write_image_marker_thumbnail,
         write_image_thumbnail,
     )
-    from urbanlens.dashboard.services.media.storage import get_downscale_policy
+    from urbanlens.dashboard.services.media.storage import get_stored_photo_policy
 
     try:
         with image.image.open("rb") as image_file:
@@ -877,44 +884,20 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
 
     new_stored_size: int | None = None
     superseded_name: str | None = None
-    if image.profile is not None:
-        downscale_policy: tuple[int | None, bool] | None = get_downscale_policy(image.profile)
+    max_dimension, convert_webp = get_stored_photo_policy(image, max_dimension_override)
+    try:
+        replacement = downscale_stored_image(image, max_dimension, convert_webp)
+    except (OSError, ValueError, EOFError, SyntaxError, PILDecompressionBombError) as exc:
+        # DecompressionBombError derives from Exception alone, so it needs naming.
+        logger.warning("Re-encoding failed for image %s: %s", image_id, exc, exc_info=True)
+        if image.pending_scan:
+            # Publishing a fresh upload that was never re-encoded would publish whatever metadata it carries.
+            return None
     else:
-        # A profile-less row (location enrichment) has no plan to read a policy
-        # from; its caller passes the cap instead. Falling back to a default
-        # rather than skipping, because this call is also what strips the
-        # provider's EXIF - "no cap given" must not silently mean "publish the
-        # provider's original, GPS and all". WebP conversion is not optional
-        # here either: these are provider photos kept as gallery thumbnails.
-        from urbanlens.dashboard.services.photos.photo_enrichment import DEFAULT_ENRICHED_MAX_DIMENSION
-
-        downscale_policy = (max_dimension_override if max_dimension_override is not None else DEFAULT_ENRICHED_MAX_DIMENSION, True)
-    if downscale_policy is not None:
-        max_dimension, convert_webp = downscale_policy
-        # Called unconditionally. It used to be gated on there being a resize, a
-        # conversion, a location opt-out or a HEIC to transcode - reasonable while
-        # this function existed to resize, but it is also what removes EXIF now,
-        # and "no cap, no conversion" is exactly the policy a downscale-exempt
-        # subscriber gets. Gating it left their photos carrying the block.
-        # downscale_stored_image decides for itself whether anything needs doing,
-        # including the HEIC case (`stored_file_needs_transcode`), where the stored
-        # bytes are what a plain <img src> gets and most browsers cannot render them.
-        try:
-            replacement = downscale_stored_image(image, max_dimension, convert_webp)
-        except (OSError, ValueError, PILDecompressionBombError) as exc:
-            # DecompressionBombError inherits straight from Exception, not from
-            # OSError/ValueError like the rest of Pillow's failures (Unidentified-
-            # ImageError does), so it escaped this handler and took the whole
-            # photo-processing task down with it. Pillow's own 89MP ceiling already
-            # prevents the memory exhaustion; what was missing was degrading to the
-            # same logged warning every other unprocessable image gets, leaving the
-            # upload stored and the rest of the pipeline intact.
-            logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
-        else:
-            if replacement is not None:
-                update_fields["image"] = image.image.name
-                new_stored_size = replacement.size
-                superseded_name = replacement.superseded_name
+        if replacement is not None:
+            update_fields["image"] = image.image.name
+            new_stored_size = replacement.size
+            superseded_name = replacement.superseded_name
 
     try:
         if write_image_thumbnail(image):
@@ -1529,6 +1512,23 @@ def sweep_stale_preview_sources() -> int:
 
 
 @shared_task(queue=Queue.MAINTENANCE)
+def sweep_held_uploads() -> int:
+    """Recover held icons and avatars whose publish never ran, and remove held files nothing names.
+
+    Deliberately not on the sandbox queue - it enqueues, it does not parse.
+
+    Returns:
+        How many held uploads were queued or dropped, plus how many files were removed.
+    """
+    from urbanlens.dashboard.services.media.held_upload import sweep_held_uploads as sweep
+
+    handled, removed = sweep()
+    if handled or removed:
+        logger.info("Held uploads: %s queued or dropped, %s unnamed file(s) removed", handled, removed)
+    return handled + removed
+
+
+@shared_task(queue=Queue.MAINTENANCE)
 def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     """Re-enqueue uploads whose processing task never ran.
 
@@ -2072,8 +2072,33 @@ def _run_comment_image_scan(task, comment, model) -> bool:
         _reject_comment_upload(comment, malware_error)
         return False
 
-    model.objects.filter(pk=comment.pk).update(pending_scan=False)
-    return True
+    from urbanlens.dashboard.services.media.storage import get_downscale_policy
+    from urbanlens.dashboard.services.media.stored_field import Reencoded, reencode_stored_field
+
+    owner = getattr(comment, "profile", None) or getattr(comment, "author", None)
+    max_dimension, convert_webp = get_downscale_policy(owner) if owner is not None else (None, True)
+    # pending_scan clears in the update that swaps in the re-encoded file, so the upload as sent is never shown.
+    try:
+        outcome = reencode_stored_field(
+            model.objects.all(),
+            comment.pk,
+            "image",
+            comment.image.name,
+            max_dimension=max_dimension,
+            convert_webp=convert_webp,
+            only_if={"pending_scan": True},
+            also_set={"pending_scan": False},
+        )
+    except OSError as exc:
+        if task.request.retries >= task.max_retries:
+            logger.exception("Image for comment %s could not be read after %s retries", comment.pk, task.request.retries)
+            _reject_comment_upload(comment, "That photo couldn't be processed.")
+            return False
+        raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+    if outcome is Reencoded.UNDECODABLE:
+        _reject_comment_upload(comment, "That photo couldn't be processed.")
+        return False
+    return outcome is Reencoded.REPLACED
 
 
 def _reject_comment_upload(comment, reason: str) -> None:

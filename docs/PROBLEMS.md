@@ -5225,19 +5225,3 @@ fields. It belongs in the `infrastructure` repo beside the other host timers, no
 Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
-
-## P117 — The external API's SpotGuessr round image decodes and re-encodes a user's photo inside the request
-
-`id: P117` · `status: open` · `updated: 2026-09-13`
-
-`external_api/views_games.py` (the round image endpoint, around line 814) calls
-`services/spotguessr/round_image.stripped_round_image`, which opens the round's stored photo with `PIL.Image.open`,
-forces a full decode with `.load()` and re-encodes it, inside the API request. There is no `untrusted_parse`
-decorator, so `warn` cannot log it and `deny` would not stop it, and nothing caches the result: every call decodes
-again, bounded only by `ExternalApiMediaThrottle`. The stored photo can be the uploader's original bytes (see P116
-on when a stored file is left as uploaded). Found by the P103 sweep on 2026-09-13; not yet reproduced with a test.
-
-Fix shape: produce the stripped copy in the sandbox and serve that - once per image, or on first request in the
-fire-and-forget shape `previews.request_sandbox_render` uses. A cold call can then no longer return the bytes
-synchronously, which changes the endpoint's contract for the mobile client, so it is a decision as much as a fix.
-

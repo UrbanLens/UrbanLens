@@ -216,6 +216,7 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         "icon": "how the owner marked the place for themselves",
         "color": "how the owner marked the place for themselves",
         "custom_icon": "how the owner marked the place for themselves",
+        "custom_icon_upload": "the owner's icon still waiting to be re-encoded",
         "detail_bg_color": "the owner's styling of their own pin",
         "detail_bg_opacity": "the owner's styling of their own pin",
         "detail_border_color": "the owner's styling of their own pin",

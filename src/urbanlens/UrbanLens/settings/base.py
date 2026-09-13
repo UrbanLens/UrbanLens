@@ -627,6 +627,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_stale_preview_sources",
         "schedule": crontab(minute=34),
     },
+    # Held icons and avatars whose publish was never queued stay "processing" for
+    # ever without this, and held files a deleted row left behind outlive undo.
+    "sweep-held-uploads": {
+        "task": "urbanlens.dashboard.tasks.sweep_held_uploads",
+        "schedule": crontab(minute=41),
+    },
     # Same shape as image-thumbnail-backfill, for the tiny map-marker preview.
     # Offset by half an hour so the two sweeps don't compete for the same tick.
     "image-marker-thumbnail-backfill": {

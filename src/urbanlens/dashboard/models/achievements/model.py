@@ -18,6 +18,7 @@ from django.db.models import (
     Index,
     IntegerField,
     PositiveIntegerField,
+    Q,
     TextField,
     UniqueConstraint,
 )
@@ -25,6 +26,7 @@ from django.utils import timezone
 
 # App Imports
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.held_upload import HeldUploadModel
 from urbanlens.dashboard.models.achievements.meta import ActivityKind
 from urbanlens.dashboard.models.achievements.queryset import (
     AchievementManager,
@@ -63,7 +65,7 @@ def metric_choices() -> list[tuple[str, str]]:
     return registry_choices()
 
 
-class Achievement(abstract.PublicDashboardModel):
+class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
     """An award a site admin defines, earned by passing a threshold on one metric.
 
     Achievements are data, not code: an admin picks one of the registered
@@ -97,6 +99,8 @@ class Achievement(abstract.PublicDashboardModel):
     # not be limited to whichever icons the picker happens to list.
     icon = CharField(max_length=50, null=True, blank=True, default=DEFAULT_ACHIEVEMENT_ICON)
     custom_icon = ImageField(upload_to="achievement_icons/", null=True, blank=True)
+    #: An uploaded icon the sandbox worker has not re-encoded yet; see services.media.held_upload.
+    custom_icon_upload = CharField(max_length=255, blank=True, default="")
     color = CharField(
         max_length=50,
         null=True,
@@ -119,6 +123,8 @@ class Achievement(abstract.PublicDashboardModel):
         ordering = ["order", "metric", "threshold", "name"]
         get_latest_by = "created"
         indexes = [
+            # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
+            Index(fields=["custom_icon_upload"], name="idxdb_achv_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["metric", "threshold"], name="idxdb_achv_metric_thresh"),
             Index(fields=["is_active"], name="idxdb_achv_active"),
         ]

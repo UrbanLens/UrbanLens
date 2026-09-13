@@ -39,7 +39,7 @@ multiplayer returns `409 {"error_code": "multiplayer_unsupported"}` from the det
 | GET | `/sessions/{id}/summary/` | `games:read` | Final scoreboard |
 | POST | `/sessions/{id}/rounds/{rid}/expire/` | `games:write` | Client-driven "timer hit zero"; server re-validates independently |
 | POST | `/sessions/{id}/rounds/{rid}/feedback/` | `games:write` | `{kind: thumbs_up\|thumbs_down\|reported}` on a Photos-mode round's photo |
-| GET | `/sessions/{id}/rounds/{rid}/image/` | `games:read` + `media:read` | Round photo bytes, EXIF stripped. Own throttle bucket (media, not JSON). |
+| GET | `/sessions/{id}/rounds/{rid}/image/` | `games:read` + `media:read` | Round photo bytes: the stored file, which carries no metadata. 404 while the photo is still being processed. Own throttle bucket (media, not JSON). |
 
 **WebSocket**: `ws/spotguessr/session/{id}/` — real-time round/reveal sync for a session the caller
 participates in. Same `games:*` scope gating as the HTTP surface (`games:read` to connect,

@@ -42,6 +42,7 @@ from uuid import uuid4
 from django.core.cache import cache
 from django.core.signing import Signer
 
+from urbanlens.dashboard.services.media.images import pixels_only
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 logger = logging.getLogger(__name__)
@@ -323,7 +324,7 @@ def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = P
         if getattr(image, "n_frames", 1) > 1:
             image.seek(0)
         has_alpha = image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info)
-        image = image.convert("RGBA" if has_alpha else "RGB")
+        image = pixels_only(image.convert("RGBA" if has_alpha else "RGB"))
         image.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
         buffer = BytesIO()
         if has_alpha:

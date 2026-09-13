@@ -584,7 +584,7 @@
             setAvatarStatus('Saving...', '#9aa0a6');
             saveProfileField('avatar', setupAvatarUpload.files[0], true)
                 .then(function (d) {
-                    if (d.ok) { setAvatarStatus('✓ Saved', '#43a047'); updateSetupAvatarPreview(d.avatar_url); }
+                    if (d.ok) { setAvatarStatus(d.avatar_pending ? '✓ Processing…' : '✓ Saved', '#43a047'); updateSetupAvatarPreview(d.avatar_url); }
                     else { setAvatarStatus('✗ ' + (d.error || 'Failed'), '#e53935'); }
                 }).catch(function () { setAvatarStatus('Failed', '#e53935'); });
         });
@@ -601,7 +601,7 @@
             fetch(PROFILE_URL, { method: 'POST', body: fd })
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
-                    if (d.ok) { setAvatarStatus('✓ Saved', '#43a047'); updateSetupAvatarPreview(d.avatar_url); }
+                    if (d.ok) { setAvatarStatus(d.avatar_pending ? '✓ Processing…' : '✓ Saved', '#43a047'); updateSetupAvatarPreview(d.avatar_url); }
                     else { setAvatarStatus('✗ ' + (d.error || 'Failed'), '#e53935'); }
                 }).catch(function () { setAvatarStatus('Failed', '#e53935'); });
         });
