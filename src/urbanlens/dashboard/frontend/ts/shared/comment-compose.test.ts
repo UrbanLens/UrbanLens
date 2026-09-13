@@ -122,4 +122,16 @@ describe("installGlobalCommentCompose", () => {
     test("exposes the global the comment partials call from onclick", () => {
         expect(typeof window.toggleReplyForm).toBe("function");
     });
+
+    // Last in the file: without the guard this binds a second set of listeners for good.
+    test("installing a second time does not stack a second set of listeners", () => {
+        installGlobalCommentCompose();
+        const highlight = mock((_id: string, _on: boolean) => {});
+        window.tripHighlightMarker = highlight;
+        document.body.innerHTML = '<a class="mention--activity" data-activity-id="7">#7</a>';
+
+        document.querySelector<HTMLElement>(".mention--activity")!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+
+        expect(highlight).toHaveBeenCalledTimes(1);
+    });
 });

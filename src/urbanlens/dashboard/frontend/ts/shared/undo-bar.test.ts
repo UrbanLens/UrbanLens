@@ -1,10 +1,15 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { installUndoBar, registerLocalUndoProvider, resetUndoBarForTests, syncUndoBar } from "./undo-bar";
 
 function keydown(opts: { key: string; ctrlKey?: boolean; shiftKey?: boolean; metaKey?: boolean; target?: EventTarget }): KeyboardEvent {
     return new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...opts });
 }
+
+// A file that ran earlier in the same process may have left an install behind.
+beforeEach(() => {
+    resetUndoBarForTests();
+});
 
 afterEach(() => {
     resetUndoBarForTests();
@@ -165,6 +170,20 @@ describe("the floating undo bar", () => {
 
         const offset = document.getElementById("ul-undo-bar")?.style.getPropertyValue("--ul-undo-offset-y");
         expect(Number.parseFloat(offset || "0")).toBeGreaterThan(40);
+    });
+
+    test("a reset also drops an install still waiting for the page to parse", () => {
+        Object.defineProperty(document, "body", { configurable: true, get: () => null });
+        try {
+            installUndoBar();
+        } finally {
+            delete (document as unknown as Record<string, unknown>).body;
+        }
+
+        resetUndoBarForTests();
+        document.dispatchEvent(new Event("DOMContentLoaded"));
+
+        expect(document.getElementById("ul-undo-bar")).toBeNull();
     });
 });
 

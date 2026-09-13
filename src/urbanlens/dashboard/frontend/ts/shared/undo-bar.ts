@@ -280,6 +280,7 @@ export function resetUndoBarForTests(): void {
     localProvider = null;
     serverState = { can_undo: false, can_redo: false, undo_label: null, redo_label: null };
     installed = false;
+    document.removeEventListener("DOMContentLoaded", bindUndoBar);
     requestInFlight = false;
     window.clearTimeout(refreshTimer);
     document.removeEventListener("keydown", onKeydown);
@@ -330,21 +331,23 @@ export function registerLocalUndoProvider(provider: UndoProvider | null): void {
     syncButtons();
 }
 
+// Named rather than inline so a reset can remove it while it still waits on DOMContentLoaded.
+function bindUndoBar(): void {
+    ensureBar();
+    bindButtons();
+    document.addEventListener("keydown", onKeydown);
+    wrapFetch();
+    document.body.addEventListener("htmx:afterRequest", onHtmxAfterRequest);
+    window.addEventListener("resize", placeBar);
+    window.ulUndo = { register: registerLocalUndoProvider, sync: syncUndoBar };
+    void fetchStack();
+}
+
 export function installUndoBar(): void {
     if (installed) return;
     installed = true;
-    const bind = (): void => {
-        ensureBar();
-        bindButtons();
-        document.addEventListener("keydown", onKeydown);
-        wrapFetch();
-        document.body.addEventListener("htmx:afterRequest", onHtmxAfterRequest);
-        window.addEventListener("resize", placeBar);
-        window.ulUndo = { register: registerLocalUndoProvider, sync: syncUndoBar };
-        void fetchStack();
-    };
-    if (document.body) bind();
-    else document.addEventListener("DOMContentLoaded", bind);
+    if (document.body) bindUndoBar();
+    else document.addEventListener("DOMContentLoaded", bindUndoBar);
 }
 
 declare global {

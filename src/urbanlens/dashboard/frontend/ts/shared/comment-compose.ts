@@ -46,7 +46,12 @@ declare global {
     }
 }
 
+let installed = false;
+
 export function installGlobalCommentCompose(): void {
+    // The listeners are delegated from document, so a second install would fire every one twice.
+    if (installed) return;
+    installed = true;
     // Called from inline onclick= in the comment partials.
     window.toggleReplyForm = toggleReplyForm;
 
