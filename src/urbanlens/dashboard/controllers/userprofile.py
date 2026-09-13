@@ -704,7 +704,8 @@ class EditProfileView(LoginRequiredMixin, View):
             return redirect("login")
         form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
-            form.save()
+            # Named, so an avatar the sandbox re-encoded since the profile was read is not written back.
+            form.save(commit=False).save(update_fields=list(form.fields))
             # Truncated to the column width, matching how every other free-text field
             # here is handled (e.g. albums' name). These two are assigned straight from
             # POST rather than through the form above, so nothing else bounds them, and

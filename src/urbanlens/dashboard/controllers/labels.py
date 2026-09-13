@@ -1170,12 +1170,13 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
 
         valid_parents = list(_parent_candidates(profile, self.kind).filter(id__in=payload["add_parent_ids"])) if payload["add_parent_ids"] else []
         for label in labels:
-            _apply_bulk_fields(label, payload)
+            changed = _apply_bulk_fields(label, payload)
             label.kind = new_kind
             if new_kind == KIND_STATUS:
                 label.profile = profile
             label.parents.clear()
-            label.save()
+            # Named, so an icon the sandbox re-encoded since the label was read is not written back.
+            label.save(update_fields=[*changed, "kind", "profile", "updated"])
             if valid_parents:
                 safe_parents = [p for p in valid_parents if p.id != label.id and not _would_create_cycle(label, p.id)]
                 if safe_parents:

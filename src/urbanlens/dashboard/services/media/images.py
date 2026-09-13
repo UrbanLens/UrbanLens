@@ -1055,25 +1055,23 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
 
 
 @untrusted_parse("image.decode")
-def reencode_image_file(stored_file: IO[bytes], name: str, *, max_dimension: int | None, convert_webp: bool) -> tuple[bytes, str]:
+def reencode_image_file(stored_file: IO[bytes], *, max_dimension: int | None, convert_webp: bool) -> tuple[bytes, str]:
     """Re-encode a stored image that is not a library photo (a comment image, an icon, an avatar) from its pixels.
 
     Args:
         stored_file: The stored file, open for reading.
-        name: Its stored name, whose stem the new name keeps.
         max_dimension: Longest-edge cap in pixels, or None to keep dimensions.
         convert_webp: Whether to encode as WebP rather than in the file's own format.
 
     Returns:
-        The encoded bytes, and a file name with the extension of the format they are in.
+        The encoded bytes, and the extension of the format they are in.
 
     Raises:
         OSError: When the file cannot be read, or is not an image.
         ValueError: When Pillow cannot decode or encode it.
     """
     data, target_format = _encode_stored(stored_file, max_dimension, convert_webp)
-    stem = posixpath.splitext(posixpath.basename(name))[0] or "image"
-    return data, f"{stem}{_FORMAT_EXTENSIONS[target_format]}"
+    return data, _FORMAT_EXTENSIONS[target_format]
 
 
 def _encode_stored(stored_file: IO[bytes], max_dimension: int | None, convert_webp: bool) -> tuple[bytes, str]:

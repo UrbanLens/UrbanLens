@@ -99,6 +99,7 @@ class LabelUndoHandler(UndoHandler):
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.labels.icons import queue_icon_resize
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
         for entry in payload:
@@ -117,6 +118,8 @@ class LabelUndoHandler(UndoHandler):
         restored: list[Label] = []
         for entry in payload:
             label = Label.objects.create(profile_id=entry["profile_id"], **entry["fields"])
+            # A label deleted before its icon was re-encoded left that task nothing to do.
+            queue_icon_resize(label)
             old_to_new[entry["old_pk"]] = label
             restored.append(label)
 

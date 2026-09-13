@@ -2062,16 +2062,23 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     owner = getattr(comment, "profile", None) or getattr(comment, "author", None)
     max_dimension, convert_webp = get_downscale_policy(owner) if owner is not None else (None, True)
     # pending_scan clears in the update that swaps in the re-encoded file, so the upload as sent is never shown.
-    outcome = reencode_stored_field(
-        model.objects.all(),
-        comment.pk,
-        "image",
-        comment.image.name,
-        max_dimension=max_dimension,
-        convert_webp=convert_webp,
-        only_if={"pending_scan": True},
-        also_set={"pending_scan": False},
-    )
+    try:
+        outcome = reencode_stored_field(
+            model.objects.all(),
+            comment.pk,
+            "image",
+            comment.image.name,
+            max_dimension=max_dimension,
+            convert_webp=convert_webp,
+            only_if={"pending_scan": True},
+            also_set={"pending_scan": False},
+        )
+    except OSError as exc:
+        if task.request.retries >= task.max_retries:
+            logger.exception("Image for comment %s could not be read after %s retries", comment.pk, task.request.retries)
+            _reject_comment_upload(comment, "That photo couldn't be processed.")
+            return False
+        raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
     if outcome is Reencoded.UNDECODABLE:
         _reject_comment_upload(comment, "That photo couldn't be processed.")
         return False

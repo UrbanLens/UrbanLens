@@ -89,7 +89,7 @@ class Command(BaseCommand):
         from urbanlens.dashboard.services.labels.icons import resize_stored_icon
         from urbanlens.dashboard.services.media.storage import get_downscale_policy
         from urbanlens.dashboard.services.media.stored_field import Reencoded, clear_stored_field, reencode_stored_field
-        from urbanlens.dashboard.services.profile.avatar import reencode_stored_avatar
+        from urbanlens.dashboard.services.profile.avatar import GENERATED_AVATAR_PATTERN, reencode_stored_avatar
 
         rewritten = 0
         failed = 0
@@ -126,8 +126,8 @@ class Command(BaseCommand):
             if icon_name := label.custom_icon.name:
                 attempt("Label", label.pk, lambda label_id=label.pk, icon_name=icon_name: resize_stored_icon(label_id, icon_name))
 
-        # A generated emoji SVG is the site's own template, not uploaded bytes.
-        for profile in Profile.objects.exclude(avatar="").exclude(avatar__isnull=True).exclude(avatar__iendswith=".svg").order_by("pk").iterator():
+        avatars = Profile.objects.exclude(avatar="").exclude(avatar__isnull=True).exclude(avatar__regex=GENERATED_AVATAR_PATTERN)
+        for profile in avatars.order_by("pk").iterator():
             if avatar_name := profile.avatar.name:
                 attempt("Profile", profile.pk, lambda profile_id=profile.pk, avatar_name=avatar_name: reencode_stored_avatar(profile_id, avatar_name))
 

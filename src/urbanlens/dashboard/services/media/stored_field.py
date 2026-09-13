@@ -7,8 +7,10 @@ whichever file lost is deleted.
 from __future__ import annotations
 
 import enum
+import io
 import logging
 from typing import TYPE_CHECKING, Any
+import uuid
 
 from django.core.files.base import ContentFile
 from PIL.Image import DecompressionBombError
@@ -55,21 +57,26 @@ def reencode_stored_field(
 
     Returns:
         What happened. On ``UNDECODABLE`` nothing was changed; the caller decides what to do with the file.
+
+    Raises:
+        OSError: Storage could not hand back the file. That says nothing about the file, so it is not ``UNDECODABLE``.
     """
     filters = {"pk": pk, field: stored_name, **(only_if or {})}
     row = rows.filter(**filters).first()
     if row is None:
         return Reencoded.STALE
     stored = getattr(row, field)
+    with stored.open("rb") as handle:
+        raw = handle.read()
     try:
-        with stored.open("rb") as handle:
-            data, filename = reencode_image_file(handle, stored_name, max_dimension=max_dimension, convert_webp=convert_webp)
+        data, extension = reencode_image_file(io.BytesIO(raw), max_dimension=max_dimension, convert_webp=convert_webp)
     except (OSError, ValueError, EOFError, SyntaxError, DecompressionBombError) as exc:
         logger.warning("Could not re-encode %s %s's %s: %s", rows.model.__name__, pk, field, exc)
         return Reencoded.UNDECODABLE
 
     storage = stored.storage
-    new_name = storage.save(stored.field.generate_filename(row, filename), ContentFile(data))
+    # Not the uploaded name: it can say as much as the metadata, and icon and avatar paths are served to every member.
+    new_name = storage.save(stored.field.generate_filename(row, f"{uuid.uuid4().hex}{extension}"), ContentFile(data))
     replaced = rows.filter(**filters).update(**{field: new_name, **(also_set or {})})
     storage.delete(stored_name if replaced else new_name)
     return Reencoded.REPLACED if replaced else Reencoded.STALE

@@ -382,12 +382,10 @@ class CopiesMadeFromAFileStoredBeforeThePipelineTests(_MetadataCase):
         from urbanlens.dashboard.services.labels.icons import ICON_MAX_PX
         from urbanlens.dashboard.services.media.images import reencode_image_file
 
-        for slug, (name, data) in _fixtures((300, 200)).items():
+        for slug, (_, data) in _fixtures((300, 200)).items():
             with self.subTest(slug):
                 with override_settings(**SANDBOX):
-                    shrunk, _ = reencode_image_file(
-                        io.BytesIO(data), name, max_dimension=ICON_MAX_PX, convert_webp=True
-                    )
+                    shrunk, _ = reencode_image_file(io.BytesIO(data), max_dimension=ICON_MAX_PX, convert_webp=True)
 
                 self.assertClean(shrunk, "the icon")
 

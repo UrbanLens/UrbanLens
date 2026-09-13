@@ -185,15 +185,22 @@ carrier and format and searches every output for it.
 Comment and trip comment images, label icons and uploaded or downloaded avatars go
 through the same encoder (`images.reencode_image_file`), swapped in by
 `stored_field.reencode_stored_field`: a conditional update on the stored name, which
-deletes whichever file lost. A comment image is re-encoded before its `pending_scan`
-clears, in the same update, and a comment whose image cannot be decoded is rejected.
-An icon is re-encoded as WebP at 256px or less, and an avatar as WebP at 512px or
-less. An icon or avatar that cannot be decoded is removed. Neither has a
-`pending_scan`, so both show the upload until the sandbox worker has run.
+deletes whichever file lost. The new file gets a random name, not the uploaded one.
+A comment image is re-encoded before its `pending_scan`
+clears, in the same update. A comment whose image cannot be decoded is rejected; one
+storage cannot read is retried, then rejected. An icon is re-encoded as WebP at 256px
+or less, and an avatar as WebP at 512px or less. An icon or avatar that cannot be
+decoded is removed; one storage cannot read is left for a later attempt. Neither has a
+`pending_scan`, so both show the upload until the sandbox worker has run. Every avatar
+writer (upload, external API, social login, Gravatar) queues the re-encode; the
+profile form takes no avatar. A label restored by undo queues its icon again, and
+writes that load a profile or label and save it back name their columns, so a file
+swapped in meanwhile is not written over.
 `test_every_stored_user_image_is_reencoded.py` runs the same fixtures through each
 path. The one-off `strip_exif_from_stored_photos` backfill re-encodes the ones stored
-before this, after the photos. Pin and achievement icons and imported photos are still stored as uploaded
-(P119).
+before this, after the photos, skipping only avatars generated from the emoji picker
+(`avatar.GENERATED_AVATAR_PATTERN`). Pin and achievement icons and imported photos are
+still stored as uploaded (P119).
 The practical effect is the one that matters here: what gets served is bytes this
 server's encoder wrote, not bytes the uploader sent. A disguised non-image
 fails to decode; data appended after the end-of-image marker does not survive

@@ -12,6 +12,7 @@ import io
 from pathlib import Path
 import shutil
 import tempfile
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
@@ -223,13 +224,38 @@ class OtherStoredImagesBackfillTests(TestCase):
         self.assertFalse(self._carries_the_comment(self.profile.avatar))
 
     def test_a_generated_emoji_avatar_is_left_alone(self) -> None:
-        name = default_storage.save("avatars/emoji_1.svg", ContentFile(b"<svg xmlns='http://www.w3.org/2000/svg'/>"))
+        for stored_as in ("avatars/emoji_1.svg", "avatars/emoji_1_aB3dE9x.svg"):
+            with self.subTest(stored_as):
+                name = default_storage.save(stored_as, ContentFile(b"<svg xmlns='http://www.w3.org/2000/svg'/>"))
+                Profile.objects.filter(pk=self.profile.pk).update(avatar=name)
+
+                call_command("strip_exif_from_stored_photos")
+
+                self.profile.refresh_from_db()
+                self.assertEqual(self.profile.avatar.name, name)
+
+    def test_an_uploaded_svg_avatar_is_not_taken_for_a_generated_one(self) -> None:
+        """An SVG stored before uploads were allowlisted is someone's markup, not the site's template."""
+        name = default_storage.save(
+            "avatars/drawn.svg", ContentFile(b"<svg xmlns='http://www.w3.org/2000/svg' onload='alert(1)'/>")
+        )
         Profile.objects.filter(pk=self.profile.pk).update(avatar=name)
 
         call_command("strip_exif_from_stored_photos")
 
         self.profile.refresh_from_db()
-        self.assertEqual(self.profile.avatar.name, name)
+        self.assertFalse(self.profile.avatar)
+        self.assertFalse(default_storage.exists(name))
+
+    def test_a_published_comment_image_that_cannot_be_read_right_now_is_kept(self) -> None:
+        comment = self._comment()
+        name = comment.image.name
+
+        with mock.patch.object(FieldFile, "open", side_effect=OSError("storage unavailable")):
+            call_command("strip_exif_from_stored_photos", stderr=io.StringIO())
+
+        comment.refresh_from_db()
+        self.assertEqual(comment.image.name, name)
 
     def test_a_comment_still_pending_is_left_to_its_scan_task(self) -> None:
         comment = self._comment(pending_scan=True)
