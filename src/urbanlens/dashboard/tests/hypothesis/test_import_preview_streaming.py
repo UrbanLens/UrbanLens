@@ -21,7 +21,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LE
 
 
 class ImportPreviewStreamingLabelAssignmentTests(TestCase):
-    """GoogleMapsGateway.import_preview_streaming() attaches labels to imported pins."""
+    """GoogleMapsGateway.iter_confirmed_import_events() attaches labels to imported pins."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -29,7 +29,7 @@ class ImportPreviewStreamingLabelAssignmentTests(TestCase):
         self.gateway = GoogleMapsGateway(api_key="test-key")
 
     def _run(self, confirmed_lists: list[dict]) -> list[dict]:
-        return list(self.gateway.import_preview_streaming(confirmed_lists, self.profile, auto_tag=False))
+        return list(self.gateway.iter_confirmed_import_events(confirmed_lists, self.profile, auto_tag=False))
 
     def test_newly_created_category_label_is_attached_to_pin(self) -> None:
         self._run(
@@ -89,7 +89,7 @@ class ImportPreviewStreamingLabelAssignmentTests(TestCase):
 class ImportPreviewDescriptionLengthTests(TestCase):
     """_preview_pins() must not silently truncate descriptions that later get saved verbatim.
 
-    The confirm/save step (import_preview_streaming) re-uses the exact dict
+    The confirm/save step (iter_confirmed_import_events) re-uses the exact dict
     _preview_pins() built for the client-facing preview - it never re-parses the
     original file. A tight, display-oriented cutoff there used to permanently
     truncate every imported pin's description to 500 characters, even though the
@@ -119,7 +119,7 @@ class ImportPreviewDescriptionLengthTests(TestCase):
         preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
         list(
-            self.gateway.import_preview_streaming(
+            self.gateway.iter_confirmed_import_events(
                 [{"stem": "", "create_category": False, "label_ids": [], "pins": preview}],
                 self.profile,
                 auto_tag=False,
@@ -269,7 +269,7 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
 
     def _run(self, description: str, *, name: str = "Old Mill", lat: float = 40.0, lng: float = -74.0):
         return list(
-            self.gateway.import_preview_streaming(
+            self.gateway.iter_confirmed_import_events(
                 [
                     {
                         "stem": "",
@@ -286,7 +286,7 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
     def test_html_is_stripped_from_the_saved_description(self) -> None:
         # The <img> makes the importer try to materialize the photo, which fetches
         # the URL. Unmocked, that reaches the real internet: the suite's network
-        # guard raises, `import_preview_streaming` catches RuntimeError and yields
+        # guard raises, `iter_confirmed_import_events` catches RuntimeError and yields
         # "Import failed unexpectedly", and this test still passed because the pin
         # was already created by then - so it was asserting against a *failed*
         # import. Mocked the same way test_img_src_becomes_a_pin_photo_not_a_link
@@ -347,7 +347,7 @@ class ImportPreviewNamesBlankPinOnReimportTests(TestCase):
 
     def _import(self, name: str) -> list[dict]:
         return list(
-            self.gateway.import_preview_streaming(
+            self.gateway.iter_confirmed_import_events(
                 [
                     {
                         "stem": "",

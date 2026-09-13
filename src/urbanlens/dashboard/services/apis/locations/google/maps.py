@@ -131,7 +131,7 @@ def _create_pin_from_confirmed(
 ) -> tuple[Pin | None, bool]:
     """Create (or merge into) a Pin from one confirmed-import pin dict.
 
-    Shared by the synchronous confirm-import loop (``import_preview_streaming``,
+    Shared by the synchronous confirm-import loop (``iter_confirmed_import_events``,
     for pins that are already accurate - literal coords, or a cid already
     cached/linked) and the background CID-resolution Celery task
     (``tasks.resolve_deferred_pin_locations``, for pins whose cid needed a live
@@ -764,10 +764,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 _notify_pin_import_parse_failure(fmt)
 
         if not parsed and not location_history_files and not my_activity_files:
-            yield sse({"type": "error", "message": "No valid location files found in the upload."})
+            yield ({"type": "error", "message": "No valid location files found in the upload."})
             return
 
-        yield sse({"type": "start", "total": grand_total})
+        yield ({"type": "start", "total": grand_total})
 
         created_count = 0
         exists_count = 0
@@ -853,7 +853,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             skipped_count += 1
 
                     percent = min(100, int(current / grand_total * 100)) if grand_total > 0 else 100
-                    yield sse(
+                    yield (
                         {
                             "type": "progress",
                             "current": current,
@@ -894,10 +894,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         logger.exception("Unable to add label to pins: %s", exc)
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
-            yield sse({"type": "error", "message": "Import failed unexpectedly."})
+            yield ({"type": "error", "message": "Import failed unexpectedly."})
             return
 
-        yield sse(
+        yield (
             {
                 "type": "complete",
                 "total": grand_total,
@@ -1091,13 +1091,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             pins.append(pin)
         return pins
 
-    def import_preview_streaming(
+    def iter_confirmed_import_events(
         self,
         confirmed_lists: list[dict[str, Any]],
         user_profile: Profile,
         auto_tag: bool = True,
-    ):
-        r"""Stream import events for user-confirmed pin selections from the preview step.
+    ) -> Generator[dict[str, Any], None, None]:
+        r"""Import user-confirmed pin selections from the preview step, one event per pin.
 
         Each ``confirmed_lists`` entry must have:
             - ``stem`` (str): list name used for category creation.
@@ -1119,15 +1119,18 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         (decoding the Maps URL's embedded S2 cell) that's wrong roughly a
         third of the time (see ``docs/designs/redata-cid-resolution.md``). Instead
         it's queued and handed off to ``tasks.resolve_deferred_pin_locations``
-        once this stream completes, so it only ever gets placed once its real
+        once every list has been walked, so it only ever gets placed once its real
         coordinates are known. This keeps this generator itself free of any
         live REData/Google call - every pin it places here came from data
         already on hand (a matched ``Location``, or a cached lookup).
 
         Yields:
-            str: SSE-formatted data lines (event shapes as ``import_pins_streaming``,
-            plus ``{type: "deferred", count}`` when pins were queued for background
-            resolution - see above).
+            dict: ``{type: "start", total}``; one ``{type: "progress", current,
+            total, percent, created, exists, skipped, outcome, name}`` per pin;
+            then ``{type: "complete", total, created, exists, skipped, deferred}``
+            and, when pins were queued for background resolution,
+            ``{type: "deferred", count}``. ``{type: "error", message}`` ends it
+            early.
 
         Args:
             confirmed_lists: User-confirmed selection from the preview step.
@@ -1136,15 +1139,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         """
         from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 
-        def sse(data: dict) -> str:
-            return f"data: {json.dumps(data)}\n\n"
-
         total = sum(len(lst.get("pins", [])) for lst in confirmed_lists)
         if total == 0:
-            yield sse({"type": "error", "message": "No pins selected for import."})
+            yield {"type": "error", "message": "No pins selected for import."}
             return
 
-        yield sse({"type": "start", "total": total})
+        yield {"type": "start", "total": total}
 
         created_count = 0
         exists_count = 0
@@ -1205,19 +1205,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         list_deferred_pins.append(pin_dict)
                         deferred_count += 1
                         percent = min(100, int(current / total * 100)) if total > 0 else 100
-                        yield sse(
-                            {
-                                "type": "progress",
-                                "current": current,
-                                "total": total,
-                                "percent": percent,
-                                "created": created_count,
-                                "exists": exists_count,
-                                "skipped": skipped_count,
-                                "outcome": "deferred",
-                                "name": pin_name,
-                            },
-                        )
+                        yield {
+                            "type": "progress",
+                            "current": current,
+                            "total": total,
+                            "percent": percent,
+                            "created": created_count,
+                            "exists": exists_count,
+                            "skipped": skipped_count,
+                            "outcome": "deferred",
+                            "name": pin_name,
+                        }
                         continue
 
                     latitude = cached_coords[0] if cached_coords else pin_dict.get("lat")
@@ -1246,19 +1244,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         outcome = "skipped"
 
                     percent = min(100, int(current / total * 100)) if total > 0 else 100
-                    yield sse(
-                        {
-                            "type": "progress",
-                            "current": current,
-                            "total": total,
-                            "percent": percent,
-                            "created": created_count,
-                            "exists": exists_count,
-                            "skipped": skipped_count,
-                            "outcome": outcome,
-                            "name": pin_name,
-                        },
-                    )
+                    yield {
+                        "type": "progress",
+                        "current": current,
+                        "total": total,
+                        "percent": percent,
+                        "created": created_count,
+                        "exists": exists_count,
+                        "skipped": skipped_count,
+                        "outcome": outcome,
+                        "name": pin_name,
+                    }
 
                 if list_deferred_pins:
                     deferred_lists.append(
@@ -1272,26 +1268,24 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during preview import: %s", exc)
-            yield sse({"type": "error", "message": "Import failed unexpectedly."})
+            yield {"type": "error", "message": "Import failed unexpectedly."}
             return
 
-        yield sse(
-            {
-                "type": "complete",
-                "total": total,
-                "created": created_count,
-                "exists": exists_count,
-                "skipped": skipped_count,
-                "deferred": deferred_count,
-            },
-        )
+        yield {
+            "type": "complete",
+            "total": total,
+            "created": created_count,
+            "exists": exists_count,
+            "skipped": skipped_count,
+            "deferred": deferred_count,
+        }
 
         if deferred_lists:
             from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import resolve_deferred_pin_locations
 
             safely_enqueue_task(resolve_deferred_pin_locations, user_profile.pk, deferred_lists, auto_tag)
-            yield sse({"type": "deferred", "count": deferred_count})
+            yield {"type": "deferred", "count": deferred_count}
 
     @staticmethod
     def _iter_kml_placemarks(features: Iterable[Any]) -> Iterator[Any]:

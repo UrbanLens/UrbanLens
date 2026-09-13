@@ -1,38 +1,17 @@
-"""The import-confirm step must not let a client name an unbounded amount of work.
+"""The confirm step refuses an oversized selection, and never imports on the request.
 
-`GoogleMapsGateway.MAX_PREVIEW_PINS = 20_000` is enforced on the *preview* step -
-`controllers/pin.py:1281` stops previewing past it and `maps.py:984` slices the
-list - and on the *confirm* step it is not enforced at all. `import_confirmed`
-(`controllers/pin.py:2051-2076`) reads `payload.get("lists", [])`, checks only
-that it is non-empty, and streams `import_preview_streaming` straight out of the
-web worker. The preview cap is not a security boundary: nothing requires the
-confirmed list to be one the server previously previewed, or to be any particular
-size.
-
-So the request creates as many pins as the JSON says, synchronously, on the
-worker serving it. That is P96, and it is the same class of defect as the map
-504s: a bounded-looking endpoint whose cost is set by the caller.
-
-**These tests fail today, deliberately** - they are the TDD reproduction, written
-before the fix, under `xfail(strict=True)` so the suite stays green now and turns
-red the day the behaviour changes, which is the prompt to drop the markers rather
-than let them rot. Two separate claims, because two different fixes are needed and
-a partial one should not look complete:
+`GoogleMapsGateway.MAX_PREVIEW_PINS` bounds the preview, but the confirm step gets
+the selection back from the client, so nothing requires it to be one the server
+previewed, or any particular size. Two claims, because a partial fix should not
+look complete:
 
 - a payload above the cap is refused outright, rather than attempted;
 - a payload below the cap does its work in a task, so the request returns without
   having created the pins itself.
 
-The second is what actually satisfies *"tasks that do take CPU should occur in
-background processes which play nicely with the rest of the site"*. The first is
-the cheap guard that should exist regardless.
-
-Verified against the live endpoint before being trusted, because the first draft
-of this file was vacuous: it sent `latitude`/`longitude`/`address`, the generator
-recognised none of it, no pins were created, and every "it created no pins"
-assertion passed while proving nothing. The stream now answers
-``{"type": "start", "total": 3}`` and creates a row per pin - see `_pin_payload`
-for the second thing that draft got wrong.
+The payloads are ones the importer really acts on. An earlier draft sent keys the
+generator ignored, created nothing, and passed every "created no pins" assertion
+while proving nothing - see `_pin_payload`.
 """
 
 from __future__ import annotations
@@ -44,7 +23,6 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
@@ -58,7 +36,7 @@ TEST_CAP = 5
 def _pin_payload(index: int) -> dict[str, Any]:
     """One confirmed pin, in the shape the preview step hands the client.
 
-    Keys are `import_preview_streaming`'s documented contract (`name`, `lat`,
+    Keys are `iter_confirmed_import_events`'s documented contract (`name`, `lat`,
     `lng`, `description`, `cid`, `maps_url`, `label_ids`), and getting them
     wrong is not a harmless mismatch: a payload the generator does not recognise
     imports nothing, so an "it created no pins" assertion over it passes without
@@ -111,7 +89,6 @@ class ImportConfirmedRefusesAnOversizePayloadTests(TestCase):
             content_type="application/json",
         )
 
-    @pytest.mark.xfail(strict=True, reason="P96: import_confirmed is uncapped and imports on the request path")
     def test_a_payload_over_the_cap_is_refused(self) -> None:
         with mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", TEST_CAP):
             response = self._post(_lists(TEST_CAP + 1))
@@ -123,13 +100,10 @@ class ImportConfirmedRefusesAnOversizePayloadTests(TestCase):
             "(status %s). MAX_PREVIEW_PINS is enforced on preview only - P96." % response.status_code,
         )
 
-    @pytest.mark.xfail(strict=True, reason="P96: import_confirmed is uncapped and imports on the request path")
     def test_nothing_is_created_when_the_payload_is_refused(self) -> None:
         """A refusal must happen before the work, not partway through it."""
         with mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", TEST_CAP):
-            response = self._post(_lists(TEST_CAP + 1))
-            if response.streaming:
-                b"".join(response.streaming_content)
+            self._post(_lists(TEST_CAP + 1))
 
         self.assertEqual(
             Pin.objects.filter(profile=self.user.profile).count(),
@@ -137,7 +111,6 @@ class ImportConfirmedRefusesAnOversizePayloadTests(TestCase):
             "the over-cap import created pins anyway",
         )
 
-    @pytest.mark.xfail(strict=True, reason="P96: import_confirmed is uncapped and imports on the request path")
     def test_the_cap_counts_pins_across_every_list_not_per_list(self) -> None:
         """Splitting the same pins across lists must not multiply the ceiling."""
         half = TEST_CAP // 2 + 1
@@ -171,7 +144,6 @@ class ImportConfirmedDoesTheWorkOffTheRequestTests(TestCase):
         self.client.force_login(self.user)
         self.url = reverse("pin.import.confirmed")
 
-    @pytest.mark.xfail(strict=True, reason="P96: import_confirmed is uncapped and imports on the request path")
     def test_an_accepted_import_creates_no_pins_inside_the_request(self) -> None:
         """The request should hand the work to a task and return.
 
@@ -188,13 +160,11 @@ class ImportConfirmedDoesTheWorkOffTheRequestTests(TestCase):
             mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", TEST_CAP),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=None),
         ):
-            response = self.client.post(
+            self.client.post(
                 self.url,
                 data=json.dumps({"lists": _lists(TEST_CAP - 1), "auto_tag": False}),
                 content_type="application/json",
             )
-            if getattr(response, "streaming", False):
-                b"".join(response.streaming_content)
 
         self.assertEqual(
             Pin.objects.filter(profile=self.user.profile).count(),

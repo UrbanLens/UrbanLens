@@ -35,6 +35,7 @@ from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's aut
 )
 from urbanlens.dashboard.services.core.celery import update_task_progress
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+from urbanlens.dashboard.services.pins import confirmed_import
 from urbanlens.dashboard.services.sandbox import sandbox_queue
 from urbanlens.dashboard.services.sandbox.queues import Queue
 
@@ -402,6 +403,12 @@ def cleanup_import_artifacts_task(import_dir_path: str, job_id: str | None = Non
 
     cleanup_import_artifacts(import_dir_path, ImportJobStatus(job_id) if job_id else None)
     logger.info("Cleaned up import artifacts for job %s", job_id or import_dir_path)
+
+
+@shared_task(queue=Queue.BULK, soft_time_limit=confirmed_import.SOFT_TIME_LIMIT_SECONDS, time_limit=confirmed_import.TIME_LIMIT_SECONDS)
+def run_confirmed_pin_import(profile_id: int, job_id: str) -> dict[str, Any]:
+    """Run one account's confirmed pin import from the selection stored under *job_id*."""
+    return confirmed_import.run_confirmed_import(profile_id, job_id)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
@@ -2477,7 +2484,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
 
     Args:
         result: The ``CidResolutionResult`` for this round.
-        deferred_lists: The lists being imported, in import_preview_streaming's shape.
+        deferred_lists: The lists being imported, in iter_confirmed_import_events's shape.
         profile: The importing profile.
         auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
 
@@ -2566,7 +2573,7 @@ def resolve_deferred_pin_locations(
 ) -> dict[str, int]:
     """Place pins whose Google Maps CID needed a live lookup to be accurate.
 
-    Queued by ``GoogleMapsGateway.import_preview_streaming`` for any
+    Queued by ``GoogleMapsGateway.iter_confirmed_import_events`` for any
     confirmed pin whose cid had neither an existing Location nor a cached
     Places lookup - see that method's docstring for why the preview's own
     lat/lng can't be trusted for these. Resolves every cid in one batch via
@@ -2579,7 +2586,7 @@ def resolve_deferred_pin_locations(
 
     Args:
         profile_id: PK of the importing profile.
-        deferred_lists: Same shape as import_preview_streaming's
+        deferred_lists: Same shape as iter_confirmed_import_events's
             confirmed_lists, restricted to pins needing a live cid lookup -
             shrinks on each retry to just what's still unresolved.
         auto_tag: Whether to enqueue AI category suggestion for newly-created pins.

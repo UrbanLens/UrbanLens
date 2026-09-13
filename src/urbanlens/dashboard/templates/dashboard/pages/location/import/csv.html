@@ -680,6 +680,10 @@ function getCsrfToken() {
 function closeDialog() {
     if (importing) {
         if (!confirm('Import is still in progress. Leave and stop importing?')) return;
+        if (importJob && importJob.cancel_url) {
+            fetch(importJob.cancel_url, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() }, keepalive: true });
+            importJob = null;
+        }
         if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
         importing = false;
     } else if (needsConfirm) {
@@ -1166,24 +1170,12 @@ $('iw-btn-confirm').addEventListener('click', async function () {
             signal: abortCtrl.signal,
         });
 
-        if (!res.ok) throw new Error('Server returned ' + res.status);
+        var job = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error(job.error || ('Server returned ' + res.status));
 
-        var reader = res.body.getReader();
-        var decoder = new TextDecoder();
-        var buf = '';
-        while (true) {
-            var chunk = await reader.read();
-            if (chunk.done) break;
-            buf += decoder.decode(chunk.value, { stream: true });
-            var parts = buf.split('\n\n');
-            buf = parts.pop();
-            parts.forEach(function (part) {
-                part = part.trim();
-                if (part.startsWith('data: ')) {
-                    try { handleProgressEvent(JSON.parse(part.slice(6))); } catch (_) {}
-                }
-            });
-        }
+        importJob = job;
+        handleProgressEvent({ type: 'start', total: job.total });
+        await followImport(job, abortCtrl.signal);
     } catch (err) {
         if (err.name === 'AbortError') return;
         importing = false;
@@ -1191,6 +1183,40 @@ $('iw-btn-confirm').addEventListener('click', async function () {
         toastr.error(err.message, 'Import failed');
     }
 });
+
+/* -- Follow the import the server is running --------------------------- */
+var importJob = null;
+var IMPORT_POLL_MS = 1000;
+
+async function followImport(job, signal) {
+    var shown = 0;
+    while (true) {
+        await new Promise(function (resolve) { setTimeout(resolve, IMPORT_POLL_MS); });
+        if (signal.aborted) return;
+        var res = await fetch(job.status_url, { signal: signal });
+        if (!res.ok) throw new Error('Lost track of the import (' + res.status + ')');
+        var state = await res.json();
+        var r = state.result || {};
+        if (r.current && r.current !== shown) {
+            shown = r.current;
+            handleProgressEvent({
+                type: 'progress', current: r.current, total: r.total, percent: state.progress,
+                created: r.created, exists: r.exists, skipped: r.skipped, outcome: r.outcome, name: r.name,
+            });
+        }
+        if (state.status === 'done') {
+            importJob = null;
+            handleProgressEvent({ type: 'complete', total: r.total, created: r.created, exists: r.exists, skipped: r.skipped, deferred: r.deferred });
+            if (r.deferred) handleProgressEvent({ type: 'deferred', count: r.deferred });
+            return;
+        }
+        if (state.status === 'error' || state.status === 'cancelled') {
+            importJob = null;
+            handleProgressEvent({ type: 'error', message: state.message });
+            return;
+        }
+    }
+}
 
 /* -- Progress event handler -------------------------------------------- */
 var logRows = [];

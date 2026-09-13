@@ -10,7 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 from django.views import View
@@ -40,6 +40,7 @@ from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from uuid import UUID
 
     from rest_framework.request import Request
 
@@ -2049,7 +2050,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=False, methods=["post"])
     def import_confirmed(self, request: Request):
-        """Stream SSE import progress for user-confirmed pin selections from the preview step."""
+        """Queue user-confirmed pin selections from the preview step as a background import.
+
+        Returns:
+            202 with ``job_id``, ``total``, ``status_url`` and ``cancel_url``. 400 for a
+            selection refused before anything is stored, 409 while the account's
+            previous import is still running, 503 when it could not be queued.
+        """
+        from urbanlens.dashboard.services.pins.confirmed_import import ConfirmedImportRefusedError, start_confirmed_import
 
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)
@@ -2058,22 +2066,39 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             payload = request.data
             confirmed_lists = payload.get("lists", [])
             auto_tag = bool(payload.get("auto_tag", True))
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, AttributeError, ParseError):
             return JsonResponse({"error": "Invalid JSON payload."}, status=400)
 
-        if not confirmed_lists:
-            return JsonResponse({"error": "No lists provided."}, status=400)
-
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        gateway = GoogleMapsGateway()
+        try:
+            started = start_confirmed_import(profile, confirmed_lists, auto_tag=auto_tag)
+        except ConfirmedImportRefusedError as refused:
+            body = {"error": refused.message}
+            if refused.job_id:
+                body.update(_confirmed_import_urls(refused.job_id))
+            return JsonResponse(body, status=refused.status)
+        return JsonResponse({"total": started.total, **_confirmed_import_urls(started.job_id)}, status=202)
 
-        response = StreamingHttpResponse(
-            gateway.import_preview_streaming(confirmed_lists, profile, auto_tag=auto_tag),
-            content_type="text/event-stream",
-        )
-        response["Cache-Control"] = "no-cache"
-        response["X-Accel-Buffering"] = "no"
-        return response
+    def import_confirmed_status(self, request: HttpRequest, job_id: UUID):
+        """Report one of the requesting user's confirmed imports, for the import dialog to poll."""
+        from urbanlens.dashboard.services.pins.confirmed_import import read_status
+
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
+        data = read_status(request.user.pk, str(job_id))
+        if data is None:
+            return JsonResponse({"error": "Import not found or expired."}, status=404)
+        return JsonResponse(data)
+
+    def import_confirmed_cancel(self, request: HttpRequest, job_id: UUID):
+        """Ask one of the requesting user's confirmed imports to stop."""
+        from urbanlens.dashboard.services.pins.confirmed_import import cancel_confirmed_import
+
+        if not isinstance(request.user, User):
+            return JsonResponse({"error": "Authentication required."}, status=401)
+        if not cancel_confirmed_import(request.user.pk, str(job_id)):
+            return JsonResponse({"error": "Import not found or expired."}, status=404)
+        return JsonResponse({"status": "cancelling"}, status=202)
 
     def weather_forecast(self, request: HttpRequest, pin_slug):
         """
@@ -2106,6 +2131,24 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         sun_times = get_sun_times(latitude, longitude)
 
         return render(request, "dashboard/pages/location/weather.html", {"forecast": forecast, "sun_times": sun_times})
+
+
+def _confirmed_import_urls(job_id: str) -> dict[str, str]:
+    """Where the import dialog follows and cancels a confirmed import.
+
+    Args:
+        job_id: The import.
+
+    Returns:
+        ``job_id``, ``status_url`` and ``cancel_url``.
+    """
+    from django.urls import reverse
+
+    return {
+        "job_id": job_id,
+        "status_url": reverse("pin.import.confirmed.status", kwargs={"job_id": job_id}),
+        "cancel_url": reverse("pin.import.confirmed.cancel", kwargs={"job_id": job_id}),
+    }
 
 
 _REDATA_MEDIA_CACHE_TTL = 3600

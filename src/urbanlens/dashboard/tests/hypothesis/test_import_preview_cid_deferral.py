@@ -1,8 +1,8 @@
-"""Regression tests for the CID-deferral split in import_preview_streaming.
+"""Regression tests for the CID-deferral split in iter_confirmed_import_events.
 
 A confirmed pin whose cid has neither an existing Location nor a cached
 Places lookup must never be placed from the preview's own (unverified)
-lat/lng - see maps.py's import_preview_streaming docstring and
+lat/lng - see maps.py's iter_confirmed_import_events docstring and
 docs/designs/redata-cid-resolution.md for why (the free S2-decode heuristic behind
 that preview guess is wrong ~31% of the time). It should instead be queued
 for background resolution via resolve_deferred_pin_locations.
@@ -30,16 +30,13 @@ class ImportPreviewCidDeferralTests(TestCase):
         self.gateway = GoogleMapsGateway(api_key="test-key")
 
     def _run(self, pins: list[dict]) -> list[dict]:
-        events_raw = self.gateway.import_preview_streaming(
-            [{"stem": "", "create_category": False, "label_ids": [], "pins": pins}],
-            self.profile,
-            auto_tag=False,
+        return list(
+            self.gateway.iter_confirmed_import_events(
+                [{"stem": "", "create_category": False, "label_ids": [], "pins": pins}],
+                self.profile,
+                auto_tag=False,
+            ),
         )
-        events = []
-        for line in events_raw:
-            assert line.startswith("data: ")
-            events.append(json.loads(line[len("data: ") :]))
-        return events
 
     def test_pin_with_uncached_cid_is_deferred_not_created_from_preview_coords(self) -> None:
         """The preview's lat/lng for an unresolved cid is a guess - never trust it."""

@@ -13,6 +13,8 @@
  * measurement it exists to take.
  */
 
+import { sleep } from "k6";
+
 import { postForm, postJson, get } from "./session.js";
 
 const MAP_INIT = "/dashboard/map/init/";
@@ -105,13 +107,12 @@ export function labelEdit(session, fixtures, tags) {
 }
 
 /**
- * Import a batch of pins through the confirmed-import SSE endpoint.
+ * Queue a batch of pins through the confirmed import, then poll it to the end.
  *
- * Runs entirely inside the request: a generator writing rows and streaming
- * progress, with no task boundary anywhere in it (P96). The response is a
- * `text/event-stream` that stays open until the last pin is written, so k6 sits
- * on the connection for the whole import - which is exactly what a real
- * browser doing this does, and exactly why it is worth measuring.
+ * The request returns once the selection is stored and queued, and a bulk worker
+ * writes the pins. Polling to completion keeps the phase as long as the work it
+ * causes, so the neighbour is measured while the import is actually running -
+ * the same thing the import dialog does.
  *
  * `auto_tag` is off so the run measures the import rather than the AI queue it
  * would otherwise fill.
@@ -134,7 +135,7 @@ export function importConfirmed(session, fixtures, tags) {
         });
     }
 
-    return postJson(
+    const accepted = postJson(
         session,
         IMPORT_CONFIRMED,
         {
@@ -142,11 +143,23 @@ export function importConfirmed(session, fixtures, tags) {
             lists: [{ stem: "Perf Import", create_category: false, label_ids: [], pins }],
         },
         Object.assign({ endpoint: "import_confirmed" }, tags),
-        // k6's default request timeout is 60s and this legitimately runs for
-        // minutes, so without this the import is cut off by the harness and
-        // recorded as an error the server never made.
-        { timeout: fixtures.importTimeout },
     );
+    if (accepted.status !== 202) {
+        return accepted;
+    }
+
+    const statusPath = accepted.json("status_url");
+    const deadline = Date.now() + parseInt(fixtures.importTimeout, 10) * 1000;
+    let polled = accepted;
+    while (Date.now() < deadline) {
+        sleep(1);
+        polled = get(session, statusPath, Object.assign({ endpoint: "import_confirmed_status" }, tags));
+        const state = polled.status === 200 ? polled.json("status") : "error";
+        if (state === "done" || state === "error" || state === "cancelled") {
+            break;
+        }
+    }
+    return polled;
 }
 
 /** Every action by the name `schedule.js` refers to it by. */

@@ -3607,54 +3607,6 @@ throttle (e.g. keyed to declared upload size) alongside the existing count-based
 this session - no benchmark run against a 2 GB adversarial upload; the risk is by inspection of the
 cap values above, not an observed timeout.
 
-## P96 — `import_confirmed`'s SSE import creates as many Pins as the client claims, synchronously in the web worker
-
-`id: P96` · `status: open` · `updated: 2026-09-10`
-
-`controllers/pin.py:2051` `import_confirmed` reads `request.data["lists"]` with no length cap and
-streams `GoogleMapsGateway.import_preview_streaming` (`services/apis/locations/google/maps.py:1094`)
-back as an SSE response - each list's `pins` array (also uncapped at this layer) is created as a
-`Pin` row in the same request/worker that opened the stream. The only upstream limit is
-`parse_for_preview`'s `MAX_PREVIEW_PINS = 20_000` (`services/apis/locations/google/maps.py:946`) on
-the *preview* step. `import_confirmed` is a separate endpoint that trusts whatever JSON body the
-client posts back to it, not the server's own preview output, so nothing stops a client from
-replaying or hand-building a `lists` payload past that cap. A large confirmed import ties up one
-gunicorn worker (see P104/R28 on why that worker is gevent, not threads) for the duration of every
-`Pin.objects.create()` plus its `post_save` signal fan-out (`models/pin/signals.py`; the
-O(pins carrying a label) part of that was P102 and is fixed, but each created pin still pays its own
-receivers).
-
-**Measured 2026-09-10, and the number is worse than "ties up a worker".** Against the development
-stack, otherwise idle:
-
-| import | account it went into | result |
-|---|---|---|
-| 500 pins | 20,000 existing | **200, 116.6 s** |
-| 500 pins | empty | **504 at 120.0 s** — while the server finished all 500 anyway |
-
-**233 ms per pin, and the cost does not come from the account.** Two imports of the same size into a
-20,000-pin account and an empty one both took about two minutes, so this is per *imported* pin, not
-per existing one. There is no size at which it is fast.
-
-**nginx cuts it off before any realistic import can finish.** `config/nginx/django.conf:50` sets
-`proxy_read_timeout 120s` on the app location, so at 233 ms/pin the ceiling is about **510 pins** -
-and the failure is silent in the worst direction. The empty-account run above returned nginx's 504
-page to the client and *then went on to create all 500 rows*: a fully successful import that reports
-a gateway error. A user would reasonably retry, spending another two minutes re-matching the pins
-they already have, and get another 504.
-
-For scale, `parse_for_preview`'s own cap is `MAX_PREVIEW_PINS = 20_000`. At this rate that is
-**78 minutes in one request** - which nginx would end at two minutes, twenty times over, while the
-work continued.
-
-So the cap this needs is not only a guard against an adversarial payload; the ordinary path is
-already past the point where the endpoint can report its own success. Whatever replaces it has to
-return before the work does - the task-plus-progress shape in PL7 phase 6 - rather than being made
-faster.
-
-Reproductions in `dashboard/tests/hypothesis/test_import_confirmed_cap.py` are `xfail(strict=True)`
-and turn red when a cap lands.
-
 ## P97 — `dissolve_polygons` is O(n^3) GEOS work over an uncapped user-supplied polygon count
 
 `id: P97` · `status: open` · `updated: 2026-09-10`
@@ -4325,7 +4277,7 @@ one cap on one view, entered twice at different severities.
 | ~~H23~~ | medium | Fixed 2026-09-13. A pointer key drops the copy each write supersedes; the value is capped and the cache can no longer 500 a map load | — |
 | H54 | high | One 512MB Valkey holds sessions, Channels, the Django cache and the broker in one keyspace under `volatile-lru`, and only the broker's keys have no TTL | PL7 phase 4, designed and unbuilt |
 | ~~H55~~ | high | Fixed 2026-09-13. Both nginx `/tmp` mounts are sized tmpfs; response buffering bounded at 64m | — |
-| H56 | high | Under gevent a request that spends its timeout in non-yielding CPU takes the whole worker down. `--worker-connections 20` bounds the blast radius to 19 requests; it does not remove it | D11 phase 3a (gthread), designed and unbuilt |
+| H56 | high | Under gevent a request that spends its timeout in non-yielding CPU takes the whole worker down. `--worker-connections 20` bounds the blast radius to 19 requests; it does not remove it. Both requests known to run that long are fixed (P108, P96 on 2026-09-13), so it is latent rather than reachable | D11 phase 3a (gthread), designed and unbuilt |
 | ~~H65~~ | high | Fixed 2026-09-13, same day it was found. The export is handed to nginx, and the four headers X-Accel drops are stated on the internal location | — |
 
 **Parked by decision, not forgotten:**

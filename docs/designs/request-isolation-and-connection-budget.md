@@ -85,7 +85,8 @@ Two known requests could run that long, and both had entries: **P108** (a 20,000
 the collateral-kill argument is a property of those two defects, not of heavy endpoints in general.
 That is a materially weaker case for the move than this section originally made, and it should be
 weighed against both being fixable directly — **P108 now has been**, at 99 ms for that same account,
-which leaves exactly one known request in the class this decision exists to contain.
+and **P96 has moved to a bulk task** (2026-09-13), which leaves no known request in the class this
+decision exists to contain.
 
 **What the measurement did *not* weaken is decision 2.** The cap bounds the database's exposure and
 provides no fairness at all between users: during the storm the neighbour's *median* request did not

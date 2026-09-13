@@ -11,6 +11,46 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-13: `import_confirmed` created as many pins as the client sent, inside the web request
+
+`id: P96` · `status: fixed` · `resolved: 2026-09-13`
+
+The confirm step took the preview's selection back from the client and ran it as a generator inside
+the request, streaming SSE. `MAX_PREVIEW_PINS` bounded only the preview, so the confirm step accepted
+any size, and the import held the web worker for its whole length. Measured 2026-09-10 on the
+development stack: 233 ms per imported pin whatever the account's size, so nginx's 120 s
+`proxy_read_timeout` ended any import past ~510 pins with a 504 - while the server went on to create
+every row. The user saw a gateway error for an import that succeeded, and a retry spent another two
+minutes matching what they already had.
+
+`services/pins/confirmed_import.py` now owns it:
+
+- **Refused before anything is stored.** The selection's shape is checked and its pins counted from
+  list lengths before any pin is looked at; over `MAX_PREVIEW_PINS` is a 400. The four
+  `xfail(strict=True)` reproductions in `test_import_confirmed_cap.py` pass without their markers.
+- **One import per account**, by a `single_flight` guard recorded with the job id *before* the
+  enqueue. A task that finishes first releases the guard, and adopting after the enqueue would take a
+  finished job's guard back. The eager-mode test in `test_confirmed_import_job.py` is the one that
+  fails if that order is reversed.
+- **The selection is stored, not sent.** It waits under `MEDIA_ROOT/imports/<job_id>/` and the bulk
+  task receives two ids: at the ceiling the selection is megabytes, and the broker shares its Valkey
+  with sessions. The deferred CID handoff still carries its payload through the broker (H21).
+- **The dialog polls** a status URL and feeds each state through the event handler it already had.
+  Closing it cancels - the SSE version stopped by losing its connection - and the task looks for a
+  cancel every 25 pins.
+- **The task has its own limit**, 90 minutes soft, sized to the ceiling at the measured rate; the
+  site-wide hour would end a full-size import partway. Running out records how far it got, and a
+  re-run matches what was already imported instead of duplicating it.
+
+The generator is `iter_confirmed_import_events` now and yields dicts; SSE framing had no other
+consumer.
+
+**What this does not change is the per-pin cost.** It now spends a bulk worker slot instead of a web
+worker, which is what D13's queue classes are for, but a full-size import holds one of the two bulk
+slots for over an hour, and two accounts importing at once hold both. Why a pin costs 233 ms has
+never been profiled. A cancel also drops pins still waiting on a CID lookup, because the handoff to
+`resolve_deferred_pin_locations` happens after the last list.
+
 ## RESOLVED 2026-09-13: A confirmed import attached any account's labels to the importer's pins, and the map read their names back
 
 `id: P115` · `status: fixed` · `resolved: 2026-09-13`

@@ -14,13 +14,14 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.cid_resolution import CidResolutionResult
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.tasks import _place_resolved_pins
+from urbanlens.dashboard.tasks import _place_resolved_pins, run_confirmed_pin_import
 
 FOREIGN_NAME = "Victim's private label"
 OWN_NAME = "Importer's own label"
@@ -50,7 +51,7 @@ class ImportConfirmLabelScopeTests(TestCase):
         return [{"stem": "", "create_category": False, "label_ids": list_label_ids, "pins": [pin]}]
 
     def _stream(self, lists: list[dict]) -> Pin:
-        list(GoogleMapsGateway(api_key="test-key").import_preview_streaming(lists, self.importer, auto_tag=False))
+        list(GoogleMapsGateway(api_key="test-key").iter_confirmed_import_events(lists, self.importer, auto_tag=False))
         return Pin.objects.get(profile=self.importer, name="Imported")
 
     def _assert_only_pickable(self, pin: Pin) -> None:
@@ -86,13 +87,13 @@ class ImportConfirmLabelScopeTests(TestCase):
         self.client.force_login(self.importer.user)
         lists = self._lists(list_label_ids=[self.foreign.pk, self.own.pk], pin_label_ids=[self.foreign.pk])
 
-        response = self.client.post(
-            reverse("pin.import.confirmed"),
-            data=json.dumps({"lists": lists, "auto_tag": False}),
-            content_type="application/json",
-        )
-        if getattr(response, "streaming", False):
-            b"".join(response.streaming_content)
+        with tasks_run_inline(run_confirmed_pin_import):
+            response = self.client.post(
+                reverse("pin.import.confirmed"),
+                data=json.dumps({"lists": lists, "auto_tag": False}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 202, response.content)
         payload = self.client.get(reverse("map.pins")).content.decode()
 
         self.assertIn(OWN_NAME, payload, "the map payload carries no label names, so the next assertion proves nothing")

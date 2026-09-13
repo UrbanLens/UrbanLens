@@ -1046,6 +1046,16 @@ urlpatterns = [
                                             pin.PinController.as_view({"post": "import_confirmed"}),
                                             name="pin.import.confirmed",
                                         ),
+                                        path(
+                                            "confirmed/<uuid:job_id>/status/",
+                                            pin.PinController.as_view({"get": "import_confirmed_status"}),
+                                            name="pin.import.confirmed.status",
+                                        ),
+                                        path(
+                                            "confirmed/<uuid:job_id>/cancel/",
+                                            pin.PinController.as_view({"post": "import_confirmed_cancel"}),
+                                            name="pin.import.confirmed.cancel",
+                                        ),
                                     ],
                                 ),
                             ),
