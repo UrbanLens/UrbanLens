@@ -29,9 +29,10 @@ rewrite's EXIF gate, not by running the new test against the old code.
 
 `images.extract_embedded_keywords` (guarded as `image.exif`) now reads them in `_process_photo_upload`, beside
 the EXIF snapshot and before the rewrite, normalizes and caps them as provider output is, and stores them on the
-encrypted `Image.embedded_keywords`. The provider reads that column and opens nothing. It reports itself
-unavailable while the column is None, so a photo processed before the column existed keeps the keywords it has
-instead of having them replaced with none. Dedup siblings copy the column wherever they copy `exif_data`, and
+encrypted `Image.embedded_keywords`. The provider reads that column and opens nothing. It runs only when the
+column holds keywords: an empty record cannot tell a file with none from one rewritten before it was read, and
+the first version, which ran for any recorded value, let a sweep re-running the upload task on an older photo
+replace that photo's keywords with none. Dedup siblings copy the column wherever they copy `exif_data`, and
 `strip_exif_from_stored_photos` records it before stripping.
 
 **Not changed:** existing photos are not backfilled - the ones already rewritten have no keywords left to read,

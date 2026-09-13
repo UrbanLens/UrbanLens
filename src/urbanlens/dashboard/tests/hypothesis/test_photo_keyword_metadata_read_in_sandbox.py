@@ -117,6 +117,17 @@ class EmbeddedKeywordsAreReadInTheSandboxTests(TestCase):
 
         self.assertEqual(self._stored_keywords(self.image), {"hospital"})
 
+    def test_reprocessing_a_rewritten_photo_keeps_the_keywords_it_has(self) -> None:
+        """A sweep re-running the upload task on a photo rewritten before the column existed finds nothing to read."""
+        self._process(self.image)
+        Image.objects.filter(pk=self.image.pk).update(embedded_keywords=None)
+        self.image.refresh_from_db()
+        ImageKeyword.objects.create(image=self.image, source=MetadataKeywordProvider.slug, keyword="hospital")
+
+        self._process(self.image)
+
+        self.assertEqual(self._stored_keywords(self.image), {"hospital"})
+
     def test_a_deduplicated_copy_carries_the_keywords(self) -> None:
         """A dedup sibling never runs the upload task, and the file it shares has already been rewritten."""
         self._process(self.image)

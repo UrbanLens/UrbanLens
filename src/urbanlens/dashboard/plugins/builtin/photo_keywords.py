@@ -42,15 +42,18 @@ class MetadataKeywordProvider(PhotoKeywordProvider):
     label = "Embedded metadata keywords"
 
     def is_available_for(self, image: Image) -> bool:
-        """Only once the upload task has read the file, so a photo it never read keeps the keywords it has.
+        """Only when the upload task recorded keywords.
+
+        An empty record cannot tell a file with none from one rewritten before it was read, so it never
+        replaces the keywords a photo already has.
 
         Args:
             image: The uploaded image.
 
         Returns:
-            True when ``Image.embedded_keywords`` has been recorded.
+            True when ``Image.embedded_keywords`` holds at least one keyword.
         """
-        return image.embedded_keywords is not None
+        return bool(image.embedded_keywords)
 
     def generate(self, image: Image) -> list[KeywordResult]:
         """Return the keywords recorded on the row; the stored file is never opened here.
