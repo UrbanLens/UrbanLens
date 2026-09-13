@@ -310,7 +310,12 @@ VALKEY_URL = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
 if VALKEY_URL:
     CACHES = {
         "default": {
-            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            # Not the stock RedisCache: with Valkey down that raises from the
+            # two paths Django leaves unguarded in cached_db (login and
+            # logout), and every request pays socket_timeout once per cache
+            # call - measured at 32s per request, readiness probe included.
+            # See core/cache_backend.py and P105.
+            "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
             "LOCATION": VALKEY_URL,
             "KEY_PREFIX": "urbanlens",
             "VERSION": 1,
@@ -320,6 +325,7 @@ if VALKEY_URL:
                 "socket_connect_timeout": 1,
                 "socket_timeout": 2,
                 "retry_on_timeout": True,
+                "BREAKER_SECONDS": _app_settings.cache_breaker_seconds,
             },
         },
     }

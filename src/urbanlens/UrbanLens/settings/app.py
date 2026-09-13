@@ -267,6 +267,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "first marker, not server memory - the document is streamed in batches either way."
         ),
     )
+    cache_breaker_seconds: float = Field(
+        default=10.0,
+        description=(
+            "How long one failed cache call makes the rest of this worker's calls answer as a miss without "
+            "touching the store. A request makes roughly a dozen cache calls, so without this an outage costs "
+            "socket_timeout once each - measured at 32 seconds per request, which is slower than failing. Set to "
+            "0 to try the store every time and only suppress the error."
+        ),
+    )
     saved_filter_max_cached_uuids: int = Field(
         default=20_000,
         description=(

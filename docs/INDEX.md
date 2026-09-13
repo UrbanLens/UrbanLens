@@ -98,7 +98,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P103 | open | 2026-09-10 | `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P104 | open | 2026-09-10 | Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P105 | open | 2026-09-10 | A Valkey outage 500s every request after 32 seconds, including the readiness probe | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P105 | open | 2026-09-13 | A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P107 | open | 2026-09-10 | The saved-filter count badges read every pin in the account to draw a number | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P109 | open | 2026-09-10 | One import's task fan-out fills the only Celery queue for hours, and a safety task waits behind it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P110 | open | 2026-09-10 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off | [`docs/PROBLEMS.md`](PROBLEMS.md) |

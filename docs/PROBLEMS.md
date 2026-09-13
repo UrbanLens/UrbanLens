@@ -3796,9 +3796,9 @@ were never the ones taken and it kept serving at 100/100. `chaos.py`'s `connecti
 scenario holds them *as the application's role*, which is the faithful version; it could not be run
 because that tool cannot dispatch (N20).
 
-## P105 — A Valkey outage 500s every request after 32 seconds, including the readiness probe
+## P105 — A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict
 
-`id: P105` · `status: open` · `updated: 2026-09-10`
+`id: P105` · `status: open` · `updated: 2026-09-13`
 
 **Measured 2026-09-10, and it is much worse than this entry originally claimed.** The heading used to
 read "locks every user out of logging in, while already-signed-in browsing keeps working". The
@@ -3879,7 +3879,68 @@ as "P105 plus something else" is that coupling rather than a second defect. Foun
 infrastructure repo while building the chaos scenarios (N17); it is the sharper half of the argument
 for D11's Valkey split, which had been justified on the fill case alone.
 
-Not fixed. See D11 for the Valkey split this sits inside; the chaos scenario is the reproduction.
+**Fixed 2026-09-13, and measured the same way it was found.** `core/cache_backend.py`'s
+`ResilientRedisCache` replaces the stock backend, on the principle that **a cache that cannot be
+reached behaves like a cache with nothing in it** — which covers `exists()` and `delete()`, the two
+Django leaves bare, and every direct `cache.get` in this codebase, in one place rather than at
+thirty call sites.
+
+The half that decides whether the site is up is the breaker, not the swallowing. One failure holds
+the store off for `UL_CACHE_BREAKER_SECONDS` (10s) and every later call in that window answers
+immediately without touching a socket, so a request pays one timeout rather than one per call. One
+probe is let through when the window ends, so recovery needs no signal and nothing has to notice
+Valkey came back.
+
+Measured on the dev stack with Valkey paused, against the 32s this entry recorded:
+
+```
+  GET /                        200 in 0.04s        (was 500 in 32.17s)
+  session create+load+flush    OK   in 4.25s       (was: raises - login and logout)
+  16 consecutive cache reads        in 0.00s       (was ~32s)
+```
+
+Three answers are deliberately not "as if empty", and each is a decision rather than an oversight:
+
+- **`add` reports False.** It is the claim half of every lock here (`services/core/single_flight`),
+  and a lock granted by a store that cannot hold it is not a lock.
+- **`incr` raises `ValueError`** — what Django raises for an absent key, which is the honest answer.
+  `account._bump_counter` already catches that and restarts the window, so a failed-login counter
+  degrades instead of exploding.
+- **A full store (`OutOfMemoryError`) degrades that one write without tripping the breaker.**
+  `volatile-lru` is still perfectly able to answer reads; holding them off for ten seconds because a
+  write did not fit would turn H54's fill case into an outage it is not.
+
+**The abuse controls fail open, and this entry's own note asked for that to be an explicit
+decision.** It is the project's existing one: `services/security/throttle.py` and
+`socket_budget.py` both allow when they cannot read their counter, on the reasoning that an outage
+which also locks everyone out is strictly worse. The login lockout now inherits it by the same
+argument. The residual, stated rather than left implied: for the length of an outage, and only then,
+failed-login counting stops.
+
+**The first version of this passed 18 unit tests and did nothing at all.** redis-py's
+`ConnectionError` and `TimeoutError` derive from `RedisError`, **not** from the builtins of the same
+name, so a backend catching the builtins caught none of them — and every mock in the suite raised a
+builtin, so the suite agreed. Found in about a minute by pausing Valkey against a real stack, and
+not findable any other way: the mock and the code shared the same wrong assumption. Every
+degradation case now runs against all four classes a real outage raises, named in one tuple at the
+top of the test file.
+
+**One thing this changes without settling: `/health/ready` answers 503 while the site serves 200s in
+40ms.** A verdict rather than a timeout is progress on its own, and the endpoint now returns in
+about 4s rather than 32. But the controller's own `_is_degraded` docstring already says an instance
+whose cache is down "still serves pages", and after this fix that is simply true — so the 503 and
+the code beside it now disagree, where before they agreed.
+
+Deliberately not changed here, because the reason it was right has moved but the consumers have not
+been looked at. `test_health.py` records the question as open in as many words, and both consumers
+live in the infrastructure repo: `deployment-web.yaml` uses `/health/ready` as its **startupProbe**
+(so a 503 during a Valkey outage blocks a rollout, which is conservative rather than wrong), and
+ingress-watch fetches it every minute and pages. If that pager keys on the status code rather than
+on `degraded`, flipping to 200 silences the alert for a real outage — which is a worse failure than
+the one being fixed. PL7 phase 2 specifies "stays 200 when degraded"; doing it needs the alert rule
+changed in the same breath, and that is an owner call across two repositories.
+
+See D11 for the Valkey split this sits inside; the chaos scenario is the reproduction.
 
 ## P107 — The saved-filter count badges read every pin in the account to draw a number
 
