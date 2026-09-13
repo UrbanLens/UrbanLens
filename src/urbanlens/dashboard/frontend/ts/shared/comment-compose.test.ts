@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 import { installGlobalCommentCompose, toggleReplyForm } from "./comment-compose";
 
-// Installed once, as it is in production: the listeners are delegated from
-// document, so re-installing per test would stack them and multiply every call.
+// Installed at import, as core.js does in production, so the file also passes when run alone.
 installGlobalCommentCompose();
 
 beforeEach(() => {
