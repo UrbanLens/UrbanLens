@@ -65,6 +65,10 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
             return self.filter(Q(profile__isnull=True) | Q(profile_id=profile))
         return self.filter(Q(profile__isnull=True) | Q(profile=profile))
 
+    def pin_assignable_by(self, profile: Profile | int) -> Self:
+        """Return the labels *profile* may put on a pin: its own and global ones, of a pin-assignable kind."""
+        return self.visible_to(profile).location_labels()
+
     def global_only(self) -> Self:
         """Return only global labels (profile=None)."""
         return self.filter(profile__isnull=True)

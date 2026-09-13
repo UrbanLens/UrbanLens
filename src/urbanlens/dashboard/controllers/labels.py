@@ -1284,7 +1284,7 @@ class LabelCustomizeView(_LabelKindMixin, LoginRequiredMixin, View):
 
 def _all_labels(profile: Profile) -> QuerySet[Label]:
     """Return all tag/category/status labels visible to the profile."""
-    return Label.objects.visible_to(profile).location_labels().in_display_order()
+    return Label.objects.pin_assignable_by(profile).in_display_order()
 
 
 def _pin_member_ids(pin: Pin) -> set[int]:

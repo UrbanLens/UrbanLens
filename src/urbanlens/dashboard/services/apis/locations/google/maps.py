@@ -246,7 +246,7 @@ def _create_pin_from_confirmed(
     if category_label:
         pin.labels.add(category_label)
     if pin_label_ids:
-        extra = list(Label.objects.filter(id__in=pin_label_ids))
+        extra = list(Label.objects.pin_assignable_by(user_profile).filter(id__in=pin_label_ids))
         if extra:
             pin.labels.add(*extra)
 
@@ -1162,7 +1162,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 list_label_ids = lst.get("label_ids") or []
                 create_category = bool(lst.get("create_category", False))
 
-                list_labels = list(Label.objects.filter(id__in=list_label_ids)) if list_label_ids else []
+                list_labels = list(Label.objects.pin_assignable_by(user_profile).filter(id__in=list_label_ids)) if list_label_ids else []
 
                 category_label = None
                 if create_category and stem:

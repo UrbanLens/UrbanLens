@@ -11,6 +11,40 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-13: A confirmed import attached any account's labels to the importer's pins, and the map read their names back
+
+`id: P115` · `status: fixed` · `resolved: 2026-09-13`
+
+`import_confirmed` takes `label_ids` from the client twice, per list and per pin, and
+`_create_pin_from_confirmed` loaded both with `Label.objects.filter(id__in=...)` - no owner, no kind.
+`_place_resolved_pins` did the same for pins whose CID resolved later. The import dialog only ever
+offers `Label.objects.visible_to(profile).location_labels()`, so the rule existed in the browser and
+nowhere on the server.
+
+It was a read as well as a write. `MapPinPayloadService._resolve_label_views` resolves a pin's labels
+by primary key, so once a foreign label was attached, the importer's own `map.pins` response carried
+its name, icon and colour. Posting a guessed id and then fetching the map read another account's
+private label names, one id at a time. Reproduced end to end before the fix:
+`test_import_confirm_label_scope.py` failed on all four cases, the payload containing the victim's
+label name.
+
+`Label.objects.pin_assignable_by(profile)` names the rule, and all five sites use it: the two that
+offer labels (the import preview, the label panel's `_all_labels`) and the three that accept them. An
+id outside it is dropped silently rather than refused, so the response cannot say which ids exist.
+
+Checked and not further instances: every other pin-label write (`pin_bulk`, the map's label edit, the
+label membership actions, the external API bulk view, `pin_suggestions`, `pin_creation`) already
+scoped to `visible_to`. Saved filters' `tags` pass through `SearchForm`'s scoped queryset; their
+`label_groups` are unscoped ids, but they only filter the owner's own pins and render as counts.
+
+**Not known: whether production already holds such rows.** The development database has none in
+30,000. The payload's label read is still by bare primary key, so a row this finds stays readable by
+its pin's owner until it is removed:
+
+```python
+Pin.labels.through.objects.filter(label__profile__isnull=False).exclude(label__profile_id=F("pin__profile_id"))
+```
+
 ## RESOLVED 2026-09-11: `MapPinCache.rebuild` dropped concurrent writes and released locks it no longer held
 
 `id: P101` · `status: fixed` · `resolved: 2026-09-11`

@@ -1277,7 +1277,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 status=400,
             )
 
-        labels = Label.objects.visible_to(profile).location_labels().in_display_order()
+        labels = Label.objects.pin_assignable_by(profile).in_display_order()
 
         previewed = sum(len(lst["pins"]) for lst in lists)
         if previewed >= gateway.MAX_PREVIEW_PINS:

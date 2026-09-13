@@ -2497,7 +2497,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
         stem = lst.get("stem", "")
         list_label_ids = lst.get("label_ids") or []
         create_category = bool(lst.get("create_category", False))
-        list_labels = list(Label.objects.filter(id__in=list_label_ids)) if list_label_ids else []
+        list_labels = list(Label.objects.pin_assignable_by(profile).filter(id__in=list_label_ids)) if list_label_ids else []
 
         category_label = None
         if create_category and stem:
