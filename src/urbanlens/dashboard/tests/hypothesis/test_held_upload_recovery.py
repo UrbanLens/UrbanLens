@@ -11,6 +11,7 @@ import os
 import shutil
 import tempfile
 import time
+from typing import IO
 from unittest import mock
 import uuid
 
@@ -148,6 +149,38 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
 
         with override_settings(**SANDBOX):
             self.assertTrue(tasks.publish_held_upload(key, profile.pk, held))
+        profile.refresh_from_db()
+        self.assertEqual(profile.avatar_upload, "")
+        self.assertTrue(profile.avatar)
+
+    def test_a_publish_still_decoding_when_the_sweep_runs_is_not_dropped(self) -> None:
+        """Two starts a deploy killed, then a third the sweep finds mid-decode: that one may yet finish."""
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        _age(held, _HOUR)
+        key = "dashboard.Profile.avatar"
+        for _ in range(2):
+            with (
+                override_settings(**SANDBOX),
+                mock.patch(_REENCODE, side_effect=MemoryError),
+                self.assertRaises(MemoryError),
+            ):
+                tasks.publish_held_upload(key, profile.pk, held)
+
+        from urbanlens.dashboard.services.media import images
+
+        decode = images.reencode_image_file
+
+        def swept_mid_decode(
+            stored_file: IO[bytes], *, max_dimension: int | None, convert_webp: bool
+        ) -> tuple[bytes, str]:
+            self._sweep()
+            return decode(stored_file, max_dimension=max_dimension, convert_webp=convert_webp)
+
+        with override_settings(**SANDBOX), mock.patch(_REENCODE, side_effect=swept_mid_decode):
+            published = tasks.publish_held_upload(key, profile.pk, held)
+
+        self.assertTrue(published, "the sweep dropped the upload while its publish was decoding it")
         profile.refresh_from_db()
         self.assertEqual(profile.avatar_upload, "")
         self.assertTrue(profile.avatar)

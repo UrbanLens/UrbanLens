@@ -13349,6 +13349,9 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   dropped a healthy upload three failed writes in, and that the concurrent index migration could not run again after
   an interrupted deploy ("already exists"). A retried start is no longer counted; each index is dropped before it is
   built.
+- **A review of that fix** found the sweep counted a publish still decoding as unfinished, so after two starts a deploy
+  killed it dropped a third that was about to succeed. A running publish is marked in the cache for up to the task's
+  hard time limit, and the sweep leaves it alone.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

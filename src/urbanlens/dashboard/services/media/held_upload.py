@@ -46,8 +46,15 @@ STALLED_HELD_AGE = timedelta(minutes=15)
 MAX_HELD_STARTS = 3
 
 
+_STARTS_TTL = int(timedelta(days=2).total_seconds())
+
+
 def _starts_key(held_name: str) -> str:
     return f"held-upload-starts:{held_name}"
+
+
+def _running_key(held_name: str) -> str:
+    return f"held-upload-running:{held_name}"
 
 
 def _touch_label_pins(label_id: int) -> None:
@@ -191,21 +198,34 @@ def publish_held(key: str, pk: int, held_name: str) -> bool:
     Raises:
         OSError: Storage could not hand back the held file.
     """
-    from urbanlens.dashboard.services.media.images import reencode_image_file
-
     held = HELD_FIELDS[key]
-    rows = apps.get_model(held.model).objects.all()
-    holding = {"pk": pk, held.upload_column: held_name}
-    row = rows.filter(**holding).first()
+    row = apps.get_model(held.model).objects.filter(pk=pk, **{held.upload_column: held_name}).first()
     if row is None:
         return False
-    shown = getattr(row, held.field)
-    storage = shown.storage
-    with storage.open(held_name, "rb") as handle:
+    with getattr(row, held.field).storage.open(held_name, "rb") as handle:
         raw = handle.read()
+    from django.conf import settings
     from django.core.cache import cache
 
-    cache.set(_starts_key(held_name), cache.get(_starts_key(held_name), 0) + 1, timeout=int(timedelta(days=2).total_seconds()))
+    cache.set(_starts_key(held_name), cache.get(_starts_key(held_name), 0) + 1, timeout=_STARTS_TTL)
+    # A worker killed mid-publish never clears this, so it lasts only as long as the task may run.
+    cache.set(_running_key(held_name), 1, timeout=settings.CELERY_TASK_TIME_LIMIT)
+    try:
+        return _publish_read(held, key, row, raw)
+    finally:
+        cache.delete(_running_key(held_name))
+
+
+def _publish_read(held: HeldField, key: str, row: Model, raw: bytes) -> bool:
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.media.images import reencode_image_file
+
+    pk, held_name = row.pk, getattr(row, held.upload_column)
+    rows = apps.get_model(held.model).objects.all()
+    holding = {"pk": pk, held.upload_column: held_name}
+    shown = getattr(row, held.field)
+    storage = shown.storage
     try:
         data, extension = reencode_image_file(io.BytesIO(raw), max_dimension=held.max_dimension, convert_webp=True)
     except (OSError, ValueError, EOFError, SyntaxError, DecompressionBombError) as exc:
@@ -217,7 +237,7 @@ def publish_held(key: str, pk: int, held_name: str) -> bool:
         new_name = storage.save(shown.field.generate_filename(row, f"{uuid.uuid4().hex}{extension}"), ContentFile(data))
     except OSError:
         # Finished, and handed to a retry: only a publish that never comes back is counted against the upload.
-        cache.set(_starts_key(held_name), max(0, cache.get(_starts_key(held_name), 1) - 1), timeout=int(timedelta(days=2).total_seconds()))
+        cache.set(_starts_key(held_name), max(0, cache.get(_starts_key(held_name), 1) - 1), timeout=_STARTS_TTL)
         raise
     also_set: dict[str, Any] = {held.field: new_name, held.upload_column: ""}
     if held.bump_updated:
@@ -323,7 +343,7 @@ def sweep_held_uploads() -> tuple[int, int]:
             except OSError:
                 logger.warning("Could not check the upload held for %s %s", held.key, pk, exc_info=True)
                 continue
-            if not stalled:
+            if not stalled or cache.get(_running_key(name)):
                 continue
             starts = cache.get(_starts_key(name), 0)
             if starts >= MAX_HELD_STARTS:
