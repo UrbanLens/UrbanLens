@@ -887,7 +887,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-django~=4.12.0",
     # Installed but disabled in `addopts`; `bin/run_tests.sh --shuffle` enables it.
-    "pytest-randomly~=4.1.0",
+    "pytest-randomly>=4.1,<5.1",
     # Parallel test workers. Off by default: each worker takes its own database,
     # so the multiplier applies to database *setup* as well, and the local
     # Postgres has been observed to fall over under exactly this load. Use it in
