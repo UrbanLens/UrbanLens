@@ -22,6 +22,9 @@ map $http_x_forwarded_proto $forwarded_scheme {
 
 server {
     listen 8080 default_server;
+    # Looked up per request, so a recreated app container is picked up without a restart.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $app_upstream urbanlens_app:8000;
     server_name _;
 
     set_real_ip_from 172.16.0.0/12;
@@ -71,7 +74,7 @@ server {
 
     location /media/ {
         proxy_read_timeout 120s;
-        proxy_pass http://urbanlens_app:8000;
+        proxy_pass http://$app_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

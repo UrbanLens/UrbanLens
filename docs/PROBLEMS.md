@@ -142,11 +142,12 @@ catalog pins - not a UrbanLens-repo defect, but worth knowing before trusting a 
 seeded pin count. Resolves itself once REData's production deployment picks up the commit that adds
 these routes; nothing to do here in the meantime beyond this note.
 
-## P7 — nginx pins its app upstream at config load and REData's `ref` is stored as permanent identity
+## P7 — REData's reconciled building `ref` is stored as permanent identity, and REData does not guarantee it is stable
 
-`id: P7` · `status: open` · `updated: 2026-08-19`
+`id: P7` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "performance and ops defects found but not fixed".
+Previously titled "performance and ops defects found but not fixed", then "nginx pins its app upstream at
+config load and REData's `ref` is stored as permanent identity"; the nginx half is fixed.
 
 Found during the 2026-08-19 sweep, verified by reading both the query definition and every call
 site. The three worst (`group_conversations_for` materialising every message in every group,
@@ -279,14 +280,14 @@ trusting the reasoning: from inside `ul_e2e-check_app`, `GET /capabilities/?lat=
 this instance reports `mapbox`/`bing_maps`/`azure_maps` as *not* applicable (no vendor keys), so the
 hardcoded list had been asking three providers it could never serve.
 
-**One more thing that repair surfaced: recreating the `app` container 502s the stack until nginx is
-restarted.** nginx resolves its upstream once, at config load, so a recreated app comes back on a new
-container IP and nginx keeps dialling the old one - `connect() failed (111: Connection refused) ...
-upstream: "http://172.25.0.5:8000/"` while the app itself answers 200 on `127.0.0.1:8000` and *every
-container reports healthy*. `create` never hits this because it brings the whole stack up together;
-any in-place repair of a running environment does, and the symptom points at the app rather than at
-nginx. A `resolver`-based upstream in the nginx config would fix it properly; `docker restart
-<slug>_nginx` is the one-line workaround, and is what the live environment needed.
+~~**Recreating the `app` container 502s the stack until nginx is restarted.**~~ Fixed 2026-09-14. nginx
+resolved each literal `proxy_pass` host once, at config load, so an app back on a new container IP kept
+being dialled at the old one while every container reported healthy. `django.conf` and
+`media.conf.template` now declare `resolver 127.0.0.11 valid=10s ipv6=off` (Docker's embedded DNS; the
+Kubernetes manifests in `../infrastructure` run no nginx) and proxy to `$app_upstream`/`$app_ws_upstream`.
+`test_nginx_resolves_upstreams_per_request.py` fails on a literal upstream or a missing resolver.
+Verified on the development stack: the app was disconnected from `app_network`, a placeholder took its
+address, and on reconnecting at 172.25.0.13 nginx served three 200s from the new address with no reload.
 
 **RESOLVED 2026-08-20: sending a group message cost a `Friendship` lookup per member, twice.**
 Measured first: an 8-member send ran 18 queries, 8 of them `Friendship.between(member, sender)`. The
