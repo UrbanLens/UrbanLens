@@ -13381,6 +13381,9 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
 - **A review of that** found a download that fails botocore's checksum check raises `FlexibleChecksumError` after one
   attempt, which s3transfer does not retry and the tuple missed. The start is counted only after the read, so a corrupt
   object was re-queued by the sweep every hour indefinitely; it is now retried and then dropped like any storage failure.
+- **A review of that** found the stubbed S3 tests built the storage with django-storages' `file_overwrite=True` default
+  rather than the production options, and nothing held the S3 save to `STORAGE_ERRORS`. The tests now build it from
+  `_S3_STORAGE_OPTIONS`, and a save the object store rejects (a 400 checksum rejection, a 503) is covered.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

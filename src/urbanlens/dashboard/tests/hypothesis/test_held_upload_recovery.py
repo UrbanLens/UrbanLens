@@ -52,6 +52,7 @@ from urbanlens.dashboard.services.media.held_upload import (
 )
 from urbanlens.dashboard.services.media.object_storage import GatedS3Storage
 from urbanlens.dashboard.tests.hypothesis.test_every_stored_photo_is_reencoded import SANDBOX, _fixtures
+from urbanlens.UrbanLens.settings.base import _S3_STORAGE_OPTIONS
 
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 _REENCODE = "urbanlens.dashboard.services.media.images.reencode_image_file"
@@ -406,11 +407,14 @@ class TheS3BackendsFailuresAreStorageErrorsTests(SimpleTestCase):
 
     def _storage(self) -> GatedS3Storage:
         return GatedS3Storage(
-            bucket_name="held",
-            access_key="test",
-            secret_key="test",
-            region_name="us-east-1",
-            endpoint_url="http://objectstore:3900",
+            **{
+                **_S3_STORAGE_OPTIONS,
+                "bucket_name": "held",
+                "access_key": "test",
+                "secret_key": "test",
+                "region_name": "us-east-1",
+                "endpoint_url": "http://objectstore:3900",
+            },
         )
 
     def test_every_operation_the_held_path_uses_fails_with_a_storage_error(self) -> None:
@@ -431,6 +435,18 @@ class TheS3BackendsFailuresAreStorageErrorsTests(SimpleTestCase):
                         with self.assertRaises(STORAGE_ERRORS):
                             call(storage)
                         stub.assert_no_pending_responses()
+
+    def test_a_save_the_object_store_rejects_fails_with_a_storage_error(self) -> None:
+        """A publish's write is checked by the object store, which rejects a body that fails its checksum with a 400."""
+        for code, status in (("BadDigest", 400), ("SlowDown", 503)):
+            with self.subTest(code=code):
+                storage = self._storage()
+                with Stubber(storage.connection.meta.client) as stub:
+                    stub.add_client_error("head_object", service_error_code="404", http_status_code=404)
+                    stub.add_client_error("put_object", service_error_code=code, http_status_code=status)
+                    with self.assertRaises(STORAGE_ERRORS):
+                        storage.save(f"{HELD_PREFIX}/{uuid.uuid4().hex}", ContentFile(b"re-encoded"))
+                    stub.assert_no_pending_responses()
 
     def test_a_read_the_download_gives_up_on_fails_with_a_storage_error(self) -> None:
         """Opening only checks the object is there; reading downloads it, and s3transfer retries a broken download itself."""
