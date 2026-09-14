@@ -14,12 +14,13 @@ import logging
 from typing import TYPE_CHECKING, Any
 import uuid
 
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import ClientError, ConnectionError as BotocoreConnectionError, HTTPClientError
 from django.apps import apps
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
 from PIL.Image import DecompressionBombError
+from s3transfer.exceptions import RetriesExceededError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -30,8 +31,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: What storage raises when it cannot do its job. The S3 backend's errors are botocore's, most of which are not OSError.
-STORAGE_ERRORS: tuple[type[Exception], ...] = (OSError, BotoCoreError, ClientError)
+#: What storage raises when it cannot do its job: OSError, or on the S3 backend the object store unreachable, refusing, or
+#: breaking every download attempt. The rest of botocore's errors, such as missing credentials or a bad parameter, are
+#: misconfiguration and are not caught.
+STORAGE_ERRORS: tuple[type[Exception], ...] = (OSError, BotocoreConnectionError, HTTPClientError, ClientError, RetriesExceededError)
 
 #: Where held uploads are stored.
 HELD_PREFIX = "unprocessed"

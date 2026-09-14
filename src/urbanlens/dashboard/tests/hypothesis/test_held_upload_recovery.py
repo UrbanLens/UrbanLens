@@ -7,6 +7,7 @@ failed is never published: the owner is told it is processing for ever, and the 
 from __future__ import annotations
 
 from contextlib import suppress
+import io
 from itertools import count
 import os
 import shutil
@@ -16,7 +17,9 @@ from typing import IO
 from unittest import mock
 import uuid
 
-from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError, ParamValidationError
+from botocore.response import StreamingBody
+from botocore.stub import Stubber
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache.backends.locmem import LocMemCache
@@ -28,7 +31,7 @@ from django.test import override_settings
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from urbanlens.core.cache_backend import ResilientRedisCache
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -37,11 +40,13 @@ from urbanlens.dashboard.models.undo.model import UNDO_RETENTION
 from urbanlens.dashboard.services.media.held_upload import (
     HELD_FIELDS,
     HELD_PREFIX,
+    STORAGE_ERRORS,
     held_rows,
     hold_upload,
     queue_held_upload,
     sweep_held_uploads,
 )
+from urbanlens.dashboard.services.media.object_storage import GatedS3Storage
 from urbanlens.dashboard.tests.hypothesis.test_every_stored_photo_is_reencoded import SANDBOX, _fixtures
 
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
@@ -322,6 +327,33 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
 
                 self.assertIn((tasks.publish_held_upload, "dashboard.Profile.avatar", recoverable.pk, held), queued)
 
+    def test_a_misconfigured_storage_client_is_not_retried_as_an_outage(self) -> None:
+        """A bad parameter or missing credentials is not storage being down; retrying only delays and quiets it."""
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        for error in (ParamValidationError(report="Invalid bucket name"), NoCredentialsError()):
+            with self.subTest(error=type(error).__name__):
+                with (
+                    override_settings(**SANDBOX),
+                    mock.patch.object(FileSystemStorage, "save", side_effect=error),
+                    mock.patch.object(tasks.publish_held_upload, "retry", side_effect=error) as retry,
+                    self.assertRaises(type(error)),
+                ):
+                    tasks.publish_held_upload("dashboard.Profile.avatar", profile.pk, held)
+                self.assertFalse(retry.called, "a misconfigured storage client was retried as though storage were down")
+
+    def test_a_sweep_whose_storage_client_cannot_authenticate_fails_loudly(self) -> None:
+        """Missing credentials are every file's problem, and a warning per file skipped hides that."""
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        _age(held, _HOUR)
+
+        with (
+            mock.patch.object(FileSystemStorage, "exists", side_effect=NoCredentialsError()),
+            self.assertRaises(NoCredentialsError),
+        ):
+            self._sweep()
+
     def test_a_held_file_a_row_still_names_is_never_removed_as_left_behind(self) -> None:
         profile = self._profile()
         held = self._held_while_the_broker_was_down(profile)
@@ -357,6 +389,62 @@ class AHeldFileNothingNamesTests(_Case):
                 self.assertTrue(default_storage.exists(expired), "storage deleted the file, so nothing was refused")
                 self.assertEqual(removed, 0, "the sweep counted a file storage refused to delete as removed")
                 default_storage.delete(expired)
+
+
+class TheS3BackendsFailuresAreStorageErrorsTests(SimpleTestCase):
+    """The failure tests above patch FileSystemStorage; this holds the real S3 backend to raising what they raise."""
+
+    def _storage(self) -> GatedS3Storage:
+        return GatedS3Storage(
+            bucket_name="held",
+            access_key="test",
+            secret_key="test",
+            region_name="us-east-1",
+            endpoint_url="http://objectstore:3900",
+        )
+
+    def test_every_operation_the_held_path_uses_fails_with_a_storage_error(self) -> None:
+        name = f"{HELD_PREFIX}/{uuid.uuid4().hex}"
+        operations = (
+            ("open", "head_object", lambda storage: storage.open(name, "rb")),
+            ("exists", "head_object", lambda storage: storage.exists(name)),
+            ("get_modified_time", "head_object", lambda storage: storage.get_modified_time(name)),
+            ("delete", "delete_object", lambda storage: storage.delete(name)),
+            ("listdir", "list_objects", lambda storage: storage.listdir(HELD_PREFIX)),
+        )
+        for label, method, call in operations:
+            for code, status in (("AccessDenied", 403), ("SlowDown", 503)):
+                with self.subTest(operation=label, status=status):
+                    storage = self._storage()
+                    with Stubber(storage.connection.meta.client) as stub:
+                        stub.add_client_error(method, service_error_code=code, http_status_code=status)
+                        with self.assertRaises(STORAGE_ERRORS):
+                            call(storage)
+
+    def test_a_read_the_download_gives_up_on_fails_with_a_storage_error(self) -> None:
+        """Opening only checks the object is there; reading downloads it, and s3transfer retries a broken download itself."""
+        name = f"{HELD_PREFIX}/{uuid.uuid4().hex}"
+        storage = self._storage()
+        attempts = storage.transfer_config.num_download_attempts
+        with Stubber(storage.connection.meta.client) as stub:
+            for _ in range(2):
+                stub.add_response("head_object", {"ContentLength": 10, "ETag": '"held"'})
+            for _ in range(attempts):
+                stub.add_response("get_object", {"Body": StreamingBody(io.BytesIO(b"short"), 10), "ContentLength": 10})
+            with self.assertRaises(STORAGE_ERRORS), storage.open(name, "rb") as handle:
+                handle.read()
+            stub.assert_no_pending_responses()
+
+    def test_a_missing_object_reads_as_missing(self) -> None:
+        """The sweep drops a held upload whose file is gone, and a publish retries one it cannot open."""
+        name = f"{HELD_PREFIX}/{uuid.uuid4().hex}"
+        storage = self._storage()
+        with Stubber(storage.connection.meta.client) as stub:
+            stub.add_client_error("head_object", service_error_code="404", http_status_code=404)
+            stub.add_client_error("head_object", service_error_code="404", http_status_code=404)
+            self.assertFalse(storage.exists(name))
+            with self.assertRaises(FileNotFoundError):
+                storage.open(name, "rb")
 
 
 class TheSweepsLookupTests(_Case):
