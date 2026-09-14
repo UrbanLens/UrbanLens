@@ -321,7 +321,7 @@ def held_rows(held: HeldField) -> QuerySet[Any, tuple[int, str]]:
 
 
 def sweep_held_uploads() -> tuple[int, int]:
-    """Queue stalled held uploads no publish is running, drop ones whose publish kept starting without finishing, and remove held files nothing names.
+    """Queue stalled held uploads no publish is running, drop ones whose file is gone or whose publish kept starting without finishing, and remove held files nothing names.
 
     A file whose row was deleted is kept past the undo window, because undo restores the row with the held name.
 
