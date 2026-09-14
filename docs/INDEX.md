@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P121` · `T3` · `PL8` · `D15` · `X18` · `I5` · `R29` · `N23`
+**Next free id:** `P122` · `T3` · `PL8` · `D15` · `X18` · `I5` · `R29` · `N23`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -64,7 +64,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-09-06 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P55 | open | 2026-09-06 | A withdrawn contribution keeps its reputation event, and the wiki gallery's delete strings are false there | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-09-05 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P57 | open | 2026-09-06 | The test-quality audit's follow-ups: 13 done; three untested surfaces, two unproven locks and two decisions remain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P58 | open | 2026-09-06 | A renamed photo's old URL still 404s for the uploader who just uploaded it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -97,6 +96,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P112 | open | 2026-09-10 | `bun run codeql:gate` fails with 26 untriaged findings, so nobody runs it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P113 | open | 2026-09-13 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 2 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P121 | open | 2026-09-14 | Pin and wiki pages give a loose photo's gallery tile and album tile the same `id` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |

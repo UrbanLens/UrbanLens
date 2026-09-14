@@ -2288,74 +2288,6 @@ The remaining ~27 concurrent requests are the page's own content (overview, gall
 markup and detail-pin JSON), the site chrome (notifications, undo stack, safety banner), and the
 five off-tab panels. Laning those would delay the page itself, which is a different trade.
 
-## P55 — A withdrawn contribution keeps its reputation event, and the wiki gallery's delete strings are false there
-
-`id: P55` · `status: open` · `updated: 2026-09-06`
-
-Previously titled "Deleting a whole wiki still withdraws a contribution without ending its quota
-bonus", and before that "A community quota bonus survives un-sharing the photo that earned it".
-Both of those halves are fixed; these two adjacent ones are what is left.
-
-**What the quota rule now is**, since the next reader will want it in one place.
-`QuotaExemption.COMMUNITY_CONTRIBUTION` is taken back exactly when a contributor ends their own
-contribution, and kept in every other case - votes withdrawn, the photo removed by someone else, the
-low-engagement sweep. Those are indistinguishable at the column (each ends as `wiki_id IS NULL`,
-with no record of who did it), so intent is stated by the caller and never inferred:
-`detach_image_from_wiki` takes a keyword-only `withdrawn_by_contributor` with no default, and
-`revoke_community_bonuses_on_wiki_delete(wiki_ids, deleted_by=...)` scopes a whole-wiki delete to
-`profile=deleted_by` so every other contributor's bonus survives it.
-
-The wiki-delete half closed on 2026-09-06. It needed three things beyond the one-line revoke, which
-is why it was filed rather than folded into the original fix, and all three are now in place: the
-revoke covers the cascaded subtree (`with_wiki_descendants`, not just the named wiki); it runs after
-the undo stash and before the delete, since the delete nulls the FK it reads; and
-`WikiUndoHandler.serialize` records which photos held the bonus (`bonus_image_ids`) so `restore`
-re-grants exactly those and invents none. Re-granting from the vote count instead was the obvious
-alternative and is worse: a threshold raised during the seven-day undo window would silently not
-restore a bonus, which is the same "somebody else's action" the one-way rule exists to prevent.
-
-The fourth thing is what the first pass at this missed, and it is the shape to expect from any
-delete whose fix does more than delete: **redo is a second copy of the delete**, and the inherited
-`UndoHandler.redo_delete` only re-deletes rows. Delete, undo, redo left the photo private with the
-bonus standing - the original defect, three clicks in instead of one. `restore` therefore records
-what it actually handed back (`regranted_image_ids`, written into the stashed entry, which
-`restore_undo_action` persists) and `WikiUndoHandler.redo_delete` takes back exactly that; by then
-a re-granted exemption and one that was never revoked are indistinguishable in the column.
-
-~~**Still open, one.** The reputation ledger keeps the `ReputationEvent` for a withdrawn
-contribution.~~ **Fixed 2026-09-06.** `retract_events_for_target` (in `services.reputation.scoring`,
-beside the `retract_event` it builds on) is called from `detach_image_from_wiki` when
-`withdrawn_by_contributor` - the same intent flag, at the same point, as the quota revoke beside it,
-so the two halves of one withdrawal cannot drift apart. Both branches are covered: the photo is kept
-when it is still on a pin and deleted when it is not, and the contribution has ended either way.
-
-The two tests that constrain the fix matter more than the one that detects the bug: **somebody
-else's removal must not retract** (`withdrawn_by_contributor=False`), which is the one-way rule this
-entry states, and **`lifetime_earned` must not fall**, since `recompute_total` is explicit that
-reverting contributions cannot take away access a user already had.
-
-**And it is not the only way an event outlives its subject.** `target_id` is a plain `IntegerField`
-and the ledger subscribes to `post_save` only, so *deleting* a contribution outright leaves its
-points standing too - reproduced, and filed as P86 rather than fixed here, because `post_delete`
-cannot tell a contributor's own deletion from a moderator's and this entry's one-way rule turns on
-exactly that distinction.
-
-**Still open, two.** In the wiki context the shared `galleryDelete` handler still prompts "This
-cannot be undone - the file is removed permanently" and toasts "Photo deleted." for a dual-owned
-photo the server only unlinks. Both strings are false there, and correcting them means changing a
-response shape three contexts share, so it wants a browser.
-
-**Not doing the "record the bonus as an amount" redesign**, and the reason is worth keeping because
-it reads like the obvious fix: it does not fix anything here. A per-wiki credit row with the same
-missing revoke survives an unlink identically - the defect was that nothing revoked, not that the
-exemption is a flag. It also costs: `get_storage_used_bytes`, `get_exempt_bytes` and
-`get_storage_totals` each answer in one aggregate over `Image` served by `idxdb_image_profile_quota`,
-and a credit table makes all three a second aggregate plus a join. And an amount frozen at grant time
-drifts from the file that earned it, because `file_size` is rewritten later
-(`strip_exif_from_stored_photos` does exactly that). It becomes genuinely necessary only if a credit
-should outlive the photo that earned it - a balance that survives its photo cannot be a flag on that
-photo's row - which is a product question, not an implementation one.
-
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
 `id: P56` · `status: open` · `updated: 2026-09-05`
@@ -5025,3 +4957,18 @@ fields. It belongs in the `infrastructure` repo beside the other host timers, no
 Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
+
+## P121 — Pin and wiki pages give a loose photo's gallery tile and album tile the same `id`
+
+`id: P121` · `status: open` · `updated: 2026-09-14`
+
+Found verifying P55. On a wiki page with the Media card's Manage tab open, `_photo_gallery.html`'s `#gallery-grid` and
+`_albums_panel.html`'s `#albums-loose-grid` (through `albums/_photo_tile.html`) each rendered `<li id="gallery-item-47">`
+for the same photo. The pin page includes both panels as well; that was not checked in a browser.
+
+Tiles are looked up by that id: three more lookups in `_photo_gallery.html`, one in `_photo_lightbox.html`, and several in
+`album-items.ts` and `album-map.ts`. `getElementById` returns the first match, which on both pages is the gallery's tile
+only because its panel comes first in the DOM, so a handler meant for the album copy acts on the gallery's instead.
+`galleryDelete` now scopes its lookup to `#gallery-grid`, because its wording reads that tile's data attributes. Not
+checked: whether deleting from one grid leaves the other's copy on screen, and which of the other lookups reach the
+wrong tile today.

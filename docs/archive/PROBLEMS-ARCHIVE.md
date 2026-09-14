@@ -11,6 +11,78 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-14: a withdrawn contribution kept its reputation event, and the wiki gallery's delete wording was false
+
+`id: P55` · `status: fixed` · `resolved: 2026-09-14`
+
+Previously titled "A withdrawn contribution keeps its reputation event, and the wiki gallery's delete strings are false
+there", before that "Deleting a whole wiki still withdraws a contribution without ending its quota bonus", and before
+that "A community quota bonus survives un-sharing the photo that earned it". All four halves are fixed.
+
+**What the quota rule now is**, since the next reader will want it in one place.
+`QuotaExemption.COMMUNITY_CONTRIBUTION` is taken back exactly when a contributor ends their own
+contribution, and kept in every other case - votes withdrawn, the photo removed by someone else, the
+low-engagement sweep. Those are indistinguishable at the column (each ends as `wiki_id IS NULL`,
+with no record of who did it), so intent is stated by the caller and never inferred:
+`detach_image_from_wiki` takes a keyword-only `withdrawn_by_contributor` with no default, and
+`revoke_community_bonuses_on_wiki_delete(wiki_ids, deleted_by=...)` scopes a whole-wiki delete to
+`profile=deleted_by` so every other contributor's bonus survives it.
+
+The wiki-delete half closed on 2026-09-06. It needed three things beyond the one-line revoke, which
+is why it was filed rather than folded into the original fix, and all three are now in place: the
+revoke covers the cascaded subtree (`with_wiki_descendants`, not just the named wiki); it runs after
+the undo stash and before the delete, since the delete nulls the FK it reads; and
+`WikiUndoHandler.serialize` records which photos held the bonus (`bonus_image_ids`) so `restore`
+re-grants exactly those and invents none. Re-granting from the vote count instead was the obvious
+alternative and is worse: a threshold raised during the seven-day undo window would silently not
+restore a bonus, which is the same "somebody else's action" the one-way rule exists to prevent.
+
+The fourth thing is what the first pass at this missed, and it is the shape to expect from any
+delete whose fix does more than delete: **redo is a second copy of the delete**, and the inherited
+`UndoHandler.redo_delete` only re-deletes rows. Delete, undo, redo left the photo private with the
+bonus standing - the original defect, three clicks in instead of one. `restore` therefore records
+what it actually handed back (`regranted_image_ids`, written into the stashed entry, which
+`restore_undo_action` persists) and `WikiUndoHandler.redo_delete` takes back exactly that; by then
+a re-granted exemption and one that was never revoked are indistinguishable in the column.
+
+**The reputation ledger kept the `ReputationEvent` for a withdrawn contribution; fixed 2026-09-06.** `retract_events_for_target` (in `services.reputation.scoring`,
+beside the `retract_event` it builds on) is called from `detach_image_from_wiki` when
+`withdrawn_by_contributor` - the same intent flag, at the same point, as the quota revoke beside it,
+so the two halves of one withdrawal cannot drift apart. Both branches are covered: the photo is kept
+when it is still on a pin and deleted when it is not, and the contribution has ended either way.
+
+The two tests that constrain the fix matter more than the one that detects the bug: **somebody
+else's removal must not retract** (`withdrawn_by_contributor=False`), which is the one-way rule this
+entry states, and **`lifetime_earned` must not fall**, since `recompute_total` is explicit that
+reverting contributions cannot take away access a user already had.
+
+**And it is not the only way an event outlives its subject.** `target_id` is a plain `IntegerField`
+and the ledger subscribes to `post_save` only, so *deleting* a contribution outright leaves its
+points standing too - reproduced, and filed as P86 rather than fixed here, because `post_delete`
+cannot tell a contributor's own deletion from a moderator's and this entry's one-way rule turns on
+exactly that distinction.
+
+**The wiki gallery's delete wording; fixed 2026-09-14.** `WikiImageView.delete` keeps a photo still on its owner's pin
+and only unlinks it from the wiki, but the shared `galleryDelete` handler warned "the file is removed permanently" and
+toasted "Photo deleted." there. No response shape had to change: each gallery tile now carries `data-on-pin`, set only on
+the viewer's own photos so nobody learns whether someone else's photo is pinned, and in the wiki context such a tile asks
+"Remove this photo from the community wiki? It stays on your pin." and toasts "Removed from the wiki. Still on your pin."
+`test_wiki_gallery_delete_wording.py` covers the attribute. Verified in Chromium on the development stack: a dual-owned
+photo got the new prompt and toast and kept its pin with `wiki_id` cleared, and a wiki-only photo still got the
+permanent-delete prompt and "Photo deleted." and its row was gone. The context menu's own "This cannot be undone" delete
+is not offered there, since the wiki gallery sets no bulk URL.
+
+**Not doing the "record the bonus as an amount" redesign**, and the reason is worth keeping because
+it reads like the obvious fix: it does not fix anything here. A per-wiki credit row with the same
+missing revoke survives an unlink identically - the defect was that nothing revoked, not that the
+exemption is a flag. It also costs: `get_storage_used_bytes`, `get_exempt_bytes` and
+`get_storage_totals` each answer in one aggregate over `Image` served by `idxdb_image_profile_quota`,
+and a credit table makes all three a second aggregate plus a join. And an amount frozen at grant time
+drifts from the file that earned it, because `file_size` is rewritten later
+(`strip_exif_from_stored_photos` does exactly that). It becomes genuinely necessary only if a credit
+should outlive the photo that earned it - a balance that survives its photo cannot be a flag on that
+photo's row - which is a product question, not an implementation one.
+
 ## RESOLVED 2026-09-14: a stored multi-part region reloaded as one layer, so one delete removed every part
 
 `id: P120` · `status: fixed` · `resolved: 2026-09-14`

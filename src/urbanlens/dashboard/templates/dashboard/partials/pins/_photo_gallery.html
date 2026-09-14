@@ -56,6 +56,7 @@
         data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
         data-on-wiki="{% if img.wiki_id %}true{% else %}false{% endif %}"
         data-uploaded="{% if img.is_own_contribution %}true{% else %}false{% endif %}"
+        data-on-pin="{% if img.profile == profile and img.pin_id %}true{% else %}false{% endif %}"
         data-map-hidden="{% if img.map_hidden %}true{% else %}false{% endif %}"
         onmouseenter="galleryHover({{ img.pk }}, true)"
         onmouseleave="galleryHover({{ img.pk }}, false)">
@@ -388,12 +389,15 @@
 
   // -- Delete -----------------------------------------------------------------
   window.galleryDelete = function (imgId) {
-    var tile = document.getElementById('gallery-item-' + imgId);
+    var tile = document.querySelector('#gallery-grid #gallery-item-' + imgId);
     var onWiki = CONTEXT_TYPE === 'pin' && tile && tile.dataset.onWiki === 'true';
     var uploaded = tile && tile.dataset.uploaded === 'true';
+    var keptOnPin = CONTEXT_TYPE === 'wiki' && tile && tile.dataset.onPin === 'true';
     var withdraw = false;
 
-    if (!onWiki) {
+    if (keptOnPin) {
+      if (!confirm('Remove this photo from the community wiki?\n\nIt stays on your pin.')) return;
+    } else if (!onWiki) {
       if (!confirm('Delete this photo?\n\nThis cannot be undone - the file is removed permanently.')) return;
     } else if (!uploaded) {
       // Fetched from a URL: it was a public resource online before we saw it,
@@ -419,12 +423,11 @@
         if (window.toastr) toastr.error('Could not delete that photo.');
         return;
       }
-      var el = document.getElementById('gallery-item-' + imgId);
-      if (el) el.remove();
+      if (tile) tile.remove();
       _items = _items.filter(function (i) { return i.id !== imgId; });
       if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
       _updateGalleryCountLabel(-1);
-      if (window.toastr) toastr.success(onWiki && !withdraw ? 'Removed from this pin. Still on the wiki.' : 'Photo deleted.');
+      if (window.toastr) toastr.success(keptOnPin ? 'Removed from the wiki. Still on your pin.' : onWiki && !withdraw ? 'Removed from this pin. Still on the wiki.' : 'Photo deleted.');
     }).catch(function () {
       if (window.toastr) toastr.error('Could not delete that photo.');
     });
