@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.consensus.model import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.consensus import chat as consensus_chat, fields, serializers, session as consensus_session
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.social.connections import get_connections
 
 logger = logging.getLogger(__name__)
@@ -419,7 +420,7 @@ class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         if round_.resolution != ConsensusRoundResolution.VOTE_OPEN:
             return JsonResponse({"error": "This round isn't open for voting."}, status=400)
 
-        chosen_answer = get_object_or_404(ConsensusAnswer, pk=request.POST.get("answer_id"), round=round_)
+        chosen_answer = get_object_or_404(ConsensusAnswer, pk=safe_int_or_none(request.POST.get("answer_id")), round=round_)
         try:
             consensus_session.submit_vote(round_, profile, chosen_answer)
         except consensus_session.NotJoinedError as exc:

@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -186,7 +187,7 @@ def _clamped_opacity(raw: str | None, fallback: int) -> int:
         return fallback
 
 
-def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> tuple[object | None, str, str | None]:
+def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> tuple[Image | None, str, str | None]:
     """Resolve the overlay's image source from an upload, a gallery pick, or a URL.
 
     Args:
@@ -204,7 +205,7 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
     # owned Image.
     image_id = (request.POST.get("image_id") or "").strip()
     if image_id:
-        image = _overlay_picker_images(owner, profile).filter(pk=image_id).first()
+        image = _overlay_picker_images(owner, profile).filter(pk=safe_int_or_none(image_id)).first()
         if image is None:
             return None, "", "That photo could not be found."
         return image, "", None

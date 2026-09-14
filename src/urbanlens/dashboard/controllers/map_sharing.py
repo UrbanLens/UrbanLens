@@ -15,6 +15,7 @@ from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.sharing.map_sharing import share_markup_map_with_profile
@@ -61,7 +62,7 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
         """
         sender, _ = Profile.objects.get_or_create(user=request.user)
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile=sender)
-        recipient = get_object_or_404(Profile, pk=request.POST.get("profile_id"))
+        recipient = get_object_or_404(Profile, pk=safe_int_or_none(request.POST.get("profile_id")))
         if recipient == sender or not are_connections(sender, recipient):
             return HttpResponse("Maps can only be shared with connected friends.", status=403)
 

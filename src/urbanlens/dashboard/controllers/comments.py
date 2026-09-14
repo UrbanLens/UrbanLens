@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, UnsupportedReactionEmojiError, comment_is_visible, toggle_reaction, top_level_comment_queryset, visible_comment_count, visible_comment_tree
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import (
@@ -123,7 +124,7 @@ def attach_existing_comment_image(comment: Comment, existing_image_id: str, prof
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
 
-    source = Image.objects.uploaded_by(profile).filter(pk=existing_image_id, media_type=MediaKind.PHOTO).first()
+    source = Image.objects.uploaded_by(profile).filter(pk=safe_int_or_none(existing_image_id), media_type=MediaKind.PHOTO).first()
     if not source:
         return
     comment.image.save(os.path.basename(source.image.name), ContentFile(source.image.read()), save=True)
@@ -289,7 +290,7 @@ class PinCommentsView(LoginRequiredMixin, View):
         if parent_id:
             # parent__isnull=True: replies render one level deep (visible_comment_tree never walks a reply's own
             # .replies), so a reply-to-a-reply would persist but never appear anywhere.
-            parent = get_object_or_404(Comment, id=parent_id, pin=pin, parent__isnull=True)
+            parent = get_object_or_404(Comment, id=safe_int_or_none(parent_id), pin=pin, parent__isnull=True)
         comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=pin))
         if image:
             comment.image = image
@@ -403,7 +404,7 @@ def _wiki_comment_addressable_by(wiki: Wiki, profile: Profile, comment_id: int |
     """
     comment = get_object_or_404(
         _visible_wiki_comments(wiki, profile, include_children=True).select_related("profile"),
-        id=comment_id,
+        id=safe_int_or_none(comment_id),
     )
     if not comment_is_visible(comment, profile):
         raise Http404

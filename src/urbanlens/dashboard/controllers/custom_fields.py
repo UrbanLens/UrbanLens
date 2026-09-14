@@ -40,6 +40,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS
 
 if TYPE_CHECKING:
@@ -534,7 +535,7 @@ class PhotoCustomFieldsView(LoginRequiredMixin, View):
         profile, image = self._resolve(request, image_id)
         if image is None:
             return HttpResponse(status=204)
-        field = get_object_or_404(CustomField, id=request.POST.get("field_id"), profile=profile, entity_type=CustomFieldEntity.PHOTO)
+        field = get_object_or_404(CustomField, id=safe_int_or_none(request.POST.get("field_id")), profile=profile, entity_type=CustomFieldEntity.PHOTO)
         _, error = save_value(field, image, request.POST.get("value", ""))
         return _render_strip(request, profile, CustomFieldEntity.PHOTO, image, "custom_fields.photo", image.pk, error=error)
 
@@ -558,6 +559,6 @@ class MarkupMapCustomFieldsView(LoginRequiredMixin, View):
         profile, markup_map = self._resolve(request, map_uuid)
         if markup_map is None:
             return HttpResponse(status=204)
-        field = get_object_or_404(CustomField, id=request.POST.get("field_id"), profile=profile, entity_type=CustomFieldEntity.MARKUP_MAP)
+        field = get_object_or_404(CustomField, id=safe_int_or_none(request.POST.get("field_id")), profile=profile, entity_type=CustomFieldEntity.MARKUP_MAP)
         _, error = save_value(field, markup_map, request.POST.get("value", ""))
         return _render_strip(request, profile, CustomFieldEntity.MARKUP_MAP, markup_map, "custom_fields.markup_map", markup_map.uuid, error=error)

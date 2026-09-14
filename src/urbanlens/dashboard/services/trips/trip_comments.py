@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
 from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
 
 # Module-level, unlike the controller helpers below: these notifications are a
@@ -295,7 +296,7 @@ def add_comment(
         # parent__isnull=True: replies render one level deep, so a
         # reply-to-a-reply would persist but never appear anywhere - refuse
         # it the same way an unknown parent id already is.
-        parent = TripComment.objects.filter(id=parent_id, trip=trip, parent__isnull=True).select_related("author").first()
+        parent = TripComment.objects.filter(id=safe_int_or_none(parent_id), trip=trip, parent__isnull=True).select_related("author").first()
         if parent is None:
             raise TripNotFoundError(COMMENT_NOT_FOUND)
 

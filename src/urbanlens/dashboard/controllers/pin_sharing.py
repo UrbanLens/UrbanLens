@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.sharing.map_sharing import share_markup_map_with_profile
@@ -118,7 +119,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
     def post(self, request, pin_slug):
         sender = request.user.profile
         pin = get_object_or_404(Pin, slug=pin_slug, profile=sender)
-        recipient = get_object_or_404(Profile, pk=request.POST.get("profile_id"))
+        recipient = get_object_or_404(Profile, pk=safe_int_or_none(request.POST.get("profile_id")))
         if recipient == sender or not are_connections(sender, recipient):
             return HttpResponse("Pins can only be shared with connected friends.", status=403)
 

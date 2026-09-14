@@ -3076,7 +3076,7 @@ design question, not a mechanical one.
 
 ## P85 — Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it
 
-`id: P85` · `status: open` · `updated: 2026-09-06`
+`id: P85` · `status: open` · `updated: 2026-09-14`
 
 `models/abstract/queryset.py` builds each manager by subclassing a call:
 
@@ -3160,11 +3160,30 @@ of those was written and then reverted, along with a test that asserted the 400 
 returning for its own reason and would have passed either way. `safe_int_or_none` now holds the
 parsing rule and `safe_int`/`clamp_int` are built on it, so the three cannot drift apart again.
 
-The remaining 30 are unaudited. About a dozen are more of the `EnrichmentSource`
-ClassVar-vs-instance-variable pattern; `Expected iterable as variadic argument` at
-`forms/settings_form.py:50` and `"dispatch" undefined in superclass` at `controllers/games.py:45`
-and `controllers/labels.py:611` have not been looked at. The tally so far is three false positives
-and two real bugs, which is the argument against leaving the code off: a blanket disable of the code
+**The rest, triaged 2026-09-14.** Re-measured with `--enable-error-code misc`: 190 errors, 146 the
+dynamic base class, 16 the `EnrichmentSource` ClassVar-vs-instance-variable pattern
+(`MediaPanelSource.__init__` assigning `key`/`cache_source` is the same thing seen from the instance
+side). None of the remaining 27 is a defect in itself: django-stubs cannot see the self-referential
+M2M through model's `from_label`/`to_label`, `.annotate()` names, a `date` in `visited_at__date__in`,
+or that `pk=None` from `safe_int_or_none` is a deliberate zero-row lookup; the `dispatch` findings
+are mixins with no declared base; `ConsentPreferenceWording`'s `WITHOUT_FACE` is shadowed by an enum
+member on purpose; `except (*STORAGE_ERRORS, ...)` is a typed tuple mypy will not unpack; and
+`AppSettings.__getattr__`'s `super()` is pydantic's, defined only outside `TYPE_CHECKING`.
+
+One of them pointed at a real bug anyway. `controllers/map_overlays.py::_image_from_request` returned
+`object | None`, and the `Image` path behind that loose type passed the raw `image_id` POST string to
+`filter(pk=...)` - `ValueError`, a 500, for any non-numeric id. Sweeping for the same shape found it
+on nine routes: pin and markup-map share sends (`profile_id`), the photo and markup-map custom-field
+saves (`field_id`), `LabelMergeView` (`target_label_id`), pin, wiki and trip comments (`parent_id`
+and `existing_image_id`, through `attach_existing_comment_image`, `_wiki_comment_addressable_by` and
+`services/trips/trip_comments.py::add_comment`), the overlay picker, and `ConsensusVoteView` (`answer_id`).
+`LabelMultiMergeView` had the `OverflowError` gap described above plus an `AttributeError` for a JSON
+body that is not an object. All reproduced first (15 failures) and fixed through `safe_int_or_none`;
+`test_non_numeric_posted_ids.py`. The game invite and kick views already caught `ValueError` and were
+left alone.
+
+The final tally is three false positives in the first sample, 27 benign in the second, and 15
+reproduced crashes reached from them - the argument against leaving the code off: a blanket disable of the code
 that reports 146 known-benign findings also silences whatever else `misc` covers.
 
 **Why this is filed rather than fixed.** The fix is not one line, and the obvious shortcut does not

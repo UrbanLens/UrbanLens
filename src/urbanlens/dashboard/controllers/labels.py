@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
-from urbanlens.dashboard.services.core.numbers import safe_int
+from urbanlens.dashboard.services.core.numbers import safe_int, safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
@@ -917,7 +917,7 @@ class LabelMergeView(_LabelKindMixin, LoginRequiredMixin, View):
         if not target_id:
             return HttpResponse(f"Target {cfg.singular_title.lower()} is required.", status=400)
 
-        target = get_object_or_404(_queryset_for_kind(self.kind, profile), id=target_id)
+        target = get_object_or_404(_queryset_for_kind(self.kind, profile), id=safe_int_or_none(target_id))
 
         try:
             merge_labels(target=target, sources=[source], profile=profile)
@@ -951,7 +951,7 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
             data = json.loads(request.body)
             target_id = int(data.get("target_id", 0))
             source_ids = [int(x) for x in data.get("source_ids", [])]
-        except (json.JSONDecodeError, ValueError, TypeError, KeyError):
+        except (json.JSONDecodeError, ValueError, TypeError, KeyError, OverflowError, AttributeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
         if not target_id:

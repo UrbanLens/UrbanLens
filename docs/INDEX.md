@@ -82,7 +82,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL7 | live | 2026-09-11 | Making "no user can affect another user's availability" a property the tests can prove; phases 0, 1 and 5 done, 2 and 6 partly | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
 | P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P83 | open | 2026-09-06 | Over half of every page's HTML is inline `<script>`, re-sent uncached on every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P85 | open | 2026-09-06 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P85 | open | 2026-09-14 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P91 | open | 2026-09-08 | Seven of eight new security integration specs have never run against a live deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P92 | open | 2026-09-08 | `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P95 | open | 2026-09-10 | `ExtractionBudget` cannot bound a single file's decompression, and nothing prices what parsing one costs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
