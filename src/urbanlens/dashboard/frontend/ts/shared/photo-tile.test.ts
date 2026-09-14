@@ -1,6 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import { type PhotoTile, renderPhotoTile, tileFromJson, tilesForImage } from "./photo-tile";
+
+afterEach(() => {
+    document.body.innerHTML = "";
+});
 
 function photo(id: number): PhotoTile {
     const parsed = tileFromJson({ id, url: `/media/${id}.jpg` });
