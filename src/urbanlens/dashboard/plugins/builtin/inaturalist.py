@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
 
 if TYPE_CHECKING:
@@ -88,6 +89,17 @@ class INaturalistPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "iNaturalist"
     description: ClassVar[str] = "Shows recent nearby wildlife/plant sightings on the Private Pin page, sourced through REData's nature-observations registry (iNaturalist)."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_nature_observations."""
+        return {
+            "redata_nature_observations": ServiceDefaults(
+                display_name="REData Nature Observations",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Nearby wildlife and plant sightings via GET /nature-observations/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_nature_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the iNaturalist pin-detail panel."""

@@ -50,6 +50,7 @@ class HistoricalMapTileView(LoginRequiredMixin, View):
         """
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
         from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+        from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
         if not redata_configured():
             return HttpResponse(status=404)
@@ -65,6 +66,10 @@ class HistoricalMapTileView(LoginRequiredMixin, View):
             status, body, content_type = RedataHistoricalMapsGateway().download_tile(georeference_uuid, z, x, y)
         except (LocationContextUnavailableError, OSError) as exc:
             logger.warning("Historical-map tile fetch failed for %s %s/%s/%s: %s", georeference_uuid, z, x, y, exc)
+            return HttpResponse(status=503)
+        except RequestCancelledError as exc:
+            # Rate-limited or switched off: one per tile while panning, so not a warning.
+            logger.debug("Historical-map tile fetch refused for %s %s/%s/%s: %s", georeference_uuid, z, x, y, exc)
             return HttpResponse(status=503)
 
         if status == 200:

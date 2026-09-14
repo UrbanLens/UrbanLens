@@ -153,6 +153,37 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Route/drive-time legs via POST /routes/ (as_given capability only). See services.apis.locations.routing_resolution.",
     ),
+    "redata_search_web": ServiceDefaults(
+        display_name="REData Web Search",
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="Web and image search via GET /search/web/, for the Google Images and SearXNG image panels and services.search. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_search_gateway.",
+    ),
+    "redata_street_view": ServiceDefaults(
+        display_name="REData Street View",
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="Street-level capture timelines via /street-view/timeline/, spent by the Mapillary, KartaView and Panoramax providers. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_street_view_gateway.",
+    ),
+    "redata_historical_maps": ServiceDefaults(
+        display_name="REData Historical Maps",
+        # One call per uncached overlay tile, so a daily cap blanks overlays for the rest of the day.
+        calls_per_minute=300,
+        calls_per_day=None,
+        notes="Map sheets covering a point via GET /maps/, and their overlay tiles via GET /maps/georeferences/{uuid}/tiles/, cached per tile by controllers.historical_map_tiles. Neither is in REData's lookup or tile pools, so its 2,000/hour all-endpoint budget per key is the ceiling. See services.apis.locations.redata_historical_maps_gateway.",
+    ),
+    "google_open_buildings": ServiceDefaults(
+        display_name="Google Open Buildings",
+        calls_per_minute=20,
+        calls_per_day=500,
+        notes="Downloads whole gzip CSV shards of Google's public Open Buildings dataset during boundary lookups. The dataset has no quota, so this bounds our own bandwidth; the values are the generic fallback's, not tuned. See services.apis.locations.boundaries.google_open_buildings.",
+    ),
+    "microsoft_building_footprints": ServiceDefaults(
+        display_name="Microsoft Building Footprints",
+        calls_per_minute=20,
+        calls_per_day=500,
+        notes="Downloads whole gzip shards of Microsoft's public building footprint dataset during boundary lookups. The dataset has no quota, so this bounds our own bandwidth; the values are the generic fallback's, not tuned. See services.apis.locations.boundaries.microsoft_buildings.",
+    ),
     "openweathermap": ServiceDefaults(
         display_name="OpenWeatherMap",
         calls_per_minute=20,
@@ -286,8 +317,20 @@ def all_service_defaults() -> dict[str, ServiceDefaults]:
 # Public API
 
 
+def _fallback_values(service: str) -> dict[str, Any]:
+    """The limits a service with no registered defaults gets."""
+    return {"display_name": service.replace("_", " ").title(), "calls_per_minute": 20, "calls_per_day": 500}
+
+
+def _still_at_fallback(row: Any, service: str) -> bool:
+    """Whether ``row`` holds exactly what the fallback created it with, so nobody has chosen its limits."""
+    untouched = {**_fallback_values(service), "calls_per_30_days": None, "min_interval_seconds": None, "usa_only": False, "notes": ""}
+    return all(getattr(row, field) == value for field, value in untouched.items())
+
+
 def get_limit_config(service: str) -> Any:
     """Return the ``ApiRateLimit`` row for ``service``, creating it if absent.
+    A row still holding the generic fallback takes the service's registered defaults once there are some; ``enabled`` is never touched.
 
     Args:
         service: The service key (e.g. ``"nps"``).
@@ -298,27 +341,22 @@ def get_limit_config(service: str) -> Any:
 
     defaults_entry = all_service_defaults().get(service)
     if defaults_entry:
-        row, _ = ApiRateLimit.objects.get_or_create(
-            service=service,
-            defaults={
-                "display_name": defaults_entry.display_name,
-                "calls_per_minute": defaults_entry.calls_per_minute,
-                "calls_per_day": defaults_entry.calls_per_day,
-                "calls_per_30_days": defaults_entry.calls_per_30_days,
-                "min_interval_seconds": defaults_entry.min_interval_seconds,
-                "usa_only": defaults_entry.usa_only,
-                "notes": defaults_entry.notes,
-            },
-        )
+        values = {
+            "display_name": defaults_entry.display_name,
+            "calls_per_minute": defaults_entry.calls_per_minute,
+            "calls_per_day": defaults_entry.calls_per_day,
+            "calls_per_30_days": defaults_entry.calls_per_30_days,
+            "min_interval_seconds": defaults_entry.min_interval_seconds,
+            "usa_only": defaults_entry.usa_only,
+            "notes": defaults_entry.notes,
+        }
+        row, created = ApiRateLimit.objects.get_or_create(service=service, defaults=values)
+        if not created and _still_at_fallback(row, service):
+            for field, value in values.items():
+                setattr(row, field, value)
+            row.save(update_fields=[*values, "updated"])
     else:
-        row, _ = ApiRateLimit.objects.get_or_create(
-            service=service,
-            defaults={
-                "display_name": service.replace("_", " ").title(),
-                "calls_per_minute": 20,
-                "calls_per_day": 500,
-            },
-        )
+        row, _ = ApiRateLimit.objects.get_or_create(service=service, defaults=_fallback_values(service))
     return row
 
 

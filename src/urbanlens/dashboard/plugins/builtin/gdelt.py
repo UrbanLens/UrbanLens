@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import InfoPanelSource
 
 if TYPE_CHECKING:
@@ -72,6 +73,17 @@ class GdeltPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "GDELT News"
     description: ClassVar[str] = "Recent news coverage mentioning the pin's location, via REData's GDELT-backed news search."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_search_news."""
+        return {
+            "redata_search_news": ServiceDefaults(
+                display_name="REData News Search",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="GDELT-backed news search via GET /search/news/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_search_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the GDELT pin-detail panel."""

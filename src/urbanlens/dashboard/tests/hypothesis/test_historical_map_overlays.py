@@ -115,6 +115,23 @@ class HistoricalMapTileProxyTests(TestCase):
         self.assertEqual(second.status_code, 503)
         self.assertEqual(download.call_count, 2)
 
+    def test_a_rate_limited_tile_is_a_503_and_not_cached(self) -> None:
+        """Panning past the tile budget must degrade like an outage, not raise out of the view."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        with (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_GATEWAY_PATH) as gateway_cls,
+        ):
+            download = gateway_cls.return_value.download_tile
+            download.side_effect = RateLimitExceededError("redata_historical_maps")
+            first = self.client.get(self.url)
+            second = self.client.get(self.url)
+
+        self.assertEqual(first.status_code, 503)
+        self.assertEqual(second.status_code, 503)
+        self.assertEqual(download.call_count, 2)
+
     def test_login_is_required(self) -> None:
         self.client.logout()
         response = self.client.get(self.url)

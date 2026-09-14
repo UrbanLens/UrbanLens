@@ -11,6 +11,63 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-14: gateway service keys fell back to `get_limit_config`'s generic 20/min, 500/day
+
+`id: P93` · `status: fixed` · `resolved: 2026-09-14`
+
+Previously titled "21 gateway service keys still fall back to `get_limit_config`'s generic 20/min, 500/day", and
+before that "Nine REData plugins declare no rate-limit defaults for their own gateway's service key".
+
+A gateway whose `service_key` appears in neither `rate_limiter.SERVICE_REGISTRY` nor any plugin's
+`get_service_defaults()` is not refused. `get_limit_config()` creates its `ApiRateLimit` row from a fallback baked into
+the function (`calls_per_minute=20`, `calls_per_day=500`, a `.title()`-cased name, no notes) - a limit nobody chose for
+that integration. `test_plugin_rate_limit_coverage.py` cannot see it, because it only inspects keys that are registered.
+
+**The nine REData plugins, fixed 2026-09-14.** `redata_air_quality`, `redata_underground`,
+`redata_hydrology`, `redata_permits`, `redata_incidents`, `hazard_history` (declaring `redata_hazards`, which
+`usgs_earthquakes` also spends), `open_elevation` (`redata_elevation`) and `redata_site_conditions` (`redata_land_cover`,
+`redata_soil`, `redata_walkability`) now declare 20/min with no daily cap, matching the sibling REData plugins. Every
+one of those endpoints sits in REData's single 1,000/hour per-key lookup pool (`../REData/docs/api-reference.md`, "Rate
+limiting"), which a per-service limit here cannot express - the notes say so. Not tuned per endpoint.
+
+**The 21 keys a guard then found were three different things.** `test_gateway_service_keys_registered.py` walks every
+concrete `Gateway` under `services/apis/` and fails on an unregistered key.
+
+- Eight send requests under their own key and are now registered. `redata_media` (`redata_aerial_media`),
+  `redata_nature_observations` (`inaturalist`) and `redata_search_news` (`gdelt`) are declared by their plugins;
+  `redata_search_web` and `redata_street_view`, each spent from more than one plugin, and `redata_historical_maps` sit in
+  `SERVICE_REGISTRY`. The five lookup-pool ones get 20/min with no daily cap. `google_open_buildings` and
+  `microsoft_building_footprints` download whole shards of open datasets that have no quota; they keep the fallback's
+  20/min and 500/day, now written down as a choice, not tuned.
+- Seven providers never send a request under their own key: `mapillary`, `kartaview`, `panoramax`, `smithsonian`,
+  `library_of_congress`, `internet_archive` and `chronicling_america` each build a REData gateway that makes the call
+  under `redata_street_view` or `redata_reference_documents`. Their key only names a cache entry and log lines, so a
+  limit on it would bound nothing. The guard lists them as delegating, and fails if any class in one's chain under
+  `services/apis/` mentions `session`.
+- Five belong only to bases instantiated through subclasses with keys of their own: `twilio` (`sms`, `whatsapp`),
+  `redata_json`, `redata_location_context`, `media_provider` and `street_view_provider`. The guard fails if one of them
+  stops having such a subclass.
+
+**`redata_historical_maps` was a live defect, not just an unchosen limit.** `controllers.historical_map_tiles` fetches
+every uncached overlay tile through that gateway. By the code, the fallback's 500/day refused every uncached tile after
+the day's 500th, and the view caught only `LocationContextUnavailableError` and `OSError`, so each refusal raised
+`RateLimitExceededError` out of the view as a 500 - reproduced in `test_historical_map_overlays.py` with a refusing
+gateway. It is now 300/min with no daily cap: neither `/maps/` nor its tiles are in REData's lookup or tile pools, so
+REData's 2,000/hour all-endpoint budget per key is the real ceiling. A refused or disabled call is a 503 and is not
+cached, like an upstream outage. The per-minute figure was not measured against real panning.
+
+**Registering a key used to change nothing where its row already existed.** `get_limit_config` only ever
+`get_or_create`d, so a row the fallback had created kept 20/min and 500/day after defaults were registered - including
+for the nine plugins fixed earlier the same day. A row still holding exactly the fallback's values (its title-cased
+name, 20, 500, and nothing else set) now takes the registered defaults on its next read; a row an admin changed is
+kept, and `enabled` is never touched. `test_rate_limit_fallback_rows_adopt_defaults.py` covers all three. Whether any
+deployment had such a row was not checked.
+
+**`overture_maps` is left to P110.** `OvertureMapsGateway` sets `service_key = None` to opt out, but
+`ServiceMeta.__new__` replaces any falsy key with one derived from the class name, so the class carries
+`overture_maps`. Its reads bypass `self.session` regardless, which is P110's open item; the guard keeps the key in
+`KNOWN_UNREGISTERED` until that is decided.
+
 ## RESOLVED 2026-09-14: a withdrawn contribution kept its reputation event, and the wiki gallery's delete wording was false
 
 `id: P55` · `status: fixed` · `resolved: 2026-09-14`

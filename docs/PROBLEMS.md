@@ -3246,44 +3246,6 @@ script into a proper bundled TS entry the way `map-annotations.ts` already is fo
 the broader, already-tracked P83/P34 initiative ("over half of every page's HTML is inline `<script>`"), not a
 scoped fix for this one badge. Left open and cross-referenced from both rather than attempted piecemeal here.
 
-## P93 — 21 gateway service keys still fall back to `get_limit_config`'s generic 20/min, 500/day
-
-`id: P93` · `status: open` · `updated: 2026-09-14`
-
-Previously titled "Nine REData plugins declare no rate-limit defaults for their own gateway's service key". Those nine
-are fixed; a test written to prove it found 21 more.
-
-A gateway whose `service_key` appears in neither `rate_limiter.SERVICE_REGISTRY` nor any plugin's
-`get_service_defaults()` is not refused. `get_limit_config()` creates its `ApiRateLimit` row from a fallback baked into
-the function (`calls_per_minute=20`, `calls_per_day=500`, a `.title()`-cased name, no notes) - a limit nobody chose for
-that integration. `test_plugin_rate_limit_coverage.py` cannot see it, because it only inspects keys that are registered.
-
-**Fixed 2026-09-14 for the nine plugins this entry named.** `redata_air_quality`, `redata_underground`,
-`redata_hydrology`, `redata_permits`, `redata_incidents`, `hazard_history` (declaring `redata_hazards`, which
-`usgs_earthquakes` also spends), `open_elevation` (`redata_elevation`) and `redata_site_conditions` (`redata_land_cover`,
-`redata_soil`, `redata_walkability`) now declare 20/min with no daily cap, matching the sibling REData plugins. Every
-one of those endpoints sits in REData's single 1,000/hour per-key lookup pool (`../REData/docs/api-reference.md`, "Rate
-limiting"), which a per-service limit here cannot express - the notes say so. Not tuned per endpoint.
-
-**Still open.** `tests/hypothesis/test_gateway_service_keys_registered.py` walks every concrete `Gateway` subclass under
-`services/apis/` and fails on an unregistered key. It holds the 21 found on 2026-09-14 in `KNOWN_UNREGISTERED`, and a
-second test fails when one of them is registered without being removed from that set:
-
-- REData gateways: `redata_historical_maps`, `redata_json`, `redata_location_context`, `redata_media`,
-  `redata_nature_observations`, `redata_search_news`, `redata_search_web`, `redata_street_view`.
-- Providers and provider bases inside the REData media and reference-document gateways: `mapillary`, `kartaview`,
-  `panoramax`, `street_view_provider`, `media_provider`, `chronicling_america`, `internet_archive`,
-  `library_of_congress`, `smithsonian`. Several may never send a request through their own session; check before giving
-  one a limit it would never spend.
-- Building footprints: `google_open_buildings`, `microsoft_building_footprints`, `overture_maps`.
-- `twilio`.
-
-**`overture_maps` is a bug of its own.** `OvertureMapsGateway` sets `service_key = None` to opt out of rate limiting
-(P110), but `ServiceMeta.__new__` (`services/core/gateway.py:39`) replaces any falsy key with one derived from the class
-name, so the class carries `"overture_maps"`, and `Gateway.__post_init__` wraps its session with that key. The metaclass
-cannot tell "not set" from "deliberately None". Not changed here; whether P110's reads should be limited is that entry's
-question.
-
 ## P95 — `ExtractionBudget` cannot bound a single file's decompression, and nothing prices what parsing one costs
 
 `id: P95` · `status: open` · `updated: 2026-09-10`
@@ -3626,7 +3588,7 @@ Two traps found while doing it, both recorded in
 
 ## P110 — The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off
 
-`id: P110` · `status: open` · `updated: 2026-09-10`
+`id: P110` · `status: open` · `updated: 2026-09-14`
 
 A recurrence of
 [the problem resolved 2026-08-31](archive/PROBLEMS-ARCHIVE.md), under a condition that resolution
@@ -3680,10 +3642,10 @@ Cooldown is worse than the acting phase. 19.2% of the neighbour's requests faile
 `/health/ready` itself began timing out — *after* the user who ran the import had received their
 504 and gone.
 
-**Not fixed by the outbound guard added the same day.** `OvertureMapsGateway` sets
-`service_key = None` ("no HTTP endpoint of ours to rate-limit"), so `Gateway.__post_init__` never
-wraps its session, and the reads happen inside `pyarrow`/`S3FileSystem` rather than through
-`self.session` at all. Nothing in `rate_limiter` sees them: the guard reported zero successful
+**Not fixed by the outbound guard added the same day.** The reads happen inside `pyarrow`/`S3FileSystem`, not
+through `self.session`. `OvertureMapsGateway` also sets `service_key = None` ("no HTTP endpoint of ours to
+rate-limit"), but that does not opt it out: `ServiceMeta.__new__` replaces any falsy key with one derived from the
+class name, so the class carries `overture_maps` and its unused session is wrapped under that key (found by P93). Nothing in `rate_limiter` sees them: the guard reported zero successful
 outbound calls while this was reading from S3 throughout. That is the documented bypass
 (`dashboard/CLAUDE.md`: "code that bypasses `self.session` — a bare `requests.*` call, an SDK
 client"), and it is worth knowing that the largest consumer of both memory and egress is on it.
@@ -3728,9 +3690,8 @@ Note that `stac.overturemaps.org` is not reachable from this box, so the *narrow
 exercised only in tests; what was verified live is that being unable to narrow now costs a fast
 refusal instead of a planet scan.
 
-Still open in this entry, and the reason it is not archived: **the reads remain invisible to the rate
-limiter and to the outbound-call guard.** `service_key` is still `None` and the parquet reads still
-go through `pyarrow`/`S3FileSystem` rather than `self.session`, so nothing bounds how often
+Still open in this entry, and the reason it is not archived: **the reads remain invisible to the rate limiter and to the outbound-call guard.** The parquet reads still go
+through `pyarrow`/`S3FileSystem` rather than `self.session`, so nothing bounds how often
 enrichment reaches Overture in the first place. The circuit breaker bounds the *damage* of a refusal;
 it does not bound the request rate that earns one.
 
