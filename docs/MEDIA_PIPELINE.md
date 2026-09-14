@@ -202,8 +202,8 @@ worker runs is never published; one that cannot be decoded is dropped and the fi
 keeps what it showed; one storage cannot read or write (an OSError, or on the S3 backend a connection or client error, or a download that
 failed every attempt or its checksum; a misconfigured client, such as missing credentials, fails instead) is
 retried, then dropped. A replaced
-avatar or achievement icon is deleted; a replaced label or pin icon is kept, because
-undo restores by stored name, and undo queues a held upload again. A publish lands
+avatar or achievement icon is deleted; a replaced label or pin icon is left to
+`sweep_unnamed_files`, and undo queues a held upload again. A publish lands
 while other requests hold the row in memory, so `models/abstract/held_upload.py`'s
 `HeldUploadModel` leaves the field and its `_upload` column out of a full `save()`
 unless that instance changed them (a row saved with no primary key is still inserted
@@ -224,6 +224,11 @@ is skipped rather than ending the sweep, and a partial index on each `_upload` c
 means finding the held rows never reads the pin table. It also removes `unprocessed/` files no row names once they are
 older than the undo window, which is how long a deleted label or pin can still come
 back with its held upload.
+`sweep_unnamed_files` (`services/media/stored_field.py`, beat, hourly) deletes files in `avatars/`, the icon
+directories and `comment_images/` that no file field storing in that directory names, once they are older than the
+Celery hard time limit (a file saved before the row naming it commits) and no undo record inside the retention window
+mentions them. A replaced label or pin icon, a file storage refused to delete after a swap, and one a row deleted
+outside undo left all end there; a file it cannot list, stat or delete waits for the next run.
 The owner's page says the avatar is processing, and the external API's profile
 detail carries `avatar_pending` for the caller's own profile.
 `test_every_icon_and_avatar_is_hidden_until_reencoded.py` fails on any stored file

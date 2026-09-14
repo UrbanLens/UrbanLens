@@ -1,11 +1,12 @@
 """Re-encode an image held in a model's file field: a comment image, an icon or an avatar.
 
 The swap is a conditional update on the stored name, so a row edited or deleted meanwhile keeps what it has, and
-whichever file lost is deleted.
+whichever file lost is deleted, or swept once no row names it.
 """
 
 from __future__ import annotations
 
+from datetime import timedelta
 import enum
 import io
 import logging
@@ -20,34 +21,100 @@ from urbanlens.dashboard.services.media.images import reencode_image_file
 
 if TYPE_CHECKING:
     from django.core.files.storage import Storage
-    from django.db.models import QuerySet
+    from django.db.models import Model, QuerySet
 
 logger = logging.getLogger(__name__)
 
+#: The fields whose directories :func:`sweep_unnamed_files` sweeps: the media gate serves any icon or avatar path, and a
+#: comment image's upload as sent carries whatever metadata it came with.
+SWEPT_FIELDS = (
+    "dashboard.Label.custom_icon",
+    "dashboard.Pin.custom_icon",
+    "dashboard.Achievement.custom_icon",
+    "dashboard.Profile.avatar",
+    "dashboard.Comment.image",
+    "dashboard.TripComment.image",
+)
 
-def delete_unnamed_file(storage: Storage, model: str, field: str, name: str) -> None:
-    """Delete a file its row no longer names, queueing the delete for later when storage refuses it now.
 
-    A refused delete does not undo or fail what made the row stop naming the file. The file is not left behind either,
-    since the media gate serves any icon or avatar path to every member; one the broker would not queue is logged as an
-    error naming it.
+def delete_unnamed_file(storage: Storage, name: str) -> bool:
+    """Delete a file its row no longer names, leaving it to :func:`sweep_unnamed_files` when storage refuses.
+
+    A refused delete does not undo or fail what made the row stop naming the file.
 
     Args:
         storage: The field's storage.
-        model: The model's label, e.g. ``"dashboard.Label"``.
-        field: The file field that named it.
         name: The stored name.
+
+    Returns:
+        Whether it was deleted.
     """
     try:
         storage.delete(name)
     except STORAGE_ERRORS:
-        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import delete_lost_stored_file
+        logger.warning("Could not delete %s, which no row names; the sweep will try again", name, exc_info=True)
+        return False
+    return True
 
-        if safely_enqueue_task(delete_lost_stored_file, model, field, name) is None:
-            logger.exception("Could not delete %s, which no %s row names, nor queue deleting it later; it stays until deleted by hand", name, model)
-        else:
-            logger.warning("Could not delete %s, which its row no longer names; queued to try again", name, exc_info=True)
+
+def sweep_unnamed_files() -> int:
+    """Delete the files in each :data:`SWEPT_FIELDS` directory that no file field storing there names.
+
+    A file younger than the task hard time limit may be waiting for the row that will name it to commit, and one an
+    undo record inside the retention window mentions may be named again by a restore, so both are kept.
+
+    Returns:
+        How many files were deleted.
+
+    Raises:
+        Exception: Whatever storage raises that is not one of
+            :data:`~urbanlens.dashboard.services.media.held_upload.STORAGE_ERRORS`, such as missing credentials.
+    """
+    from django.apps import apps
+    from django.conf import settings
+    from django.db.models import FileField
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.undo.model import UNDO_RETENTION, UndoAction
+
+    stored: list[tuple[type[Model], str, Storage, str]] = []
+    swept: dict[tuple[int, str], Storage] = {}
+    for model in apps.get_models():
+        for field in model._meta.get_fields():  # noqa: SLF001 - _meta is Django's public model API
+            if isinstance(field, FileField) and isinstance(field.upload_to, str):
+                directory = field.upload_to.strip("/")
+                stored.append((model, field.name, field.storage, directory))
+                if f"{model._meta.label}.{field.name}" in SWEPT_FIELDS:  # noqa: SLF001 - _meta is Django's public model API
+                    swept[id(field.storage), directory] = field.storage
+
+    now = timezone.now()
+    young = timedelta(seconds=settings.CELERY_TASK_TIME_LIMIT)
+    restorable = UndoAction.objects.filter(created__gt=now - UNDO_RETENTION)
+    removed = 0
+    for (storage_id, directory), storage in swept.items():
+        try:
+            _directories, files = storage.listdir(directory)
+        except FileNotFoundError:
+            continue
+        except STORAGE_ERRORS:
+            logger.warning("Could not list %s to sweep it", directory, exc_info=True)
+            continue
+        named: set[str] = set()
+        for model, name, field_storage, field_directory in stored:
+            if (id(field_storage), field_directory) == (storage_id, directory):
+                named.update(model._base_manager.exclude(**{name: ""}).filter(**{f"{name}__isnull": False}).values_list(name, flat=True))  # noqa: SLF001 - Django's public model API
+        for file in files:
+            path = f"{directory}/{file}"
+            if path in named:
+                continue
+            try:
+                if now - storage.get_modified_time(path) < young:
+                    continue
+            except STORAGE_ERRORS:
+                continue
+            if not restorable.filter(payload__icontains=path).exists():
+                removed += delete_unnamed_file(storage, path)
+    return removed
 
 
 class Reencoded(enum.Enum):
@@ -88,8 +155,8 @@ def reencode_stored_field(
     Raises:
         OSError: Storage could not read the file or write the re-encoded one; on the S3 backend, any of
             :data:`~urbanlens.dashboard.services.media.held_upload.STORAGE_ERRORS`. That says nothing about the file,
-            so it is not ``UNDECODABLE``. A file the swap left unnamed that cannot be deleted is deleted later, by
-            :func:`delete_unnamed_file`.
+            so it is not ``UNDECODABLE``. A file the swap left unnamed that cannot be deleted is left to
+            :func:`sweep_unnamed_files`.
     """
     filters = {"pk": pk, field: stored_name, **(only_if or {})}
     row = rows.filter(**filters).first()
@@ -108,7 +175,7 @@ def reencode_stored_field(
     # Not the uploaded name: it can say as much as the metadata, and icon and avatar paths are served to every member.
     new_name = storage.save(stored.field.generate_filename(row, f"{uuid.uuid4().hex}{extension}"), ContentFile(data))
     replaced = rows.filter(**filters).update(**{field: new_name, **(also_set or {})})
-    delete_unnamed_file(storage, rows.model._meta.label, field, stored_name if replaced else new_name)  # noqa: SLF001 - _meta is Django's public model API
+    delete_unnamed_file(storage, stored_name if replaced else new_name)
     return Reencoded.REPLACED if replaced else Reencoded.STALE
 
 
@@ -129,5 +196,5 @@ def clear_stored_field(rows: QuerySet[Any], pk: int, field: str, stored_name: st
     row = holding.first()
     if row is None or not holding.update(**{field: "", **(also_set or {})}):
         return False
-    delete_unnamed_file(getattr(row, field).storage, rows.model._meta.label, field, stored_name)  # noqa: SLF001 - _meta is Django's public model API
+    delete_unnamed_file(getattr(row, field).storage, stored_name)
     return True

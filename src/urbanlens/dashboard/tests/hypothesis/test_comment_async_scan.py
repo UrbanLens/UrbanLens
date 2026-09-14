@@ -198,7 +198,6 @@ class ScanCommentImageTaskTests(TestCase):
             patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None),
             patch.object(FileSystemStorage, "delete", side_effect=[_slow_down("DeleteObject"), None, None]),
             patch.object(scan_comment_image, "max_retries", 0),
-            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             result = scan_comment_image(comment.pk)
         self.assertTrue(result)
@@ -210,12 +209,6 @@ class ScanCommentImageTaskTests(TestCase):
                 profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
             ).exists()
         )
-        queued = [
-            call.args[1:]
-            for call in enqueue.call_args_list
-            if getattr(call.args[0], "name", "") == "urbanlens.dashboard.tasks.delete_lost_stored_file"
-        ]
-        self.assertEqual(queued, [("dashboard.Comment", "image", uploaded)])
 
     def test_missing_comment_is_a_no_op(self) -> None:
         self.assertFalse(scan_comment_image(999_999))

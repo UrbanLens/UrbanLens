@@ -13410,6 +13410,12 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
 - **A second review of that** found the only log line naming such a file said its delete was queued, whether or not
   the broker took it; the enqueue failure is logged without the file. A file whose later delete could not be queued is
   now logged as an error naming it.
+- **Then** `delete_lost_stored_file` was replaced by `sweep_unnamed_files`, an hourly sweep of `avatars/`, the icon
+  directories and `comment_images/`, so what removes a lost file no longer depends on the broker taking a task when
+  the delete fails. It deletes a file no file field storing in that directory names, once it is older than the Celery
+  hard time limit and no undo record inside the retention window mentions it. That also removes the label and pin
+  icons a publish replaced, which had been kept for undo and stayed served for ever (a metadata-bearing one replaced
+  before the backfill ran was never re-encoded), and icons of rows deleted outside undo.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

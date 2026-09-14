@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Iterator
 from contextlib import suppress
+from datetime import timedelta
 import io
 from itertools import count
 import os
@@ -32,6 +33,8 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage, default_storage
 from django.db import connection
 from django.test import override_settings
+from django.utils import timezone
+from model_bakery import baker
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from urbanlens.core.cache_backend import ResilientRedisCache
@@ -40,6 +43,7 @@ from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.trips.model import TripComment
 from urbanlens.dashboard.models.undo.model import UNDO_RETENTION
 from urbanlens.dashboard.services.media.held_upload import (
     HELD_FIELDS,
@@ -57,6 +61,8 @@ from urbanlens.UrbanLens.settings.base import _S3_STORAGE_OPTIONS
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 _REENCODE = "urbanlens.dashboard.services.media.images.reencode_image_file"
 _SWEEP = "urbanlens.dashboard.tasks.sweep_held_uploads"
+_SWEEP_UNNAMED = "urbanlens.dashboard.tasks.sweep_unnamed_files"
+_SHOWN_DIRECTORIES = ("avatars", "label_icons", "pin_custom_icons", "achievement_icons", "comment_images")
 _owners = count()
 _HOUR = 3600
 
@@ -394,6 +400,113 @@ class AHeldFileNothingNamesTests(_Case):
                 self.assertTrue(default_storage.exists(expired), "storage deleted the file, so nothing was refused")
                 self.assertEqual(removed, 0, "the sweep counted a file storage refused to delete as removed")
                 default_storage.delete(expired)
+
+
+class AShownFileNothingNamesTests(_Case):
+    """An icon, avatar or comment image no row names is removed, however it was left: a delete storage refused, a label
+    or pin icon a publish replaced, a row deleted outside undo. The media gate serves any icon or avatar path."""
+
+    _OLD = (UNDO_RETENTION.days + 2) * 24 * _HOUR
+
+    def _file(self, directory: str, age: float) -> str:
+        name = default_storage.save(f"{directory}/{uuid.uuid4().hex}.webp", ContentFile(b"shown once"))
+        _age(name, age)
+        return name
+
+    def _sweep_unnamed(self) -> None:
+        self.assertIn(
+            _SWEEP_UNNAMED,
+            [entry["task"] for entry in settings.CELERY_BEAT_SCHEDULE.values()],
+            "nothing sweeps unnamed files",
+        )
+        getattr(tasks, _SWEEP_UNNAMED.rsplit(".", 1)[1])()
+
+    def test_every_directory_a_shown_image_is_stored_in_is_swept(self) -> None:
+        for directory in _SHOWN_DIRECTORIES:
+            with self.subTest(directory=directory):
+                name = self._file(directory, self._OLD)
+
+                self._sweep_unnamed()
+
+                self.assertFalse(default_storage.exists(name))
+
+    def test_a_file_a_row_names_is_kept(self) -> None:
+        profile = self._profile()
+        name = self._file("avatars", self._OLD)
+        Profile.objects.filter(pk=profile.pk).update(avatar=name)
+
+        self._sweep_unnamed()
+
+        self.assertTrue(default_storage.exists(name))
+
+    def test_a_file_another_model_names_in_the_same_directory_is_kept(self) -> None:
+        name = self._file("comment_images", self._OLD)
+        baker.make(TripComment, image=name)
+
+        self._sweep_unnamed()
+
+        self.assertTrue(default_storage.exists(name))
+
+    def test_a_file_saved_for_a_row_that_has_not_committed_yet_is_kept(self) -> None:
+        name = self._file("label_icons", 60)
+
+        self._sweep_unnamed()
+
+        self.assertTrue(default_storage.exists(name))
+
+    def test_an_icon_an_undo_could_restore_is_kept_until_the_undo_expires(self) -> None:
+        from urbanlens.dashboard.models.undo.model import UndoAction
+        from urbanlens.dashboard.services.undo.service import stash_for_undo
+
+        profile = self._profile()
+        name = self._file("label_icons", self._OLD)
+        label = Label.objects.create(profile=profile, kind=KIND_TAG, name="ZzSwept Icon")
+        Label.objects.filter(pk=label.pk).update(custom_icon=name)
+        label.refresh_from_db()
+        undo_action = stash_for_undo("label", [label], profile)
+        assert undo_action is not None, "nothing was stashed"
+        label.delete()
+
+        self._sweep_unnamed()
+        self.assertTrue(default_storage.exists(name), "the icon of a label undo can restore was removed")
+
+        UndoAction.objects.filter(pk=undo_action.pk).update(
+            created=timezone.now() - UNDO_RETENTION - timedelta(hours=1)
+        )
+        self._sweep_unnamed()
+        self.assertFalse(default_storage.exists(name), "the icon of a label no undo can restore stayed served")
+
+    def test_one_file_storage_refused_to_delete_does_not_stop_the_rest(self) -> None:
+        names = [self._file(directory, self._OLD) for directory in _SHOWN_DIRECTORIES]
+        original = FileSystemStorage.delete
+        refused: list[str] = []
+
+        def delete(storage: FileSystemStorage, name: str) -> None:
+            if not refused:
+                refused.append(name)
+                raise _STORAGE_FAILURES[2]
+            original(storage, name)
+
+        with mock.patch.object(FileSystemStorage, "delete", delete):
+            self._sweep_unnamed()
+
+        self.assertEqual([name for name in names if default_storage.exists(name)], refused)
+
+    def test_one_directory_storage_cannot_list_does_not_stop_the_rest(self) -> None:
+        names = [self._file(directory, self._OLD) for directory in _SHOWN_DIRECTORIES]
+        original = FileSystemStorage.listdir
+        refused: list[str] = []
+
+        def listdir(storage: FileSystemStorage, path: str) -> tuple[list[str], list[str]]:
+            if not refused:
+                refused.append(path)
+                raise _STORAGE_FAILURES[1]
+            return original(storage, path)
+
+        with mock.patch.object(FileSystemStorage, "listdir", listdir):
+            self._sweep_unnamed()
+
+        self.assertEqual(len([name for name in names if default_storage.exists(name)]), 1)
 
 
 class _RawBody(io.BytesIO):

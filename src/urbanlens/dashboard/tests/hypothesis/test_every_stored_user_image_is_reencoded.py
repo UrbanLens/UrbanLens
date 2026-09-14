@@ -10,11 +10,13 @@ from __future__ import annotations
 
 from itertools import count
 import json
+import os
 from pathlib import Path
+import time
 from unittest import mock
 
 from botocore.exceptions import ClientError
-from celery.exceptions import Retry
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files.storage import FileSystemStorage, Storage, default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -49,13 +51,7 @@ from urbanlens.dashboard.tests.hypothesis.test_external_api_social_profile impor
 _SCAN_TARGET = "urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload"
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 _UNDECODABLE = ("broken.png", b"\x89PNG\r\n\x1a\n" + b"\0" * 64)
-_DELETE_LATER = "urbanlens.dashboard.tasks.delete_lost_stored_file"
-_STORED_FIELD_LOGGER = "urbanlens.dashboard.services.media.stored_field"
 _owners = count()
-
-
-def _deletes_queued(enqueue: mock.MagicMock) -> list[tuple[object, ...]]:
-    return [call.args[1:] for call in enqueue.call_args_list if getattr(call.args[0], "name", "") == _DELETE_LATER]
 
 
 def _upload(name: str, data: bytes) -> SimpleUploadedFile:
@@ -311,8 +307,16 @@ class AFileThatCannotBeReadRightNowTests(_Case):
 class AFileThatCannotBeDeletedRightNowTests(_Case):
     """The row already names the file that won, so failing to delete the one that lost neither fails nor undoes that.
 
-    The media gate serves any icon or avatar path to every member, so the file that lost is deleted later instead.
+    The media gate serves any icon or avatar path to every member, so the sweep deletes the file that lost instead.
     """
+
+    def _swept(self, name: str) -> bool:
+        from urbanlens.dashboard.services.media.stored_field import sweep_unnamed_files
+
+        past = time.time() - 2 * settings.CELERY_TASK_TIME_LIMIT
+        os.utime(default_storage.path(name), (past, past))
+        sweep_unnamed_files()
+        return not default_storage.exists(name)
 
     def _label_showing(self, name: str, data: bytes) -> Label:
         label = Label.objects.create(profile=self._profile(), kind=KIND_TAG, name="ZzUndeletable")
@@ -339,55 +343,37 @@ class AFileThatCannotBeDeletedRightNowTests(_Case):
         label = self._label_showing(*_fixtures()["png-text"])
         shown = _stored_name(label.custom_icon)
 
-        with override_settings(**SANDBOX), mock.patch(_ENQUEUE) as enqueue:
+        with override_settings(**SANDBOX):
             self.assertTrue(reencode_shown("dashboard.Label.custom_icon", label.pk, shown))
 
         self.assertFalse(default_storage.exists(shown))
-        self.assertEqual(_deletes_queued(enqueue), [])
 
     def test_an_icon_is_replaced_though_the_one_it_replaced_cannot_be_deleted(self) -> None:
         label = self._label_showing(*_fixtures()["png-text"])
         shown = _stored_name(label.custom_icon)
 
-        with (
-            override_settings(**SANDBOX),
-            self._refusing_deletes(),
-            mock.patch(_ENQUEUE) as enqueue,
-            self.assertNoLogs(_STORED_FIELD_LOGGER, level="ERROR"),
-        ):
+        with override_settings(**SANDBOX), self._refusing_deletes():
             self.assertTrue(reencode_shown("dashboard.Label.custom_icon", label.pk, shown))
 
         label.refresh_from_db()
         self.assertNotEqual(label.custom_icon.name, shown)
         self.assertClean(self._read(label.custom_icon), "the label icon")
-        self.assertEqual(_deletes_queued(enqueue), [("dashboard.Label", "custom_icon", shown)])
-
-    def test_a_delete_the_broker_would_not_queue_is_logged_as_an_error_naming_the_file(self) -> None:
-        label = self._label_showing(*_fixtures()["png-text"])
-        shown = _stored_name(label.custom_icon)
-
-        with (
-            override_settings(**SANDBOX),
-            self._refusing_deletes(),
-            mock.patch(_ENQUEUE, return_value=None),
-            self.assertLogs(_STORED_FIELD_LOGGER, level="ERROR") as logs,
-        ):
-            self.assertTrue(reencode_shown("dashboard.Label.custom_icon", label.pk, shown))
-
-        self.assertTrue(any(shown in record.getMessage() for record in logs.records if record.levelname == "ERROR"))
+        self.assertTrue(default_storage.exists(shown), "storage deleted it, so nothing was refused")
+        self.assertTrue(self._swept(shown), "the icon it replaced stayed served")
+        self.assertTrue(default_storage.exists(_stored_name(label.custom_icon)))
 
     def test_an_undecodable_icon_is_cleared_though_it_cannot_be_deleted(self) -> None:
         label = self._label_showing(*_UNDECODABLE)
         shown = _stored_name(label.custom_icon)
 
-        with override_settings(**SANDBOX), self._refusing_deletes(), mock.patch(_ENQUEUE) as enqueue:
+        with override_settings(**SANDBOX), self._refusing_deletes():
             self.assertTrue(reencode_shown("dashboard.Label.custom_icon", label.pk, shown))
 
         label.refresh_from_db()
         self.assertFalse(label.custom_icon)
-        self.assertEqual(_deletes_queued(enqueue), [("dashboard.Label", "custom_icon", shown)])
+        self.assertTrue(self._swept(shown), "the icon it cleared stayed served")
 
-    def test_a_published_icon_queues_the_delete_of_the_one_it_replaced_when_storage_refuses_it(self) -> None:
+    def test_a_published_icon_leaves_the_one_it_replaced_to_the_sweep_when_storage_refuses_it(self) -> None:
         achievement = Achievement.objects.create(name="ZzUndeletable Award", metric="photos_uploaded", threshold=1)
         name, data = _fixtures()["png-text"]
         shown = default_storage.save(f"achievement_icons/{name}", _upload(name, data))
@@ -395,55 +381,23 @@ class AFileThatCannotBeDeletedRightNowTests(_Case):
         achievement.refresh_from_db()
         self._hold(achievement, "custom_icon", name, data)
 
-        with self._refusing_deletes(only=shown), mock.patch(_ENQUEUE) as enqueue:
+        with self._refusing_deletes(only=shown):
             self.assertTrue(self._publish(achievement, "custom_icon"))
 
         self.assertNotEqual(achievement.custom_icon.name, shown)
-        self.assertEqual(_deletes_queued(enqueue), [("dashboard.Achievement", "custom_icon", shown)])
+        self.assertTrue(self._swept(shown), "the icon it replaced stayed served")
 
-    def test_the_later_delete_removes_a_file_no_row_names(self) -> None:
-        from urbanlens.dashboard.tasks import delete_lost_stored_file
-
-        name = default_storage.save("label_icons/lost.png", _upload(*_fixtures()["png-text"]))
-
-        self.assertTrue(delete_lost_stored_file("dashboard.Label", "custom_icon", name))
-
-        self.assertFalse(default_storage.exists(name))
-
-    def test_the_later_delete_keeps_a_file_a_row_names(self) -> None:
-        from urbanlens.dashboard.tasks import delete_lost_stored_file
-
-        label = self._label_showing(*_fixtures()["png-text"])
+    def test_a_label_icon_a_publish_replaced_is_swept(self) -> None:
+        """A replaced label icon is kept for undo, and a legacy one replaced before the backfill is never re-encoded."""
+        label = self._label_showing(*_fixtures()["jpeg-exif-gps"])
         shown = _stored_name(label.custom_icon)
+        self._hold(label, "custom_icon", *_fixtures()["png-text"])
 
-        self.assertFalse(delete_lost_stored_file("dashboard.Label", "custom_icon", shown))
+        with mock.patch(_ENQUEUE):
+            self.assertTrue(self._publish(label, "custom_icon"))
 
-        self.assertTrue(default_storage.exists(shown))
-
-    def test_the_later_delete_is_retried_while_storage_refuses_it(self) -> None:
-        from urbanlens.dashboard.tasks import delete_lost_stored_file
-
-        name = default_storage.save("label_icons/lost.png", _upload(*_fixtures()["png-text"]))
-
-        with (
-            self._refusing_deletes(),
-            mock.patch.object(delete_lost_stored_file, "retry", side_effect=Retry()) as retry,
-            self.assertRaises(Retry),
-        ):
-            delete_lost_stored_file("dashboard.Label", "custom_icon", name)
-
-        retry.assert_called_once()
-        self.assertTrue(default_storage.exists(name))
-
-    def test_the_later_delete_gives_up_after_its_last_retry_without_raising(self) -> None:
-        from urbanlens.dashboard.tasks import delete_lost_stored_file
-
-        name = default_storage.save("label_icons/lost.png", _upload(*_fixtures()["png-text"]))
-
-        with self._refusing_deletes(), mock.patch.object(delete_lost_stored_file, "max_retries", 0):
-            self.assertFalse(delete_lost_stored_file("dashboard.Label", "custom_icon", name))
-
-        self.assertTrue(default_storage.exists(name))
+        self.assertNotEqual(label.custom_icon.name, shown)
+        self.assertTrue(self._swept(shown), "the label icon a publish replaced stayed served")
 
 
 class ALabelRestoredByUndoTests(_Case):

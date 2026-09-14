@@ -436,6 +436,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_held_uploads",
         "schedule": crontab(minute=41),
     },
+    # The media gate serves any icon or avatar path, so one no row names must not outlive a refused delete.
+    "sweep-unnamed-files": {
+        "task": "urbanlens.dashboard.tasks.sweep_unnamed_files",
+        "schedule": crontab(minute=47),
+    },
     # Map-marker thumbnail backfill; offset to avoid tick contention.
     "image-marker-thumbnail-backfill": {
         "task": "urbanlens.dashboard.tasks.backfill_image_marker_thumbnails",

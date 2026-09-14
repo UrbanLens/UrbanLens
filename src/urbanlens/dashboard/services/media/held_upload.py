@@ -83,7 +83,7 @@ class HeldField:
     model: str
     field: str
     max_dimension: int
-    #: Label and pin icons keep the file they replace, because undo restores a deleted row by its stored name.
+    #: Label and pin icons leave the file they replace to the sweep, which keeps a file an undo record names.
     delete_replaced: bool
     #: Clients that cache a label by ``updated`` redraw its icon when it moves.
     bump_updated: bool = False
@@ -269,7 +269,7 @@ def _publish_read(held: HeldField, key: str, row: Model, raw: bytes) -> bool:
     if held.delete_replaced and previous[0]:
         from urbanlens.dashboard.services.media.stored_field import delete_unnamed_file
 
-        delete_unnamed_file(storage, held.model, held.field, previous[0])
+        delete_unnamed_file(storage, previous[0])
     if held.after_publish is not None:
         held.after_publish(pk)
     return True
