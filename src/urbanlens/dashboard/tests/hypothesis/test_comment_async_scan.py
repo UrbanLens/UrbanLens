@@ -184,6 +184,25 @@ class ScanCommentImageTaskTests(TestCase):
             ).message,
         )
 
+    def test_a_published_comment_is_kept_when_its_upload_as_sent_cannot_be_deleted(self) -> None:
+        comment = self._pending_comment(text="already published")
+        uploaded = comment.image.name
+        with (
+            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None),
+            patch.object(FileSystemStorage, "delete", side_effect=[_slow_down("DeleteObject"), None, None]),
+            patch.object(scan_comment_image, "max_retries", 0),
+        ):
+            result = scan_comment_image(comment.pk)
+        self.assertTrue(result)
+        comment.refresh_from_db()
+        self.assertFalse(comment.pending_scan)
+        self.assertNotEqual(comment.image.name, uploaded)
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
+            ).exists()
+        )
+
     def test_missing_comment_is_a_no_op(self) -> None:
         self.assertFalse(scan_comment_image(999_999))
 

@@ -15,12 +15,22 @@ import uuid
 from django.core.files.base import ContentFile
 from PIL.Image import DecompressionBombError
 
+from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
 from urbanlens.dashboard.services.media.images import reencode_image_file
 
 if TYPE_CHECKING:
+    from django.core.files.storage import Storage
     from django.db.models import QuerySet
 
 logger = logging.getLogger(__name__)
+
+
+def _delete_lost(storage: Storage, name: str) -> None:
+    # The row no longer names it, so a refused delete must not read as a failed swap.
+    try:
+        storage.delete(name)
+    except STORAGE_ERRORS:
+        logger.warning("Could not delete %s, which its row no longer names", name, exc_info=True)
 
 
 class Reencoded(enum.Enum):
@@ -59,9 +69,9 @@ def reencode_stored_field(
         What happened. On ``UNDECODABLE`` nothing was changed; the caller decides what to do with the file.
 
     Raises:
-        OSError: Storage could not read the file, write the re-encoded one or delete the one replaced; on the S3 backend,
-            any of :data:`~urbanlens.dashboard.services.media.held_upload.STORAGE_ERRORS`. That says nothing about the
-            file, so it is not ``UNDECODABLE``.
+        OSError: Storage could not read the file or write the re-encoded one; on the S3 backend, any of
+            :data:`~urbanlens.dashboard.services.media.held_upload.STORAGE_ERRORS`. That says nothing about the file,
+            so it is not ``UNDECODABLE``. A file the swap left unnamed that cannot be deleted is logged and kept.
     """
     filters = {"pk": pk, field: stored_name, **(only_if or {})}
     row = rows.filter(**filters).first()
@@ -80,7 +90,7 @@ def reencode_stored_field(
     # Not the uploaded name: it can say as much as the metadata, and icon and avatar paths are served to every member.
     new_name = storage.save(stored.field.generate_filename(row, f"{uuid.uuid4().hex}{extension}"), ContentFile(data))
     replaced = rows.filter(**filters).update(**{field: new_name, **(also_set or {})})
-    storage.delete(stored_name if replaced else new_name)
+    _delete_lost(storage, stored_name if replaced else new_name)
     return Reencoded.REPLACED if replaced else Reencoded.STALE
 
 
@@ -101,5 +111,5 @@ def clear_stored_field(rows: QuerySet[Any], pk: int, field: str, stored_name: st
     row = holding.first()
     if row is None or not holding.update(**{field: "", **(also_set or {})}):
         return False
-    getattr(row, field).storage.delete(stored_name)
+    _delete_lost(getattr(row, field).storage, stored_name)
     return True

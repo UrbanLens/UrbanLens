@@ -13,8 +13,9 @@ import json
 from pathlib import Path
 from unittest import mock
 
+from botocore.exceptions import ClientError
 from django.contrib.auth.models import User
-from django.core.files.storage import Storage
+from django.core.files.storage import FileSystemStorage, Storage, default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import Model
 from django.db.models.fields.files import FieldFile
@@ -29,7 +30,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
-from urbanlens.dashboard.services.media.held_upload import held_field, hold_upload
+from urbanlens.dashboard.services.media.held_upload import held_field, hold_upload, reencode_shown
 from urbanlens.dashboard.tasks import publish_held_upload, scan_comment_image, scan_trip_comment_image
 from urbanlens.dashboard.tests.hypothesis.test_every_stored_photo_is_reencoded import (
     _CONTENT_TYPES,
@@ -297,6 +298,45 @@ class AFileThatCannotBeReadRightNowTests(_Case):
         label.refresh_from_db()
         self.assertEqual(label.custom_icon_upload, held)
         self.assertTrue(label.custom_icon.storage.exists(held))
+
+
+class AFileThatCannotBeDeletedRightNowTests(_Case):
+    """The row already names the file that won, so failing to delete the one that lost neither fails nor undoes that."""
+
+    def _label_showing(self, name: str, data: bytes) -> Label:
+        label = Label.objects.create(profile=self._profile(), kind=KIND_TAG, name="ZzUndeletable")
+        Label.objects.filter(pk=label.pk).update(
+            custom_icon=default_storage.save(f"label_icons/{name}", _upload(name, data))
+        )
+        label.refresh_from_db()
+        return label
+
+    def _refusing_deletes(self) -> mock._patch:
+        refused = ClientError(
+            {"Error": {"Code": "SlowDown", "Message": "busy"}, "ResponseMetadata": {"HTTPStatusCode": 503}},
+            "DeleteObject",
+        )
+        return mock.patch.object(FileSystemStorage, "delete", side_effect=refused)
+
+    def test_an_icon_is_replaced_though_the_one_it_replaced_cannot_be_deleted(self) -> None:
+        label = self._label_showing(*_fixtures()["png-text"])
+        shown = _stored_name(label.custom_icon)
+
+        with override_settings(**SANDBOX), self._refusing_deletes():
+            self.assertTrue(reencode_shown("dashboard.Label.custom_icon", label.pk, shown))
+
+        label.refresh_from_db()
+        self.assertNotEqual(label.custom_icon.name, shown)
+        self.assertClean(self._read(label.custom_icon), "the label icon")
+
+    def test_an_undecodable_icon_is_cleared_though_it_cannot_be_deleted(self) -> None:
+        label = self._label_showing(*_UNDECODABLE)
+
+        with override_settings(**SANDBOX), self._refusing_deletes():
+            self.assertTrue(reencode_shown("dashboard.Label.custom_icon", label.pk, _stored_name(label.custom_icon)))
+
+        label.refresh_from_db()
+        self.assertFalse(label.custom_icon)
 
 
 class ALabelRestoredByUndoTests(_Case):

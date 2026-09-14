@@ -13394,6 +13394,11 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   `STORAGE_ERRORS`. The photo upload tasks still catch OSError alone. The same review found a commit message saying
   django-storages reads `AWS_S3_OBJECT_PARAMETERS` and `AWS_S3_CLIENT_CONFIG` from Django settings only; `S3Storage`
   also takes both as storage options. `_S3_STORAGE_OPTIONS` passes neither, so nothing sets a checksum option there.
+- **A review of that** found `reencode_stored_field` and `clear_stored_field` deleted the file that lost only after the
+  row stopped naming it, and let a refused delete raise. On the comment scan's last retry that reached the give-up
+  branch after the swap had published the comment, which then deleted the published comment and told its author it
+  could not be posted; the backfill counted a finished swap as failed. The delete is now logged and the file kept, as
+  `_delete_quietly` does for held uploads. Nothing yet removes such a file later.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

@@ -304,8 +304,8 @@ def reencode_shown(key: str, pk: int, name: str) -> bool:
         Whether the file was replaced or removed.
 
     Raises:
-        OSError: Storage could not read the file, write the re-encoded one or delete the one replaced; on the S3 backend,
-            any of :data:`STORAGE_ERRORS`.
+        OSError: Storage could not read the file or write the re-encoded one; on the S3 backend, any of
+            :data:`STORAGE_ERRORS`.
     """
     from urbanlens.dashboard.services.media.stored_field import Reencoded, clear_stored_field, reencode_stored_field
 
