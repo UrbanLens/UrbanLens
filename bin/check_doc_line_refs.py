@@ -56,6 +56,28 @@ def _without_struck_text(lines: list[str]) -> list[str]:
     return result
 
 
+def _fenced_lines(lines: list[str]) -> set[int]:
+    """Zero-based indices of the lines inside fenced code blocks, fences included.
+
+    A block quotes output: a pasted traceback's frames carry the line numbers the code had when it crashed, and
+    renumbering them would falsify the quote.
+
+    Args:
+        lines: Every line of the document.
+
+    Returns:
+        The indices to skip."""
+    fenced: set[int] = set()
+    inside = False
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            inside = not inside
+            fenced.add(index)
+        elif inside:
+            fenced.add(index)
+    return fenced
+
+
 def _citation_block(lines: list[str], index: int) -> range:
     """The wrapped prose block the line at `index` belongs to.
 
@@ -124,7 +146,10 @@ def check(*, report_drift: bool = False) -> int:
         # above it: a citation nobody can follow is broken whether or not the
         # sentence around it says the defect is gone.
         unstruck = _without_struck_text(lines)
+        fenced = _fenced_lines(lines)
         for line_number, line in enumerate(lines, 1):
+            if line_number - 1 in fenced:
+                continue
             block = "\n".join(unstruck[i] for i in _citation_block(lines, line_number - 1))
             identifiers = [name for name in _IDENTIFIER.findall(block) if len(name) >= _MIN_IDENTIFIER_LENGTH]
             for citation in _CITATION.finditer(line):

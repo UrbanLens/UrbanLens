@@ -1809,7 +1809,7 @@ hardcoded path is invisible to this kind of sweep *and* breaks silently when the
 
 - `label.index` (`urls.py:1203`, `LabelKindIndexView`) - a whole page view. Its siblings
   `label.create`/`label.rows`/`label.edit` are live from the Organize page; only the index itself is
-  unreachable, and only `test_query_scaling.py:96` names it.
+  unreachable, and only `test_query_scaling.py:77` names it.
 - `dev_toolbar.toggle_map_dark_mode` (`urls.py:2134`) - dev tooling with no button; plausibly
   invoked by hand, which is why it is listed rather than deleted.
 
@@ -1963,7 +1963,7 @@ somebody rewrote by hand somewhere else, so the rule now exists twice:
 
 **Three near-misses, deleted anyway, and the distinction is worth keeping.**
 `PlaceQuerySet.part_of_children`/`member_of_children` look like they were reimplemented at
-`services/places/splits.py:113` and `models/place/queryset.py:207`, but both of those filter on a
+`services/places/splits.py:86` and `models/place/queryset.py:156`, but both of those filter on a
 *specific* parent (`parent_id=place.pk`, `aggregate.children`), while the methods mean "any place
 whose parent edge is PART_OF". Routing either call site through the method would have added a
 redundant `parent__isnull=False` to make a worse fit look like reuse. `LocationQuerySet.in_domain_of`
@@ -2032,11 +2032,11 @@ Options:
 Worth deciding rather than leaving implicit, because the app currently promises "Message deleted" in
 one surface while quoting the message in another.
 
-## P49 — Doc citations drift silently
+## P49 — Doc citations drift silently, and CI's past-end check is red on 92 citations in dated records
 
 `id: P49` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "Doc citations drift silently, and a pin-suggestion race can still duplicate a row",
+Previously titled "Doc citations drift silently", before that "Doc citations drift silently, and a pin-suggestion race can still duplicate a row",
 before that "`npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree guards", and
 before that "... none of `deploy.sh`'s guards (minor)". The git-squash and pin-suggestion items are
 fixed; the documentation-citation item below is what is left.
@@ -2104,8 +2104,21 @@ they can't be repaired mechanically, and they split into two kinds:
   changing the number - and guessing at that would put invented history into the record.
 
 The eight that *were* mechanically provable (anchored on a `def`/`class` the tool could locate
-uniquely) are fixed, and `check_doc_line_refs.py` now runs in CI to keep past-end-of-file citations
-at zero.
+uniquely) are fixed, and `check_doc_line_refs.py` runs in CI.
+
+**It does not keep past-end-of-file citations at zero, and CI's step is red** (found 2026-09-14). It
+reported 95, and its pre-commit hook is `stages: [manual]`, so no commit ever ran it. Five were in
+`PROBLEMS.md`: four are renumbered to where the code sits now, and the fifth was a frame in a pasted
+traceback, which the check now skips along with everything else inside a fenced block, as quoted
+output (two more such frames were in the archive). The other 92 are prose in dated records - 65 in
+`designs/`, 15 in `archive/`, and the rest in `audits/`, `notes/`, `reports/` and one handoff.
+
+That is the conflict the next paragraphs describe from the other side. The check treats a citation
+nobody can follow as broken wherever it is, struck text included, while the argument below says a
+dated record should keep the line it was written against. One has to give: exempt the dated
+directories from the past-end check, or rewrite each of those citations to drop its line number or
+name the commit it was read at. That is a choice about what those records are for, so it is left
+open, and CI stays red until it is made.
 
 The "fourteen" in this entry's original title was never a count of what needs repairing, and the
 number the report prints is not one either. Re-measured 2026-09-05 at 569 suspected drifts, of which
@@ -3073,7 +3086,7 @@ reaches the ORM through `.objects`, which the manager problem has already made `
 dynamic base class above. Of the other 35, three were checked and all three are django-stubs
 limitations rather than defects:
 
-- `spotguessr/overview.py:143` - `Cannot resolve keyword 'participant_count'`. It is an
+- `spotguessr/overview.py:91` - `Cannot resolve keyword 'participant_count'`. It is an
   `.annotate()` name that `participated_sessions` adds; the stubs cannot see runtime annotations.
 - `abstract/versioned.py:298,392,443` - `target_id` on `AbstractFieldRevision`. The abstract base
   names a column its concrete subclasses declare.
@@ -3253,7 +3266,7 @@ nginx bounds the compressed body to 200 MB (`config/nginx/django.conf:42`, `clie
 200m`), which bounds bytes *in transit*, not bytes *after decompression* - up to the 2 GB
 `ExtractionBudget` ceiling, entirely inside one authenticated gunicorn worker, per POST. The only
 rate control on this endpoint is the global DRF `user` throttle at `600/minute`
-(`settings/base.py:1288`) - a request-*count* budget, not a cost-scoped one, so an account can
+(`settings/base.py:957`) - a request-*count* budget, not a cost-scoped one, so an account can
 submit 600 near-2GB extractions a minute exactly as cheaply as 600 single-KB ones, as far as the
 throttle is concerned.
 
