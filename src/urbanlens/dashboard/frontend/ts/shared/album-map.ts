@@ -9,6 +9,7 @@ import { toast } from "./dialogs";
 import { showMapContextMenu } from "./map-context-menu";
 import { createMapLayers } from "./map-layers";
 import { createPhotoMarkerLayer, type PhotoMapItem, type PhotoMarkerLayer } from "./photo-map";
+import { tilesForImage } from "./photo-tile";
 
 /** Zoom used when an album has exactly one placed photo (fitBounds would max out). */
 const SINGLE_PHOTO_ZOOM = 17;
@@ -51,8 +52,7 @@ async function savePosition(imageId: number, lat: number, lng: number): Promise<
 }
 
 function setTileMapHidden(imageId: number, hidden: boolean): void {
-    const tile = document.getElementById(`gallery-item-${imageId}`);
-    if (tile) tile.dataset.mapHidden = hidden ? "true" : "false";
+    for (const tile of tilesForImage(imageId)) tile.dataset.mapHidden = hidden ? "true" : "false";
 }
 
 /** Keep album-map markers in sync when hide/show is driven from the pin map or lightbox. */
@@ -63,7 +63,7 @@ function syncAlbumMapHidden(imageId: number, hidden: boolean): void {
         return;
     }
     const photo = readPhotos().find((item) => item.id === imageId);
-    const tile = document.getElementById(`gallery-item-${imageId}`);
+    const [tile] = tilesForImage(imageId);
     const lat = photo?.lat ?? (tile?.dataset.lat ? Number.parseFloat(tile.dataset.lat) : Number.NaN);
     const lng = photo?.lng ?? (tile?.dataset.lng ? Number.parseFloat(tile.dataset.lng) : Number.NaN);
     const url = photo?.url || tile?.dataset.url || "";

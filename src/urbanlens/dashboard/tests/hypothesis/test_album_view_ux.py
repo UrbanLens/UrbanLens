@@ -150,6 +150,25 @@ class AlbumPanelSectionsTests(TestCase):
 
         self.assertContains(response, "Not in an album")
 
+    def test_a_loose_tile_does_not_take_the_gallery_tile_s_id(self) -> None:
+        """The pin and wiki pages render the gallery beside this panel, and a shared id sends one grid's lookups
+        to the other grid's tile (P121)."""
+        image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, f'data-id="{image.pk}"')
+        self.assertNotContains(response, f'id="gallery-item-{image.pk}"')
+
+    def test_an_album_s_tile_does_not_take_the_gallery_tile_s_id(self) -> None:
+        image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        AlbumItem.objects.create(album=self.album, image=image, order=0)
+
+        response = self.client.get(self.url, {"album": self.album.slug})
+
+        self.assertContains(response, f'data-id="{image.pk}"')
+        self.assertNotContains(response, f'id="gallery-item-{image.pk}"')
+
     def test_the_loose_section_is_hidden_when_there_are_no_photos_at_all(self) -> None:
         response = self.client.get(self.url)
 

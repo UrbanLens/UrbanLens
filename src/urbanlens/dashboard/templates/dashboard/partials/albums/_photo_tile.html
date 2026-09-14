@@ -1,6 +1,5 @@
 {% comment %}One photo tile in an album grid (list loose-photos, or an album's own grid).{% endcomment %}
 <li class="gallery-item{% if in_album %} album-item{% endif %}"
-    id="gallery-item-{{ img.pk }}"
     draggable="true"
     data-id="{{ img.pk }}"
     data-uuid="{{ img.uuid }}"

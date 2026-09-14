@@ -142,6 +142,11 @@ export function lightboxListFromGrid(grid: HTMLElement, clicked: HTMLElement): {
     return { list, idx };
 }
 
+/** Every tile showing this photo under *root*. The pin and wiki pages show a photo in the gallery and in an album grid at once, so only the gallery's tile carries an id. */
+export function tilesForImage(imageId: number, root: ParentNode = document): HTMLElement[] {
+    return Array.from(root.querySelectorAll<HTMLElement>(`.gallery-item[data-id="${imageId}"]`));
+}
+
 export function applyTileDataset(el: HTMLElement, tile: PhotoTile): void {
     el.dataset.id = String(tile.id);
     el.dataset.uuid = tile.uuid;
@@ -164,7 +169,6 @@ export function applyTileDataset(el: HTMLElement, tile: PhotoTile): void {
 export function renderPhotoTile(tile: PhotoTile, opts: { inAlbum: boolean; albumSlug?: string }): HTMLLIElement {
     const li = document.createElement("li");
     li.className = opts.inAlbum ? "gallery-item album-item" : "gallery-item";
-    li.id = `gallery-item-${tile.id}`;
     li.draggable = true;
     applyTileDataset(li, tile);
     if (opts.inAlbum && opts.albumSlug) li.dataset.albumSlug = opts.albumSlug;

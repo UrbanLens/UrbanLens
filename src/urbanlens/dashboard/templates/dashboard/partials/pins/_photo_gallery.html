@@ -387,6 +387,11 @@
     _updateGalleryCountLabel(1);
   }
 
+  // The albums panel on the same page can show this photo too.
+  function _tilesFor(imgId) {
+    return document.querySelectorAll('.gallery-item[data-id="' + imgId + '"]');
+  }
+
   // -- Delete -----------------------------------------------------------------
   window.galleryDelete = function (imgId) {
     var tile = document.querySelector('#gallery-grid #gallery-item-' + imgId);
@@ -423,7 +428,7 @@
         if (window.toastr) toastr.error('Could not delete that photo.');
         return;
       }
-      if (tile) tile.remove();
+      _tilesFor(imgId).forEach(function (el) { el.remove(); });
       _items = _items.filter(function (i) { return i.id !== imgId; });
       if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
       _updateGalleryCountLabel(-1);
@@ -475,10 +480,12 @@
         return data;
       });
     }).then(function (data) {
+      _tilesFor(imgId).forEach(function (copy) {
+        copy.dataset.lat = data.latitude;
+        copy.dataset.lng = data.longitude;
+      });
       var el = document.getElementById('gallery-item-' + imgId);
       if (el) {
-        el.dataset.lat = data.latitude;
-        el.dataset.lng = data.longitude;
         var coordIcon = el.querySelector('.gallery-has-coords');
         if (!coordIcon) {
           var btn = el.querySelector('.gallery-thumb-btn');
@@ -510,8 +517,7 @@
         return data;
       });
     }).then(function (data) {
-      var el = document.getElementById('gallery-item-' + imgId);
-      if (el) el.dataset.mapHidden = data.map_hidden ? 'true' : 'false';
+      _tilesFor(imgId).forEach(function (copy) { copy.dataset.mapHidden = data.map_hidden ? 'true' : 'false'; });
       var item = _items.find(function (i) { return i.id === imgId; });
       if (item) item.mapHidden = !!data.map_hidden;
       if (data.map_hidden) {
@@ -571,8 +577,7 @@
       body: JSON.stringify({ action: 'delete', image_ids: ids }),
     }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function () {
       ids.forEach(function (id) {
-        var el = document.getElementById('gallery-item-' + id);
-        if (el) el.remove();
+        _tilesFor(id).forEach(function (el) { el.remove(); });
       });
       _items = _items.filter(function (i) { return ids.indexOf(i.id) === -1; });
       if (window.toastr) toastr.success('Deleted ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + '.');

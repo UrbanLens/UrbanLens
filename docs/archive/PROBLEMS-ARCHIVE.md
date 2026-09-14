@@ -11,6 +11,31 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-14: pin and wiki pages gave a photo's gallery tile and album tile the same `id`
+
+`id: P121` · `status: fixed` · `resolved: 2026-09-14`
+
+Previously titled "Pin and wiki pages give a loose photo's gallery tile and album tile the same `id`".
+
+Found verifying P55. On a wiki page with the Media card's Manage tab open, `_photo_gallery.html`'s `#gallery-grid` and
+`_albums_panel.html`'s `#albums-loose-grid` (through `albums/_photo_tile.html`) each rendered `<li id="gallery-item-47">`
+for the same photo, and `getElementById` returned the gallery's tile only because its panel came first in the DOM.
+
+**Fixed 2026-09-14.** Album tiles (`albums/_photo_tile.html` and `photo-tile.ts`'s `renderPhotoTile`) carry no id now, so
+`gallery-item-<pk>` is the gallery's alone. Code that means every copy of a photo finds them by `data-id`, through
+`tilesForImage` in TypeScript or `_tilesFor` in the gallery's inline script. What the entry had left unchecked:
+
+- **Album "remove from album" reached the wrong tile.** Its bulk action removed the photo's gallery tile and left the
+  album tile on screen. It now removes only the albums panel's copies, since the photo is still on the pin.
+- **Every other change updated one copy.** Album bulk delete, hide-from-map and album-map repositioning reached the
+  gallery's tile; the gallery's delete, bulk delete, hide-from-map and repositioning reached only their own. All now
+  update every copy. The GPS icon is still added only to the gallery tile, which is the only one that shows it.
+
+Tests, each failing first: `test_album_view_ux.py` (neither the loose grid's nor an album's tiles take the gallery id) and
+`photo-tile.test.ts` (no id, and `tilesForImage` with and without a root). In a browser on the `development_main` stack,
+a pin page with an album open had one `gallery-item` id per photo, and bulk remove took the album's copy while the
+gallery's stayed. That browser run was after the fix only.
+
 ## RESOLVED 2026-09-14: gateway service keys fell back to `get_limit_config`'s generic 20/min, 500/day
 
 `id: P93` · `status: fixed` · `resolved: 2026-09-14`

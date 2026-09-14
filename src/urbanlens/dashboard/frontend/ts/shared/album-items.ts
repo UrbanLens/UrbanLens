@@ -9,7 +9,7 @@ import { getCsrfToken } from "./csrf";
 import { fetchJson, sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
 import { bindPhotoContextMenu } from "./photo-context-menu";
-import { lightboxListFromGrid, parsePhotoIds, renderPhotoTile, tileFromJson, tileHasImage, writePhotoIds } from "./photo-tile";
+import { lightboxListFromGrid, parsePhotoIds, renderPhotoTile, tileFromJson, tileHasImage, tilesForImage, writePhotoIds } from "./photo-tile";
 import { bindPhotoGrid } from "./photo-virtual-grid";
 
 /** Upload ceiling: long enough for a big photo on a slow uplink, short enough to fail. */
@@ -193,8 +193,7 @@ function ensureMapHiddenHandler(): void {
         }
         void postJson(`${base}${imgId}/`, { map_hidden: hidden })
             .then((data) => {
-                const tile = document.getElementById(`gallery-item-${imgId}`);
-                if (tile) tile.dataset.mapHidden = data.map_hidden ? "true" : "false";
+                for (const tile of tilesForImage(imgId)) tile.dataset.mapHidden = data.map_hidden ? "true" : "false";
                 window._albumSyncMapHidden?.(imgId, Boolean(data.map_hidden));
                 if (data.map_hidden) {
                     window._galleryRemoveMarker?.(imgId);
@@ -392,9 +391,11 @@ async function setAlbumCoverFromToolbar(imageId: number): Promise<void> {
 }
 
 async function bulkRemove(ids: number[]): Promise<void> {
-    const url = albumPanel()?.dataset.removeUrl;
-    if (!url || !ids.length) return;
-    ids.forEach((id) => document.getElementById(`gallery-item-${id}`)?.remove());
+    const panel = albumPanel();
+    const url = panel?.dataset.removeUrl;
+    if (!panel || !url || !ids.length) return;
+    // Only this panel's copies: the photo is still on the pin, so its gallery tile stays.
+    ids.forEach((id) => tilesForImage(id, panel).forEach((tile) => tile.remove()));
     try {
         await postJson(url, { image_ids: ids });
         clearSelect();
@@ -421,7 +422,7 @@ async function bulkDelete(ids: number[], bulkUrl: string): Promise<void> {
     if (!window.confirm(`Delete ${ids.length} photo${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
     try {
         await postJson(bulkUrl, { action: "delete", image_ids: ids });
-        ids.forEach((id) => document.getElementById(`gallery-item-${id}`)?.remove());
+        ids.forEach((id) => tilesForImage(id).forEach((tile) => tile.remove()));
         toast.success(`Deleted ${ids.length} photo${ids.length === 1 ? "" : "s"}.`);
         clearSelect();
     } catch (err) {

@@ -4903,18 +4903,3 @@ fields. It belongs in the `infrastructure` repo beside the other host timers, no
 Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
-
-## P121 — Pin and wiki pages give a loose photo's gallery tile and album tile the same `id`
-
-`id: P121` · `status: open` · `updated: 2026-09-14`
-
-Found verifying P55. On a wiki page with the Media card's Manage tab open, `_photo_gallery.html`'s `#gallery-grid` and
-`_albums_panel.html`'s `#albums-loose-grid` (through `albums/_photo_tile.html`) each rendered `<li id="gallery-item-47">`
-for the same photo. The pin page includes both panels as well; that was not checked in a browser.
-
-Tiles are looked up by that id: three more lookups in `_photo_gallery.html`, one in `_photo_lightbox.html`, and several in
-`album-items.ts` and `album-map.ts`. `getElementById` returns the first match, which on both pages is the gallery's tile
-only because its panel comes first in the DOM, so a handler meant for the album copy acts on the gallery's instead.
-`galleryDelete` now scopes its lookup to `#gallery-grid`, because its wording reads that tile's data attributes. Not
-checked: whether deleting from one grid leaves the other's copy on screen, and which of the other lookups reach the
-wrong tile today.
