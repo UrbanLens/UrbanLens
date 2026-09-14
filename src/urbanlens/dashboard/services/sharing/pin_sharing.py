@@ -132,7 +132,7 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         parent_pin: When the share is part of a "pin + child pins" bundle, the recipient-side pin the new pin should nest under.
 
     Returns:
-        The newly created Pin, carrying over every user-visible property (name, icon, labels, notes, scores, security indicators, photos)."""
+        The newly created Pin, carrying the site's facts (name, type, dates, security indicators, shared photos) but none of the sender's own relationship to it (icon, colour, labels, notes, ratings)."""
     source = share.pin
     if source is None:
         return Pin.objects.create(
@@ -155,8 +155,6 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         # copied alongside name: it is the only thing stopping the automatic
         # building/parcel classifier from overwriting a type the sender chose.
         pin_type_is_user_provided=source.pin_type_is_user_provided,
-        # effective_icon checks custom_icon before icon, so omitting it silently
-        # changed what the shared pin looked like.
         indoor_outdoor=source.indoor_outdoor,
         date_built=source.date_built,
         date_abandoned=source.date_abandoned,

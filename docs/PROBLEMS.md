@@ -1052,8 +1052,8 @@ than fallbacks. The rest of this entry records them and the file-stranding work 
   shared pins, trip member maps and wiki pages render other accounts' pin icons. Reading every
   surface that emits an icon URL found none that does. Map payloads, the pin sidebar, pin lists,
   pin sync and the external API all scope to the pin's owner. A pin accepted from a share is the
-  recipient's own row, and `services/sharing/pin_sharing.py::create_recipient_pin` does not copy
-  `custom_icon`. A wiki-published floorplan copy has no `linked_pin`. The label organiser, label
+  recipient's own row, and `services/sharing/pin_sharing.py::create_pin_from_share` deliberately copies neither
+  `icon` nor `custom_icon` (`test_share_pin_copy_fidelity.py`). A wiki-published floorplan copy has no `linked_pin`. The label organiser, label
   pickers and label serializers all list `Label.objects.visible_to(viewer)`, and the wiki
   label-membership panel draws no custom icons. So the gate needs ownership, not a visibility
   queryset, and one should be built only when a surface that shows another account's pin exists.
