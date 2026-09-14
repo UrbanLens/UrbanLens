@@ -2354,11 +2354,11 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
 
-## P57 — The test-quality audit's follow-ups: 13 done; three untested surfaces, two unproven locks and two decisions remain
+## P57 — The test-quality audit's follow-ups: 14 done; three untested surfaces, one unproven lock and two decisions remain
 
-`id: P57` · `status: open` · `updated: 2026-09-06`
+`id: P57` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "Test-quality audit follow-ups (2026-08-29)".
+Previously titled "The test-quality audit's follow-ups: 13 done; three untested surfaces, two unproven locks and two decisions remain", and before that "Test-quality audit follow-ups (2026-08-29)".
 
 Found while auditing existing unit tests for real positive/negative coverage (see
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
@@ -2389,8 +2389,7 @@ Three of the "untested surface" entries are covered as of 2026-09-06 too - `Wiki
   credentials - standing. `test_ai_gateway_guarded` still passes, which is what proves it.
 
 What remains: **three untested surfaces** (`CalendarImportView`, the carousel's "no imagery
-available" branch, and the multi-level pin/wiki nesting prefix), two stale-documentation items, two
-locks with no real-concurrency proof, and two that need a decision from whoever owns the area.
+available" branch, and the multi-level pin/wiki nesting prefix), two stale-documentation items, one lock with no real-concurrency proof (the ledger sweep's), and two that need a decision from whoever owns the area.
 
 *(An earlier version of this line claimed every untested surface was covered. That was written
 after reading only the first half of this entry and is wrong - the five above are all listed
@@ -2583,16 +2582,14 @@ stays valid - that is "unset", not "set to nothing". The original text follows.
 static minimum pledge set but pay-what-you-want turned off, and `clean()` raises nothing - the
 field is simply inert.
 
-**Webhook-event row lock has no real-concurrency proof.** `StripeWebhookView.post` takes
-`StripeWebhookEvent.objects.select_for_update()` specifically so two truly concurrent deliveries of
-the same event id serialize instead of both reading `processed_at` as null and both crediting the
-payment - but every existing test for this view (`test_billing_webhook_idempotency.py`,
-`test_billing_webhook_view.py`) drives it sequentially through Django's test client on one
-connection, where `select_for_update()` is a no-op. This is the same class of gap
-`test_billing_ledger_lock.py` was written to close for the ledger's row lock, after a mutation-
-testing run showed a dropped `select_for_update()` survived every non-threaded test. Closing it
-needs a `TransactionTestCase` + real-thread test (as `test_billing_ledger_lock.py` does via
-`core.tests.concurrency.run_concurrently`).
+**Webhook-event row lock: covered 2026-09-14.** `StripeWebhookView.post` takes
+`StripeWebhookEvent.objects.select_for_update()` so two concurrent deliveries of one event id cannot both read
+`processed_at` as null and both credit the payment, but every test of the view ran on one connection, where the lock
+never contends. `test_billing_webhook_event_lock.py` posts two deliveries from separate threads and connections, through
+the real handler and ledger, with `handle_event` held until the other delivery arrives: one event credits 1000 once, and
+two distinct events credit 400 and 700 together. The distinct pair is what shows both threads do reach the handler at
+once when nothing stops them. The test was not run against a view with the lock removed, since that means editing
+production code to prove a test; the defect it guards against was never present.
 
 ~~**`WikiBoundaryView` has no test coverage at all.**~~ **Covered 2026-09-06** - the area limit,
 the `WikiEdit` audit write on both save and clear, the `just_drawn` concealment bypass, and request

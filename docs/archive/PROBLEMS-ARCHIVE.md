@@ -60,7 +60,8 @@ cached, like an upstream outage. The per-minute figure was not measured against 
 `get_or_create`d, so a row the fallback had created kept 20/min and 500/day after defaults were registered - including
 for the nine plugins fixed earlier the same day. A row still holding exactly the fallback's values (its title-cased
 name, 20, 500, and nothing else set) now takes the registered defaults on its next read; a row an admin changed is
-kept, and `enabled` is never touched. `test_rate_limit_fallback_rows_adopt_defaults.py` covers all three. Whether any
+kept, and `enabled` is never touched. A row is only written when the registered values differ, so defaults that
+happen to equal the fallback's cost no write per read. `test_rate_limit_fallback_rows_adopt_defaults.py` covers all four. Whether any
 deployment had such a row was not checked.
 
 **`overture_maps` is left to P110.** `OvertureMapsGateway` sets `service_key = None` to opt out, but

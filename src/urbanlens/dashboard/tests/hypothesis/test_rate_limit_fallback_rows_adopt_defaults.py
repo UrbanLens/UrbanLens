@@ -7,6 +7,8 @@ the limit nobody chose - for the REData historical-map tile proxy, a 500-tile da
 
 from __future__ import annotations
 
+from unittest import mock
+
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.services.core import rate_limiter
@@ -54,3 +56,13 @@ class FallbackRowAdoptsDefaultsTests(TestCase):
 
         self.assertFalse(config.enabled)
         self.assertNotEqual(config.notes, "")
+
+    def test_defaults_identical_to_the_fallback_are_not_rewritten_on_every_read(self) -> None:
+        _fallback_row()
+        same = rate_limiter.ServiceDefaults(display_name="Redata Historical Maps")
+
+        with (
+            mock.patch.object(rate_limiter, "all_service_defaults", return_value={_SERVICE: same}),
+            self.assertNumQueries(1),
+        ):
+            rate_limiter.get_limit_config(_SERVICE)

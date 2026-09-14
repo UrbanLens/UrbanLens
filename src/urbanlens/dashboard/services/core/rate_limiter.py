@@ -351,7 +351,7 @@ def get_limit_config(service: str) -> Any:
             "notes": defaults_entry.notes,
         }
         row, created = ApiRateLimit.objects.get_or_create(service=service, defaults=values)
-        if not created and _still_at_fallback(row, service):
+        if not created and _still_at_fallback(row, service) and any(getattr(row, field) != value for field, value in values.items()):
             for field, value in values.items():
                 setattr(row, field, value)
             row.save(update_fields=[*values, "updated"])
