@@ -11,6 +11,71 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-14: `bun run codeql:gate` stayed red on triaged false positives, because nothing recorded a verdict
+
+`id: P112` · `status: fixed` · `resolved: 2026-09-14`
+
+Previously titled "`bun run codeql:gate` fails with 26 untriaged findings, so nobody runs it".
+
+`bun run codeql:gate` exits 1 on any error- or warning-level finding. On 2026-09-10 it reported 26,
+every one older than the availability programme. A gate red for that long carries no information, so
+it gets skipped, and `CLAUDE.md` lists it among the checks to run before a PR.
+
+### Triage (2026-09-14)
+
+Each finding was read at its source and along its data flow in the SARIF, not only at its sink.
+
+**Real: location data written to logs.** CodeQL flagged `services/undo/handlers/pin_mutation.py::_move`,
+which logged a rejected undo's target coordinates twice: as arguments, and again inside
+`PinMoveError`'s message. That message is now coordinate-free at its source in
+`services/pins/pin_edit.py::move_pin_to_coordinates`, since `models/pin/viewset.py::PinViewSet` and
+`external_api/views.py::PinDetailView.patch` log it too. A grep for the same shape found five more that CodeQL had not
+flagged:
+
+- `controllers/pin.py::PinController.wikipedia_info` - raw coordinates.
+- `controllers/maps.py::MapController.nearby_places` - the viewport centre, to four decimals.
+- `controllers/trip.py::_build_activity_forecasts` - an activity's coordinates rounded to 0.01°,
+  which `redact_coordinate`'s docstring rules out.
+- `services/apis/locations/google/maps.py::GoogleMapsGateway._csv_row_iter` - a Takeout Maps URL, which
+  embeds the coordinates, and a whole CSV row with the user's own name and notes for the place.
+- `controllers/maps.py::_parse_bbox` - a malformed viewport bbox, verbatim.
+
+All of these now log an id, a count, an exception type or a column list, and
+`test_coordinates_absent_from_logs.py` failed on each before the change. The grep matched log calls
+naming `latitude`, `longitude`, `lat`, `lng` or `coords`; a coordinate passed under another name
+would not have matched.
+
+**False positives:**
+
+| rule | where | why it is not exploitable |
+|---|---|---|
+| `py/path-injection` ×3 | `controllers/media.py::resolve_media_path`, `LocalMediaSource.response` | the resolved path must be inside `MEDIA_ROOT`, and not the root itself, before it is stat'ed or opened. The `lgtm` comments there say so, but the CodeQL CLI does not read them |
+| `py/full-ssrf` | `services/security/url_safety.py::fetch_public_url`, reached from `controllers/media_preview.py::MediaPreviewView.get` | the sink is inside the SSRF guard. The view refuses an unsigned URL before anything else, and each redirect hop is re-validated and pinned to the address it resolved to |
+| `py/url-redirection` | `controllers/api_keys.py::ApiKeyRevokeView.post` | the user's value only becomes a `?page=` query on `reverse('settings.view')`, so the redirect cannot leave the site |
+| `py/weak-sensitive-data-hashing` | `services/apis/security/hibp.py::HaveIBeenPwnedGateway.is_password_pwned` | HIBP's k-anonymity range API is defined over SHA-1, and only a five-character prefix leaves the process |
+| `py/clear-text-storage-sensitive-data` | `management/commands/export_public_locations.py::Command.handle` | it exports locations that passed the public vote, which is what the command is for |
+| `js/xss`, `js/client-side-unvalidated-url-redirection` | `pages/messages/index.html`, `appendBubble` | the source is the DM WebSocket, whose `images[].url` the server builds from `image.image.url` in `services/messaging/direct_messages.py::_serialize_images`. It lands in an `<img src>`, which neither runs script nor navigates |
+| `js/xss-through-dom` | `ts/entries/floorplan-editor.ts`, the pin photo strip | `photo.url` comes from the server-rendered `floorplan-photos` JSON, into an `<img src>` |
+| `js/xss-through-dom` | `pages/pin_lists/saved_filter_detail.html`, `buildPreviewPopup` | `pt.slug` comes from the server-rendered `saved-filter-initial-pins` JSON, after a fixed `/dashboard/map/pin/` prefix |
+| `js/xss-through-dom` | `themes/base.html`, the photo picker's `fileInput.onchange` | the user's own picked file, shown through a `blob:` URL |
+| `py/bad-tag-filter` ×6 | `bin/check_bem_modifiers.py::_SCRIPT_BLOCK` and five profile-page test files | they strip `<script>` blocks out of rendered HTML before a lint or an assertion. Nothing they produce reaches a browser |
+| `js/insecure-randomness` ×4 | `tests/integration/lib/api-client.ts`, `hrsh-boundary-provenance.spec.ts` | `Math.random()` scatters test pin coordinates |
+| `js/incomplete-url-substring-sanitization` | `hrsh-property-data.spec.ts` | a test assertion that a link points at `echo.epa.gov` |
+| `js/incomplete-multi-character-sanitization` | `frontend/browser/harness-parity.test.ts` | strips tags to measure a button's visible text in a test |
+
+### Resolution (2026-09-14)
+
+`bin/run_codeql.py` now reads `.github/codeql/triaged-findings.json`: one entry per finding, with its rule,
+path, SARIF `primaryLocationLineHash`, language and the reason from the table above. A matching finding
+is counted as triaged rather than as a failure, and `--verbose` prints it with its reason. A new
+finding under the same rule still fails. An entry with no reason is refused, and one that matches no
+finding in an analysed language is listed for removal. `test_run_codeql.py` covers each of those.
+
+`bun run codeql:gate --fast` against databases extracted from this tree exits 0, with 13 Python and 11
+JavaScript findings triaged and none stale. Two full rebuilds were killed by host memory pressure
+before that run, so the pass reused their finalised databases rather than extracting afresh. GitHub
+code scanning in CI does not read the file; its alerts still need dismissing in GitHub.
+
 ## RESOLVED 2026-09-14: pin and wiki pages gave a photo's gallery tile and album tile the same `id`
 
 `id: P121` · `status: fixed` · `resolved: 2026-09-14`

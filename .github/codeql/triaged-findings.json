@@ -1,0 +1,170 @@
+[
+  {
+    "rule": "js/incomplete-multi-character-sanitization",
+    "path": "src/urbanlens/dashboard/frontend/browser/harness-parity.test.ts",
+    "fingerprint": "7e2abb6f3f604ed6:1",
+    "language": "javascript",
+    "reason": "Strips tags to measure a button's visible text in a test, not a sanitizer."
+  },
+  {
+    "rule": "js/xss-through-dom",
+    "path": "src/urbanlens/dashboard/frontend/ts/entries/floorplan-editor.ts",
+    "fingerprint": "f914cf03be246823:1",
+    "language": "javascript",
+    "reason": "photo.url comes from the server-rendered floorplan-photos JSON and is assigned to an <img src>."
+  },
+  {
+    "rule": "js/client-side-unvalidated-url-redirection",
+    "path": "src/urbanlens/dashboard/templates/dashboard/pages/messages/index.html",
+    "fingerprint": "367cdd89e2e783f9:1",
+    "language": "javascript",
+    "reason": "The value is assigned to an <img src>, which loads an image and never navigates; the server builds it from image.image.url in _serialize_images."
+  },
+  {
+    "rule": "js/xss",
+    "path": "src/urbanlens/dashboard/templates/dashboard/pages/messages/index.html",
+    "fingerprint": "367cdd89e2e783f9:1",
+    "language": "javascript",
+    "reason": "The source is the DM WebSocket, whose images[].url the server builds from image.image.url in _serialize_images; it is assigned to an <img src>, which does not run script."
+  },
+  {
+    "rule": "js/xss-through-dom",
+    "path": "src/urbanlens/dashboard/templates/dashboard/pages/pin_lists/saved_filter_detail.html",
+    "fingerprint": "9243b33a806d99e9:1",
+    "language": "javascript",
+    "reason": "pt.slug comes from the server-rendered saved-filter-initial-pins JSON, after a fixed /dashboard/map/pin/ prefix."
+  },
+  {
+    "rule": "js/xss-through-dom",
+    "path": "src/urbanlens/dashboard/templates/dashboard/themes/base.html",
+    "fingerprint": "bf57b5ded1d5a751:1",
+    "language": "javascript",
+    "reason": "The user's own picked file, shown through a blob: URL from URL.createObjectURL."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/lib/api-client.ts",
+    "fingerprint": "53635a0de18232d1:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/lib/api-client.ts",
+    "fingerprint": "e1459b25acc68944:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/specs/location/hrsh-boundary-provenance.spec.ts",
+    "fingerprint": "14237f42850c57f4:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/specs/location/hrsh-boundary-provenance.spec.ts",
+    "fingerprint": "b4c9b621bef17653:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/incomplete-url-substring-sanitization",
+    "path": "tests/integration/specs/location/hrsh-property-data.spec.ts",
+    "fingerprint": "55bb63deffd31f61:1",
+    "language": "javascript",
+    "reason": "A test assertion that a link points at echo.epa.gov, not a sanitizer."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "bin/check_bem_modifiers.py",
+    "fingerprint": "86c3f8577362f717:1",
+    "language": "python",
+    "reason": "Strips <script> blocks from templates before linting class names; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/url-redirection",
+    "path": "src/urbanlens/dashboard/controllers/api_keys.py",
+    "fingerprint": "b2c6a5e0c3e9625b:1",
+    "language": "python",
+    "reason": "The user's value only becomes a ?page= query on reverse('settings.view'), so the redirect cannot leave the site."
+  },
+  {
+    "rule": "py/path-injection",
+    "path": "src/urbanlens/dashboard/controllers/media.py",
+    "fingerprint": "2a362e4fb8807ac3:1",
+    "language": "python",
+    "reason": "resolve_media_path only returns a path that resolves inside MEDIA_ROOT and is not the root itself; every open and stat happens after that check."
+  },
+  {
+    "rule": "py/path-injection",
+    "path": "src/urbanlens/dashboard/controllers/media.py",
+    "fingerprint": "7d25d1c4dbc223c6:1",
+    "language": "python",
+    "reason": "resolve_media_path only returns a path that resolves inside MEDIA_ROOT and is not the root itself; every open and stat happens after that check."
+  },
+  {
+    "rule": "py/path-injection",
+    "path": "src/urbanlens/dashboard/controllers/media.py",
+    "fingerprint": "9d551f62aec62e3e:1",
+    "language": "python",
+    "reason": "resolve_media_path only returns a path that resolves inside MEDIA_ROOT and is not the root itself; every open and stat happens after that check."
+  },
+  {
+    "rule": "py/clear-text-storage-sensitive-data",
+    "path": "src/urbanlens/dashboard/management/commands/export_public_locations.py",
+    "fingerprint": "6a7d7ce05172b995:1",
+    "language": "python",
+    "reason": "The command exports locations that passed the public vote; publishing them is its purpose."
+  },
+  {
+    "rule": "py/weak-sensitive-data-hashing",
+    "path": "src/urbanlens/dashboard/services/apis/security/hibp.py",
+    "fingerprint": "530480af10b86cc4:1",
+    "language": "python",
+    "reason": "HIBP's k-anonymity range API is defined over SHA-1, and only a five-character prefix of the digest leaves the process."
+  },
+  {
+    "rule": "py/full-ssrf",
+    "path": "src/urbanlens/dashboard/services/security/url_safety.py",
+    "fingerprint": "fdaf373d7a3c638:1",
+    "language": "python",
+    "reason": "The sink is inside fetch_public_url, the SSRF guard: each redirect hop is re-validated as public and the connection is pinned to the address it resolved to. Its caller, MediaPreviewView.get, refuses an unsigned URL first."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_additional_details.py",
+    "fingerprint": "ea2d8c7849f72366:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_hero_meta_editable.py",
+    "fingerprint": "f39c47985fb3267e:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_identity_editable.py",
+    "fingerprint": "f7458b85798dc13d:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_preview.py",
+    "fingerprint": "24db4a4907d7d6f1:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_social_inline.py",
+    "fingerprint": "7257f505aefd6e17:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  }
+]

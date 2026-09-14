@@ -30,7 +30,9 @@ def _load_runner():
     return module
 
 
-def _sarif(*, note_rule: str = "py/cyclic-import", error_rule: str = "py/log-injection") -> dict:
+def _sarif(
+    *, note_rule: str = "py/cyclic-import", error_rule: str = "py/log-injection", fingerprint: str = "b0:1"
+) -> dict:
     """Return a minimal SARIF document with one note and one error."""
     return {
         "runs": [
@@ -59,6 +61,7 @@ def _sarif(*, note_rule: str = "py/cyclic-import", error_rule: str = "py/log-inj
                     {
                         "ruleId": error_rule,
                         "message": {"text": "log"},
+                        "partialFingerprints": {"primaryLocationLineHash": fingerprint},
                         "locations": [
                             {
                                 "physicalLocation": {
@@ -145,6 +148,65 @@ class RunCodeqlWrapperTests(SimpleTestCase):
         self.assertIn("py/cyclic-import", text)
         self.assertNotIn("b.py:2:", text)
         self.assertNotIn("a.py:1:", text)
+
+    def _triaged(self, entries: list[dict]) -> dict:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "triaged.json"
+            path.write_text(json.dumps(entries), encoding="utf-8")
+            return self.runner.load_triaged(path)
+
+    def _count(self, sarif: dict, triaged: dict, matched: set) -> tuple[int, str]:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "python.sarif"
+            path.write_text(json.dumps(sarif), encoding="utf-8")
+            captured = io.StringIO()
+            with patch("sys.stdout", captured):
+                count = self.runner._print_sarif(path, triaged=triaged, matched=matched)
+        return count, captured.getvalue()
+
+    def test_a_triaged_finding_does_not_fail_the_gate(self) -> None:
+        entry = {"rule": "py/log-injection", "path": "b.py", "fingerprint": "b0:1", "language": "python", "reason": "x"}
+        triaged = self._triaged([entry])
+        matched: set = set()
+
+        count, text = self._count(_sarif(), triaged, matched)
+
+        self.assertEqual(count, 0)
+        self.assertIn("0 error/warning, 1 triaged, 1 note", text)
+        self.assertNotIn("b.py:2:", text)
+        self.assertEqual(matched, set(triaged))
+
+    def test_a_new_finding_under_a_triaged_rule_still_fails(self) -> None:
+        entry = {"rule": "py/log-injection", "path": "b.py", "fingerprint": "b0:1", "language": "python", "reason": "x"}
+        triaged = self._triaged([entry])
+
+        count, text = self._count(_sarif(fingerprint="c9:1"), triaged, set())
+
+        self.assertEqual(count, 1)
+        self.assertIn("b.py:2: error:", text)
+
+    def test_a_verdict_without_a_reason_is_refused(self) -> None:
+        entry = {"rule": "py/log-injection", "path": "b.py", "fingerprint": "b0:1", "language": "python", "reason": " "}
+
+        with self.assertRaises(ValueError):
+            self._triaged([entry])
+
+    def test_no_triage_file_means_nothing_is_triaged(self) -> None:
+        self.assertEqual(self.runner.load_triaged(Path("/nonexistent/triaged.json")), {})
+
+    def test_an_entry_matching_nothing_in_an_analysed_language_is_stale(self) -> None:
+        triaged = self._triaged(
+            [
+                {"rule": "py/a", "path": "a.py", "fingerprint": "1:1", "language": "python", "reason": "x"},
+                {"rule": "py/b", "path": "b.py", "fingerprint": "2:1", "language": "python", "reason": "x"},
+                {"rule": "js/c", "path": "c.ts", "fingerprint": "3:1", "language": "javascript", "reason": "x"},
+            ]
+        )
+        matched = {("py/a", "a.py", "1:1")}
+
+        stale = self.runner.stale_triaged(triaged, matched, languages=("python",))
+
+        self.assertEqual([entry["path"] for entry in stale], ["b.py"])
 
     @given(st.booleans())
     @settings(max_examples=20, deadline=None)

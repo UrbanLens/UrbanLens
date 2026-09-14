@@ -92,7 +92,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P109 | open | 2026-09-10 | One import's task fan-out fills the only Celery queue for hours, and a safety task waits behind it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P110 | open | 2026-09-14 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-10 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P112 | open | 2026-09-14 | `bun run codeql:gate` stays red on triaged false positives, because nothing records a verdict | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P113 | open | 2026-09-13 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 2 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |

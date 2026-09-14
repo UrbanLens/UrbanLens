@@ -479,13 +479,20 @@ Default output is a per-rule count plus each error/warning. Notes (unused
 imports, cyclic imports, and similar) are counted but not printed unless
 `--verbose`. SARIF under `.codeql/results/` still has everything.
 
+A finding read and judged not exploitable goes in `.github/codeql/triaged-findings.json`, with the
+reason. It is counted as triaged rather than as a failure, and `--verbose` prints it with that reason.
+Entries are keyed on rule, path and the SARIF `primaryLocationLineHash`, so a new finding under the same
+rule still fails, and an entry follows its line when code above it moves. Editing the flagged line
+changes the hash, which is deliberate: the verdict was about that line. The run then lists the entry as
+matching no finding, and it should be re-judged or removed. A missing reason is refused. This file does
+not affect GitHub code scanning in CI, whose alerts are dismissed in GitHub.
+
 A failed JavaScript or Actions extract leaves a database with `finalised:
 false`. The wrapper does not reuse that; it rebuilds. Those extractors need
 **Node.js** on PATH - bun is not a substitute.
 
 CodeQL does **not** run from a git hook. It was wired as a pre-push hook and
-had to be removed: the analysis is minutes long, `--gate` exits non-zero on the
-repo's known-and-triaged findings, and a GUI git client shows none of a hook's
+had to be removed: the analysis is minutes long, and a GUI git client shows none of a hook's
 output - so `git push` from VS Code simply failed with no explanation. CI still
 runs CodeQL on every PR (`.github/workflows/security.yml`).
 

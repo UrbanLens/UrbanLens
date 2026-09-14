@@ -31,6 +31,11 @@ RESULTS_DIR = REPO_ROOT / ".codeql" / "results"
 STAMP_PATH = REPO_ROOT / ".codeql" / "stamp.json"
 CI_CONFIG = REPO_ROOT / ".github" / "codeql" / "codeql-config.yml"
 LOCAL_CONFIG = REPO_ROOT / ".github" / "codeql" / "codeql-config-local.yml"
+#: Findings read and judged not exploitable, each with the reason. Keyed on the SARIF line hash, so an entry
+#: follows its line when code above it moves, and lapses when the line itself changes.
+TRIAGED_PATH = REPO_ROOT / ".github" / "codeql" / "triaged-findings.json"
+
+TriageKey = tuple[str, str, str]
 
 #: CodeQL-action language ids. ``javascript`` includes TypeScript.
 LANGUAGES = ("python", "javascript", "actions")
@@ -404,23 +409,69 @@ def _result_level(result: dict, rules: dict) -> str:
     return result.get("level") or (rule.get("defaultConfiguration") or {}).get("level") or "warning"
 
 
-def _print_sarif(path: Path, *, verbose: bool = False, quiet: bool = False) -> int:
+def load_triaged(path: Path) -> dict[TriageKey, dict]:
+    """Read the triaged-findings file.
+
+    Args:
+        path: JSON list of ``{rule, path, fingerprint, language, reason}`` objects.
+
+    Returns:
+        Each entry keyed by ``(rule, path, fingerprint)``; empty when the file does not exist.
+
+    Raises:
+        ValueError: An entry lacks a field or gives no reason."""
+    if not path.is_file():
+        return {}
+    triaged: dict[TriageKey, dict] = {}
+    for entry in json.loads(path.read_text(encoding="utf-8")):
+        missing = [field for field in ("rule", "path", "fingerprint", "language", "reason") if not str(entry.get(field) or "").strip()]
+        if missing:
+            raise ValueError(f"{path}: triaged entry {entry!r} has no {', '.join(missing)}")
+        triaged[(entry["rule"], entry["path"], entry["fingerprint"])] = entry
+    return triaged
+
+
+def stale_triaged(triaged: dict[TriageKey, dict], matched: set[TriageKey], *, languages: tuple[str, ...]) -> list[dict]:
+    """Entries for an analysed language that no finding matched: the code moved on, so the verdict should go.
+
+    Args:
+        triaged: Every triaged entry.
+        matched: Keys a finding matched during this run.
+        languages: The languages this run analysed.
+
+    Returns:
+        The stale entries."""
+    return [entry for key, entry in triaged.items() if key not in matched and entry["language"] in languages]
+
+
+def _print_sarif(
+    path: Path,
+    *,
+    verbose: bool = False,
+    quiet: bool = False,
+    triaged: dict[TriageKey, dict] | None = None,
+    matched: set[TriageKey] | None = None,
+) -> int:
     """Print findings from a SARIF file and return how many were error/warning.
 
     Default output is a per-rule count plus each error/warning.
 
     Args:
         path: SARIF document produced by ``database analyze``.
-        verbose: Print note-level findings as well.
+        verbose: Print note-level findings, and triaged ones, as well.
         quiet: Print only the summary, not individual findings.
+        triaged: Findings already judged not exploitable; they are reported but not counted.
+        matched: Collects the keys of triaged entries a finding matched.
 
     Returns:
-        Count of results whose level is ``error`` or ``warning``."""
+        Count of untriaged results whose level is ``error`` or ``warning``."""
     payload = json.loads(path.read_text(encoding="utf-8"))
+    triaged = triaged or {}
     counts: Counter[tuple[str, str]] = Counter()
     lines: list[tuple[str, str]] = []
     actionable = 0
     notes = 0
+    triaged_count = 0
     for run in payload.get("runs", []):
         rules = {rule.get("id"): rule for rule in run.get("tool", {}).get("driver", {}).get("rules", []) if rule.get("id")}
         for result in run.get("results", []):
@@ -434,13 +485,22 @@ def _print_sarif(path: Path, *, verbose: bool = False, quiet: bool = False) -> i
             help_uri = ((rules.get(rule_id) or {}).get("helpUri") or "") if verbose else ""
             suffix = f"  ({help_uri})" if help_uri else ""
             line = f"{uri}:{start}: {level}: {rule_id}: {message}{suffix}"
+            key = (rule_id, uri, (result.get("partialFingerprints") or {}).get("primaryLocationLineHash") or "")
+            if level != "note" and key in triaged:
+                triaged_count += 1
+                if matched is not None:
+                    matched.add(key)
+                if verbose:
+                    lines.append(("triaged", f"{line}  [triaged: {triaged[key]['reason']}]"))
+                continue
             counts[(level, rule_id)] += 1
             lines.append((level, line))
             if level == "note":
                 notes += 1
             else:
                 actionable += 1
-    print(f"{path.name}: {actionable} error/warning, {notes} note")
+    triaged_summary = f", {triaged_count} triaged" if triaged_count else ""
+    print(f"{path.name}: {actionable} error/warning{triaged_summary}, {notes} note")
     rank = {"error": 0, "warning": 1, "note": 2}
     for (level, rule_id), n in sorted(
         counts.items(),
@@ -486,6 +546,8 @@ def _analyze_language(
     threat_local: bool,
     verbose: bool = False,
     quiet: bool = False,
+    triaged: dict[TriageKey, dict] | None = None,
+    matched: set[TriageKey] | None = None,
 ) -> int:
     """Analyse one language database and print its findings.
 
@@ -497,9 +559,11 @@ def _analyze_language(
         threat_local: Also treat local inputs (file/env/CLI) as taint sources.
         verbose: Print note-level findings and CodeQL progress.
         quiet: Print only the per-rule summary from SARIF.
+        triaged: Findings already judged not exploitable.
+        matched: Collects the keys of triaged entries a finding matched.
 
     Returns:
-        Count of error/warning findings."""
+        Count of untriaged error/warning findings."""
     db = DB_CLUSTER / language
     if not _database_ready(language):
         yml = db / "codeql-database.yml"
@@ -531,7 +595,7 @@ def _analyze_language(
     except subprocess.CalledProcessError as exc:
         print(f"Failed to analyse {language} (exit {exc.returncode})", file=sys.stderr)
         return -1
-    return _print_sarif(sarif, verbose=verbose, quiet=quiet)
+    return _print_sarif(sarif, verbose=verbose, quiet=quiet, triaged=triaged, matched=matched)
 
 
 def _database_ready(language: str) -> bool:
@@ -718,8 +782,11 @@ def main(argv: list[str] | None = None) -> int:
     threat_local = mode == "local"
     verbose = bool(args.verbose)
     quiet = bool(args.quiet) and not verbose
+    triaged = load_triaged(TRIAGED_PATH)
+    matched: set[TriageKey] = set()
     total_actionable = 0
     missing = 0
+    analysed: list[str] = []
     for language in languages:
         count = _analyze_language(
             codeql,
@@ -729,14 +796,22 @@ def main(argv: list[str] | None = None) -> int:
             threat_local=threat_local,
             verbose=verbose,
             quiet=quiet,
+            triaged=triaged,
+            matched=matched,
         )
         if count < 0:
             missing += 1
             continue
+        analysed.append(language)
         total_actionable += count
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"SARIF written under {RESULTS_DIR}")
+    stale = stale_triaged(triaged, matched, languages=tuple(analysed))
+    if stale:
+        print(f"{len(stale)} triaged entr{'y' if len(stale) == 1 else 'ies'} matched no finding; remove from {TRIAGED_PATH.relative_to(REPO_ROOT)}:")
+        for entry in stale:
+            print(f"  {entry['path']}: {entry['rule']} ({entry['fingerprint']})")
     if missing:
         print(f"{missing} language(s) had no finalised database.", file=sys.stderr)
     if total_actionable:
