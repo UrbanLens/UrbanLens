@@ -159,6 +159,7 @@ from urbanlens.dashboard.models.trivia import (
     TriviaSessionStatus,
 )
 from urbanlens.dashboard.models.undo import UndoAction
+from urbanlens.dashboard.models.upload_retry import UploadRetry
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits import ExternalVisitParticipant, PinVisit, VisitSource
 from urbanlens.dashboard.models.wiki import Wiki, WikiFieldRevision

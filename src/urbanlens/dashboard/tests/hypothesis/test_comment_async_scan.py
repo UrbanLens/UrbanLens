@@ -100,7 +100,7 @@ class ScanCommentImageTaskTests(TestCase):
             result = scan_comment_image(comment_id)
         self.assertFalse(result)
         self.assertFalse(Comment.objects.filter(pk=comment_id).exists())
-        # The stored file, not just the row, must go - see _reject_comment_upload's
+        # The stored file, not just the row, must go - see reject_comment_upload's
         # docstring on why an orphaned upload can't be left behind in storage.
         self.assertFalse(comment.image.storage.exists(image_name))
         notification = NotificationLog.objects.get(
@@ -166,8 +166,8 @@ class ScanCommentImageTaskTests(TestCase):
         comment.refresh_from_db()
         self.assertTrue(comment.pending_scan)
 
-    def test_an_object_store_that_keeps_refusing_the_reencoded_image_rejects_it(self) -> None:
-        comment = self._pending_comment(text="never stored")
+    def test_an_object_store_that_keeps_refusing_the_reencoded_image_leaves_it_pending(self) -> None:
+        comment = self._pending_comment(text="not stored yet")
         comment_id = comment.pk
         with (
             patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None),
@@ -176,12 +176,11 @@ class ScanCommentImageTaskTests(TestCase):
         ):
             result = scan_comment_image(comment_id)
         self.assertFalse(result)
-        self.assertFalse(Comment.objects.filter(pk=comment_id).exists())
-        self.assertIn(
-            "never stored",
-            NotificationLog.objects.get(
+        self.assertTrue(Comment.objects.filter(pk=comment_id, pending_scan=True).exists())
+        self.assertFalse(
+            NotificationLog.objects.filter(
                 profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
-            ).message,
+            ).exists()
         )
 
     def test_the_upload_as_sent_is_deleted_once_its_reencoded_copy_is_shown(self) -> None:

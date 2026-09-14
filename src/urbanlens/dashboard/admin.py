@@ -10,6 +10,7 @@ from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 from urbanlens.dashboard.models.facts import Fact, FactEvidence
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.upload_retry import UploadRetry
 from urbanlens.dashboard.models.wiki import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
@@ -114,6 +115,8 @@ class SiteSettingsAdmin(admin.ModelAdmin):
                     "notify_pin_import_errors_gotify",
                     "notify_safety_checkin_archival_failed_email",
                     "notify_safety_checkin_archival_failed_gotify",
+                    "notify_stuck_uploads_email",
+                    "notify_stuck_uploads_gotify",
                 ],
                 "description": "Which critical notification types are sent to which channels above.",
             },
@@ -276,6 +279,38 @@ class AchievementAdmin(admin.ModelAdmin):
 
         granted = sum(evaluate_achievement_for_all(achievement) for achievement in queryset)
         self.message_user(request, f"Granted {granted} award(s).", messages.SUCCESS)
+
+
+@admin.register(UploadRetry)
+class UploadRetryAdmin(admin.ModelAdmin):
+    """Uploads storage failed on, waiting to be tried again; giving up drops a held upload or rejects a comment."""
+
+    list_display = ["target", "object_id", "attempts", "created", "updated", "next_attempt_at", "gone_since", "admin_notified_at", "last_error"]
+    list_filter = ["target"]
+    readonly_fields = [field.name for field in UploadRetry._meta.fields]  # noqa: SLF001
+    ordering = ["created"]
+    actions = ["give_up_selected"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+    @admin.action(description="Give up on the selected uploads (drops held uploads, rejects comments)", permissions=["view"])
+    def give_up_selected(self, request: HttpRequest, queryset) -> None:
+        from urbanlens.dashboard.services.media.upload_retry import give_up
+
+        if not request.user.is_superuser:
+            self.message_user(request, "Only a superuser can give up on an upload.", messages.ERROR)
+            return
+        waiting = list(queryset)
+        for retry in waiting:
+            give_up(retry)
+        self.message_user(request, f"Gave up on {len(waiting)} upload(s).", messages.SUCCESS)
 
 
 @admin.register(UserAchievement)

@@ -334,9 +334,11 @@ def held_rows(held: HeldField) -> QuerySet[Any, tuple[int, str]]:
 
 
 def sweep_held_uploads() -> tuple[int, int]:
-    """Queue stalled held uploads no publish is running, drop ones whose file is gone or whose publish kept starting without finishing, and remove held files nothing names.
+    """Queue stalled held uploads no publish is running, drop ones whose publish kept starting without finishing, and remove held files nothing names.
 
-    A file whose row was deleted is kept past the undo window, because undo restores the row with the held name.
+    One waiting for storage is left to :func:`~urbanlens.dashboard.services.media.upload_retry.retry_waiting_uploads`,
+    and one whose file is gone starts waiting there. A file whose row was deleted is kept past the undo window, because
+    undo restores the row with the held name.
 
     Returns:
         How many held uploads were queued or dropped, and how many unnamed files were removed.
@@ -344,7 +346,9 @@ def sweep_held_uploads() -> tuple[int, int]:
     from django.core.cache import cache
 
     from urbanlens.dashboard.models.undo.model import UNDO_RETENTION
+    from urbanlens.dashboard.models.upload_retry import UploadRetry
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.upload_retry import file_is_gone
     from urbanlens.dashboard.tasks import publish_held_upload
 
     now = timezone.now()
@@ -353,11 +357,14 @@ def sweep_held_uploads() -> tuple[int, int]:
     storages: dict[int, Storage] = {}
     for held in HELD_FIELDS.values():
         storage = storages.setdefault(id(held.storage), held.storage)
+        waiting = set(UploadRetry.objects.filter(target=held.key).values_list("object_id", flat=True))
         for pk, name in held_rows(held).iterator():
             named.add(name)
+            if pk in waiting:
+                continue
             try:
                 if not storage.exists(name):
-                    handled += drop_held(held.key, pk, name)
+                    file_is_gone(held.key, pk, name, FileNotFoundError(name))
                     continue
                 stalled = now - storage.get_modified_time(name) >= STALLED_HELD_AGE
             except STORAGE_ERRORS:

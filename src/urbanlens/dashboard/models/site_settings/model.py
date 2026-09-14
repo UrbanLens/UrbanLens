@@ -427,6 +427,16 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Send a Gotify push notification when a safety check-in gives up on archival after repeated failures.",
         verbose_name="Safety check-in archival failures (Gotify)",
     )
+    notify_stuck_uploads_email = BooleanField(
+        default=True,
+        help_text="Email the admin notification address when an upload has kept failing for a day while storage accepts others.",
+        verbose_name="Stuck uploads (email)",
+    )
+    notify_stuck_uploads_gotify = BooleanField(
+        default=False,
+        help_text="Send a Gotify push notification when an upload has kept failing for a day while storage accepts others.",
+        verbose_name="Stuck uploads (Gotify)",
+    )
 
     # --- Google Places layer ---
 

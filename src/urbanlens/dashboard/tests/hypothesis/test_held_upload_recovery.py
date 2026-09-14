@@ -306,6 +306,34 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
         self.assertEqual(profile.avatar_upload, "")
         self.assertTrue(profile.avatar)
 
+    def test_an_upload_waiting_for_storage_is_left_to_the_retry_sweep(self) -> None:
+        """The retry sweep paces it; queueing it here every hour as well would undo that pacing."""
+        from urbanlens.dashboard.models.upload_retry import UploadRetry
+
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        _age(held, _HOUR)
+        UploadRetry.objects.create(
+            target="dashboard.Profile.avatar", object_id=profile.pk, name=held, next_attempt_at=timezone.now()
+        )
+
+        self.assertEqual(self._publishes(self._sweep()), [])
+
+    def test_an_upload_whose_file_is_gone_waits_rather_than_being_dropped(self) -> None:
+        """Storage pointed at the wrong place reports every file gone, so one gone file is not proof of loss."""
+        from urbanlens.dashboard.models.upload_retry import UploadRetry
+
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        default_storage.delete(held)
+
+        self.assertEqual(self._publishes(self._sweep()), [])
+
+        profile.refresh_from_db()
+        self.assertEqual(profile.avatar_upload, held)
+        waiting = UploadRetry.objects.get(target="dashboard.Profile.avatar", object_id=profile.pk)
+        self.assertIsNotNone(waiting.gone_since)
+
     def test_a_sweep_during_a_broker_outage_reports_nothing_queued(self) -> None:
         """The count is what an operator reads mid-incident, and an enqueue the broker refused queued nothing."""
         profile = self._profile()
@@ -576,7 +604,7 @@ class TheS3BackendsFailuresAreStorageErrorsTests(SimpleTestCase):
             stub.assert_no_pending_responses()
 
     def test_a_missing_object_reads_as_missing(self) -> None:
-        """The sweep drops a held upload whose file is gone, and a publish retries one it cannot open."""
+        """A gone file is told apart from storage refusing, which the task retries sooner."""
         name = f"{HELD_PREFIX}/{uuid.uuid4().hex}"
         storage = self._storage()
         with Stubber(storage.connection.meta.client) as stub:

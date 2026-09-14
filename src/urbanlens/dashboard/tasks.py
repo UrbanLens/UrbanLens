@@ -360,17 +360,31 @@ def finish_import_preview_task(profile_id: int, job_id: str) -> None:
 
 @shared_task(bind=True, queue=SANDBOX_QUEUE, max_retries=5)
 def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
-    """Re-encode a held icon or avatar in the sandbox worker and show it."""
+    """Re-encode a held icon or avatar in the sandbox worker and show it.
+
+    Storage failing past the task's own retries leaves the upload held, waiting for :func:`retry_waiting_uploads`.
+    """
+    from urbanlens.dashboard.services.media import upload_retry
     from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS, drop_held, publish_held
 
     try:
-        return publish_held(key, pk, held_name, attempt=self.request.id)
+        published = publish_held(key, pk, held_name, attempt=self.request.id)
     except STORAGE_ERRORS as exc:
-        if self.request.retries >= self.max_retries:
-            logger.exception("Storage could not read or write the upload held for %s %s after %s retries", key, pk, self.request.retries)
-            drop_held(key, pk, held_name)
+        if upload_retry.means_file_is_gone(exc):
+            if upload_retry.file_is_gone(key, pk, held_name, exc):
+                logger.warning("Dropping the upload held for %s %s: storage has not had its file for %s", key, pk, upload_retry.GONE_GRACE)
+                drop_held(key, pk, held_name)
+                upload_retry.stop_waiting(key, pk)
             return False
-        raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 900)) from exc
+        if self.request.retries < self.max_retries and not upload_retry.is_waiting(key, pk):
+            raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 900)) from exc
+        logger.warning("Storage could not read or write the upload held for %s %s; it waits for storage", key, pk, exc_info=True)
+        upload_retry.wait_for_storage(key, pk, held_name, exc)
+        return False
+    upload_retry.stop_waiting(key, pk)
+    if published:
+        upload_retry.record_storage_success()
+    return published
 
 
 @shared_task(queue=Queue.MAINTENANCE)
@@ -1312,6 +1326,36 @@ def sweep_unnamed_files() -> int:
 
 
 @shared_task(queue=Queue.MAINTENANCE)
+def retry_waiting_uploads() -> int:
+    """Queue a bounded batch of uploads waiting for storage whose next attempt is due, and report stuck ones.
+
+    Returns:
+        How many attempts were queued.
+    """
+    from urbanlens.dashboard.services.media.upload_retry import retry_waiting_uploads as retry
+
+    queued = retry()
+    if queued:
+        logger.info("Queued %s upload(s) waiting for storage", queued)
+    return queued
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def adopt_stalled_comment_scans() -> int:
+    """Leave pending comments whose scan never ran to :func:`retry_waiting_uploads`.
+
+    Returns:
+        How many comments were taken up.
+    """
+    from urbanlens.dashboard.services.media.upload_retry import adopt_stalled_comment_scans as adopt
+
+    adopted = adopt()
+    if adopted:
+        logger.info("%s pending comment scan(s) never ran and now wait for a retry", adopted)
+    return adopted
+
+
+@shared_task(queue=Queue.MAINTENANCE)
 def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     """Re-enqueue uploads whose processing task never ran.
 
@@ -1743,9 +1787,11 @@ def scan_comment_image(self, comment_id: int) -> bool:
         True when the scan completed and found the image clean.
     """
     from urbanlens.dashboard.models.comments.model import Comment
+    from urbanlens.dashboard.services.media.upload_retry import COMMENT_IMAGE, stop_waiting
 
     comment = Comment.objects.filter(pk=comment_id, pending_scan=True).select_related("profile", "pin", "wiki__location").first()
     if comment is None or not comment.image:
+        stop_waiting(COMMENT_IMAGE, comment_id)
         return False
     return _run_comment_image_scan(self, comment, Comment)
 
@@ -1761,9 +1807,11 @@ def scan_trip_comment_image(self, comment_id: int) -> bool:
         True when the scan completed and found the image clean.
     """
     from urbanlens.dashboard.models.trips.model import TripComment
+    from urbanlens.dashboard.services.media.upload_retry import TRIP_COMMENT_IMAGE, stop_waiting
 
     comment = TripComment.objects.filter(pk=comment_id, pending_scan=True).select_related("author", "trip").first()
     if comment is None or not comment.image:
+        stop_waiting(TRIP_COMMENT_IMAGE, comment_id)
         return False
     return _run_comment_image_scan(self, comment, TripComment)
 
@@ -1779,22 +1827,35 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     Returns:
         True when the scan completed and found the image clean.
     """
+    from django.core.files.base import ContentFile
+
+    from urbanlens.dashboard.services.media import upload_retry
+    from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
     from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
 
+    target = f"{model._meta.label}.image"  # noqa: SLF001 - _meta is Django's public model API
+    # Read before the scan, which reports any OSError reading its stream as the scanner being down.
     try:
-        malware_error = malware_error_for_upload(comment.image)
+        with comment.image.open("rb") as handle:
+            upload = ContentFile(handle.read(), name=comment.image.name)
+    except STORAGE_ERRORS as exc:
+        return _comment_storage_failed(task, comment, target, exc)
+
+    try:
+        malware_error = malware_error_for_upload(upload)
     except MalwareScanUnavailableError as exc:
         if task.request.retries >= task.max_retries:
             logger.exception("Malware scan permanently unavailable for comment %s after %s retries", comment.pk, task.request.retries)
-            _reject_comment_upload(comment, "Our antivirus scanner was unavailable and your photo could not be scanned.")
+            upload_retry.stop_waiting(target, comment.pk)
+            reject_comment_upload(comment, "Our antivirus scanner was unavailable and your photo could not be scanned.")
             return False
         raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
 
     if malware_error:
-        _reject_comment_upload(comment, malware_error)
+        upload_retry.stop_waiting(target, comment.pk)
+        reject_comment_upload(comment, malware_error)
         return False
 
-    from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
     from urbanlens.dashboard.services.media.storage import get_downscale_policy
     from urbanlens.dashboard.services.media.stored_field import Reencoded, reencode_stored_field
 
@@ -1813,18 +1874,47 @@ def _run_comment_image_scan(task, comment, model) -> bool:
             also_set={"pending_scan": False},
         )
     except STORAGE_ERRORS as exc:
-        if task.request.retries >= task.max_retries:
-            logger.exception("Storage could not read or write the image for comment %s after %s retries", comment.pk, task.request.retries)
-            _reject_comment_upload(comment, "That photo couldn't be processed.")
-            return False
-        raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+        return _comment_storage_failed(task, comment, target, exc)
+    upload_retry.stop_waiting(target, comment.pk)
     if outcome is Reencoded.UNDECODABLE:
-        _reject_comment_upload(comment, "That photo couldn't be processed.")
+        reject_comment_upload(comment, "That photo couldn't be processed.")
         return False
+    if outcome is Reencoded.REPLACED:
+        upload_retry.record_storage_success()
     return outcome is Reencoded.REPLACED
 
 
-def _reject_comment_upload(comment, reason: str) -> None:
+def _comment_storage_failed(task, comment, target: str, exc: Exception) -> bool:
+    """Retry a comment image storage failed on, then leave it pending, waiting for storage; reject it once its file is gone.
+
+    Args:
+        task: The bound Celery task instance.
+        comment: The pending ``Comment`` or ``TripComment``.
+        target: Its :class:`~urbanlens.dashboard.models.upload_retry.UploadRetry` target.
+        exc: What storage raised.
+
+    Returns:
+        False: the image was not published.
+
+    Raises:
+        Retry: While the task has retries left and the comment is not already waiting.
+    """
+    from urbanlens.dashboard.services.media import upload_retry
+
+    if upload_retry.means_file_is_gone(exc):
+        if upload_retry.file_is_gone(target, comment.pk, comment.image.name, exc):
+            logger.warning("Rejecting comment %s: storage has not had its image for %s", comment.pk, upload_retry.GONE_GRACE)
+            upload_retry.stop_waiting(target, comment.pk)
+            reject_comment_upload(comment, "That photo couldn't be processed.")
+        return False
+    if task.request.retries < task.max_retries and not upload_retry.is_waiting(target, comment.pk):
+        raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+    logger.warning("Storage could not read or write the image for comment %s; it waits for storage", comment.pk, exc_info=exc)
+    upload_retry.wait_for_storage(target, comment.pk, comment.image.name, exc)
+    return False
+
+
+def reject_comment_upload(comment, reason: str) -> None:
     """Notify a comment's author their upload was rejected, and remove the comment.
 
     The comment (text included) never went visible to anyone but its own author (see ``pending_scan``),

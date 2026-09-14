@@ -13416,6 +13416,13 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   hard time limit and no undo record inside the retention window mentions it. That also removes the label and pin
   icons a publish replaced, which had been kept for undo and stayed served for ever (a metadata-bearing one replaced
   before the backfill ran was never re-encoded), and icons of rows deleted outside undo.
+- **Then** an upload storage kept failing on past its task's retries (about 30 minutes) stopped being dropped or
+  rejected. The file is already stored, so it waits in `UploadRetry`, and `retry_waiting_uploads` retries it with
+  doubling backoff up to a day, at most 20 per run, and one per run while storage is failing for everyone. A file
+  storage says is gone is given up on only after 7 days of that, with another upload served meanwhile. An upload stuck
+  over a day while others succeed alerts the admins once, and the admin can give up on it. Storage refusing the read
+  for the malware scan had rejected the comment as an antivirus outage; the image is now read before the scan. A
+  pending comment whose scan was never queued had nothing to retry it; `adopt_stalled_comment_scans` now does.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

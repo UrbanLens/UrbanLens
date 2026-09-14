@@ -436,6 +436,16 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_held_uploads",
         "schedule": crontab(minute=41),
     },
+    # Uploads storage failed on wait instead of being dropped; each is retried with backoff, a bounded batch at a time.
+    "retry-waiting-uploads": {
+        "task": "urbanlens.dashboard.tasks.retry_waiting_uploads",
+        "schedule": crontab(minute="*/5"),
+    },
+    # A pending comment whose scan was never queued has nothing else to retry it.
+    "adopt-stalled-comment-scans": {
+        "task": "urbanlens.dashboard.tasks.adopt_stalled_comment_scans",
+        "schedule": crontab(minute=53),
+    },
     # The media gate serves any icon or avatar path, so one no row names must not outlive a refused delete.
     "sweep-unnamed-files": {
         "task": "urbanlens.dashboard.tasks.sweep_unnamed_files",

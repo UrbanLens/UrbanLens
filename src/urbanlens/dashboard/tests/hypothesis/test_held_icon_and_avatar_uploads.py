@@ -126,7 +126,7 @@ class WhatThePublishKeepsAndDeletesTests(_HeldCase):
                 self.assertTrue(self._publish(instance, field, self._hold(instance, field)))
                 self.assertEqual(default_storage.exists(replaced), kept)
 
-    def test_a_storage_failure_is_retried_and_after_the_last_retry_the_upload_is_dropped(self) -> None:
+    def test_a_storage_failure_is_retried_and_after_the_last_retry_the_upload_waits_for_storage(self) -> None:
         profile = self._profile()
         held = self._hold(profile, "avatar")
         key = held_field(profile, "avatar").key
@@ -144,8 +144,8 @@ class WhatThePublishKeepsAndDeletesTests(_HeldCase):
                 self.assertFalse(tasks.publish_held_upload(key, profile.pk, held))
 
         profile.refresh_from_db()
-        self.assertEqual(profile.avatar_upload, "")
-        self.assertFalse(default_storage.exists(held))
+        self.assertEqual(profile.avatar_upload, held)
+        self.assertTrue(default_storage.exists(held))
 
 
 class ARowReadBeforeThePublishTests(_HeldCase):

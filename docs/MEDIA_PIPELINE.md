@@ -183,12 +183,32 @@ that cannot be re-encoded is retried and then removed, never published as upload
 `tests/hypothesis/test_every_stored_photo_is_reencoded.py` plants a marker in every
 carrier and format and searches every output for it.
 
+**Waiting for storage.** The upload is already in media storage, so a failure that
+outlasts a task's own retries (about 30 minutes) needs nothing from its owner: the
+upload stays held or pending and gets an `UploadRetry` row, and
+`services/media/upload_retry.py`'s `retry_waiting_uploads` (beat, every 5 minutes,
+maintenance queue) queues it again. The first retry comes 5 minutes after it starts
+waiting; each wait after that is twice as long, up to a day. One run queues at most 20. While the latest storage failure
+is newer than the latest success, only one upload per run probes storage. A task for an
+upload that is already waiting skips its own quick retries, so the retry sweep alone
+sets the pace. A file storage says is gone (`FileNotFoundError`, or S3 `NoSuchKey`/404) is
+retried once a day. It is given up on only after storage has said so for 7 days and served
+another upload since, because storage pointed at the wrong bucket or prefix also reports
+every file gone. An upload waiting over a day, with storage serving other uploads since it
+last failed, is reported once to the admins (`NotificationEvent.UPLOAD_STUCK`, routed by
+`notify_stuck_uploads_*`), since that suggests a failure retrying cannot fix. The admin's
+Upload retries list has a Give up action, which drops a held upload or rejects a comment.
+`adopt_stalled_comment_scans` (hourly) gives a pending comment whose scan was never
+queued an `UploadRetry` row.
+
 Comment and trip comment images, custom icons (label, pin, achievement) and avatars
 from every writer go through the same encoder (`images.reencode_image_file`), under a
 random name rather than the uploaded one. A comment image is re-encoded by
 `stored_field.reencode_stored_field` before its `pending_scan` clears, in the same
 update; one that cannot be decoded is rejected, and one storage cannot read or
-write (any of `held_upload.STORAGE_ERRORS`) is retried, then rejected.
+write (any of `held_upload.STORAGE_ERRORS`) is retried, then left pending to wait for
+storage (below). The image is read before the malware scan, so storage refusing that read is
+not mistaken for the scanner being down; a scanner that stays down still rejects.
 
 An icon or avatar cannot be hidden by a flag on its row, because the media gate
 serves any icon or avatar path to every member, so the upload is held instead.
@@ -201,7 +221,7 @@ upload replaced, cleared or superseded (an emoji avatar, a removed avatar) befor
 worker runs is never published; one that cannot be decoded is dropped and the field
 keeps what it showed; one storage cannot read or write (an OSError, or on the S3 backend a connection or client error, or a download that
 failed every attempt or its checksum; a misconfigured client, such as missing credentials, fails instead) is
-retried, then dropped. A replaced
+retried, then waits for storage. A replaced
 avatar or achievement icon is deleted; a replaced label or pin icon is left to
 `sweep_unnamed_files`, and undo queues a held upload again. A publish lands
 while other requests hold the row in memory, so `models/abstract/held_upload.py`'s
@@ -210,7 +230,9 @@ unless that instance changed them (a row saved with no primary key is still inse
 whole); otherwise a settings form or the external API's profile PATCH would write
 back an empty field and a held name whose file is gone. `sweep_held_uploads` (beat,
 hourly) queues the publish again for an upload held longer than 15 minutes, since a
-failed enqueue would otherwise leave it "processing" for ever. It drops one whose
+failed enqueue would otherwise leave it "processing" for ever. It leaves an upload that is
+waiting for storage to the retry sweep. An upload whose file is gone starts waiting there
+instead of being dropped. It drops one whose
 publish has started three times without finishing, so a file that kills the worker is
 not fed to it every hour (a start that failed to write to storage and was handed to a
 retry finished, and is not counted, and one still running, for as long as the task's

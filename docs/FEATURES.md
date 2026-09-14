@@ -726,7 +726,9 @@ parent/child relationship, so there's nothing yet to curate it from.
   self-hostable push server such as ntfy — is the default transport, matching the project's
   self-hosted ethos and keeping an F-Droid build free of Play Services. An FCM row kind exists for
   a future Play-Store flavour and is deliberately not dispatched yet
-- Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
+- Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications),
+  routed per event in SiteSettings: pin import errors, safety check-in archival failures, and
+  uploads stuck waiting for storage (`services/media/upload_retry.py`)
 
 ## Custom Fields
 
