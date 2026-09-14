@@ -152,9 +152,9 @@ Two further things worth knowing before trusting a green run here:
   down - the template hardcodes the threshold as a literal while
   `MIN_VISIBLE_PIN_COUNT` lives in Python - but it is not evidence the masking
   logic works.
-- **The wiki is "created automatically" in a sense nobody can observe.** The
-  draft is real (`ensure_draft_wiki_for_location`) but carries
-  `officially_created=False`, and every visible surface treats that as "no wiki".
-  The testable claim is not that the wiki appears, but that it is *already
-  populated* the moment a user creates it - which is the only external evidence
-  the background draft did its work.
+- **The wiki is created automatically, and there is no draft state.**
+  `tasks.ensure_wiki_for_location` creates it through
+  `get_or_create_for_location` when its location gains a pin, and it is visible
+  at once to anyone with access. Enrichment (`enrich_wiki_location`, the
+  Wikipedia seed) runs in the background, so a test can assert the page exists
+  immediately but must drive those tasks before asserting on its content.

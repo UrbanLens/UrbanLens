@@ -100,8 +100,7 @@ def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]
         values[name] = field.get_default()
 
     # `name` has no model default, so the fallback above yields "".
-    # No wiki ever looks like that: every creation path names it from the location
-    # (WikiManager.claim_for_location, get_or_create_draft_for_location).
+    # No wiki ever looks like that: `get_or_create_for_location`, the one creation path, always names it.
     if not values.get("name"):
         from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
 

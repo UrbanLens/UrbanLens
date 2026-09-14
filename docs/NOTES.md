@@ -144,6 +144,11 @@ initials of significant words (`Hudson River State Hospital` → `hrsh`), the fi
 initials are too short (`Ford Motors` → `ford`), or a truncation of that word when even the first
 word is too long (`Switzerland` → `switz`).
 
+Only the immediate parent contributes. A grandchild `Boiler Room` under `hrsh-powerhouse` is
+`powerhouse-boiler-room`: the parent's own slug is longer than 8 characters, so it is never a
+candidate, and the prefix comes from the parent's name or aliases instead. Chaining prefixes would
+break that length bound at every level.
+
 Truncation drops whole trailing words rather than clipping mid-word. Hyphenated compounds
 (`non-contributing`) are one word, so `Staff/Tenant House 1900 (non-contributing)` under HRSH
 becomes `hrsh-stafftenant-house-1900`, not `…-non-contributi`. Dropped words are added back only

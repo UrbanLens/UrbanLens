@@ -55,10 +55,8 @@ class WikiShareService:
         Args:
             pin: The pin whose Location gets a community wiki.
             include_fields: Subset of :data:`SEEDABLE_FIELDS` the user chose to
-                copy from their pin into the new wiki. Ignored when the wiki
-                is already official (never overwrite community content with
-                personal data) - a still-unofficial draft is fair game, since
-                nobody has edited it yet.
+                contribute, recorded as that user's stat votes on every share.
+                They never overwrite the wiki's own content.
             alias_ids: PKs of the pin's own (non-official) aliases to copy in
                 as wiki aliases, on top of official ones (always copied).
             image_ids: PKs of the pin's own photos to also attach to the wiki.

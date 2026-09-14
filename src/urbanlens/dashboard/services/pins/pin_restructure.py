@@ -480,10 +480,7 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
     try:
         wiki = pin.location.wiki
     except ObjectDoesNotExist:
-        # A draft, never an official page: drafts are already auto-created for every pinned location
-        # (tasks.ensure_draft_wiki_for_location) and stay invisible until somebody claims them, so
-        # seeding one here mirrors the buildings without publishing a community page behind the
-        # user's back.
+        # Ordinarily unreachable: tasks.ensure_wiki_for_location creates the wiki when the pin is made.
         wiki, _created = WikiModel.objects.get_or_create_for_location(pin.location)
 
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_tree_order

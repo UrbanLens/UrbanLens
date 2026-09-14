@@ -214,6 +214,25 @@ class ChildPinSlugTests(TestCase):
         self.assertEqual(first.slug, "hrsh-stafftenant-house-1900")
         self.assertEqual(second.slug, "hrsh-stafftenant-house-1900-non-contributing")
 
+    def _child(self, name: str, parent: Pin) -> Pin:
+        return Pin.objects.create(profile=self.profile, location=self._location(), name=name, parent_pin=parent)
+
+    def test_a_grandchild_takes_its_prefix_from_its_parent_not_the_root(self) -> None:
+        powerhouse = self._child("Powerhouse", self._parent("Hudson River State Hospital", "HRSH"))
+
+        grandchild = self._child("Boiler Room", powerhouse)
+
+        self.assertEqual(powerhouse.slug, "hrsh-powerhouse")
+        self.assertEqual(grandchild.slug, "powerhouse-boiler-room")
+
+    def test_a_grandchild_uses_its_parent_s_compact_alias(self) -> None:
+        powerhouse = self._child("Powerhouse", self._parent("Hudson River State Hospital", "HRSH"))
+        PinAlias.objects.create(pin=powerhouse, name="PH Bldg")
+
+        grandchild = self._child("Boiler Room", powerhouse)
+
+        self.assertEqual(grandchild.slug, "ph-bldg-boiler-room")
+
 
 class ChildWikiSlugTests(TestCase):
     """Child wikis mint the same prefixed slug, and copy it onto a UUID location slug."""
@@ -240,6 +259,16 @@ class ChildWikiSlugTests(TestCase):
             parent_wiki=parent,
         )
         self.assertEqual(child.slug, "hrsh-powerhouse")
+
+    def test_a_grandchild_wiki_takes_its_prefix_from_its_parent_not_the_root(self) -> None:
+        root = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")
+        WikiAlias.objects.create(wiki=root, name="HRSH")
+        powerhouse = Wiki.objects.create(location=self._location(), name="Powerhouse", parent_wiki=root)
+
+        grandchild = Wiki.objects.create(location=self._location(), name="Boiler Room", parent_wiki=powerhouse)
+
+        self.assertEqual(powerhouse.slug, "hrsh-powerhouse")
+        self.assertEqual(grandchild.slug, "powerhouse-boiler-room")
 
     def test_uuid_location_slug_is_replaced_with_the_child_wiki_slug(self) -> None:
         parent = Wiki.objects.create(

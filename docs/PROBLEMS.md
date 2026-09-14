@@ -2354,11 +2354,11 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
 
-## P57 — The test-quality audit's follow-ups: 15 done; one untested surface and two decisions remain
+## P57 — The test-quality audit's follow-ups: all done but one owner decision
 
 `id: P57` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "The test-quality audit's follow-ups: 14 done; three untested surfaces, one unproven lock and two decisions remain", and before that "Test-quality audit follow-ups (2026-08-29)".
+Previously titled "The test-quality audit's follow-ups: 15 done; one untested surface and two decisions remain", and before that "Test-quality audit follow-ups (2026-08-29)".
 
 Found while auditing existing unit tests for real positive/negative coverage (see
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
@@ -2390,9 +2390,11 @@ Three of the "untested surface" entries are covered as of 2026-09-06 too - `Wiki
   subject *is* that method, leaving the rest of the guard - and the socket guard and the placeholder
   credentials - standing. `test_ai_gateway_guarded` still passes, which is what proves it.
 
-`CalendarImportView` and the carousel's "no imagery available" branch are covered as of 2026-09-14; neither test found a defect.
+`CalendarImportView`, the carousel's "no imagery available" branch and the multi-level nesting prefix
+are covered as of 2026-09-14, and both stale-documentation items are settled; none of it found a defect.
 
-What remains: **one untested surface** (the multi-level pin/wiki nesting prefix), two stale-documentation items, and two that need a decision from whoever owns the area.
+What remains: **one decision** for whoever owns Location/address display - whether the trailing comma
+`Location.address` leaves after a route-only address is intended. Every other item below is fixed, covered or refuted.
 
 Worth noting about this entry's own hit rate: it filed the AI trip tools as tidy-up ("duplicated
 business logic ... can silently drift"), and they were a live permission bypass. Two of the five
@@ -2616,31 +2618,21 @@ Recorded here so nobody re-derives the same false alarm from a source read alone
 real problem, a plausible-sounding defect inferred from code reading turned out wrong once actually
 run.
 
-**Stale `update_or_create`/`auto_now` rationale in boundary voting docs.** Both
-`services/geo/boundary_voting.py`'s module docstring and `test_boundary_vote_recency.py`'s header
-explain the re-affirm-refreshes-`updated` behavior as depending on `cast_boundary_vote`'s
-`defaults={"boundary": choice}` explicitly including the field whose `auto_now` timestamp needs
-bumping ("Django only refreshes an `auto_now` field when that field is included [in
-update_fields]"). That's no longer how `update_or_create()` behaves: Django 6.0.6 (pinned in
-`.venv`) unconditionally folds every field with a custom `pre_save` - i.e. every
-`auto_now`/`auto_now_add` field - into `update_fields` for backward compatibility, regardless of
-what's in `defaults` (see `update_or_create` in `django/db/models/query.py`). The test's protective
-value is unaffected (it still catches a regression away from `update_or_create`, e.g. a raw
-`.filter().update()`), but the prose misdescribes the current mechanism and could mislead a future
-contributor into thinking they must hand-add `updated` to `defaults`.
+~~**Stale `update_or_create`/`auto_now` rationale in boundary voting docs.**~~ **Already gone,
+checked 2026-09-14.** Neither `services/geo/boundary_voting.py` nor `test_boundary_vote_recency.py`
+still explains the refresh through `update_fields`. The entry's reading of Django holds: 6.0.6's
+`update_or_create` adds every field with a custom `pre_save` to `update_fields` itself, so
+`updated` needs no mention in `defaults`.
 
-**Stale "draft wiki" language around the building-mirror path.**
-`pin_restructure.mirror_buildings_to_wiki`'s docstring/comments and `test_building_wiki_mirror.py`'s
-own module docstring describe the wiki a building import mirrors into as an "invisible draft...
-until claimed," citing `tasks.ensure_draft_wiki_for_location` and a
-`WikiManager.get_or_create_draft_for_location` - neither exists on disk (the real names are
-`ensure_wiki_for_location` and `get_or_create_for_location`), and `WikiManager`'s own docstring
-states plainly: "Wikis are published on creation now, and there is one question again" - there is
-no draft/official field left on `Wiki` found during this audit. `services/wiki/wiki_share.py`
-("Ignored when the wiki is already official... a still-unofficial draft is fair game") and
-`services/wiki/concealment.py` reference the same apparently-retired concept. Either a draft/
-official distinction exists somewhere this audit pass didn't locate, or this is stale documentation
-spanning at least three production files describing removed behavior - worth a follow-up look.
+~~**Stale "draft wiki" language around the building-mirror path.**~~ **Fixed 2026-09-14.** There is
+no draft state: `Wiki` has no `officially_created` field (it survives only in old migrations), and
+`get_or_create_for_location` is the one creation path. Four places still described the retired
+concept and are rewritten - `pin_restructure.mirror_buildings_to_wiki`'s comment,
+`concealment.py`'s naming comment (which cited two functions that do not exist),
+`docs/LOCATION_DATA_TESTS.md`, and `wiki_share.share_from_pin`'s docstring. That last one was
+wrong about behaviour rather than names: it said chosen fields were ignored once a wiki was
+"official", when they are recorded as the sharer's stat votes on every share. `test_building_wiki_mirror.py`'s
+docstring had already been corrected.
 
 ~~**`CalendarImportView` has no test coverage at all.**~~ **Covered 2026-09-14** in
 `test_calendar_import_view.py`: the no-account dialog and 400, blank `event_ids`, the per-event
@@ -2669,12 +2661,12 @@ the status alone would have filed a bug against working code, so the test assert
 `satellite_view.html` render `view-unavailable` with the caller's `error`, or their own default
 message without one, and no slide or arrow markup.
 
-**Multi-level pin/wiki nesting prefix is undocumented and untested.** `_slug_parent_prefix()`
-derives a child's prefix only from its *immediate* parent (name/official_name/slug/aliases), so a
-grandchild nested two levels under an aliased root picks up a prefix derived from the immediate
-parent's own name/slug, not the top-level acronym, unless that immediate parent itself has an
-alias. This may be intentional (shallow, not chained, prefixing) but it's unverified either way and
-worth a deliberate look if 3+ level nesting is a real use case.
+~~**Multi-level pin/wiki nesting prefix is undocumented and untested.**~~ **Covered and documented
+2026-09-14.** `test_child_slugs.py` now pins it for pins and wikis: `Boiler Room` under
+`hrsh-powerhouse` is `powerhouse-boiler-room`, and `ph-bldg-boiler-room` when the parent has that
+alias. `docs/NOTES.md` records it. Shallow prefixing follows from the prefix's 3-8 character bound
+rather than being a choice made separately from it - a parent slug that already carries a prefix
+is always longer than 8, so chaining would mean dropping the bound.
 
 ~~**`TripCommentDeleteView` has zero test coverage.**~~ **Covered 2026-09-06** in
 `test_trip_comment_delete.py`. No defect: the view was already correct, and is now guarded - the
