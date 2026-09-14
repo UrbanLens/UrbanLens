@@ -516,14 +516,14 @@ Three boundaries, each of which the obvious version gets wrong:
   the transaction, so deleting there would survive a rollback that put the row
   back. `transaction.on_commit` runs it only once the write lands.
 
-Historical orphans predating this are not swept, and for these families that is
-a disclosure item as well as a disk one. `authorize_icon` is unconditional for
-`pin_custom_icons/`, `label_icons/` and `achievement_icons/`, so an orphaned
-icon is still fetchable by any authenticated user. `authorize_avatar` is
-unconditional too, but deliberately - an avatar renders beside its owner's name
-site-wide, and uploading one is an act of publishing it to the other members, so
-there the orphan is only a disk cost. A one-time sweep against surviving rows
-closes the disk half; narrowing `authorize_icon` is P14's other half.
+Historical orphans predating this are not swept. For pin and label icons that is
+a disk cost only: `authorize_pin_icon` and `authorize_label_icon` serve a file
+only to a viewer who owns (or, for a global label, can see) a row that names it,
+so an orphan matches nothing and is refused. `authorize_icon`
+(`achievement_icons/`) and `authorize_avatar` are unconditional, deliberately -
+an award or an avatar renders on its owner's profile site-wide - so an orphaned
+achievement icon or avatar is still fetchable by any authenticated user. A
+one-time sweep against surviving rows closes the disk half for every family.
 
 ## Adding a parser
 

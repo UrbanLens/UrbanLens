@@ -1001,11 +1001,13 @@ reporter considers too slow to refresh.
 
 ---
 
-## P14 — Custom pin and label icons are readable by any authenticated user; narrowing that needs a pin-visibility query nothing has
+## P14 — Media gate residue: icons are owner-scoped now; stranded icon files and safety check-in photo audiences remain
 
-`id: P14` · `status: open` · `updated: 2026-09-05`
+`id: P14` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "Authenticated media gate - residual per-family risk (2026-07-23)".
+Previously titled "Custom pin and label icons are readable by any authenticated user; narrowing
+that needs a pin-visibility query nothing has", before that "Authenticated media gate - residual
+per-family risk (2026-07-23)".
 
 `/media/...` is now served through `dashboard.controllers.media.MediaGateView` (nginx `location
 /media/` proxies to Django; authorized responses hand back to the `internal`-only
@@ -1039,21 +1041,22 @@ comments in `src/urbanlens/dashboard/controllers/media.py`:
 The two families below stay deliberately authenticated-only, now as registered decisions rather
 than fallbacks. The rest of this entry records them and the file-stranding work around them.
 
-- **`pin_custom_icons/` (Pin.custom_icon) and `label_icons/` (Label.custom_icon)**:
-  authenticated-only. Strict owner-only enforcement risks breaking any surface that renders
-  another user's shared/labeled pin (shared pin views, trip member maps, global labels with
-  `profile=None`). Residual risk is low (small decorative icons, not photos), but a determined
-  enumerator could fetch other users' custom icons.
+- **`pin_custom_icons/` (Pin.custom_icon) and `label_icons/` (Label.custom_icon): scoped
+  2026-09-14.** `authorize_pin_icon` serves a pin icon only to the owner of a pin that uses the
+  file, and `authorize_label_icon` serves a label icon only where `Label.objects.visible_to` would
+  show the label: its owner, or everyone for a global label. `achievement_icons/` stays open to
+  any signed-in account, because awards render on other members' profiles.
+  `test_custom_icon_media_gate.py` reproduced a stranger fetching both before the change.
 
-  **Attempted 2026-09-05 and stopped at a missing primitive**, which is the useful thing to
-  record. The intended rule is "owner OR global label OR an existing share/visibility
-  relationship", and its middle and last clauses need a *pin* visibility queryset that does not
-  exist. `Image.objects.visible_to` exists; `Label.objects.visible_to` is global-or-owned, which
-  is too narrow, because another member's personal label legitimately renders on a pin you can
-  see. There is no `Pin.objects.visible_to`, so "which icons does this viewer render" cannot be
-  asked - and inventing that rule inside a media gate is how one ends up either leaking or
-  blanking icons on legitimate pages. The next step is that queryset - own pins, shared pins,
-  trip member maps, wiki-linked - built and tested on its own, with this gate as one caller.
+  The 2026-09-05 attempt stopped for want of a `Pin.objects.visible_to`, on the assumption that
+  shared pins, trip member maps and wiki pages render other accounts' pin icons. Reading every
+  surface that emits an icon URL found none that does. Map payloads, the pin sidebar, pin lists,
+  pin sync and the external API all scope to the pin's owner. A pin accepted from a share is the
+  recipient's own row, and `services/sharing/pin_sharing.py::create_recipient_pin` does not copy
+  `custom_icon`. A wiki-published floorplan copy has no `linked_pin`. The label organiser, label
+  pickers and label serializers all list `Label.objects.visible_to(viewer)`, and the wiki
+  label-membership panel draws no custom icons. So the gate needs ownership, not a visibility
+  queryset, and one should be built only when a surface that shows another account's pin exists.
 - **Orphan files** (a file on disk under `pin_images/` or `comment_images/` whose owning
   Image/Comment/TripComment row no longer exists, e.g. row deleted without file cleanup):
   now **denied** (2026-08-29). The stranding paths below still matter for disk usage; they are
@@ -1102,8 +1105,8 @@ than fallbacks. The rest of this entry records them and the file-stranding work 
     `transaction.on_commit` defers each unlink until the write is real.
 
   Still open: **historical** orphans. This stops new ones for two of the four fields; a one-time
-  sweep against surviving rows would close what is already there. For the icon families that is a
-  disclosure item as well as a disk one, since `authorize_icon` is unconditional.
+  sweep against surviving rows would close what is already there. It is a disk item only: an
+  orphaned icon file matches no pin or label row, so the icon authorizers refuse it.
 - **Unknown path families**: now **denied** and logged at WARNING (2026-08-29), and
   `check_media_authorizers` refuses to start with an unregistered family, so a new `upload_to`
   prefix cannot inherit a fallback either way.
@@ -1115,9 +1118,9 @@ than fallbacks. The rest of this entry records them and the file-stranding work 
   photo-visibility check, those contacts would be denied the photos (and vice versa: users
   passing `visible_to` but outside the check-in's audience can fetch them).
 
-**Suggested next step**: product decision on icon visibility (owner-only + share-relationship vs.
-authenticated-only), a cleanup job for orphaned media files (a disk-usage question now rather than
-a disclosure one), and a review of safety check-in photo audience rules.
+**Suggested next step**: deferring the unlink of a replaced or deleted `Pin`/`Label` icon until
+its undo window closes, a cleanup job for orphaned media files (a disk-usage question, not a
+disclosure one), and a review of safety check-in photo audience rules.
 
 ---
 

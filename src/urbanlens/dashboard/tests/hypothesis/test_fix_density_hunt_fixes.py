@@ -168,8 +168,8 @@ class LabelIconUploadValidationTests(TestCase):
     """Creating a label must check an uploaded icon exactly as editing one does.
 
     `_resize_custom_icon` deliberately returns the file untouched when PIL cannot open it (that fallback has its
-    own test), and `label_icons/` is served to any authenticated user with a Content-Type nginx derives from the
-    file extension - so an unchecked upload is not merely unresized, it is reachable as whatever type its name
+    own test), and `label_icons/` is served to the label's owner (everyone, for a global label) with a Content-Type
+    nginx derives from the file extension - so an unchecked upload is not merely unresized, it is reachable as whatever type its name
     claims."""
 
     def setUp(self) -> None:

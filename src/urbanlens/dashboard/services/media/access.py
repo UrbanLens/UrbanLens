@@ -214,11 +214,41 @@ def authorize_avatar(profile: Profile, rel_path: str) -> bool:
 
 
 @media_authorizer("pin_custom_icons")
+def authorize_pin_icon(profile: Profile, rel_path: str) -> bool:
+    """Authorize a pin's custom icon for the owner of a pin that uses it.
+    Every surface that emits a pin's icon URL is scoped to the pin's owner, and a shared pin arrives as the recipient's own copy.
+
+    Args:
+        profile: The authenticated requester's profile.
+        rel_path: Path relative to ``MEDIA_ROOT``.
+
+    Returns:
+        True when one of the requester's pins uses the file.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    return Pin.objects.filter(profile=profile, custom_icon=rel_path).exists()
+
+
 @media_authorizer("label_icons")
+def authorize_label_icon(profile: Profile, rel_path: str) -> bool:
+    """Authorize a label's custom icon for anyone the label is visible to: its owner, or everyone for a global label.
+
+    Args:
+        profile: The authenticated requester's profile.
+        rel_path: Path relative to ``MEDIA_ROOT``.
+
+    Returns:
+        True when a label visible to the requester uses the file.
+    """
+    from urbanlens.dashboard.models.labels.model import Label
+
+    return Label.objects.visible_to(profile).filter(custom_icon=rel_path).exists()
+
+
 @media_authorizer("achievement_icons")
 def authorize_icon(profile: Profile, rel_path: str) -> bool:
-    """Allow any authenticated user to fetch a map/label/achievement icon.
-    ``Label.objects.visible_to`` is global-or-owned, so authorizing through it would blank another member's labelled pin.
+    """Allow any authenticated user to fetch an achievement icon, since awards render on other members' profiles.
 
     Args:
         profile: The authenticated requester's profile (unused).
