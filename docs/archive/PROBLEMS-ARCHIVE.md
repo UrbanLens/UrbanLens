@@ -13364,8 +13364,9 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   the mark its killed child left and returned without publishing, until the mark expired and a sweep re-queued it. The
   mark now carries the Celery task id, which a redelivery keeps, and a publish takes back a mark with its own id.
   Accepted limit: a worker that loses its broker connection can have a still-running publish handed back too, and the
-  redelivery now runs alongside it. Losing an upload that way needs two earlier killed starts, a storage error in one
-  copy and the hourly sweep inside that window.
+  redelivery now runs alongside it. Losing an upload that way needs an earlier start that never finished (two, if
+  the copy that ends first failed a storage write and so took its start back), that copy ending in an error while the
+  other is still running, and the hourly sweep inside that window.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file
