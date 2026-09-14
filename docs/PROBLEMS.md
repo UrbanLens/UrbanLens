@@ -1876,11 +1876,12 @@ the component gallery whose entire purpose is to show what each variant looks li
 
 ---
 
-## P37 — 100 write handlers totalling 1,217 statements never execute under the test suite
+## P37 — A 2026-08-14 coverage run found 100 write handlers no test executed; all but one of its top roster are tested now
 
-`id: P37` · `status: open` · `updated: 2026-09-08`
+`id: P37` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "1,217 statements of write handlers that no test executes".
+Previously titled "100 write handlers totalling 1,217 statements never execute under the test suite",
+and before that "1,217 statements of write handlers that no test executes".
 
 Measured 2026-08-14 with `coverage.py` over the full suite; full list in
 `docs/reports/2026-08-14-view-coverage.md`.
@@ -1889,34 +1890,29 @@ The view layer is 80% covered by statement, which sounds healthy. The shape unde
 **208 of 1,795 callables never execute**, and **100 of those are `post`/`delete`/`put`/`patch`
 handlers totalling 1,217 statements**. Half of the unexercised view code is code that mutates data.
 
-Suggested order, highest risk first (statement counts in brackets):
-
-1. `controllers/labels.py::LabelBulkConvertView.post` [36] and `LabelBulkEditView.post` [33] -
-   bulk mutations over many rows, and the label subsystem has already produced several bugs.
-2. `controllers/site_admin.py::SiteAdminUsersView.post` [35] - user administration.
-3. `controllers/detail_pins.py::LocationWikiDetailPinEditView.post` [34] - wiki-scoped edits, which
-   touch the place-domain visibility rules.
-4. `consensus.py::ConsensusPhotoUploadView.post` [31], `visit_suggestions.py::VisitSuggestionRespondView.post`
-   [31], `calendar_sync.py::CalendarImportView.post` [30].
-
-`controllers/pin.py::PinController.upload_takeout` [39] is a special case: it is also on the
-caller-less route list above, so it should be resolved (deleted or tested) before anything else -
-two independent signals agree that nothing reaches it.
-
 Caveats worth keeping attached to this number: coverage measures execution, not correctness, and
 the run was scoped to `controllers/` and `external_api/`, so a service called by an uncovered
 handler may itself be well tested.
 
-**Corrected 2026-09-08:** item 4 previously also listed `controllers/albums.py::AlbumEditView.post`
-[31]. `01e1b5988` ("test: wiki-owned albums, including the concealment path that had no coverage")
-added `WikiAlbumBySlugScopingTests::test_a_concealed_viewer_cannot_rename_another_contributors_album`
-and `::test_an_unconcealed_viewer_can` in
-`src/urbanlens/dashboard/tests/hypothesis/test_wiki_albums.py`, both of which POST a rename through
-`AlbumEditView`, so that handler is exercised now. Removed from the roster rather than left to imply
-it is still uncovered; the other three items in this bullet and the rest of the 100-handler count are
-not re-measured this session, so treat only this one line as updated. The underlying snapshot in
-`docs/reports/2026-08-14-view-coverage.md` (X12) is left as-is - it is a dated measurement, not a
-live roster.
+### The highest-risk roster, as of 2026-09-14
+
+The entry ranked its uncovered handlers by risk. Each was re-checked by searching the tests for a
+request to its route, not by re-running coverage, so the other ~90 handlers are not re-measured.
+
+| handler [statements] | now |
+|---|---|
+| `controllers/labels.py::LabelBulkConvertView.post` [36] | exercised: `test_label_bulk_convert_conflict.py` runs a real convert, and `test_every_stored_user_image_is_reencoded.py` runs one alongside an icon publish |
+| `controllers/labels.py::LabelBulkEditView.post` [33] | `test_label_bulk_edit_applies.py` (2026-09-14): only the fields sent are written, other profiles' labels, other kinds and protected statuses are untouched, parents and children are added, and a cycle is refused. Before it, only the ceiling tests reached this handler, and they are refused before any write |
+| `controllers/site_admin.py::SiteAdminUsersView.post` [35] | exercised by `test_site_admin_user_deletion.py` and `test_request_id_lookups.py` |
+| `controllers/detail_pins.py::LocationWikiDetailPinEditView.post` [34] | `test_wiki_detail_pin_edit.py` (2026-09-14): the visibility gate, a child of another wiki, style fields sent and kept, a move and its `WikiEdit`, and a refused move that saves nothing. The `delete` verb was already covered by `test_undo.py` and `test_quota_rewards.py` |
+| `controllers/visit_suggestions.py::VisitSuggestionRespondView.post` [31] | exercised by `test_notification_inbox_dismissal.py` |
+| `controllers/calendar_sync.py::CalendarImportView.post` [30] | `test_calendar_import_view.py` |
+| `controllers/albums.py::AlbumEditView.post` [31] | exercised by `test_wiki_albums.py` since `01e1b5988` |
+| `controllers/pin.py::PinController.upload_takeout` [39] | deleted, along with its route |
+| `controllers/consensus.py::ConsensusPhotoUploadView.post` [31] | **still untested.** `test_consensus_photos.py` covers `services/consensus/photos.py::record_in_round_upload` beneath it, not the view's participant, duplicate-checksum or quota refusals |
+
+"Exercised" means a test sends a request that reaches the handler. It does not mean every branch is
+asserted. `docs/reports/2026-08-14-view-coverage.md` (X12) stays as the dated measurement.
 
 ---
 

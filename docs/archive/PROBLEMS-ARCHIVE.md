@@ -71,7 +71,7 @@ is counted as triaged rather than as a failure, and `--verbose` prints it with i
 finding under the same rule still fails. An entry with no reason is refused, and one that matches no
 finding in an analysed language is listed for removal. `test_run_codeql.py` covers each of those.
 
-`bun run codeql:gate --fast` against databases extracted from this tree exits 0, with 13 Python and 11
+`python3 bin/run_codeql.py --gate --fast` against databases extracted from this tree exits 0, with 13 Python and 11
 JavaScript findings triaged and none stale. Two full rebuilds were killed by host memory pressure
 before that run, so the pass reused their finalised databases rather than extracting afresh. GitHub
 code scanning in CI does not read the file; its alerts still need dismissing in GitHub.
