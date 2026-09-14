@@ -13,7 +13,24 @@ import re
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 _DASHBOARD = Path(__file__).resolve().parents[2]
-_REMOVE_TOOL_ENABLED = re.compile(r"edit\s*:\s*\{[^}]*\bremove\s*:\s*true")
+_EDIT_OPTIONS = re.compile(r"\bedit\s*:\s*\{")
+_REMOVE_DISABLED = re.compile(r"\bremove\s*:\s*false\b")
+
+
+def _enables_remove_tool(source: str) -> bool:
+    """leaflet-draw enables the remove tool unless the edit options say ``remove: false``."""
+    if "Control.Draw(" not in source:
+        return False
+    for match in _EDIT_OPTIONS.finditer(source):
+        depth, end = 1, match.end()
+        while depth and end < len(source):
+            depth += {"{": 1, "}": -1}.get(source[end], 0)
+            end += 1
+        if not _REMOVE_DISABLED.search(source[match.end() : end]):
+            return True
+    return False
+
+
 _REGION_MAPS = (
     "templates/dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html",
     "templates/dashboard/pages/pin_lists/detail.html",
@@ -26,7 +43,9 @@ class RegionDeletionIsImmediateTests(SimpleTestCase):
             str(path.relative_to(_DASHBOARD))
             for root in ("templates", "frontend/ts")
             for path in (_DASHBOARD / root).rglob("*")
-            if path.suffix in {".html", ".ts"} and _REMOVE_TOOL_ENABLED.search(path.read_text(encoding="utf-8"))
+            if path.suffix in {".html", ".ts"}
+            and not path.name.endswith(".test.ts")
+            and _enables_remove_tool(path.read_text(encoding="utf-8"))
         ]
 
         self.assertEqual(offenders, [])

@@ -379,12 +379,16 @@ function ensureAreaMap(): L.Map {
     state.areaMap.addLayer(state.areaDrawnItems);
     const drawControl = new L.Control.Draw({
         draw: { polygon: {}, rectangle: false, circle: false, marker: false, polyline: false, circlemarker: false },
-        edit: { featureGroup: state.areaDrawnItems },
+        edit: { featureGroup: state.areaDrawnItems, remove: false },
     });
     state.areaMap.addControl(drawControl);
     state.areaMap.on(L.Draw.Event.CREATED, (event: L.LeafletEvent) => {
         const { layer } = event as unknown as { layer: L.Polygon };
         setAreaGeometry(layer.toGeoJSON().geometry);
+    });
+    state.areaMap.on(L.Draw.Event.EDITED, () => {
+        const layer = state.areaDrawnItems?.getLayers()[0];
+        if (layer instanceof L.Polygon) setAreaGeometry(layer.toGeoJSON().geometry);
     });
     return state.areaMap;
 }

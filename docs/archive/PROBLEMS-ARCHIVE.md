@@ -30,7 +30,13 @@ whose `ImmediateDeleteMode` removes a clicked layer and persists at once, disarm
 the last region goes. Verified in the same browser run afterwards: the saved filter's stored value dropped to 1 polygon
 on the click and stayed at 1 after picking the draw tool, and the pin list's stored `smart_boundary` went from 2
 components to 1. `region-delete.test.ts` covers the mode; `test_region_delete_is_immediate.py` fails if any template or
-TS file enables leaflet-draw's remove tool or a region map drops the delete button.
+TS file builds a draw control whose `edit` options do not say `remove: false`, or a region map drops the delete button.
+
+The post-batch review found the first version of that guard matched only an explicit `remove: true`, but leaflet-draw
+enables the tool when `remove` is omitted, as `spotguessr.ts`'s area map did. That map also listened only for
+`draw:created`, so by the code a trash-deleted or reshaped area never reached `sg-area-geo-bounds`, which the game reads.
+It now disables the remove tool (its Clear button already clears the area) and saves on `draw:edited`. Verified in
+Chromium: no remove button on the map, and dragging a vertex then Save changed the stored bounds.
 
 The triage's last item, "page overflows footer", was not reproduced: a 1400px-wide full-page screenshot of a saved
 filter's detail page ends with the footer below all content. Other widths were not checked.
