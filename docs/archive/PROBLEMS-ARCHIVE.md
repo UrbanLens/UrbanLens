@@ -13373,11 +13373,14 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   OSError, which botocore's `ClientError` and `EndpointConnectionError` are not: one such error ended the whole sweep,
   and a failed save kept its counted start and was not retried, so an object store outage could drop a healthy
   upload. `STORAGE_ERRORS` covers both backends. The rest of the codebase that talks to storage still catches OSError.
-- **A review of that** found `BotoCoreError` also covers a bad parameter, missing credentials and an unknown region, so
+- **A review of that** found `BotoCoreError` also covers a bad parameter, missing credentials and a missing region, so
   a misconfigured client was retried as an outage and the sweep skipped every file with a warning. `STORAGE_ERRORS`
   now names botocore's connection and HTTP client errors instead; a test stubs the real S3 backend to hold it to that.
   That test also found reading a held file on S3 downloads it through s3transfer, which retries a broken download
   itself and then raises its own `RetriesExceededError`, caught by neither tuple; it is now in `STORAGE_ERRORS`.
+- **A review of that** found a download that fails botocore's checksum check raises `FlexibleChecksumError` after one
+  attempt, which s3transfer does not retry and the tuple missed. The start is counted only after the read, so a corrupt
+  object was re-queued by the sweep every hour indefinitely; it is now retried and then dropped like any storage failure.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

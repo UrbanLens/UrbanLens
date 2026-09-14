@@ -6,6 +6,8 @@ failed is never published: the owner is told it is processing for ever, and the 
 
 from __future__ import annotations
 
+import base64
+from collections.abc import Iterator
 from contextlib import suppress
 import io
 from itertools import count
@@ -16,7 +18,9 @@ import time
 from typing import IO
 from unittest import mock
 import uuid
+import zlib
 
+from botocore.awsrequest import AWSRequest, AWSResponse
 from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError, ParamValidationError
 from botocore.response import StreamingBody
 from botocore.stub import Stubber
@@ -391,6 +395,12 @@ class AHeldFileNothingNamesTests(_Case):
                 default_storage.delete(expired)
 
 
+class _RawBody(io.BytesIO):
+    def stream(self, amt: int = 1024, decode_content: bool | None = None) -> Iterator[bytes]:
+        while chunk := self.read(amt):
+            yield chunk
+
+
 class TheS3BackendsFailuresAreStorageErrorsTests(SimpleTestCase):
     """The failure tests above patch FileSystemStorage; this holds the real S3 backend to raising what they raise."""
 
@@ -420,6 +430,7 @@ class TheS3BackendsFailuresAreStorageErrorsTests(SimpleTestCase):
                         stub.add_client_error(method, service_error_code=code, http_status_code=status)
                         with self.assertRaises(STORAGE_ERRORS):
                             call(storage)
+                        stub.assert_no_pending_responses()
 
     def test_a_read_the_download_gives_up_on_fails_with_a_storage_error(self) -> None:
         """Opening only checks the object is there; reading downloads it, and s3transfer retries a broken download itself."""
@@ -445,6 +456,23 @@ class TheS3BackendsFailuresAreStorageErrorsTests(SimpleTestCase):
             self.assertFalse(storage.exists(name))
             with self.assertRaises(FileNotFoundError):
                 storage.open(name, "rb")
+            stub.assert_no_pending_responses()
+
+    def test_a_download_that_arrives_corrupt_fails_with_a_storage_error(self) -> None:
+        """botocore checks a download against the checksum the object store sends, and s3transfer does not retry a mismatch."""
+        storage = self._storage()
+        sent: list[str] = []
+
+        def respond(request: AWSRequest, **_: object) -> AWSResponse:
+            sent.append(request.method)
+            other = base64.b64encode(zlib.crc32(b"something else").to_bytes(4, "big")).decode()
+            headers = {"Content-Length": "10", "ETag": '"held"', "x-amz-checksum-crc32": other}
+            return AWSResponse(request.url, 200, headers, _RawBody(b"0123456789" if request.method == "GET" else b""))
+
+        storage.connection.meta.client.meta.events.register("before-send.s3", respond)
+        with self.assertRaises(STORAGE_ERRORS), storage.open(f"{HELD_PREFIX}/{uuid.uuid4().hex}", "rb") as handle:
+            handle.read()
+        self.assertIn("GET", sent)
 
 
 class TheSweepsLookupTests(_Case):

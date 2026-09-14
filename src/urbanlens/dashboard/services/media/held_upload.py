@@ -14,7 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 import uuid
 
-from botocore.exceptions import ClientError, ConnectionError as BotocoreConnectionError, HTTPClientError
+from botocore.exceptions import ClientError, ConnectionError as BotocoreConnectionError, FlexibleChecksumError, HTTPClientError
 from django.apps import apps
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -31,10 +31,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: What storage raises when it cannot do its job: OSError, or on the S3 backend the object store unreachable, refusing, or
-#: breaking every download attempt. The rest of botocore's errors, such as missing credentials or a bad parameter, are
-#: misconfiguration and are not caught.
-STORAGE_ERRORS: tuple[type[Exception], ...] = (OSError, BotocoreConnectionError, HTTPClientError, ClientError, RetriesExceededError)
+#: What storage raises when it cannot do its job: OSError, or on the S3 backend the object store unreachable, refusing,
+#: breaking every download attempt, or sending a download that fails its checksum. The rest of botocore's errors, such as
+#: missing credentials or a bad parameter, are misconfiguration and are not caught.
+STORAGE_ERRORS: tuple[type[Exception], ...] = (OSError, BotocoreConnectionError, HTTPClientError, ClientError, RetriesExceededError, FlexibleChecksumError)
 
 #: Where held uploads are stored.
 HELD_PREFIX = "unprocessed"
