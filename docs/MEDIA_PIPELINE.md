@@ -214,8 +214,8 @@ not fed to it every hour (a start that failed to write to storage and was handed
 retry finished, and is not counted, and one still running, for as long as the task's
 hard time limit allows, is left alone; a duplicate publish that finds one running
 returns without starting, unless it is a redelivery of that same task, which takes the
-mark back, so starts overlap only after a broker connection loss hands a running
-publish back, or while the cache is down, when a publish goes ahead unmarked and the
+mark back, so starts overlap when a broker connection loss hands a running publish
+back, or while the cache is down, when a publish goes ahead unmarked and the
 sweep never drops); counting starts rather than queues means a sandbox queue
 backed up behind a bulk import costs nobody their upload. A file storage cannot stat
 is skipped rather than ending the sweep, and a partial index on each `_upload` column

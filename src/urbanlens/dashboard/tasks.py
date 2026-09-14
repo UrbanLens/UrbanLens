@@ -1513,7 +1513,7 @@ def sweep_stale_preview_sources() -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def sweep_held_uploads() -> int:
-    """Recover held icons and avatars whose publish never ran, and remove held files nothing names.
+    """Re-queue held icons and avatars whose publish never ran, drop ones that never finish, and remove held files nothing names.
 
     Deliberately not on the sandbox queue - it enqueues, it does not parse.
 

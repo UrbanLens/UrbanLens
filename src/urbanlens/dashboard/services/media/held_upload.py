@@ -38,7 +38,7 @@ ICON_MAX_PX = 256
 #: The longest side a stored avatar keeps.
 AVATAR_MAX_PX = 512
 
-#: How long a held upload waits before the sweep takes it that its publish was never queued.
+#: How long a held upload waits before the sweep takes it that its publish was never queued or never finished.
 STALLED_HELD_AGE = timedelta(minutes=15)
 
 #: How many publishes of one held upload may start without finishing before the sweep drops it. Counted when a publish
@@ -321,7 +321,7 @@ def held_rows(held: HeldField) -> QuerySet[Any, tuple[int, str]]:
 
 
 def sweep_held_uploads() -> tuple[int, int]:
-    """Queue held uploads whose publish never ran, drop ones queued too often, and remove held files nothing names.
+    """Queue stalled held uploads no publish is running, drop ones whose publish kept starting without finishing, and remove held files nothing names.
 
     A file whose row was deleted is kept past the undo window, because undo restores the row with the held name.
 
