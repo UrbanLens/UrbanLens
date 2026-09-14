@@ -30,8 +30,8 @@ _TITLE_NORMALIZE_RE = re.compile(r"[^a-zA-Z0-9]+")
 def _request_host(request) -> str:
     """Return the request hostname without port or leading ``www.``.
 
-    Reads directly from META to avoid DisallowedHost exceptions; this function
-    is used only for branding decisions, not security validation.
+    Reads directly from META to avoid DisallowedHost exceptions; this function is used only for branding
+    decisions, not security validation.
 
     Args:
         request: The current HttpRequest.
@@ -121,8 +121,8 @@ def app_title_name_suggestions(user: User) -> list[str]:
 def setup_app_title_value(request: HttpRequest, user: User, current_title: str) -> str:
     """Resolve the app title shown in the setup wizard.
 
-    On non-official hosts, replace the factory default ``UrbanLens`` with a
-    personalized suggestion so installers are not nudged toward the reserved name.
+    On non-official hosts, replace the factory default ``UrbanLens`` with a personalized suggestion so
+    installers are not nudged toward the reserved name.
 
     Args:
         request: The current HttpRequest.
@@ -278,11 +278,11 @@ def _build_feature_groups(app_settings) -> list[dict]:
 class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """First-run setup wizard for the bootstrap administrator.
 
+    GET /setup/ → render wizard
+    POST /setup/ → handle action (save_title | complete)
+
     Only accessible while ``SiteSettings.bootstrap_admin_onboarding_complete`` is False.
     Once complete, all visits redirect to the map.
-
-    GET  /setup/  → render wizard
-    POST /setup/  → handle action (save_title | complete)
     """
 
     permission_required = "dashboard.view_site_admin"

@@ -1,10 +1,5 @@
 """Underground structures plugin: mapped subsurface features near a pin, via REData.
-
-Tunnels, culverts, station levels, access shafts and buried utility runs from
-OpenStreetMap - core context for urban exploration. Worldwide but
-volunteer-mapped: an empty answer means "nothing mapped here", never
-"nothing there", so the panel simply hides rather than asserting absence.
-"""
+Worldwide but volunteer-mapped: an empty answer means "nothing mapped here", never "nothing there", so the panel simply hides rather than asserting absence."""
 
 from __future__ import annotations
 
@@ -41,11 +36,7 @@ class UndergroundPanelSource(RedataInfoPanelSource):
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
         """Drop each structure's geometry before caching.
-
-        The panel renders names/kinds/flags only; a LineString per tunnel
-        segment would bloat the cache row for nothing. A future map-overlay
-        consumer should fetch its own geometry rather than reading this cache.
-        """
+        A future map-overlay consumer should fetch its own geometry rather than reading this cache."""
         return [{key: value for key, value in structure.items() if key != "geometry"} for structure in rows]
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:

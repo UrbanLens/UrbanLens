@@ -1,18 +1,4 @@
-"""Tests for the "organize this property?" suggestion (services/controllers pin_restructure).
-
-Covers the two halves it offers together - creating a child pin per unpinned
-building, and nesting the owner's existing top-level pins that stand inside the
-property - plus the gating that keeps it to one dialog, once, per pin: the
-account-wide setting, the permanent per-pin dismissal, and having nothing to
-suggest.
-
-Building footprints matter here: matching an existing child pin to a building
-by its real polygon (not a radius from the centroid) is what stops the
-suggestion from offering to re-pin buildings the user already covered.
-
-The parcel building list is seeded straight into the LocationCache, so no
-external service is contacted.
-"""
+"""Tests for the "organize this property?" suggestion (services/controllers pin_restructure)."""
 
 from __future__ import annotations
 
@@ -258,15 +244,9 @@ class RestructureOfferGatingTests(TestCase):
     def test_offered_even_when_only_one_building_is_unpinned(self) -> None:
         """Any building this would create and the user doesn't have is worth offering.
 
-        Pins the *outer* two, leaving "Main Hall" - deliberately not
-        ``_BUILDINGS[1:]``, which would leave Main Hall unpinned while parking a
-        pin on its exact centroid (it sits inside the Tool Shed footprint, so
-        that pin footprint-matches the shed and leaves the hall unmatched).
-        ``resolve_child_pin_location`` refuses a second pin at one point, so
-        that arrangement is one where the offered building genuinely cannot be
-        created - covered by ``BuildingUnderExistingRootPinTests`` - and is the
-        wrong fixture for asserting that a creatable building is still offered.
-        """
+        Pins the *outer* two, leaving "Main Hall" - deliberately not ``_BUILDINGS[1:]``, which would leave Main
+        Hall unpinned while parking a pin on its exact centroid (it sits inside the Tool Shed footprint, so that
+        pin footprint-matches the shed and leaves the hall unmatched)."""
         for building in (_BUILDINGS[0], _BUILDINGS[2]):
             baker.make(
                 Pin,
@@ -531,11 +511,7 @@ class RestructureApplyTests(TestCase):
 class RestructureWikiMirrorTests(TestCase):
     """The wiki mirror, which now runs *after* the request that triggered it.
 
-    The pin side has already succeeded by the time the mirror runs, so it was
-    moved onto a task: a wiki-side failure used to surface as a 500 for work
-    that was done (docs/PROBLEMS.md, 2026-08-18). These therefore exercise the
-    mirror directly, and the view's job is only to enqueue it.
-    """
+    These therefore exercise the mirror directly, and the view's job is only to enqueue it."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -559,11 +535,7 @@ class RestructureWikiMirrorTests(TestCase):
         )
 
     def test_a_place_with_no_wiki_gains_one_to_hang_the_buildings_off(self) -> None:
-        """This used to assert the mirror created a *draft* rather than a published
-        page. Every place has a published page now, so the mirror publishes nothing
-        that was not already there - what is left to check is that it makes one when
-        the background task has not yet.
-        """
+        """Every place has a published page now, so the mirror publishes nothing that was not already there - what is left to check is that it makes one when the background task has not yet."""
         self._mirror()
 
         self.assertTrue(Wiki.objects.filter(location=self.location).exists())
@@ -656,12 +628,7 @@ class BuildingImportPanelActionTests(TestCase):
 
 
 class MissingBuildingsParcelBoundaryTests(TestCase):
-    """REData's own ``is_on_property`` flag isn't guaranteed to agree with our
-    own parcel boundary (``plugins.builtin.parcel_buildings._building_within``'s
-    own docstring says as much) - a building it marks on-property but which
-    our boundary doesn't actually contain must not be suggested. The user can
-    still pin it by hand; it just should not be offered as a suggestion.
-    """
+    """REData's own ``is_on_property`` flag isn't guaranteed to agree with our own parcel boundary (``plugins.builtin.parcel_buildings._building_within``'s own docstring says as much) - a building it marks on-property but which our boundary doesn't actually contain must not be suggested. The user can still pin it by hand; it just should not be offered as a suggestion."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -698,10 +665,8 @@ class MissingBuildingsParcelBoundaryTests(TestCase):
     def test_import_does_not_provision_places_for_boundary_excluded_buildings(self) -> None:
         """The POST path must not undo the dialog's boundary filter.
 
-        Building places join the parcel's wiki/access domain, so an off-property
-        survey-zone record is not harmless just because no child pin was created
-        for it.
-        """
+        Building places join the parcel's wiki/access domain, so an off-property survey-zone record is not
+        harmless just because no child pin was created for it."""
         pin_restructure.create_building_pins(self.pin, pin_restructure.missing_buildings(self.pin))
 
         self.assertFalse(
@@ -730,18 +695,7 @@ class MissingBuildingsParcelBoundaryTests(TestCase):
 class BuildingUnderExistingRootPinTests(TestCase):
     """A building whose centroid already carries one of the owner's *top-level* pins.
 
-    The reported bug. ``missing_buildings`` consulted only the parcel pin's own
-    children, so such a building counted as unpinned and was offered forever;
-    ``create_building_pins`` then asked ``resolve_child_pin_location`` for its
-    point, which refuses anywhere the profile already has a pin - top-level ones
-    included - and the building was silently skipped. Every attempt left the
-    count unchanged, so the panel button and the suggestion both stayed on the
-    page describing work that could never complete.
-
-    The pin standing on it is exactly what ``nestable_root_pins`` exists to
-    re-home, which is how the property still gets organized: by adopting that
-    pin, not by duplicating it.
-    """
+    The reported bug."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -796,13 +750,7 @@ class BuildingUnderExistingRootPinTests(TestCase):
 class RestructureNestChoiceTests(TestCase):
     """The organize dialog's per-pin include/exclude choice.
 
-    Covers controllers.pin_restructure.PinRestructureApplyView.post's
-    nest_selection/nest_keys handling. Organizing a pin under a property is
-    always a pure reparent - nothing about the candidate's own data changes.
-    Actually consolidating two pins into one is a separate, deliberate action
-    (services.pins.pin_merge, reached from the map's "Merge pins" bulk-select
-    flow) that this dialog does not offer.
-    """
+    Covers controllers.pin_restructure.PinRestructureApplyView.post's nest_selection/nest_keys handling."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -887,11 +835,9 @@ class RestructureNestChoiceTests(TestCase):
 class EmptyImportIsNotReportedAsSuccessTests(TestCase):
     """An import that created nothing must not claim it did.
 
-    ``create_building_pins`` skips a building whose point is already pinned, so
-    a selection made entirely of those returned 0 - and the response still said
-    "Added 0 building pins." over a *success* toast, which is what made the
-    failure read as silent.
-    """
+    ``create_building_pins`` skips a building whose point is already pinned, so a selection made entirely of
+    those returned 0 - and the response still said "Added 0 building pins." over a *success* toast, which is
+    what made the failure read as silent."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -921,15 +867,8 @@ class EmptyImportIsNotReportedAsSuccessTests(TestCase):
 class OrganizeDialogQueryScalingTests(QueryScalingMixin, TestCase):
     """The organize dialog must not query per candidate pin.
 
-    Its own use case is a campus or hospital complex pinned building by
-    building, so a large candidate list is the normal case rather than the
-    extreme one - and ``nestable_root_pins`` offers up to 500 of them.
-
-    Each candidate carries its own article and custom field value as
-    realistic incidental data (the dialog never compares them against the
-    property pin's own - organizing a pin only ever changes its parent), to
-    confirm rendering a candidate row (effective_name, etc.) doesn't N+1.
-    """
+    Its own use case is a campus or hospital complex pinned building by building, so a large candidate list is
+    the normal case rather than the extreme one - and ``nestable_root_pins`` offers up to 500 of them."""
 
     def setUp(self) -> None:
         super().setUp()

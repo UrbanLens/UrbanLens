@@ -1,14 +1,4 @@
-{% comment %}
-One album's tile in the albums grid.
-
-Destructive and rarely-used actions live in the tile's overflow menu rather
-than on its face, so the grid reads as a set of albums instead of a set of
-controls.
-
-Expects:
-  row - a dict from controllers.albums._album_row (album, cover, photo_count,
-        date_start, date_end, detail_url, delete_url, ...)
-{% endcomment %}
+{% comment %}One album's tile in the albums grid.{% endcomment %}
 <li class="album-card" data-album-slug="{{ row.album.slug }}" data-add-url="{{ row.add_url }}" data-album-drop>
   <a class="album-card-link" href="{{ row.list_url }}?album={{ row.album.slug }}"
      data-album-open="{{ row.album.slug }}"

@@ -1,21 +1,5 @@
 /**
  * The fly-to-corner dismissal for auto-loading cards that turn out to be empty.
- *
- * Cards marked ``data-ext-panel-204`` used to simply ``remove()`` themselves when
- * they discovered they had nothing to show, vanishing instantly and shifting
- * whatever was below them with no warning. This shrinks the card and flies it
- * toward the tools FAB - the same corner that already holds manually-collapsed
- * sections - so the disappearance reads as "it went there" rather than a jump.
- *
- * Split out of the collapsible-sections block it shared a template ``<script>``
- * with: the two share no state, only DOM lookups.
- *
- * **Testing limitation, stated deliberately.** Everything below the element check
- * is geometry - ``getBoundingClientRect`` and ``getComputedStyle`` - which happy-dom
- * reports as zeros. The tests alongside this cover what is real there (a
- * disconnected element is removed; the transition and its timeout fallback each
- * finish exactly once) and cannot assert the animation itself. That part moved
- * knowingly untested rather than by accident.
  */
 
 /** Where the card should fly to: the tools FAB's centre. */
@@ -32,11 +16,7 @@ function toolsFabTarget(): { x: number; y: number } {
 }
 
 export function flyToToolsFab(el: HTMLElement | null): void {
-    // Most data-ext-panel-204 cards now start `hidden` and never paint before
-    // their 204 arrives - nothing on screen to fly, so skip straight to
-    // removal instead of pinning/animating an invisible element and waiting
-    // out the 450ms fallback for a transitionend that display:none prevents
-    // from ever firing.
+    // Most data-ext-panel-204 cards now start `hidden` and never paint before their 204 arrives.
     if (!el || !el.isConnected || el.hidden) {
         el?.remove();
         return;

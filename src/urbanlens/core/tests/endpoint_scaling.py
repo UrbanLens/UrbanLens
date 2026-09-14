@@ -1,34 +1,4 @@
-"""Every axis a collection endpoint can grow along, measured in one seed pass.
-
-The three existing mixins each answer one question and each seed the database
-themselves, so pointing all three at one endpoint seeds it three times and issues
-three sets of requests to learn things that could have been read off the same
-two. This composes them: seed, measure everything, seed, measure everything,
-report every axis that moved.
-
-It also adds the two axes none of them can see.
-
-**Rows fetched per row.** `QueryScalingMixin` counts *statements*, so a view that
-runs one query and drags every row of a table into Python is perfectly flat by
-its measure - `SavedFilterMatchCountsView` materialises every root pin's uuid per
-request, in a single statement. Summing `cursor.rowcount` across the request
-catches that, and nothing else here does.
-
-**Bytes per row.** Both existing mixins already measure the body; neither asserts
-on it. An endpoint that ships 40 KB per row is a defect whatever its query count,
-and it is the axis a client feels first over a mobile connection.
-
-**Rows in the payload, against a ceiling.** Only for endpoints that claim one:
-`count_payload_rows` returns None by default and the axis is skipped. Where it is
-implemented, the assertion is that a response cannot be made arbitrarily large by
-owning more rows - which is the defect P96 and the map document share, and which
-no per-row budget can express, because their per-row cost is fine.
-
-Every axis is a **count**, deliberately. Timings on a shared host are noisy
-enough that `RenderTimeScalingMixin` needs best-of-five and a ratio to say
-anything; counts are exact, do not move with load, and fail the same way on every
-machine. See X14 for what happened when a timing was re-examined.
-"""
+"""Every axis a collection endpoint can grow along, measured in one seed pass."""
 
 from __future__ import annotations
 
@@ -53,13 +23,9 @@ MAX_OBJECTS_PER_ROW = 1.0
 #: is for a join or a count query alongside it.
 MAX_ROWS_FETCHED_PER_ROW = 1.5
 
-#: The same budget for an endpoint whose output does **not** grow - a paginated
-#: list, or one returning a count. Much stricter, because that is the whole
-#: assertion: if the response is capped, the reading behind it must be capped
-#: too. `SavedFilterMatchCountsView` returns a constant-size body and reads every
-#: root pin's uuid to build it, which is invisible to a statement counter (there
-#: is one statement at every size) and to a bytes-per-row budget (the body never
-#: moves). This is the number that catches it.
+#: The same budget for an endpoint whose output does **not** grow - a paginated list, or one returning a count.
+#: Much stricter, because that is the whole assertion: if the response is capped, the reading behind it must be
+#: capped too.
 MAX_ROWS_FETCHED_PER_ROW_WHEN_CAPPED = 0.5
 
 #: Response bytes one row may add. Generous: this catches an endpoint shipping a
@@ -70,23 +36,17 @@ MAX_BYTES_PER_ROW = 4_000
 def read_body(response: HttpResponseBase) -> bytes:
     """The whole body, whether or not it was streamed.
 
-    `StreamingHttpResponse` raises on `.content`, so reading a body the obvious
-    way put `map.document` - the largest endpoint in the application - outside
-    the reach of every gate built on this mixin.
+    `StreamingHttpResponse` raises on `.content`, so reading a body the obvious way put `map.document` - the
+    largest endpoint in the application - outside the reach of every gate built on this mixin.
 
     Args:
         response: The response to read.
 
     Returns:
-        The body as bytes. A streamed response is cached back onto itself so a
-        caller reading it again, such as `count_payload_rows`, does not find the
-        generator already exhausted.
+        The body as bytes.
 
     Raises:
-        TypeError: The response carries a body in neither of the two shapes
-            Django defines, or it streams asynchronously, which cannot be drained
-            from a synchronous test.
-    """
+        TypeError: The response carries a body in neither of the two shapes Django defines, or it streams asynchronously, which cannot be drained from a..."""
     if isinstance(response, StreamingHttpResponse):
         chunks = response.streaming_content
         if not isinstance(chunks, Iterator):
@@ -118,8 +78,7 @@ def _row_counting_wrapper(totals: list[int]) -> Any:
         totals: Single-element accumulator, mutated in place.
 
     Returns:
-        The wrapper callable.
-    """
+        The wrapper callable."""
 
     def wrapper(execute: Any, sql: str, params: Any, many: bool, context: dict[str, Any]) -> Any:
         result = execute(sql, params, many, context)
@@ -138,48 +97,38 @@ def _row_counting_wrapper(totals: list[int]) -> Any:
 class EndpointScalingMixin(InstantiationScalingMixin):
     """Assert an endpoint's cost per row is bounded on every axis at once.
 
-    Subclasses implement :meth:`seed_rows` and call
-    :meth:`assert_endpoint_scaling`. Override :meth:`request` for a POST, and
-    :meth:`count_payload_rows` for an endpoint that claims a ceiling.
-    """
+    Subclasses implement :meth:`seed_rows` and call :meth:`assert_endpoint_scaling`."""
 
     def request(self, url: str, **extra: Any) -> HttpResponse:
         """Issue the request under test. Override for POST or a body.
 
         Args:
-            url: The URL to fetch.
-            **extra: Passed to the test client.
+            url: The URL to fetch. **extra: Passed to the test client.
 
         Returns:
-            The response.
-        """
+            The response."""
         return self.client.get(url, **extra)
 
     def count_payload_rows(self, response: HttpResponse) -> int | None:
         """How many records the response carries, if that is countable.
 
-        Returns None by default, which skips the ceiling axis. Implement it on an
-        endpoint that is supposed to cap what it returns - the point of the axis
-        is that a per-row budget cannot express "and never more than N rows".
+        Returns None by default, which skips the ceiling axis.
 
         Args:
             response: The response to read.
 
         Returns:
-            The record count, or None to skip.
-        """
+            The record count, or None to skip."""
         return None
 
     def measure_endpoint(self, url: str, **extra: Any) -> EndpointSample:
         """Fetch *url* once, reading every axis off the same request.
 
         Args:
-            url: The URL to measure.
-            **extra: Passed to the test client.
+            url: The URL to measure. **extra: Passed to the test client.
 
         Returns:
-            The sample.
-        """
+            The sample."""
         rows: list[int] = [0]
         with connection.execute_wrapper(_row_counting_wrapper(rows)), count_instantiations() as counted:
             response = self.request(url, **extra)
@@ -201,16 +150,14 @@ class EndpointScalingMixin(InstantiationScalingMixin):
     def measure_queries(self, url: str, **extra: Any) -> tuple[dict[str, Any], ...]:
         """The statements *url* runs, captured separately from the timed axes.
 
-        `CaptureQueriesContext` turns on ``force_debug_cursor``, which is fine
-        for counting but is not something to hold while measuring anything else.
+        `CaptureQueriesContext` turns on ``force_debug_cursor``, which is fine for counting but is not something
+        to hold while measuring anything else.
 
         Args:
-            url: The URL to measure.
-            **extra: Passed to the test client.
+            url: The URL to measure. **extra: Passed to the test client.
 
         Returns:
-            The captured queries.
-        """
+            The captured queries."""
         with CaptureQueriesContext(connection) as captured:
             self.request(url, **extra)
         return tuple(captured.captured_queries)
@@ -231,25 +178,10 @@ class EndpointScalingMixin(InstantiationScalingMixin):
         """Assert every per-row cost of *url* is bounded, reporting all failures.
 
         Args:
-            url: The URL to measure.
-            max_objects_per_row: Model instances one row may cost.
-            max_rows_fetched_per_row: Database rows one row may cost. Defaults to
-                :data:`MAX_ROWS_FETCHED_PER_ROW` when the response grows with the
-                table, and to the much stricter
-                :data:`MAX_ROWS_FETCHED_PER_ROW_WHEN_CAPPED` when it does not -
-                an endpoint that caps its output must cap its reading too.
-            max_bytes_per_row: Response bytes one row may add.
-            query_tolerance: Extra statements allowed at the larger size.
-            payload_ceiling: If set, the most records the response may carry
-                however many rows exist. Requires :meth:`count_payload_rows`.
-            expect_growth: Require the body to grow between the two sizes.
-            growth_waiver: Why it cannot, when *expect_growth* is False.
-            **extra: Passed to the test client.
+            url: The URL to measure. max_objects_per_row: Model instances one row may cost. max_rows_fetched_per_row: Database rows one row may cost.
 
         Raises:
-            AssertionError: Any axis grew past its budget, or the seed did not
-                exercise the endpoint.
-        """
+            AssertionError: Any axis grew past its budget, or the seed did not exercise the endpoint."""
         if not expect_growth and not growth_waiver:
             raise AssertionError("expect_growth=False needs growth_waiver= explaining why the response cannot grow")
 
@@ -311,10 +243,8 @@ class EndpointScalingMixin(InstantiationScalingMixin):
     ) -> Iterator[str]:
         """Every axis that grew past its budget, described.
 
-        Yielded rather than raised one at a time so a failure reports the whole
-        picture: an endpoint building objects per row usually also fetches rows
-        per row, and fixing one at a time means measuring three times.
-        """
+        Yielded rather than raised one at a time so a failure reports the whole picture: an endpoint building
+        objects per row usually also fetches rows per row, and fixing one at a time means measuring three times."""
         added = self.second_batch
 
         per_row = (large.objects - small.objects) / added

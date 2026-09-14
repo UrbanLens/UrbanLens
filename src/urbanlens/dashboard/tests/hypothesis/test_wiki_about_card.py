@@ -1,16 +1,4 @@
-"""A wiki with no description/dates/security/links must still offer to add a link.
-
-`_wiki_about_card.html`'s outer guard used to be
-`{% if wiki.description or wiki.date_abandoned or wiki.effective_date_last_active
-or wiki.links.exists %}`, hiding the whole card - including the links row,
-whose "add a link" button (see `_pin_links_row.html`'s `dialog_id`) is the only
-entry point for adding one - the moment all four were empty. A wiki that has
-never had any of those set could never get its first link short of using
-"Suggest Edits" to set some other field first.
-
-See PROBLEMS.md, "a wiki with zero description/dates/security/links has no way
-to add its first link".
-"""
+"""A wiki with no description/dates/security/links must still offer to add a link."""
 
 from __future__ import annotations
 

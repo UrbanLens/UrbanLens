@@ -1,20 +1,4 @@
-"""The panel single-flight marker must outlive the task it guards.
-
-Panel fetches are single-flight: ``schedule_panel_fetch`` claims a cache key with
-an atomic ``cache.add`` and ``fetch_panel_source`` releases it in a ``finally``.
-A task the worker *hard-kills* never reaches that ``finally``, so the marker's
-TTL is the only thing that frees the panel — hence
-``FLIGHT_TTL_SECONDS > time_limit``.
-
-Both sides document the relationship (``external_data.FLIGHT_TTL_SECONDS``'s
-comment and the one above ``fetch_panel_source``), but the numbers are literals
-in two different modules and nothing checked that they still agree. Raise the
-task's ``time_limit`` past the TTL and the marker expires *while the task is
-still running*: the next poll re-claims it and enqueues a duplicate fetch, so a
-slow provider gets concurrent duplicate requests from every polling page —
-precisely what single-flight exists to prevent, and it degrades silently, as
-extra API spend rather than an error.
-"""
+"""The panel single-flight marker must outlive the task it guards."""
 
 from __future__ import annotations
 

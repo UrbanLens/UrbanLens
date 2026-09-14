@@ -1,13 +1,4 @@
-"""Regression guard for the edit-profile page hero avatar not refreshing.
-
-The avatar-upload/gravatar/emoji widgets on the edit-profile page save via a
-plain fetch() JSON call (not an HTMX swap), so nothing server-rendered can OOB
--update the page hero's own avatar <img> - updateAvatarPreview() (edit.html)
-has to reach into the DOM and update it directly by id. This only guards the
-id actually being present on the rendered page; the JS behavior itself isn't
-exercised by these Python tests (no browser here) - see edit.html's
-updateAvatarPreview() for the JS side of this fix.
-"""
+"""Regression guard for the edit-profile page hero avatar not refreshing."""
 
 from __future__ import annotations
 
@@ -44,9 +35,7 @@ class ProfileHeroAvatarIdTests(TestCase):
 
 
 class ProfileBioShownOnceTests(TestCase):
-    """The hero used to show a 2-line-clamped copy of the bio directly above
-    the "About" section's full, un-clamped copy - the exact same text twice
-    in a row. The hero no longer renders it at all; only the About section does."""
+    """The hero no longer renders it at all; only the About section does."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -59,13 +48,6 @@ class ProfileBioShownOnceTests(TestCase):
 
     def test_bio_appears_exactly_once_as_visible_text(self) -> None:
         content = self.client.get(reverse("profile.view")).content.decode()
-        # The click-to-edit bio element legitimately carries the raw value
-        # twice in markup - once in its data-raw-bio attribute (the editor's
-        # source of truth) and once as its visible text - so a raw substring
-        # count of 1 is impossible by construction. The regression this test
-        # guards (the hero rendering a clamped VISIBLE duplicate above the
-        # About section) is caught by counting visible-text occurrences only:
-        # element text is always preceded by '>', the attribute copy never is.
         self.assertEqual(content.count(f">{self.bio}"), 1)
         self.assertEqual(content.count(self.bio), 2)
 

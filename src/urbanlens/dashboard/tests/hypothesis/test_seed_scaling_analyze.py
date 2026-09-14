@@ -1,22 +1,4 @@
-"""The scaling harness must tell the planner about the rows it just seeded.
-
-Seeding through the ORM leaves ``pg_class.reltuples`` and ``pg_statistic``
-describing the table as it was beforehand - usually empty - so every query the
-measurement then runs is planned for a table that does not exist any more. The
-effect is not subtle and it is shaped exactly like the regression these mixins
-hunt: ``MapPinPayloadService.all()`` at 5,000 pins measured 4.683s without the
-refresh and 0.384s with it, and the session that hit it spent three rounds
-suspecting its own change (N10,
-``docs/notes/map-perf-measurement-and-test-gaps.md``).
-
-The interesting design question was which tables to refresh, and the answer is
-measured rather than assumed. A bare ``ANALYZE`` over this schema's 237 tables
-costs 3.55s cold and 1.70s warm, against 45ms for three named ones; an
-assertion seeds twice, so the bare form would add seconds to every scaling test
-in the suite. So :meth:`SeedScalingMixin.seed` captures the seed's own SQL and
-analyses exactly the tables it wrote to - which no test can forget to update,
-and which stays correct when a signal writes somewhere the test never mentions.
-"""
+"""The scaling harness must tell the planner about the rows it just seeded."""
 
 from __future__ import annotations
 
@@ -100,11 +82,7 @@ class SeedRefreshesStatisticsTests(TestCase):
         self.assertIn(Label._meta.db_table, case.analyzed[0])
 
     def test_it_does_not_analyse_the_whole_database(self) -> None:
-        """The measured reason the table list is derived rather than omitted.
-
-        A bare ANALYZE is 1.70s warm on this schema against 45ms for a few named
-        tables, and every scaling assertion seeds twice.
-        """
+        """The measured reason the table list is derived rather than omitted."""
         case = self._case()
 
         case.seed(2)
@@ -127,10 +105,8 @@ class SeedRefreshesStatisticsTests(TestCase):
     def test_the_statistics_really_move(self) -> None:
         """The end-to-end claim: after seed(), the planner knows the rows are there.
 
-        `pg_class.reltuples` is -1 on a table that has never been analysed, and a
-        non-negative estimate afterwards. Asserting on the estimate rather than on
-        the call proves the SQL was accepted and took effect, which a mock cannot.
-        """
+        `pg_class.reltuples` is -1 on a table that has never been analysed, and a non-negative estimate
+        afterwards."""
         case = self._case()
 
         case.seed(6)

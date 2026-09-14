@@ -74,10 +74,7 @@ def pending_merge_suggestions(profile: Profile) -> QuerySet[PinMergeSuggestion]:
 def merge_suggestion_cards(suggestions: Iterable[PinMergeSuggestion]) -> list[dict[str, Any]]:
     """Build per-card template context, one entry per suggestion.
 
-    Conflicts are computed fresh here (not stored on the suggestion) since
-    they must reflect the two pins' *current* state, which can change between
-    when the suggestion was raised and when it's reviewed. Only ever called
-    with pending suggestions (see callers), so both pins are guaranteed set.
+    Only ever called with pending suggestions (see callers), so both pins are guaranteed set.
 
     Args:
         suggestions: Iterable of ``PinMergeSuggestion`` rows.
@@ -105,8 +102,7 @@ def _toast(message: str, level: str = "success", *, status: int = 200, refresh_q
     Mirrors ``controllers.pin_suggestions._toast``.
 
     Args:
-        message: Toast body text (HTML-escaped by the caller if it embeds
-            any dynamic value).
+        message: Toast body text (HTML-escaped by the caller if it embeds any dynamic value).
         level: toastr level ("success", "info", "warning", "error").
         status: HTTP status code for the (otherwise empty) response.
         refresh_queue: Whether to also fire the ``refreshQueue`` htmx event.
@@ -142,13 +138,9 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
     """Accept or reject a single pin merge suggestion.
 
     POST /memories/locations/merge/<suggestion_id>/<action>/ where action is
-    "accept" or "reject".
 
-    Accept body: ``survivor_pk`` (optional - defaults to
-    ``suggestion.suggested_survivor``), plus one ``resolution__<key>`` field
-    per conflict rendered on the card (see ``services.pins.pin_merge.plan_merge_conflicts``).
-    Missing resolutions re-render the card with the conflict form intact and
-    an error toast, rather than failing with a 500.
+    Missing resolutions re-render the card with the conflict form intact and an error toast, rather than
+    failing with a 500.
     """
 
     def _get_suggestion(self, request: HttpRequest, suggestion_id: int) -> tuple[PinMergeSuggestion, Profile]:

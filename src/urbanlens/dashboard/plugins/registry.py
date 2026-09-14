@@ -1,26 +1,5 @@
 """Discovery and aggregation of UrbanLens plugins.
-
-The module-level :data:`plugin_registry` singleton is populated once at app
-startup (``DashboardConfig.ready()``) from three sources, in this order:
-
-1. **Bundled** - every module in :mod:`urbanlens.dashboard.plugins.builtin`.
-2. **Settings** - dotted module paths in the ``UL_PLUGIN_MODULES`` env
-   setting, for site-local plugins that aren't packaged.
-3. **Entry points** - pip-installed packages exposing the
-   ``urbanlens.plugins`` entry-point group, for distributable plugins::
-
-       [project.entry-points."urbanlens.plugins"]
-       my_plugin = "my_package.urbanlens_plugin"
-
-An entry point may resolve to a plugin class, a plugin instance, or a module
-(which is scanned for plugin classes defined in it). A failure loading any
-one plugin is logged and skipped so a broken plugin never prevents startup.
-
-Install-level disabling: list plugin names in the ``UL_DISABLED_PLUGINS``
-setting. Runtime per-service toggling (without a restart) remains on the
-site-admin API limits page via ``ApiRateLimit.enabled``, which gates the
-actual HTTP calls.
-"""
+A failure loading any one plugin is logged and skipped so a broken plugin never prevents startup."""
 
 from __future__ import annotations
 
@@ -56,10 +35,8 @@ class PluginInfo:
 
     Attributes:
         plugin: The plugin instance.
-        source: Discovery source: ``"builtin"``, ``"settings"``,
-            ``"entry-point"``, or ``"code"`` (registered programmatically).
-        module: Dotted path of the module the plugin class was defined in.
-    """
+        source: Discovery source: ``"builtin"``, ``"settings"``, ``"entry-point"``, or ``"code"`` (registered programmatically).
+        module: Dotted path of the module the plugin class was defined in."""
 
     plugin: UrbanLensPlugin
     source: str
@@ -68,11 +45,7 @@ class PluginInfo:
 
 class PluginRegistry:
     """Holds every discovered plugin and aggregates their contributions.
-
-    Aggregation methods only consult *enabled* plugins, ordered by
-    ``(plugin.order, plugin.name)`` so contribution ordering (e.g. imagery
-    carousel provider order) is deterministic and plugin-controlled.
-    """
+    Aggregation methods only consult *enabled* plugins, ordered by ``(plugin.order, plugin.name)`` so contribution ordering (e.g. imagery carousel provider order) is deterministic and plugin-controlled."""
 
     def __init__(self) -> None:
         """Initialize an empty, undiscovered registry."""
@@ -81,10 +54,7 @@ class PluginRegistry:
 
     def discover(self, *, force: bool = False) -> None:
         """Load plugins from all discovery sources; idempotent.
-
-        Runs inside ``AppConfig.ready()``, so nothing here may touch the
-        database. After all sources load, each plugin's ``register`` hook
-        runs and the ``plugins_loaded`` action fires.
+        Runs inside ``AppConfig.ready()``, so nothing here may touch the database.
 
         Args:
             force: Re-run discovery from scratch, discarding current state.
@@ -114,8 +84,7 @@ class PluginRegistry:
             source: Discovery source label recorded for the admin UI.
 
         Returns:
-            The registered instance, or None when the plugin was rejected
-            (missing name, duplicate name, or failed instantiation).
+            The registered instance, or None when the plugin was rejected (missing name, duplicate name, or failed instantiation).
         """
         try:
             instance = plugin() if isinstance(plugin, type) else plugin
@@ -165,8 +134,7 @@ class PluginRegistry:
             name: The plugin slug.
 
         Returns:
-            True unless the name appears in the ``UL_DISABLED_PLUGINS``
-            setting.
+            True unless the name appears in the ``UL_DISABLED_PLUGINS`` setting.
         """
         from urbanlens.UrbanLens.settings.app import settings
 
@@ -180,17 +148,13 @@ class PluginRegistry:
         """
         return [info.plugin for info in self.plugins() if self.is_enabled(info.plugin.name)]
 
-    # ------------------------------------------------------------------
     # Contribution aggregation
-    # ------------------------------------------------------------------
 
     def service_defaults(self) -> dict[str, ServiceDefaults]:
         """Rate-limit defaults declared by enabled plugins.
 
         Returns:
-            Merged mapping of service key to defaults. A duplicate service
-            key is logged and the first (lowest-ordered) plugin wins.
-        """
+            Merged mapping of service key to defaults."""
         merged: dict[str, ServiceDefaults] = {}
         for plugin in self.enabled_plugins():
             for key, defaults in self._safe(plugin, "get_service_defaults", {}).items():
@@ -212,10 +176,7 @@ class PluginRegistry:
         """Place-name candidate providers contributed by enabled plugins.
 
         Returns:
-            NameProvider instances in plugin order, which is the arrival
-            order the name resolver uses to break ties among unprioritized
-            sources.
-        """
+            NameProvider instances in plugin order, which is the arrival order the name resolver uses to break ties among unprioritized sources."""
         return self._collect("get_name_providers")
 
     def satellite_providers(self) -> list[SatelliteViewProvider]:
@@ -230,18 +191,14 @@ class PluginRegistry:
         """Background-enrichment sources contributed by enabled plugins.
 
         Returns:
-            EnrichmentSource instances in plugin order; the scheduled
-            enrichment task runs them in this order each cycle.
-        """
+            EnrichmentSource instances in plugin order; the scheduled enrichment task runs them in this order each cycle."""
         return self._collect("get_enrichment_sources")
 
     def photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
         """Photo keywording strategies contributed by enabled plugins.
 
         Returns:
-            PhotoKeywordProvider instances in plugin order; each stores its
-            own keywords per image, so ordering only affects run order.
-        """
+            PhotoKeywordProvider instances in plugin order; each stores its own keywords per image, so ordering only affects run order."""
         return self._collect("get_photo_keyword_providers")
 
     def street_view_providers(self) -> list[StreetViewProvider]:
@@ -252,9 +209,7 @@ class PluginRegistry:
         """
         return self._collect("get_street_view_providers")
 
-    # ------------------------------------------------------------------
     # Internals
-    # ------------------------------------------------------------------
 
     def _collect(self, method_name: str) -> list:
         """Concatenate one list-valued contribution across enabled plugins."""
@@ -320,11 +275,7 @@ class PluginRegistry:
 
     def _register_module(self, module: ModuleType, *, source: str) -> None:
         """Register every concrete plugin class defined in a module.
-
-        Only classes *defined in* the module count - imported plugin classes
-        are skipped so a module can reference another plugin without
-        re-registering it.
-        """
+        Only classes *defined in* the module count - imported plugin classes are skipped so a module can reference another plugin without re-registering it."""
         for attr in vars(module).values():
             if inspect.isclass(attr) and issubclass(attr, UrbanLensPlugin) and attr.__module__ == module.__name__ and attr.name and not inspect.isabstract(attr):
                 self.register(attr, source=source)

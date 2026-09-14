@@ -1,20 +1,4 @@
-"""A map viewport that crosses the date line must return the pins on screen.
-
-``within_bounds`` built one ``Polygon.from_bbox((west, south, east, north))``.
-When a viewport crosses the antimeridian its west edge is greater than its east
-edge, and that rectangle is then drawn the *long* way round: measured, a
-2-degree window became a **358-degree** box that excluded every pin actually on
-screen and included everything on the far side of the planet.
-
-The other arriving shape is unwrapped bounds - Leaflet's ``getEast()`` returns
-181 rather than -179 when panned across - which produced a valid-looking box that
-simply never matched stored coordinates, since those are always folded into
-[-180, 180].
-
-Both are handled now: edges are normalised, and a crossing viewport is queried as
-its two real halves. The ordinary case is asserted alongside, because a viewport
-filter that changed behaviour for the rest of the world would be a far worse bug.
-"""
+"""A map viewport that crosses the date line must return the pins on screen."""
 
 from __future__ import annotations
 

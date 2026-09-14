@@ -15,9 +15,7 @@ function floorAt(level: number, markers: Array<Partial<Marker>>): Floor {
 
 describe("connectorCandidates", () => {
     test("a lift that skips storeys can still be linked", () => {
-        // Only the floor above and below used to be offered, so an express lift
-        // between the ground and third storeys - or a stair on a plan whose
-        // middle floor has not been drawn yet - could not be linked at all.
+        // Only the floor above and below used to be offered, so an express lift between the ground and third storeys.
         const ground = floorAt(0, [{ kind: "elevator", name: "express" }]);
         const third = floorAt(3, [{ kind: "elevator", name: "express-3" }]);
         const marker = ground.markers[0] as Marker;

@@ -36,19 +36,7 @@ class BillingCustomer(abstract.DashboardModel):
 
 class RoleSubscription(abstract.DashboardModel):
     """A user's paid, Stripe-backed subscription to a SubscriptionRole.
-
-    Distinct from ``UserSubscription`` (an admin-issued grant with no billing behind
-    it) - a role can be held either way, and ``active_subscription_roles()``/
-    ``user_has_feature()`` check both. ``threshold_met`` only matters for roles with
-    ``pwyw_dynamic_threshold`` enabled: it's recomputed against the site's current
-    cost-per-user each time Stripe reports a successful charge
-    (``services.billing.webhooks``), so a pledge that used to clear the bar can stop
-    granting the role's features without the subscription itself changing status.
-
-    Pay-what-you-want roles also accrue a usage ledger (``total_paid_cents``,
-    ``amount_used_cents``, ``usage_covered_until`` - see ``services.billing.banking``)
-    that can keep ``grants_access`` true independent of ``is_billable``/``threshold_met``,
-    for as long as cumulative overpayment covers each elapsed billing period's cost.
+    Distinct from ``UserSubscription`` (an admin-issued grant with no billing behind it) - a role can be held either way, and ``active_subscription_roles()``/ ``user_has_feature()`` check both.
     """
 
     user = ForeignKey(User, on_delete=CASCADE, related_name="role_subscriptions")
@@ -135,12 +123,8 @@ class StripeWebhookEvent(abstract.DashboardModel):
 
 class StripeProcessedRefund(abstract.DashboardModel):
     """Idempotency record for individual Stripe refund objects already applied.
-
-    ``StripeWebhookEvent`` dedups whole event deliveries, but ``charge.refunded`` is
-    cumulative: a second partial refund on the same charge arrives as a *fresh* event
-    (new event id) whose ``refunds.data`` re-contains every earlier refund object. Each
-    refund id (``re_...``) is claimed here exactly once - within the receiving view's
-    transaction, so the claim commits atomically with the ledger decrement it produced.
+    ``StripeWebhookEvent`` dedups whole event deliveries, but ``charge.refunded`` is cumulative: a second partial refund on the same charge arrives as a *fresh* event (new event id) whose ``refunds.data`` re-contains every earlier refund object.
+    Each refund id (``re_...``) is claimed here exactly once - within the receiving view's transaction, so the claim commits atomically with the ledger decrement it produced.
     """
 
     stripe_refund_id = CharField(max_length=255, unique=True)

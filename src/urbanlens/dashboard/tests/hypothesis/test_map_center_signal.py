@@ -1,10 +1,4 @@
-"""Tests for the pin_invalidate_map_center post_save signal.
-
-Invariants verified:
-  - Creating a new Pin clears the profile's cached centroid (lat/lng → None).
-  - Saving an *existing* Pin does NOT clear the cache.
-  - A Pin with no profile_id does not crash and does not affect any profile.
-"""
+"""Tests for the pin_invalidate_map_center post_save signal."""
 
 from __future__ import annotations
 

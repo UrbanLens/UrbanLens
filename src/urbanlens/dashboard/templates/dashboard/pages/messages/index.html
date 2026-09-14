@@ -5,9 +5,7 @@
 {% block page_title %}Messages{% endblock %}
 
 {% block header %}
-{# Leaflet + Leaflet.draw power the "Attach a map" composer (the shared #}
-{# comment-map dialog in base.html, which no-ops without Leaflet). The jump-to #}
-{# search and layer/export engines already ship globally in core.js. #}
+{# Leaflet + Leaflet.draw power the "Attach a map" composer (the shared comment-map dialog in base.html, which no-ops without Leaflet). #}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
 {% vendor_asset "leaflet_draw_css" %}
@@ -122,11 +120,7 @@
 
 <div id="dm-share-dialog-host"></div>
 
-{# Minimal photo lightbox for DM image attachments - reuses the shared #}
-{# gallery-lightbox CSS (see _gallery.scss) but skips the side panel (no #}
-{# captions/relevance/custom fields apply to a raw DM photo attachment). #}
-{# Prev/next cycle every photo currently loaded in the conversation (not just #}
-{# the clicked message's own attachments), backed by a thumbnail strip. #}
+{# Minimal photo lightbox for DM image attachments. #}
 <dialog id="dm-lightbox" class="gallery-lightbox ul-dialog" aria-label="Message photo viewer">
     <div class="lightbox-inner dm-lightbox-inner">
         <button type="button" class="lightbox-close" onclick="document.getElementById('dm-lightbox').close()" aria-label="Close">

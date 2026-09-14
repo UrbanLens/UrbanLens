@@ -1,9 +1,4 @@
-"""Bulk writes skip ``post_save``, so the work those receivers do must be done by hand.
-
-``bulk_update``/``bulk_create`` issue raw SQL and never call ``save()``, so no
-``post_save`` fires. Where a receiver maintains derived state, every bulk path has to
-reproduce it or that state silently rots - which is exactly what had happened here.
-"""
+"""Bulk writes skip ``post_save``, so the work those receivers do must be done by hand."""
 
 from __future__ import annotations
 
@@ -33,12 +28,8 @@ from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_tr
 class LabelBulkUpdateTouchesCarryingPinsTests(TestCase):
     """A label's order decides what its pins draw, and reordering is a ``bulk_update``.
 
-    ``Pin.icon_source_label`` sorts by ``-label.order``, so reordering labels changes
-    which one supplies a pin's icon and colour. ``bulk_update`` fires no ``post_save``
-    and never writes an ``auto_now`` column, so the reorder has to move ``Pin.updated``
-    itself; otherwise the client polls an unchanged timestamp and keeps drawing the old
-    icon (P106).
-    """
+    ``Pin.icon_source_label`` sorts by ``-label.order``, so reordering labels changes which one supplies a pin's
+    icon and colour."""
 
     def setUp(self):
         super().setUp()
@@ -57,8 +48,7 @@ class LabelBulkUpdateTouchesCarryingPinsTests(TestCase):
             pin: Whose stamp to read.
 
         Returns:
-            The timestamp the client's poll is derived from.
-        """
+            The timestamp the client's poll is derived from."""
         return Pin.objects.filter(pk=pin.pk).values_list("updated", flat=True).first()
 
     def _reorder_via_organize(self) -> None:
@@ -120,10 +110,8 @@ class LabelBulkUpdateTouchesCarryingPinsTests(TestCase):
 class TripActivityBulkCreateQueuesCalendarPushTests(TestCase):
     """Copying a pin list into a trip must reach an auto-synced calendar.
 
-    ``sync_trip_on_activity_save`` pushes the trip whenever an activity is saved, but
-    ``copy_list_pins_to_trip`` uses ``bulk_create`` - so a list copied into an
-    auto-synced trip never reached the user's calendar.
-    """
+    ``sync_trip_on_activity_save`` pushes the trip whenever an activity is saved, but ``copy_list_pins_to_trip``
+    uses ``bulk_create`` - so a list copied into an auto-synced trip never reached the user's calendar."""
 
     def setUp(self):
         super().setUp()

@@ -1,13 +1,4 @@
-"""Tests for services.profile.identity_visibility and its trip/group-chat wiring.
-
-A trip or group chat can include people who aren't friends with everyone
-else in it - if their profile_visibility setting doesn't permit a given
-viewer to see their identity, that viewer must still see the trip
-activity/comment/message content, but the author's/member's name, username,
-and avatar must be masked. Also covers the "suggest connecting" feature:
-adding someone unconnected to existing members softly introduces them
-(never auto-friends), gated on both sides' allow_friend_recommendations.
-"""
+"""Tests for services.profile.identity_visibility and its trip/group-chat wiring."""
 
 from __future__ import annotations
 
@@ -267,11 +258,7 @@ class TripCommentVisibilityGateTests(TestCase):
 class LiveMessagePayloadMaskingTests(TestCase):
     """WebSocket message payloads resolve the sender's identity per recipient.
 
-    docs/NOTES.md, "Decisions from the 2026-07-23 session" (PR #111 deferred item): the
-    broadcast payload used to be built once and delivered identically to every
-    member, so a live incoming message revealed a raw sender name that a page
-    refresh would mask. Payloads are now built per recipient.
-    """
+    Payloads are now built per recipient."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -413,12 +400,10 @@ class GroupMessageSenderPrivacyTests(TestCase):
 class TripListCardPrivacyTests(TestCase):
     """Trip list cards mask member avatars/creator badge per profile_visibility.
 
-    A list is more diffuse than the single-trip render sites (member panel,
-    activity and comment attribution): every card carries its own member avatars
-    and creator badge, across however many trips are listed at once, so masking
-    has to run over the whole page's worth of them - see
-    controllers/trip.py's _apply_trip_list_identity_masking.
-    """
+    A list is more diffuse than the single-trip render sites (member panel, activity and comment attribution):
+    every card carries its own member avatars and creator badge, across however many trips are listed at once,
+    so masking has to run over the whole page's worth of them - see controllers/trip.py's
+    _apply_trip_list_identity_masking."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -482,11 +467,8 @@ class TripListCardPrivacyTests(TestCase):
 class PinWikiCommentAuthorPrivacyTests(TestCase):
     """Pin/wiki comment author identity is masked per profile_visibility - comment text still shows.
 
-    Two separate gates, easily mistaken for one: can_view_comments_from decides
-    whether the comment is shown at all (comment_visibility), and profile_visibility
-    decides whether its author is named. Passing the first says nothing about
-    the second.
-    """
+    Two separate gates, easily mistaken for one: can_view_comments_from decides whether the comment is shown at
+    all (comment_visibility), and profile_visibility decides whether its author is named."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -502,12 +484,6 @@ class PinWikiCommentAuthorPrivacyTests(TestCase):
         wiki = Wiki.objects.create(location=location, name="Old Mill Wiki")
         baker.make(Pin, profile=self.viewer, location=location)
         hidden_author = _profile(visibility=VisibilityChoice.NO_ONE)
-        # The author must have standing at this location (a pin - which is how
-        # wiki commenters see the wiki at all): it gives viewer and author a
-        # common pin, so the author's default comment_visibility
-        # (ANYTHING_IN_COMMON) passes and the comment CONTENT stays visible -
-        # what this test exercises is that the AUTHOR identity is still masked
-        # per profile_visibility once the content gate passes.
         baker.make(Pin, profile=hidden_author, location=location)
         Comment.objects.create(wiki=wiki, profile=hidden_author, text="Watch the third floor.")
 
@@ -547,10 +523,8 @@ class PinWikiCommentAuthorPrivacyTests(TestCase):
 class TripInviteNotificationPrivacyTests(TestCase):
     """Trip-invite notification text masks the inviter's identity when hidden.
 
-    Notification text is baked in as a plain-text string at creation time, so a
-    template-side fix cannot reach it later: the identity has to be resolved,
-    and masked if needed, before the string is formatted.
-    """
+    Notification text is baked in as a plain-text string at creation time, so a template-side fix cannot reach
+    it later: the identity has to be resolved, and masked if needed, before the string is formatted."""
 
     def test_added_to_trip_notification_masks_a_hidden_inviter(self) -> None:
         inviter = _profile(visibility=VisibilityChoice.NO_ONE)
@@ -652,10 +626,9 @@ class GroupAddNotificationTextPrivacyTests(TestCase):
 class DirectMessageThreadPartnerMaskingTests(TestCase):
     """_thread.html's block-confirm/empty-state/composer text masks a hidden partner.
 
-    The thread header resolves the partner through display_identity_for, which
-    is easy to read as covering the template - four other spots in the same file
-    render the partner independently, and each has to mask on its own.
-    """
+    The thread header resolves the partner through display_identity_for, which is easy to read as covering the
+    template - four other spots in the same file render the partner independently, and each has to mask on its
+    own."""
 
     def setUp(self) -> None:
         super().setUp()

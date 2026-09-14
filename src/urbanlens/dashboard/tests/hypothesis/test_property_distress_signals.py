@@ -1,21 +1,4 @@
-"""Liens and tax delinquency on the property record card.
-
-REData has exposed `/parcels/{uuid}/liens/` and `/parcels/{uuid}/tax-payments/`
-all along and nothing consumed them (found by auditing REData's api-reference
-against this codebase's gateways). For an application about abandoned places
-they are the most telling records on the card: an open code-enforcement lien
-and years of delinquent tax are what "abandoned" looks like in public records,
-long before anything says so in words.
-
-Two contract details drive the shaping, and both are easy to get wrong:
-
-- `delinquent` is the publisher's own determination, *not* derived from `paid`.
-  A current bill is unpaid before its due date without being delinquent, so
-  counting unpaid rows would overstate distress on a perfectly current
-  property.
-- `status` on a lien is free text that publishers spell inconsistently, so it
-  is shown as a label and never branched on.
-"""
+"""Liens and tax delinquency on the property record card."""
 
 from __future__ import annotations
 

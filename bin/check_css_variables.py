@@ -1,28 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if a stylesheet reads a custom property nothing defines.
-
-`var(--ul-border)` against a token that does not exist is not a syntax error and
-not a visible one either, because these are almost always written with a
-fallback: `var(--border-color, #cbd5e1)` renders the fallback, forever, on every
-theme. The rule looks themed, reviews as themed, and is a hard-coded colour - so
-dark mode simply never reaches it. Ten files were in that state when this was
-first measured, and eight references still were a month later.
-
-Three kinds of use are *not* defects, and getting them wrong would make this
-noise rather than a check:
-
-* **Interpolated names.** `var(--ul-#{$name})` is a whole family of tokens; the
-  name is not known until Sass runs. Skipped.
-* **Runtime-set names.** `--tag-color` is written by TypeScript with
-  `style.setProperty`, or by a template's inline `style="--x: ..."`. Those are
-  real definitions in a place a stylesheet cannot declare them, so both are
-  collected as definitions.
-* **Names inside comments**, including a comment recording that a broken
-  reference was removed - which is exactly the shape this check produces.
-
-Exits non-zero listing each undefined property. Safe to run by hand from the
-repo root.
-"""
+"""Fail if a stylesheet reads a custom property nothing defines."""
 
 from __future__ import annotations
 
@@ -45,12 +22,9 @@ _DEFINITION = re.compile(r"""(?:^|[;{'"])\s*(--[\w-]+)\s*:""", re.MULTILINE)
 #: `var(--ul-#{$k})` can be told from a plain one.
 _USE = re.compile(r"var\(\s*(--[\w-]*)(.?)")
 
-#: A custom-property name as a string literal anywhere in TypeScript. Broader
-#: than `setProperty(` on purpose: the name is as often passed *to* a helper
-#: that sets it (`positionAboveColliders(el, "--ul-undo-offset-y", ...)`) as
-#: written at the call site. The cost is that a name only ever *read* by a test
-#: string counts as defined, which is a false negative in the direction that
-#: keeps this check quiet rather than wrong-but-loud.
+#: A custom-property name as a string literal anywhere in TypeScript.
+#: Broader than `setProperty(` on purpose: the name is as often passed *to* a helper that sets it
+#: (`positionAboveColliders(el, "--ul-undo-offset-y", ...)`) as written at the call site.
 _NAME_LITERAL = re.compile(r"""['"`](--[\w-]+)['"`]""")
 
 #: A `//` comment, and a `/* */` block. Removed before scanning for uses, so a
@@ -66,8 +40,7 @@ def strip_comments(text: str) -> str:
         text: Stylesheet source.
 
     Returns:
-        The same text with comment bodies removed, line structure intact.
-    """
+        The same text with comment bodies removed, line structure intact."""
     return _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub("", text))
 
 
@@ -79,9 +52,7 @@ def undefined_properties(sources: dict[str, str], runtime: dict[str, str]) -> di
         runtime: Path -> contents for files that may set a property at runtime.
 
     Returns:
-        Property name -> the stylesheet paths reading it, for each one nothing
-        defines. Empty when every read resolves.
-    """
+        Property name -> the stylesheet paths reading it, for each one nothing defines."""
     defined: set[str] = set()
     for text in sources.values():
         defined |= set(_DEFINITION.findall(text))

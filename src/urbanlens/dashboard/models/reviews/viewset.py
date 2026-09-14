@@ -16,15 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ReviewViewSet(mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
     """Review endpoints.
-
-    Only ``create_or_update`` (bound directly via ``as_view`` in
-    ``dashboard/urls.py``) is actually routed - this viewset is never
-    registered with the DRF router, so ``list``/``create``/``retrieve``
-    are never reachable. The base class only mixes in ``update``/``destroy``
-    (used by :meth:`update`/:meth:`destroy` below, kept in case they're
-    wired up later) rather than the full ``ModelViewSet``, which previously
-    exposed an unrouted, broken ``create()`` that violated the
-    ``unique_together`` constraint by saving twice.
+    Only ``create_or_update`` (bound directly via ``as_view`` in ``dashboard/urls.py``) is actually routed - this viewset is never registered with the DRF router, so ``list``/``create``/``retrieve`` are never reachable.
     """
 
     serializer_class = ReviewSerializer
@@ -38,11 +30,8 @@ class ReviewViewSet(mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.
     @action(detail=True, methods=["patch"], url_path="create_or_update", url_name="create_or_update")
     def create_or_update(self, request, pk=None):
         """Upsert the requester's own rating for a pin (star-rating widget).
-
-        ``pk`` is the target pin's id, not a Review id - this always acts on
-        the caller's own (profile, pin) rating, creating it on first use and
-        updating it thereafter. ``profile`` and ``pin`` are never taken from
-        the request body; only ``rating`` is client-controlled.
+        ``pk`` is the target pin's id, not a Review id - this always acts on the caller's own (profile, pin) rating, creating it on first use and updating it thereafter.
+        ``profile`` and ``pin`` are never taken from the request body; only ``rating`` is client-controlled.
         """
         profile = request.user.profile
         pin = Pin.objects.filter(pk=pk, profile=profile).first()

@@ -1,14 +1,4 @@
-"""Tests for the per-user Google Calendar trip sync.
-
-Covers:
-- trip_to_event_body / event_to_trip_kwargs - pure conversion both ways,
-  including the all-day exclusive-end-date convention (property-based)
-- import_events_as_trips - trip/membership/link creation, dedupe, and
-  skipping of events that originated as UrbanLens exports (gateway mocked)
-- export_trip_to_calendar / remove_trip_from_calendar - event create vs
-  update, vanished-event recreation, link bookkeeping (gateway mocked)
-- OAuth callback view - rejects bad/missing state without storing tokens
-"""
+"""Tests for the per-user Google Calendar trip sync."""
 
 from __future__ import annotations
 
@@ -272,12 +262,8 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
     def test_racing_import_of_one_event_still_creates_a_single_trip(self):
         """The already_linked() read can be lost; the DB constraint decides.
 
-        Simulates the double-submit by neutering the pre-check, so the second
-        import reaches the create path exactly as a concurrent request would.
-        The partial unique on (profile, google_event_id) must then reject it,
-        and the whole half-built trip must roll back rather than survive as a
-        duplicate.
-        """
+        Simulates the double-submit by neutering the pre-check, so the second import reaches the create path
+        exactly as a concurrent request would."""
         gateway = self._patch_gateway()
         gateway.get_event.return_value = {
             "id": "evt1",
@@ -300,10 +286,8 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
     def test_two_timed_imports_keep_their_blank_trip_level_links(self):
         """The constraint is partial, so blank-id trip-level rows still coexist.
 
-        A timed import deliberately leaves the trip-level link's event id empty
-        (the activity-level row owns the id). A plain unique constraint would
-        have made the second such import fail.
-        """
+        A timed import deliberately leaves the trip-level link's event id empty (the activity-level row owns the
+        id)."""
         gateway = self._patch_gateway()
         gateway.get_event.side_effect = [
             {
@@ -731,12 +715,10 @@ class ExportTripTests(_CalendarSyncDBTestCase):
 class DisconnectMemberCalendarSyncTests(_CalendarSyncDBTestCase):
     """disconnect_member_calendar_sync stops a departing member's auto-sync.
 
-    Regression coverage for a real gap: removing/leaving a trip only ever
-    deleted the TripMembership row, so a departed member's Google Calendar
-    kept receiving live pushes of the trip's evolving details forever via
-    push_auto_synced_trip_changes - trip access control and live calendar
-    export are two independent channels to the same data.
-    """
+    Regression coverage for a real gap: removing/leaving a trip only ever deleted the TripMembership row, so a
+    departed member's Google Calendar kept receiving live pushes of the trip's evolving details forever via
+    push_auto_synced_trip_changes - trip access control and live calendar export are two independent channels to
+    the same data."""
 
     def _trip_with_link(self, *, auto_sync: bool = True) -> tuple[Trip, TripCalendarLink]:
         trip = Trip.objects.create(
@@ -1213,11 +1195,9 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
 class GetCalendarAccountTests(_CalendarSyncDBTestCase):
     """GoogleCalendarAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
 
-    Regression test for a production 500: rotating field_encryption_key
-    without migrating old rows makes EncryptedTextField.from_db_value raise
-    InvalidToken, which crashed every page that touched the calendar
-    connection (e.g. GET /dashboard/trips/).
-    """
+    Regression test for a production 500: rotating field_encryption_key without migrating old rows makes
+    EncryptedTextField.from_db_value raise InvalidToken, which crashed every page that touched the calendar
+    connection (e.g."""
 
     def _corrupt_stored_access_token(self):
         """Write a ciphertext-shaped value directly to the DB that Fernet cannot decrypt."""
@@ -1269,13 +1249,7 @@ class CalendarCallbackViewTests(TestCase):
         self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
 
     def test_successful_connect_redirects_to_the_settings_connections_tab(self):
-        """Regression guard: every redirect(next_name) call used to send a bare
-        view name straight into redirect(), producing a URL with no #hash for
-        "settings.view" - unlike Flickr/Google Photos's callbacks, whose error
-        branches already anchor to their own Connections-tab section.
-        settings/index.html's tab-switch JS only activates a non-default tab
-        when the URL carries a fragment, so this silently landed the user back
-        on the default Privacy tab regardless of where they connected from."""
+        """Regression guard: every redirect(next_name) call used to send a bare view name straight into redirect(), producing a URL with no #hash for "settings.view" - unlike Flickr/Google Photos's callbacks, whose error branches already anchor to their own Connections-tab section. settings/index.html's tab-switch JS only activates a non-default tab when the URL carries a fragment, so this silently landed the user back on the default Privacy tab regardless of where they connected from."""
         from django.core import signing
 
         state = signing.dumps({"pid": self.profile.id, "next": "settings.view"}, salt="google-calendar-connect")
@@ -1307,31 +1281,16 @@ class CalendarCallbackViewTests(TestCase):
 class CalendarInviteIdentityMaskingTests(TestCase):
     """The calendar importer's trip invite must mask like the ordinary one does.
 
-    `trip_membership.invite_to_trip` resolves the inviter through
-    `resolve_visible_identity` before formatting, with a comment explaining that
-    a notification's message is stored as plain text and so must be masked at
-    write time. The Google Calendar importer creates the *same*
-    `ADDED_TO_TRIP` notification and named `importer.username` raw.
-
-    Being friends is not sufficient permission. `VisibilityChoice`'s own
-    docstring says accepted friends qualify for every level **except**
-    `NO_ONE` - so an importer who has hidden their identity was still named,
-    and a NotificationLog insert is picked up by push delivery and by
-    `notification_text_alerts`, which builds an SMS body from the stored text.
-    The name left the app.
-    """
+    `trip_membership.invite_to_trip` resolves the inviter through `resolve_visible_identity` before formatting,
+    with a comment explaining that a notification's message is stored as plain text and so must be masked at
+    write time."""
 
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.importer = baker.make(User, username="hidden_importer").profile
         self.invitee = baker.make(User, username="invitee").profile
-        # One row, which is now all a pair can have
-        # (`friendship_one_row_per_pair`). This built both directions, and that
-        # reciprocal pair is how P8 surfaced: with mute wired into delivery,
-        # `between().get()` raised MultipleObjectsReturned on every
-        # notification between them. Being friends is what this class is about,
-        # and one row says that.
+        # One row, which is now all a pair can have (`friendship_one_row_per_pair`).
         Friendship.objects.create(from_profile=self.importer, to_profile=self.invitee, status=FriendshipStatus.ACCEPTED)
         self.trip = baker.make(Trip, creator=self.importer, name="Quarry run")
         self.trip.profiles.add(self.importer)
@@ -1377,13 +1336,10 @@ class CalendarInviteIdentityMaskingTests(TestCase):
 class CalendarInviteRespectsNotificationPreferenceTests(TestCase):
     """The calendar importer's invite must honor added_to_trip like the ordinary one does.
 
-    `_invite_participants` used to build its own ADDED_TO_TRIP notification
-    inline instead of calling `trip_membership.notify_added_to_trip` (the
-    canonical implementation, which does check the recipient's preference) -
-    so a recipient who turned this category off still got notified, purely
-    because they were invited via a calendar import rather than the ordinary
-    trip member picker.
-    """
+    `_invite_participants` used to build its own ADDED_TO_TRIP notification inline instead of calling
+    `trip_membership.notify_added_to_trip` (the canonical implementation, which does check the recipient's
+    preference) - so a recipient who turned this category off still got notified, purely because they were
+    invited via a calendar import rather than the ordinary trip member picker."""
 
     def setUp(self) -> None:
         super().setUp()

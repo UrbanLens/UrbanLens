@@ -1,10 +1,4 @@
-"""Property-based tests for the Review model.
-
-Covers:
-- Rating field validation (MinValueValidator(0), MaxValueValidator(5))
-- unique_together (profile, pin) constraint
-- Pin.rating property delegates to the latest review
-"""
+"""Property-based tests for the Review model."""
 
 from __future__ import annotations
 

@@ -1,16 +1,4 @@
-"""Tests for the /rest/ API surface: authentication, per-user scoping, and minimal exposure.
-
-The REST API exists solely for the app's own frontend, which uses exactly
-three operations:
-
-- ``PATCH /rest/pins/<uuid>/``  (map popup quick-edit, pin dragging)
-- ``DELETE /rest/pins/<uuid>/`` (pin delete with undo stash)
-- ``PATCH /rest/reviews/create_or_update/<pin id>/`` (star-rating widget)
-
-Everything else (pin create/list/retrieve, profile CRUD, review router
-routes) has been deliberately removed; these tests pin that down so the
-surface cannot silently grow back.
-"""
+"""Tests for the /rest/ API surface: authentication, per-user scoping, and minimal exposure."""
 
 from __future__ import annotations
 

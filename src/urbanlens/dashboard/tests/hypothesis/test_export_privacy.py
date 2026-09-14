@@ -1,16 +1,4 @@
-"""Privacy properties of the user data export (services/export.py).
-
-The export had no tests at all; these lock in the two properties that
-matter most:
-
-- The connections exporter must not reveal the identity (or the response)
-  behind outgoing requests the recipient hasn't accepted - the same
-  account-enumeration rule the pending-requests widget enforces. Before
-  this fix, inviting an email and exporting your data revealed whether the
-  email matched a registered account (a Friendship row with the target's
-  username/uuid appears only when it matched) and whether they declined.
-- Exporters only ever emit the exporting user's own rows.
-"""
+"""Privacy properties of the user data export (services/export.py)."""
 
 from __future__ import annotations
 

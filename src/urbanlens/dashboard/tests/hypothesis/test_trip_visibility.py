@@ -1,15 +1,4 @@
-"""Tests for _apply_trip_visibility_filter - the core privacy logic for trip activities.
-
-This function hides activities from viewers based on the adder's
-trip_pin_location_visibility setting:
-  - NO_ONE    → always hidden
-  - FRIENDS   → visible only if viewer and adder are accepted friends
-  - COMMON_PIN → visible only if viewer also has the same Location pinned
-  - COMMON_FRIEND → visible only if viewer and adder share a mutual friend
-  - ANYONE    → always visible (handled before calling this function)
-
-All tests are DB-backed since the function queries Pin, Friendship, and related models.
-"""
+"""Tests for _apply_trip_visibility_filter - the core privacy logic for trip activities."""
 
 from __future__ import annotations
 

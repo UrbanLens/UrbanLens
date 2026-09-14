@@ -52,8 +52,7 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
             query: Address or place-name query string.
 
         Returns:
-            The best-matching normalized result, or None when nothing
-            matched or the request failed.
+            The best-matching normalized result, or None when nothing matched or the request failed.
 
         Raises:
             ValueError: When no subscription key is configured.
@@ -76,8 +75,7 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
             longitude: WGS-84 longitude.
 
         Returns:
-            The normalized address result, or None when nothing matched or
-            the request failed.
+            The normalized address result, or None when nothing matched or the request failed.
 
         Raises:
             ValueError: When no subscription key is configured.

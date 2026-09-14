@@ -30,18 +30,8 @@ class PinImportFailureStatus(abstract.TextChoices):
 
 class PinImportFailure(abstract.DashboardModel):
     """A pin from an import whose Google Maps CID could not be automatically resolved to a location.
-
-    Raised by ``tasks.resolve_deferred_pin_locations`` (via
-    ``services.pins.pin_import_failures.record_pin_import_failure``) when Google/REData
-    either confirms no location exists for a cid, or repeated lookup attempts stall
-    out - see that task's docstring. This always reflects a data gap on Google's side
-    (or a transient lookup failure), never a defect in the pin the user tried to
-    import - the review queue built on this model
-    (``controllers.pin_import_failures``) must always phrase it that way to the owner.
-
-    Unique per ``(profile, cid)``: re-running the same import must never create a
-    second entry for a cid that already has one, regardless of its current status -
-    see ``record_pin_import_failure``'s own docstring.
+    Raised by ``tasks.resolve_deferred_pin_locations`` (via ``services.pins.pin_import_failures.record_pin_import_failure``) when Google/REData either confirms no location exists for a cid, or repeated lookup attempts stall out - see that task's docstring.
+    This always reflects a data gap on Google's side (or a transient lookup failure), never a defect in the pin the user tried to import - the review queue built on this model (``controllers.pin_import_failures``) must always phrase it that way to the owner.
 
     Attributes:
         profile: Owner this failure belongs to.
@@ -60,11 +50,9 @@ class PinImportFailure(abstract.DashboardModel):
     name = CharField(max_length=255, blank=True, default="")
     description = TextField(blank=True, default="", max_length=MAX_PIN_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_PIN_DESCRIPTION_LENGTH)])
     #: The Google Maps URL this row's cid came from, when the import had one.
-    #: Kept because its ``!1s0x{s2_cell}:0x{cid}`` segment encodes an S2 cell,
-    #: which decodes to an approximate position - too unreliable to place a pin
-    #: with (~1 in 3 are wrong), but a useful corroborating signal when guessing
-    #: a location for the owner to confirm. See
-    #: ``services.pins.import_failure_guess``.
+    #: Kept because its ``!1s0x{s2_cell}:0x{cid}`` segment encodes an S2 cell, which decodes to an
+    #: approximate position - too unreliable to place a pin with (~1 in 3 are wrong), but a useful
+    #: corroborating signal when guessing a location for the owner to confirm.
     maps_url = URLField(max_length=2048, blank=True, default="")
     reason = CharField(max_length=20, choices=PinImportFailureReason.choices)
     status = CharField(max_length=20, choices=PinImportFailureStatus.choices, default=PinImportFailureStatus.PENDING)

@@ -1,19 +1,4 @@
-"""A Merge button is only rendered where merging actually works.
-
-`_organize_label_card.html` had a second branch: when no `merge_url` was passed
-and the kind was `people`, it rendered a Merge button calling
-`peopleMergeSingle(...)`. That function is defined nowhere in the repository, so
-every click raised `ReferenceError` and nothing happened.
-
-Wiring it to the real route would not have helped: `KIND_USER` and `KIND_MEDIA`
-both set `enable_single_merge=False`, and `LabelMergeView` answers **404** for a
-kind that does. The affordance was for a capability the server refuses, so the
-fix is to not offer it.
-
-This test is written against the *config* rather than the template so it keeps
-holding if the markup moves: whatever the page renders, a kind that cannot
-single-merge must not show a single-merge control.
-"""
+"""A Merge button is only rendered where merging actually works."""
 
 from __future__ import annotations
 

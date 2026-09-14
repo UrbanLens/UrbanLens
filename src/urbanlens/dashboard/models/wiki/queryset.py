@@ -35,9 +35,7 @@ class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet[
 
     def with_descendants(self) -> Self:
         """Expand this queryset to include the full child-wiki subtree of each wiki.
-
-        Walks ``parent_wiki`` children level by level (BFS) until no new
-        descendants are found, matching ``PinQuerySet.with_descendants``.
+        Walks ``parent_wiki`` children level by level (BFS) until no new descendants are found, matching ``PinQuerySet.with_descendants``.
 
         Returns:
             A fresh QuerySet over this queryset's wikis plus every descendant.
@@ -69,23 +67,13 @@ class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet[
 
 class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
     """Manager for Wiki.
-
-    Every pinned Location gets a page automatically
-    (``tasks.ensure_wiki_for_location``), published from the moment it exists
-    and filled in by background enrichment. There is no draft state and no
-    create action; what a person contributes to a page is a separate, explicit
-    act (``services.wiki.wiki_share``).
-
-    Use ``get_for_location`` for "does this place have a page yet?".
+    Every pinned Location gets a page automatically (``tasks.ensure_wiki_for_location``), published from the moment it exists and filled in by background enrichment.
     """
 
     def existing_for_location(self, location: Location | None) -> Wiki | None:
         """The Wiki describing what this Location stands on, draft or official.
-
         Checks the Location's own row first, then the *place* it resolved onto.
-        The second lookup is the dedup that matters: two people pinning
-        opposite ends of one property get two Locations, and without it they
-        would get two community pages for one real-world thing.
+        The second lookup is the dedup that matters: two people pinning opposite ends of one property get two Locations, and without it they would get two community pages for one real-world thing.
 
         Args:
             location: The shared Location to look up (None-safe).
@@ -105,12 +93,7 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
 
     def get_for_location(self, location: Location | None) -> Wiki | None:
         """Return the Location's Wiki, or None when it has none yet.
-
-        Identical to :meth:`existing_for_location`, and kept because it is the
-        name most call sites use. The two used to differ: a wiki was born as an
-        invisible draft and this method filtered those out, so "does a wiki
-        exist" and "is there one to show" were different questions. Wikis are
-        published on creation now, and there is one question again.
+        Identical to :meth:`existing_for_location`, and kept because it is the name most call sites use.
 
         Args:
             location: The shared Location to look up (None-safe).
@@ -126,12 +109,8 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
 
     def get_or_create_for_location(self, location: Location, defaults: dict | None = None) -> tuple[Wiki, bool]:
         """Return the Wiki for a Location, creating it if absent.
-
-        The one creation path. Called by ``tasks.ensure_wiki_for_location``
-        when a pin gains a shared Location, and by the enrichment paths that
-        need somewhere to write. Everything else should use
-        ``get_for_location``, which never creates - a wiki appearing as a side
-        effect of viewing or editing other content is a bug.
+        The one creation path.
+        Everything else should use ``get_for_location``, which never creates - a wiki appearing as a side effect of viewing or editing other content is a bug.
 
         Args:
             location: The shared Location to attach the wiki to.

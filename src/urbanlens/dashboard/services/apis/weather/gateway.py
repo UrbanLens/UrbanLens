@@ -19,9 +19,7 @@ class OpenWeatherMapGateway(Gateway):
     service_key: ClassVar[str] = "openweathermap"
     paid_service: ClassVar[bool] = False
 
-    # default_factory, not a bare default: a dataclass field's bare default expression is
-    # evaluated once at class-definition/import time, so a later settings change (or test
-    # patch) would never reach subsequent instantiations - default_factory re-reads it fresh.
+    # default_factory so settings changes apply per instance; a bare default freezes at import.
     api_key: str | None = field(default_factory=lambda: settings.openweathermap_api_key)
     base_url: str = "http://api.openweathermap.org/data/2.5/forecast"
 
@@ -87,7 +85,7 @@ class OpenWeatherMapGateway(Gateway):
         for item in forecast:
             dt_txt = item.get("dt_txt", "")
             if dt_txt:
-                item["date"] = datetime.strptime(dt_txt, "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007  # OpenWeatherMap dt_txt is UTC; owm_item_to_slot anchors it
+                item["date"] = datetime.strptime(dt_txt, "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007  # OpenWeatherMap...
         return forecast
 
     def filter_forecast(self, forecast: list[dict]) -> list[dict]:

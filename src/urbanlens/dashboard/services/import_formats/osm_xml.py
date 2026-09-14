@@ -1,17 +1,5 @@
 """OSM XML pin import.
-
-Parses the ``<node>``/``<way>`` elements produced by an Overpass Turbo export (the
-common way users pull "all abandoned:* tagged features within X radius" style
-queries). Only elements carrying at least one ``<tag>`` become pins - most nodes in
-an OSM XML export are untagged geometry vertices belonging to a way, not points of
-interest in their own right.
-
-``<relation>`` elements (multipolygons, administrative boundaries, and other
-multi-way groupings) are intentionally out of scope: correctly resolving a relation
-requires role-aware member resolution, which is disproportionate to this format's
-purpose here of pulling individual tagged point/building features rather than
-rendering a full OSM dataset. This is a deliberate limitation, not a gap to fill.
-"""
+Only elements carrying at least one ``<tag>`` become pins - most nodes in an OSM XML export are untagged geometry vertices belonging to a way, not points of interest in their own right."""
 
 from __future__ import annotations
 
@@ -58,13 +46,11 @@ def osm_xml_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[st
         user_profile: The profile to associate with each pin.
 
     Returns:
-        List of pin dicts, one per tagged node and one per tagged way (way pins
-        are placed at the centroid of the way's referenced node coordinates).
+        List of pin dicts, one per tagged node and one per tagged way (way pins are placed at the centroid of the way's referenced node coordinates).
 
     Raises:
         xml.etree.ElementTree.ParseError: If the file is not valid XML.
-        ValueError: If a ``lat``/``lon`` attribute cannot be parsed as a float.
-    """
+        ValueError: If a ``lat``/``lon`` attribute cannot be parsed as a float."""
     pins: list[dict[str, Any]] = []
     try:
         root = parse_xml(file_contents)

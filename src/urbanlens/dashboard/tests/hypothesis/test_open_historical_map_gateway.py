@@ -1,10 +1,4 @@
-"""Tests for the OpenHistoricalMap Overpass gateway (services.apis.locations.open_historical_map).
-
-Constructed with a fake ``session`` object throughout, which keeps
-``Gateway.__post_init__`` from swapping in the real rate-limited/DB-writing
-session (that swap only fires for the default ``requests.Session`` instance -
-see ``Gateway.__post_init__``), so these run DB-free as ``SimpleTestCase``.
-"""
+"""Tests for the OpenHistoricalMap Overpass gateway (services.apis.locations.open_historical_map)."""
 
 from __future__ import annotations
 

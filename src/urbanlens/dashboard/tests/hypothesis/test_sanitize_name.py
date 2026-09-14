@@ -166,13 +166,8 @@ class ModelSaveSanitizesNameTests(TestCase):
 class UnderscoreIsKeptTests(SimpleTestCase):
     """Underscore survives sanitization, unlike other punctuation that is dropped.
 
-    It was dropped until 2026-08-12, which silently renamed anything imported or
-    typed with one - "Site_7" became "Site7" on save, with no indication. That is
-    a harsher outcome than the allowlist applies to genuinely risky characters:
-    `"`, `#`, `/` and `&` were all already kept. Underscore is a word character -
-    not markup-significant, not a URL or query-string delimiter, not a homograph -
-    so keeping it widens nothing the property tests above protect.
-    """
+    That is a harsher outcome than the allowlist applies to genuinely risky characters: `"`, `#`, `/` and `&`
+    were all already kept."""
 
     def test_an_underscore_survives(self) -> None:
         self.assertEqual(sanitize_name("Site_7"), "Site_7")

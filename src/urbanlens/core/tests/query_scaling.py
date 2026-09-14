@@ -1,33 +1,4 @@
-"""Assert that an endpoint's query count does not grow with its row count.
-
-Three things this provides that hand-written scaling tests kept getting wrong:
-
-**The measurement has to be exercised.** A scaling test whose seed grows pins
-while the endpoint lists conversations renders the same list twice and passes
-without measuring anything. That happened during the 2026-08-17 audit: a survey
-reported the conversation list "flat" at both sizes, and seeding conversations
-properly revealed about eleven queries per row. So :meth:`assert_flat` requires
-the response body to *grow* between the two measurements, and fails with "the
-seed does not exercise this endpoint" when it doesn't - a wrong test now fails
-loudly instead of passing quietly.
-
-**A failure should say what grew.** Diffing the two runs' SQL by hand took a
-separate diagnostic run every time. On failure, :meth:`assert_flat` normalises
-the captured statements (digits and quoted literals replaced) and reports which
-ones multiplied, so the cause is in the failure message rather than a session
-away.
-
-**Row count is not always body length.** Paginated endpoints cap what they
-render, so their body stops growing while the query count still can. Those pass
-``expect_growth=False`` with a reason, which is a deliberate, visible decision
-rather than a silent one.
-
-This answers *how many* queries an endpoint costs per row.
-:class:`~urbanlens.core.tests.render_scaling.RenderTimeScalingMixin` answers how
-*expensive* a row is to render, and only the pair distinguishes a slow database
-from a slow template - a page can be perfectly flat here and still take twelve
-seconds.
-"""
+"""Assert that an endpoint's query count does not grow with its row count."""
 
 from __future__ import annotations
 
@@ -69,8 +40,7 @@ def normalize_sql(sql: str, *, width: int = 130) -> str:
         width: How much of the normalised statement to keep for reporting.
 
     Returns:
-        The statement with digits and quoted literals replaced, truncated.
-    """
+        The statement with digits and quoted literals replaced, truncated."""
     return _QUOTED.sub("'X'", _DIGITS.sub("N", sql))[:width]
 
 
@@ -82,8 +52,7 @@ def queries_that_grew(before: Iterable[dict[str, Any]], after: Iterable[dict[str
         after: Captured queries from the larger one.
 
     Returns:
-        ``(before_count, after_count, sql)`` triples, most-grown first.
-    """
+        ``(before_count, after_count, sql)`` triples, most-grown first."""
     small = collections.Counter(normalize_sql(query["sql"]) for query in before)
     large = collections.Counter(normalize_sql(query["sql"]) for query in after)
     grown = [(small.get(sql, 0), count, sql) for sql, count in large.items() if count > small.get(sql, 0)]
@@ -100,12 +69,10 @@ class QueryScalingMixin(SeedScalingMixin):
         """Fetch *url*, returning its captured queries and response body length.
 
         Args:
-            url: The URL to fetch.
-            **extra: Passed to the test client (headers, auth).
+            url: The URL to fetch. **extra: Passed to the test client (headers, auth).
 
         Returns:
-            The captured queries and the response body's length in bytes.
-        """
+            The captured queries and the response body's length in bytes."""
         with CaptureQueriesContext(connection) as captured:
             response = self.client.get(url, **extra)
         self.assertEqual(response.status_code, 200, f"{url} returned {response.status_code}")
@@ -123,20 +90,10 @@ class QueryScalingMixin(SeedScalingMixin):
         """Assert *url* costs the same number of queries at two data sizes.
 
         Args:
-            url: The URL to measure.
-            tolerance: Extra queries allowed at the larger size before this is
-                treated as slope rather than noise.
-            expect_growth: Require the response body to grow between the two
-                measurements. Turn this off only for endpoints that cap what
-                they render (pagination), and say why in *growth_waiver*.
-            growth_waiver: Why this endpoint's response cannot grow. Required
-                when *expect_growth* is False, so the exemption is legible.
-            **extra: Passed to the test client.
+            url: The URL to measure. tolerance: Extra queries allowed at the larger size before this is treated as slope rather than noise....
 
         Raises:
-            AssertionError: The endpoint queries per row, or the seed did not
-                change what it renders.
-        """
+            AssertionError: The endpoint queries per row, or the seed did not change what it renders."""
         if not expect_growth and not growth_waiver:
             raise AssertionError("expect_growth=False needs growth_waiver= explaining why the response cannot grow")
 

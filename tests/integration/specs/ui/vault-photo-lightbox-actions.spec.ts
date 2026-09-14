@@ -1,11 +1,4 @@
-/**
- * The shared lightbox's Batch 4 additions, verified from Vault > Photos: the
- * pin/wiki association panel and the "File to a pin" picker. Written against
- * a real browser (not just the unit suite) since the whole point of this
- * batch is a shared <dialog>, debounced search, and an AJAX-refreshed panel
- * all driven by vanilla JS - exactly the kind of wiring that looks correct
- * from a source read and isn't.
- */
+/** The shared lightbox's Batch 4 additions, verified from Vault > Photos: the pin/wiki association panel and the "File to a pin" picker. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";
@@ -24,12 +17,7 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("lightbox pin association and file-to-pin picker", () => {
     test("an unfiled photo's lightbox offers File to a pin; picking one updates the panel", async ({ page, api, guard }) => {
-        // Pre-existing, unrelated to this batch (see docs/PROBLEMS.md, "A photo's
-        // grid tile can 404/500 for a few seconds right after upload"): the async
-        // upload-processing task can re-encode and rename the stored file, and a
-        // tile rendered before (or racing) that rename briefly 404s/500s. Not
-        // what this test is about - it's asserting on the lightbox's associations
-        // panel and picker, not on upload-processing timing.
+        // Async upload-processing can briefly 404/500 the tile; allow it (this asserts the associations panel, not timing).
         guard.allow(/\/media\/pin_images\/.*lightbox-associations\.(jpg|webp)/);
 
         const pinName = resourceName("E2E lightbox target pin");

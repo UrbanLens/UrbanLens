@@ -135,8 +135,7 @@ class SafelyEnqueueTaskTests(SimpleTestCase):
 
     def test_uses_apply_async_with_expires(self) -> None:
         # First-class, not folded into **kwargs: those are task arguments, not
-        # apply_async options - see the assistant turn task (batch 2c), the
-        # first caller that needs a stale turn dropped rather than run late.
+        # apply_async options - a stale turn must be dropped, not run late.
         task = mock.Mock()
         task.apply_async.return_value = "async-result"
         self.assertEqual(safely_enqueue_task(task, 1, expires=120), "async-result")

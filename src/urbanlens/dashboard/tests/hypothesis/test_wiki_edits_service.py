@@ -1,14 +1,4 @@
-"""Property-based tests for ``services.wiki.wiki_edits.apply_wiki_edit``.
-
-Two properties, asserted over generated values rather than chosen ones:
-
-- a value the function will not store is rejected, never dropped. Both callers
-  used to differ here - the internal view skipped the field and answered
-  ``{"ok": true}``, reporting a write it had not made;
-- a value equal to what the submitter was looking at is not an edit. These
-  forms post every field whether or not it was touched, so the diff is the only
-  thing between an untouched field and a `WikiEdit` with someone's name on it.
-"""
+"""Property-based tests for ``services.wiki.wiki_edits.apply_wiki_edit``."""
 
 from __future__ import annotations
 
@@ -102,12 +92,7 @@ class ApplyWikiEditBehaviorTests(TestCase):
         self.wiki = baker.make("dashboard.Wiki", location=location, name="Baseline")
 
     def test_an_untouched_empty_date_is_not_a_change(self) -> None:
-        """The form posts every field, so a nullable one arrives as "".
-
-        Against a stored `None` that differs as a string and normalises back to
-        `None`, so it used to be recorded as a change - a `WikiEdit` saying
-        None -> None, a bumped `updated`, and reputation paid for it.
-        """
+        """The form posts every field, so a nullable one arrives as ""."""
         self.assertIsNone(self.wiki.date_abandoned)
 
         self.assertIsNone(apply_wiki_edit(self.wiki, self.profile, {"date_abandoned": ""}))

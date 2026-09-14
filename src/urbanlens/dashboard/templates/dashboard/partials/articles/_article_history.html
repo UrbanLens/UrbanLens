@@ -1,11 +1,4 @@
-{% comment %}
-Revision history for the History tab. Each row can expand a diff below the
-list header.
-
-Rows carry `is_current` rather than reading `forloop.first`: once the list
-pages, the first row of page two is not the current revision, and this
-template both labels that row and withholds its Restore button.
-{% endcomment %}
+{% comment %}Revision history for the History tab.{% endcomment %}
 <div id="article-history-panel" class="article-history"
      hx-get="{{ scope.urls.history }}"
      hx-trigger="articleSaved from:body"

@@ -1,40 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when a template applies a BEM modifier that no CSS rule styles.
-
-`class="card card--secondary"` where `.card` is styled and `.card--secondary` is
-not renders as a plain card. Nothing errors, nothing logs, and the review reads
-correctly - the modifier is spelled right and the base class it modifies really
-does exist. The distinction the author wrote it for simply never appears.
-
-Fifty of these were live when this check was written (see P36). The count had
-been recorded as 45 against a table of 46 rows, measured by hand three weeks
-earlier, and had drifted in both directions - one fixed, eight added, three that
-were never this - which is the argument for measuring it here instead of
-transcribing it into a document.
-
-Three things this gets right that a whitespace tokenizer over `class="..."` does
-not, each of which hid real findings from the hand count:
-
-* **A class written flush against a tag.** `class="page-footer{% if x %}
-  page-footer--map{% endif %}"` yields the token `page-footer{%` to a naive
-  split. Tags that emit nothing are removed as separators; tags and `{{ }}` that
-  *can* emit text poison the token they touch, so `btn--{{ variant }}` is
-  skipped rather than reported as `btn--`.
-* **A modifier used as a JavaScript hook.** `slide.querySelector(".sv-img--
-  fallback")` is a selector, not a visual state, and needs no rule. Referenced
-  from TypeScript or a template's own `<script>`, a modifier is exempt.
-* **A stale compiled stylesheet.** The hand count measured `style.css`, which is
-  a gitignored build artifact and was five days behind the `.scss` sources when
-  this was written. This compiles the sources, and refuses to fall back to a
-  stale artifact silently.
-
-`_KNOWN_UNSTYLED` is the accepted set. Anything outside it fails, and an entry
-that no longer reproduces fails too - so the list shrinks as they are fixed and
-cannot quietly grow. Deleting the modifier from the template is as valid a
-resolution as writing the rule; what is not valid is leaving a new one unrecorded.
-
-Exits non-zero listing what changed. Safe to run by hand from the repo root.
-"""
+"""Fail when a template applies a BEM modifier that no CSS rule styles."""
 
 from __future__ import annotations
 
@@ -103,9 +68,8 @@ _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 #: Where a selector list can end: the next `{` closes one, and `}`/`;` start one.
 _DELIMITER = re.compile(r"[{};]")
 
-#: Modifiers applied by a template that no rule styles, accepted for now. Each is
-#: a visual state that does not render; see P36 for the triage. Sorted, so a
-#: diff to this set reads as one line per change.
+#: Modifiers applied by a template that no rule styles, accepted for now.
+#: Sorted, so a diff to this set reads as one line per change.
 _KNOWN_UNSTYLED = frozenset(
     {
         "album-card--readonly",
@@ -165,9 +129,8 @@ _KNOWN_UNSTYLED = frozenset(
 def stylesheet(root: pathlib.Path) -> str:
     """Compile the Sass sources, or fall back to the artifact if it is current.
 
-    Measuring the checked-in `style.css` is what the original hand count did, and
-    it was five days stale at the time. A build artifact older than its sources
-    cannot answer this question, so it is used only when it is at least as new.
+    Measuring the checked-in `style.css` is what the original hand count did, and it was five days stale at the
+    time.
 
     Args:
         root: The repository root.
@@ -176,9 +139,7 @@ def stylesheet(root: pathlib.Path) -> str:
         The compiled CSS text.
 
     Raises:
-        RuntimeError: When Sass is unavailable and the artifact is stale, so
-            there is no trustworthy stylesheet to measure.
-    """
+        RuntimeError: When Sass is unavailable and the artifact is stale, so there is no trustworthy stylesheet to measure."""
     sass = root / "node_modules" / "sass" / "sass.js"
     runner = next((exe for exe in ("bun", "node") if _which(exe)), None)
     if sass.exists() and runner:
@@ -210,30 +171,21 @@ def _which(name: str) -> bool:
         name: The executable to look for.
 
     Returns:
-        True when it can be run.
-    """
+        True when it can be run."""
     return subprocess.run(["which", name], capture_output=True, check=False).returncode == 0
 
 
 def styled_classes(css: str) -> set[str]:
     """Collect every class name a rule in *css* selects.
 
-    Whatever is between the previous `{`, `}` or `;` and the next `{` is a
-    selector list, or an at-rule prelude if it starts with `@`. That holds
-    regardless of formatting, which matters: the first version of this read
-    lines and required each selector to end in `{`, so it worked on
-    `--style=expanded` and found **zero** rules in `--style=compressed` - the
-    style `bun run sass` actually writes. Every modifier would then have failed
-    the "is the base styled" test, the check would have reported its entire
-    accepted list as fixed, and following that instruction would have deleted
-    the baseline and left it passing vacuously.
+    Whatever is between the previous `{`, `}` or `;` and the next `{` is a selector list, or an at-rule prelude
+    if it starts with `@`.
 
     Args:
         css: Compiled CSS, in any output style.
 
     Returns:
-        Every class name appearing in a selector.
-    """
+        Every class name appearing in a selector."""
     text = _BLOCK_COMMENT.sub(" ", css)
     styled: set[str] = set()
     start = 0
@@ -253,8 +205,7 @@ def applied_classes(templates: dict[str, str]) -> dict[str, list[str]]:
         templates: Template path to contents.
 
     Returns:
-        Class name to the paths applying it, in the order encountered.
-    """
+        Class name to the paths applying it, in the order encountered."""
     applied: dict[str, list[str]] = {}
     for path in sorted(templates):
         for match in _CLASS_ATTR.finditer(templates[path]):
@@ -272,21 +223,14 @@ def applied_classes(templates: dict[str, str]) -> dict[str, list[str]]:
 def _selects(name: str, script: str) -> bool:
     """Whether *script* uses *name* to find an element rather than to render one.
 
-    A plain substring test gets both directions wrong. It exempts `btn--sel`
-    because `tag-dialog-btn--selected` contains it, and it exempts
-    `trip-map-marker-num--ghost`, which appears in a script only inside a
-    template literal that *builds* the markup - still a visual state, still
-    unstyled. So a reference counts only in the two forms that actually look
-    something up: as a `.class` in a selector string, or as a bare token passed
-    to the classList/getElementsByClassName family.
+    A plain substring test gets both directions wrong.
 
     Args:
         name: The class name to look for.
         script: JavaScript or TypeScript source.
 
     Returns:
-        True when the script selects on *name*.
-    """
+        True when the script selects on *name*."""
     escaped = re.escape(name)
     selector = re.compile(rf"\.{escaped}(?![\w-])")
     token = re.compile(rf"""(?:classList\s*\.\s*(?:add|remove|toggle|contains|replace)|getElementsByClassName)\s*\([^)]*['"`]{escaped}['"`]""")
@@ -296,8 +240,8 @@ def _selects(name: str, script: str) -> bool:
 def unstyled_modifiers(css: str, templates: dict[str, str], scripts: dict[str, str]) -> dict[str, list[str]]:
     """Find applied BEM modifiers whose block is styled and which are not.
 
-    A modifier whose *base* has no rule either is not this check's business: that
-    is a whole component with no styling, which is visible immediately.
+    A modifier whose *base* has no rule either is not this check's business: that is a whole component with no
+    styling, which is visible immediately.
 
     Args:
         css: Compiled CSS.
@@ -305,8 +249,7 @@ def unstyled_modifiers(css: str, templates: dict[str, str], scripts: dict[str, s
         scripts: Path to contents for anywhere a class may be used as a selector.
 
     Returns:
-        Modifier name to the templates applying it.
-    """
+        Modifier name to the templates applying it."""
     styled = styled_classes(css)
     applied = applied_classes(templates)
     found: dict[str, list[str]] = {}

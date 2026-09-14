@@ -1,57 +1,6 @@
 /**
- * Does the parcel boundary ever arrive, and does it reach the map?
- *
- * This file is the one that reports the absence. Everything else under
- * `specs/location/` skips when there is no parcel geometry and points here, so
- * a pipeline that has stopped running produces a single failure naming the
- * cause rather than thirty saying "undefined".
- *
- * ## Why this is the likeliest thing in the directory to fail
- *
- * Reading the code, there is a specific reason to expect it. Boundary
- * provisioning is lazy by design - the comment on `BoundaryPanelSource` says so:
- * "the lazy path that replaced eager generation on pin creation - the provider
- * chain only runs when someone actually views a pin detail page (or creates a
- * wiki)". Every trigger for that chain asks the same question:
- *
- * ```python
- * # services/locations/boundaries.py:208, in generation_status
- * if location.place_resolved_at is None:
- *     return False, False        # -> (ran=False), so scheduling proceeds
- * ```
- *
- * But `create_pin_for_profile` calls `resolve_location_place`, which stamps
- * that timestamp *without calling any provider* - its own docstring says
- * "Never calls a provider - it only asks what is already known", and it stamps
- * even when it found nothing:
- *
- * ```python
- * # services/places/resolution.py:44-46
- * place = Place.objects.resolve_for_point(...)      # may be None
- * if save and (... or location.place_resolved_at is None):
- *     Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
- * ```
- *
- * So by the time anyone can view the pin, `boundary_generation_ran` is already
- * True, `schedule_location_boundary_generation` returns "fresh, nothing to do",
- * and `BoundaryPanelSource.is_ready` is True. The chain has never run and
- * nothing will run it until the stamp goes stale, which is
- * `SiteSettings.boundary_cache_days` away.
- *
- * **This was confirmed and fixed.** It was a reading of the source when first
- * written; it was then measured directly - the campus pin carried a stamped
- * `place_resolved_at` with a null `place_id`, and no Place covered its
- * coordinate, while REData answered six scored parcel candidates for it on
- * demand. `resolve_location_place` no longer stamps a coordinate it resolved
- * nothing for, so the stamp once again means only what
- * `generation_status` reads it as.
- *
- * What the deployment drew in the meantime was a convex hull around the pin's
- * own child pins, which is a distinct defect from this one and passes every
- * assertion in this file - the shape arrives, it is plausibly sized, it
- * contains the pin. `hrsh-boundary-provenance.spec.ts` is the file that
- * catches it, and the distinction between "a boundary arrived" and "the
- * boundary came from somewhere" is why the two are separate.
+ * Does the parcel boundary ever arrive, and does it reach the map? This file is the one that
+ * reports the absence.
  */
 
 import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";

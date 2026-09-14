@@ -1,10 +1,4 @@
-"""Provider-agnostic weather forecast shape, shared by REData, OpenWeatherMap, and Open-Meteo.
-
-``services.apis.locations.weather_resolution`` tries REData first (when
-configured) and falls back to OpenWeatherMap-then-Open-Meteo otherwise - every
-path converts into the same ``ForecastSlot``/``SunTimes`` shapes here, so
-``weather.html``/``trip_weather.html`` render one markup regardless of source.
-"""
+"""Provider-agnostic weather forecast shape, shared by REData, OpenWeatherMap, and Open-Meteo."""
 
 from __future__ import annotations
 
@@ -14,28 +8,12 @@ from typing import Any, NotRequired, TypedDict
 
 class ForecastSlot(TypedDict):
     """One forecast time slot, in a shape independent of the source provider.
+    Time arithmetic (matching a slot to a scheduled activity, bucketing by day) must use ``date_utc`` instead."""
 
-    ``date`` is the provider's own wall clock, kept for display and carrying
-    **no timezone contract**: Open-Meteo publishes local time for the queried
-    coordinates, OpenWeatherMap publishes UTC, and REData passes through
-    whatever its upstream emitted. Time arithmetic (matching a slot to a
-    scheduled activity, bucketing by day) must use ``date_utc`` instead.
-
-    ``date_utc`` is always timezone-aware UTC when present. Converters derive
-    it as: an aware provider timestamp is ``astimezone(UTC)``; a naive one is
-    assumed to already be UTC (correct for OpenWeatherMap's ``dt_txt``, and
-    the documented assumption for REData) - except Open-Meteo, whose naive
-    local timestamps are first anchored with the response's own
-    ``utc_offset_seconds``. It is absent only when a converter had no way to
-    anchor the provider's wall clock.
-    """
-
-    #: Naive **UTC**, so slots from different providers are comparable and can be
-    #: matched against `Activity.scheduled_at` (also stored UTC). Providers that
-    #: report local time convert on the way out - see `OpenMeteoGateway`, which
-    #: requests `timezone=auto` for its own local-time behaviour and subtracts
-    #: the `utc_offset_seconds` it reports back. Not displayed anywhere; the
-    #: rendered slots carry their own labels.
+    #: Naive **UTC**, so slots from different providers are comparable and can be matched against
+    #: `Activity.scheduled_at` (also stored UTC).
+    #: Providers that report local time convert on the way out - see `OpenMeteoGateway`, which
+    #: requests `timezone=auto` for its own local-time behaviour and subtracts the
     date: datetime
     #: The slot's instant as an aware UTC datetime - see the class docstring
     #: for the per-provider derivation and when it can be absent.
@@ -53,14 +31,7 @@ class ForecastSlot(TypedDict):
 
 
 class SunTimes(TypedDict):
-    """Sunrise/sunset and golden-hour windows for one local calendar day.
-
-    Golden hour is approximated as the hour immediately after sunrise and
-    the hour immediately before sunset - the common photography-app
-    convention, rather than a precise solar-elevation calculation (which
-    would need a separate astronomy library); good enough for planning
-    purposes.
-    """
+    """Sunrise/sunset and golden-hour windows for one local calendar day."""
 
     sunrise: datetime
     sunset: datetime
@@ -93,15 +64,10 @@ def owm_item_to_slot(item: dict[str, Any]) -> ForecastSlot | None:
     """Convert one raw OpenWeatherMap forecast entry into a ``ForecastSlot``.
 
     Args:
-        item: One entry of OpenWeatherMap's ``list`` response, already
-            carrying a parsed ``date`` field (see
-            ``OpenWeatherMapGateway._parse_dates``). OpenWeatherMap's
-            ``dt_txt`` is UTC, so a naive ``date`` is anchored as UTC for
-            ``date_utc``.
+        item: One entry of OpenWeatherMap's ``list`` response, already carrying a parsed ``date`` field (see ``OpenWeatherMapGateway._parse_dates``).
 
     Returns:
-        The normalized slot, or None when the entry is missing its date.
-    """
+        The normalized slot, or None when the entry is missing its date."""
     date = item.get("date")
     if not isinstance(date, datetime):
         return None
@@ -152,15 +118,10 @@ def redata_forecast_to_slots(forecast: list[dict[str, Any]]) -> list[ForecastSlo
     """Convert REData's ``weather.forecast`` list into ``ForecastSlot`` entries.
 
     Args:
-        forecast: The ``forecast`` array from one REData weather result entry
-            (a mix of ``granularity: "hourly"``/``"daily"`` slots).
-            ``starts_at`` keeps whatever awareness its ISO string carried: an
-            offset-carrying value is converted for ``date_utc``, a naive one
-            is assumed to already be UTC (the ``ForecastSlot`` contract).
+        forecast: The ``forecast`` array from one REData weather result entry (a mix of ``granularity: "hourly"``/``"daily"`` slots).
 
     Returns:
-        Normalized slots, skipping any entry with no parseable ``starts_at``.
-    """
+        Normalized slots, skipping any entry with no parseable ``starts_at``."""
     slots: list[ForecastSlot] = []
     for entry in forecast:
         starts_at = entry.get("starts_at")
@@ -195,13 +156,10 @@ def redata_sun_to_sun_times(sun: dict[str, Any]) -> SunTimes | None:
     """Convert REData's ``weather.sun`` block into a ``SunTimes``.
 
     Args:
-        sun: The ``sun`` object from one REData weather result entry - ``{}``
-            for a provider that doesn't publish sun times (see REData's
-            ``../REData/docs/api-reference.md``, "GET /weather/").
+        sun: The ``sun`` object from one REData weather result entry - ``{}`` for a provider that doesn't publish sun times (see REData's ``../REData/docs/api-reference.md``, "GET /weather/").
 
     Returns:
-        The normalized sun times, or None when any field is missing/unparseable.
-    """
+        The normalized sun times, or None when any field is missing/unparseable."""
     try:
         return SunTimes(
             sunrise=datetime.fromisoformat(sun["sunrise"]),

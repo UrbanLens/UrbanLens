@@ -90,21 +90,7 @@ class RecordGeolocationPinVisitsTests(TestCase):
         self.assertTrue(PinVisit.objects.filter(pin=self.pin, source=VisitSource.GEOLOCATION).exists())
 
     def test_query_count_does_not_grow_with_distant_pins(self):
-        """Regression guard for a production nginx timeout: this used to run
-        the full per-pin boundary-resolution chain (several queries each)
-        against every one of a profile's root pins on every geolocation ping,
-        unbounded by distance - a profile with many pins scattered far from
-        the current point (e.g. after a bulk import) made this endpoint
-        blow past nginx's 60s upstream timeout. A PostGIS distance pre-filter
-        now excludes far-away pins before that loop runs, so the query count
-        must stay flat regardless of how many distant pins exist, rather than
-        growing per pin."""
-        # Warm-up ping (unmeasured): records today's visit for the nearby pin,
-        # absorbing the one-time first-visit side effects (visited-status label
-        # creation and its smart-list resync, last-visited sync) that would
-        # otherwise make the two measured runs differ for reasons unrelated to
-        # distant pins. Both measured runs below then traverse identical state:
-        # the repeat-ping path where today's visit already exists.
+        """A PostGIS distance pre-filter now excludes far-away pins before that loop runs, so the query count must stay flat regardless of how many distant pins exist, rather than growing per pin."""
         record_geolocation_pin_visits(self.profile, latitude=40.0002, longitude=-74.0002, visited_at=timezone.now())
 
         with CaptureQueriesContext(connection) as baseline:

@@ -1,46 +1,5 @@
 """Interior floorplans: walls are the geometry, everything else hangs off them.
-
-**Walls are the only stored shape.** A room is not a polygon - it is a named
-point that binds, at render time, to whichever enclosed region of the wall
-graph contains it (see ``frontend/ts/shared/floorplan/planar.ts``). That is
-Revit's room model, and it is chosen for two properties this application needs:
-
-- **One source of truth for a shared partition.** When two rooms sit either
-  side of a wall, that wall exists once. Room-polygon models duplicate it, and
-  the two copies drift apart the first time somebody drags one.
-- **Geometry edits cannot destroy room identity.** Moving a wall changes which
-  region a seed sits in, never whether the room, its name, its photos or its
-  labels still exist. A seed left outside every enclosed region is a legible
-  "not enclosed yet" state, not data loss.
-
-**Doors and windows are intervals along a wall**, not free-standing objects
-with their own coordinates. An opening cannot outlive the wall it is cut into,
-moves when that wall moves, and cannot drift off it - all three are properties
-of the schema here rather than rules some editor has to remember. **Locks hang
-off the opening** for the same reason: which door is locked and what opens it
-is field data worth keeping, and a lock outliving its door would be a fact
-about nothing.
-
-**Geometry is plan-local metres, not WGS-84.** A degree of longitude is ~74 km
-at this latitude and ~111 km at the equator, so in degrees x and y are
-different units: lengths, angles, right-angle snapping and area all need a
-latitude correction applied at every step, and every place that forgets is a
-subtly wrong drawing. Storing metres east/north of one per-plan origin makes
-the arithmetic ordinary and makes the tolerances the editor reasons about
-("within 0.15 m") expressible as themselves. The origin lives on the plan, not
-the floor, because a shared origin across every floor is what lets storeys be
-stacked and aligned at all. Conversion to WGS-84 happens at the edges, in
-``services.floorplans.features`` for map rendering.
-
-**Versioning is whole-document**: a layout change is a new ``Floorplan`` with a
-later ``valid_from``. "The floorplan as of 1954" is the query.
-
-**Sources and references are per-plan pools** every item points into, so ten
-walls traced from one scanned drawing share one source row, and one photo can
-evidence a wall and the door cut into it at once.
-
-Floorplans are absent by default and never load with a building - most
-buildings will never have one, and the common case pays nothing.
+Floorplans are absent by default and never load with a building - most buildings will never have one, and the common case pays nothing. **Walls are the only stored shape.** A room is not a polygon - it is a named point that binds, at render time, to whichever enclosed region of the wall graph contains it (see ``frontend/ts/shared/floorplan/planar.ts``).
 """
 
 from __future__ import annotations
@@ -76,17 +35,8 @@ from .queryset import FloorplanManager
 
 class FloorplanWallKind(TextChoices):
     """What a wall segment represents.
-
-    ``VIRTUAL`` is load-bearing for messy real buildings: it draws as a dashed
-    hint and renders as nothing, but participates fully in enclosing a region.
-    Without it a courtyard, a loading bay, a collapsed side or an unexplored
-    boundary can only be recorded by drawing a wall that is not there.
-
-    ``FENCE`` is a boundary rather than a building element - a yard, a
-    compound, the line you have to get past before the structure. A *gap* in a
-    fence is a ``VIRTUAL`` span rather than an opening, since it is a stretch
-    where nothing is built; an opening is fitted into fabric that continues,
-    which is what a ``GATE`` is.
+    ``VIRTUAL`` is load-bearing for messy real buildings: it draws as a dashed hint and renders as nothing, but participates fully in enclosing a region.
+    Without it a courtyard, a loading bay, a collapsed side or an unexplored boundary can only be recorded by drawing a wall that is not there.
     """
 
     EXTERIOR = "exterior", "Exterior wall"
@@ -130,13 +80,7 @@ class FloorplanOpeningSwing(TextChoices):
 
 class FloorplanLockState(TextChoices):
     """Whether a lock is presently securing its opening.
-
-    Deliberately only the *engagement* axis. Physical integrity - broken,
-    seized, missing - is what every floorplan item's ``condition`` already
-    records, so folding it in here would give a producer two places to write
-    one fact and a reader no rule for which wins. It would also erase the
-    distinction that matters most on site: a broken lock may be hanging open
-    or rusted shut, and "broken" alone does not say whether the door opens.
+    Physical integrity - broken, seized, missing - is what every floorplan item's ``condition`` already records, so folding it in here would give a producer two places to write one fact and a reader no rule for which wins.
     """
 
     UNKNOWN = "unknown", "Not known"
@@ -146,13 +90,7 @@ class FloorplanLockState(TextChoices):
 
 class FloorplanMarkerKind(TextChoices):
     """What a point marker on a floor denotes.
-
-    One table with a kind, rather than a tool and a table per concept: these
-    differ in icon and meaning, not in schema.
-
-    Trimmed to the kinds that earn their own icon: an entrance is already a
-    door opening on a wall, and "photo"/"note"/"fixture" markers carried no
-    information a label field didn't already say.
+    One table with a kind, rather than a tool and a table per concept: these differ in icon and meaning, not in schema.
     """
 
     HAZARD = "hazard", "Hazard"
@@ -193,12 +131,10 @@ class FloorplanItem(abstract.FrontendDashboardModel):
     built_date = DateField(null=True, blank=True)
     attributes = JSONField(default=dict, blank=True)
     source = ForeignKey("dashboard.FloorplanSource", on_delete=SET_NULL, null=True, blank=True, related_name="+")
-    # The attachment path for photos of a wall, opening, room or marker: the
-    # media lives once in the plan's reference pool and any number of items
-    # point at it. Attachment is item-level, not a point on a wall - this
-    # relation carries no geometry, and a photo's own position and heading live
-    # on the linked Image (latitude/longitude/direction), whose coordinate
-    # provenance is not yet separable; see models/images/model.py.
+    # The attachment path for photos of a wall, opening, room or marker: the media lives once in the
+    # plan's reference pool and any number of items point at it.
+    # Attachment is item-level, not a point on a wall - this relation carries no geometry, and a
+    # photo's own position and heading live on the linked Image (latitude/longitude/direction),
     references = ManyToManyField("dashboard.FloorplanReference", blank=True, related_name="%(class)ss")
     labels = ManyToManyField("dashboard.Label", blank=True, related_name="floorplan_%(class)ss")
 
@@ -236,10 +172,9 @@ class Floorplan(FloorplanItem):
     place = ForeignKey("dashboard.Place", on_delete=PROTECT, null=True, blank=True, related_name="floorplans")
     pin = ForeignKey("dashboard.Pin", on_delete=SET_NULL, null=True, blank=True, related_name="floorplans")
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="floorplans")
-    #: A community plan is visible to everyone who can see that wiki and
-    #: editable by them, with each save recorded as a WikiEdit; a personal
-    #: plan (wiki null) is its author's alone. Publishing is always explicit -
-    #: a plan names doors and entrances.
+    #: A community plan is visible to everyone who can see that wiki and editable by them, with each
+    #: save recorded as a WikiEdit; a personal plan (wiki null) is its author's alone.
+    #: Publishing is always explicit - a plan names doors and entrances.
     wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, null=True, blank=True, related_name="floorplans")
     building_ref = CharField(max_length=255, blank=True, default="")
     building_name = CharField(max_length=255, blank=True, default="")
@@ -277,9 +212,7 @@ class Floorplan(FloorplanItem):
 
 class FloorplanSource(abstract.FrontendDashboardModel):
     """One provenance record in a plan's source pool.
-
-    Any combination of a URL, a stored file, a note and an author - as thin
-    as "measured on site, 2019 visit" or as concrete as a scanned HABS sheet.
+    Any combination of a URL, a stored file, a note and an author - as thin as "measured on site, 2019 visit" or as concrete as a scanned HABS sheet.
 
     Attributes:
         floorplan: The plan whose pool this row belongs to.
@@ -299,9 +232,9 @@ class FloorplanSource(abstract.FrontendDashboardModel):
     author = CharField(max_length=255, blank=True, default="")
     attributes = JSONField(default=dict, blank=True)
 
-    #: Position in the plan's own list. Written from the payload index on every
-    #: save, so the order a document is sent in is the order it comes back in -
-    #: which is what lets the editor match a pool row it has just created to the
+    #: Position in the plan's own list.
+    #: Written from the payload index on every save, so the order a document is sent in is the order
+    #: it comes back in - which is what lets the editor match a pool row it has just created to the
     #: row the server made for it.
     sort_order = PositiveIntegerField(default=0)
 
@@ -350,16 +283,7 @@ class FloorplanReference(abstract.FrontendDashboardModel):
 
 class FloorplanFloor(FloorplanItem):
     """One storey of the plan.
-
-    Carries no outline of its own: the storey's shape is whatever its walls
-    enclose, so an outline stored here would be a second, divergent answer to
-    the same question.
-
-    A storey carries three facts that are easy to conflate and must not be:
-    where it sits in the stack (``level``), what people call it on a lift
-    button (``designation``), and any nickname the author gives it (``name``).
-    Skipping a thirteenth floor by designation while the levels stay
-    contiguous is exactly the case that needs them apart.
+    Carries no outline of its own: the storey's shape is whatever its walls enclose, so an outline stored here would be a second, divergent answer to the same question.
 
     Attributes:
         floorplan: The plan version this floor belongs to.
@@ -384,12 +308,10 @@ class FloorplanFloor(FloorplanItem):
         db_table = "dashboard_floorplan_floors"
         ordering = ("level", "sort_order", "id")
         constraints = [
-            # DEFERRED is load-bearing, not decoration. save_document writes
-            # floors one row at a time inside a single transaction, so a
-            # reorder that swaps two levels, or a mid-stack delete that
-            # renumbers 3 down to 2, necessarily collides part-way through.
-            # Checked at commit, those are fine; checked per statement, they
-            # are an IntegrityError.
+            # DEFERRED is load-bearing, not decoration. save_document writes floors one row at a
+            # time inside a single transaction, so a reorder that swaps two levels, or a mid-stack
+            # delete that renumbers 3 down to 2, necessarily collides part-way through.
+            # Checked at commit, those are fine; checked per statement, they are an IntegrityError.
             UniqueConstraint(fields=["floorplan", "level"], name="floorplan_floor_unique_level", deferrable=Deferrable.DEFERRED),
         ]
 
@@ -399,10 +321,8 @@ class FloorplanFloor(FloorplanItem):
 
 class FloorplanWall(FloorplanItem):
     """One straight wall segment, in plan-local metres.
-
-    Always a single segment. A drawn polyline is stored as consecutive walls
-    sharing an endpoint, which is what lets one span of a chain be re-typed,
-    deleted or given a door without splitting anything first.
+    Always a single segment.
+    A drawn polyline is stored as consecutive walls sharing an endpoint, which is what lets one span of a chain be re-typed, deleted or given a door without splitting anything first.
 
     Attributes:
         floor: The storey this wall stands on.
@@ -442,14 +362,7 @@ class FloorplanWall(FloorplanItem):
 
 class FloorplanOpening(FloorplanItem):
     """A door or window, as an interval along one wall.
-
-    Stored as two parameters along the wall rather than its own coordinates:
-    an opening then cannot outlive its wall, cannot fail to move with it, and
-    cannot drift off it. All three would otherwise be invariants some editor
-    had to maintain by hand.
-
-    An opening never breaks the enclosure - a room with a door in it is still
-    a room - so this table is invisible to region detection by construction.
+    Stored as two parameters along the wall rather than its own coordinates: an opening then cannot outlive its wall, cannot fail to move with it, and cannot drift off it.
 
     Attributes:
         wall: The wall this opening is cut into.
@@ -489,16 +402,7 @@ class FloorplanOpening(FloorplanItem):
 
 class FloorplanLock(FloorplanItem):
     """One lock on an opening; a door may carry several, or none.
-
-    Hangs off the opening rather than the wall, because that is the thing a
-    lock actually secures: it cannot then outlive the door it is fitted to,
-    and a wall's locks would have nothing to say about which of its three
-    doors each one belongs to.
-
-    ``key_attributes`` is free-form on purpose. What identifies a key -
-    bitting, keyway, brand, "the one on the ring in the office" - differs per
-    building and per person recording it, and any column set fixed here would
-    only push the actual note into a description field instead.
+    Hangs off the opening rather than the wall, because that is the thing a lock actually secures: it cannot then outlive the door it is fitted to, and a wall's locks would have nothing to say about which of its three doors each one belongs to.
 
     Attributes:
         opening: The door or hatch this lock secures.
@@ -525,15 +429,8 @@ class FloorplanLock(FloorplanItem):
 
 class FloorplanRoomSeed(FloorplanItem):
     """A named room, stored as the point that identifies it.
-
-    Not a polygon. The room's shape is whichever enclosed region of the wall
-    graph contains this point, resolved at render time - so the walls and the
-    room can never disagree about where the room is, and editing walls can
-    never delete a room's name, photos or labels.
-
-    A seed that lands outside every enclosed region is a room the drawing does
-    not close yet. That is shown as such, and is recoverable by drawing the
-    missing wall; it is not an error and not data loss.
+    Not a polygon.
+    The room's shape is whichever enclosed region of the wall graph contains this point, resolved at render time - so the walls and the room can never disagree about where the room is, and editing walls can never delete a room's name, photos or labels.
 
     Attributes:
         floor: The storey this room is on.

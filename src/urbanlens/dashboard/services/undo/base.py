@@ -1,10 +1,4 @@
-"""Base class and registry for per-model undo handlers.
-
-See the modules under ``services.undo.handlers`` for the concrete, per-model
-serialize/restore (deletes) and undo/redo mutation logic. Importing
-``services.undo.handlers`` (done once by ``services.undo.service``) populates
-the registry below.
-"""
+"""Base class and registry for per-model undo handlers."""
 
 from __future__ import annotations
 
@@ -19,19 +13,7 @@ if TYPE_CHECKING:
 
 class UndoHandler(abc.ABC):
     """Serializes/restores instances of one model for the undo framework.
-
-    Delete handlers (``supports_delete`` True, the default) capture a snapshot
-    before the row is removed and recreate it on undo. Mutation handlers
-    (``MutationUndoHandler``) record a reversible change instead.
-
-    Cascade-deleted children (comments, notes, contacts, markup annotations,
-    etc.) are gone the instant the parent is deleted - before ``serialize``
-    gets a chance to capture them - so ``restore`` only brings back each
-    instance's own core fields plus whichever relations are cheap and safe
-    to relink (self-referential hierarchy, labels, membership rosters).
-    Callers must surface this scope limit to the user before they confirm
-    the delete.
-    """
+    Mutation handlers (``MutationUndoHandler``) record a reversible change instead."""
 
     model_label: ClassVar[str]
     #: The Django model this delete handler recreates. Used to re-delete the
@@ -64,10 +46,10 @@ class UndoHandler(abc.ABC):
         pks = payload.get("restored_pks") or []
         if cls.model is None or not pks:
             return
-        # _default_manager, not objects: django-stubs only types `objects` on
-        # a concrete model subclass (via its mypy plugin), not on a `type[Model]`
-        # classvar like this one - `_default_manager` is the same manager,
-        # typed directly on the base class for exactly this situation.
+        # _default_manager, not objects: django-stubs only types `objects` on a concrete model
+        # subclass (via its mypy plugin), not on a `type[Model]` classvar like this one -
+        # `_default_manager` is the same manager, typed directly on the base class for exactly this
+        # situation.
         cls.model._default_manager.filter(pk__in=pks).delete()  # noqa: SLF001
 
     @classmethod
@@ -90,11 +72,7 @@ class UndoHandler(abc.ABC):
 
 
 class MutationUndoHandler(UndoHandler):
-    """Undo handler for a reversible change rather than a deletion.
-
-    ``serialize``/``restore`` are not used. The payload is a dict describing
-    the change, applied by ``undo_mutation`` / ``redo_mutation``.
-    """
+    """Undo handler for a reversible change rather than a deletion."""
 
     supports_delete = False
 
@@ -139,8 +117,7 @@ def describe_batch(singular_label: str, plural_label: str, names: list[str], max
         singular_label: Label for a single instance, e.g. ``"Pin"``.
         plural_label: Label for the plural count, e.g. ``"pins"``.
         names: Display name of every instance in the batch, in order.
-        max_shown: Maximum number of names to list before collapsing the rest
-            into a "(+N more)" suffix.
+        max_shown: Maximum number of names to list before collapsing the rest into a "(+N more)" suffix.
 
     Returns:
         e.g. ``"Pin: Old Mill"``, or ``"5 pins: Old Mill, Grain Silo, Water Tower (+2 more)"``.

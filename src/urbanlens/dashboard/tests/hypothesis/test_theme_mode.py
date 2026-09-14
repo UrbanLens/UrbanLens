@@ -1,10 +1,4 @@
-"""Tests for the system color theme feature.
-
-Covers:
-- ThemeChoice enum values and membership
-- Profile.theme_mode default and field persistence
-- StyleSettingsForm validation and save behaviour
-"""
+"""Tests for the system color theme feature."""
 
 from __future__ import annotations
 

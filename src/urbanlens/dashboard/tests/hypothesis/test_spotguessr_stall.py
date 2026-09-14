@@ -1,10 +1,4 @@
-"""Tests for the multiplayer-stall fixes (SpotGuessr audit finding #1).
-
-Covers ``force_reveal_round`` (the stall-sweep primitive - can end a session
-as ABANDONED), ``expire_round_timer`` (the round-timer primitive - never
-abandons), ``end_session_now`` (the host's manual escape hatch),
-``GameSessionQuerySet.stalled()``, and the Celery sweep task itself.
-"""
+"""Tests for the multiplayer-stall fixes (SpotGuessr audit finding #1)."""
 
 from __future__ import annotations
 

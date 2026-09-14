@@ -1,10 +1,5 @@
 /**
- * E2EE globals bundle: exposes window.UrbanLensE2EE for the auth pages
- * (login/signup/password-reset) and the messages page.
- *
- * Built as a classic IIFE script (like core.ts) so inline <script> blocks in
- * those templates can call it synchronously after load. Templates must call
- * UrbanLensE2EE.init({...}) with the endpoint URLs before any other function.
+ * E2EE globals bundle: exposes window.UrbanLensE2EE for the auth pages (login/signup/password-reset) and the messages page.
  */
 import {
     changePassword,
@@ -72,11 +67,7 @@ const api = {
 
 window.UrbanLensE2EE = api;
 
-// Wired here rather than from the header template: this bundle already loads on
-// every signed-in page (themes/base.html), and inline template JavaScript is
-// outside every automated check in this repository (see P34). The form is the
-// one in partials/layout/header.html; a page without it is a page with nothing
-// to clear.
+// Wired here rather than from the header template.
 const signOutForm = document.querySelector<HTMLFormElement>("form.nav-dropdown-logout-form");
 if (signOutForm) wireSignOutForm(signOutForm);
 

@@ -1,13 +1,4 @@
-"""A photo uploaded to a pin is not on the location's wiki until somebody puts it there.
-
-Uploading to a pin used to stamp `wiki=Wiki.objects.get_for_location(location)` on
-the row, so a photo of your own house appeared in that place's community Photos
-panel - and became votable there - without you choosing to contribute it. The
-uploader's `photo_upload_visibility` narrowed *who* saw it, which is a control
-over the audience for things you have shared; it is not consent to share.
-
-Everything on a wiki is there because a person put it there.
-"""
+"""A photo uploaded to a pin is not on the location's wiki until somebody puts it there."""
 
 from __future__ import annotations
 

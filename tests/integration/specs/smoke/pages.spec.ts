@@ -1,15 +1,8 @@
 /**
- * Every page the application links to still renders.
- *
- * The cheapest test in the suite and, in practice, the one that catches the
- * most: a template that references a context key a view stopped providing, a
- * `{% url %}` for a route that moved, an N+1 that turned into a timeout, a
- * migration that has not been applied. None of those need a clever assertion -
- * they need somebody to open the page.
- *
- * The signed-in sweep discovers its targets from the rendered navigation rather
- * than from a list in this file, so a page added later is covered without
- * anyone remembering to come back here.
+ * Every page the application links to still renders. The cheapest test in the suite and, in
+ * practice, the one that catches the most: a template that references a context key a view stopped
+ * providing, a `{% url %}` for a route that moved, an N+1 that turned into a timeout, a migration
+ * that has not been applied.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

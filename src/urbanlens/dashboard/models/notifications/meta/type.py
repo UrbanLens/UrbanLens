@@ -41,18 +41,8 @@ class NotificationType(TextChoices):
 
 
 #: Notification types a friendship mute must never suppress.
-#:
-#: Mute is a volume control on someone's social activity - their shares, their
-#: comments, their invitations. A safety check-in is not that: the whole point
-#: of the feature is that somebody notices when a person does not come back
-#: from a site, and a preference set weeks earlier about a friend's chatter is
-#: not consent to stop watching for that. The partner invite/accepted pair is
-#: here for a related reason - it is an actionable request whose sender is left
-#: waiting for an answer that would never be asked for.
-#:
-#: Listed rather than derived from the ``safety_ci_`` value prefix so that a
-#: new safety type is a decision somebody makes; ``test_friendship_mute``
-#: fails when one is added and not considered here.
+#: Mute is a volume control on someone's social activity - their shares, their comments, their
+#: invitations.
 MUTE_EXEMPT_TYPES = frozenset(
     {
         NotificationType.SAFETY_CHECKIN_DUE,

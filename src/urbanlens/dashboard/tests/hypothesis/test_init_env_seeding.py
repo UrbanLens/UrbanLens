@@ -1,28 +1,4 @@
-"""Startup must not depend on writing a `.env` into the image.
-
-On 2026-08-17 staging would not start. `.env*` had just been excluded from the
-image - correctly, because a secret baked into a layer outlives its own rotation
-- and `bin/init.py` responded by trying to *create* `/app/.env` from
-`.env-sample`. The app directory is not writable by the container's user, so the
-write raised `PermissionError`, the initializer turned that into
-`UnrecoverableError`, and the container never became healthy. Every service that
-waits on it failed with it.
-
-The path had existed for a long time and never run: while `.env` was baked into
-the image, `env_file.exists()` returned early. Removing the secret exposed a
-latent fatal branch, which is the shape worth testing for - not the secret, and
-not the permission.
-
-Two properties, and they are separate:
-
-- A deployed environment never tries to write the file at all. It is configured
-  from real environment variables (compose's ``env_file:``), so there is nothing
-  to seed, and writing `.env-sample`'s placeholders beside real values would at
-  best be noise.
-- A failure to write is never fatal anywhere. The file is a convenience for
-  someone running from a checkout. A genuine misconfiguration still fails
-  loudly, with a far better message, at the ``DJANGO_SECRET_KEY`` guard.
-"""
+"""Startup must not depend on writing a `.env` into the image."""
 
 from __future__ import annotations
 

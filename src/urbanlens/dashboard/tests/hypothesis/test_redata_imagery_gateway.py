@@ -1,9 +1,4 @@
-"""Tests for RedataImageryGateway - REData's ``/imagery/`` cross-provider imagery endpoint.
-
-Mirrors ``test_redata_context_gateway.py``'s conventions: a mock ``session``
-(``Gateway.__post_init__`` leaves a non-default session untouched, skipping
-the DB-backed rate-limiting wrapper), no database access.
-"""
+"""Tests for RedataImageryGateway - REData's ``/imagery/`` cross-provider imagery endpoint."""
 
 from __future__ import annotations
 

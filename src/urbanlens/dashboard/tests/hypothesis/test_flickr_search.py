@@ -1,21 +1,4 @@
-"""Tests for the public Flickr search Media gallery provider.
-
-Distinct from test_flickr.py (per-user OAuth library) and
-test_flickr_album_import.py (public album by URL) - this covers:
-
-- build_search_query - required-operator query assembly from pin/wiki names,
-  aliases (nickname exclusion, address-derived exclusion, dedup), and state.
-- FlickrSearchGateway - unauthenticated flickr.photos.search calls (used when
-  an API key is configured), error handling, MediaItem mapping.
-- build_feed_tag_queries / FlickrFeedSearchGateway - the keyless fallback
-  (used when no API key is configured): tag-AND query decomposition and the
-  public syndication feed calls.
-- FlickrMediaPanelSource - search_terms dispatch by active gateway, gate.
-- FlickrPlugin.get_panel_sources - picks the API gateway or the feed fallback
-  based on whether a key is configured.
-
-All HTTP calls are mocked; no real network access occurs.
-"""
+"""Tests for the public Flickr search Media gallery provider."""
 
 from __future__ import annotations
 

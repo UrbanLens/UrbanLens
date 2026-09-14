@@ -1,19 +1,4 @@
-"""Tests that label colours cannot be stored as arbitrary strings.
-
-`Label.color` carries `choices`, which is a form-layer constraint and not a
-database one: `services/import_export/import_data.py` builds labels straight
-from an uploaded file's rows, and the external API assigns from a JSON body.
-The value is then interpolated into `style="..."` attributes across the label
-chip, merge-form and organize templates, so whatever reaches the column renders.
-
-`LabelCustomization.color` is the weaker of the two - no `choices` at all - and
-it *wins* over the label's own value in `Label.effective_color`, so it is the
-one that actually renders wherever a user has set an override.
-
-These pin the coercion at the model, which is what covers every write path at
-once, plus the `bulk_create` route that does not call `save()` and so needs its
-own.
-"""
+"""Tests that label colours cannot be stored as arbitrary strings."""
 
 from __future__ import annotations
 

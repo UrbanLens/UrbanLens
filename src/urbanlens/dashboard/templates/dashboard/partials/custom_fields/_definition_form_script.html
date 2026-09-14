@@ -1,7 +1,4 @@
-{# Wires every .cf-def-form on the page: reveals the style select once a type is chosen #}
-{# (offering only that type's styles), the options editor for select fields, and the #}
-{# bound inputs for the slider style. Included at the end of each panel partial so it #}
-{# re-runs after every HTMX swap. Context: styles_by_type (from the panel views). #}
+{# Wires every.cf-def-form on the page: reveals the style select once a type is chosen (offering only that type's styles), the options. #}
 {{ styles_by_type|json_script:"cf-styles-data" }}
 <script>
 (function () {

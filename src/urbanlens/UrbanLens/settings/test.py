@@ -12,54 +12,16 @@ from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 
 TESTING = True
 
-# `TESTING = True` above arrives too late for anything base.py already decided
-# from its own guess, and `STORAGES` is one of those. base.py infers TESTING by
-# looking for "pytest" in `sys.argv`, which holds for a normal run and **not**
-# for a pytest-xdist worker: execnet starts those with `argv[0] == "-c"`, so the
-# guess comes out False, `STORAGES["staticfiles"]` freezes to the manifest
-# backend, and then this line sets TESTING True over the top of a decision
-# already made.
-#
-# The symptom is that every test rendering a page whose `{% static %}` target is
-# not in the manifest raises `ValueError: Missing staticfiles manifest entry`.
-# Measured 2026-09-05: a full suite run with `-n 6` reported 303 failures, of
-# which **287** were that, and the same suite run serially does not have them.
-# `bin/run_tests.sh --parallel` was therefore unusable for anything that renders.
-#
-# Set here rather than by improving the guess, because a settings module named
-# `test` does not need to infer whether it is under test.
+# A `test` module is under test by definition; xdist workers hide pytest from argv, so fix storage here.
 STORAGES = {**STORAGES, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}}  # noqa: F405
 
-# django-perf-rec writes each covered view's query *fingerprint* to a .perf.yml
-# beside its test, so an N+1 arrives as a reviewable diff rather than as a
-# number nobody can interpret.
-#
-# MODE decides what a missing record means. "once" writes it and passes, which
-# is what you want the first time you cover a view. In CI a missing record means
-# the file was never committed, and silently recording it there would assert
-# whatever the code does today - including the regression under review - so it
-# fails instead.
+# Query fingerprints land beside tests as reviewable diffs; CI fails on missing records instead.
 PERF_REC = {"MODE": "none" if os.getenv("CI") else "once"}
 
-# Django's default PBKDF2 hasher runs ~1.2M iterations per call, which is the
-# point in production and pure overhead in tests - every baked User, every
-# generate_api_key, and every authenticate_api_key pays it. It was not merely
-# slow: ApiKeyWebSocketAuthTests.test_valid_api_key_authenticates_an_anonymous_socket
-# hashed inside the connection handshake and blew past WebsocketCommunicator's
-# 1-second default connect timeout, failing as an opaque asyncio TimeoutError.
-# (Its OAuth2 sibling passed throughout - that path is a plain indexed lookup
-# with no hashing, which is what made the failure look consumer-specific.)
-# Test-only: base.py keeps the real hashers for every other environment.
+# Production hashing is pure overhead in tests and can blow handshake timeouts.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
-# The real cache is Redis/valkey-backed, which makes every test whose request path
-# touches the cache depend on a live external service. Two problems with that: the
-# suite's own network guard (core.testing_network) only permits localhost, so running
-# against a compose stack - where the cache resolves to a container bridge IP - fails
-# any such test with an opaque "External network access is disabled during tests"
-# rather than anything about the code; and tests would otherwise share one cache
-# instance, so entries bleed between them. locmem is per-process and needs nothing
-# running.
+# locmem: no live service needed and no cross-test bleed (network guard only allows localhost).
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
@@ -67,171 +29,60 @@ CACHES = {
     },
 }
 
-# Same reasoning as CACHES above, for the Celery broker. base.py points it at
-# valkey, so every `apply_async` in a test opened a real broker connection - which
-# the network guard blocks, raising RuntimeError, which `safely_enqueue_task`
-# catches and reports as "broker unreachable" by returning None. Callers that treat
-# that as "give up quietly" then took their failure path: the pin-detail panel views
-# returned 204 instead of a panel, and twelve tests failed asserting a behaviour the
-# code only exhibits when the broker is down.
-#
-# `memory://` is Celery's in-process transport - enqueueing succeeds and needs
-# nothing running. Tasks still do not execute, since no worker consumes the queue
-# and CELERY_TASK_ALWAYS_EAGER stays opt-in via UL_CELERY_TASK_ALWAYS_EAGER, so a
-# test asserting a request only *scheduled* work still sees exactly that.
+# In-process broker; tasks still don't run without ALWAYS_EAGER, so scheduling-only assertions hold.
 CELERY_BROKER_URL = "memory://"
 CELERY_RESULT_BACKEND = "cache+memory://"
 
-# Same reasoning again, for the channel layer. base.py points it at valkey, so
-# any consumer test that reaches a group send opens a real connection - blocked
-# by the network guard when the address is a container bridge IP, which is what
-# `docker compose exec app pytest` resolves to.
-#
-# Set here rather than per-module: eight test modules each declared their own
-# `_IN_MEMORY_CHANNEL_LAYERS` override, which is eight places to remember and
-# eight that a new consumer test can be written without.
-#
-# One consequence of the move, since it is a real difference: the per-class
-# overrides handed each class a fresh layer, and this is one instance for the
-# whole process. Nothing in the suite has depended on that isolation (all 101
-# tests in the nine modules pass either way), but a consumer test that leaves a
-# group subscribed can now be seen by a later one. Flush in teardown if that
-# ever bites, rather than reinstating an override for its side effect. It also
-# makes base.py's TESTING-only channels_redis prefix dead configuration - no
-# test reaches that backend now.
+# One in-memory layer for the suite; flush in teardown if a lingering subscription ever bites.
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
-# No clamd daemon runs in the test environment - tests that exercise the
-# malware-rejection path (services.security.malware_scan) mock it explicitly; every
-# other upload test should hit the "clean" no-op path instead of a 503 from
-# an unreachable scanner (see AppSettings.clamav_enabled's fail-closed
-# behavior).
+# No clamd in tests; malware-path tests mock it, the rest take the clean no-op.
 _app_settings.clamav_enabled = False
 
-# Forced to None (rather than relying on the field's own default) so a real
-# UL_VIRUSTOTAL_API_KEY in a developer's local .env can't make the suite make
-# live network calls. Tests that exercise the VirusTotal path patch this back
-# explicitly - see services.security.virustotal_scan.
+# Force None so a developer .env can't trigger live VirusTotal calls.
 _app_settings.virustotal_api_key = None
 
-# Same reasoning, for every LLM provider credential. This is the structural
-# guarantee that a test cannot spend real provider tokens, and it is deliberately
-# unconditional and set HERE rather than in a pytest fixture: a settings module
-# is loaded by every runner, and `docs/AI_PIPELINE.md` explicitly sanctions a
-# local non-Docker checkout keeping real keys in `.env` for LocalInferenceClient,
-# which is exactly the machine this has to protect. (The original reason given
-# was that CI ran `manage.py test`, which never loads conftest.py. CI runs pytest
-# as of 2026-09-05, and the conclusion is unchanged - `manage.py test` is still a
-# supported way to run this suite, and the point of putting it here is not to
-# depend on knowing which runner is in use.)
-#
-# Pinned to a placeholder rather than None on purpose: `providers.build_adapter`
-# raises ProviderError on a falsy key *before* any adapter is constructed, so
-# None would make every provider path fail with "no key configured" instead of
-# exercising the adapter the test means to exercise. A test that wants a real
-# provider call mocked patches the adapter or the inference client, as the suite
-# already does throughout.
+# Guarantee tests never spend provider tokens, regardless of runner or local .env.
+# Placeholder (not None) so adapter construction still exercises the tested path.
 _app_settings.anthropic_api_key = "test-placeholder-not-a-key"
 _app_settings.openai_api_key = "test-placeholder-not-a-key"
 _app_settings.cloudflare_ai_api_key = "test-placeholder-not-a-key"
 _app_settings.huggingface_ai_api_key = None
-# A policy-valid Cloudflare host carrying no account id. Real endpoints embed the
-# account id in the path, and `Dockerfile`'s `COPY . /app` bakes the test tree
-# into every image - so a real one reaching a test artifact would ship with it.
-# `Url`, not a bare str: the field is typed `Url | None` and the settings model
-# does not set `validate_assignment`, so a plain string would be stored as-is
-# and any consumer reading `.host`/`.scheme` would behave differently under
-# test than in production.
+# Policy-valid host with no real account; keeps test artifacts shippable. Url-typed to match production.
 _app_settings.cloudflare_worker_ai_endpoint = Url("https://api.cloudflare.com/client/v4/accounts/TESTACCOUNT/ai/run")
-# Never let the suite address a real ai-inference service; get_inference_client()
-# falls back to LocalInferenceClient, which the suite mocks at the adapter.
+# Never address a real ai-inference service; tests mock at the adapter.
 _app_settings.ai_inference_url = None
 
-# A throwaway MEDIA_ROOT, removed when the process exits.
-#
-# base.py points MEDIA_ROOT at src/urbanlens/media - the directory a local dev
-# server writes real uploads into - and every fixture that saves a file wrote
-# there, because TestCase rolls the database back between tests but not the
-# filesystem. That debris is not inert: it made
-# test_pin_privacy_from_a_wiki.PrivatePhotoBytesTests fail in proportion to how
-# much had built up (measured 3 failures in 4 runs against a polluted tree,
-# 0 in 12 once isolated).
-#
-# Set here rather than only in a pytest fixture so it does not depend on which
-# runner is in use: `manage.py test` never loads conftest.py, and a settings
-# module is loaded by both. (This used to say "because CI runs `manage.py test`";
-# CI runs pytest as of 2026-09-05, which changes nothing about where this
-# belongs.) Settings are imported once per test process, so this is one directory
-# per process - including each xdist worker - and atexit removes it either way.
+# Throwaway MEDIA_ROOT per process (TestCase rolls back the DB, not the filesystem).
 _test_media_root = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 atexit.register(lambda: shutil.rmtree(_test_media_root, ignore_errors=True))
 MEDIA_ROOT = _test_media_root
 
-# The suite calls the parsers directly - that is how they are unit tested - so
-# the sandbox boundary is not enforced here. The tests that verify the boundary
-# itself (services/sandbox) raise it back to "deny" with override_settings.
+# Suite calls parsers directly; boundary tests re-raise to deny.
 UL_UNTRUSTED_PARSE_POLICY = "allow"
-# No media-worker container drains a queue under pytest; with this off, the
-# untrusted-parse tasks keep their default routing and CELERY_TASK_ALWAYS_EAGER
-# still runs them in-process where a test asks for it.
+# No media-worker drains queues under pytest; default routing plus eager still runs where asked.
 UL_SANDBOX_ENABLED = False
 
-# Same reasoning as UL_UNTRUSTED_PARSE_POLICY above: the suite calls
-# LocalInferenceClient directly (mocking the provider adapters, never a real
-# provider) - the tests that verify this boundary itself raise it back to
-# "deny" with override_settings.
+# Suite calls LocalInferenceClient directly with mocked adapters.
 UL_DIRECT_INFERENCE_POLICY = "allow"
 
-# No ai-worker container drains Queue.AI under pytest either, but the suite
-# exercises assistant availability directly (CELERY_TASK_ALWAYS_EAGER runs the
-# turn task in-process where a test asks for it) - the tests that verify this
-# boundary itself set UL_AI_WORKER_ENABLED = False with override_settings.
+# Assistant turns run in-process under eager; boundary tests flip this off.
 UL_AI_WORKER_ENABLED = True
 
-# Pinned off so the suite is deterministic whatever the developer's .env says -
-# otherwise a machine with metrics enabled runs against a different URLconf,
-# middleware stack and Celery config than CI does. The tests that need it on
-# flip it explicitly.
-#
-# Assigning the Django setting is not sufficient on its own, and the reason is
-# import order: `DJANGO_SETTINGS_MODULE=...settings.test` imports the *package*
-# first, whose __init__ already does `from .base import *`. Everything base
-# derives from the environment is therefore fixed before this file's body runs,
-# and `from .base import *` below re-exports the cached module rather than
-# re-executing it. So each derived value is undone explicitly here.
+# Pin metrics off for determinism; derived values undone explicitly due to import order.
 UL_METRICS_ENABLED = False
-# Derived from the flag *and* UL_PROCESS_ROLE in base; both halves have to be
-# undone, since base computed this before this file's body ran.
 UL_METRICS_INSTRUMENTED = False
-# urls.py registers the /metrics route from the pydantic settings object, not
-# from the Django setting - and it is a singleton, so this reaches it. Same
-# idiom as clamav_enabled and virustotal_api_key above.
 _app_settings.metrics_enabled = False
-# Events cost a broker publish per task transition; base ties this to the flag.
 CELERY_WORKER_SEND_TASK_EVENTS = False
-# django_prometheus is appended to INSTALLED_APPS and wraps MIDDLEWARE on both
-# ends when metrics are on. Left in place, the suite would exercise a middleware
-# stack CI never sees.
 INSTALLED_APPS = [app for app in INSTALLED_APPS if app != "django_prometheus"]  # noqa: F405
 MIDDLEWARE = [middleware for middleware in MIDDLEWARE if not middleware.startswith("django_prometheus.")]  # noqa: F405
-# In multiprocess mode every sample is backed by an mmap keyed on metric name
-# and labels and shared by every registry in the process, which makes a fresh
-# CollectorRegistry report increments from whichever test ran before it. This
-# leaves each registry its own values, so a per-test registry actually isolates.
-# It is not a plain env pop: prometheus_client may already have been imported by
-# the time this module runs - see the helper.
+# Single-process values so per-test registries actually isolate (see helper).
 _metrics.disable_multiprocess_metrics()
 
-# model_bakery's default related-object generation collides with the
-# create_user_profile post_save signal (see urbanlens.core.tests.baker).
+# model_bakery collides with the create_user_profile signal; use the signal-safe baker.
 BAKER_CUSTOM_CLASS = "urbanlens.core.tests.baker.SignalSafeBaker"
 
-# model_bakery dispatches by exact field class, so EncryptedTextField (a
-# TextField subclass used by ImmichAccount/FlickrAccount/GooglePhotosAccount/
-# GoogleCalendarAccount/SiteSettings) isn't picked up by TextField's built-in
-# generator - baker.make() would otherwise raise TypeError for any of those
-# fields left at their default. Reuse the same plain-text generator TextField
-# gets.
+# EncryptedTextField needs TextField's plain-text generator or baker.make() raises TypeError.
 BAKER_CUSTOM_FIELDS_GEN = {
     "urbanlens.dashboard.models.fields.EncryptedTextField": "model_bakery.random_gen.gen_string",
 }

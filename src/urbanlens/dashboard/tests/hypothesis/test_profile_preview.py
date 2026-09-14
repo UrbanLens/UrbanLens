@@ -1,13 +1,4 @@
-"""Tests for the "view my profile as another user" preview feature.
-
-Covers:
-- preview_modes() mirroring the settings-page VisibilityChoice options
-- create_ghost_viewer() building the correct relationship per mode
-- ProfilePreviewMiddleware end-to-end: simulated rendering, banner injection,
-  rollback of all ghost rows, write blocking, and auto-exit on navigation
-- The property that each simulated audience sees exactly what the owner's
-  profile_visibility setting permits
-"""
+"""Tests for the "view my profile as another user" preview feature."""
 
 from __future__ import annotations
 
@@ -244,10 +235,8 @@ class PreviewVisibilityPropertyTests(TestCase):
     def test_preview_matches_profile_visibility(self) -> None:
         """The previewed page is visible iff the real audience would pass the check.
 
-        Exhaustive over every (simulated audience, profile_visibility) pair: a
-        ghost sees the profile when it is visible to any logged-in user, or
-        when the ghost's relationship satisfies Profile.visibility_permits().
-        """
+        Exhaustive over every (simulated audience, profile_visibility) pair: a ghost sees the profile when it is
+        visible to any logged-in user, or when the ghost's relationship satisfies Profile.visibility_permits()."""
         for mode, _label in preview_modes():
             for visibility in VisibilityChoice.values:
                 with self.subTest(mode=mode, visibility=visibility):

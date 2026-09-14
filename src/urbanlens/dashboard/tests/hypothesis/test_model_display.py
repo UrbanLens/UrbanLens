@@ -1,13 +1,4 @@
-"""Tests for __str__ and to_json() on models not covered elsewhere.
-
-Covers:
-- PinVisit.__str__ and VisitSource enum values
-- PinMarkup.__str__, to_json(), and MarkupType enum values
-- PinAlias.__str__ and LocationAlias.__str__
-
-All tests that rely on DB access use django.test.TestCase (with baker); pure
-property/display tests use unittest.TestCase with unsaved instances.
-"""
+"""Tests for __str__ and to_json() on models not covered elsewhere."""
 
 from __future__ import annotations
 

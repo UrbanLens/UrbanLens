@@ -24,9 +24,7 @@ def build_adapter(provider: Provider, config: InferenceConfig) -> ProviderAdapte
         A ready-to-use adapter.
 
     Raises:
-        ProviderError: No API key (or, for Cloudflare, endpoint) is configured
-            for the requested provider.
-    """
+        ProviderError: No API key (or, for Cloudflare, endpoint) is configured for the requested provider."""
     if provider == "anthropic":
         from urbanlens_ai.providers.anthropic import AnthropicAdapter
 

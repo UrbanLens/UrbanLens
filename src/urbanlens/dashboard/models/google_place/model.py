@@ -11,15 +11,7 @@ from urbanlens.dashboard.models.google_place.queryset import GooglePlaceManager
 
 class GooglePlace(abstract.DashboardModel):
     """Cached Google Place / geocoding metadata for a coordinate pair.
-
-    Deduplicated by (latitude, longitude): any two Location rows that share
-    coordinates reference the same GooglePlace row, so Google's APIs are only
-    contacted once per point. A Pin has no ``google_place`` FK of its own - a
-    pin's coordinates are always its linked Location's, so it always reaches
-    this cache via ``pin.location.google_place``; a detail/child pin whose own
-    Location has different coordinates than its parent's simply points at a
-    different Location, which gets its own GooglePlace row (or shares one, if
-    those coordinates happen to already have a cached row).
+    Deduplicated by (latitude, longitude): any two Location rows that share coordinates reference the same GooglePlace row, so Google's APIs are only contacted once per point.
     """
 
     latitude = DecimalField(max_digits=9, decimal_places=6)

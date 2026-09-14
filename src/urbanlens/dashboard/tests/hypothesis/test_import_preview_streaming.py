@@ -1,7 +1,4 @@
-"""Regression tests for UL-150: pins imported with a new "create category" label
-
-must actually be added to that label, not just create it unattached.
-"""
+"""Regression tests for UL-150: pins imported with a new "create category" label"""
 
 from __future__ import annotations
 
@@ -131,22 +128,14 @@ class ImportPreviewDescriptionLengthTests(TestCase):
 
 
 class ImportPreviewLegacyRepairFlagTests(TestCase):
-    """_preview_pins() flags records that would repair a pre-cutoff mis-placed pin,
-    or whose own coordinates are simply untrustworthy.
+    """_preview_pins() flags records that would repair a pre-cutoff mis-placed pin, or whose own coordinates are simply untrustworthy.
 
-    Regression coverage for the bug where re-importing to trigger the TEMPORARY
-    legacy CID coordinate repair (see services.apis.locations.legacy_cid_coordinate_fix)
-    never worked: the preview step's client-side "already on your map" check
-    compared the same S2-derived (lat, lng) guess that originally mis-placed the
-    pin against the user's existing pins, found that same legacy pin sitting
-    right there, and pre-deselected the record - so it was never sent to the
-    server-side repair at all. needs_repair tells the client to skip that check.
-
-    Also covers the broader, independent TEMPORARY condition: any record whose
-    own cid came from the imprecise S2-cell URL guess (_csv_row_iter's
-    "s2_guess") is force-selected even when no specific legacy pin match is
-    found - not every affected row still has one to find.
-    """
+    Regression coverage for the bug where re-importing to trigger the TEMPORARY legacy CID coordinate repair
+    (see services.apis.locations.legacy_cid_coordinate_fix) never worked: the preview step's client-side
+    "already on your map" check compared the same S2-derived (lat, lng) guess that originally mis-placed the pin
+    against the user's existing pins, found that same legacy pin sitting right there, and pre-deselected the
+    record - so it was never sent to the server-side repair at all. needs_repair tells the client to skip that
+    check."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -220,11 +209,7 @@ class ImportPreviewLegacyRepairFlagTests(TestCase):
 
 
 class ImportPreviewMapsUrlPassthroughTests(TestCase):
-    """_preview_pins() carries a row's source Google Maps URL through to the preview
-    dict unchanged - not displayed, but re-used by a deferred REData lookup
-    (cid_resolution.resolve_cids), which resolves via the place's own URL faster
-    and more reliably than the bare cid alone. See GoogleMapsGateway._csv_row_iter.
-    """
+    """_preview_pins() carries a row's source Google Maps URL through to the preview dict unchanged - not displayed, but re-used by a deferred REData lookup (cid_resolution.resolve_cids), which resolves via the place's own URL faster and more reliably than the bare cid alone. See GoogleMapsGateway._csv_row_iter."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -335,10 +320,7 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
 
 
 class ImportPreviewNamesBlankPinOnReimportTests(TestCase):
-    """UL-207: a pin imported without a name should pick one up from a later
-    re-import of the same coordinates (e.g. Google Takeout's Labelled Places),
-    since get_nearby_or_create's `defaults` are only ever applied when
-    creating a brand-new row, never to an existing one it merges into."""
+    """Google Takeout's Labelled Places), since get_nearby_or_create's `defaults` are only ever applied when creating a brand-new row, never to an existing one it merges into."""
 
     def setUp(self) -> None:
         super().setUp()

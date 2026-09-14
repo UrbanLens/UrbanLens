@@ -1,25 +1,4 @@
-"""External API: the friend-invite endpoint must not leak site membership.
-
-Mirrors the internal-surface test in ``test_friend_invite_privacy.py``, but
-raises the bar: rather than comparing two cases, this compares all four
-outcomes the endpoint can reach without a validation error, and asserts the
-status code, the response body *and* the header names are identical across
-every one of them.
-
-That strictness is the point. ``POST /friend-invites/`` takes an arbitrary
-email address and is reachable by anyone holding an API key. If any observable
-part of the response varied by whether the address belonged to an account, the
-endpoint would be a membership-enumeration oracle: try addresses one at a
-time, diff the responses, harvest the site's user list.
-
-The four cases:
-
-1. the address belongs to a registered account that accepts requests;
-2. the address belongs to nobody;
-3. the address belongs to a registered account whose privacy settings refuse
-   the request (nothing is created);
-4. the address belongs to nobody and the outbound mail send raises.
-"""
+"""External API: the friend-invite endpoint must not leak site membership."""
 
 from __future__ import annotations
 
@@ -46,8 +25,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Kwargs to splat into a test-client call.
-    """
+        Kwargs to splat into a test-client call."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -61,14 +39,12 @@ class ExternalInvitePrivacyTests(TestCase):
     def _inviter_key(self) -> str:
         """Create a fresh inviter and return an API key granting social:write.
 
-        A distinct inviter per case keeps the shared per-user outbound-email
-        budget from coupling the four cases together - a rate limit tripped by
-        case 3 would otherwise change case 4's response for reasons that have
+        A distinct inviter per case keeps the shared per-user outbound-email budget from coupling the four cases
+        together - a rate limit tripped by case 3 would otherwise change case 4's response for reasons that have
         nothing to do with the property under test.
 
         Returns:
-            The plaintext API key.
-        """
+            The plaintext API key."""
         user = baker.make(User, email=f"inviter{baker.random_gen.gen_integer(1, 10**9)}@example.com")
         api_key, raw_key = generate_api_key(user, "Test")
         api_key.scopes = [ApiKeyScope.SOCIAL_WRITE.value]
@@ -79,12 +55,10 @@ class ExternalInvitePrivacyTests(TestCase):
         """POST one invitation.
 
         Args:
-            raw_key: The caller's API key.
-            email: The address to invite.
+            raw_key: The caller's API key. email: The address to invite.
 
         Returns:
-            The HTTP response.
-        """
+            The HTTP response."""
         return self.client.post(
             self.url,
             {"email": email},

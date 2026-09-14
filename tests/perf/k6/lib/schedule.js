@@ -1,26 +1,6 @@
-/**
- * The one place the run's timeline is written down.
- *
- * Two scenarios need to agree about it and they cannot talk to each other: k6
- * gives a VU no shared mutable state, so the neighbour cannot be told "the
- * actor is importing now". Both derive it from the clock instead, from this
- * table, which is why the table rather than the scenario definitions is the
- * source of truth - the actor's `startTime` offsets and the neighbour's phase
- * lookup are both computed from it below.
- *
- * A phase's `action` names an export of `actions.js`. `vus` is how many copies
- * of the actor run it at once; that is the whole difference between
- * `map_search_1` and `map_search_8`, and between either and `search_storm`.
- */
+/** The one place the run's timeline is written down. Two scenarios need to agree about it and they cannot talk to each other: k6 gives a VU no shared mutable state, so the neighbour cannot be told "the actor is importing now". */
 
-/** Seconds at each end of a phase whose requests are tagged `edge` instead.
- *
- * The neighbour derives the phase from elapsed wall-clock, and the two clocks
- * are offset by however long `setup()` took to log three accounts in - a couple
- * of seconds. Without a guard band a request from the tail of `search_storm`
- * can be tagged `cooldown` and fail cooldown's threshold, which reads as a
- * regression in the quietest phase of the run.
- */
+/** Seconds at each end of a phase whose requests are tagged `edge` instead. The neighbour derives the phase from elapsed wall-clock, and the two clocks are offset by however long `setup()` took to log three accounts in - a couple of seconds. */
 export const GUARD_SECONDS = 5;
 
 export const PHASES = [
@@ -41,12 +21,7 @@ export const PHASES = [
     // P104's mechanism, reproduced deliberately: enough concurrent filter POSTs
     // to exhaust the connection pool if nothing bounds it.
     { name: "search_storm", seconds: 90, action: "mapSearch", vus: 60 },
-    // Last of the acting phases, and long, because it is the only one whose
-    // duration is not ours to choose: k6 does not abort an in-flight request at
-    // a phase boundary, so an import that outlives its phase goes on loading
-    // the box while the next phase is being measured. Ordered here so the phase
-    // that inherits an overrun is cooldown, where a raised p95 is a true signal
-    // (the import is still running) rather than a false one.
+    // Last and longest: k6 never aborts in-flight requests, so an overrunning import only pollutes cooldown, not a measured phase.
     { name: "import_confirmed", seconds: 240, action: "importConfirmed", vus: 1 },
     // Not decoration. If the neighbour does not come back to baseline here,
     // something the actor did is still running, and a phase that merely ended
@@ -55,12 +30,7 @@ export const PHASES = [
 ];
 
 /**
- * A subset of the timeline, for running one phase without the other fourteen minutes.
- *
- * The baseline phase is always kept whether or not it was asked for: every
- * verdict is relative to it, and a run without it has nothing to be relative to.
- * Order follows the full schedule rather than the argument, so a subset is
- * always a subsequence of the real run.
+ * A subset of the timeline, for running one phase without the other fourteen minutes. The baseline phase is always kept whether or not it was asked for: every verdict is relative to it, and a run without it has nothing to be relative to.
  *
  * @param {string|string[]|null} names Comma-separated or array; falsy means all.
  * @returns {object[]} The phases to run, in schedule order.

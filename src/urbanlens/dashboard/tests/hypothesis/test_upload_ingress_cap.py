@@ -1,17 +1,4 @@
-"""An upload the proxy will reject has to be refused here, where it can be explained.
-
-Cloudflare's free and pro plans cap a request body at 100 MB. This app accepts
-250 MB by default (`SiteSettings.max_upload_file_size_mb`), 500 MB on the
-data-import paths, and nginx is configured for 200 MB - so behind a proxied
-hostname a 150 MB video is answered by Cloudflare, not by Django. No view runs,
-nothing is logged here, and the uploader sees an error page from a company they
-have never heard of after uploading 100 MB.
-
-`UL_MAX_REQUEST_BODY_MB` lowers the limit the app advertises and enforces to
-what the ingress will actually carry, which moves the refusal to the browser,
-before any bytes are sent. Every test below has a negative half: with no cap
-configured, nothing may change.
-"""
+"""An upload the proxy will reject has to be refused here, where it can be explained."""
 
 from __future__ import annotations
 
@@ -108,8 +95,7 @@ class DataFileUploadFormCapTests(SimpleTestCase):
             size: The file's size in bytes.
 
         Returns:
-            The validation message, or None when the file is accepted.
-        """
+            The validation message, or None when the file is accepted."""
         from django import forms
 
         from urbanlens.dashboard.forms.upload_datafile import _MultipleFileField

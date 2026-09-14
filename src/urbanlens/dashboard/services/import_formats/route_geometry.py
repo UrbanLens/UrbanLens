@@ -1,10 +1,4 @@
-"""Shared route-geometry helpers - simplification and distance measurement.
-
-Used by both the GPX track/route parser and the Google Takeout semantic-history
-activitySegment parser, since both need to turn a raw sequence of (lat, lng)
-points into a simplified LineString suitable for storage on Route.path plus a
-distance measurement computed from the full-resolution points.
-"""
+"""Shared route-geometry helpers - simplification and distance measurement."""
 
 from __future__ import annotations
 
@@ -34,16 +28,12 @@ def simplify_and_measure(points: list[tuple[float, float]]) -> RouteGeometry:
 
     Args:
         points: Raw ``(latitude, longitude)`` points in recording order.
-            Must contain at least 2 points.
 
     Returns:
-        RouteGeometry with the simplified path (a GeoDjango LineString, ready
-        to assign to ``Route.path``), the cumulative geodesic distance over
-        the *raw* points, and the raw/simplified point counts.
+        RouteGeometry with the simplified path (a GeoDjango LineString, ready to assign to ``Route.path``), the cumulative geodesic distance over the *raw* points, and the raw/simplified point counts.
 
     Raises:
-        ValueError: If fewer than 2 points are given.
-    """
+        ValueError: If fewer than 2 points are given."""
     if len(points) < 2:
         raise ValueError("At least 2 points are required to build a route.")
 

@@ -1,16 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-A saved filter's name and appearance: name, icon, colour, colour opacity.
-
-Split out of _saved_filter_fields.html so the map's quick "Save Filter" dialog
-can offer the same options as the full create/edit dialog without dragging in
-the whole criteria surface (security fields, custom fields, region pickers)
-that only the full form has context for. One definition, so the two cannot
-drift - which is how the map dialog came to offer a name and nothing else.
-
-Context: saved_filter (optional), color_choices, current_color,
-current_opacity. The including template supplies the surrounding <form>.
-{% endcomment %}
+{% comment %}A saved filter's name and appearance: name, icon, colour, colour opacity.{% endcomment %}
 <div class="form-row">
     <label for="saved-filter-name">Filter name <span class="required">*</span></label>
     <input type="text" name="filter_name" id="saved-filter-name" required maxlength="100"

@@ -1,25 +1,4 @@
-"""The Vault home's arithmetic has to cover every media kind it is billed for.
-
-``MediaKind`` has three values; the Vault home counted two. A video's bytes are
-already on the storage bar - ``get_storage_totals`` aggregates every row of the
-profile with no media-type filter - so the number was never wrong. What was
-wrong is that nothing on the page accounted for it: three tiles and a recent
-strip explaining a bar bigger than all of them, and an ``is_empty`` that told a
-user holding nothing but videos their Vault was empty while charging them for
-it.
-
-Two things worth knowing before changing this:
-
-- **A video has no thumbnail and never will.** Thumbnails are written only in
-  the photo branch of upload processing, and the hourly backfill filters to
-  ``media_type=PHOTO``, so ``thumb_url`` falls through to the file itself.
-  Rendering one through the photo tile downloads the whole video to display a
-  broken image, which is why the recent strip branches on *photo* rather than
-  on *document*.
-- **The delete already worked.** ``PhotoActionView`` enforces ownership and
-  deliberately does not restrict media type; nothing had ever handed a user one
-  of their videos' ids. The missing piece was markup, not an endpoint.
-"""
+"""The Vault home's arithmetic has to cover every media kind it is billed for."""
 
 from __future__ import annotations
 

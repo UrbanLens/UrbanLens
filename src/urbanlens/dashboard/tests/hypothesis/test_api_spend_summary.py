@@ -1,16 +1,4 @@
-"""The 30-day API spend summary must count every service that actually cost money.
-
-``api_spend_summary_30d`` decided what to include by asking whether a service has
-a flat ``ServiceDefaults.cost_per_call``. Of the 46 registered services exactly
-one does. Every AI service - assistant, article expansion/safety, the trivia
-chain, photo keywords - prices per call from real token usage instead, writes
-that onto ``ApiCallLog.cost_estimate``, and declares no flat rate. So the number
-shown on the site-admin cost page and the public running-costs page silently
-excluded the most expensive services in the app and counted them as "unpriced".
-
-The right question is "did this service record any cost", not "does it have a
-flat price".
-"""
+"""The 30-day API spend summary must count every service that actually cost money."""
 
 from __future__ import annotations
 
@@ -31,11 +19,9 @@ class ApiSpendSummaryTests(TestCase):
     def test_a_service_priced_per_call_is_counted(self) -> None:
         """``ai_photo_keywords`` has no flat rate but logs a real cost per call.
 
-        Checked before *and* after the calls are logged, on the same service: a stub that
-        always reports every registered service as priced would pass the second half alone,
-        and the original bug (keying "priced" off the flat rate) would pass the first half
-        alone but never flip once real cost is recorded.
-        """
+        Checked before *and* after the calls are logged, on the same service: a stub that always reports every
+        registered service as priced would pass the second half alone, and the original bug (keying "priced" off
+        the flat rate) would pass the first half alone but never flip once real cost is recorded."""
         baseline = api_spend_summary_30d()
         self.assertEqual(baseline["priced_services"], [], "nothing has recorded a cost yet")
         self.assertIsNone(baseline["total_cost_30d"])
@@ -81,9 +67,8 @@ class ApiSpendSummaryTests(TestCase):
     def test_a_recorded_zero_cost_counts_as_priced_not_unpriced(self) -> None:
         """A call that genuinely cost $0.00 recorded a cost - distinct from never recording one.
 
-        ``cost_30d is None`` is the unpriced test in the implementation; a regression to a
-        falsy check (``if not cost_30d``) would misclassify this exact case.
-        """
+        ``cost_30d is None`` is the unpriced test in the implementation; a regression to a falsy check (``if not
+        cost_30d``) would misclassify this exact case."""
         ApiCallLog.objects.create(service="ai_photo_keywords", success=True, cost_estimate=Decimal(0))
 
         summary = api_spend_summary_30d()

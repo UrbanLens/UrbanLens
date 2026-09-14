@@ -1,10 +1,4 @@
-"""A Gotify server that rejects the request must not look like a delivery.
-
-`_send_gotify` caught transport errors but ignored the response status, so a
-rotated token (401) or a wrong URL (404) - both of which answer cleanly -
-produced no log line at all. Nobody watches for an admin notification that
-never arrives, which is exactly why the silent case needed closing.
-"""
+"""A Gotify server that rejects the request must not look like a delivery."""
 
 from __future__ import annotations
 

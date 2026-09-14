@@ -1,18 +1,6 @@
 /**
- * Plugin-contributed enrichment panels, as a native client sees them.
- *
- * The most deployment-dependent surface in the API and the least testable
- * anywhere else. Which panels exist is decided at import time by the plugin
- * registry - 54 of them on a full deployment - and which ones a *caller* may
- * see depends on their key's scopes and on whether the deployment enabled the
- * provider at all. None of that is knowable from a fixture; it is a property of
- * the machine the code is running on.
- *
- * So the assertions here are about the contract rather than about contents: a
- * client has to be able to ask what panels exist, get a stable key for each,
- * and fetch one by key without guessing. What a panel *says* depends on what
- * the outside world knows about a coordinate and is not something a test can
- * pin down.
+ * Plugin-contributed enrichment panels, as a native client sees them. The most deployment-dependent
+ * surface in the API and the least testable anywhere else.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

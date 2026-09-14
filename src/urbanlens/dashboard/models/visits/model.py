@@ -12,16 +12,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_VISIT_NOTES_LENGTH
 
 
 class VisitSource(TextChoices):
-    """Origin of a PinVisit record.
-
-    - MANUAL: User manually added the visit.
-    - HISTORY: Imported from the user's location history.
-    - TRIP: Added from a trip the user attended.
-    - USER: Added by another user.
-    - PHOTO: Added when the user uploaded a photo with location metadata.
-    - GEOLOCATION: Added when the user's device provided a geolocation.
-    - SAFETY_CHECKIN: Added when a safety check-in concluded at this place.
-    """
+    """Origin of a PinVisit record."""
 
     MANUAL = "manual", "Journal"
     HISTORY = "history", "Imported"
@@ -33,11 +24,7 @@ class VisitSource(TextChoices):
 
 
 class PinVisit(abstract.FrontendDashboardModel):
-    """A single recorded visit by a user to one of their pinned locations.
-
-    Multiple PinVisit rows can exist per pin. When a visit is created or deleted
-    through the controller, pin.last_visited is kept in sync with the most
-    recent visited_at across all visit records for that pin.
+    """A single recorded visit by a user to one of their pinned locations. Multiple PinVisit rows can exist per pin.
 
     Attributes:
         pin: The pin this visit belongs to.
@@ -51,7 +38,6 @@ class PinVisit(abstract.FrontendDashboardModel):
 
     visited_at = DateTimeField()
     #: max_length adds a MaxLengthValidator without changing the DB column (see
-    #: services.core.text_limits) - previously unbounded on every write path, which
     #: is a storage-abuse vector now that the external API can log visits too.
     notes = TextField(null=True, blank=True, max_length=MAX_VISIT_NOTES_LENGTH)
     source = CharField(max_length=20, choices=VisitSource.choices, default=VisitSource.MANUAL)
@@ -92,9 +78,7 @@ class PinVisit(abstract.FrontendDashboardModel):
     @property
     def map_data(self) -> dict | None:
         """Client snapshot of the attached markup map, if any.
-
-        Kept as a property so templates and viewer JS that consumed the old
-        ``map_data`` JSON column keep working against the MarkupMap relation.
+        Kept as a property so templates and viewer JS that consumed the old ``map_data`` JSON column keep working against the MarkupMap relation.
 
         Returns:
             Snapshot dict or None when no map is attached.
@@ -104,13 +88,7 @@ class PinVisit(abstract.FrontendDashboardModel):
     @property
     def notes_html(self) -> str:
         """Sanitized HTML rendering of ``notes``, authored as Markdown.
-
-        The visit-log dialog's notes field uses the same TipTap/Markdown
-        WYSIWYG editor as the pin/wiki article (see
-        ``_visit_form.html``/``frontend/ts/entries/article-wysiwyg.ts``), so
-        rendering it for display reuses the article renderer rather than a
-        second sanitization pipeline. Notes are short, so this isn't cached
-        the way ``Article.content_html`` is.
+        The visit-log dialog's notes field uses the same TipTap/Markdown WYSIWYG editor as the pin/wiki article (see ``_visit_form.html``/``frontend/ts/entries/article-wysiwyg.ts``), so rendering it for display reuses the article renderer rather than a second sanitization pipeline.
 
         Returns:
             Sanitized HTML, or "" when there are no notes.

@@ -10,10 +10,8 @@ class DashboardConfig(AppConfig):
 
     def ready(self):
         # Teach Pillow to open HEIC/HEIF before anything reads an upload.
-        # Registered here rather than at each call site because every path that
-        # opens an image needs it - thumbnails, EXIF extraction, the GPS strip -
-        # and a path that missed it would fail the way HEIC used to: silently,
-        # keeping a file whose coordinates the uploader asked to have removed.
+        # Registered here because every image path needs it - a path that
+        # missed it would keep a file whose GPS the uploader asked to strip.
         from pillow_heif import register_heif_opener
 
         register_heif_opener()
@@ -54,10 +52,8 @@ class DashboardConfig(AppConfig):
         from urbanlens.dashboard.plugins import plugin_registry
 
         # Deletes an icon or avatar that a replace or a row deletion left behind.
-        # Django has not removed FileField files since 1.3, so both stranded one
-        # per action - and a stranded file is the "orphan" the media gate has to
-        # refuse to serve, because it cannot be told from a live file whose
-        # owner the viewer may not learn about.
+        # Django never removes FileField files, and a stranded file is
+        # indistinguishable from one the viewer may not learn about.
         from urbanlens.dashboard.services.media.file_cleanup import connect as connect_file_cleanup
 
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")

@@ -9,17 +9,12 @@ from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Inde
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.search_history.queryset import SearchHistoryManager
 
-#: Longest query string persisted to history; longer inputs are truncated.
+#: Longer inputs are truncated.
 MAX_SEARCH_QUERY_LENGTH = 255
 
 
 class SearchHistory(abstract.DashboardModel):
-    """One remembered global-search query for a profile.
-
-    A (profile, query) pair is stored once; re-running the same search bumps
-    ``last_used`` and ``use_count`` instead of creating a duplicate row, so the
-    recent-searches dropdown stays deduplicated and frecency-sortable.
-    """
+    """One remembered global-search query per profile; re-running bumps last_used/use_count."""
 
     query = CharField(max_length=MAX_SEARCH_QUERY_LENGTH)
     last_used = DateTimeField(auto_now=True, db_index=True)

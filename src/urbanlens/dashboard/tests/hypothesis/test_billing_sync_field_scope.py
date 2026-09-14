@@ -1,30 +1,4 @@
-"""A Stripe sync must write only the fields Stripe is authoritative for.
-
-``sync_from_stripe_subscription`` copies status/price/period off a live Stripe
-Subscription and then calls a bare ``save()`` - which writes *every* column on
-the instance, including the three the pay-what-you-want ledger owns
-(``total_paid_cents``, ``amount_used_cents``, ``usage_covered_until``). Stripe
-has no opinion about those; they are computed locally from payments.
-
-That turns every sync into a blind write of ledger state from whatever snapshot
-the instance happens to hold, and both callers hold theirs across a network
-round-trip:
-
-- ``_handle_invoice_payment_succeeded`` loads the subscription, calls
-  ``stripe.Subscription.retrieve``, then syncs - so anything that advanced the
-  ledger during that round-trip is written back to its pre-call value.
-- ``sync_stripe_subscriptions``, the nightly sweep, does a ``retrieve`` per row
-  over every non-canceled subscription, holding each snapshot for the length of
-  its own API call.
-
-Locking the row inside ``banking`` does not help here: this is a different
-function, it writes the ledger columns without going through ``banking`` at all,
-and in the payment handler it runs *before* ``apply_payment`` - so the locked,
-refreshed read that follows picks up the stale values this just committed.
-
-The interleaving is modelled with two snapshots of one row rather than threads,
-for the reasons given in ``test_billing_ledger_concurrency``.
-"""
+"""A Stripe sync must write only the fields Stripe is authoritative for."""
 
 from __future__ import annotations
 

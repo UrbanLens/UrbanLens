@@ -1,21 +1,14 @@
 /**
- * Shared right-click menu for every Leaflet map: copy coordinates, Street View
- * when imagery exists, and directions to the clicked point.
- *
- * Page-specific actions (add a pin, create a child pin, edit a boundary) are
- * extra items passed by the caller, so every map starts from the same base
- * rather than each page reinventing a slightly different menu.
- *
- * Installed automatically by `createMapLayers` unless a map opts out (the main
- * map builds extra "Add Pin Here" items on top of `showMapContextMenu`; the
- * floorplan editor has its own specialised menu).
+ * Shared right-click menu for every Leaflet map: copy coordinates, Street View when imagery exists, and directions to the clicked point.
  */
 
 declare const L: typeof import("leaflet");
 
 import { toast } from "./dialogs";
 
-/** Metadata endpoint used to hide Street View when Google has no coverage. */
+/**
+ * Metadata endpoint used to hide Street View when Google has no coverage.
+ */
 export const STREETVIEW_CHECK_URL = "/dashboard/map/streetview-check/";
 
 export interface ContextMenuAction {
@@ -79,12 +72,6 @@ const ZOOM_FOR_8_DIGITS = 19;
 
 /**
  * Decimal places for a copied lat/lng, based on Leaflet zoom.
- *
- * A mouse click is a couple of pixels; at city/street zooms that is metres
- * wide, so six decimals (what we have always copied) is already more precise
- * than the click. Once the map is zoomed into a building or closer, extra
- * digits keep the click's true position instead of rounding it away.
- *
  * @param zoom - Leaflet zoom, or a non-finite stand-in when the map is unknown.
  * @returns An integer in ``[6, 8]``.
  */
@@ -189,9 +176,7 @@ function appendItem(menu: HTMLElement, item: ContextMenuItem, close: () => void)
 
 /**
  * Opens the shared map menu at a viewport point.
- *
  * @returns The menu element, so callers that later grow its contents (place
- *     details arriving asynchronously) can re-place it.
  */
 export function showMapContextMenu(options: ShowMapContextMenuOptions): HTMLElement {
     closeMapContextMenus();
@@ -276,10 +261,7 @@ export function showMapContextMenu(options: ShowMapContextMenuOptions): HTMLElem
         if (!menu.contains(event.target as Node)) close();
     };
     dismissHandler = dismiss;
-    // Deferred so the click that opened the menu doesn't immediately dismiss
-    // it. closeMapContextMenus() can run first (a second right-click, an item
-    // click, a route change), and it nulls dismissHandler - so re-check that
-    // this menu is still the open one instead of registering a stale handler.
+    // Deferred so the click that opened the menu doesn't immediately dismiss it. closeMapContextMenus() can run first.
     setTimeout(() => {
         if (dismissHandler === dismiss) document.addEventListener("click", dismiss);
     }, 0);

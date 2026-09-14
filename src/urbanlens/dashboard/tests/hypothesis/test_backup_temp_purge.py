@@ -1,14 +1,4 @@
-"""A dump that dies mid-write leaves a `.tmp` behind that nothing used to reap.
-
-`run()` writes to `<name>.sql.tmp` and renames only on success, so a partial dump can
-never be mistaken for a complete backup. That is deliberate, but it means retention -
-which only ever considers `is_backup_filename` matches - never counts or removes those
-files. A process death mid-dump (OOM kill, container restart) is exactly the case the
-rename guards against, and every occurrence left a full-dump-sized file on disk forever.
-
-`purge_stale_temp_files` reaps them, but only once they are far too old to be a dump
-still in progress - deleting a live dump's temp file would corrupt a running backup.
-"""
+"""A dump that dies mid-write leaves a `.tmp` behind that nothing used to reap."""
 
 from __future__ import annotations
 
@@ -76,10 +66,7 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
             self.assertTrue(live.exists())
 
     def test_the_stale_cutoff_boundary_is_pinned_to_the_second(self) -> None:
-        """`> cutoff` (not `>=`) decides which side of STALE_TEMP_AGE_SECONDS a file falls
-        on - pin the exact cutoff instant and one second inside it, not just values
-        comfortably on either side, so a flipped comparison or an off-by-one survives no
-        longer than this test."""
+        """`> cutoff` (not `>=`) decides which side of STALE_TEMP_AGE_SECONDS a file falls on - pin the exact cutoff instant and one second inside it, not just values comfortably on either side, so a flipped comparison or an off-by-one survives no longer than this test."""
         with TemporaryDirectory() as tmp:
             fixed_now = 10_000_000.0
             cutoff = fixed_now - STALE_TEMP_AGE_SECONDS
@@ -155,10 +142,8 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
 class BackupTimeoutTests(SimpleTestCase):
     """A wedged pg_dump must fail cleanly rather than run to the Celery task limit.
 
-    `subprocess.TimeoutExpired` is not a `CalledProcessError`, so the original handler
-    would not have caught one had a timeout been passed - it would propagate out of the
-    task leaving the partial `.tmp` behind.
-    """
+    `subprocess.TimeoutExpired` is not a `CalledProcessError`, so the original handler would not have caught one
+    had a timeout been passed - it would propagate out of the task leaving the partial `.tmp` behind."""
 
     def _backup(self, backup_dir: str | Path) -> DatabaseBackup:
         backup = DatabaseBackup(auto_schedule=False)
@@ -197,12 +182,8 @@ class BackupTimeoutTests(SimpleTestCase):
 class CountBasedRetentionTests(SimpleTestCase):
     """`purge_old_backups`'s count-deletion loop had never run in any test.
 
-    `test_backup_temp_purge.py` exercised only the `.tmp`-reaping side effect,
-    with zero real `.sql` backups on disk - so `backup_files[self.backup_retention:]`
-    was never reached. These assert by *identity*: which files survive, not how
-    many. A resulting count alone would pass an implementation that deleted the
-    newest and kept the oldest, which is the one mistake this loop can make.
-    """
+    `test_backup_temp_purge.py` exercised only the `.tmp`-reaping side effect, with zero real `.sql` backups on
+    disk - so `backup_files[self.backup_retention:]` was never reached."""
 
     def _backup(self, backup_dir: str | Path, retention: int) -> DatabaseBackup:
         with mock.patch.object(DatabaseBackup, "schedule_backup", return_value=False):

@@ -1,25 +1,4 @@
-"""``visible_contact_info_pks`` must agree with ``can_view_contact_info``, row by row.
-
-The contact-info sibling of ``test_identity_visibility_batch``, and it exists
-for the same reason: a batch path is a second implementation of a decision that
-already had one, and the two drift silently because each is self-consistent.
-
-Two things separate this field from ``profile_visibility``, and both are the
-kind of difference a shared implementation quietly loses:
-
-- an unanswered friend request does **not** open the gate (a phone number is
-  more sensitive than "who's asking to connect"), and
-- a ``DirectMessageTemporaryAccess`` grant reveals an identity, never a contact
-  method.
-
-So the interesting tests here are the two negatives - the pending request and
-the temporary grant - because a batch helper parameterised over both fields
-passes everything else whether or not it honours them.
-
-``related_profile_ids`` gets its own class. It is a deliberate *superset*, so it
-cannot be tested for equality with anything; what it must never do is miss a
-profile that a real gate would have passed, which is what each test asserts.
-"""
+"""``visible_contact_info_pks`` must agree with ``can_view_contact_info``, row by row."""
 
 from __future__ import annotations
 
@@ -218,11 +197,8 @@ class VisibleContactInfoPksAgreementTests(TestCase):
 class RelatedProfileIdsSupersetTests(TestCase):
     """``related_profile_ids`` narrows a queryset before the real check runs.
 
-    It is allowed to be loose and is not allowed to be tight: an extra id costs
-    one row for the real check to reject, while a missing one hides a profile
-    the viewer is entitled to see. So every test here asserts membership, and
-    none asserts absence.
-    """
+    It is allowed to be loose and is not allowed to be tight: an extra id costs one row for the real check to
+    reject, while a missing one hides a profile the viewer is entitled to see."""
 
     def setUp(self) -> None:
         super().setUp()

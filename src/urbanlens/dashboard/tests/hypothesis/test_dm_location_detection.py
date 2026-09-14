@@ -1,15 +1,4 @@
-"""Tests for coordinate/address detection in direct messages.
-
-Parsing (pure, no DB): every supported coordinate format resolves to the same
-place, prose numbers don't false-positive, and a hypothesis round-trip checks
-arbitrary in-range decimal pairs.
-
-Recording (DB): a plaintext message with coordinates creates a mention + a
-DM_DETECTED share + the recipient's exposure; a recipient who already has the
-place pinned gets a reference-only mention (no share - it doesn't count);
-encrypted messages are never scanned; "Add to map" materializes the pin; and
-onward shares chain back to the DM share.
-"""
+"""Tests for coordinate/address detection in direct messages."""
 
 from __future__ import annotations
 
@@ -100,12 +89,8 @@ class ParseCoordinatesTests(TestCase):
     def test_adversarial_input_does_not_hang(self):
         """Regression for the py/polynomial-redos CodeQL alert on _DECIMAL_HEMI_RE/_DMS_RE.
 
-        Long runs of near-matching whitespace with no terminating hemisphere
-        letter used to trigger catastrophic/polynomial backtracking. Uses
-        bait sized right up to the DM length cap (so the length-cap
-        defense-in-depth guard doesn't just truncate the regexes' way out of
-        it) - this must complete near-instantly regardless.
-        """
+        Uses bait sized right up to the DM length cap (so the length-cap defense-in-depth guard doesn't just
+        truncate the regexes' way out of it) - this must complete near-instantly regardless."""
         pad = MAX_DIRECT_MESSAGE_LENGTH // 2 - 10
         hemi_bait = ("40." + "0" * pad + " " * pad + "X")[:MAX_DIRECT_MESSAGE_LENGTH]
         dms_bait = ("40d40" + " " * pad + "X")[:MAX_DIRECT_MESSAGE_LENGTH]
@@ -122,10 +107,8 @@ class ParseCoordinatesTests(TestCase):
     def test_oversized_input_is_bounded_by_length_cap(self):
         """A message far exceeding MAX_DIRECT_MESSAGE_LENGTH still returns fast.
 
-        Defense-in-depth: parse_coordinates truncates before scanning, so
-        even a hypothetical caller that skips body-length validation can't
-        feed these regexes unbounded text.
-        """
+        Defense-in-depth: parse_coordinates truncates before scanning, so even a hypothetical caller that skips
+        body-length validation can't feed these regexes unbounded text."""
         huge_bait = "40." + "0" * 200_000 + " " * 200_000 + "X"
 
         start = time.perf_counter()

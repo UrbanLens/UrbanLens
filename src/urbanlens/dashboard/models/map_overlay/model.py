@@ -1,22 +1,6 @@
 """Georeferenced image overlays drawn on a pin's or wiki's map.
-
-A user pins a historical map image - a Sanborn fire-insurance sheet, a site
-plan, a hand-drawn survey - onto the live map and drags its four corners until
-its streets line up with the real ones. Scans are never axis-aligned or square
-to north, and a flatbed scan of a century-old sheet is usually a little
-trapezoidal, so four independently-placed corners (a full projective
-transform) are the honest unit rather than a bounding box plus a rotation.
-
-The corners are stored as WGS-84 coordinates rather than as a transform
-matrix: they mean the same thing at every zoom level and after any base-layer
-change, and they stay correct if the rendering ever moves off Leaflet. The
-matrix is recomputed client-side per frame from those four points.
-
-Attaches to a Pin or a Wiki with the same one-of-two-parents convention
-:class:`~urbanlens.dashboard.models.markup.model.PinMarkup` and
-:class:`~urbanlens.dashboard.models.markup.model.CustomLayer` use, and may
-optionally sit inside a ``CustomLayer`` so it toggles with that layer's other
-markup instead of on its own.
+A user pins a historical map image - a Sanborn fire-insurance sheet, a site plan, a hand-drawn survey - onto the live map and drags its four corners until its streets line up with the real ones.
+Scans are never axis-aligned or square to north, and a flatbed scan of a century-old sheet is usually a little trapezoidal, so four independently-placed corners (a full projective transform) are the honest unit rather than a bounding box plus a rotation.
 """
 
 from __future__ import annotations
@@ -39,11 +23,10 @@ from django.db.models import (
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayManager
 
-#: Corner order used everywhere this model is serialized, drawn, or edited:
-#: north-west, north-east, south-east, south-west - clockwise from the top
-#: left of the *image*, not of the map. "North-west" names the corner's
-#: starting position, not a constraint: a rotated overlay legitimately ends up
-#: with its ``nw`` corner east of its ``ne`` one.
+#: Corner order used everywhere this model is serialized, drawn, or edited: north-west, north-east,
+#: south-east, south-west - clockwise from the top left of the *image*, not of the map.
+#: "North-west" names the corner's starting position, not a constraint: a rotated overlay
+#: legitimately ends up with its ``nw`` corner east of its ``ne`` one.
 CORNERS = ("nw", "ne", "se", "sw")
 
 

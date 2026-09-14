@@ -29,12 +29,7 @@ class BoundaryType(TextChoices):
 
 class BoundarySource(TextChoices):
     """External provider a candidate boundary's geometry came from.
-
-    Only providers whose geometry is authoritative enough to serve as a
-    location's *official* matching boundary get a value here - REData (county
-    assessor GIS) and Overpass (OpenStreetMap). Blank (``""``) marks every
-    other row: the canonical location default, wiki/pin customizations, and
-    legacy rows from before per-source candidates existed.
+    Blank (``""``) marks every other row: the canonical location default, wiki/pin customizations, and legacy rows from before per-source candidates existed.
     """
 
     REDATA = "redata", "County records (REData)"
@@ -43,38 +38,7 @@ class BoundarySource(TextChoices):
 
 class Boundary(abstract.DashboardModel):
     """A spatial boundary owned by a pin, a wiki, or a provider vote.
-
-    **Official geometry does not live here.** It lives on ``Place.geometry``,
-    written only by the provider chain and boundary voting. That split is the
-    whole point: this table is where user- and community-drawn shapes live, and
-    the access predicate never reads it, so "a drawn polygon can never widen
-    what you can see" is a property of the schema rather than a filter every
-    query has to remember to apply.
-
-    Three kinds of row remain, distinguished by which FK is set:
-
-    Source candidate (place=<Place>, source="redata"|"overpass", pin/wiki/profile=None):
-        A per-provider offer for one place's official parcel geometry, kept so
-        the community can vote on which provider is most accurate (see
-        ``services.geo.boundary_voting``). One per (place, boundary_type,
-        source). Candidates never match anything directly - the winner's
-        polygon is materialised onto ``Place.geometry``.
-
-    Wiki boundary (wiki=<Wiki>, pin=None):
-        Community-drawn customisation made on the wiki page. Display only.
-
-    Pin boundary (pin=<Pin>, profile=pin.profile):
-        A user's personal customisation made on the Private Pin page, or the
-        auto-refitted child-pin bounds when ``generated_from_children`` is set.
-        Display only, and only for that pin's own map.
-
-    When nothing else applies, a property boundary falls back to a circle of
-    ``default_radius_meters`` around the location's coordinates. Building
-    boundaries have no such fallback - absence means "no known building here".
-
-    Use ``Boundary.objects.effective_polygon_for_pin`` /
-    ``effective_polygon_for_wiki`` to resolve display geometry, including the
-    place lookup and detail-pin inheritance rules.
+    Three kinds of row remain, distinguished by which FK is set: **Official geometry does not live here.** It lives on ``Place.geometry``, written only by the provider chain and boundary voting.
     """
 
     boundary_type = CharField(max_length=20, choices=BoundaryType.choices, default=BoundaryType.PROPERTY)
@@ -92,12 +56,9 @@ class Boundary(abstract.DashboardModel):
         default=False,
         help_text="Marks a pin boundary that may be automatically refitted as its child pins change.",
     )
-    # When the provider chain last ran for this row. A non-null value with a
-    # null generated_polygon means "we looked and found nothing" - don't refetch
-    # on every page view. Once older than SiteSettings.boundary_cache_days, the
-    # row is stale (see services.locations.boundaries.boundary_generation_stale)
-    # and due for a lazy, request-triggered background refresh - the existing
-    # geometry keeps being served in the meantime.
+    # When the provider chain last ran for this row.
+    # A non-null value with a null generated_polygon means "we looked and found nothing" - don't
+    # refetch on every page view.
     generated_at = DateTimeField(null=True, blank=True)
     # Radius (metres) used for the property-circle fallback when no polygon exists.
     default_radius_meters = IntegerField(default=DEFAULT_RADIUS_METERS)
@@ -111,10 +72,7 @@ class Boundary(abstract.DashboardModel):
         blank=True,
         related_name="boundaries",
     )
-    # Set on source-candidate rows only. Candidates are per-provider offers for
-    # one real-world thing's official geometry, so they belong to the Place, not
-    # to whichever Location happened to trigger the fetch - that per-Location
-    # anchoring is what used to give one campus 125 copies of its own parcel.
+    # Set on source-candidate rows only.
     place = ForeignKey(
         "dashboard.Place",
         on_delete=CASCADE,

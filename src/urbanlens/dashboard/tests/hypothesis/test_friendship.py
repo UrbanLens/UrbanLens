@@ -1,22 +1,4 @@
-"""Property-based tests for the Friendship state machine.
-
-Friendship transitions follow strict rules:
-  accept  → ACCEPTED
-  decline → DECLINED    (re-request allowed)
-  ignore  → IGNORED     (re-request blocked)
-  remove  → REMOVED     (re-request allowed)
-  block   → BLOCKED     (re-request blocked)
-
-Mute is deliberately absent from that list: it is not a transition. It sets
-the caller's own mute column and leaves ``status`` untouched, because muting an
-accepted friend must not stop them being a friend. See
-``test_friendship_mute_flag`` for that behaviour and the bug it replaced.
-
-NOTE: Friendship.between() calls QuerySet.get() and raises DoesNotExist when
-no friendship exists between two profiles.  The tests here use
-Friendship.objects.create() directly for initial setup so they are not affected
-by that known limitation.
-"""
+"""Property-based tests for the Friendship state machine."""
 
 from __future__ import annotations
 
@@ -116,16 +98,7 @@ class FriendshipTransitionTests(TestCase):
 class FriendshipBlockMuteTests(TestCase):
     """block() creates a new friendship row when none exists; mute() only flips a flag.
 
-    The asymmetry is the point. Blocking must work against a stranger - that
-    is what blocking is for - so it invents the row. Muting must not: it is a
-    notification preference about a relationship you already have, and the
-    classmethod that used to conjure a ``Muted`` row for a stranger both
-    invented a relationship out of nothing and (because ``Muted`` was a
-    status) permanently blocked the pair from ever exchanging a friend
-    request. Mute is now :meth:`Friendship.mute`, an instance method that
-    writes one boolean; see ``test_friendship_mute_flag`` for its full
-    behaviour.
-    """
+    The asymmetry is the point."""
 
     profile_a: Profile
     profile_b: Profile
@@ -192,11 +165,8 @@ class FriendshipUniqueConstraintTests(TestCase):
     def test_reversed_direction_conflicts_too(self) -> None:
         """This asserted the opposite until 2026-09-05, and that was the defect.
 
-        `unique_together` is directional, so it permitted A→B *and* B→A - while
-        every reader assumed one row per pair and the mute columns are per-side
-        of one row. `friendship_one_row_per_pair` closes it; see
-        `test_friendship_pair_uniqueness.py` for the rest of that behaviour.
-        """
+        `unique_together` is directional, so it permitted A→B *and* B→A - while every reader assumed one row per
+        pair and the mute columns are per-side of one row."""
         _make_requested(self.profile_a, self.profile_b)
         with self.assertRaises(IntegrityError), transaction.atomic():
             _make_requested(self.profile_b, self.profile_a)

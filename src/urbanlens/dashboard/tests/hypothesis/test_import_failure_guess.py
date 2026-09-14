@@ -1,19 +1,4 @@
-"""Guessing a location for an unplaceable import, from the pin's name.
-
-An import whose CID never resolves leaves a `PinImportFailure` carrying little
-more than a name, and the user places each one by hand - hundreds per import.
-Many of those names are geocodable: exported names are frequently bare addresses
-("123 Main St", usually with no city), and a name that is not an address is still
-often a place OpenStreetMap knows.
-
-Every case here is a *suggestion*; nothing is placed automatically. The tests
-therefore care as much about what is refused as what is offered - a wrong
-suggestion costs the user more than no suggestion, because they have to notice it
-is wrong.
-
-Nominatim is stubbed throughout: this is about the decision logic, and the
-network is unavailable in tests by design.
-"""
+"""Guessing a location for an unplaceable import, from the pin's name."""
 
 from __future__ import annotations
 
@@ -140,12 +125,9 @@ class ImportFailureGuessTests(TestCase):
 class ImportFailureGuessCorroborationTests(TestCase):
     """The S2 cell raises confidence when it agrees, and never rejects when it does not.
 
-    Decoding the cell is wrong about one time in three, which was fatal when the
-    importer used it to *place* pins (see the module docstring) but is useful for
-    proposing one: two independent signals agreeing is much stronger evidence
-    than either alone, and a disagreeing cell must not veto a good match at that
-    error rate.
-    """
+    Decoding the cell is wrong about one time in three, which was fatal when the importer used it to *place*
+    pins (see the module docstring) but is useful for proposing one: two independent signals agreeing is much
+    stronger evidence than either alone, and a disagreeing cell must not veto a good match at that error rate."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -238,12 +220,8 @@ class ImportFailureGuessCorroborationTests(TestCase):
     def test_corroboration_does_not_get_stricter_at_high_latitude(self) -> None:
         """The agreement bound is a true distance, not a degree box.
 
-        A degree of longitude shrinks with latitude - half its equatorial width at
-        60 deg, a third at 70 - so a degree-based check silently tightened the
-        further north the pin was. The same physical offset between the cell and
-        the geocoded match must corroborate everywhere, or northern imports lose
-        confidence for no geographic reason.
-        """
+        A degree of longitude shrinks with latitude - half its equatorial width at 60 deg, a third at 70 - so a
+        degree-based check silently tightened the further north the pin was."""
         # One failure reused across latitudes: the S2 decode is mocked, so the
         # row's own url is irrelevant, and re-creating it would collide on cid.
         failure = self._failure("123 Main St")
@@ -274,10 +252,7 @@ class ImportFailureGuessCorroborationTests(TestCase):
         self.assertEqual(guess.source, "address")
 
     def test_a_rate_limited_lookup_is_not_logged_as_an_error(self) -> None:
-        """Nominatim's policy caps us at one call a minute and the queue reveals a
-        card per scroll, so refusal is the common case, not an exceptional one.
-        Logging a traceback per refused card buries the genuine geocoder failures
-        in hundreds of expected ones."""
+        """Nominatim's policy caps us at one call a minute and the queue reveals a card per scroll, so refusal is the common case, not an exceptional one. Logging a traceback per refused card buries the genuine geocoder failures in hundreds of expected ones."""
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         failure = self._failure("123 Main St")
@@ -303,12 +278,7 @@ class ImportFailureGuessCorroborationTests(TestCase):
             guess_for_failure(failure)
 
     def test_the_rate_limit_reaches_the_caller_through_the_real_gateway(self) -> None:
-        """The earlier rate-limit test mocks ``NominatimGateway.search`` itself, so
-        it proves the caller's handler works but says nothing about whether the
-        exception can ever get there. ``search`` used to flatten every failure to
-        ``[]``, which made that handler unreachable in production and the test
-        green anyway. This one patches the *session*, so the exception has to
-        travel the path it really travels."""
+        """The earlier rate-limit test mocks ``NominatimGateway.search`` itself, so it proves the caller's handler works but says nothing about whether the exception can ever get there. This one patches the *session*, so the exception has to travel the path it really travels."""
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         failure = self._failure("123 Main St")

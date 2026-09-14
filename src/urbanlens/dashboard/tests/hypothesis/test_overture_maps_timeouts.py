@@ -1,11 +1,4 @@
-"""Regression guard for OvertureMapsGateway's default S3 read timeouts.
-
-Unbounded connect_timeout/request_timeout (the old default: both None) let a
-stalled S3 range-read tie up a Celery worker indefinitely, since pyarrow's
-read isn't interruptible the way a plain `requests` call is - reported as the
-"Building Characteristics" pin-detail panel getting stuck in a loading state
-(and, by tying up worker capacity, delaying other panels queued behind it).
-"""
+"""Regression guard for OvertureMapsGateway's default S3 read timeouts."""
 
 from __future__ import annotations
 

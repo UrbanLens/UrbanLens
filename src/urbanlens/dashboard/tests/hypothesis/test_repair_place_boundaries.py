@@ -1,18 +1,4 @@
-"""The boundary repair pass must sweep the area the *old* geometry covered.
-
-`provision_places_for_coordinate` calls `resolve_locations_in(place.geometry)`
-whenever it stores an outline, so an oversized parcel re-homed pins across a
-wide area onto itself. Correcting the outline does not undo that.
-
-`resolve_locations_in` re-resolves each location it visits authoritatively, but
-its scope is `Location.objects.filter(point__within=polygon)`. Sweeping with the
-corrected (smaller) polygon therefore visits only the locations still inside it
-and leaves every wrongly-captured location outside it attached to the wrong
-place - a fix that looks applied and isn't. The command must capture the old
-geometry before re-provisioning and sweep with that.
-
-That ordering is the whole point of the command, so it is what these tests pin.
-"""
+"""The boundary repair pass must sweep the area the *old* geometry covered."""
 
 from __future__ import annotations
 

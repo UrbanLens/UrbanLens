@@ -1,17 +1,5 @@
 /**
- * The photo map inside an album's view: where each photo was taken, with
- * drag-to-correct on the viewer's own photos.
- *
- * Everything visual comes from the shared components - `createPhotoMarkerLayer`
- * for the markers and their drag behaviour, `createMapLayers` for the tile
- * sources and the layers strip - so this module is only the album-specific
- * wiring: read the photo list the server rendered, fit the view to it, and post
- * a moved photo to the gallery's own reposition endpoint.
- *
- * The album panel is HTMX-swapped, so the map is torn down and rebuilt per swap
- * rather than initialised once. Leaflet cannot measure a container inside a
- * `hidden` ancestor, so the map is only built once the section is shown, and
- * `invalidateSize` runs after it becomes visible.
+ * The photo map inside an album's view: where each photo was taken, with drag-to-correct on the viewer's own photos.
  */
 
 declare const L: typeof import("leaflet");
@@ -52,18 +40,12 @@ function readPhotos(): PhotoMapItem[] {
 
 /**
  * Persist a photo's new position.
- *
- * Posts to the pin/wiki gallery's per-image endpoint (`<gallery>/<id>/`) - the
- * single writer for Image coordinates, which also enforces that only the
- * uploader may move their own photo. Rejects so the marker snaps back.
  */
 async function savePosition(imageId: number, lat: number, lng: number): Promise<void> {
     const base = panel()?.dataset.repositionBase;
     if (!base) throw new Error("No reposition endpoint for this album.");
 
-    // `fetchJson` already reads an `error` key out of a refusal's body and
-    // falls back to `HTTP <status>`, which is what this hand-rolled read did.
-    // The caller catches and toasts that message, so the generic net is off.
+    // `fetchJson` already reads an `error` key out of a refusal's body and falls back to `HTTP <status>`, which is what this hand-rolled.
     await sendJson(`${base}${imageId}/`, "POST", { latitude: lat, longitude: lng }, { reportsItsOwnErrors: true });
     setTileMapHidden(imageId, false);
 }
@@ -110,9 +92,6 @@ export function destroyAlbumMap(): void {
 
 /**
  * Build the album map, or re-measure it if it already exists.
- *
- * Safe to call repeatedly - the second call only invalidates the size, which is
- * what showing a previously-hidden section needs.
  */
 export function initAlbumMap(): void {
     const container = document.getElementById("album-map");

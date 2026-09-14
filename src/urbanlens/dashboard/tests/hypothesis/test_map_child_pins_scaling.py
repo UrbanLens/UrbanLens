@@ -1,25 +1,9 @@
-"""The child-pins layer still builds a model graph per row, as the map once did.
+"""The child-pins layer still builds a model graph per row.
 
-R27 moved the main map's payload off model instances and onto a column
-projection — 10,000 pins went from 63,240 objects and 5.8s to zero objects and
-~0.33s. `map_child_pins_json` (`controllers/maps.py:702-748`) was not moved with
-it, and still does the thing that was fixed:
-
-```python
-query = (... .select_related("location", "parent_pin", "parent_pin__location")
-             .prefetch_related(Prefetch("labels", ...)))
-for child in query:
-    entry = child.to_detail_json()
-```
-
-so every child pin costs its own `Pin`, its `Location`, its parent `Pin`, that
-parent's `Location`, and a fresh `Label` per pin-label pair — the exact fan-out
-R27 measured, on an endpoint the map's "Child pins" layer calls directly.
-
-It is smaller than the main map was, because most accounts have far fewer child
-pins than root pins. That is a reason it has not hurt yet, not a reason the shape
-is right: nothing bounds how many child pins a profile owns, and D12 puts this
-endpoint on the projection path with the rest.
+Each child pin costs its own ``Pin``, its ``Location``, its parent ``Pin``,
+that parent's ``Location``, and a fresh ``Label`` per pin-label pair - the
+fan-out the main map already moved off. Small today only because few accounts
+own many child pins; nothing bounds that count.
 
 **Fails today, deliberately**, under `xfail(strict=True)`.
 """

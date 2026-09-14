@@ -1,43 +1,6 @@
 /**
- * Shared setup for the Hudson River State Hospital specs.
- *
- * Every spec in this directory needs the same thing first: one pin on the
- * campus, with its parcel geometry actually provisioned. That is slow (it waits
- * on county GIS data through REData), it costs real third-party calls, and it
- * is the same work for all of them - so it happens once per worker and is
- * shared.
- *
- * ## Why this fixture refuses to throw
- *
- * Provisioning can legitimately not happen: the account may have external
- * lookups off, the deployment may have no REData configured, or the pipeline
- * may be broken. If the fixture threw, all thirty-odd tests in this directory
- * would fail with the same setup error and the report would say nothing about
- * which of them would have passed.
- *
- * Instead it always yields, carrying either the geometry or a diagnosis of why
- * there is none. Exactly one spec - `hrsh-boundary.spec.ts` - asserts that
- * provisioning happened, so a broken pipeline produces **one** failure naming
- * the cause. Everything downstream calls {@link CampusFixture.requireBoundary}
- * and skips with a pointer to it. One red and thirty skips is a readable
- * report; thirty-one reds is not.
- *
- * ## Why one worker, and why "worker-scoped" is not the same as "once"
- *
- * The `location` project runs with a single worker (see `playwright.config.ts`).
- * These specs share one pin on one property, and the app enforces one root pin
- * per property per profile - so two workers racing to create it would have one
- * of them refused, and a worker deleting it in teardown would pull it out from
- * under the other. Parallelism here buys nothing anyway: the cost is waiting on
- * other people's APIs, not on CPU.
- *
- * That still does not make this setup run once. Playwright starts a **fresh
- * worker process per spec file** when the previous one is torn down, and each
- * fresh worker rebuilds its worker fixtures - so a seven-file directory ran the
- * ten-minute boundary wait seven times, turning a fifteen-minute run into an
- * hour. Measured, not theorised. The verdict is therefore cached on disk per run
- * id: the first worker waits, the rest re-read the pin once and take the
- * recorded answer. See {@link VERDICT_PATH}.
+ * Shared setup for the Hudson River State Hospital specs. Every spec in this directory needs the
+ * same thing first: one pin on the campus, with its parcel geometry actually provisioned.
  */
 
 import { type APIRequestContext, type Page } from "@playwright/test";

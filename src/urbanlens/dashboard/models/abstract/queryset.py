@@ -54,13 +54,7 @@ class PublicDashboardQuerySet(FrontendDashboardQuerySet[_ModelT]):
 
     def slug_or_uuid(self, value: str) -> Self:
         """Return the row matching this slug, or this uuid if it was sent instead.
-
-        Every public URL for one of these models builds its identifier as
-        ``obj.slug or str(obj.uuid)`` - the uuid fallback fires whenever a row's
-        slug hasn't been minted (e.g. a legacy row predating auto-slug
-        generation, or one saved via a path that bypassed it). An endpoint that
-        only ever looks up ``slug=value`` 404s for exactly those rows even
-        though the value it received is a perfectly valid identifier for them.
+        Every public URL for one of these models builds its identifier as ``obj.slug or str(obj.uuid)`` - the uuid fallback fires whenever a row's slug hasn't been minted (e.g. a legacy row predating auto-slug generation, or one saved via a path that bypassed it).
 
         Args:
             value: The slug or uuid string taken from a URL path segment.

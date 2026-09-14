@@ -1,20 +1,4 @@
-"""A seed that quietly creates fewer rows than it reports makes every number wrong.
-
-`seed_heavy_account` exists to make the neighbour test meaningful, and everything
-downstream of it — k6 thresholds, the connection sampler's budget, the claim that
-a label edit is expensive — is arithmetic over the row count it says it made. So
-the count has to be true, and the two ways it could quietly not be are both
-things that have actually happened in this repo:
-
-- rows merging because coordinates were too close (three pins at 0.0001 degrees
-  created one `Location`), and
-- `ANALYZE` not running, which does not change the count but makes every timing
-  taken afterwards a measurement of the planner's ignorance (N10: 4.683s against
-  0.384s at 5,000 pins).
-
-Both are asserted here against the database rather than against the return value,
-because the return value is the thing under suspicion.
-"""
+"""A seed that quietly creates fewer rows than it reports makes every number wrong."""
 
 from __future__ import annotations
 
@@ -76,7 +60,7 @@ class TheSeedCreatesWhatItReportsTests(TestCase):
         self.assertEqual(len(coordinates), SEEDED)
 
     def test_every_pin_carries_the_shared_label(self) -> None:
-        """The P102 trigger. A seed that spread labels would make the fan-out look cheap."""
+        """A seed that spread labels would make the fan-out look cheap."""
         seed_heavy_account(self.profile, pins=SEEDED)
 
         label = Label.objects.get(name=HEAVY_LABEL_NAME, profile=self.profile)
@@ -141,10 +125,8 @@ class TheSeedIsIdempotentTests(TestCase):
     def test_topping_up_does_not_collide_on_coordinates(self) -> None:
         """The second run must continue the grid, not restart it.
 
-        `Location` is unique on `(latitude, longitude)`, so a restarted grid
-        raises rather than merging — which is a loud failure, but only if
-        something runs the second seed. This is that something.
-        """
+        `Location` is unique on `(latitude, longitude)`, so a restarted grid raises rather than merging — which
+        is a loud failure, but only if something runs the second seed."""
         seed_heavy_account(self.profile, pins=SEEDED)
         seed_heavy_account(self.profile, pins=SEEDED * 2)
 
@@ -154,13 +136,8 @@ class TheSeedIsIdempotentTests(TestCase):
     def test_topping_up_by_a_different_amount_does_not_collide(self) -> None:
         """Three runs, each creating a different number of pins.
 
-        The test above passes without exercising the defect it is named for: it
-        creates `SEEDED` twice, so anything derived from "how many are being
-        created now" comes out the same both times. The grid geometry was
-        derived from exactly that, and this is the shape that found it — a
-        200-then-20,000 top-up raised `IntegrityError` on the unique constraint
-        while the doubling test stayed green.
-        """
+        The test above passes without exercising the defect it is named for: it creates `SEEDED` twice, so
+        anything derived from "how many are being created now" comes out the same both times."""
         seed_heavy_account(self.profile, pins=3)
         seed_heavy_account(self.profile, pins=17)
         seed_heavy_account(self.profile, pins=40)
@@ -172,11 +149,8 @@ class TheSeedIsIdempotentTests(TestCase):
     def test_a_pin_index_always_lands_on_the_same_coordinate(self) -> None:
         """The property the collision was a symptom of, asserted directly.
 
-        Two accounts seeded to different sizes must agree about where pin *n*
-        goes, because that is what makes a top-up safe. Asserted across profiles
-        rather than across runs, so the grid stays pinned even if the top-up
-        path is later rewritten.
-        """
+        Two accounts seeded to different sizes must agree about where pin *n* goes, because that is what makes a
+        top-up safe."""
         other = baker.make(User).profile
 
         seed_heavy_account(self.profile, pins=5)
@@ -229,11 +203,8 @@ class TheSeedTellsThePlannerTests(TestCase):
 class TheReportIsUsableByTheHarnessTests(TestCase):
     """Every value the load harness reads out of the manifest has to be true.
 
-    The k6 neighbour scenario edits the shared label *by id* and filters pins by
-    a *name prefix*, both taken from this report. A report that named a label
-    that did not exist, or a prefix that matched nothing, would produce a run
-    that finished green having measured a 404 and an empty result set.
-    """
+    The k6 neighbour scenario edits the shared label *by id* and filters pins by a *name prefix*, both taken
+    from this report."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -259,10 +230,8 @@ class TheReportIsUsableByTheHarnessTests(TestCase):
     def test_the_reported_label_is_editable_by_id_after_a_rename(self) -> None:
         """A load run renames or recolours the label; a later top-up must not fork it.
 
-        The seeder finds its label by name, so a run that changed the name would
-        leave the next seed creating a second label and the pins split between
-        them - which reads as "the label edit got cheaper".
-        """
+        The seeder finds its label by name, so a run that changed the name would leave the next seed creating a
+        second label and the pins split between them - which reads as "the label edit got cheaper"."""
         first = seed_heavy_account(self.profile, pins=SEEDED)
 
         second = seed_heavy_account(self.profile, pins=SEEDED * 2)
@@ -275,13 +244,7 @@ class TheReportIsUsableByTheHarnessTests(TestCase):
 class TheSeedHoldsTheMapCentreConstantTests(TestCase):
     """The seed stores the map centre, so a load run does not measure computing it.
 
-    `Profile.compute_map_center` sits on the critical path of the map page. It
-    used to be O(n^2) in pins, so a seeded account without a stored centre wedged
-    the process on the run's first map request and every phase after it measured
-    that (P108, fixed). Still held constant: the harness exists to compare phases
-    against each other, and a per-account one-off on the first request of the run
-    is exactly the kind of variable that makes two phases incomparable.
-    """
+    `Profile.compute_map_center` sits on the critical path of the map page."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -300,11 +263,8 @@ class TheSeedHoldsTheMapCentreConstantTests(TestCase):
     def test_the_stored_centre_is_the_answer_the_slow_path_would_give(self) -> None:
         """Not an approximation, and this is what says so.
 
-        The seeded grid spans far less than the 1,000 km cluster radius, so every
-        point is in one cluster and the densest-cluster centroid is the plain
-        mean. If the grid ever grew past that radius this would fail, which is
-        the right outcome - the shortcut would no longer be equivalent.
-        """
+        The seeded grid spans far less than the 1,000 km cluster radius, so every point is in one cluster and
+        the densest-cluster centroid is the plain mean."""
         seed_heavy_account(self.profile, pins=SEEDED)
         self.profile.refresh_from_db()
         stored = (float(self.profile.map_center_latitude), float(self.profile.map_center_longitude))
@@ -327,11 +287,8 @@ class TheSeedHoldsTheMapCentreConstantTests(TestCase):
 class TheSeedCanCarryARealisticLabelCountTests(TestCase):
     """One label per pin is the cheapest case for anything that scales with them.
 
-    The map payload names a pin's labels by id and defines each once per
-    response, so what that saves over copying every label's facts into every pin
-    grows with how many labels a pin carries. A fixture that always gives one
-    measures the case where there is nothing to save.
-    """
+    The map payload names a pin's labels by id and defines each once per response, so what that saves over
+    copying every label's facts into every pin grows with how many labels a pin carries."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -349,10 +306,9 @@ class TheSeedCanCarryARealisticLabelCountTests(TestCase):
     def test_the_vocabulary_is_shared_rather_than_per_pin(self) -> None:
         """A label per pin is not a realistic account and would flatter compression.
 
-        Counted as `(kind, name)` pairs rather than against the profile's total or
-        by name alone: a profile arrives with several dozen default labels, and
-        some of them share a name with the vocabulary under a different kind.
-        """
+        Counted as `(kind, name)` pairs rather than against the profile's total or by name alone: a profile
+        arrives with several dozen default labels, and some of them share a name with the vocabulary under a
+        different kind."""
         report = seed_heavy_account(self.profile, pins=SEEDED, labels_per_pin=4)
 
         names = {name for _kind, name in VOCABULARY}

@@ -1,11 +1,4 @@
-"""Template access to the third-party asset table.
-
-``{% vendor_asset "leaflet_js" %}`` writes the whole tag, and
-``{% vendor_asset_url "leaflet_marker_icon" %}`` writes just a URL for the
-assets referenced from script or CSS rather than by a tag of their own. Both
-resolve through :mod:`services.core.vendor_assets`, so a version or a source is
-changed in one place instead of in each template that mentions the library.
-"""
+"""Template access to the third-party asset table (versions/sources live in one place)."""
 
 from __future__ import annotations
 

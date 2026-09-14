@@ -1,11 +1,4 @@
-"""Tests for GoogleMapsGateway._csv_row_iter() - CSV pin import.
-
-Two independent CSV shapes are supported: Google Takeout exports (identified by
-a URL column) and generic spreadsheet exports (Airtable, Google Sheets, Excel,
-etc.) that carry their own latitude/longitude columns. This file only covers
-the generic-column path; Takeout-URL parsing is exercised elsewhere via the
-Google Maps import tests.
-"""
+"""Tests for GoogleMapsGateway._csv_row_iter() - CSV pin import."""
 
 from __future__ import annotations
 
@@ -82,11 +75,7 @@ class CsvRowIterLatLonTests(SimpleTestCase):
         self.assertAlmostEqual(pins[0]["longitude"], 2.0)
 
     def test_parking_location_column_is_recognized_as_a_url_column(self):
-        """UL-203: Google Takeout's Parking.csv export uses a "Parking location"
-        header for its URL column, not "URL" - every row previously fell
-        through to the generic latitude/longitude fallback (which Parking.csv
-        has none of) and was silently skipped, so the whole file failed to
-        import a single pin."""
+        """UL-203: Google Takeout's Parking.csv export uses a "Parking location" header for its URL column, not "URL" - every row previously fell through to the generic latitude/longitude fallback (which Parking.csv has none of) and was silently skipped, so the whole file failed to import a single pin."""
         csv_text = 'Parking location,Timestamp\n"https://maps.google.com/maps/search/3.0,4.0",2024-01-01T00:00:00Z'
 
         pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
@@ -153,12 +142,7 @@ class CsvRowIterLatLonTests(SimpleTestCase):
 
 
 class CsvRowIterS2GuessFlagTests(SimpleTestCase):
-    """TEMPORARY: _csv_row_iter() flags rows whose cid came from the imprecise
-    S2-cell URL pattern, so the import preview can force-select them by default -
-    see the matching TEMPORARY block in GoogleMapsGateway._preview_pins. Remove
-    together with that block once every user's previously-imported data has been
-    repaired.
-    """
+    """TEMPORARY: _csv_row_iter() flags rows whose cid came from the imprecise S2-cell URL pattern, so the import preview can force-select them by default - see the matching TEMPORARY block in GoogleMapsGateway._preview_pins."""
 
     def setUp(self):
         self.profile = object()

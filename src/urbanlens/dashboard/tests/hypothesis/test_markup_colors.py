@@ -1,14 +1,4 @@
-"""Tests that PinMarkup colours cannot be stored as arbitrary strings.
-
-``color`` and ``border_color`` are interpolated into markup that reaches
-``innerHTML`` on the client (text-label spans, arrowhead SVG), and every write
-path builds the model directly from a JSON body rather than through a Form, so
-the restriction is enforced in ``PinMarkup.save()``. These tests pin that down
-at the model - which covers the create/edit endpoints, snapshot imports, and
-map clones alike - plus the pure helpers the renderers share.
-
-Model tests require the database; the helper tests do not.
-"""
+"""Tests that PinMarkup colours cannot be stored as arbitrary strings."""
 
 from __future__ import annotations
 
@@ -80,10 +70,8 @@ class SanitizeOptionalColorTests(SimpleTestCase):
 class PinMarkupBulkCreateColorTests(TestCase):
     """bulk_create never calls save(), so the coercion has to reach it separately.
 
-    The undo restore rebuilds a deleted map's annotations this way, from a
-    payload captured at delete time - which is precisely where a value stored
-    before this validation existed would still be sitting.
-    """
+    The undo restore rebuilds a deleted map's annotations this way, from a payload captured at delete time -
+    which is precisely where a value stored before this validation existed would still be sitting."""
 
     def setUp(self):
         self.user = baker.make("auth.User")

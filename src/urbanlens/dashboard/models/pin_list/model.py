@@ -1,12 +1,5 @@
 """PinList models - named, ordered collections of a profile's Pins.
-
-A PinList can be plain (pins added/removed only by explicit user action) or
-"smart" (``is_smart=True``), in which case it auto-includes pins matching a
-saved filter (``smart_filter``, same JSON shape as ``SavedFilter.criteria``)
-and/or falling inside a drawn boundary polygon (``smart_boundary``). See
-``dashboard.services.pins.pin_list_membership`` for the matching/sync logic and
-``dashboard.models.pin_list.signals`` for the Pin-save hook that keeps
-smart-list membership current.
+A PinList can be plain (pins added/removed only by explicit user action) or "smart" (``is_smart=True``), in which case it auto-includes pins matching a saved filter (``smart_filter``, same JSON shape as ``SavedFilter.criteria``) and/or falling inside a drawn boundary polygon (``smart_boundary``).
 """
 
 from __future__ import annotations
@@ -30,11 +23,7 @@ logger = logging.getLogger(__name__)
 
 class PinList(abstract.PublicDashboardModel):
     """A profile's named, ordered collection of their own Pins.
-
-    URLs identify a list by ``slug`` rather than ``uuid`` - see
-    ``abstract.PublicDashboardModel``. Slugs are unique per-profile (not
-    globally), matching ``Pin``'s scoping and this model's existing
-    per-profile name uniqueness.
+    URLs identify a list by ``slug`` rather than ``uuid`` - see ``abstract.PublicDashboardModel``.
     """
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="pin_lists")
@@ -45,12 +34,10 @@ class PinList(abstract.PublicDashboardModel):
     # Same JSON shape as SavedFilter.criteria - see dashboard.services.search.filter_criteria.
     smart_filter = JSONField(null=True, blank=True)
     smart_boundary = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
-    # Tracks which SavedFilter smart_filter was last copied from, so editing
-    # that SavedFilter can resync this list's membership too - see
-    # PinListEditView (sets/clears this alongside smart_filter) and
-    # SavedFilterEditView (resyncs every list still pointing at it).
-    # SET_NULL rather than CASCADE: deleting the source SavedFilter shouldn't
-    # blow away a list's last-synced snapshot, only stop it from tracking further edits.
+    # Tracks which SavedFilter smart_filter was last copied from, so editing that SavedFilter can
+    # resync this list's membership too - see PinListEditView (sets/clears this alongside
+    # smart_filter) and SavedFilterEditView (resyncs every list still pointing at it).
+    # SET_NULL rather than CASCADE: deleting the source SavedFilter shouldn't blow away a list's
     source_saved_filter = ForeignKey(
         "dashboard.SavedFilter",
         on_delete=SET_NULL,
@@ -79,10 +66,9 @@ class PinList(abstract.PublicDashboardModel):
     def pin_count(self) -> int:
         """Number of pins currently on this list.
 
-        Prefers ``with_pin_counts()``'s annotation, which counts in the
-        database. Falls back to ``len(self.items.all())``, which reuses a
-        ``prefetch_related("items")`` cache where a caller set one up and
-        otherwise costs the same single query ``.count()`` would have.
+        Prefers ``with_pin_counts()``'s annotation, which counts in the database. Falls back to
+        ``len(self.items.all())``, which reuses a ``prefetch_related("items")`` cache where a
+        caller set one up and otherwise costs the same single query ``.count()`` would have.
         """
         annotated = getattr(self, "_pin_count", None)
         if annotated is not None:

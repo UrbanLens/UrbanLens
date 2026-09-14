@@ -12,11 +12,10 @@ _FIGURES_CACHE_KEY = "public-costs-page-figures-v1"
 class CostsView(TemplateView):
     """Render the public page showing UrbanLens's estimated running costs.
 
-    Gated behind ``SiteSettings.public_costs_page_enabled`` (off by default) - the
-    page 404s until an admin turns it on from the site-admin cost tracking page.
-
-    Shows only the aggregate monthly total and its trend - the per-service external
-    API spend breakdown lives on the site-admin cost tracking page instead.
+    Gated behind ``SiteSettings.public_costs_page_enabled`` (off by default) - the page 404s until an
+    admin turns it on from the site-admin cost tracking page.
+    Shows only the aggregate monthly total and its trend - the per-service external API spend breakdown
+    lives on the site-admin cost tracking page instead.
     """
 
     template_name = "dashboard/pages/costs/index.html"
@@ -28,9 +27,8 @@ class CostsView(TemplateView):
             **kwargs: Standard ``TemplateView`` keyword arguments.
 
         Returns:
-            Template context including ``breakdown``, ``total_hardware_cost``,
-            ``cost_per_user``, ``active_user_count``, ``cost_per_supporter``,
-            ``active_supporter_count``, and the monthly total chart series.
+            Template context including ``breakdown``, ``total_hardware_cost``, ``cost_per_user``,
+            ``active_user_count``, ``cost_per_supporter``,...
         """
         from urbanlens.dashboard.models.site_settings import SiteSettings
 

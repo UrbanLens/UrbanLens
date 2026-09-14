@@ -1,28 +1,4 @@
-"""Tests for exporting a trip to Google Calendar over the external API.
-
-Two things are covered here, and the first is not an API concern at all:
-
-**The export privacy gate.** ``services.trips.calendar_sync`` used to honour only an
-activity's own ``location_hidden`` flag when writing event locations, ignoring
-the adder's ``trip_pin_location_visibility`` setting that every other trip
-surface applies (the activities panel, the map, AI suggestions - all via
-``services.trips.trip_visibility.viewer_hidden_activity_ids``). Exporting a shared
-trip therefore copied trip-mates' coordinates - ones the trip screen
-deliberately hides from the exporter - into a third party's calendar, where no
-UrbanLens setting can ever claw them back. The first class below is the
-regression guard, written against the service rather than the endpoint because
-auto-sync pushes reach the same code without any HTTP request at all.
-
-**The endpoint pair.** ``POST``/``DELETE /trips/{slug}/calendar/`` exists
-because export was assumed to be impossible without a browser: it is not.
-Tokens are stored per user *with a refresh token* and the gateway refreshes
-them on its own, so only the one-time consent is browser-bound. The 409 for an
-unconnected calendar therefore carries the *site's own* connect route rather
-than a Google URL - a Google URL minted here would redirect to the login page
-and lose the authorization code, because the API caller has no session.
-
-Every gateway call is mocked. Nothing in this file may reach Google.
-"""
+"""Tests for exporting a trip to Google Calendar over the external API."""
 
 from __future__ import annotations
 
@@ -70,8 +46,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The raw (unhashed) API key value.
 
     Returns:
-        Extra kwargs for Django's test client.
-    """
+        Extra kwargs for Django's test client."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -100,16 +75,12 @@ class _CalendarTestCase(TestCase):
     def _patch_gateway(self) -> mock.MagicMock:
         """Replace the gateway the sync service instantiates.
 
-        A fresh id per created event, the way Google actually answers: one
-        export of a trip that has activities writes a trip-level link and an
-        activity-level one, and the partial unique on (profile,
-        google_event_id) rejects them if the fixture hands back the same id
-        twice.
+        A fresh id per created event, the way Google actually answers: one export of a trip that has activities
+        writes a trip-level link and an activity-level one, and the partial unique on (profile, google_event_id)
+        rejects them if the fixture hands back the same id twice.
 
         Returns:
-            The mock standing in for the gateway *instance*, with
-            ``create_event`` already returning plausible event ids.
-        """
+            The mock standing in for the gateway *instance*, with ``create_event`` already returning plausible event ids."""
         patcher = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway")
         gateway_cls = patcher.start()
         self.addCleanup(patcher.stop)
@@ -125,8 +96,7 @@ class _CalendarTestCase(TestCase):
             _body: The event body the service built (unused).
 
         Returns:
-            An event dict with an id unique within this test.
-        """
+            An event dict with an id unique within this test."""
         self._created_events = getattr(self, "_created_events", 0) + 1
         return {"id": f"evt-new-{self._created_events}"}
 
@@ -134,9 +104,7 @@ class _CalendarTestCase(TestCase):
         """A dated trip the key owner and the trip-mate both belong to.
 
         Returns:
-            The saved trip, created by the trip-mate so the key owner is a
-            plain member rather than an organizer.
-        """
+            The saved trip, created by the trip-mate so the key owner is a plain member rather than an organizer."""
         trip = Trip.objects.create(
             name="Shared trip",
             creator=self.mate,
@@ -166,25 +134,16 @@ class _CalendarTestCase(TestCase):
 class ExportRespectsAdderVisibilityTests(_CalendarTestCase):
     """A trip-mate's hidden coordinates must never reach a third party's calendar.
 
-    ``location_hidden`` was the only gate the exporter honoured. The adder's
-    ``trip_pin_location_visibility`` - the setting that decides whether *this
-    particular viewer* sees a location at all - was ignored, so the exporter
-    received in their Google Calendar exactly the coordinates the trip screen
-    had refused to show them.
-    """
+    ``location_hidden`` was the only gate the exporter honoured."""
 
     def _mate_activity(self, trip: Trip, visibility: str, **kwargs) -> TripActivity:
         """Add a located activity contributed by the trip-mate.
 
         Args:
-            trip: The trip to add to.
-            visibility: The adder's ``trip_pin_location_visibility`` level.
-            **kwargs: Extra ``TripActivity`` field values.
+            trip: The trip to add to. visibility: The adder's ``trip_pin_location_visibility`` level. **kwargs: Extra ``TripActivity`` field values.
 
         Returns:
-            The saved activity, with ``added_by`` refreshed so the visibility
-            gate reads the level just set.
-        """
+            The saved activity, with ``added_by`` refreshed so the visibility gate reads the level just set."""
         Profile.objects.filter(pk=self.mate.pk).update(trip_pin_location_visibility=visibility)
         location = Location.objects.create(latitude=42.33, longitude=-83.04, **_ADDRESS_COMPONENTS)
         return TripActivity.objects.create(
@@ -255,13 +214,10 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
         """POST the export endpoint for *trip*.
 
         Args:
-            trip: The trip to export.
-            body: Optional JSON body.
-            raw_key: Optional alternative API key.
+            trip: The trip to export. body: Optional JSON body. raw_key: Optional alternative API key.
 
         Returns:
-            The test client's response.
-        """
+            The test client's response."""
         return self.client.post(
             reverse("external_api:trips.calendar_export", args=[trip.slug]),
             body or {},
@@ -304,16 +260,8 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
     def test_export_opens_no_transaction_around_the_upstream_calls(self) -> None:
         """The third-party calls must not run inside a transaction this view opened.
 
-        Wrapping the fan-out in ``transaction.atomic`` would pin a database
-        connection for the length of an unbounded series of upstream requests.
-        The service is idempotent by design precisely so it does not need one.
-
-        The assertion is on *savepoint depth* rather than ``in_atomic_block``:
-        Django's ``TestCase`` already runs every test inside an atomic block, so
-        the latter is unconditionally true here and would pass no matter what
-        the view did. Any ``atomic`` the request opened would nest inside that
-        outer block and push a savepoint, which is what this actually detects.
-        """
+        Wrapping the fan-out in ``transaction.atomic`` would pin a database connection for the length of an
+        unbounded series of upstream requests."""
         from django.db import connection
 
         gateway = self._patch_gateway()
@@ -353,10 +301,8 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
     def test_unconnected_calendar_is_409_with_the_sites_connect_url(self) -> None:
         """The client must be sent to the site's own route, never to Google.
 
-        A Google authorization URL minted by this API would come back to the
-        OAuth callback with no session attached, redirect to the login page,
-        and lose the authorization code.
-        """
+        A Google authorization URL minted by this API would come back to the OAuth callback with no session
+        attached, redirect to the login page, and lose the authorization code."""
         self._patch_gateway()
         self.account.delete()
         trip = self._own_trip()
@@ -451,8 +397,7 @@ class TripCalendarRemoveEndpointTests(_CalendarTestCase):
             trip: The trip to unexport.
 
         Returns:
-            The test client's response.
-        """
+            The test client's response."""
         return self.client.delete(
             reverse("external_api:trips.calendar_export", args=[trip.slug]), **_bearer(self.raw_key)
         )

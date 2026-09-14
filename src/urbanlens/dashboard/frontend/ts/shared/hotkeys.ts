@@ -1,16 +1,5 @@
 /**
  * Site-wide customizable keyboard shortcuts.
- *
- * Every rebindable action is declared once, here, in DEFAULT_HOTKEYS. A page
- * that wants to react to one calls matchesHotkey(event, actionId) instead of
- * comparing event.key/ctrlKey/etc directly, so the user's own override (saved
- * from Settings > Shortcuts, injected as window.UL_HOTKEYS by base.html) is
- * honoured everywhere without each call site re-implementing the lookup.
- *
- * Not every existing document-level keydown handler in the app is listed
- * here - Escape/Enter in dialogs and organize panels are conventional modal
- * behavior, not a "shortcut" a user would expect to rebind, so they stay as
- * plain hardcoded key checks.
  */
 
 export interface HotkeyDefault {
@@ -20,13 +9,7 @@ export interface HotkeyDefault {
     description: string;
 }
 
-// No type annotation here, deliberately: leaving the literal object to infer
-// its own type keeps `DEFAULT_HOTKEYS.redo` (etc.) known-present to callers
-// like the contract test, rather than widening every key to `T | undefined`.
-// matchesHotkey/loadHotkeys below only ever iterate it generically
-// (Object.entries) or index into their own already-generic return values, so
-// they don't need the wider Record<string, HotkeyDefault> shape - only a
-// dynamic `DEFAULT_HOTKEYS[someString]` lookup would, and nothing does that.
+// No type annotation here, deliberately: leaving the literal object to infer its own type keeps `DEFAULT_HOTKEYS.redo` (etc.).
 export const DEFAULT_HOTKEYS = {
     undo: {
         keys: ["ctrl+z"],
@@ -61,10 +44,7 @@ export function normalizeCombo(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "m
 }
 
 /**
- * Resolve every action's accepted combos: the user's own override (a single
- * combo, replacing the defaults entirely) where one is set, else the
- * defaults. Reads window.UL_HOTKEYS fresh each call - cheap enough (a handful
- * of actions) that caching would only add invalidation to worry about.
+ * Resolve every action's accepted combos: the user's own override (a single combo, replacing the defaults entirely) where one is set,.
  */
 export function loadHotkeys(): Record<string, string[]> {
     const overrides = (typeof window !== "undefined" && window.UL_HOTKEYS) || {};

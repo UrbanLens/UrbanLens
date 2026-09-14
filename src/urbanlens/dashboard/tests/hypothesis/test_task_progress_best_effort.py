@@ -1,15 +1,4 @@
-"""Reporting progress must never fail the work that has already succeeded.
-
-`update_task_progress` calls `task.update_state`, which writes to the Celery result
-backend. That call was unguarded, so a backend hiccup propagated out of whichever
-task was reporting - and since `CELERY_TASK_ACKS_LATE` is on and most tasks carry
-`autoretry_for=(OSError,)`, the task was then redelivered and re-ran side effects
-that are not all idempotent (`sweep_immich_library_locations` creates an unguarded
-NotificationLog immediately before its final progress call).
-
-This matches the contract `channel_broadcast.send_group_message` already documents
-for the other side channel in this codebase: never raises.
-"""
+"""Reporting progress must never fail the work that has already succeeded."""
 
 from __future__ import annotations
 

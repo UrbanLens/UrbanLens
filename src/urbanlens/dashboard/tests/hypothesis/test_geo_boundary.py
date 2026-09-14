@@ -1,10 +1,4 @@
-"""Tests for GeoBoundary - the generalized replacement for the old "USA only" bool flag.
-
-Covers the lazy-load/memoization contract (a boundary's geometry loader must
-never run more than once per instance, and never at construction time), the
-bbox/WKT factories, and ``state_boundary``'s two-layer caching (Django cache
-across process restarts, per-instance memoization within one).
-"""
+"""Tests for GeoBoundary - the generalized replacement for the old "USA only" bool flag."""
 
 from __future__ import annotations
 

@@ -1,10 +1,4 @@
-"""Property-based tests for Pin model computed properties.
-
-These tests exercise business logic that is expressed as Python properties on
-Pin, using in-memory model instances - no database round-trips required.  Each
-property tested here carries a real invariant that the rest of the application
-depends on.
-"""
+"""Property-based tests for Pin model computed properties."""
 
 from __future__ import annotations
 

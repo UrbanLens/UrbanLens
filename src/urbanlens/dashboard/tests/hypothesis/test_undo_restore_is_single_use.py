@@ -1,10 +1,4 @@
-"""An undo entry must restore once, however many times it is submitted.
-
-``restore_undo_action`` claims the row under a lock and stamps ``undone_at``
-so a second submit finds it already consumed. Both halves of a double-submit
-fetch the entry while it still exists, so without the claim both would restore
-and the user would get two copies of everything.
-"""
+"""An undo entry must restore once, however many times it is submitted."""
 
 from __future__ import annotations
 

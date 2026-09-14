@@ -1,18 +1,4 @@
-"""Child-pin saves must keep working outside an ambient transaction.
-
-`refit_child_pin_boundary` runs from Pin's post_save/post_delete signals and takes a
-`select_for_update` lock, which raises `TransactionManagementError` outside a transaction.
-It is safe because the function carries `@transaction.atomic` - and that decorator is the
-only thing making it safe: `ATOMIC_REQUESTS` is unset (Django defaults it to False), and
-`Pin._meta.parents` is empty, so `Model.save_base` uses `mark_for_rollback_on_error` rather
-than opening a transaction of its own.
-
-These tests pin that guarantee. Remove the decorator and they fail.
-
-They use **TransactionTestCase** deliberately: the ordinary `TestCase` wraps every test in a
-transaction, which would satisfy `select_for_update` for free and make the guarantee
-untestable - the rest of the suite genuinely cannot observe this.
-"""
+"""Child-pin saves must keep working outside an ambient transaction."""
 
 from __future__ import annotations
 
@@ -77,11 +63,9 @@ class ChildPinOutsideTransactionTests(TransactionTestCase):
     def test_reparenting_a_child_pin_outside_a_transaction(self) -> None:
         """A hierarchy move refits the old and new parent as two separate atomic calls.
 
-        Untested by the create/delete cases above: ``refit_child_boundaries_on_save``
-        loops over up to two parent ids for a single save, each its own
-        ``@transaction.atomic`` call, still with no ambient transaction wrapping
-        the loop itself.
-        """
+        Untested by the create/delete cases above: ``refit_child_boundaries_on_save`` loops over up to two
+        parent ids for a single save, each its own ``@transaction.atomic`` call, still with no ambient
+        transaction wrapping the loop itself."""
         other_parent = baker.make(Pin, profile=self.profile, location=self._child_location(42.7000, -73.8000))
         child = Pin.objects.create(
             profile=self.profile, location=self._child_location(42.6528, -73.7564), parent_pin=self.parent

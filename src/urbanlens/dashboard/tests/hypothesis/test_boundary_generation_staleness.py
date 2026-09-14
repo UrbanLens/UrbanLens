@@ -1,13 +1,4 @@
-"""Tests for the place-resolution TTL.
-
-``boundary_generation_stale``, the ``schedule_location_boundary_generation``
-gate, and ``generate_location_boundaries``' refresh-overwrite behaviour.
-
-Staleness now keys off ``Location.place_resolved_at`` (stamped even when the
-providers found nothing, so an unknown coordinate is asked about once rather
-than on every page view) and, when a place was found,
-``Place.geometry_generated_at``.
-"""
+"""Tests for the place-resolution TTL."""
 
 from __future__ import annotations
 

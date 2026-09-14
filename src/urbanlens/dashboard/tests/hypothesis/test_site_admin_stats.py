@@ -102,7 +102,6 @@ class ServerUptimeTests(SimpleTestCase):
             return _app_uptime()
 
     def test_parses_days_hours_minutes_correctly(self) -> None:
-        # 1 day + 2 hours + 3 minutes = 86400 + 7200 + 180 = 93780 seconds
         seconds = 86400 + 7200 + 180
         self.assertEqual(self._uptime_at(seconds), "1d 2h 3m")
 
@@ -294,10 +293,8 @@ class SiteAdminStatsViewContextTests(TestCase):
 class SiteAdminHomeViewTests(TestCase):
     """The admin homepage renders without waiting on infra/git I/O.
 
-    Service health (Postgres/Valkey/Celery/nginx pings) and the git update
-    check (a git fetch) are real I/O - SiteAdminHomeStatusPartialView fetches
-    them lazily via HTMX instead of SiteAdminHomeView blocking on them.
-    """
+    Service health (Postgres/Valkey/Celery/nginx pings) and the git update check (a git fetch) are real I/O -
+    SiteAdminHomeStatusPartialView fetches them lazily via HTMX instead of SiteAdminHomeView blocking on them."""
 
     def setUp(self) -> None:
         super().setUp()

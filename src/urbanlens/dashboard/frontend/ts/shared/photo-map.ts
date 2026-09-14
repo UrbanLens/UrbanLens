@@ -1,22 +1,5 @@
 /**
- * Photo markers on a Leaflet map: the thumbnail icon, its zoom-dependent size,
- * drag-to-reposition, and nearby-photo clustering.
- *
- * Extracted from the pin detail map (entries/map-annotations.ts), which remains
- * the canonical surface - it still owns its own marker bookkeeping because its
- * markers are also wired into a side panel, tap-to-place, and the lightbox. What
- * lives here is the part that must look and behave identically everywhere a
- * photo appears on a map, so a second surface (an album's map) can't drift into
- * a differently-sized icon or a differently-shaped save call.
- *
- * Nearby photos cluster into a stacked-polaroid badge rather than a numbered
- * circle - the top image sits on the second, and hover fans them slightly
- * apart. Same-spot GPS hits stay stacked at every zoom so a burst of photos
- * from one building is never a pile of overlapping thumbnails.
- *
- * Leaflet is a CDN global on every map page, so it is declared rather than
- * imported - importing would bundle a second copy and clobber the plugins hung
- * off `window.L`.
+ * Photo markers on a Leaflet map: the thumbnail icon, its zoom-dependent size, drag-to-reposition, and nearby-photo clustering.
  */
 
 declare const L: typeof import("leaflet");

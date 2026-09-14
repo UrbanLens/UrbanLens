@@ -127,7 +127,7 @@ class UndoLastActionToolTests(TestCase):
         self.assertIn("error", result.data)
 
     def test_an_expired_restore_surfaces_as_an_error_not_a_raise(self) -> None:
-        """UndoAlreadyRestoredError (a concurrent double-confirm) - covered by mocking since peek_undo's own .active() filter already screens out a genuinely time-expired row before restore_undo_action ever runs."""
+        """An expired restore surfaces as an error, not a raise (mocked: .active() already screens out genuinely expired rows)."""
         undo_action = _stash_deleted_pin(self.profile)
         # _undo_last_action imports restore_undo_action locally at call time
         # (matching every other handler's deferred-import convention), so the

@@ -1,10 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-Inline media-label picker for the photo lightbox. Browse existing labels,
-filter as you type, and create+apply a new media label in one step.
-
-Expects the same context as label_membership_panel.html (membership_route=image).
-{% endcomment %}
+{% comment %}Inline media-label picker for the photo lightbox.{% endcomment %}
 <div class="lightbox-labels" id="media-label-panel" data-image-uuid="{{ obj_uuid }}">
   <h4 class="lightbox-labels-title">
     <i class="material-symbols-outlined">sell</i>

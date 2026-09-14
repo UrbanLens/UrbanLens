@@ -1,23 +1,4 @@
-{% comment %}
-A single pending PinImportFailure card - a pin from an import whose Google
-Maps CID never resolved to a location. This is always a gap in Google's own
-place data, or a lookup that didn't finish in time - never a defect in the
-import itself, so the copy here must keep framing it that way. The owner can
-place the pin themselves with an address or coordinates, or remove it.
-
-Built on the same .pin-suggestion-card shell as _pin_suggestion_card.html so
-these cards blend into the same grid rather than reading as a distinct
-section. Dismiss posts directly like "Not a match"; placing a pin opens a
-small dialog for the address/coordinates form, like the new-pin create
-dialog. Both actions target this card by id, swapping outerHTML: success
-returns an empty response (the card vanishes, with a toast - a "View pin"
-link on resolve - and `refreshQueue` keeps the rest of the page in sync); an
-error response (invalid coordinates, or place creation failing) re-renders
-this same card plus an error toast.
-
-Context:
-  failure - the pending PinImportFailure
-{% endcomment %}
+{% comment %}A single pending PinImportFailure card - a pin from an import whose Google Maps CID never resolved to a location.{% endcomment %}
 <article class="pin-suggestion-card pin-import-failure-card" id="pin-import-failure-card-{{ failure.pk }}">
     <div class="pin-suggestion-card-body">
         <div class="pin-suggestion-card-meta">

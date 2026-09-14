@@ -1,17 +1,5 @@
 /**
  * Signing out has to discard the cached keys, and must never be blocked by that.
- *
- * The decrypted identity key and every unsealed conversation and group key sit
- * in IndexedDB so day-to-day use never prompts for a password. Nothing removed
- * them on sign-out until 2026-09-05, so leaving a shared machine left every
- * message readable there - the rows are keyed by profile slug, which prevents an
- * accidental read and not a deliberate one.
- *
- * The second property is the one worth testing hardest: a browser with IndexedDB
- * blocked, a wedged transaction, or a slow delete must all still sign the user
- * out. Being unable to leave is a worse failure than a key outliving the
- * session, and it is the failure this kind of "clean up first" wiring usually
- * introduces.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
@@ -90,9 +78,7 @@ describe("signing out", () => {
     });
 
     test("submits even when there is no IndexedDB at all", async () => {
-        // A private window, a browser with site data blocked, or an origin over
-        // quota: `indexedDB.open` is not callable, and the clear throws
-        // synchronously inside the promise chain.
+        // A private window, a browser with site data blocked, or an origin over quota.
         db.uninstall();
         delete (globalThis as { indexedDB?: unknown }).indexedDB;
         const { form, submitted } = signOutForm();

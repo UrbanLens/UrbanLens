@@ -1,11 +1,4 @@
-"""Contributions reach the ledger by themselves, and reverts take them back.
-
-The write half of these handlers is deliberately synchronous, so these tests
-assert that a row exists immediately after the contributing save - not after a
-Celery round trip. Scoring is the deferred half and is queued through
-``transaction.on_commit``, which does not run inside a TestCase's transaction;
-that is why the rows here are expected to be *unscored* rather than valued.
-"""
+"""Contributions reach the ledger by themselves, and reverts take them back."""
 
 from __future__ import annotations
 

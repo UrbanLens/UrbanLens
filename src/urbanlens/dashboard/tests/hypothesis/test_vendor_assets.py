@@ -1,11 +1,4 @@
-"""Third-party assets resolve to one place, chosen when the page is rendered.
-
-Every script and stylesheet the site loads from someone else's server used to be
-written out inline in whichever template wanted it. That is how leaflet-draw came
-to be requested from two different CDNs, how one template asked unpkg for
-whatever Leaflet it happened to be serving that day, and how Leaflet's marker
-images came to be fetched from a different release than the library using them.
-"""
+"""Third-party assets resolve to one place, chosen when the page is rendered."""
 
 from __future__ import annotations
 
@@ -54,12 +47,8 @@ class VendorAssetTableTests(SimpleTestCase):
     def test_every_script_and_style_pins_an_integrity_hash(self) -> None:
         """Every ``<script>``/``<link>`` this table can render must be checkable.
 
-        Only ``image`` assets are exempt - they have no tag of their own
-        (`vendor_asset_tag` raises for one), so nothing renders `integrity=`
-        for them regardless. Nine of these were unpinned until a Nuclei
-        `missing-sri` scan flagged the gap; asserted over the whole table so
-        the next asset someone adds without a hash fails here instead.
-        """
+        Only ``image`` assets are exempt - they have no tag of their own (`vendor_asset_tag` raises for one), so
+        nothing renders `integrity=` for them regardless."""
         for key, asset in VENDOR_ASSETS.items():
             if asset.kind == "image":
                 continue

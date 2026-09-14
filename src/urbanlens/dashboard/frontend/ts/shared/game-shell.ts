@@ -1,18 +1,5 @@
 /**
  * Cross-game shell behaviour for SpotGuessr / Trivia / Consensus.
- *
- * Owns panel swapping, the progress rail, focus mode, true fullscreen, the
- * players/chat drawer, and the resize hooks Leaflet needs. Each game entry
- * constructs one of these with its own root, shell and panel-id map; nothing
- * here knows anything game-specific.
- *
- * Two independent immersion tiers:
- *   1. Focus mode - CSS only (`.is-immersive` + `body.ul-game-immersive`), so
- *      iOS Safari, which has no Element.requestFullscreen, degrades instead of
- *      breaking.
- *   2. True fullscreen - requestFullscreen() on the shell element itself. The
- *      shell never leaves the DOM, so `.ul-game [hidden]` and the
- *      `body.page-<game>` custom properties keep applying inside it.
  */
 
 import { isTypingTarget, matchesHotkey } from "./hotkeys";
@@ -40,11 +27,8 @@ export interface GameShell {
     isImmersive(): boolean;
     isFullscreen(): boolean;
     /**
-     * Shows or hides the players/chat drawer and its HUD toggle together.
-     *
-     * The rail only ever holds multiplayer content, so a solo game must turn it
-     * off rather than offer a button that opens an empty drawer.
-     */
+ * Shows or hides the players/chat drawer and its HUD toggle together.
+ */
     setRailAvailable(available: boolean): void;
     /** Appends a node into the shell so it survives true fullscreen, and returns it. */
     mountOverlay<T extends HTMLElement>(node: T): T;
@@ -107,15 +91,6 @@ function writeImmersivePreference(on: boolean): void {
 
 /**
  * Replays an element's `.is-entering` animation.
- *
- * The play panel is never re-mounted between rounds, so an animation declared
- * straight on a clue/photo fires exactly once - when the panel is first shown -
- * and every later round swaps its content with no transition at all. The
- * entrance therefore hangs off a class the round renderer re-applies.
- *
- * Args:
- *     element: The element to replay, or null when the game has none this round.
- *     skip: True under prefers-reduced-motion; leaves the class off entirely.
  */
 export function playEntrance(element: HTMLElement | null | undefined, skip = false): void {
     if (!element) {
@@ -154,8 +129,7 @@ export function createGameShell(opts: GameShellOptions): GameShell {
     };
 
     // -- Chrome measurement ------------------------------------------------------
-    // .app-nav is position: relative (not sticky), so a scrolled page would
-    // otherwise report a negative offset; every caller scrolls to top first.
+    // .app-nav is position: relative (not sticky), so a scrolled page would otherwise report a negative offset.
     function syncChromeTop(): void {
         const nav = document.querySelector<HTMLElement>(".app-nav");
         const top = nav ? Math.max(0, Math.round(nav.getBoundingClientRect().bottom)) : 64;
@@ -195,14 +169,11 @@ export function createGameShell(opts: GameShellOptions): GameShell {
         try {
             void Promise.resolve(exit.call(document)).catch(() => {});
         } catch {
-            /* Already exited. */
+
         }
     }
 
-    // Nodes outside the fullscreen element are not painted at all, so toasts and
-    // the shared confirm dialog would silently vanish mid-game. The original
-    // next sibling is recorded, not just the parent, so repeated enter/exit
-    // cycles cannot reorder base.html's DOM.
+    // Nodes outside the fullscreen element are not painted at all, so toasts and the shared confirm dialog would silently vanish mid-game.
     function adoptOverlay(node: HTMLElement): void {
         if (shell.contains(node) || !node.parentNode) {
             return;
@@ -221,10 +192,7 @@ export function createGameShell(opts: GameShellOptions): GameShell {
         if (overlayObserver) {
             return;
         }
-        // toastr builds #toast-container lazily, on its first notification. A
-        // player who enters fullscreen before any toast has fired would
-        // otherwise have every later toast appended to document.body - outside
-        // the fullscreen element, so never painted, so no error feedback at all.
+        // toastr builds #toast-container lazily, on its first notification.
         overlayObserver = new MutationObserver((records) => {
             for (const record of records) {
                 for (const added of record.addedNodes) {
@@ -303,15 +271,8 @@ export function createGameShell(opts: GameShellOptions): GameShell {
     }
 
     /**
-     * Drops the pending hide-timer and animation listeners for `element`.
-     *
-     * Both exits from the leaving state go through here. The listeners are torn
-     * down with the timer rather than left to fire once: the 200 ms guard beats
-     * the .22s exit animation, and hiding the element cancels that animation
-     * instead of ending it, so an `animationend` listener left armed would
-     * survive until the panel is next shown - where the entrance animation would
-     * then hide the panel that had just appeared.
-     */
+ * Drops the pending hide-timer and animation listeners for `element`.
+ */
     function clearLeaving(element: HTMLElement): void {
         const handle = leaving.get(element);
         if (!handle) {
@@ -464,9 +425,7 @@ export function createGameShell(opts: GameShellOptions): GameShell {
         });
     }
 
-    // A toggle, not a one-way exit: leaving focus mode also writes the
-    // preference, so without a way back the control would permanently disable
-    // the immersive layout for that browser profile on all three games.
+    // A toggle, not a one-way exit: leaving focus mode also writes the preference, so without a way back the control would permanently.
     for (const button of shell.querySelectorAll<HTMLElement>("[data-game-focus-toggle]")) {
         button.addEventListener("click", () => {
             const next = !immersive;

@@ -1,12 +1,5 @@
 /**
- * Small comment-composer behaviours: the reply form toggle, the attached-image
- * filename preview, and hover-syncing an activity mention with the trip map.
- *
- * ``tripHighlightMarker`` is consumed here but owned by the trip detail page - the
- * guard is what keeps these mentions inert on the pin and wiki pages, where the same
- * comment markup renders but no trip map exists.
- *
- * Ported out of ``base.html``'s inline script unchanged.
+ * Small comment-composer behaviours: the reply form toggle, the attached-image filename preview, and hover-syncing an activity mention.
  */
 
 /** Show or hide a comment's reply form, focusing the textarea when it opens. */

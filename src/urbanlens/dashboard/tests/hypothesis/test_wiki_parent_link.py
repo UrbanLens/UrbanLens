@@ -1,17 +1,4 @@
-"""Tests for the wiki page's "up to the parent wiki" link.
-
-Wikis nest themselves - a building's wiki becomes a child of the campus's -
-so a nested page needs a way up. The link is gated on
-``wiki_access.visible_parent_wiki`` rather than rendered from
-``wiki.parent_wiki`` directly, because a breadcrumb to a page the viewer would
-get a 404 from is itself a disclosure: it confirms a place exists that they
-have not earned.
-
-Within one access domain (a building ``PART_OF`` its parcel) the parent is
-always reachable, so the interesting case is the ``MEMBER_OF`` edge: a campus
-made of several parcels is earned only by holding *every* member, so someone
-who pinned one parcel must not be shown the campus above it.
-"""
+"""Tests for the wiki page's "up to the parent wiki" link."""
 
 from __future__ import annotations
 

@@ -1,12 +1,4 @@
-"""Tests for WikipediaGateway's address-verification matching.
-
-``get_article_for_location`` must only accept a geosearch candidate when
-there's a genuine positive signal that it's specifically about the queried
-place - proximity alone (which is all ``list=geosearch`` guarantees) is not
-enough. These tests pin down ``_address_matches``'s stricter rejection
-behavior: a nearby candidate with no title/name match and no address mention
-in its extract must be rejected, not guessed at.
-"""
+"""Tests for WikipediaGateway's address-verification matching."""
 
 from __future__ import annotations
 
@@ -175,11 +167,9 @@ class AbsoluteMediaUrlTests(SimpleTestCase):
 class GetArticleMediaTests(SimpleTestCase):
     """WikipediaGateway.get_article_media() - reads the article's own curated media list.
 
-    This exists specifically because a Wikimedia Commons text search (see
-    WikimediaGateway) can miss images that are only reachable through an
-    in-body gallery and aren't independently discoverable by name -
-    "Wikipedia article images not reliably reaching Media section" entry.
-    """
+    This exists specifically because a Wikimedia Commons text search (see WikimediaGateway) can miss images that
+    are only reachable through an in-body gallery and aren't independently discoverable by name - "Wikipedia
+    article images not reliably reaching Media section" entry."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -241,14 +231,11 @@ class GetArticleMediaTests(SimpleTestCase):
 
 
 class WikipediaCampusFallbackTests(TestCase):
-    """UL-354: a child pin whose own coordinates find no article retries from
-    each ancestor pin's coordinates and name (campus-aware search).
+    """UL-354: a child pin whose own coordinates find no article retries from each ancestor pin's coordinates and name (campus-aware search).
 
-    A large campus has one article geotagged at a single point (usually the
-    main building); an outbuilding pin can sit outside the geosearch radius,
-    so its own search legitimately finds nothing - the parent's point and
-    name are the right second query, without widening the global radius.
-    """
+    A large campus has one article geotagged at a single point (usually the main building); an outbuilding pin
+    can sit outside the geosearch radius, so its own search legitimately finds nothing - the parent's point and
+    name are the right second query, without widening the global radius."""
 
     _CAMPUS_ARTICLE = {
         "title": "Hudson River State Hospital",
@@ -365,14 +352,11 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
 
 
 class FetchInfoboxTests(SimpleTestCase):
-    """WikipediaGateway._fetch_infobox() - regression coverage for the
-    "started from Wikipedia" seed missing the infobox.
+    """WikipediaGateway._fetch_infobox() - regression coverage for the "started from Wikipedia" seed missing the infobox.
 
-    _fetch_summary/_fetch_extended_extract are both backed by the
-    TextExtracts extension, which strips infoboxes before returning "extract"
-    text - _fetch_infobox instead parses action=parse's real rendered HTML,
-    which is the only Wikipedia response that carries the infobox table.
-    """
+    _fetch_summary/_fetch_extended_extract are both backed by the TextExtracts extension, which strips infoboxes
+    before returning "extract" text - _fetch_infobox instead parses action=parse's real rendered HTML, which is
+    the only Wikipedia response that carries the infobox table."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -385,12 +369,7 @@ class FetchInfoboxTests(SimpleTestCase):
         resp.json.return_value = payload
         return resp
 
-    # A trimmed version of the "New St. Joseph Cemetery" infobox from the
-    # original bug report: a title row (th only, no td), an image/map row
-    # (td only, no th), a section-divider row ("Details", th only), then
-    # real label/value fact rows - including one with inline markup
-    # (a <span> around a non-breaking space in "Owned by") and a linked label
-    # ("Find a Grave") to confirm text_content() flattens both correctly.
+    # A trimmed version of the "New St.
     _INFOBOX_HTML = """
     <table class="infobox vcard">
     <tbody>
@@ -463,11 +442,7 @@ class CleanAndTrimExtractTests(SimpleTestCase):
         self.assertNotIn("javascript:", result)
 
     def test_generic_attributes_like_title_and_lang_are_stripped(self) -> None:
-        """nh3/ammonia keeps a hardcoded "generic" attribute set (title, lang, ...) on every
-        tag regardless of an empty `attributes={}` allowlist unless `attribute_filter` also
-        rejects them - assert the extract cleaner actually does so, since the allowlist alone
-        does not guarantee "no attributes at all" as its call site intends.
-        """
+        """nh3/ammonia keeps a hardcoded "generic" attribute set (title, lang, ...) on every tag regardless of an empty `attributes={}` allowlist unless `attribute_filter` also rejects them - assert the extract cleaner actually does so, since the allowlist alone does not guarantee "no attributes at all" as its call site intends."""
         html = '<p title="injected" lang="en">Hello</p>'
         result = WikipediaGateway._clean_and_trim_extract(html)
         self.assertNotIn("title=", result)

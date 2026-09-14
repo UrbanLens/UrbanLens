@@ -1,17 +1,5 @@
 """Trivia models - Glicko-2 ratings, question bank, sessions, rounds, answers, and votes.
-
-See "Trivia entry for the full spec this schema encodes:
-locations drawn only from a pool every session participant can access (mirrors
-SpotGuessr's eligibility rule), questions from three sources (user-submitted,
-AI-generated from wiki articles, deterministic from structured location data),
-a Glicko-2 player-skill/question-difficulty pairing (mirrors
-``models.spotguessr``'s player/location pairing), and upvote/downvote/report
-voting with a small passive "shown, no reaction" default.
-
-Phase 1 built the full multiplayer-capable schema (sessions/participants
-support LOBBY/INVITED from day one) but only ever created solo sessions;
-Phase 2 adds ``TriviaSessionChatMessage`` and wires up the multiplayer
-lifecycle in ``services.trivia.session``.
+See "Trivia entry for the full spec this schema encodes: locations drawn only from a pool every session participant can access (mirrors SpotGuessr's eligibility rule), questions from three sources (user-submitted, AI-generated from wiki articles, deterministic from structured location data), a Glicko-2 player-skill/question-difficulty pairing (mirrors ``models.spotguessr``'s player/location pairing), and upvote/downvote/report voting with a small passive "shown, no reaction" default.
 """
 
 from __future__ import annotations
@@ -67,12 +55,8 @@ class TriviaQuestionSource(abstract.TextChoices):
 
 class TriviaQuestionStatus(abstract.TextChoices):
     """Content-moderation lifecycle of a TriviaQuestion.
-
-    Mirrors ``PinSuggestionStatus``'s shape. Deterministic questions are
-    created ``APPROVED`` directly - they're template-generated from
-    structured data, not free text, so they carry none of the person/
-    bullying/in-group risk the classifier exists to catch (Phase 3 only
-    classifies ``USER_SUBMITTED``/``AI_GENERATED`` questions).
+    Mirrors ``PinSuggestionStatus``'s shape.
+    Deterministic questions are created ``APPROVED`` directly - they're template-generated from structured data, not free text, so they carry none of the person/ bullying/in-group risk the classifier exists to catch (Phase 3 only classifies ``USER_SUBMITTED``/``AI_GENERATED`` questions).
     """
 
     PENDING_REVIEW = "pending_review", "Pending Review"
@@ -138,11 +122,7 @@ class TriviaQuestion(abstract.DashboardModel):
     @staticmethod
     def normalize_answer(text: str) -> str:
         """Lowercase and strip everything but letters/digits, for exact-match comparison.
-
-        A handful of Unicode letters (e.g. mathematical alphanumeric symbols
-        like MATHEMATICAL SCRIPT CAPITAL A) have no lowercase form, so
-        ``casefold()`` leaves them unchanged and still uppercase - drop those
-        rather than let a "normalized" answer stay non-lowercase.
+        A handful of Unicode letters (e.g. mathematical alphanumeric symbols like MATHEMATICAL SCRIPT CAPITAL A) have no lowercase form, so ``casefold()`` leaves them unchanged and still uppercase - drop those rather than let a "normalized" answer stay non-lowercase.
         """
         return "".join(char for char in text.casefold() if char.isalnum() and not char.isupper())
 
@@ -177,13 +157,7 @@ class TriviaQuestionVoteKind(abstract.TextChoices):
 
 class TriviaQuestionVote(abstract.DashboardModel):
     """One participant's reaction to one TriviaQuestion.
-
-    An event log, not a single mutable counter - the same profile can be
-    asked the same question again in a later session and gets a fresh
-    ``NO_REACTION`` backfill each time, since that signal is only meaningful
-    in aggregate over many plays. An explicit vote always overwrites
-    whatever was previously recorded for this ``(question, profile)`` pair -
-    see ``services.trivia.voting.record_vote``/``backfill_no_reaction``.
+    An event log, not a single mutable counter - the same profile can be asked the same question again in a later session and gets a fresh ``NO_REACTION`` backfill each time, since that signal is only meaningful in aggregate over many plays.
     """
 
     kind = CharField(max_length=15, choices=TriviaQuestionVoteKind.choices)
@@ -217,11 +191,7 @@ class TriviaQuestionVote(abstract.DashboardModel):
 
 class PlayerTriviaRating(_Glicko2RatingFields, abstract.DashboardModel):
     """A profile's overall Glicko-2 skill rating for Trivia.
-
-    One row per profile - unlike SpotGuessr's per-mode ratings, Trivia has
-    no notion of separate "modes" to split skill across. Updated once per
-    round played (``services.trivia.ratings.apply_round_ratings``), treating
-    the round's question as the round's sole "opponent."
+    One row per profile - unlike SpotGuessr's per-mode ratings, Trivia has no notion of separate "modes" to split skill across.
     """
 
     mu = FloatField(default=_DEFAULT_MU)
@@ -249,14 +219,7 @@ class PlayerTriviaRating(_Glicko2RatingFields, abstract.DashboardModel):
 
 
 class TriviaQuestionRating(_Glicko2RatingFields, abstract.DashboardModel):
-    """A question's Glicko-2 *difficulty* rating - the direct analog of SpotGuessr's LocationModeRating.
-
-    One row per question. Updated once per round played, treating every
-    participant in that round as an "opponent" with outcome score
-    ``1 - (whether they answered correctly)`` - a question nobody can answer
-    is "winning" against the field, exactly the high-difficulty signal a
-    hard question should earn.
-    """
+    """A question's Glicko-2 *difficulty* rating - the direct analog of SpotGuessr's LocationModeRating. One row per question."""
 
     mu = FloatField(default=_DEFAULT_MU)
     phi = FloatField(default=_DEFAULT_PHI)
@@ -292,15 +255,9 @@ class TriviaSessionStatus(abstract.TextChoices):
 
 
 class TriviaSessionParticipantStatus(abstract.TextChoices):
-    """Whether a participant has accepted their invitation yet. Mirrors ``GameSessionParticipantStatus``.
-
-    ``LEFT`` has no SpotGuessr equivalent yet - set once a participant
-    voluntarily leaves (``services.trivia.session.leave_session``) or is
-    removed by the host (``kick_participant``), from either ``INVITED`` or
-    ``JOINED``. A terminal state - a departed participant never rejoins the
-    same session (they'd need a fresh invite, which creates a new row
-    anyway, since ``invite_to_session``'s ``get_or_create`` only fires for a
-    profile with no existing row at all).
+    """Whether a participant has accepted their invitation yet.
+    Mirrors ``GameSessionParticipantStatus``.
+    ``LEFT`` has no SpotGuessr equivalent yet - set once a participant voluntarily leaves (``services.trivia.session.leave_session``) or is removed by the host (``kick_participant``), from either ``INVITED`` or ``JOINED``.
     """
 
     INVITED = "invited", "Invited"
@@ -310,12 +267,7 @@ class TriviaSessionParticipantStatus(abstract.TextChoices):
 
 class TriviaSession(abstract.DashboardModel):
     """One Trivia playthrough: a config snapshot and a fixed round count.
-
-    Modeled as a proper many-participant session from Phase 1, mirroring
-    ``models.spotguessr.GameSession`` - every eligibility/scoring rule reads
-    "all (joined) participants," not "the player," so a Phase 2 multiplayer
-    lobby reuses these tables unchanged. Phase 1 only ever creates solo
-    sessions (see ``services.trivia.session.start_solo_session``).
+    Modeled as a proper many-participant session from Phase 1, mirroring ``models.spotguessr.GameSession`` - every eligibility/scoring rule reads "all (joined) participants," not "the player," so a Phase 2 multiplayer lobby reuses these tables unchanged.
 
     Attributes:
         status: Lifecycle state.
@@ -491,12 +443,9 @@ class TriviaAnswer(abstract.DashboardModel):
 
 
 class TriviaSessionChatMessage(abstract.DashboardModel):
-    """One chat message in a multiplayer session's live text chat. Mirrors ``GameSessionChatMessage``.
-
-    Plain text, no E2EE - ephemeral match banter between participants
-    already visible to each other on the scoreboard, not a private
-    conversation. Sent and broadcast over ``TriviaSessionConsumer`` only;
-    read history is served over HTTP for reconnects/late page-opens.
+    """One chat message in a multiplayer session's live text chat.
+    Mirrors ``GameSessionChatMessage``.
+    Plain text, no E2EE - ephemeral match banter between participants already visible to each other on the scoreboard, not a private conversation.
     """
 
     body = CharField(max_length=1000)
@@ -524,10 +473,9 @@ class TriviaSessionChatMessage(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trivia_chat_messages"
         indexes = [
-            # Index names are capped at 30 characters (Oracle's historical
-            # limit, which Django enforces universally regardless of the
-            # active backend) - "trivia" is abbreviated to fit, mirroring
-            # models.spotguessr's own "sg" abbreviation for the same reason.
+            # Index names are capped at 30 characters (Oracle's historical limit, which Django
+            # enforces universally regardless of the active backend) - "trivia" is abbreviated to
+            # fit, mirroring models.spotguessr's own "sg" abbreviation for the same reason.
             Index(fields=["session", "created"], name="idxdb_trivia_chat_created"),
         ]
 

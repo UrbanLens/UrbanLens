@@ -1,13 +1,4 @@
-{% comment %}
-Markup Maps panel for the Private Pin page - maps directly associated with
-this pin (MarkupMap.pin), e.g. created via the pin-share dialog's "New map"
-flow. Only rendered when the pin has at least one (the view returns 204
-otherwise, and the page's htmx:afterOnLoad handler removes the placeholder).
-
-Context:
-  pin       - Pin instance.
-  map_cards - list of {map, snapshot, item_count} dicts.
-{% endcomment %}
+{% comment %}Markup Maps panel for the Private Pin page.{% endcomment %}
 <div id="pin-markup-maps-panel" class="pin-markup-maps-panel card card--secondary"
      data-collapse-scope="pin" data-collapse-section="markup-maps">
     <div class="card-header">

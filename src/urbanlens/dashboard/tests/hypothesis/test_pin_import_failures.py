@@ -1,22 +1,4 @@
-"""Tests for PinImportFailure - the review queue for pins whose Google Maps CID
-never resolved to a location during import.
-
-Covers:
-- services.pins.pin_import_failures.record_pin_import_failure - creates a PENDING
-  row, and is idempotent per (profile, cid) even across differing
-  name/description/reason on a later call (re-running the same import must
-  never resurrect or duplicate an entry).
-- tasks.resolve_deferred_pin_locations - records a failure for a cid the
-  resolver confirms unresolvable, and for every cid still unresolved when
-  each of the three give-up branches (auth_failed, consecutive_request_failures
-  cap, consecutive_no_progress cap) fires; auto-resolves a pending failure the
-  moment its cid succeeds, on this call or a later retry; never duplicates a
-  failure row across repeated calls.
-- services.pins.pin_import_failures.resolve_pin_import_failure /
-  dismiss_pin_import_failure / auto_resolve_pin_import_failure_for_cid.
-- controllers.pin_import_failures - the HTTP review-queue actions (resolve,
-  dismiss, queue partial), with ownership/already-handled guards.
-"""
+"""Tests for PinImportFailure - the review queue for pins whose Google Maps CID never resolved to a location during import."""
 
 from __future__ import annotations
 
@@ -245,13 +227,10 @@ class ResolvePinImportFailureTests(TestCase):
 class ResolvePinImportFailureLegacyRepairTests(TestCase):
     """resolve_pin_import_failure must move a matching legacy pin, not create a new one.
 
-    TEMPORARY: mirrors test_legacy_cid_coordinate_fix.py's own coverage of
-    repair_legacy_pin_coordinates, but exercised through the manual
-    resolve-a-failure entry point specifically - a regression test for a bug
-    where the manual "Place pin" flow bypassed the repair entirely and always
-    created a second, duplicate pin instead of moving the pre-cutoff one.
-    Delete alongside the rest of legacy_cid_coordinate_fix.
-    """
+    TEMPORARY: mirrors test_legacy_cid_coordinate_fix.py's own coverage of repair_legacy_pin_coordinates, but
+    exercised through the manual resolve-a-failure entry point specifically - a regression test for a bug where
+    the manual "Place pin" flow bypassed the repair entirely and always created a second, duplicate pin instead
+    of moving the pre-cutoff one."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -722,10 +701,8 @@ class PinImportFailureDismissViewTests(TestCase):
 class PinImportFailureQueuePartialViewTests(TestCase):
     """GET /memories/locations/import-failures/queue/ - pending-only, unpaginated.
 
-    Unpaginated like pin_merge_suggestions: these are expected to be rare, so
-    there's no page_obj/pagination-bar to collide with the page's own
-    pin_suggestions pagination when both are rendered together.
-    """
+    Unpaginated like pin_merge_suggestions: these are expected to be rare, so there's no page_obj/pagination-bar
+    to collide with the page's own pin_suggestions pagination when both are rendered together."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -762,11 +739,9 @@ class PinImportFailureQueuePartialViewTests(TestCase):
     def test_no_page_of_the_queue_shows_another_profile_s_failures(self) -> None:
         """Ownership, checked across every page rather than on the first.
 
-        This used to assert the queue was unpaginated, which it no longer is
-        (P69) - but the half worth keeping is stronger when it walks the pages:
-        a slice applied before the ownership filter would leak on some page
-        other than the one a single-page assertion happens to look at.
-        """
+        This used to assert the queue was unpaginated, which it no longer is (P69) - but the half worth keeping
+        is stronger when it walks the pages: a slice applied before the ownership filter would leak on some page
+        other than the one a single-page assertion happens to look at."""
         other = baker.make(User)
         PinImportFailure.objects.create(
             profile=other.profile, cid=999, name="Someone else's", reason=PinImportFailureReason.NO_LOCATION_FOUND
@@ -793,16 +768,9 @@ class PinImportFailureQueuePartialViewTests(TestCase):
 class LocationsPageRendersImportFailuresTests(TestCase):
     """GET /memories/locations/ - the full page must render pending failures inline.
 
-    Regression test: PinSuggestionQueueView.get() (controllers/pin_suggestions.py)
-    renders locations.html with a *static* {% include %} of
-    _pin_import_failures_queue.html using the same context dict as the rest of
-    the page - it must supply the same "pin_import_failures" key the partial
-    iterates over. A prior version passed "pin_import_failures"/
-    "pin_import_failures_count" only, while the partial template looked for a
-    differently-named "failures" - the section heading and empty-state both
-    still rendered (gated on the count), but the card list itself silently
-    never appeared, even though the count was correctly non-zero.
-    """
+    Regression test: PinSuggestionQueueView.get() (controllers/pin_suggestions.py) renders locations.html with a
+    *static* {% include %} of _pin_import_failures_queue.html using the same context dict as the rest of the
+    page - it must supply the same "pin_import_failures" key the partial iterates over."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -829,17 +797,9 @@ class LocationsPageRendersImportFailuresTests(TestCase):
 class PinImportFailureQueuePaginationTests(TestCase):
     """The queue is paginated, and its pagination is its own.
 
-    It was unpaginated on the stated grounds that these failures are "rare",
-    which ``PinImportFailureGuessView``'s docstring in the same file
-    contradicts: "a single import can leave hundreds of failures". Each card
-    also fetches its own geocoder guess on reveal, so an unpaginated queue of
-    hundreds is hundreds of pending lookups as well as hundreds of cards (P69).
-
-    The second class of test here is the one worth having. This partial renders
-    inside the full Memories > Locations page alongside the pin-suggestion
-    queue, which paginates on ``page`` - so a shared parameter would move both
-    sections with one click, and only a test that renders *both* can see it.
-    """
+    It was unpaginated on the stated grounds that these failures are "rare", which
+    ``PinImportFailureGuessView``'s docstring in the same file contradicts: "a single import can leave hundreds
+    of failures"."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -889,10 +849,7 @@ class PinImportFailureQueuePaginationTests(TestCase):
     def test_paging_the_failures_does_not_move_the_suggestion_queue(self) -> None:
         """The reason this section has its own parameter.
 
-        Both queues render on Memories > Locations, and the suggestions queue
-        pages on ``page``. Sharing it would make one next-page click advance
-        both lists, which reads as the page losing your place.
-        """
+        Both queues render on Memories > Locations, and the suggestions queue pages on ``page``."""
         self._seed(30)
 
         response = self.client.get(reverse("memories.locations"), {"failures_page": 2})

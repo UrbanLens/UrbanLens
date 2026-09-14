@@ -1,23 +1,4 @@
-"""Regression guard: declining an *accepted* partner row must revoke live access.
-
-``SafetyCheckinChatConsumer`` checks "may this profile watch this check-in?" once,
-at ``connect()`` time, and then keeps the socket open. That is why
-``services.visits.safety.remove_checkin_partner`` (the owner-initiated removal) ends with
-``_broadcast_partner_access_revoked`` - without it, a removed partner keeps
-receiving chat, status and live-location frames for as long as their tab stays
-open.
-
-``decline_checkin_partner_invite`` deletes exactly the same row and, until this
-guard existed, did *not* broadcast. That was harmless while the only caller was
-the web overview page (which renders a Decline button solely for ``INVITED``
-rows, and an invitee has no socket to revoke). The external API's decline
-endpoint uses the same owner-supplied queryset the controller does -
-``filter(checkin__uuid=..., profile=caller)``, with no status filter, because a
-status filter would make a repeat decline 404 for the wrong reason - so an
-already-``ACCEPTED`` partner can now reach it as a "resign". At that point the
-missing broadcast is a partner who resigned but keeps streaming someone's live
-position, which is the single most sensitive read in this application.
-"""
+"""Regression guard: declining an *accepted* partner row must revoke live access."""
 
 from __future__ import annotations
 
@@ -59,8 +40,7 @@ class DeclineRevokesLiveAccessTests(TestCase):
             status: One of ``SafetyCheckinPartnerStatus``.
 
         Returns:
-            The created partner row.
-        """
+            The created partner row."""
         return SafetyCheckinPartner.objects.create(
             checkin=self.checkin, profile=self.partner_profile, invited_by=self.owner, status=status
         )
@@ -78,12 +58,8 @@ class DeclineRevokesLiveAccessTests(TestCase):
     def test_declining_a_pending_invite_broadcasts_nothing(self) -> None:
         """An invitee never had access, so there is nothing to revoke.
 
-        Worth pinning down rather than treating as harmless: the revocation frame
-        goes to the whole check-in group, and the consumer only acts on it when the
-        payload's ``profile_id`` matches its own. Broadcasting for someone who was
-        never connected is wasted work on a group the owner is sitting in, and it
-        would make the frame useless as a signal that access actually changed.
-        """
+        Worth pinning down rather than treating as harmless: the revocation frame goes to the whole check-in
+        group, and the consumer only acts on it when the payload's ``profile_id`` matches its own."""
         partner = self._partner(SafetyCheckinPartnerStatus.INVITED)
 
         with mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_partner_access_revoked") as revoke:

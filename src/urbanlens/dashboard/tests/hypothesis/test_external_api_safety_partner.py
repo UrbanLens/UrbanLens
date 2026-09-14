@@ -1,23 +1,4 @@
-"""Tests for the external API's partner-facing safety endpoints.
-
-Three things were previously web-only, and each left the API able to reach a
-state it had no way to leave:
-
-* an invited partner could be created through the API but could only *answer*
-  in a browser;
-* a partner could not see the check-ins they had accepted;
-* a partner could not mark the owner safe - the single most useful thing a
-  watcher does, and the one that stops an escalation that runs on a five-minute
-  beat.
-
-The security property under nearly every test here is the same one: a partner
-row is created in the ``INVITED`` state and only becomes authority when
-``ACCEPTED``. Every read on this surface is a person's plan, destination and
-companions; the invitation-answering endpoints are additionally scoped to the
-caller's *own* row, because a lookup keyed only by check-in uuid would let
-anyone walk other people's invitations - and an invitation names both a
-check-in and the person out on it.
-"""
+"""Tests for the external API's partner-facing safety endpoints."""
 
 from __future__ import annotations
 
@@ -51,8 +32,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Extra kwargs for ``self.client``.
-    """
+        Extra kwargs for ``self.client``."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -102,12 +82,10 @@ class _SafetyPartnerTestCase(TestCase):
         """Issue an API key for *user*.
 
         Args:
-            user: The key's owner.
-            scopes: Scope values to grant, defaulting to safety read + write.
+            user: The key's owner. scopes: Scope values to grant, defaulting to safety read + write.
 
         Returns:
-            The plaintext key.
-        """
+            The plaintext key."""
         key, raw = generate_api_key(user, "Test")
         # scopes is editable=False, so it is set directly rather than through a
         # form. The default grant deliberately excludes safety:*.
@@ -133,10 +111,8 @@ class SafetyPartnerInviteListTests(_SafetyPartnerTestCase):
     def test_invitee_sees_their_pending_invite(self) -> None:
         """Without this listing, an API-only client can never learn the uuid to accept.
 
-        The invitee is not the owner, so the check-in is in none of their lists,
-        and until they accept, the partner-checkin endpoints correctly refuse to
-        resolve it. This is the only route in.
-        """
+        The invitee is not the owner, so the check-in is in none of their lists, and until they accept, the
+        partner-checkin endpoints correctly refuse to resolve it."""
         response = self.client.get(self.invites_url, **_bearer(self.watcher_key))
 
         self.assertEqual(response.status_code, 200)
@@ -152,10 +128,8 @@ class SafetyPartnerInviteListTests(_SafetyPartnerTestCase):
     def test_listing_is_only_the_callers_own_invites(self) -> None:
         """A caller must not be able to enumerate other people's invitations.
 
-        An invitation names a check-in *and* the person out on it, so a listing
-        that leaked other people's rows would disclose who is currently out
-        somewhere, to anyone holding any safety-scoped key.
-        """
+        An invitation names a check-in *and* the person out on it, so a listing that leaked other people's rows
+        would disclose who is currently out somewhere, to anyone holding any safety-scoped key."""
         someone_else = Profile.objects.get(user=baker.make(User, username="bystander"))
         SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=someone_else, invited_by=self.owner)
 
@@ -210,10 +184,7 @@ class SafetyPartnerInviteAcceptTests(_SafetyPartnerTestCase):
     def test_repeat_accept_is_200_not_an_error(self) -> None:
         """A retried request must not look like a failure to take on the role.
 
-        Mobile clients retry, and "the first attempt succeeded but the response
-        was lost" is the common case. Answering 409 would tell the user they had
-        failed to accept a safety responsibility they had in fact accepted.
-        """
+        Mobile clients retry, and "the first attempt succeeded but the response was lost" is the common case."""
         self.assertEqual(self.client.post(self.accept_url, **_bearer(self.watcher_key)).status_code, 200)
         second = self.client.post(self.accept_url, **_bearer(self.watcher_key))
         self.assertEqual(second.status_code, 200)
@@ -222,10 +193,8 @@ class SafetyPartnerInviteAcceptTests(_SafetyPartnerTestCase):
     def test_repeat_accept_does_not_re_notify_the_owner(self) -> None:
         """Idempotent means no side effects the second time, not just no error.
 
-        The conditional UPDATE inside the service is what makes this true; a
-        read-then-write would send the owner a second "partner accepted" notice
-        (and post a second system chat message) on every retry.
-        """
+        The conditional UPDATE inside the service is what makes this true; a read-then-write would send the
+        owner a second "partner accepted" notice (and post a second system chat message) on every retry."""
         self.client.post(self.accept_url, **_bearer(self.watcher_key))
         first_count = NotificationLog.objects.filter(
             profile=self.owner, notification_type=NotificationType.SAFETY_CHECKIN_PARTNER_ACCEPTED
@@ -243,10 +212,8 @@ class SafetyPartnerInviteAcceptTests(_SafetyPartnerTestCase):
     def test_cannot_accept_someone_elses_invitation(self) -> None:
         """The queryset is scoped to the caller's own row, not just the check-in.
 
-        A lookup keyed only on ``checkin__uuid`` would let any caller accept a
-        partnership that was offered to somebody else, granting themselves a
-        live view of where a stranger physically is.
-        """
+        A lookup keyed only on ``checkin__uuid`` would let any caller accept a partnership that was offered to
+        somebody else, granting themselves a live view of where a stranger physically is."""
         intruder_user = baker.make(User, username="intruder")
         response = self.client.post(self.accept_url, **_bearer(self._issue_key(intruder_user)))
 
@@ -288,10 +255,9 @@ class SafetyPartnerInviteDeclineTests(_SafetyPartnerTestCase):
     def test_accepted_partner_can_resign(self) -> None:
         """No status filter guards decline, so it doubles as "step down".
 
-        A watcher who can no longer take responsibility must be able to say so,
-        and the alternative - only the owner may remove them - leaves someone
-        holding a live view of another person's position against their will.
-        """
+        A watcher who can no longer take responsibility must be able to say so, and the alternative - only the
+        owner may remove them - leaves someone holding a live view of another person's position against their
+        will."""
         self._accept()
         self.assertEqual(self.client.post(self.decline_url, **_bearer(self.watcher_key)).status_code, 204)
         self.assertFalse(SafetyCheckinPartner.objects.filter(pk=self.partner.pk).exists())
@@ -334,13 +300,7 @@ class SafetyPartnerCheckinReadTests(_SafetyPartnerTestCase):
     def test_partner_count_is_not_collapsed_by_the_filter(self) -> None:
         """Guards a real ORM trap in the queryset behind this list.
 
-        ``partnered_with`` filters on the multi-valued ``partners`` relation. If
-        the count annotations were applied *after* that filter, Django would
-        reuse the same join and every row would report ``partner_count`` 1 - the
-        caller's own row - no matter how many watchers the check-in actually
-        has. A client rendering "1 partner" for a three-partner check-in is
-        wrong in a way nobody would think to question.
-        """
+        ``partnered_with`` filters on the multi-valued ``partners`` relation."""
         self._accept()
         second = Profile.objects.get(user=baker.make(User, username="second-watcher"))
         SafetyCheckinPartner.objects.create(
@@ -358,20 +318,16 @@ class SafetyPartnerCheckinReadTests(_SafetyPartnerTestCase):
     def test_own_checkins_are_not_partnered_checkins(self) -> None:
         """The owner's own check-in never appears on the partner surface.
 
-        Keeping the two disjoint is what stops an owner reaching the
-        partner-only mark-safe write on their own check-in - an action whose
-        entire audit meaning is "somebody else confirmed they are alright".
-        """
+        Keeping the two disjoint is what stops an owner reaching the partner-only mark-safe write on their own
+        check-in - an action whose entire audit meaning is "somebody else confirmed they are alright"."""
         self.assertEqual(self.client.get(self.partner_list_url, **_bearer(self.owner_key)).json()["count"], 0)
         self.assertEqual(self.client.get(self.partner_detail_url, **_bearer(self.owner_key)).status_code, 404)
 
     def test_detail_gives_the_partner_the_full_document(self) -> None:
         """Matching the website, which hands an accepted partner the owner's own page.
 
-        A partner's whole purpose is seeing the plan *before* something goes
-        wrong; serving a thinner payload here would show the mobile client less
-        than the website already does.
-        """
+        A partner's whole purpose is seeing the plan *before* something goes wrong; serving a thinner payload
+        here would show the mobile client less than the website already does."""
         self._accept()
         payload = self.client.get(self.partner_detail_url, **_bearer(self.watcher_key)).json()
 
@@ -441,10 +397,8 @@ class SafetyPartnerMarkSafeTests(_SafetyPartnerTestCase):
     def test_invited_partner_cannot_mark_safe(self) -> None:
         """The ACCEPTED clause is the whole check.
 
-        Dropping it would let someone who was only ever *offered* a watching
-        role stand down a real escalation - silencing the alarm for a person who
-        may genuinely be in trouble.
-        """
+        Dropping it would let someone who was only ever *offered* a watching role stand down a real escalation -
+        silencing the alarm for a person who may genuinely be in trouble."""
         response = self.client.post(self.mark_safe_url, **_bearer(self.watcher_key))
 
         self.assertEqual(response.status_code, 404)
@@ -476,10 +430,8 @@ class SafetyPartnerMarkSafeTests(_SafetyPartnerTestCase):
     def test_repeat_mark_safe_does_not_re_resolve(self) -> None:
         """The second call sees an already-resolved check-in and conflicts.
 
-        Pinned because the resolution path notifies every contact: a mark-safe
-        that ran twice would email real emergency contacts twice about the same
-        incident.
-        """
+        Pinned because the resolution path notifies every contact: a mark-safe that ran twice would email real
+        emergency contacts twice about the same incident."""
         self._accept()
         self.assertEqual(self.client.post(self.mark_safe_url, **_bearer(self.watcher_key)).status_code, 200)
         self.checkin.refresh_from_db()

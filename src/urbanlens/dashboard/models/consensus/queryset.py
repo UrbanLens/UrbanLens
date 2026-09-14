@@ -1,10 +1,4 @@
-"""QuerySets/Managers for Consensus models.
-
-Points/leveling math lives in ``services.consensus.points``; trust scoring in
-``services.consensus.trust``; eligibility and field-kind selection in
-``services.consensus.eligibility``/``selection``. These classes only scope
-and fetch rows.
-"""
+"""QuerySets/Managers for Consensus models (only scope/fetch rows; math lives in services.consensus)."""
 
 from __future__ import annotations
 
@@ -37,22 +31,17 @@ class ConsensusSessionQuerySet(abstract.DashboardQuerySet):
     """QuerySet for ConsensusSession."""
 
     def active(self) -> Self:
-        """Restrict to sessions still in progress (lobby or active)."""
+        """Restrict to sessions still in progress."""
         from urbanlens.dashboard.models.consensus.model import ConsensusSessionStatus
 
         return self.filter(status__in=[ConsensusSessionStatus.LOBBY, ConsensusSessionStatus.ACTIVE])
 
     def for_profile(self, profile: Profile) -> Self:
-        """Restrict to sessions ``profile`` is (or was) a participant in, any status."""
+        """Restrict to sessions ``profile`` participated in."""
         return self.filter(participants__profile=profile).distinct()
 
     def answer_stalled(self, *, cutoff: datetime) -> Self:
-        """ACTIVE sessions whose current round is still collecting answers past ``cutoff``.
-
-        Used by the stall-sweep Celery task (``tasks.sweep_stalled_consensus_sessions``)
-        to find sessions a participant walked away from mid-round - mirrors
-        ``GameSessionQuerySet.stalled``.
-        """
+        """ACTIVE sessions past ``cutoff`` with answers still pending."""
         from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSessionStatus
 
         return self.filter(
@@ -62,7 +51,7 @@ class ConsensusSessionQuerySet(abstract.DashboardQuerySet):
         ).distinct()
 
     def vote_stalled(self, *, cutoff: datetime) -> Self:
-        """ACTIVE sessions whose current round has an open vote stuck past ``cutoff``."""
+        """ACTIVE sessions past ``cutoff`` with votes still open."""
         from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSessionStatus
 
         return self.filter(
@@ -80,7 +69,7 @@ class ConsensusSessionParticipantQuerySet(abstract.DashboardQuerySet):
     """QuerySet for ConsensusSessionParticipant."""
 
     def joined(self) -> Self:
-        """Restrict to participants who have actually accepted (not just invited)."""
+        """Restrict to participants who accepted."""
         from urbanlens.dashboard.models.consensus.model import ConsensusSessionParticipantStatus
 
         return self.filter(status=ConsensusSessionParticipantStatus.JOINED)
@@ -134,7 +123,7 @@ class ConsensusTentativeAnswerQuerySet(abstract.DashboardQuerySet):
         return self.filter(wiki=wiki)
 
     def pending(self) -> Self:
-        """Tentative answers not yet applied or dismissed - still building consensus."""
+        """Tentative answers not yet applied or dismissed."""
         from urbanlens.dashboard.models.consensus.model import ConsensusTentativeStatus
 
         return self.filter(status=ConsensusTentativeStatus.PENDING)

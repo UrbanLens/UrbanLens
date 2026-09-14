@@ -1,9 +1,4 @@
-"""Integration test for the WikiEdit -> Consensus points hook (models.wiki_edit.signals).
-
-This is the behavior most likely to silently regress (a double-award, or a
-manual edit never getting credited) - it gets an explicit named test, not
-just the pure-logic property tests in test_consensus_points.py.
-"""
+"""Integration test for the WikiEdit -> Consensus points hook (models.wiki_edit.signals)."""
 
 from __future__ import annotations
 
@@ -51,11 +46,9 @@ class WikiEditPointsHookTests(TestCase):
     def test_a_consensus_sourced_edit_is_never_double_awarded(self) -> None:
         """A WikiEdit created with consensus_round set must NOT also trigger the manual-edit award.
 
-        Consensus's own resolution code (services.consensus.session) awards
-        its (larger) in-game points directly via `points.award_points`
-        before creating the WikiEdit - the signal must recognize this edit
-        already got its points and skip the baseline award entirely.
-        """
+        Consensus's own resolution code (services.consensus.session) awards its (larger) in-game points directly
+        via `points.award_points` before creating the WikiEdit - the signal must recognize this edit already got
+        its points and skip the baseline award entirely."""
         profile = _make_profile()
         wiki = baker.make(Wiki, location=baker.make(Location))
         session = ConsensusSession.objects.create(host_profile=profile, status=ConsensusSessionStatus.ACTIVE)

@@ -1,21 +1,4 @@
-"""Enrolment must refuse Argon2 parameters weaker than the pinned defaults.
-
-``MessagingKeyBundle.password_wrapped_secret`` is the user's private key wrapped
-under a key derived from their password, and the security claim is that whoever
-holds that blob - *including this server* - cannot open it. How expensive that
-is comes down entirely to the Argon2 opslimit/memlimit the wrap used.
-
-The enrolment endpoint took both from the request and validated only that they
-were positive, so a caller could enrol with `opslimit=1, memlimit=1` and leave
-its own account's wrapped private key recoverable from the password at trivial
-cost. It also *stores* those values, so every later re-wrap inherits them.
-
-A floor costs nothing in compatibility: the server's default has always been
-``(2, 64 MiB)`` - one migration, never changed - and the real client sends
-exactly those constants (`e2ee-crypto.KDF_OPSLIMIT`/`KDF_MEMLIMIT`, pinned to
-match). Stronger values are still accepted so a future client can raise them
-without a server change.
-"""
+"""Enrolment must refuse Argon2 parameters weaker than the pinned defaults."""
 
 from __future__ import annotations
 
@@ -93,18 +76,7 @@ class EnrolKdfFloorTests(TestCase):
 class RewrapKdfParametersTests(TestCase):
     """A re-wrap must record the parameters the new blob was actually made with.
 
-    Enrolment accepts stronger-than-default parameters on purpose, and stores
-    them. `/rewrap` replaced `password_wrapped_secret` and left them untouched -
-    but the client wraps the replacement with its own *pinned* constants, and
-    must (it cannot take cost parameters from a server response for a blob it is
-    about to store). So a bundle enrolled above the floor ended up advertising a
-    cost its stored blob was not made with, and every later password unlock
-    derived the wrong key.
-
-    That is a permanent lockout from the password path, reachable through the
-    public API by enrolling above the floor: the device holding the cached key
-    loops re-wrapping, and a device without one has only the recovery key left.
-    """
+    Enrolment accepts stronger-than-default parameters on purpose, and stores them."""
 
     def setUp(self) -> None:
         super().setUp()

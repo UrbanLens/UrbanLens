@@ -2,31 +2,9 @@
 #
 # Copy the working tree into a running app container.
 #
-# `/app/src` is baked into the image, not bind-mounted, so a running app
-# container reflects whenever the image was last built. Syncing it by hand is
-# what CLAUDE.local.md used to document, and the hand-typed form leaves out the
-# step that matters: `docker cp` preserves *source* ownership, and the container
-# runs as `appuser`. A copy from a host directory owned by anyone else takes
-# away appuser's ability to write what it just received.
+# /app/src is baked into the image; `docker cp` preserves source ownership, so chown back to appuser.
 #
-# That does not fail loudly. On 2026-08-14 it took out `src/urbanlens/logs/`,
-# Django's logging config raised PermissionError, and the process died *before*
-# binding port 8000 - while `docker exec` (which defaults to root) kept working,
-# so every diagnostic and every pytest run in that session succeeded against a
-# site that was down. On 2026-09-04 the same mechanism hit
-# `dashboard/frontend/static/dashboard/js`: the entrypoint's `bun run build`
-# could not remove its own output directory, `init.py` raised UnrecoverableError,
-# and the container crash-looped - which also means `docker exec` gets
-# "container is restarting", so the one command that repairs it is the one you
-# cannot run. This script waits that out rather than making you time it.
-#
-# Compiled assets need the extra step --frontend performs. `collectstatic`
-# populates a *volume* mounted at /app/src/urbanlens/frontend/static and shared
-# with nginx; copying built output into the package directory never reaches it,
-# so the site keeps serving whatever bundle was live at last boot even though
-# the container's own copy of the file is current. Verified 2026-09-01, when a
-# live-browser check of a same-day TS fix passed review and unit tests while
-# exercising a three-hour-old bundle.
+# Waits out a crash-looping container and rebuilds frontend assets on request.
 #
 # Usage:
 #   bin/sync_app.sh                    # sync source, chown, prune, verify
@@ -46,14 +24,7 @@ CONTAINER="${UL_APP_CONTAINER:-urbanlens_development_main_app}"
 FRONTEND=0
 RESTART=0
 
-# The app container mounts volumes *inside* the tree being copied, and copying
-# into them is worse than pointless. `frontend/static` is the collectstatic
-# output shared with nginx: the host's copy is whatever was collected there
-# last, so a plain sync replaces the manifest nginx is serving with an older,
-# shorter one, and every asset the container has but the manifest does not
-# becomes a render-time error rather than a stale file. `media` holds uploads
-# that exist only in the volume. Neither contains Python or templates, so
-# leaving them out changes nothing the parity check looks at.
+# Volumes inside the tree hold live state, not Python/templates, so exclude them from the copy.
 SYNC_EXCLUDES=(urbanlens/frontend/static urbanlens/media backups)
 
 for arg in "$@"; do
@@ -69,10 +40,7 @@ if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
     exit 2
 fi
 
-# A container crash-looping on a previous bad sync is the case this script most
-# needs to handle, and it is the case `docker exec` refuses: the daemon answers
-# "container is restarting" for every attempt that does not land inside the
-# window where it is briefly up. Wait for one rather than reporting the refusal.
+# Crash-looping containers only accept exec in brief windows; wait for one.
 wait_for_exec() {
     local attempt
     for attempt in $(seq 1 60); do
@@ -92,20 +60,10 @@ sync_tree_into "$CONTAINER"
 verify_parity_with "$CONTAINER"
 
 if [ "$FRONTEND" -eq 1 ]; then
-    # -u appuser, not the default. `docker exec` runs as root, which is the
-    # single most misleading thing about working on this container: root can
-    # write everything, so a build run that way succeeds, leaves root-owned
-    # output, and hands the *next* boot the same EACCES this script exists to
-    # prevent. Running as the account the entrypoint uses means a permission
-    # problem fails here, loudly, instead of at 3am on a restart.
+    # Build as appuser; root-owned output breaks the next boot.
     echo "==> rebuilding the frontend in $CONTAINER"
     docker exec -u appuser "$CONTAINER" bun run build
-    # SCSS too, and it is a separate command: `bun run build` is
-    # bin/build-frontend.ts, which only bundles TypeScript. This flag's usage
-    # line promised "SCSS/TS" without ever compiling the first of them, so a
-    # stylesheet change synced this way collected the *previous* CSS and the
-    # site kept serving it - the same class of silent staleness the
-    # collectstatic note above exists for.
+    # `bun run build` skips SCSS, so compile it separately.
     echo "==> compiling SCSS"
     docker exec -u appuser "$CONTAINER" bun run sass
     echo "==> collectstatic"

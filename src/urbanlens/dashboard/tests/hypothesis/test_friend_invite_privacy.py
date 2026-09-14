@@ -18,30 +18,15 @@ from urbanlens.dashboard.models.profile.model import VisibilityChoice
 def make_invitable_user(**kwargs) -> User:
     """Bake a user who accepts friend requests from anyone.
 
-    ``friend_request_visibility`` defaults to ``ANYONE``, so this is a no-op
-    against a freshly baked profile today - but it makes each test's
-    dependency on that setting explicit rather than incidental, and keeps
-    these tests correct if the default (or model_bakery's field-generation
-    behavior) ever changes again.
-
-    ``services.social.friendship.invite_by_email`` runs the same
-    ``Profile.visibility_permits`` evaluator ``request_friend`` does - a
-    deliberate fix, since the bare ``!= NO_ONE`` check it replaced let anyone
-    who knew an address bypass a restricted visibility setting entirely. A
-    target with a *non-default* visibility (``FRIENDS`` and stricter, or the
-    old ``ANYTHING_IN_COMMON`` default) would refuse a freshly baked inviter,
-    since they share no pin/friend/trip.
-
-    Tests below that are about *invite mechanics* (does the email match, does
-    the widget leak the target) use this so the gate isn't what they trip on.
-    Tests about the *gate itself* set the visibility they mean explicitly.
+    ``friend_request_visibility`` defaults to ``ANYONE``, so this is a no-op against a freshly baked profile
+    today - but it makes each test's dependency on that setting explicit rather than incidental, and keeps these
+    tests correct if the default (or model_bakery's field-generation behavior) ever changes again.
 
     Args:
         **kwargs: Passed through to ``baker.make(User, ...)``.
 
     Returns:
-        The baked user, with friend requests open to anyone.
-    """
+        The baked user, with friend requests open to anyone."""
     user = baker.make(User, **kwargs)
     user.profile.friend_request_visibility = VisibilityChoice.ANYONE
     user.profile.save(update_fields=["friend_request_visibility"])
@@ -112,10 +97,7 @@ class InviteByEmailPrivacyTests(TestCase):
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_reinviting_a_gmail_variant_replaces_the_pending_invitation(self, mock_send) -> None:
-        """A dot/+ variant of an already-invited address must dedupe against
-        the same pending FriendInvitation row, not create a second one -
-        otherwise the invitee's eventual signup only auto-accepts whichever
-        row happens to match their exact registered spelling."""
+        """A dot/+ variant of an already-invited address must dedupe against the same pending FriendInvitation row, not create a second one - otherwise the invitee's eventual signup only auto-accepts whichever row happens to match their exact registered spelling."""
         self.client.post(self.url, {"email": "johndoe3@gmail.com"})
         self.client.post(self.url, {"email": "John.Doe.3+invite@gmail.com"})
 
@@ -143,19 +125,11 @@ class InviteByEmailPrivacyTests(TestCase):
 
 
 class OutgoingRequestWidgetPrivacyTests(TestCase):
-    """The sender's own "pending sent requests" widget must not reveal the
-    target's identity, nor whether an invited email matched a registered
-    account, until the request is accepted - see _friend_list_ctx's docstring.
+    """The sender's own "pending sent requests" widget must not reveal the target's identity, nor whether an invited email matched a registered account, until the request is accepted - see _friend_list_ctx's docstring.
 
-    The widget only renders on the "View all friends" page now (the compact
-    profile-page embed dropped it - see friend_list_partial.html), so these
-    tests hit friend.page_widget - the endpoint that actually renders
-    friends_page_content.html. (An earlier revision requested friend.list
-    with an HX-Target header instead, but that action never dispatched on
-    the header - it always renders the compact partial, which contains no
-    pending section at all, so those assertions were passing/failing against
-    the wrong markup entirely.)
-    """
+    The widget only renders on the "View all friends" page now (the compact profile-page embed dropped it - see
+    friend_list_partial.html), so these tests hit friend.page_widget - the endpoint that actually renders
+    friends_page_content.html."""
 
     def setUp(self) -> None:
         self.inviter = baker.make(User, username="widgetinviter", email="widgetinviter@example.com")
@@ -178,10 +152,7 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         self.assertIn(b"Pending request", response.content)
 
     def test_direct_friend_request_identity_is_also_hidden_until_accepted(self) -> None:
-        """Even a request sent by clicking "Add Friend" on a visible profile - where
-        the sender already knows who they requested - must render generically here,
-        so the widget's shape can never be used to distinguish that case from an
-        email-guess request (which the sender should NOT be able to identify)."""
+        """Even a request sent by clicking "Add Friend" on a visible profile - where the sender already knows who they requested - must render generically here, so the widget's shape can never be used to distinguish that case from an email-guess request (which the sender should NOT be able to identify)."""
         target = baker.make(User, username="directtarget", email="direct@example.com", is_active=True)
         Friendship.objects.create(
             from_profile=self.inviter.profile, to_profile=target.profile, status=FriendshipStatus.REQUESTED
@@ -237,13 +208,10 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
     def test_pending_cards_carry_no_type_revealing_urls_or_ids(self, mock_send) -> None:
         """The cancel buttons must not distinguish the two pending kinds.
 
-        The first version of this widget rendered identical card BODIES but
-        posted matched-email cancels to friend.remove/<target_profile_id>
-        and unmatched ones to a separate cancel-invitation/<pk> URL - so the
-        DOM still told the sender whether the email belonged to an account
-        (and, worse, the target's profile id). Both kinds must share the one
-        opaque cancel_pending URL shape and neither legacy URL may appear.
-        """
+        The first version of this widget rendered identical card BODIES but posted matched-email cancels to
+        friend.remove/<target_profile_id> and unmatched ones to a separate cancel-invitation/<pk> URL - so the
+        DOM still told the sender whether the email belonged to an account (and, worse, the target's profile
+        id)."""
         target = make_invitable_user(username="urlleaktarget", email="urlleak@example.com", is_active=True)
         self.client.post(reverse("friend.invite_email"), {"email": target.email})
         self.client.post(reverse("friend.invite_email"), {"email": "urlleak-unmatched@example.com"})
@@ -256,10 +224,7 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_pending_cards_are_structurally_identical_across_kinds(self, mock_send) -> None:
-        """Modulo the opaque token itself, a matched-email card and an
-        unmatched-email card must render byte-identically - including their
-        ORDER being chronological rather than grouped by kind, which would
-        otherwise leak the kind of any card via its position."""
+        """Modulo the opaque token itself, a matched-email card and an unmatched-email card must render byte-identically - including their ORDER being chronological rather than grouped by kind, which would otherwise leak the kind of any card via its position."""
         import re
 
         target = make_invitable_user(username="structuretarget", email="structure@example.com", is_active=True)

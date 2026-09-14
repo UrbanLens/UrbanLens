@@ -1,11 +1,4 @@
-"""Tests for GoogleMapsGateway.get_street_view_single - Street View "no imagery" placeholder leak.
-
-See docs/designs/drafts/spotguessr.md ("Street View mode") and
-services.spotguessr.street_view for how this feeds SpotGuessr's Street View
-mode. A custom (mock) `session` is passed directly to the gateway - Gateway
-.__post_init__ preserves any non-plain-requests.Session as-is, which is this
-codebase's established test-injection pattern (see services/gateway.py).
-"""
+"""Tests for GoogleMapsGateway.get_street_view_single - Street View "no imagery" placeholder leak."""
 
 from __future__ import annotations
 
@@ -32,11 +25,7 @@ class GetStreetViewSingleTests(SimpleTestCase):
         return GoogleMapsGateway(api_key="test-key", session=session)
 
     def test_the_image_request_keeps_the_radius_metadata_found_the_pano_at(self) -> None:
-        """Regression guard: dropping `radius` from the image request lets it
-        re-search with Google's own smaller default and miss a pano that
-        metadata only found by expanding the search radius - silently
-        returning the "Sorry, we have no imagery here" placeholder instead
-        of the real photo."""
+        """Regression guard: dropping `radius` from the image request lets it re-search with Google's own smaller default and miss a pano that metadata only found by expanding the search radius - silently returning the "Sorry, we have no imagery here" placeholder instead of the real photo."""
         session = MagicMock()
         session.get.side_effect = [
             _response(json_data={"status": "OK", "location": {"lat": 1.0, "lng": 2.0}, "date": "2024-01"}),
@@ -82,11 +71,7 @@ class GetStreetViewSingleTests(SimpleTestCase):
             gateway.get_street_view_single(1.0, 2.0, radius=200, radius_increment=50, max_radius=200)
 
     def test_over_query_limit_raises_immediately_instead_of_sweeping_the_radius(self) -> None:
-        """Regression guard for the SpotGuessr /start/ 504s: OVER_QUERY_LIMIT (and any
-        other account/request-level failure) is not "no coverage here yet" - retrying
-        at a wider radius just repeats the identical failure up to
-        (max_radius - radius) / radius_increment times, turning one bad API key/quota
-        into ~20 wasted calls per candidate location."""
+        """Regression guard for the SpotGuessr /start/ 504s: OVER_QUERY_LIMIT (and any other account/request-level failure) is not "no coverage here yet" - retrying at a wider radius just repeats the identical failure up to (max_radius - radius) / radius_increment times, turning one bad API key/quota into ~20 wasted calls per candidate location."""
         session = MagicMock()
         session.get.side_effect = [
             _response(json_data={"status": "OVER_QUERY_LIMIT"}),

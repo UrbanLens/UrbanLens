@@ -1,11 +1,4 @@
-"""Trip tools: list (read-only), create and add-activity (writes, confirm-gated).
-
-Trips are multi-profile (``TripMembership``), so ``list_trips`` can
-legitimately surface a trip someone else created and shared with the
-requesting profile - :attr:`~registry.DataScope.VISIBLE_SHARED`, not
-``OWN_PROFILE``, even though every query below is still scoped to
-``context.profile`` and nothing here bypasses that membership check.
-"""
+"""Trip tools: list (read-only), create and add-activity (writes, confirm-gated)."""
 
 from __future__ import annotations
 
@@ -68,10 +61,7 @@ class CreateTripArgs(BaseModel):
 
 
 def _create_trip(context: ToolContext, args: CreateTripArgs) -> dict[str, Any]:
-    # The shared service every other caller uses. It owns the name generation,
-    # the membership join, the description length limit, and the
-    # max_upcoming_trips_per_user quota under a lock on the creator's profile
-    # row - the lock this tool used to hold on its own.
+    # The shared service every other caller uses.
     from urbanlens.dashboard.services.trips.trip_crud import create_trip
     from urbanlens.dashboard.services.trips.trip_errors import TripError
 
@@ -117,9 +107,9 @@ def _add_trip_activity(context: ToolContext, args: AddTripActivityArgs) -> dict[
     if trip is None:
         return {"error": "No such trip (it must be one of the user's own trips)."}
     # Membership only narrows *which* trip; whether this profile may add to it is
-    # `create_activity`'s call, via allow_add_activities and joined-ness. The
-    # filter above matches through TripMembership with no status filter, so it
-    # includes invited-not-joined members too.
+    # `create_activity`'s call, via allow_add_activities and joined-ness.
+    # The filter above matches through TripMembership with no status filter, so it includes
+    # invited-not-joined members too.
     pin = Pin.objects.filter(slug=args.pin_slug, profile=context.profile, parent_pin__isnull=True).select_related("location").first()
     if pin is None:
         return {"error": "No such pin (it must be one of the user's own pins)."}
@@ -137,11 +127,7 @@ def _add_trip_activity(context: ToolContext, args: AddTripActivityArgs) -> dict[
             # 9am local: an arbitrary-but-sane default hour for a date-only plan.
             scheduled_at = datetime.combine(day, time(hour=9), tzinfo=get_current_timezone())
 
-    # The shared service every other caller uses. It owns the permission check
-    # (allow_add_activities, and joined-ness), the max_trip_activities quota
-    # under a trip-row lock, the append position, and the reshare-chain record -
-    # all of which this tool used to re-implement, and two of which it had never
-    # implemented at all.
+    # The shared service every other caller uses.
     try:
         activity = create_activity(trip, context.profile, place={"pin_slug": args.pin_slug}, scheduled_at=scheduled_at)
     except TripError as exc:

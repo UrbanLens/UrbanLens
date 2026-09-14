@@ -1,10 +1,4 @@
-"""Deleting a label is restorable from Undo History, including what the cascade took.
-
-The label row is the least of it: deleting a label also severs its place in the
-hierarchy (both directions of the ``parents`` self-M2M) and its assignment to every
-pin carrying it - and a label's order decides which icon a pin draws on the map, so
-those assignments are visible state.
-"""
+"""Deleting a label is restorable from Undo History, including what the cascade took."""
 
 from __future__ import annotations
 
@@ -109,13 +103,7 @@ class LabelUndoTests(TestCase):
         )
 
     def test_a_name_reused_since_is_refused_with_a_message(self):
-        """Since migration 0042 the name is unique, so restoring onto a reused one
-        would raise IntegrityError from the database - a 500 with no explanation.
-        The handler refuses first and says why.
-
-        This test previously asserted the opposite (that a duplicate was created),
-        which was correct while Label had no constraint.
-        """
+        """The handler refuses first and says why."""
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
         undo_action = self._delete_with_undo()

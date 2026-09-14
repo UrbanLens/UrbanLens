@@ -1,13 +1,4 @@
-"""Live-refresh notifications for the Private Pin page's external-data panels.
-
-Some panels (Wikipedia, Nominatim, EPA ECHO's exact-site detail) have side
-effects beyond their own content - an auto-added alias/link, or a changed
-pin display name (see services.locations.naming). Those mutations happen in
-a background Celery task with no HTTP response of their own to signal from,
-so PinController._notify_panel_ready attaches an HX-Trigger header the next
-time the panel that caused them is rendered from the now-fresh cache - see
-PinController.wikipedia_info/nominatim_info/panel_info.
-"""
+"""Live-refresh notifications for the Private Pin page's external-data panels."""
 
 from __future__ import annotations
 

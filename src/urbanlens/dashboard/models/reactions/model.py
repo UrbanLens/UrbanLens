@@ -12,29 +12,8 @@ from urbanlens.dashboard.models.reactions.queryset import ReactionManager
 
 class Reaction(abstract.DashboardModel):
     """An emoji reaction from a user on a Comment, TripComment, DirectMessage, or GroupMessage.
-
-    Exactly one of ``comment``, ``trip_comment``, ``direct_message``, or
-    ``group_message`` must be set. A profile can react with the same emoji only
-    once per target, but may react to the same target with several different
-    emoji.
-
-    Every host gets its own nullable FK plus its own *partial* unique
-    constraint rather than a generic content-type pointer, and new hosts must
-    follow that shape rather than inventing one. A real database constraint is
-    what makes the duplicate impossible, and the duplicate is not hypothetical:
-    a double-tap, or a retried request on a flaky mobile link, submits the same
-    reaction twice, and without the constraint both rows land and the emoji's
-    aggregate count reads 2 for a single person. A generic content-type pointer
-    could not express that constraint at all, since the uniqueness would have
-    to span (content_type, object_id) pairs the database cannot key on
-    per-host.
-
-    The ``condition=Q(<host>__isnull=False)`` on each constraint is what keeps
-    that affordable. The three-column unique index would otherwise cover every
-    row in the table - including the ~3/4 of them belonging to the *other*
-    hosts, whose column is NULL and which can never collide anyway (PostgreSQL
-    treats NULLs as distinct) - so the table would carry four full-size indexes
-    of which each only ever adjudicates a quarter of the rows.
+    Exactly one of ``comment``, ``trip_comment``, ``direct_message``, or ``group_message`` must be set.
+    A profile can react with the same emoji only once per target, but may react to the same target with several different emoji.
     """
 
     emoji = models.CharField(max_length=10)
@@ -65,11 +44,10 @@ class Reaction(abstract.DashboardModel):
         null=True,
         blank=True,
     )
-    # CASCADE, matching every sibling host: a hard-deleted message must not
-    # leave orphan reaction rows that later aggregate against a missing row.
-    # (``GroupMessage.deleted_at`` is a soft tombstone and does not delete the
-    # row, so reactions on a deleted-for-everyone message survive exactly as
-    # the message itself does.)
+    # CASCADE, matching every sibling host: a hard-deleted message must not leave orphan reaction
+    # rows that later aggregate against a missing row.
+    # (``GroupMessage.deleted_at`` is a soft tombstone and does not delete the row, so reactions on
+    # a deleted-for-everyone message survive exactly as the message itself does.)
     group_message = models.ForeignKey(
         "dashboard.GroupMessage",
         on_delete=models.CASCADE,

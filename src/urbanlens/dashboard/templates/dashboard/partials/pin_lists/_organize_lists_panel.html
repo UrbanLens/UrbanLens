@@ -1,13 +1,5 @@
 {% load humanize %}
-{% comment %}
-Lists tab content, lazy-loaded via HTMX into Organize's "Lists" panel (see
-organize/index.html and PinListsIndexView.get - only ever requested with an
-HX-Request header; direct navigation to /lists/ redirects to Organize instead).
-
-Context:
-  pin_lists - PinList queryset for the current profile, already sorted
-  sort      - current sort key ("updated", "name", or "pin_count")
-{% endcomment %}
+{% comment %}Lists tab content, lazy-loaded via HTMX into Organize's "Lists" panel.{% endcomment %}
 <div class="pin-lists-toolbar">
     <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..."
            oninput="pinListsFilterCards(this.value)" autocomplete="off">

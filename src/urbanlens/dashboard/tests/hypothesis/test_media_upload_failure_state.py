@@ -1,24 +1,4 @@
-"""A media task that dies must leave the row in a state somebody can act on.
-
-``process_image_upload`` sets ``Image.upload_processed_at`` on success and,
-before this, set nothing at all on permanent failure. There was no
-``task_failure`` receiver and no per-task ``on_failure``, so a row whose task
-died kept ``upload_processed_at = None`` forever: the uploader saw a photo that
-never finished, with no error and no way to retry, and nothing server-side
-distinguished "still running" from "died three days ago".
-
-``autoretry_for=(OSError,)`` does not cover it. Those retries run *inside* the
-child, so anything that kills the child - OOM, a decoder segfault, a lost worker
-- never reaches them.
-
-The owner's ruling, and what these pin down: **the user retries; if they do not,
-the upload is discarded**. So there are three states worth asserting, and the
-transitions between them:
-
-* stranded - the task died, and nothing has noticed yet;
-* failed - noticed, recorded, and offered back to the uploader;
-* gone - they did not take the offer, and the bytes are not kept forever.
-"""
+"""A media task that dies must leave the row in a state somebody can act on."""
 
 from __future__ import annotations
 

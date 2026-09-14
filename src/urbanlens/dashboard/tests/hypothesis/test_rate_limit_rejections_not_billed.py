@@ -1,23 +1,4 @@
-"""A rejected call must not consume the budget that rejected it.
-
-Every blocked attempt writes an ``ApiCallLog`` row so the rejection is visible in
-usage reporting - `_reserve_call` creates one with ``was_rate_limited=True``
-before raising, and another with ``was_service_disabled=True`` for a disabled
-service. ``check_rate_limit`` then counts rows for the service and excludes only
-``was_geo_filtered=True``, so those rejection rows count as if they were real
-outbound calls.
-
-The per-minute limit is what makes this bite. A burst that exceeds it produces
-one rejection row per over-limit attempt, and every one of those is then charged
-against the *daily* and *30-day* budgets, which are far larger and much slower to
-recover. A caller that retries into a per-minute wall therefore burns a day's
-allowance without a single request leaving the process - and the more aggressively
-it retries, the faster its real budget disappears.
-
-That the author excluded ``was_geo_filtered`` is what makes this a bug rather
-than a design choice: skipped calls were already understood not to count. Two of
-the three skip reasons were missed.
-"""
+"""A rejected call must not consume the budget that rejected it."""
 
 from __future__ import annotations
 
@@ -84,10 +65,7 @@ class RejectionsAreNotBilledTests(TestCase):
     def test_the_limiter_agrees_once_the_minute_window_is_irrelevant(self) -> None:
         """A day's budget must not be exhausted by a burst of refusals.
 
-        With the per-minute limit removed, only the daily limit applies. Ten
-        rejection rows were already written by the burst above; if those count,
-        the service is wrongly out of budget for the rest of the day.
-        """
+        With the per-minute limit removed, only the daily limit applies."""
         for _ in range(12):
             self._attempt()  # 2 permitted, 10 rejected
 
@@ -117,11 +95,7 @@ class RejectionsAreNotBilledTests(TestCase):
     def test_the_enrichment_budget_is_computed_the_same_way(self) -> None:
         """`compute_service_budget` had the identical count, and the same flaw.
 
-        It decides how many enrichment calls a sweep may still make. Inflating
-        "used" with rejection rows shrinks that budget, and a large enough burst
-        drives it to zero - stopping enrichment for a service whose real quota is
-        mostly unspent.
-        """
+        It decides how many enrichment calls a sweep may still make."""
         from urbanlens.dashboard.services.locations.enrichment import compute_service_budget
 
         ApiRateLimit.objects.filter(service=_SERVICE).update(calls_per_minute=2, calls_per_day=10)

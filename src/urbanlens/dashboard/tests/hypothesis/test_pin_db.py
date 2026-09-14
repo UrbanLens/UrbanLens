@@ -1,9 +1,4 @@
-"""Property-based database tests for the Pin model.
-
-Covers PinManager.get_nearby_or_create and the major PinQuerySet filters.
-Each @given example runs inside its own atomic savepoint (rolled back
-automatically by hypothesis.extra.django.TestCase).
-"""
+"""Property-based database tests for the Pin model."""
 
 from __future__ import annotations
 

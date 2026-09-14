@@ -1,20 +1,4 @@
-"""Tests for the integration suite's account provisioning.
-
-Two things are worth testing here and they are not the same thing.
-
-The first is that a provisioned account is actually usable by a headless run.
-Every precondition in ``services.integration_testing.accounts`` exists because
-some redirect, prompt or challenge would otherwise stop the suite before its
-first assertion, and each is a single field that a future change could quietly
-flip back. A test that only checked "a user row exists" would pass through every
-one of those regressions.
-
-The second is the selection query behind ``--purge``. It deletes accounts and
-everything hanging off them, and it may be pointed at a staging instance people
-also use by hand. Its boundaries are the safety property of this whole feature,
-so they are tested from both sides: that it finds what it should, and - more
-importantly - that it does not find anything else.
-"""
+"""Tests for the integration suite's account provisioning."""
 
 from __future__ import annotations
 
@@ -62,12 +46,9 @@ class ProvisionAccountTests(TestCase):
     def test_account_can_actually_sign_in(self):
         """Active, verified, and holding the password that was reported.
 
-        Each of these is separately load-bearing: an inactive account is
-        refused outright, an unverified one is refused with an offer to resend
-        an email nobody can receive, and a password that does not match the
-        manifest makes every sign-in in the suite fail for a reason the suite
-        cannot see.
-        """
+        Each of these is separately load-bearing: an inactive account is refused outright, an unverified one is
+        refused with an offer to resend an email nobody can receive, and a password that does not match the
+        manifest makes every sign-in in the suite fail for a reason the suite cannot see."""
         account, _ = provision_account("primary", password=PASSWORD)
 
         user = User.objects.get(username=account.username)
@@ -78,10 +59,8 @@ class ProvisionAccountTests(TestCase):
     def test_profile_is_past_every_post_login_diversion(self):
         """``PostLoginRedirectView`` must land the run in the application.
 
-        Without both flags it redirects to the welcome flow or to profile
-        editing, and every navigation the suite makes afterwards is against the
-        wrong page.
-        """
+        Without both flags it redirects to the welcome flow or to profile editing, and every navigation the
+        suite makes afterwards is against the wrong page."""
         account, _ = provision_account("primary", password=PASSWORD)
 
         profile = Profile.objects.get(user__username=account.username)
@@ -105,10 +84,8 @@ class ProvisionAccountTests(TestCase):
     def test_no_notification_is_ever_delivered_by_email(self):
         """Every delivery preference is on-site only.
 
-        The address is on a reserved domain that cannot receive mail, so an
-        email preference would produce a delivery failure inside whatever task
-        raised the notification - reported as that feature failing.
-        """
+        The address is on a reserved domain that cannot receive mail, so an email preference would produce a
+        delivery failure inside whatever task raised the notification - reported as that feature failing."""
         account, _ = provision_account("primary", password=PASSWORD)
 
         preferences = NotificationPreference.objects.get(profile__user__username=account.username)
@@ -149,10 +126,8 @@ class ApiKeyProvisioningTests(TestCase):
     def test_the_restricted_key_is_valid_and_insufficient(self):
         """Valid credential, minimal grant.
 
-        A key that does not authenticate proves nothing about scope
-        enforcement - the endpoint would refuse it at the authentication step
-        and the test would pass whether or not scopes were checked at all.
-        """
+        A key that does not authenticate proves nothing about scope enforcement - the endpoint would refuse it
+        at the authentication step and the test would pass whether or not scopes were checked at all."""
         account, _ = provision_account("primary", password=PASSWORD)
 
         assert account.restricted_api_key is not None
@@ -207,10 +182,7 @@ class IdempotencyTests(TestCase):
 class SelectionBoundaryTests(TestCase):
     """What ``--purge`` is and is not allowed to see.
 
-    The negative cases matter more than the positive one. This query deletes
-    accounts and everything hanging off them, and it may be run on an instance
-    that also holds accounts somebody is using.
-    """
+    The negative cases matter more than the positive one."""
 
     def test_a_provisioned_account_is_selected(self):
         provision_account("primary", password=PASSWORD)
@@ -236,10 +208,8 @@ class SelectionBoundaryTests(TestCase):
     def test_a_staff_account_is_never_selected(self):
         """A staff account carrying both conventions is still excluded.
 
-        The last line of defence: if somebody promotes one of these to
-        investigate something, a later purge must not silently take the
-        elevated account with it.
-        """
+        The last line of defence: if somebody promotes one of these to investigate something, a later purge must
+        not silently take the elevated account with it."""
         User.objects.create_user(username=username_for("primary"), email=email_for("primary"), is_staff=True)
 
         self.assertEqual(list(integration_users()), [])
@@ -259,26 +229,15 @@ class SelectionBoundaryTests(TestCase):
 class BootstrapAdminGuardTests(TestCase):
     """A disposable account must never claim the single, permanent admin slot.
 
-    Asserted against ``SiteSettings.bootstrap_admin_user``, which is the
-    authoritative record, rather than against the return value: the promotion
-    runs from a ``post_save`` signal, so by the time a test can call the
-    function itself the decision has already been made once.
-    """
+    Asserted against ``SiteSettings.bootstrap_admin_user``, which is the authoritative record, rather than
+    against the return value: the promotion runs from a ``post_save`` signal, so by the time a test can call the
+    function itself the decision has already been made once."""
 
     def setUp(self):
         """Establish the global state these tests read, rather than assuming it.
 
-        ``promote_first_user_if_needed`` consults two pieces of site-wide state:
-        the ``SiteSettings`` bootstrap slot, and whether any ``User`` other than
-        the one being created exists. Neither is this file's to assume. Against a
-        database another file has already written to - which is what
-        ``bin/run_tests.sh --fast`` reuses - all three tests here fail on somebody
-        else's fixture, and read as a regression in whatever was being worked on.
-
-        Clearing the slot alone would not be enough: the "an ordinary first user
-        is still promoted" case needs an empty user table as well. Both writes are
-        inside the test's transaction and roll back with it.
-        """
+        ``promote_first_user_if_needed`` consults two pieces of site-wide state: the ``SiteSettings`` bootstrap
+        slot, and whether any ``User`` other than the one being created exists."""
         super().setUp()
         User.objects.all().delete()
         # Redundant while the FK is SET_NULL, but this is the value every
@@ -291,10 +250,8 @@ class BootstrapAdminGuardTests(TestCase):
     def test_the_first_provisioned_account_is_not_promoted(self):
         """Provisioning against a freshly built database creates the first user on it.
 
-        The slot is single-claim and permanent, so a throwaway account taking
-        it would leave the real operator unable to ever be promoted - and a
-        purge would then leave it pointing at a row that no longer exists.
-        """
+        The slot is single-claim and permanent, so a throwaway account taking it would leave the real operator
+        unable to ever be promoted - and a purge would then leave it pointing at a row that no longer exists."""
         User.objects.create_user(username=username_for("primary"), email=email_for("primary"))
 
         self.assertIsNone(self._bootstrap_admin_id(), "a disposable account claimed the bootstrap admin slot")
@@ -308,14 +265,7 @@ class BootstrapAdminGuardTests(TestCase):
     def test_provisioning_leaves_the_slot_unclaimed(self):
         """The order that matters: disposable accounts created on a fresh instance.
 
-        The slot stays empty rather than pointing at an account a purge will
-        delete. It does *not* become claimable by whoever signs up next -
-        ``promote_first_user_if_needed`` only ever promotes a genuinely first
-        user - so on an instance provisioned before anyone registered, the
-        operator is promoted deliberately (``createsuperuser``, or the site
-        admin group) rather than automatically. That is the recoverable
-        outcome; a dangling reference to a deleted row is not.
-        """
+        The slot stays empty rather than pointing at an account a purge will delete."""
         provision_account("primary", password=PASSWORD)
         provision_account("secondary", password=PASSWORD)
 
@@ -402,12 +352,7 @@ class CommandTests(TestCase):
 class HeavySeedingTests(TestCase):
     """`--heavy-pins`, and the two ways it could lie.
 
-    The load harness reads the shared label's id and the account's pin count out
-    of the manifest this writes. If the manifest said a role was seeded and it
-    was not, the run that follows would measure an empty account, take twelve
-    minutes doing it, and pass - which is the worst outcome available, because
-    it is indistinguishable from the site being fast.
-    """
+    The load harness reads the shared label's id and the account's pin count out of the manifest this writes."""
 
     def test_nothing_is_seeded_by_default(self):
         """Provisioning is cheap; seeding is not. Every ordinary run must stay cheap."""

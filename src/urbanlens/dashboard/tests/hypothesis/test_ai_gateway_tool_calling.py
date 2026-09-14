@@ -1,9 +1,4 @@
-"""Tests for LLMGateway.send_with_tools - the native tool-calling entry point (batch 2c).
-
-Unlike send_prompt/send_prompt_list, this returns the raw InferenceResponse
-(content blocks, stop_reason) rather than parsing an <ANSWER> tag - there is
-no text protocol for a native-tool-calling caller to parse.
-"""
+"""Tests for LLMGateway.send_with_tools - the native tool-calling entry point (batch 2c)."""
 
 from __future__ import annotations
 
@@ -25,13 +20,6 @@ _TOOLS = [
 
 class SendWithToolsTests(SimpleTestCase):
     def setUp(self) -> None:
-        # conftest's session-scoped guard replaces every AI chokepoint with a
-        # Mock returning None - including send_with_tools, which is this file's
-        # entire subject, so every assertion here would be made against a call
-        # that never happened. Restored for these tests only; the rest of the
-        # guard, the localhost-only socket guard and the placeholder credentials
-        # all stay in place, and the inference client below is a Mock, so
-        # nothing here can reach a provider.
         self.enterContext(real_ai_chokepoint("urbanlens.dashboard.services.ai.gateway.LLMGateway.send_with_tools"))
 
         # "claude-*" isn't a tiktoken-native model, so calculate_tokens falls

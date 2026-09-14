@@ -1,39 +1,5 @@
 """Web Images plugin: a Media-gallery tab of web-image search results, via REData.
-
-Unlike the archive providers (Wikimedia, Smithsonian, Library of Congress),
-which search one curated collection, this provider casts the widest net: it
-runs an aggressive, relevance-shaped query through REData's ``/search/web/``
-image mode to surface photos of a place that never made it into a formal
-archive - the abandoned-hospital shots, urbex galleries, and vintage
-postcards that live on Flickr, imgur, Pinterest, DeviantArt, etc. (REData's
-own image-capable provider today, Google Programmable Search).
-
-The whole value here is *precision*: a bare "Hudson River State Hospital"
-image search returns unrelated stock photos and same-named places elsewhere.
-So the query is built as required, disambiguating ``OR``-groups that a
-general image engine treats as required clauses (see :func:`build_image_query`):
-
-* **Aliases** - every non-nickname name the place is known by, quoted. A
-  nickname is a private label ("the spooky hospital") that no external source
-  indexes, so it's excluded.
-* **Ancestor names** (child pins only) - the parent site's own non-nickname
-  names. A child pin's name ("Staff House", "Boiler House") is often a
-  generic building label shared verbatim by unrelated properties nationwide,
-  so this keeps results tied to this specific site rather than matching
-  whichever same-named building elsewhere a provider prefers.
-* **Area** - the state (US) or country (elsewhere) *and* the municipality,
-  quoted. Requiring a geographic clause rejects the same-named place two
-  states over.
-* **Subject** - the site's fixed subject vocabulary (abandoned, urbex,
-  decay, ...), so a generic name doesn't pull in the operating business of
-  the same name.
-
-This panel keeps its historical name/slug (``searxng_images``) for
-``UL_DISABLED_PLUGINS`` continuity even though it no longer talks to a
-self-hosted SearXNG instance directly - REData's web-search endpoint (shared
-with :class:`~urbanlens.dashboard.plugins.builtin.google_images.GoogleImagesPanelSource`)
-covers it instead.
-"""
+So the query is built as required, disambiguating ``OR``-groups that a general image engine treats as required clauses (see :func:`build_image_query`):"""
 
 from __future__ import annotations
 
@@ -48,10 +14,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
-#: Fixed subject-matter clause: at least one of these words must appear, so a
-#: place name that coincides with an operating business/brand doesn't flood the
-#: gallery with irrelevant marketing imagery. These describe UrbanLens's own
-#: subject (urban exploration / abandoned places), not any one location.
+#: Fixed subject-matter clause: at least one of these words must appear, so a place name that
+#: coincides with an operating business/brand doesn't flood the gallery with irrelevant marketing
+#: imagery.
 SUBJECT_TERMS: tuple[str, ...] = ("abandoned", "urbex", "urban exploration", "decay", "vacant", "postcard")
 
 #: Country names (case-insensitive) treated as "United States" when deciding
@@ -86,24 +51,15 @@ def _dedup_preserving_order(terms: list[str]) -> list[str]:
 
 def assemble_image_query(aliases: list[str], area_terms: list[str], ancestor_terms: list[str] | None = None) -> str | None:
     """Assemble the grouped SearXNG relevance query from its component terms.
-
-    Kept separate from :func:`build_image_query` (which pulls the terms off a
-    ``Pin``) so the pure string-assembly logic is unit-testable without the ORM.
+    Kept separate from :func:`build_image_query` (which pulls the terms off a ``Pin``) so the pure string-assembly logic is unit-testable without the ORM.
 
     Args:
-        aliases: The place's names (already nickname-filtered). Required - an
-            empty list yields ``None``, since there is nothing to search for.
+        aliases: The place's names (already nickname-filtered).
         area_terms: Geographic disambiguators (state/country + municipality).
-            Optional; an empty list simply omits the area group.
-        ancestor_terms: Names of a child pin's parent site (see
-            ``Pin.ancestor_search_names``). Optional; an empty list omits the
-            group, which is the normal case for a pin with no parent.
+        ancestor_terms: Names of a child pin's parent site (see ``Pin.ancestor_search_names``).
 
     Returns:
-        A query string of ``OR``-grouped, quoted clauses (e.g.
-        ``("A" OR "B") ("NY" OR "Troy") ("abandoned" OR ...)``), or ``None``
-        when no usable alias remained.
-    """
+        A query string of ``OR``-grouped, quoted clauses (e.g. ``("A" OR "B") ("NY" OR "Troy") ("abandoned" OR ...)``), or ``None`` when no usable alias remained."""
     alias_terms = _dedup_preserving_order(aliases)
     if not alias_terms:
         return None
@@ -127,20 +83,11 @@ def _or_group(terms: list[str]) -> str:
 def build_image_query(pin: Pin) -> str | None:
     """Build the aggressive image-search query for a pin, or ``None`` if unbuildable.
 
-    Aliases are gathered from the pin's own canonical names, its non-nickname
-    :class:`PinAlias` rows, and - when the location has a community wiki - the
-    wiki's non-nickname aliases, so the query benefits from names other users
-    have contributed for the same place. A child pin also gets its ancestor
-    chain's names as a separate required group (see
-    ``Pin.ancestor_search_names``).
-
     Args:
         pin: The pin whose place is being searched.
 
     Returns:
-        The grouped query string, or ``None`` when the pin has no meaningful
-        name to search on (the provider then stays quietly absent).
-    """
+        The grouped query string, or ``None`` when the pin has no meaningful name to search on (the provider then stays quietly absent)."""
     from urbanlens.dashboard.models.aliases.model import AliasType
     from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -162,16 +109,11 @@ def build_image_query(pin: Pin) -> str | None:
 def _area_terms(pin: Pin) -> list[str]:
     """Geographic disambiguators: the broad region plus the municipality.
 
-    Broad term is the US state (for a US or country-less pin) or the country
-    (elsewhere); the tighter term is the city, falling back to the county. The
-    example ``("New York" OR "poughkeepsie")`` is state + city.
-
     Args:
         pin: The pin whose location supplies the geographic fields.
 
     Returns:
-        Zero to two area terms, most-broad first.
-    """
+        Zero to two area terms, most-broad first."""
     country = (pin.effective_country or "").strip()
     is_usa = not country or country.casefold() in _US_COUNTRY_NAMES
     broad = pin.effective_state if is_usa else country
@@ -204,26 +146,13 @@ class SearxngImageMediaSource(GalleryMediaSource):
             try:
                 results = RedataSearchGateway().search_web(query, images=True, max_results=_MAX_IMAGES)
             except LocationContextUnavailableError as exc:
-                # An outage must not be written to the cache. The *existence* of
-                # a LocationCache row is what marks this source as having run
-                # (see LocationCacheEnrichmentSource), so caching an empty list
-                # here turns a transient failure into a durable "no photographs
-                # here" that nothing retries - which is exactly what happened
-                # while the SearXNG instance was returning 403s: the emptiness
-                # outlived the outage. Returning without writing leaves the
-                # source unfetched, so the next pass tries again.
+                # An outage must not be written to the cache.
                 logging.getLogger(__name__).warning("REData image search failed for %r, leaving it unfetched to retry: %s", query, exc)
                 return
         LocationCache.set(pin.location, self.cache_source, {"items": results, "query": query or ""}, query_key=query or "")
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Rebuild ``MediaItem``s from the cached REData image results.
-
-        REData's image-mode results carry the image itself under
-        ``thumbnail`` and the page it was found on under ``link`` (see
-        ``RedataSearchGateway.search_web``) - there is no separate smaller
-        preview, so the same URL serves as both the item and its thumbnail.
-        """
+        """Rebuild ``MediaItem``s from the cached REData image results."""
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
         items = (data or {}).get("items") or []

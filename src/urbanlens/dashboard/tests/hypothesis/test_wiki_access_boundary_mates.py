@@ -1,19 +1,4 @@
-"""Tests for wiki_access.location_visible_to's "same place" matching.
-
-Originally, a profile could only see a wiki by having a pin at the EXACT SAME
-Location row the wiki pointed to. Nearly-identical coordinates routinely
-resolve to distinct Location rows, so a profile whose pin genuinely sat on the
-same building was denied access to that place's wiki entirely.
-
-The fix used to be expressed as containment against the wiki location's own
-copy of the boundary polygon ("boundary mates"). Since the Place model landed,
-it is expressed directly: two coordinates that resolve onto the same
-real-world thing share its access domain, so no polygon comparison happens at
-read time at all. These tests keep the original scenarios and assert the same
-outcomes through the new mechanism - including the anti-gaming invariants,
-which are now structural (the access predicate does not read the ``Boundary``
-table at all).
-"""
+"""Tests for wiki_access.location_visible_to's "same place" matching."""
 
 from __future__ import annotations
 

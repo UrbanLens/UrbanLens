@@ -1,4 +1,4 @@
-"""The assistant's "what did I just dismiss" tools - grounded only in the client's own ring for this turn (services.ai.dismissals), never a server-side lookup."""
+"""The assistant's "what did I just dismiss" tools - grounded in the client's own ring."""
 
 from __future__ import annotations
 

@@ -1,17 +1,4 @@
-"""A blocked profile can still be a saved emergency contact - and you are told.
-
-Filed 2026-08-17: `EmergencyContactDefault` is a template copied onto each new
-check-in, so blocking someone does not stop a check-in created afterwards from
-paging them. The filing left it open because both silent answers are wrong in
-an obvious way - leaving it pages someone you blocked, deleting it destroys a
-safety contact in the one feature whose purpose is that somebody is told when
-you do not come back.
-
-So neither is chosen for the owner: the row stays, and the check-in and
-settings pages say plainly that it will still be contacted. Someone may block
-a person socially and still want them called if they go missing; that is
-theirs to decide, knowingly.
-"""
+"""A blocked profile can still be a saved emergency contact - and you are told."""
 
 from __future__ import annotations
 

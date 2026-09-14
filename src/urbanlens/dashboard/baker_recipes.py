@@ -349,10 +349,8 @@ notification_log: Recipe[NotificationLog] = Recipe(
     url="",
 )
 
-# NotificationPreference has a OneToOneField to Profile.
-# Note: a NotificationPreference may be auto-created by a post_save signal
-# when a Profile is created.  In that case, access it via profile.notification_preferences
-# rather than using this recipe directly.
+# NotificationPreference may be auto-created by a post_save signal - in that
+# case access it via profile.notification_preferences, not this recipe.
 notification_preference: Recipe[NotificationPreference] = Recipe(
     "dashboard.NotificationPreference",
     profile=_make_profile,
@@ -381,8 +379,7 @@ location_edit: Recipe[WikiEdit] = Recipe(
     "dashboard.WikiEdit",
     wiki=foreign_key("dashboard.wiki"),
     editor=_make_profile,
-    # "from"/"to", matching every production writer - "old"/"new" made this
-    # recipe's rows invisible to anything that reads a real diff.
+    # "from"/"to", matching every production writer - anything reading a real diff expects those keys.
     changes={"name": {"from": "Old Name", "to": "New Name"}},
     reverted=False,
     reverted_by=None,

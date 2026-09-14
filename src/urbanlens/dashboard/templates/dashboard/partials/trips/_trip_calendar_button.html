@@ -1,5 +1,4 @@
 {# Google Calendar export toggle for the viewing user's own calendar. #}
-{# Context: trip, profile, calendar_account, calendar_link #}
 <span id="trip-calendar-button">
     {% if not calendar_account %}
     <a href="{% url 'trips.calendar.connect' %}" class="btn-icon"

@@ -1,30 +1,4 @@
-"""Turn a device's raw scan history into fuzzy WikiDeviceMarker location(s).
-
-The whole pipeline is a **full recompute from raw history** each time it
-runs, rather than incrementally-merged running state: at this app's current
-data volume (beta, low upload counts) a full recompute is simpler to reason
-about, trivially idempotent (running it twice with no new data is a no-op),
-and far easier to test correctly than incremental merge bookkeeping. This can
-move to incremental maintenance later if data volume ever justifies it.
-
-Algorithm, per (device, wiki):
-
-1. Pull every ``detected=True`` :class:`DeviceScanEntry` for the device whose
-   ``location`` falls inside the wiki's current effective boundary, within a
-   lookback window.
-2. Weight each entry by recency (older observations count for less - a
-   device that hasn't been seen in months shouldn't out-vote one seen
-   yesterday).
-3. Greedily cluster entries by proximity - a device that has moved shows up
-   as two separate clusters once they're far enough apart.
-4. Reconcile computed clusters against this (device, wiki) pair's current,
-   not-manually-placed markers (nearest match wins); unmatched clusters
-   become new markers, and existing markers with no matching cluster this
-   round (their contributors aged out of the lookback window) go ``STALE``.
-5. Separately, ``detected=False`` ("not found here") entries feed
-   :func:`record_absence_report`, which can flip a marker to
-   ``PRESUMED_REMOVED``.
-"""
+"""Turn a device's raw scan history into fuzzy WikiDeviceMarker location(s)."""
 
 from __future__ import annotations
 
@@ -48,10 +22,9 @@ if TYPE_CHECKING:
 #: this simply drop out of every recompute, same as if they'd never existed.
 LOOKBACK_DAYS = 720
 
-#: Recency half-life for an entry's clustering weight - a 30-day-old
-#: observation counts for half as much as a fresh one, matching how quickly a
-#: transient setup (a contractor's temporary camera) should stop dominating
-#: a marker's position over a permanent one.
+#: Recency half-life for an entry's clustering weight - a 30-day-old observation counts for half as
+#: much as a fresh one, matching how quickly a transient setup (a contractor's temporary camera)
+#: should stop dominating a marker's position over a permanent one.
 DECAY_HALF_LIFE_DAYS = 90
 
 #: Entries within this real-world distance of each other (or of a marker)
@@ -62,7 +35,6 @@ MERGE_DISTANCE_METERS = 30.0
 #: observation shouldn't collapse to an implausibly precise point.
 MIN_RADIUS_METERS = 5.0
 
-#: Total cluster weight at which confidence reaches ``1 - e^-1`` (~63%) -
 #: tuned so a couple of independent, recent corroborating scans already read
 #: as meaningfully confident, while a single one stays low.
 CONFIDENCE_SATURATION_WEIGHT = 3.0
@@ -87,12 +59,10 @@ def weight_for_age(age: timedelta) -> float:
     """Recency weight for an observation this old - halves every ``DECAY_HALF_LIFE_DAYS``.
 
     Args:
-        age: How long ago the observation was made. Negative (future,
-            e.g. clock skew) is treated as zero.
+        age: How long ago the observation was made.
 
     Returns:
-        A weight in ``(0, 1]`` - always positive, never exceeding 1.
-    """
+        A weight in ``(0, 1]`` - always positive, never exceeding 1."""
     age_days = max(age.total_seconds() / 86_400, 0.0)
     return 0.5 ** (age_days / DECAY_HALF_LIFE_DAYS)
 
@@ -104,27 +74,18 @@ def confidence_for_weight(total_weight: float) -> float:
         total_weight: Sum of every contributing entry's recency weight.
 
     Returns:
-        A value in ``[0, 1)`` that increases monotonically with weight but
-        never reaches 1 - there is always room for one more corroborating scan.
-    """
+        A value in ``[0, 1)`` that increases monotonically with weight but never reaches 1 - there is always room for one more corroborating scan."""
     return 1.0 - math.exp(-max(total_weight, 0.0) / CONFIDENCE_SATURATION_WEIGHT)
 
 
 def weighted_centroid(points_with_weights: Sequence[tuple[Point, float]]) -> Point:
     """Weighted average position of a set of points.
 
-    A plain weighted lat/lng average, not a proper meter-space projection -
-    accurate enough given every cluster this is used on spans at most a few
-    hundred meters (``MERGE_DISTANCE_METERS``), where the difference is
-    negligible.
-
     Args:
         points_with_weights: Non-empty sequence of (point, weight) pairs.
-            Every weight must be positive.
 
     Returns:
-        The weighted-average point, SRID 4326.
-    """
+        The weighted-average point, SRID 4326."""
     from django.contrib.gis.geos import Point
 
     total_weight = sum(weight for _, weight in points_with_weights)
@@ -141,9 +102,7 @@ def weighted_radius_meters(points_with_weights: Sequence[tuple[Point, float]], c
         centroid: The points' weighted centroid.
 
     Returns:
-        The weighted RMS distance from centroid, floored at
-        ``MIN_RADIUS_METERS``.
-    """
+        The weighted RMS distance from centroid, floored at ``MIN_RADIUS_METERS``."""
     total_weight = sum(weight for _, weight in points_with_weights)
     variance = sum(weight * _haversine_meters(point, centroid) ** 2 for point, weight in points_with_weights) / total_weight
     return max(math.sqrt(variance), MIN_RADIUS_METERS)
@@ -163,21 +122,18 @@ def _weight_entry(entry: DeviceScanEntry, now: datetime.datetime) -> _WeightedEn
     """Build a :class:`_WeightedEntry` from a persisted scan entry.
 
     Args:
-        entry: A ``detected=True`` scan entry, with its ``readings``
-            prefetched.
+        entry: A ``detected=True`` scan entry, with its ``readings`` prefetched.
         now: Reference time for the recency-weight calculation.
 
     Returns:
-        The entry's clustering inputs.
-    """
+        The entry's clustering inputs."""
     readings = list(entry.readings.all())
     signal_values = [reading.signal_strength for reading in readings if reading.signal_strength is not None]
     avg_signal = sum(signal_values) / len(signal_values) if signal_values else None
-    # The client-submitted observation time, not row-insertion time: an
-    # offline mobile client can upload readings well after they were taken,
-    # and entry.created would then treat stale scans as fresh. Falls back to
-    # entry.created only for the edge case of a detected=True entry with no
-    # readings attached.
+    # The client-submitted observation time, not row-insertion time: an offline mobile client can
+    # upload readings well after they were taken, and entry.created would then treat stale scans as
+    # fresh.
+    # Falls back to entry.created only for the edge case of a detected=True entry with no readings
     observed_at = max((reading.observed_at for reading in readings), default=entry.created)
     return _WeightedEntry(
         point=entry.location,
@@ -189,19 +145,13 @@ def _weight_entry(entry: DeviceScanEntry, now: datetime.datetime) -> _WeightedEn
 
 def _cluster_entries(entries: Sequence[_WeightedEntry]) -> list[list[_WeightedEntry]]:
     """Greedily group entries within ``MERGE_DISTANCE_METERS`` of a growing cluster centroid.
-
-    Heaviest (most recent/most corroborated) entries seed clusters first, so
-    a cluster's running centroid stabilizes quickly. This is a simple
-    approximation appropriate for the modest per-(device, wiki) point counts
-    this ever runs against - not a general-purpose spatial clustering
-    algorithm.
+    Heaviest (most recent/most corroborated) entries seed clusters first, so a cluster's running centroid stabilizes quickly.
 
     Args:
         entries: Weighted entries to group.
 
     Returns:
-        Clusters (each a non-empty list of entries), in no particular order.
-    """
+        Clusters (each a non-empty list of entries), in no particular order."""
     remaining = sorted(entries, key=lambda e: e.weight, reverse=True)
     clusters: list[list[_WeightedEntry]] = []
     while remaining:
@@ -247,19 +197,14 @@ def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[Wik
         wiki: The wiki whose device markers are being recomputed.
 
     Returns:
-        The markers now current for this (device, wiki) pair (created or
-        updated this call) - callers don't need this return value for the
-        pipeline to work, it's provided for tests.
-    """
+        The markers now current for this (device, wiki) pair (created or updated this call) - callers don't need this return value for the pipeline to work, it's provided for tests."""
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
     from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, MarkerStatus, WikiDeviceMarker
 
-    # Effective boundary (community-drawn override, else generated, else
-    # circle fallback) rather than the stricter location-default-only check
-    # services.device_scan.wiki_lookup uses to *route* a new detection to a
-    # wiki - this call only decides membership within a wiki its device
-    # already legitimately touched, not visibility, so the broader/more
-    # accurate boundary is the right one to use.
+    # Effective boundary (community-drawn override, else generated, else circle fallback) rather
+    # than the stricter location-default-only check services.device_scan.wiki_lookup uses to *route*
+    # a new detection to a wiki - this call only decides membership within a wiki its device already
+    # legitimately touched, not visibility, so the broader/more accurate boundary is the right one
     polygon = Boundary.objects.effective_polygon_for_wiki(wiki, BoundaryType.PROPERTY)
     if polygon is None:
         return []
@@ -313,10 +258,6 @@ def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[Wik
             )
         result_markers.append(marker)
 
-    # A previously-active marker with no matching cluster this round has had
-    # every contributor age out of the lookback window - go STALE rather
-    # than being deleted, so history survives and it can come back ACTIVE
-    # the moment a fresh observation matches it again.
     for marker in existing_markers:
         if marker.pk not in matched_marker_ids and marker.status == MarkerStatus.ACTIVE:
             marker.status = MarkerStatus.STALE
@@ -327,25 +268,13 @@ def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[Wik
 
 def record_absence_report(marker: WikiDeviceMarker) -> WikiDeviceMarker:
     """Apply one "expected device not found here" report to *marker*.
-
     The increment is an ``F`` expression rather than a read-modify-write.
-    ``process_device_scan_upload`` claims each *upload* atomically, so the same
-    report can never be applied twice - but two different users' uploads for
-    the same marker are processed by different workers, and both incrementing
-    from the same in-memory value loses one, delaying the escalation this
-    counter exists to trigger.
-
-    ``status`` is written only when it actually changes, for the same reason:
-    the old unconditional ``save(update_fields=[..., "status", ...])`` wrote
-    back whatever status was read, so an absence report landing alongside a
-    fresh detection could revert the marker that detection had just set ACTIVE.
 
     Args:
         marker: The marker a client reported not detecting.
 
     Returns:
-        The marker, refreshed to the stored counter and status.
-    """
+        The marker, refreshed to the stored counter and status."""
     from django.db.models import F
 
     from urbanlens.dashboard.models.device_scan.model import MarkerStatus, WikiDeviceMarker as MarkerModel

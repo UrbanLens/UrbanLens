@@ -81,10 +81,7 @@ describe("the global assistant overlay", () => {
     });
 
     test("focuses the composer once its body actually loads, not before", async () => {
-        // The real htmx.ajax swaps the fetched HTML into #assistant-overlay-body
-        // and then dispatches htmx:afterSwap - the stub here does the swap by
-        // hand and fires the same event, so this exercises the same listener
-        // the real integration relies on.
+        // The real htmx.ajax swaps the fetched HTML into #assistant-overlay-body and then dispatches htmx:afterSwap.
         document.body.innerHTML = OVERLAY_MARKUP;
         window.htmx = {
             process: () => undefined,
@@ -106,11 +103,7 @@ describe("the global assistant overlay", () => {
     });
 
     test("a failed first load does not permanently disable later opens", async () => {
-        // Regression guard: bodyLoaded used to be set true synchronously right
-        // before the (fire-and-forget) ajax call, so a failed first load left
-        // it stuck true forever - every later open() silently no-opped on the
-        // loading skeleton with no retry. It must only become true once a real
-        // swap happens.
+        // Regression guard: bodyLoaded used to be set true synchronously right before the (fire-and-forget) ajax call, so a failed first load.
         document.body.innerHTML = OVERLAY_MARKUP;
         let ajaxCallCount = 0;
         window.htmx = {

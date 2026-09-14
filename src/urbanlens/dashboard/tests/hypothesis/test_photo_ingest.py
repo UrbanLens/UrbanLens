@@ -1,9 +1,4 @@
-"""Tests for the unfiled-photo ingestion path: find_matching_pin and _suggest_for_unfiled_photo.
-
-These cover Memories-page uploads (no pin attached): the photo's GPS is matched
-against the uploader's own pins to raise a self-directed VisitSuggestion. A Pin's
-coordinates live on its linked Location, whose PostGIS point is auto-synced on save.
-"""
+"""Tests for the unfiled-photo ingestion path: find_matching_pin and _suggest_for_unfiled_photo."""
 
 from __future__ import annotations
 

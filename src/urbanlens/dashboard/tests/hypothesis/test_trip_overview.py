@@ -1,14 +1,4 @@
-"""Tests for the trips overview page (TripOverviewView) and view-tracking.
-
-Invariants verified:
-  - GET /trips/ renders the overview page and computes stat-tile counts by
-    timeline_status.
-  - "Recently updated" is ordered by Trip.updated, independent of viewing.
-  - "Recently viewed" only includes trips the viewer has opened, ordered by
-    their own TripMembership.last_viewed_at (not another member's).
-  - Visiting a trip's detail page (TripDetailView) stamps the viewer's own
-    membership row's last_viewed_at, without touching other members' rows.
-"""
+"""Tests for the trips overview page (TripOverviewView) and view-tracking."""
 
 from __future__ import annotations
 
@@ -99,9 +89,7 @@ class TripOverviewViewTests(TestCase):
 
 
 class TripSectionLabelConsistencyTests(TestCase):
-    """The top nav says "Trips", so the hero/breadcrumb/subnav must too - they
-    used to say "Plan" (hero/breadcrumb) with a sub-tab also confusingly named
-    "Trips" (same name as the parent nav item, one level down)."""
+    """The top nav says "Trips", so the hero/breadcrumb/subnav must too - they used to say "Plan" (hero/breadcrumb) with a sub-tab also confusingly named "Trips" (same name as the parent nav item, one level down)."""
 
     def setUp(self) -> None:
         super().setUp()

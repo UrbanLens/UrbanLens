@@ -1,12 +1,4 @@
-"""Tests for the property_records plugin's panel rendering and OFFICIAL owner/sale writer.
-
-Covers:
-- PropertyRecordsPanelSource.render_context: the found-record card, the
-  manual-only pointer card, and the quiet-204 cases.
-- _write_official_owners_and_sales: creates OwnerSource.OFFICIAL WikiOwner/
-  WikiPropertySale rows, never duplicates them on a repeat fetch, and never
-  overwrites a pre-existing (e.g. user-entered) owner of the same name.
-"""
+"""Tests for the property_records plugin's panel rendering and OFFICIAL owner/sale writer."""
 
 from __future__ import annotations
 
@@ -74,11 +66,7 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertTrue(any(entry["href"] == "https://example.gov/assessor" for entry in ctx["meta"]))
 
     def test_an_unresolvable_viewer_never_gets_the_owner_name(self) -> None:
-        """The owner name is subscriber-only county assessor data, so a call
-        with no viewer to check entitlement against withholds it rather than
-        publishing a private individual's name by default. Which viewers *do*
-        see it is covered in ``test_property_owner_access.py``, which has real
-        pins to check against."""
+        """The owner name is subscriber-only county assessor data, so a call with no viewer to check entitlement against withholds it rather than publishing a private individual's name by default. Which viewers *do* see it is covered in ``test_property_owner_access.py``, which has real pins to check against."""
         data = {
             "available": True,
             "situs_address": "123 Main St",
@@ -231,11 +219,7 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertEqual(self.source.debug_count({}), 0)
 
     def test_demographics_are_rendered_as_meta_rows_when_the_viewer_may_see_them(self) -> None:
-        """``render_context(self.pin, ...)`` can't exercise show_demographics=True - this
-        class's ``self.pin`` is deliberately None (no viewer to resolve), so this calls
-        ``_render_available`` directly, the same as ``DemographicsRowsTests`` below tests
-        ``_demographics_rows`` directly - see ``RenderContextViewerGatingTests`` below for
-        the full-stack (real pin, real subscription) render-context equivalent."""
+        """``render_context(self.pin, ...)`` can't exercise show_demographics=True - this class's ``self.pin`` is deliberately None (no viewer to resolve), so this calls ``_render_available`` directly, the same as ``DemographicsRowsTests`` below tests ``_demographics_rows`` directly - see ``RenderContextViewerGatingTests`` below for the full-stack (real pin, real subscription) render-context equivalent."""
         data = self._base_available_data(
             demographics={
                 "population": 295911,
@@ -459,11 +443,8 @@ class FetchPayloadTransientErrorTests(TestCase):
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
 
-        # Location.address is a read-only property composed from the component
-        # fields; assigning to it (as this test used to) raises AttributeError.
-        # Set the components and let it compose, then assert on that value
-        # rather than a hard-coded string, so the test stays about pass-through
-        # instead of pinning the composition format.
+        # Set the components and let it compose, then assert on that value rather than a hard-coded string, so
+        # the test stays about pass-through instead of pinning the composition format.
         self.location.street_number = "123"
         self.location.route = "Main St"
         expected_address = self.location.address

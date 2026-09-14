@@ -1,17 +1,4 @@
-"""Every undo handler must restore its model's own fields intact.
-
-The framework's contract is deliberately narrow - cascade-deleted children are
-gone before ``serialize`` ever runs, so a handler only promises to bring back the
-instance's *own* fields plus a few cheap relations (see ``UndoHandler``'s
-docstring). This asserts that narrow promise actually holds, for every registered
-handler at once.
-
-The failure this guards against is a handler that quietly omits a field: the undo
-appears to work, the row comes back, and one column silently reverts to its
-default. Per-handler tests don't catch it on the handler nobody wrote one for,
-which is why this iterates the registry instead - and why it fails when a handler
-is registered with no builder here, rather than skipping it.
-"""
+"""Every undo handler must restore its model's own fields intact."""
 
 from __future__ import annotations
 

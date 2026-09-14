@@ -1,20 +1,4 @@
-"""One piece of evidence must never read as certainty.
-
-``confidence.py`` carries a weakly-informative Beta(2, 2) prior specifically so
-"a single piece of evidence should never read as 100% confidence". That is a
-designed property, not an accident of the arithmetic, and it is the thing that
-stops one submission from promoting a fact to CONFIRMED on its own.
-
-It holds today - one unanimous categorical submission scores 0.60, below the 0.75
-confirm threshold, and a number fact scores 0.20 on one piece because of the
-separate ``MIN_EVIDENCE_FOR_ESTIMATE`` count factor. Nothing pinned it, so a
-future tuning change to either constant could quietly remove the guarantee while
-every existing test still passed.
-
-Written as bounds rather than exact values: the numbers are tuning decisions and
-should be free to move, but not through 1.0, and not past the confirm threshold
-on a single submission.
-"""
+"""One piece of evidence must never read as certainty."""
 
 from __future__ import annotations
 

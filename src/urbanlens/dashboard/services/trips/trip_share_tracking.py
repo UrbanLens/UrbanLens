@@ -1,29 +1,5 @@
 """Share-chain tracking for places revealed through trip activities.
-
-Adding a pin/location to a trip as an activity reveals that place to every
-other member of the trip - which is a share, and must count in the sharer's
-reshare chain exactly like an explicit pin share (see
-``services.sharing.share_provenance``). Two symmetric entry points:
-
-- :func:`record_trip_activity_shares` - a new activity was added; record a
-  detected share to every member who has already joined.
-- :func:`record_trip_shares_for_member` - a profile joined the trip; record a
-  detected share for every place already on the itinerary.
-
-Both create ``PinShare`` rows with ``origin=TRIP_ACTIVITY`` and
-``status=DETECTED`` (never actionable, never materializes a Pin), then record
-the recipient's ``LocationExposure`` so future pins they drop at the place
-chain back correctly.
-
-Which members a place is actually revealed to is decided per viewer, by
-``trip_visibility.viewer_hidden_activity_ids`` - the same gate the itinerary
-panel, the trip map, the calendar feed and the AI suggestions all apply. A
-member the adder's ``trip_pin_location_visibility`` hides the activity from is
-shown nothing, so recording a share to them would claim an exposure that never
-happened and hand them a share page plotting the coordinates their trip-mate
-chose not to reveal. Consulting only the activity's own ``location_hidden``
-flag, as this used to, sees none of that.
-"""
+Both create ``PinShare`` rows with ``origin=TRIP_ACTIVITY`` and ``status=DETECTED`` (never actionable, never materializes a Pin), then record the recipient's ``LocationExposure`` so future pins they drop at the place chain back correctly."""
 
 from __future__ import annotations
 
@@ -53,16 +29,11 @@ logger = logging.getLogger(__name__)
 def _activity_place(activity: TripActivity) -> tuple[Pin | None, Location | None]:
     """The (pin, location) pair an activity could reveal, or ``(None, None)``.
 
-    Hidden-location activities ("Secret Location") reveal nothing to anyone.
-    Whether a *particular* member sees it is a separate question - see
-    :func:`_reveals_to`.
-
     Args:
         activity: The activity to inspect.
 
     Returns:
-        The pin (when linked) and the effective Location.
-    """
+        The pin (when linked) and the effective Location."""
     if activity.location_hidden:
         return None, None
     pin = activity.pin
@@ -88,10 +59,6 @@ def _hidden_from(activities: list[TripActivity], viewer: Profile) -> set[int]:
 def _record_detected_trip_share(sharer: Profile, recipient: Profile, pin: Pin | None, location: Location) -> PinShare | None:
     """Create one TRIP_ACTIVITY detected share, applying the shared dedup rules.
 
-    Skipped when it wouldn't be the recipient's initial information about the
-    place: they already have their own pin there, they already carry an
-    exposure for it, or a share of this exact pin already reached them.
-
     Args:
         sharer: The member who put the place on the itinerary.
         recipient: The member the place is being revealed to.
@@ -99,8 +66,7 @@ def _record_detected_trip_share(sharer: Profile, recipient: Profile, pin: Pin | 
         location: The place's Location.
 
     Returns:
-        The newly created share, or None when skipped.
-    """
+        The newly created share, or None when skipped."""
     if recipient.pk == sharer.pk:
         return None
     # An activity may link a pin the sharer doesn't own (e.g. re-linked after

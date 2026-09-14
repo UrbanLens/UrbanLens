@@ -1,13 +1,4 @@
-"""Tests for the CRIS Building USN Points plugin.
-
-Retrieval calls REData's cultural-resources endpoints (see the module
-docstring in plugins.builtin.cris_buildings) - RedataGateway itself is
-mocked, so no real network access occurs. Covers NY-only geo-gating,
-fetch()'s lookup -> fetch-detail -> flatten pipeline (and its graceful
-degradation when REData is unconfigured/unavailable), render_context against
-the flattened payload shape, and media_items() building proxy URLs for
-attachments.
-"""
+"""Tests for the CRIS Building USN Points plugin."""
 
 from __future__ import annotations
 
@@ -195,13 +186,8 @@ class PanelFetchTests(TestCase):
     def test_unconfigured_gateway_gracefully_persists_empty(self) -> None:
         """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
 
-        The unconfigured state is simulated rather than left to the ambient
-        environment: an install that *does* configure REData would otherwise
-        reach the real API here instead of exercising this branch.
-        ``__post_init__`` is what raises that ValueError, and it's the only
-        patchable seam - RedataGateway is a slotted dataclass, so ``base_url``
-        itself is read-only on the class.
-        """
+        The unconfigured state is simulated rather than left to the ambient environment: an install that *does*
+        configure REData would otherwise reach the real API here instead of exercising this branch."""
         with (
             patch.object(
                 RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")
@@ -372,10 +358,8 @@ class MediaItemsTests(SimpleTestCase):
 def _stub_pin(*, site_scope: bool = False):
     """A duck-typed pin for render_context, which now consults parcel-vs-building scope.
 
-    ``is_site_scope`` short-circuits on the instance memo, so setting it
-    directly decides the answer without needing a database (these are
-    SimpleTestCases). The real scope rules are covered in test_site_scope.py.
-    """
+    ``is_site_scope`` short-circuits on the instance memo, so setting it directly decides the answer without
+    needing a database (these are SimpleTestCases)."""
     return SimpleNamespace(_site_scope_cache=site_scope)
 
 
@@ -632,11 +616,7 @@ class EnrichmentSourceTests(TestCase):
 class MediaReadinessTests(SimpleTestCase):
     """The panel and the background enrichment source share one cache row.
 
-    Enrichment writes the info-card half only. Before this was accounted for,
-    a location enriched in the background rendered as an authoritative "CRIS
-    found nothing" in the gallery for the whole cache window, even though CRIS
-    had photos and inventory forms for it and nothing had ever asked.
-    """
+    Enrichment writes the info-card half only."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -714,13 +694,8 @@ _CRIS_DISTRICT = {**_DISTRICT_RESOURCE, "provider": "ny_cris"}
 class ProviderScopingTests(SimpleTestCase):
     """This panel reads CRIS's own attribute names, so it must read CRIS's rows.
 
-    REData answers `/cultural-resources/lookup/` from a registry of state and
-    municipal inventories plus the nationwide National Register. Inside New
-    York both `ny_cris` and `nps_nrhp` answer, and selecting purely on
-    `resource_type` let an NRHP row win - after which `USNName` is absent, the
-    card renders nothing, and a nomination PDF from the wrong source lands in
-    the CRIS-labelled media tab.
-    """
+    REData answers `/cultural-resources/lookup/` from a registry of state and municipal inventories plus the
+    nationwide National Register."""
 
     def test_an_nrhp_building_does_not_win_on_distance(self) -> None:
         resources = [_NRHP_BUILDING, _CRIS_BUILDING]

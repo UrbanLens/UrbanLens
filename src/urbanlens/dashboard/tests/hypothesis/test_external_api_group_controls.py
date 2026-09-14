@@ -1,31 +1,4 @@
-"""Tests for the external API's group-chat controls and per-conversation mute.
-
-These endpoints closed a set of gaps where the one-to-one conversation had a
-capability and the group did not: reacting to a message, deleting one's own
-message, leaving, and muting. The asymmetry itself was the bug, so most of what
-is asserted here is that the group behaves *the same way* the direct-message
-surface already does - and that the handful of places it deliberately differs
-differ for a stated reason.
-
-Four properties get the most attention, in rough order of how bad the failure
-would be:
-
-- **Group scoping of message ids.** ``GroupMessage`` primary keys are
-  sequential across the whole table, so a lookup that forgot ``group=`` would
-  let a member of any one group react into - or read the existence of - every
-  other group's messages. Both message endpoints are tested against an id from
-  a group the caller is a member of, which is the case a ``pk``-only lookup
-  passes and a scoped lookup rejects.
-- **Declarative mute.** PUT and DELETE must be idempotent. A toggle would mean
-  a retried request over a flaky mobile link silently inverts the state the
-  first, unacknowledged attempt applied, and the user then gets back exactly
-  the notifications they silenced.
-- **Mute is notification-only.** A muted conversation stays in the conversation
-  list. "Muted" quietly becoming "hidden" would lose people their threads.
-- **``update_fields`` on the group mute write.** The membership row also
-  carries ``left_at``/``removed_by``; a full ``save()`` would write back stale
-  copies of those and resurrect a membership a concurrent removal just ended.
-"""
+"""Tests for the external API's group-chat controls and per-conversation mute."""
 
 from __future__ import annotations
 
@@ -76,10 +49,8 @@ def _profile() -> Profile:
 def _token_for(user: User, scope: str = READ_WRITE) -> str:
     """Issue a first-party OAuth2 access token.
 
-    Messaging scopes are in ``permissions.OAUTH2_ONLY_SCOPES``, so an OAuth2
-    token is the only credential that can reach any of these endpoints - a PAT
-    is refused even holding the same scope strings (asserted below).
-    """
+    Messaging scopes are in ``permissions.OAUTH2_ONLY_SCOPES``, so an OAuth2 token is the only credential that
+    can reach any of these endpoints - a PAT is refused even holding the same scope strings (asserted below)."""
     token = AccessToken.objects.create(
         user=user,
         application=first_party_application(),
@@ -102,10 +73,8 @@ def _open_dms(*profiles: Profile) -> None:
 def _befriend(first: Profile, second: Profile) -> None:
     """Connect two profiles with exactly one Friendship row.
 
-    One row, never one per direction: ``Friendship.objects.between()`` resolves
-    the pair with ``.get()``, so a reciprocal second row makes every connection
-    check raise ``MultipleObjectsReturned``.
-    """
+    One row, never one per direction: ``Friendship.objects.between()`` resolves the pair with ``.get()``, so a
+    reciprocal second row makes every connection check raise ``MultipleObjectsReturned``."""
     Friendship.objects.create(
         from_profile=first,
         to_profile=second,
@@ -228,10 +197,8 @@ class GroupMessageReactionTests(GroupControlsBaseTestCase):
     def test_message_id_from_another_group_is_404(self) -> None:
         """The lookup is scoped to the group in the path, not to the id alone.
 
-        The caller is an active member of *both* groups, so only the ``group=``
-        term in the lookup can reject this - which is exactly the term a
-        ``pk``-only implementation omits.
-        """
+        The caller is an active member of *both* groups, so only the ``group=`` term in the lookup can reject
+        this - which is exactly the term a ``pk``-only implementation omits."""
         other_group = create_group_chat(self.creator, "Other", [self.member])
         elsewhere = self._message(group=other_group, body="not yours")
         url = reverse(
@@ -317,12 +284,8 @@ class GroupMessageDeleteTests(GroupControlsBaseTestCase):
     def test_scope_query_param_is_ignored(self) -> None:
         """There is no group analogue of the one-to-one ``?scope=self``.
 
-        A group message has no per-member copy to hide, so honouring the
-        parameter would mean inventing semantics that diverge from the
-        direct-message contract clients already implement. It is accepted-and-
-        ignored rather than rejected, so a client that sends its DM parameters
-        verbatim still gets the delete it asked for.
-        """
+        A group message has no per-member copy to hide, so honouring the parameter would mean inventing
+        semantics that diverge from the direct-message contract clients already implement."""
         response = self.client.delete(f"{self.url}?scope=self", **self.creator_auth)
         self.assertEqual(response.status_code, 204)
         self.message.refresh_from_db()
@@ -349,10 +312,8 @@ class GroupLeaveTests(GroupControlsBaseTestCase):
     def test_repeat_leave_is_204(self) -> None:
         """Idempotent for someone who was a member - a lost response is not a failure.
 
-        Answering the retry 404 would be indistinguishable from "that group
-        never existed", which is precisely the ambiguity a retrying mobile
-        client cannot resolve.
-        """
+        Answering the retry 404 would be indistinguishable from "that group never existed", which is precisely
+        the ambiguity a retrying mobile client cannot resolve."""
         first = self.client.post(self.url, **self.member_auth)
         second = self.client.post(self.url, **self.member_auth)
         self.assertEqual((first.status_code, second.status_code), (204, 204))
@@ -472,12 +433,7 @@ class SetGroupMutedServiceTests(GroupControlsBaseTestCase):
     def test_write_does_not_clobber_a_concurrent_removal(self) -> None:
         """``update_fields`` is load-bearing, not a micro-optimization.
 
-        The membership row carries ``left_at``/``removed_by`` alongside
-        ``muted``. A full ``save()`` from a stale in-memory copy - which is
-        what a request that loaded the row before a concurrent removal holds -
-        would write back ``left_at=None`` and silently readmit someone who had
-        just been removed from the group.
-        """
+        The membership row carries ``left_at``/``removed_by`` alongside ``muted``."""
         stale = GroupChatMembership.objects.get(group=self.group, profile=self.member)
         # A concurrent request removes them while `stale` still says active.
         GroupChatMembership.objects.get(pk=stale.pk).end(removed_by=self.creator)
@@ -542,10 +498,8 @@ class ConversationMuteTests(GroupControlsBaseTestCase):
     def test_reserved_peer_slug_is_404(self) -> None:
         """A profile whose slug collides with a route literal is not a peer.
 
-        ``messages/<peer_slug>/`` is a catch-all, so a user who managed to hold
-        the slug "groups" would otherwise be addressable at a path that reads
-        like the group namespace.
-        """
+        ``messages/<peer_slug>/`` is a catch-all, so a user who managed to hold the slug "groups" would
+        otherwise be addressable at a path that reads like the group namespace."""
         for reserved in ("groups", "settings", "conversations"):
             url = reverse("external_api:messages.mute", kwargs={"peer_slug": reserved})
             self.assertEqual(self.client.put(url, **self.creator_auth).status_code, 404, reserved)
@@ -601,10 +555,8 @@ class GroupMessagePayloadTests(GroupControlsBaseTestCase):
     def test_recipient_sees_the_pin_share_id_they_must_respond_to(self) -> None:
         """Without this field the share card has no id to accept or reject.
 
-        The recipient's own ``PinShare`` is the one they may answer at
-        ``/pin-shares/<id>/respond/``; a group share creates one per member, so
-        there is no single shared id to report.
-        """
+        The recipient's own ``PinShare`` is the one they may answer at ``/pin-shares/<id>/respond/``; a group
+        share creates one per member, so there is no single shared id to report."""
         message = share_pin_in_group_message(self.creator, self.group, self.pin, "look at this")
         share = message.shares.get(recipient=self.member)
 
@@ -641,11 +593,9 @@ class GroupMessagePayloadTests(GroupControlsBaseTestCase):
     def test_reactions_survive_the_conversation_list_serializer(self) -> None:
         """The inbox row runs the payload through ``DirectMessageSerializer``.
 
-        A field the builder emits but the serializer does not declare is
-        silently dropped there while still appearing in the thread - the kind
-        of surface-dependent shape drift that costs a client author an
-        afternoon.
-        """
+        A field the builder emits but the serializer does not declare is silently dropped there while still
+        appearing in the thread - the kind of surface-dependent shape drift that costs a client author an
+        afternoon."""
         message = self._message(body="last word")
         react_url = reverse(
             "external_api:messages.groups.messages.react",

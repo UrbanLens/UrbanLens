@@ -6,17 +6,12 @@
 .profile-page {
     display: flex;
     flex-direction: column;
-    // Roomier rhythm between the body sections (About / Social / Contact /
-    // Additional Details / Friends) so they don't read as one dense stack,
-    // plus breathing room below the subnav and above the footer.
+    // Roomier rhythm between the body sections (About / Social / Contact / Additional Details / Friends) so they don't read as one dense.
     gap: 2rem;
     padding: 1.5rem 0 3rem;
 }
 
-// Avatar + identity, rendered inside the shared .ul-page-hero--profile banner
-// (partials/ui/_page_hero.html + partials/profile/_profile_hero_body.html) on
-// both the Profile and Edit Profile pages, so the two tabs share one fixed
-// hero height - see .ul-page-hero--profile in _page_hero.scss.
+// Avatar + identity, rendered inside the shared.ul-page-hero--profile banner.
 
 // Avatar column
 .profile-avatar-col {
@@ -183,9 +178,7 @@
     gap: .4rem;
 }
 
-// Bio shown once, in its own "About" card - the hero used to show a
-// 2-line-clamped duplicate above it, which read as redundant since this
-// full version sat immediately below. Removed from the hero entirely.
+// Bio shown once, in its own "About" card - the hero used to show a 2-line-clamped duplicate above it, which read as redundant since.
 .profile-bio-full {
     font-size: 0.95rem;
     color: var(--ul-grey-8);
@@ -315,10 +308,7 @@
     margin-left: 0.2rem;
 }
 
-// Contact / Additional Details sections (profile/index.html) - each item is a
-// <span> or <a>, which default to inline with no separation between them.
-// Stacked one-per-line, mirroring .profile-meta-row/.profile-meta-item's
-// pattern (the hero's own contact-ish row) but vertical instead of wrapped.
+// Contact / Additional Details sections (profile/index.html).
 .contact-info-list {
     display: flex;
     flex-direction: column;
@@ -701,10 +691,7 @@
     color: var(--ul-grey-6);
     margin: 0 0 0.5rem;
 
-    // Same running-text problem .settings-section-desc has (axe:
-    // link-in-text-block): colour alone cannot distinguish an inline link from
-    // the prose around it. Scoped off .btn, which is a link styled as a control
-    // and is already distinguishable without one.
+    // Same running-text problem.settings-section-desc has (axe: link-in-text-block).
     a:not(.btn) {
         text-decoration: underline;
     }
@@ -743,14 +730,7 @@
 }
 
 
-// Label-left/control-right on wide screens, for any settings field shaped
-// like Privacy's (a .settings-label direct child) - scoped structurally
-// rather than per-form, so every settings tab gets this consistently
-// (previously Privacy-only; every other tab always stacked the control
-// below its label even with room to spare) and any new field added later
-// gets it automatically as long as it follows the same markup shape.
-// Toggle-style fields (.settings-toggle-row, no .settings-label child) are
-// unaffected - their content doesn't fit this label/control split anyway.
+// Label-left/control-right on wide screens, for any settings field shaped like Privacy's (a.settings-label direct child).
 .settings-field:has(> .settings-label) {
     padding: 0.95rem 1rem;
     max-width: 45rem;
@@ -770,12 +750,7 @@
         > .settings-select { grid-area: control; justify-self: end; max-width: 100%; }
         > .settings-error { grid-area: error; }
 
-        // A field with a second .settings-help child (e.g. a dynamic estimate/detail
-        // paragraph below the main description, like #storage-estimate or
-        // #guidance-help-detail) would otherwise also claim grid-area: help and
-        // overlap the first one, since grid-area assigns by selector match, not
-        // occurrence order. Only the first gets the named cell; anything after it
-        // falls back to normal auto-placement in its own row underneath the field.
+        // A field with a second.settings-help child.
         > .settings-help ~ .settings-help {
             grid-area: auto;
             margin-top: .35rem;
@@ -1160,11 +1135,7 @@
     }
 }
 
-// Generic option-tile picker: a row of clickable icon+label tiles backing a
-// hidden radio input, used for every mutually-exclusive visual choice on the
-// settings page (theme, map dark mode, guidance level, default map view,
-// starting point, cluster radius mode). Was named .settings-theme-option
-// (theme picker only) before being generalized to every group of this shape.
+// Generic option-tile picker: a row of clickable icon+label tiles backing a hidden radio input, used for every mutually-exclusive visual.
 .settings-option-row {
     display: flex;
     gap: 1rem;
@@ -1199,10 +1170,7 @@
         transition: color 0.15s;
     }
 
-    // Groups wired with explicit JS toggle the .active class directly; groups
-    // that only ever set the radio's checked state rely on :has() instead -
-    // both are supported so a new group doesn't need its own JS just to
-    // reflect selection.
+    // Groups wired with explicit JS toggle the.active class directly.
     &.active,
     &:has(input:checked) {
         border-color: var(--primary-color);
@@ -1459,7 +1427,7 @@ textarea.edit-textarea {
 
 .edit-username-wrap {
     &:hover {
-        .edit-username-input, 
+        .edit-username-input,
         .edit-username-at {
             background-color: var(--ul-surface-2);
             border-color: var(--ul-surface-2-border);
@@ -2058,9 +2026,7 @@ body div.container .profile-annotation-notes {
     font-family: inherit;
     line-height: 1.5;
 
-    // Grow to fit content instead of scrolling internally. JS fallback for
-    // browsers without field-sizing support lives in profile_annotation_content.html,
-    // since it must re-run after every htmx swap of this panel.
+    // Grow to fit content instead of scrolling internally.
     field-sizing: content;
 
     &:focus {
@@ -2665,7 +2631,7 @@ a.profile-stat--link {
 .btn {
     &.btn-friend {
         color: var(--ul-black);
-            
+
         &--accept {
             background: var(--ul-button-yes-bg);
             border-color: var(--ul-button-yes-border);
@@ -2701,7 +2667,7 @@ a.profile-stat--link {
                 border-color: var(--ul-button-no-hover-border);
             }
         }
-        
+
         &--invite {
             @include btn-primary;
             margin-left: auto;
@@ -2975,15 +2941,7 @@ a.profile-stat--link {
 }
 
 // -- Private annotation zone ---------------------------------------------------
-// A private note/trust-rating a user keeps about someone ELSE (see
-// partials/profile/profile_annotation_partial.html, rendered on that other
-// user's profile page) - wrapped in a single amber "private" frame with chips
-// straddling the top/bottom borders, so it reads as one private area without
-// repeating an "Only visible to you" chip per field. This is the only
-// remaining consumer of the amber-frame treatment - the logged-in homepage's
-// own dashboard used to share it too, but moved to a plain widget-grid layout
-// (see _homepage.scss) since a whole page of "this is secret" framing read as
-// unnecessarily alarming for what is, after all, just your own homepage.
+// A private note/trust-rating a user keeps about someone ELSE.
 
 .profile-private-zone {
     position: relative;

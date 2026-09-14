@@ -1,25 +1,4 @@
-"""Positive controls for the fourth concealment review round.
-
-The third review round's V4 finding was that the whole render-test suite had
-no positive control for automatic content: `resolve_fields` could be deleted
-outright and every test would still pass, because nothing proved the
-own/friend/automatic logic ever actually ran rather than happening to agree
-with a wholesale-hide default. This file exists so the same thing can't
-happen to the surfaces the fourth round added or fixed - each test below
-would fail if the code under test were deleted or reverted to its prior
-(wholesale-hide, or unguarded) behaviour, not just if concealment broke
-outright.
-
-Covers: own+friends visibility for CustomLayer/MapImageOverlay/Album/Reaction/
-WikiOwner/WikiPropertySale; the layer_uuid read-side nulling and the write-
-safety fix that stops an edit to an unrelated field silently destroying a
-real, invisible layer assignment; the WikiOwner/WikiPropertySale dedup fix
-(an oracle and, for sales, a direct name leak); wiki-scoped boundary
-concealment and the write-path fix that stops a viewer's own just-drawn
-boundary vanishing from the very response that saved it; and the search
-result display fix (a surviving candidate's title/snippet must come from the
-concealed values, not the live row).
-"""
+"""Positive controls for the fourth concealment review round."""
 
 from __future__ import annotations
 
@@ -112,11 +91,8 @@ class OwnContributionVisibleRowsTests(TestCase):
     def test_wiki_owner_official_record_with_no_creator_is_automatic_not_hidden(self) -> None:
         """plugins.builtin.property_records writes OwnerSource.OFFICIAL rows with no created_by.
 
-        Null actor here is genuinely ambiguous (also caused by account
-        deletion), so - like WikiLink - it defaults to automatic rather than
-        being treated as a departed account. A concealed viewer must still
-        see a real deed-lookup record; that's what a fresh wiki would show.
-        """
+        Null actor here is genuinely ambiguous (also caused by account deletion), so - like WikiLink - it
+        defaults to automatic rather than being treated as a departed account."""
         from urbanlens.dashboard.models.property_owner.meta import OwnerSource
 
         official = WikiOwner.objects.create(name="County Record LLC", source=OwnerSource.OFFICIAL, created_by=None)
@@ -144,13 +120,11 @@ class OwnContributionVisibleRowsTests(TestCase):
 class LayerUuidNullingAndWriteSafetyTests(TestCase):
     """The read-side layer_uuid nulling, and the write-path fix that stops it destroying real data.
 
-    Round 4's adversarial review caught the write-safety bug directly: nulling
-    a hidden layer for *display* means the edit panel's own <select> shows no
-    selection, so editing any other field on the item echoes that None back
-    as if clearing the layer had been deliberate - silently and permanently
-    stripping a real, invisible layer assignment. test_editing_an_unrelated_field_
-    does_not_clear_a_hidden_layer is that exact scenario end to end.
-    """
+    Round 4's adversarial review caught the write-safety bug directly: nulling a hidden layer for *display*
+    means the edit panel's own <select> shows no selection, so editing any other field on the item echoes that
+    None back as if clearing the layer had been deliberate - silently and permanently stripping a real,
+    invisible layer assignment. test_editing_an_unrelated_field_ does_not_clear_a_hidden_layer is that exact
+    scenario end to end."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -322,13 +296,9 @@ class WikiScopedBoundaryConcealmentTests(TestCase):
 class SearchResultUsesConcealedValuesTests(TestCase):
     """A surviving search candidate's displayed text must be the concealed value, not the live row.
 
-    This is the critical content-leak the fourth round's adversarial review
-    caught in the search fix itself: the over-fetch+reverify gate only
-    decided whether a concealed wiki could appear in results at all: the
-    SearchResult it then built still read wiki.name/description straight off
-    the live row. A term matching only via a friend's alias must not display
-    the wiki's true, stranger-renamed title.
-    """
+    This is the critical content-leak the fourth round's adversarial review caught in the search fix itself: the
+    over-fetch+reverify gate only decided whether a concealed wiki could appear in results at all: the
+    SearchResult it then built still read wiki.name/description straight off the live row."""
 
     def setUp(self) -> None:
         super().setUp()

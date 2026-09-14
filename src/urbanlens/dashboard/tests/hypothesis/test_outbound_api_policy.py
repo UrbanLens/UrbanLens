@@ -49,15 +49,8 @@ def _deployment(
 ) -> Iterator[None]:
     """Pretend to be one deployment.
 
-    `ENVIRONMENT_NAME` is a Django setting (from ``UL_ENVIRONMENT``) while
-    `demo_mode` and `allow_outbound_apis` are Pydantic app settings, so this
-    needs both mechanisms. `TESTING` is forced off because the suite itself sets
-    it, and with it on the guard permits everything by design - leaving it alone
-    would make every assertion below vacuous.
-
-    ``allow=None`` is the real default and means the variable is unset, which is
-    what almost every deployment looks like.
-    """
+    `ENVIRONMENT_NAME` is a Django setting (from ``UL_ENVIRONMENT``) while `demo_mode` and `allow_outbound_apis`
+    are Pydantic app settings, so this needs both mechanisms."""
     with (
         override_settings(ENVIRONMENT_NAME=str(environment), TESTING=False),
         mock.patch.multiple("urbanlens.UrbanLens.settings.app.settings", demo_mode=demo, allow_outbound_apis=allow),
@@ -68,10 +61,8 @@ def _deployment(
 class TheSettingsThisReliesOnExistTests(TestCase):
     """`override_settings` will happily invent a name production does not have.
 
-    Every test below would pass against a guard reading a setting that only
-    exists inside these tests, so the names are checked against the real
-    settings module first.
-    """
+    Every test below would pass against a guard reading a setting that only exists inside these tests, so the
+    names are checked against the real settings module first."""
 
     def test_environment_name_is_a_real_setting(self) -> None:
         self.assertTrue(hasattr(django_settings, "ENVIRONMENT_NAME"))
@@ -87,12 +78,8 @@ class TheSettingsThisReliesOnExistTests(TestCase):
 class TheProductionTrapTests(TestCase):
     """The bug this guard nearly shipped with, pinned so it cannot come back.
 
-    `app_settings.environment_name` looks like the obvious thing to read and is
-    not wired to `UL_ENVIRONMENT`: it is a separate Pydantic field defaulting to
-    `local`. A production deployment that never sets `UL_ENVIRONMENT_NAME`
-    reports `local` from it, so a guard reading it would have refused every
-    outbound call in production.
-    """
+    `app_settings.environment_name` looks like the obvious thing to read and is not wired to `UL_ENVIRONMENT`:
+    it is a separate Pydantic field defaulting to `local`."""
 
     def test_production_still_calls_out_when_the_pydantic_field_says_local(self) -> None:
         with (
@@ -147,10 +134,8 @@ class DevelopmentSpendsNothingTests(TestCase):
     def test_development_refuses_our_own_service_too(self) -> None:
         """The demo's exemption does not carry over, and this is the whole point.
 
-        A dev box's REData URL is the production one, and REData reaches a paid
-        provider one hop later - so "it is only our own capacity" stops being
-        true at the boundary the demo guard was reasoning about.
-        """
+        A dev box's REData URL is the production one, and REData reaches a paid provider one hop later - so "it
+        is only our own capacity" stops being true at the boundary the demo guard was reasoning about."""
         with _deployment(EnvironmentTypes.DEVELOPMENT):
             self.assertFalse(outbound_calls_permitted(OWN))
 
@@ -174,10 +159,7 @@ class DevelopmentSpendsNothingTests(TestCase):
 class TheGuardIsWiredAtTheChokePointTests(TestCase):
     """Not merely a function that returns the right answer.
 
-    `service_is_enabled` is what `_reserve_call` consults, and it is reached by
-    every gateway in the project. A guard that were correct but unreferenced
-    would pass every test above and stop nothing.
-    """
+    `service_is_enabled` is what `_reserve_call` consults, and it is reached by every gateway in the project."""
 
     def test_service_is_enabled_refuses_on_development(self) -> None:
         from urbanlens.dashboard.services.core.rate_limiter import service_is_enabled
@@ -188,10 +170,7 @@ class TheGuardIsWiredAtTheChokePointTests(TestCase):
     def test_service_is_enabled_is_not_short_circuited_by_a_supplied_config(self) -> None:
         """The guard runs before the caller's own row is trusted.
 
-        `_reserve_call` holds the `ApiRateLimit` row and passes it in to save
-        re-reads. If the guard were checked after that, an enabled row would let
-        the call straight through.
-        """
+        `_reserve_call` holds the `ApiRateLimit` row and passes it in to save re-reads."""
         from urbanlens.dashboard.services.core.rate_limiter import service_is_enabled
 
         enabled_row = mock.Mock(enabled=True)
@@ -202,13 +181,7 @@ class TheGuardIsWiredAtTheChokePointTests(TestCase):
 class AnExplicitAnswerWinsTests(TestCase):
     """`UL_ALLOW_OUTBOUND_APIS` overrides the environment's default both ways.
 
-    The direction that matters is `false` on a deployment the environment would
-    otherwise trust. `dev_env.py --environment staging` sets
-    `UL_ENVIRONMENT=staging` purely to get gunicorn - infra's own comment says
-    "this is one axis, not two: the application branches on UL_ENVIRONMENT
-    alone" - so a throwaway environment is otherwise indistinguishable from the
-    real staging deployment and would call providers for real.
-    """
+    The direction that matters is `false` on a deployment the environment would otherwise trust."""
 
     def test_a_throwaway_staging_environment_can_refuse(self) -> None:
         with _deployment(EnvironmentTypes.STAGING, allow=False):

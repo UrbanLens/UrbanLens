@@ -1,10 +1,4 @@
-"""Tests for services.memories.aggregator.get_memory_events() date-range filtering.
-
-All tests require the database - records are created with model_bakery.
-PinVisit is used as the representative source for the boundary-inclusion
-property test since every _x_for_range() function applies the same
-``__date__range`` filtering pattern against its own model's timestamp field.
-"""
+"""Tests for services.memories.aggregator.get_memory_events() date-range filtering."""
 
 from __future__ import annotations
 
@@ -104,14 +98,10 @@ class MemoryEventsDateRangeTests(TestCase):
 class PhotoMemoryEventTests(TestCase):
     """get_memory_events() must surface geotagged photos, not silently drop them.
 
-    Regression test: _photos_for_range annotated a queryset field named
-    ``effective_taken_at``, colliding with the real read-only
-    ``Image.effective_taken_at`` property - Django raised AttributeError
-    trying to setattr the annotated value onto that name during row
-    materialization, and get_memory_events' broad exception guard (see
-    MemorySourceIsolationTests) swallowed it every time, for every profile
-    with any photo in range.
-    """
+    Regression test: _photos_for_range annotated a queryset field named ``effective_taken_at``, colliding with
+    the real read-only ``Image.effective_taken_at`` property - Django raised AttributeError trying to setattr
+    the annotated value onto that name during row materialization, and get_memory_events' broad exception guard
+    (see MemorySourceIsolationTests) swallowed it every time, for every profile with any photo in range."""
 
     def setUp(self):
         self.profile = _make_profile()

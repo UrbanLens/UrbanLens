@@ -24,11 +24,7 @@ class MapImageOverlayQuerySet(abstract.FrontendDashboardQuerySet):
 
     def renderable(self) -> Self:
         """Overlays that still have something to draw - an image or a tile template.
-
-        An overlay whose uploaded ``Image`` was deleted elsewhere (gallery
-        cleanup, a quota sweep) keeps its georeferencing but has nothing to
-        show; excluding it here stops every map from rendering a broken tile
-        for it.
+        An overlay whose uploaded ``Image`` was deleted elsewhere (gallery cleanup, a quota sweep) keeps its georeferencing but has nothing to show; excluding it here stops every map from rendering a broken tile for it.
         """
         from django.db.models import Q
 

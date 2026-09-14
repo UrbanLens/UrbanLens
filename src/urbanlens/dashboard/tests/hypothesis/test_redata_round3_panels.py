@@ -1,8 +1,4 @@
-"""Tests for round 3 of the REData integration (2026-08-15).
-
-Fire & disaster history panel, the aerial media gallery source, assessment
-history on the property card, and the Chronicling America provider's flags.
-"""
+"""Tests for round 3 of the REData integration (2026-08-15)."""
 
 from __future__ import annotations
 

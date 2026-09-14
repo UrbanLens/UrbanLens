@@ -1,9 +1,6 @@
 // Consensus - wiki-data-completion game: gameplay, competitive lobby, and chat.
 //
-// Layout, chrome and motion come from `game_shell`; what stays here is the
-// Consensus-specific arrangement (the answer widgets, the lifetime-progression
-// HUD badge) plus one-line mixin includes that give the class names the
-// TypeScript writes their shared appearance.
+// Layout, chrome and motion come from `game_shell`.
 @use 'variables' as *;
 @use 'game_shell' as shell;
 
@@ -29,10 +26,7 @@
         }
     }
 
-    // Text-only rounds (name / description / choice) hide both the photo and
-    // the map, so the answer column takes the whole stage and centres in it.
-    // align-items (not align-content) so the dock keeps its content height and
-    // its own max-height/overflow can take over once it outgrows the track.
+    // Text-only rounds (name / description / choice) hide both the photo and the map, so the answer column takes the whole stage and centres.
     .ul-game-stage--single .ul-game-stage__play {
         grid-template-rows: minmax(0, 1fr);
         align-items: center;
@@ -343,8 +337,6 @@
 
 // -- Score card -------------------------------------------------------------------------
 // One row shape for the reveal results, the live scoreboard and the summary.
-// Three separate TS builders emit it with three children each: either
-// avatar/info/points or rank/name/points.
 
 .consensus-score-card {
     @include shell.score-row;

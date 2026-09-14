@@ -1,12 +1,4 @@
-"""Tests for the external API's OpenAPI schema and OAuth2 token authentication.
-
-The schema is the published contract native clients generate code from, so it
-must (a) exist, (b) cover only the external surface - never the internal
-HTMX/REST endpoints - and (c) never silently drift from what the sync
-service actually emits. OAuth2 bearer tokens (django-oauth-toolkit) are the
-native apps' credential and must be honored by the same views, under the
-same scope rules, as PAT-style API keys.
-"""
+"""Tests for the external API's OpenAPI schema and OAuth2 token authentication."""
 
 from __future__ import annotations
 

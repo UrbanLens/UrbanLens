@@ -1,15 +1,6 @@
 /**
- * Private data must not leak through any *other* surface than its own URL.
- *
- * Object-level 404s (authorization.spec.ts) are necessary and not sufficient.
- * Search, the map JSON the browser fetches, the wiki of a location the
- * stranger has not pinned, photo bytes, and HTML of a page the stranger can
- * actually load are all separate read paths, and a row that is 404 at
- * `pins/{slug}/` can still appear in `search/?q=` or `/dashboard/map/pins/`.
- *
- * The control in each case is that the *owner* can see the thing on that
- * same surface, so an empty result for the stranger is not "search is
- * broken".
+ * Private data must not leak through any *other* surface than its own URL. Object-level 404s
+ * (authorization.spec.ts) are necessary and not sufficient.
  */
 
 import type { APIRequestContext } from "@playwright/test";

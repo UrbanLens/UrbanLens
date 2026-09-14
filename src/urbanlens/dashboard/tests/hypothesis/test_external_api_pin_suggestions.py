@@ -1,14 +1,4 @@
-"""Tests for the external API's pin-suggestion endpoint: POST pin-suggestions/.
-
-Unlike POST pins/ (test_external_api.py's PinCreateFieldTests etc.), nothing
-here creates a real Pin - the submission is staged as a pending PinSuggestion
-the key's owner must explicitly accept before anything appears on their map.
-Covers: it never creates a Pin outright, the same scope/validation rules
-PinsView.post already enforces (missing coords/address, geocoding gate,
-unknown pin_type), the new fields (description/pin_type/aliases/links/photos)
-land on the suggestion, matching an existing pin is reported, and the
-same visit-logging-off gate ingest_location_hits already enforces.
-"""
+"""Tests for the external API's pin-suggestion endpoint: POST pin-suggestions/."""
 
 from __future__ import annotations
 

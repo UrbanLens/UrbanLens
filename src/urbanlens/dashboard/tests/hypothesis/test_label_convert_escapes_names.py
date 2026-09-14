@@ -1,17 +1,4 @@
-"""A conflicting label's name is escaped in the bulk-convert refusal.
-
-`LabelBulkConvertView` refuses when converting would collide with an existing label, and
-names the offenders so the user knows which ones. That body is built by f-string
-interpolation into an `HttpResponse`, which has no template escaping - so a label named
-`<img src=x onerror=...>` reached the response as markup.
-
-The same file already escaped this value in the protected-status refusal (`escape(label.name)`),
-so this is an inconsistency rather than an oversight, and the fix matches the existing call.
-
-`HttpResponse` defaults to `Content-Type: text/html`. Whether HTMX swaps a 400 body depends on
-configuration, so this may not have been reachable as stored XSS - the assertion is that the
-response does not carry raw markup either way.
-"""
+"""A conflicting label's name is escaped in the bulk-convert refusal."""
 
 from __future__ import annotations
 

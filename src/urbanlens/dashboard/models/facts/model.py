@@ -1,22 +1,6 @@
 """Facts - a confidence-tracked piece of data about a Location, Wiki, or Image.
-
-A ``Fact`` is the *resolved* current state (value, confidence, status) for one
-``(subject, key)`` pair - e.g. "this wiki's ``indoor_outdoor`` is BOTH, at
-0.82 confidence". It is never written to directly; it is always recomputed
-from its ``FactEvidence`` trail (see ``services.facts.confidence``) by
-whichever source contributed a new observation (SpotGuessr guesses, Consensus
-answers, manual wiki edits, future AI extraction - see
-``services.facts.evidence``).
-
-Subject attachment follows this codebase's established pattern (no
-``GenericForeignKey`` is used anywhere - see ``ConsensusRound.wiki`` +
-``.target_image``, ``models/consensus/model.py``): one nullable FK per
-possible subject type, with exactly one populated. A new subject type in the
-future is one more additive nullable FK, never a schema migration of existing
-rows.
-
-``key`` is a free string validated against ``services.facts.registry`` rather
-than a fixed Django enum, so a new fact key never requires a migration.
+A ``Fact`` is the *resolved* current state (value, confidence, status) for one ``(subject, key)`` pair - e.g.
+It is never written to directly; it is always recomputed from its ``FactEvidence`` trail (see ``services.facts.confidence``) by whichever source contributed a new observation (SpotGuessr guesses, Consensus answers, manual wiki edits, future AI extraction - see ``services.facts.evidence``).
 """
 
 from __future__ import annotations
@@ -151,10 +135,7 @@ class TypedValueModel(abstract.DashboardModel):
 
 class Fact(TypedValueModel):
     """The resolved current value/confidence/status for one ``(subject, key)`` pair.
-
-    Never written to directly - always recomputed from ``self.evidence`` by
-    ``services.facts.confidence.recompute``, queued async
-    (``tasks.recompute_fact_confidence``) after every new ``FactEvidence`` row.
+    Never written to directly - always recomputed from ``self.evidence`` by ``services.facts.confidence.recompute``, queued async (``tasks.recompute_fact_confidence``) after every new ``FactEvidence`` row.
 
     Attributes:
         key: Which piece of data this is, e.g. ``"wiki_indoor_outdoor"`` -
@@ -192,10 +173,7 @@ class Fact(TypedValueModel):
 
     def save(self, *args, **kwargs) -> None:
         """Derive ``subject_type`` and enforce "exactly one subject FK set" before saving.
-
-        Backstopped, as an unbypassable floor, by a DB ``CHECK`` constraint
-        added in migration ``0020_facts`` - mirrors ``Location``'s own
-        immutable-fields enforcement (both in ``save()`` and via a DB trigger).
+        Backstopped, as an unbypassable floor, by a DB ``CHECK`` constraint added in migration ``0020_facts`` - mirrors ``Location``'s own immutable-fields enforcement (both in ``save()`` and via a DB trigger).
 
         Raises:
             ValueError: If zero or more than one of ``location``/``wiki``/
@@ -231,10 +209,7 @@ class Fact(TypedValueModel):
 
 class FactEvidence(TypedValueModel):
     """One append-only observation contributing toward a Fact's confidence.
-
-    Never mutated or deleted once created - a bad observation is
-    soft-invalidated via ``superseded`` instead (mirrors ``WikiEdit.reverted``),
-    so the evidence trail always reflects exactly what was submitted and when.
+    Never mutated or deleted once created - a bad observation is soft-invalidated via ``superseded`` instead (mirrors ``WikiEdit.reverted``), so the evidence trail always reflects exactly what was submitted and when.
 
     Attributes:
         source_kind: Broad category of where this observation came from.

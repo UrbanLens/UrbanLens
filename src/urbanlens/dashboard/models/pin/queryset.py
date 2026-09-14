@@ -1,4 +1,3 @@
-# Generic imports
 from __future__ import annotations
 
 import contextlib
@@ -11,7 +10,6 @@ from django.contrib.gis.measure import D
 from django.db import IntegrityError
 from django.db.models import Count, Exists, F, OuterRef, Q
 
-# App Imports
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.services.security.redact import redact_coordinate
@@ -23,37 +21,20 @@ logger = logging.getLogger(__name__)
 
 
 class PinQuerySet(abstract.PublicDashboardQuerySet):
-    """QuerySet for Pin - the user-specific half of the place model.
-
-    Filters here operate on per-user data (profile, visit history, status, priority).
-    For filtering by place attributes (address, CID, official name) use LocationQuerySet
-    or join through the location FK: Pin.objects.filter(location__official_name__icontains=...).
-    """
+    """Pin filters over per-user data; join via location FK for place attributes."""
 
     def root_pins(self) -> Self:
         """Return only top-level pins (excludes personal detail pins)."""
         return self.filter(parent_pin__isnull=True)
 
     def with_cached_photos(self) -> Self:
-        """Pins whose location already has at least one stored Photo Image.
-
-        A pure DB lookup - no external API call is made or needed. Deliberately
-        not scoped to ``wiki__isnull=False``: this answers "is there already a
-        photo to show" (pin detail display), a superset of "eligible for
-        SpotGuessr Photos mode" (that stricter wiki+relevance filter lives in
-        ``services.spotguessr.photos`` and isn't duplicated here).
-        """
+        """Pins whose location already has a stored photo."""
         from urbanlens.dashboard.models.images.model import Image, MediaKind
 
         return self.filter(Exists(Image.objects.filter(location_id=OuterRef("location_id"), media_type=MediaKind.PHOTO)))
 
     def filter_by_security_indicators(self, criteria) -> Self:
-        """Filter by exact match on each ``security_<field>`` criterion.
-
-        Each of the 8 :data:`SECURITY_FIELDS` gets its own optional exact-match
-        filter (e.g. ``security_fences="everywhere"``); unset/invalid values
-        are ignored rather than raising, matching the rest of
-        ``filter_by_criteria``'s tolerance for a hand-edited/stale criteria dict.
+        """Filter by exact match on each ``security_<field>`` criterion; ignores unset values.
 
         Args:
             criteria: The same criteria dict ``filter_by_criteria`` receives.
@@ -77,12 +58,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(parent_pin__isnull=False)
 
     def with_descendants(self) -> Self:
-        """Expand this queryset to include the full personal detail-pin subtree of each pin.
-
-        Walks ``parent_pin`` children level by level (BFS) until no new
-        descendants are found, so pins of any nesting depth are included -
-        needed because deleting a pin cascades to its entire subtree
-        (``Pin.parent_pin`` is ``on_delete=CASCADE``).
+        """Include the full detail-pin subtree of each pin.
 
         Returns:
             A fresh QuerySet over this queryset's pins plus every descendant.
@@ -102,26 +78,12 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(last_visited__isnull=True)
 
     def visited(self) -> Self:
-        """Return pins marked visited, however that was recorded.
-
-        A pin counts as "visited" when it either has a ``last_visited``
-        timestamp or carries the profile's "Visited" status label - the same
-        predicate used inline by ``visited_without_record`` and
-        ``filter_by_criteria``'s ``has_visits`` filter, named here so other
-        callers (e.g. Consensus's eligibility rule - only visited pins'
-        wikis are ever surfaced as rounds) can build on it directly instead
-        of re-deriving the ``Q``.
-        """
+        """Pins marked visited via timestamp or Visited status label."""
         visited_q = Q(last_visited__isnull=False) | Q(labels__name="Visited", labels__kind=KIND_STATUS)
         return self.filter(visited_q).distinct()
 
     def visited_without_record(self) -> Self:
-        """Return top-level pins marked visited that have no dated PinVisit record.
-
-        Such a pin can still lack any ``PinVisit`` row (e.g. imported pins, or a
-        status set by hand), leaving a gap the Memories page surfaces so the user
-        can log a concrete, dated visit. Pins the user dismissed from that queue
-        are excluded.
+        """Visited pins with no dated visit row, excluding dismissed ones.
 
         Returns:
             Distinct top-level pins that are marked visited but have zero rows in
@@ -136,12 +98,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(name__icontains=name)
 
     def with_placeholder_names(self) -> Self:
-        """Pins carrying a stored, non-user-provided name (candidates for the name-upgrade sweep).
-
-        Narrows to the SQL-cheap part of the check (a name is stored at all,
-        and the user didn't type it); callers must still test each name with
-        ``is_meaningful_name`` themselves, since "meaningful" isn't expressible
-        as a query filter.
+        """Pins with a stored non-user name; callers check meaningfulness.
 
         Returns:
             Filtered queryset, with ``location`` (and its wiki) preselected.
@@ -152,13 +109,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(profile=profile)
 
     def modified_since(self, since) -> Self:
-        """Return pins created or edited at or after ``since``.
-
-        ``updated`` is ``auto_now``, so any save - create or edit - moves a pin
-        into this window. Deletions never appear here; delta-sync callers pair
-        this with ``PinTombstone.objects.deleted_since`` to learn about those.
-        Rides the ``idxdb_profile_update`` index when combined with a profile
-        filter.
+        """Pins created or edited at or after ``since``.
 
         Args:
             since: Inclusive lower bound on the last-modified time.
@@ -169,10 +120,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(updated__gte=since)
 
     def near_point(self, point: Point, radius_km: float) -> Self:
-        """Return root pins whose location falls within ``radius_km`` of ``point``, closest first.
-
-        Used by the Private Pin page's "Nearby Pins" map layer to find a
-        profile's other pins around the one being viewed.
+        """Root pins within ``radius_km`` of ``point``, closest first.
 
         Args:
             point: PostGIS point to measure distance from.
@@ -185,12 +133,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.root_pins().filter(location__point__distance_lte=(point, D(km=radius_km))).annotate(distance=Distance("location__point", point)).order_by("distance")
 
     def within_bounds(self, south: float, west: float, north: float, east: float) -> Self:
-        """Return pins whose location falls within a lat/lng bounding box.
-
-        Used by the pin-list sidebar to scope its results to the map's
-        current viewport. Same ``Polygon.from_bbox`` + ``location__point__within``
-        idiom as ``MapController.map_pins_json``'s inline bbox handling and
-        ``filter_by_criteria``'s ``include_regions`` support.
+        """Pins whose location falls within a lat/lng box.
 
         Args:
             south: Southern (minimum) latitude.
@@ -216,10 +159,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             return bbox
 
         if west > east:
-            # The viewport crosses the antimeridian. One box from these edges
-            # spans the *long* way round - 358 degrees for a 2-degree window -
-            # so it excludes everything on screen and includes everything else.
-            # Query the two real halves instead.
+            # Split antimeridian-crossing viewports into two queries.
             return self.filter(Q(location__point__within=box(west, 180.0)) | Q(location__point__within=box(-180.0, east)))
         return self.filter(location__point__within=box(west, east))
 
@@ -231,7 +171,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(labels__id__in=tag_ids).distinct()
 
     def apply_label_groups(self, groups: list[dict]) -> Self:
-        """Apply structured label filter groups returned by ``SearchForm.parse_label_groups()``.
+        """Apply structured label filter groups; caller must call ``distinct()``.
 
         Args:
             groups: List of ``{"op": "and"|"or"|"not", "ids": [int, ...]}``. An
@@ -260,10 +200,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 for bid in ids:
                     expanded = _Label.get_label_and_descendants(bid)
                     or_q |= Q(labels__id__in=expanded)
-                # An "or" group may also take a priority threshold, so
-                # "wanted *or* high priority" is one condition. The top-level
-                # min_priority cannot express that: groups are ANDed together,
-                # so it would narrow the labels rather than widen them.
+                # "or" group may also carry a priority threshold.
                 if (floor := group.get("min_priority")) is not None:
                     with contextlib.suppress(ValueError, TypeError):
                         or_q |= Q(priority__gte=int(floor))
@@ -275,7 +212,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return qs
 
     def filter_by_criteria(self, criteria) -> Self:
-        """Filter pins by the criteria dict produced by SearchForm.cleaned_data.
+        """Filter pins by a ``SearchForm`` criteria dict.
 
         Args:
             criteria: Dict with optional keys: name, status (list), tags (QuerySet),
@@ -303,7 +240,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         if label_statuses := criteria.get("status"):
             qs = qs.filter(labels__id__in=[s.id if hasattr(s, "id") else s for s in label_statuses])
 
-        # Structured label_groups (from formula bar) supersedes legacy tags/exclude_tags.
+        # Structured label_groups supersedes legacy tags/exclude_tags.
         if label_groups := criteria.get("label_groups"):
             qs = qs.apply_label_groups(label_groups)
         else:
@@ -322,20 +259,13 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         if (min_rating := criteria.get("min_rating")) is not None:
             with contextlib.suppress(ValueError, TypeError):
                 min_rating = int(min_rating)
-                # 0 on the rating slider means "unrated" (there is no stored
-                # Review with rating=0 - pin_edit.py deletes the review
-                # instead of ever writing one), not a real floor to compare
-                # against. Every pin, rated or not, already satisfies "0 or
-                # unrated", so this is a no-op; only a real minimum (1-5)
-                # actually restricts the result.
+                # 0 means unrated, so only a real minimum restricts the result.
                 if min_rating > 0:
                     qs = qs.filter(reviews__rating__gte=min_rating)
         if (max_rating := criteria.get("max_rating")) is not None:
             with contextlib.suppress(ValueError, TypeError):
                 max_rating = int(max_rating)
-                # max_rating=0 asks for "unrated only" - reviews__rating__lte=0
-                # would silently match nothing (no Review row ever has
-                # rating=0), so that specific case needs isnull instead.
+                # 0 means unrated only.
                 if max_rating <= 0:
                     qs = qs.filter(reviews__isnull=True)
                 else:
@@ -408,9 +338,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
 
         if include_regions := criteria.get("include_regions"):
-            # Regions drawn across the date line arrive unwrapped (Leaflet gives
-            # 179..181); stored points are folded, so a planar __within misses
-            # everything east of the line until the region is split.
             qs = qs.filter(location__point__within=split_at_antimeridian(include_regions))
         if exclude_regions := criteria.get("exclude_regions"):
             qs = qs.exclude(location__point__within=split_at_antimeridian(exclude_regions))
@@ -420,10 +347,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
 
     def filter_by_custom_fields(self, custom_field_criteria) -> Self:
         """Filter pins by the owner's custom field values.
-
-        Each criterion gets its own ``filter()`` call so it joins its own
-        CustomFieldValue row (AND semantics across fields), while a number/date
-        range stays within a single join so both bounds apply to the same value.
 
         Args:
             custom_field_criteria: List of dicts from
@@ -441,7 +364,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             if field is None:
                 continue
             if criterion.get("checked") is False:
-                # "Unchecked" means not affirmatively checked: no stored value counts too.
+                # Unchecked includes rows with no stored value.
                 qs = qs.exclude(custom_field_values__field=field, custom_field_values__value_boolean=True)
                 continue
             lookups: dict = {"custom_field_values__field": field}
@@ -474,17 +397,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return qs
 
     def overlapping(self) -> Self:
-        """Pins whose footprint overlaps another pin's footprint.
-
-        A pin's "footprint" is its effective property boundary - a drawn or
-        API-generated polygon when one exists, else a default circle centered
-        on its coordinates (see ``BoundaryManager.effective_polygon_for_pin``).
-        Every pin resolves to *some* footprint this way, so this doubles as a
-        duplicate/stacked-pin detector (e.g. two pins left at the same
-        coordinates by a bug get identical, fully-overlapping circles) as well
-        as a real drawn-boundary overlap check.
-
-        Both pins in every overlapping pair are included in the result.
+        """Pins whose footprint overlaps another pin in this queryset.
 
         Returns:
             Pins (from this queryset) that overlap at least one other pin also
@@ -493,24 +406,11 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
         from urbanlens.dashboard.models.pin.model import Pin
 
-        # Re-queried via the concrete Pin manager (rather than iterating `self`
-        # directly) so effective_polygon_for_pin, which takes a concrete Pin,
-        # type-checks - `self` here is still the generic PinQuerySet[_ModelT].
-        # The select_related covers every relation resolve_for_pin's fallback
-        # chain touches (own row -> place polygon -> parent -> wiki -> circle),
-        # so resolving N pins doesn't lazily re-fetch each pin's location,
-        # place, parent, and wiki as four extra queries per pin.
+        # Re-queried via the concrete manager so the polygon helper type-checks.
         pins = Pin.objects.filter(pk__in=self.values_list("pk", flat=True)).select_related("location__place", "parent_pin__location", "wiki")
         footprints = [(pin.pk, polygon) for pin in pins if (polygon := Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)) is not None]
 
-        # Sweep over x-extents instead of comparing all pairs: real
-        # collections are geographically spread out, and most footprints are
-        # the default ~50m circles, so nearly every pair's bounding boxes are
-        # disjoint - the O(n^2) polygon intersects this replaced spent almost
-        # all its time proving that. Sorting by min-x and breaking when the
-        # next candidate starts past this one's max-x keeps only genuinely
-        # x-overlapping pairs; the y-extent check then filters the rest before
-        # any real geometry runs.
+        # Sweep over x-extents to avoid pairwise geometry checks.
         entries = sorted(((polygon.extent, pk, polygon) for pk, polygon in footprints), key=lambda entry: entry[0][0])
         overlapping_ids: set[int] = set()
         for i, ((_min_x, min_y, max_x, max_y), pk_a, polygon_a) in enumerate(entries):
@@ -545,11 +445,10 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
 
 
 class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
-    """Manager for Pin. Use get_nearby_or_create to avoid duplicate pins for the same profile+location."""
+    """Manager for Pin."""
 
     def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):
-        """
-        Get or create a Pin instance, considering two pins the same if they are within a certain distance threshold.
+        """Get or create a pin, treating nearby coordinates as the same place.
 
         Args:
             latitude (float): Latitude of the pin.
@@ -560,7 +459,6 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
 
         Returns:
             (Pin, bool): Tuple of (Pin instance, created boolean)
-
         """
         if latitude is None or longitude is None:
             logger.warning("get_nearby_or_create called with None coordinates, skipping.")
@@ -591,28 +489,18 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
         latitude, longitude = lat_f, lon_f
 
         defaults = dict(defaults or {})
-        # Coordinates live on the Location; drop any legacy coord kwargs.
-        # `profile` is already an explicit argument, but the import parsers
-        # embed it in their pin dicts too - drop it so create() below doesn't
-        # receive it twice.
+        # Coordinates live on Location; drop legacy kwargs to avoid duplicates.
         for redundant in ("latitude", "longitude", "point", "profile"):
             defaults.pop(redundant, None)
 
-        # A Pin no longer stores its own coordinates: it references a shared
-        # Location (deduped by coordinates). Callers may pass a specific
-        # Location via defaults; otherwise resolve/create one from the
-        # coordinates, then find-or-create the profile's root pin for it.
+        # Pins reference a shared Location; resolve one when not given.
         location = defaults.pop("location", None)
         if location is None:
             from urbanlens.dashboard.models.location.model import Location
 
             location, _ = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=threshold_meters)
 
-        # Not scoped to root pins: the profile may already have a child (sub) pin
-        # at this exact Location (e.g. one merged under another pin earlier), and
-        # that must dedupe too, not just root pins. Root pins sort first when both
-        # exist, since that's the more useful merge target and matches prior
-        # behavior for the common case.
+        # Include child pins when deduping; prefer root pins as merge target.
         existing_pin = self.filter(location=location, profile=profile).order_by(F("parent_pin_id").asc(nulls_first=True)).first()
         if existing_pin is not None:
             return existing_pin, False
@@ -620,13 +508,10 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
         try:
             pin = self.create(location=location, profile=profile, **defaults)
         except IntegrityError:
-            # A concurrent request created this profile's pin at this Location between
-            # the existence check above and this insert (db_pin_unique_location_per_profile)
-            # - return that row instead of letting the race surface as an unhandled 500.
+            # Concurrent insert won the race; return that row.
             existing_pin = self.filter(location=location, profile=profile).order_by(F("parent_pin_id").asc(nulls_first=True)).first()
             if existing_pin is not None:
                 return existing_pin, False
             raise
 
-        # Return the new pin and True for 'created'
         return pin, True

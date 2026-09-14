@@ -43,11 +43,7 @@ class ApiCallLogAdmin(admin.ModelAdmin):
 
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):
-    """Admin for the SiteSettings singleton.
-
-    Enforces singleton behaviour: the changelist redirects straight to pk=1,
-    and add/delete are disabled so only the one record can ever be edited.
-    """
+    """Admin for the SiteSettings singleton (changelist redirects to pk=1; add/delete disabled)."""
 
     fieldsets = [
         (
@@ -149,16 +145,9 @@ class PinAdmin(admin.ModelAdmin):
 
 
 def _delete_unedited_child_wikis(modeladmin, request: HttpRequest, queryset) -> None:
-    """Delete child wikis that have never been edited after their initial creation.
+    """Delete child wikis never saved after creation (updated - created < 10s).
 
-    A child wiki is a Wiki with ``parent_wiki`` set.  "Unedited" is detected by
-    comparing the ``updated`` and ``created`` timestamps: if they differ by
-    less than 10 seconds, the wiki was never saved again after its initial
-    INSERT, meaning no user has moved, renamed, or changed it.
-
-    NOTE: Child wikis are created manually by users via the wiki page and are
-    NOT auto-recreated by any background process.  Deleting them permanently
-    removes them unless a user re-adds them.
+    Deletion is permanent; users must re-add them manually.
     """
     from datetime import timedelta
 
@@ -255,11 +244,7 @@ class FactEvidenceAdmin(admin.ModelAdmin):
 
 @admin.register(Achievement)
 class AchievementAdmin(admin.ModelAdmin):
-    """Admin for Achievement - define the awards users can earn.
-
-    Saving here queues a backfill (see ``models.achievements.signals``), so an
-    award added today is granted immediately to everyone who already qualifies.
-    """
+    """Admin for Achievement; saving queues a backfill granting existing qualifiers."""
 
     list_display = ["name", "metric_label", "threshold", "is_active", "is_secret", "order", "earned_count"]
     list_editable = ["threshold", "is_active", "is_secret", "order"]
@@ -308,11 +293,7 @@ class UserAchievementAdmin(admin.ModelAdmin):
 
 @admin.register(ProfileStreak)
 class ProfileStreakAdmin(admin.ModelAdmin):
-    """Admin for ProfileStreak - cached consecutive-day counters.
-
-    Read-only: these are derived from ``ProfileActivityDay`` and editing them by
-    hand would silently desync the two. Use the rebuild action instead.
-    """
+    """Admin for ProfileStreak; read-only derived counters, rebuild via action."""
 
     list_display = ["profile", "kind", "current_length", "longest_length", "last_day"]
     list_filter = ["kind"]

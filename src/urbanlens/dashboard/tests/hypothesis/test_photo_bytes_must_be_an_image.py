@@ -1,30 +1,4 @@
-"""A photo upload has to be an image in its bytes, not just in its name.
-
-Found by the integration suite on 2026-08-24: a shell script uploaded as
-`not-really.png` with `Content-Type: image/png` was stored and served back from
-this app's origin as an image. Both signals the upload path trusted - the
-extension and the declared content type - are supplied by the caller, so neither
-is evidence of anything.
-
-The reason no existing test caught it is worth stating, because it is the theme
-running through `docs/audits/TEST_COVERAGE_GAPS.md`: every upload test uploads a real
-image. The adversarial case was never tried, because a test written alongside a
-feature is written by somebody thinking about the feature working.
-
-`content_type_mismatch_error` only fires on a *confirmed* mismatch. Bytes
-`filetype` cannot place at all return None from it - deliberately, since not
-every legitimate document format has a magic-byte signature - and a shell script
-is unrecognisable rather than mismatched. Photos now require a positive
-identification instead.
-
-**The half of this worth reading before changing anything:** failing closed is
-only safe because every extension in the photo allowlist has a signature
-`filetype` knows. Two did not agree by *name* - the library reports a TIFF as
-`tif` and an animated PNG as `apng`, and neither string was in the image set -
-so making photos fail closed without noticing that would have started rejecting
-genuine TIFF and APNG uploads. The alias tests below exist to keep that from
-being reintroduced.
-"""
+"""A photo upload has to be an image in its bytes, not just in its name."""
 
 from __future__ import annotations
 
@@ -83,11 +57,9 @@ class PhotoBytesTests(SimpleTestCase):
 class SniffAliasTests(SimpleTestCase):
     """`filetype`'s names for our formats have to be names we recognise.
 
-    This is the regression guard for the trap described in the module docstring:
-    a format we allow by extension but whose sniffed name we do not recognise
-    reads as "not an image" and gets rejected, and it looks like a broken
-    upload rather than a naming mismatch.
-    """
+    This is the regression guard for the trap described in the module docstring: a format we allow by extension
+    but whose sniffed name we do not recognise reads as "not an image" and gets rejected, and it looks like a
+    broken upload rather than a naming mismatch."""
 
     def test_a_tiff_sniffs_as_a_photo(self) -> None:
         self.assertEqual(sniff_media_kind(io.BytesIO(TIFF)), MediaKind.PHOTO)
@@ -95,11 +67,8 @@ class SniffAliasTests(SimpleTestCase):
     def test_every_allowed_image_extension_is_recognised_by_name(self) -> None:
         """Each allowlisted extension must be one the sniffer maps to PHOTO.
 
-        `jpeg`/`heif` are the user-facing spellings of formats `filetype` calls
-        `jpg`/`heic`; both spellings are in the sniffed set, so either answer
-        maps correctly. Anything added to the allowlist in future that the
-        library names differently fails here rather than in production.
-        """
+        `jpeg`/`heif` are the user-facing spellings of formats `filetype` calls `jpg`/`heic`; both spellings are
+        in the sniffed set, so either answer maps correctly."""
         unmapped = sorted(extension for extension in _IMAGE_EXTENSIONS if extension not in _SNIFFED_IMAGE_EXTENSIONS)
 
         self.assertFalse(

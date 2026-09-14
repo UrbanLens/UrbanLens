@@ -1,16 +1,4 @@
-"""Tests for the Google Photos Picker integration.
-
-Covers:
-- GooglePhotosGateway - session create/get, media item listing (pagination),
-  duration-string parsing, download with the ``=d``/``=w..-h..`` suffix.
-- Settings connect/callback/disconnect (OAuth2 state validation, mirrors
-  GoogleCalendarCallbackView's tests).
-- Pin-detail session create/status views - the session/poll/list flow, since
-  there's no coordinate filter to test here (every picked item is a candidate).
-- import_google_photos task - new-item happy path and checksum dedupe.
-
-All HTTP/OAuth calls are mocked; no real network access occurs.
-"""
+"""Tests for the Google Photos Picker integration."""
 
 from __future__ import annotations
 
@@ -141,11 +129,7 @@ class GooglePhotosGatewayTests(TestCase):
         self.assertIn("=w", called_url)
 
     def test_the_preview_is_a_thumbnail_not_a_full_size_image(self) -> None:
-        """The proxied preview URL is used in exactly one place - an `<img>` in
-        `_google_photos_picker_grid.html`. It used to ask for `=w2048-h2048`, so
-        every tile scrolled past cost about a megabyte of Google's bandwidth and
-        a megabyte of the shared 512MB Valkey to draw a small square. The test
-        above passes for any `=w`, which is why it did not catch that."""
+        """The proxied preview URL is used in exactly one place - an `<img>` in `_google_photos_picker_grid.html`. The test above passes for any `=w`, which is why it did not catch that."""
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(content=b"bytes")
         gw.download_media_item("https://x/a", original=False)
@@ -182,11 +166,7 @@ class GooglePhotosSettingsViewTests(TestCase):
         self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
 
     def test_successful_connect_redirects_to_the_connections_tab(self) -> None:
-        """Regression guard: the success path used to redirect to the bare
-        settings URL (no #hash), unlike every error branch in the same view -
-        settings/index.html's tab-switch JS only activates a non-default tab
-        when the URL carries a fragment, so this silently landed the user on
-        the default Privacy tab instead of Connections."""
+        """Regression guard: the success path used to redirect to the bare settings URL (no #hash), unlike every error branch in the same view - settings/index.html's tab-switch JS only activates a non-default tab when the URL carries a fragment, so this silently landed the user on the default Privacy tab instead of Connections."""
         from django.core import signing
 
         state = signing.dumps({"pid": self.profile.id}, salt="google-photos-connect")
@@ -207,10 +187,7 @@ class GooglePhotosSettingsViewTests(TestCase):
         self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
 
     def test_disconnect_revokes_the_token_at_google(self) -> None:
-        """Regression: the account model's own docstring promises "deleted
-        (after best-effort token revocation)", matching GoogleCalendarAccount's
-        disconnect flow - the view previously just deleted the row, leaving
-        the OAuth grant live on Google's side indefinitely."""
+        """Regression: the account model's own docstring promises "deleted (after best-effort token revocation)", matching GoogleCalendarAccount's disconnect flow - the view previously just deleted the row, leaving the OAuth grant live on Google's side indefinitely."""
         GooglePhotosAccount.objects.create(profile=self.profile, access_token="access-tok", refresh_token="refresh-tok")
         with mock.patch("urbanlens.dashboard.controllers.google_photos.revoke_token") as mock_revoke:
             self.client.post(reverse("settings.google_photos.disconnect"))
@@ -367,9 +344,7 @@ class ImportGooglePhotosTaskTests(TestCase):
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
     def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
+        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
         self._seed_cache(
             "sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}}
         )
@@ -388,11 +363,9 @@ class ImportGooglePhotosTaskTests(TestCase):
 class GetPhotosAccountTests(TestCase):
     """GooglePhotosAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
 
-    Regression test for a production 500: rotating field_encryption_key
-    without migrating old rows makes EncryptedTextField.from_db_value raise
-    InvalidToken, which crashed every page that touched the Google Photos
-    connection (e.g. GET /dashboard/settings/google-photos/).
-    """
+    Regression test for a production 500: rotating field_encryption_key without migrating old rows makes
+    EncryptedTextField.from_db_value raise InvalidToken, which crashed every page that touched the Google Photos
+    connection (e.g."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

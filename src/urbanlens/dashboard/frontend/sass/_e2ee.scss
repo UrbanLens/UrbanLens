@@ -188,10 +188,7 @@
     //color: $color-red-100;
 }
 
-// .dm-bubble is a column flex container, so a plain inline sibling after the
-// body span would land on its own row below the text instead of beside it -
-// float it over the bubble's own corner instead (.dm-bubble is already
-// position: relative).
+// .dm-bubble is a column flex container, so a plain inline sibling after the body span would land on its own row below the text instead.
 .dm-lock-icon {
     position: absolute;
     top: .4rem;

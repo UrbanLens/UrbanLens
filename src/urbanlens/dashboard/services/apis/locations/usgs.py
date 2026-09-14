@@ -18,29 +18,12 @@ _M2M_URL = "https://m2m.cr.usgs.gov/api/api/json/stable"
 _TNM_URL = "https://tnmaccess.nationalmap.gov/api/v1"
 _HTMC_PRODUCTS = "Historical Topographic Map Collection (HTMC)"
 _M2M_SESSION_CACHE_KEY = "usgs_m2m_auth"
-_M2M_SESSION_TTL = 7200  # USGS M2M session tokens expire after ~2 hours
+_M2M_SESSION_TTL = 7200
 
 
 @dataclass(slots=True, kw_only=True)
 class UsgsGateway(Gateway):
-    """Gateway for USGS M2M/EarthExplorer, TNMAccess, topoView, and HTMC.
-
-    Authentication:
-        USGS Machine-to-Machine (M2M) uses a two-stage authentication model:
-
-        1. **Application token** (``UL_USGS_API_KEY``): A static token generated
-           once in your USGS EarthExplorer account settings.  This never expires.
-
-        2. **Session token**: Obtained by calling ``login-token`` with the
-           application token + username.  Valid for ~2 hours and cached in
-           Django's cache backend automatically.
-
-        Set both ``UL_USGS_API_KEY`` (application token) and ``UL_USGS_USERNAME``
-        in ``.env``.  The gateway handles the login exchange and token renewal
-        transparently.
-
-        TNM/topoView endpoints are public and do not require authentication.
-    """
+    """Gateway for USGS M2M/EarthExplorer, TNMAccess, topoView, and HTMC."""
 
     service_key: ClassVar[str] = "usgs"
     paid_service: ClassVar[bool] = False
@@ -80,9 +63,6 @@ class UsgsGateway(Gateway):
 
     def m2m_request(self, endpoint: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         """Send a POST request to the M2M API.
-
-        Automatically obtains and caches a session token from the configured
-        application token + username credentials.
 
         Args:
             endpoint: M2M endpoint name (e.g. ``"scene-search"``).
@@ -175,8 +155,6 @@ class UsgsGateway(Gateway):
     ) -> dict[str, Any]:
         """Return The National Map products intersecting coordinates.
 
-        No authentication required - TNM is a public endpoint.
-
         Args:
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
@@ -205,10 +183,6 @@ class UsgsGateway(Gateway):
     ) -> dict[str, Any]:
         """Return HTMC historical topographic maps near coordinates.
 
-        Queries the TNM ``products`` endpoint filtered to the Historical
-        Topographic Map Collection, which contains scanned USGS topo maps
-        going back to the late 1800s.
-
         Args:
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
@@ -216,7 +190,6 @@ class UsgsGateway(Gateway):
             **params: Additional TNM API parameters.
 
         Returns:
-            Parsed JSON with a list of matching HTMC products including
-            download URLs for the scanned map PDFs.
+            Parsed JSON with a list of matching HTMC products including download URLs for the scanned map PDFs.
         """
         return self.tnm_products_for_coordinates(latitude, longitude, delta=delta, datasets=_HTMC_PRODUCTS, **params)

@@ -6,7 +6,7 @@ from urbanlens.dashboard.models import abstract
 
 
 class GooglePlaceQuerySet(abstract.DashboardQuerySet):
-    """Query helpers for coordinate-keyed Google Place cache rows."""
+    """Query helpers for Google Place cache rows."""
 
 
 class GooglePlaceManager(abstract.DashboardManager.from_queryset(GooglePlaceQuerySet)):

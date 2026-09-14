@@ -1,10 +1,4 @@
-"""QuerySets/Managers for Fact and FactEvidence.
-
-Confidence math lives in ``services.facts.confidence``; the write path in
-``services.facts.evidence``; read-side consumption queries (AI agents,
-Consensus recheck-round selection) in ``services.facts.consumption``. These
-classes only scope and fetch rows.
-"""
+"""QuerySets/Managers for Fact and FactEvidence (only scope/fetch rows; logic lives in services.facts)."""
 
 from __future__ import annotations
 

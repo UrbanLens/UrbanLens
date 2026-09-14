@@ -1,14 +1,4 @@
-"""Tests for GooglePlacesGateway's field-mask/fields handling.
-
-Places API (New) bills fields by SKU tier - rating/userRatingCount are
-Enterprise tier, billed extra whether or not a caller actually uses them
-("Stop retrieving Google Places atmosphere data" entry for the original
-billing report this addresses).
-These tests guard the fix: find_nearest_place_id must request a minimal
-field_mask, and get_place_details must never be callable without explicit
-fields (which would make the legacy endpoint return - and bill for -
-everything).
-"""
+"""Tests for GooglePlacesGateway's field-mask/fields handling."""
 
 from __future__ import annotations
 

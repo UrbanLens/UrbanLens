@@ -1,48 +1,5 @@
 #!/usr/bin/env python3
-"""Apply safe auto-fixes to the staged files, stage them, and gate on the rest.
-
-Why this exists
----------------
-pre-commit calls a hook FAILED when the worktree no longer matches the index
-afterwards ("files were modified by this hook"). Every auto-fixing hook
-therefore costs a wasted commit: the first `git commit` fixes and fails, the
-second succeeds. Running the fixers here and staging what they changed leaves
-the diff pre-commit compares unchanged, so a normal commit passes on the first
-run with the fixes already in it.
-
-This replaces five hooks that rewrote files without staging them: ruff --fix,
-ruff-format, end-of-file-fixer, trailing-whitespace and mixed-line-ending.
-
-Why partially staged files are skipped
---------------------------------------
-pre-commit stashes unstaged changes before hooks run and restores them
-afterwards with `git apply`. If a fix is staged and that restore conflicts,
-pre-commit's rollback does `git checkout -- .`, which restores the worktree
-from an index that already contains the fix; the re-apply then fails a second
-time and the unstaged work is left only in pre-commit's patch file. Leaving
-such files completely untouched is what makes that impossible. Inside a hook
-`git diff` is already empty -- the stash has happened -- so the affected files
-are identified from the patch pre-commit just wrote.
-
-The lint gate
--------------
-Files this script fixed are held to the full `ruff check`: every safe fix has
-just been applied, so anything left needs a human. Files it had to skip are
-held only to violations ruff cannot fix at all, because failing a commit over
-something the script was not allowed to fix is exactly the friction this is
-meant to remove.
-
-Formatting width is ruff's business, not this script's: test directories carry
-their own ``.ruff.toml`` setting ``line-length = 120``, which ruff finds by
-walking up from each file. Keeping a second copy of that rule here is how
-``ruff format --check src`` in CI came to disagree with the commit path.
-
-It never applies ruff's unsafe fixes, and never fails a commit because of an
-error in itself. In particular it does not delete code: unused imports (F401)
-and stale ``noqa`` directives (RUF100) are left alone deliberately, since a
-binding kept for a future caller and a comment explaining a suppression are
-both information a formatter should not be allowed to discard.
-"""
+"""Apply safe auto-fixes to the staged files, stage them, and gate on the rest."""
 
 from __future__ import annotations
 
@@ -154,9 +111,7 @@ def stashed_paths() -> tuple[bool, set[str]]:
     """Files that had unstaged changes when this commit started.
 
     Returns:
-        (uncertain, paths). When `uncertain` is true the caller must not stage
-        anything, because a stash it cannot see may exist.
-    """
+        (uncertain, paths)."""
     now = time.time()
     own_pid = _precommit_pid()
     try:
@@ -190,13 +145,8 @@ def stashed_paths() -> tuple[bool, set[str]]:
 def _patch_paths(patch: Path) -> set[str]:
     """Every path a stash patch touches, or an empty set if git cannot read it.
 
-    `git apply --numstat -z` rather than reading the diff headers: git unquotes
-    paths itself, so a non-ASCII or space-bearing name comes back intact, and it
-    reports binary hunks, which carry no `---`/`+++` pair to parse. Getting this
-    wrong is not cosmetic - a path missed here is a partially staged file the
-    fixer will rewrite and stage, which is the one sequence that turns
-    pre-commit's rollback into lost work.
-    """
+    `git apply --numstat -z` rather than reading the diff headers: git unquotes paths itself, so a non-ASCII or
+    space-bearing name comes back intact, and it reports binary hunks, which carry no `---`/`+++` pair to parse."""
     result = subprocess.run(
         ["git", "apply", "--numstat", "-z", str(patch)],
         capture_output=True,
@@ -271,16 +221,11 @@ def _read(path: Path) -> bytes | None:
 def staged_format_drift(ruff: list[str], paths: list[str]) -> str:
     """Skipped files whose *staged* content is not formatted.
 
-    A file that was staged and then edited again is skipped by the fixer, because
-    rewriting it could cost the unstaged edit. That is the right call, but it
-    used to mean the staged content went in unformatted with nothing said - and
-    pre-commit hides a passing hook's stdout, so even the "not touched" line was
-    invisible. This checks the blob that is actually being committed, without
-    going near the working tree.
+    A file that was staged and then edited again is skipped by the fixer, because rewriting it could cost the
+    unstaged edit.
 
     Returns:
-        A message naming the drifted files, or "" when they are all clean.
-    """
+        A message naming the drifted files, or "" when they are all clean."""
     drifted = []
     for name in paths:
         blob = _run("git", "show", f":{name}")
@@ -332,19 +277,15 @@ def unfixable_only(ruff: list[str], paths: list[str]) -> str:
 def sweep_mode(ruff: list[str] | None, *, write: bool) -> int:
     """Apply (or report) the formatter across every tracked Python file.
 
-    The commit path only ever sees staged files, so nothing there would notice a
-    file that drifted out of format some other way (a rebase, a merge
-    resolution, an edit made with the hooks skipped). This is that sweep, and it
-    applies the same two widths, from the same code, so the two cannot disagree.
+    The commit path only ever sees staged files, so nothing there would notice a file that drifted out of format
+    some other way (a rebase, a merge resolution, an edit made with the hooks skipped).
 
     Args:
         ruff: The resolved ruff command, or None if none is installed.
         write: Rewrite drifted files when true; only report them when false.
 
     Returns:
-        0 when the tree is formatted (or was just formatted), 1 on drift found
-        in report mode, or if ruff is missing.
-    """
+        0 when the tree is formatted (or was just formatted), 1 on drift found in report mode, or if ruff is missing."""
     label = "--format" if write else "--check"
     if ruff is None:
         print(f"autofix {label}: ruff not found (is the venv installed?)")
@@ -385,14 +326,11 @@ def sweep_mode(ruff: list[str] | None, *, write: bool) -> int:
 def _stage(paths: list[str]) -> str | None:
     """`git add` the paths, retrying briefly past a held index lock.
 
-    This repo is worked in by more than one session at a time, so `index.lock`
-    can be held by an unrelated `git` for a moment. Failing on the first attempt
-    would leave correct fixes unstaged and hand the developer back the two-run
-    behaviour this script exists to remove.
+    This repo is worked in by more than one session at a time, so `index.lock` can be held by an unrelated `git`
+    for a moment.
 
     Returns:
-        None on success, else the last error message.
-    """
+        None on success, else the last error message."""
     error = ""
     for attempt in range(LOCK_RETRIES):
         result = _run("git", "add", "--", *paths)
@@ -408,12 +346,7 @@ def _stage(paths: list[str]) -> str | None:
 def _already_staged() -> set[str] | None:
     """Paths with staged changes, or None if that cannot be determined.
 
-    During a real commit every path pre-commit passes is staged, so this changes
-    nothing there. It matters for `pre-commit run --all-files` (which is what
-    `bun run pre-commit` and `bun run test:full` invoke): without it the hook
-    would `git add` every file it touched anywhere in the tree, quietly staging
-    work the developer had not chosen to commit.
-    """
+    During a real commit every path pre-commit passes is staged, so this changes nothing there."""
     result = _run("git", "diff", "--cached", "--name-only", "-z", timeout=60)
     if result.returncode != 0:
         return None

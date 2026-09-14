@@ -1,15 +1,5 @@
 /**
  * "Are you sure you want to leave?" for pages with something worth losing.
- *
- * Three pages grew their own copy of this: the auto-save guard, the safety
- * check-in page (whose warning is that nobody would be notified if something
- * happened), and the tools page during an export. The copies had drifted and each
- * carried the same two defects, so the behaviour lives here once and each caller
- * supplies only what differs - when it is blocked, and what to say.
- *
- * Two ways off the page are covered: closing the tab, which only the browser's own
- * prompt can guard, and clicking an ordinary link, which is intercepted so the
- * question can be asked in the site's dialog instead.
  */
 
 export interface LeaveConfirmationOptions {
@@ -45,26 +35,15 @@ export interface LeaveConfirmationHandle {
     /** Re-arm after a confirmed leave. Test-only. */
     resetForTests(): void;
     /**
-     * Unbind both listeners.
-     *
-     * A page installs one guard and keeps it for its lifetime, so production
-     * never calls this. Tests install one per case against a shared `document`
-     * that is never torn down between them, and without a way to unbind, every
-     * case leaves its capture-phase click listener behind for the rest of the
-     * run.
-     */
+ * Unbind both listeners.
+ */
     uninstall(): void;
 }
 
 export function installLeaveConfirmation(options: LeaveConfirmationOptions): LeaveConfirmationHandle {
-    // Set once the user has agreed to leave, and deliberately never cleared: the
-    // page is on its way out. Without it the navigation we start ourselves re-enters
-    // beforeunload with the page still blocked and the browser asks a second time,
-    // so the user answers the same question twice.
+    // Set once the user has agreed to leave, and deliberately never cleared: the page is on its way out.
     //
-    // The cost is that a confirmed click which somehow does not navigate leaves the
-    // page unguarded. Links that genuinely do not navigate are filtered out below
-    // instead, which covers the realistic cases without guessing at a re-arm delay.
+    // The cost is that a confirmed click which somehow does not navigate leaves the page unguarded.
     let leaving = false;
 
     const blocked = (): boolean => !leaving && options.isBlocked();
@@ -79,10 +58,7 @@ export function installLeaveConfirmation(options: LeaveConfirmationOptions): Lea
 
     const onClick = (event: MouseEvent): void => {
             if (!blocked()) return;
-            // A modified or non-primary click opens a new tab, window, or download
-            // and leaves this page untouched, so there is nothing to warn about.
-            // Intercepting it would also be harmful: the confirm path navigates the
-            // current tab, discarding the very thing being guarded.
+            // A modified or non-primary click opens a new tab, window, or download and leaves this page untouched, so there is nothing to warn about.
             if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
 
             const target = event.target as HTMLElement | null;
@@ -91,9 +67,7 @@ export function installLeaveConfirmation(options: LeaveConfirmationOptions): Lea
 
             const href = link.getAttribute("href");
             const scheme = href ? href.trim().toLowerCase() : "";
-            // In-page anchors do not leave; script and data urls are not navigations
-            // worth guarding; a new tab leaves this page open; and a download link
-            // saves a file without navigating at all.
+            // In-page anchors do not leave; script and data urls are not navigations worth guarding; a new tab leaves this page open.
             if (
                 !href ||
                 href.charAt(0) === "#" ||

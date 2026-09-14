@@ -1,10 +1,4 @@
-"""Tests for the Consensus field-kind strategy registry (services.consensus.fields).
-
-Pure logic - registry completeness and the text/coordinate agreement rules
-each strategy's ``agrees``/``normalize`` implement. No DB required for these
-(strategies that need the ORM - find_missing/apply_answer - are exercised by
-the DB-backed session tests instead).
-"""
+"""Tests for the Consensus field-kind strategy registry (services.consensus.fields)."""
 
 from __future__ import annotations
 

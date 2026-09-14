@@ -1,19 +1,5 @@
 /**
- * Object-level authorization across the published API.
- *
- * Pins are private by construction. So are lists, trips, labels, saved
- * filters, custom fields, photos, notes, visits, safety check-ins and undo
- * entries. Each of those collections re-implements "is this the caller's?",
- * and the failure worth catching is that *one* of them looks the object up
- * before it looks the caller up - a 200 or a 403 where a 404 belongs, or a
- * write that lands in somebody else's row.
- *
- * Every case has three legs:
- *   1. the owner can read (or write) their own object - otherwise a 404 is
- *      just a broken endpoint;
- *   2. a second account cannot;
- *   3. the second account's answer is identical to the answer for an object
- *      that never existed, so a slug is not an oracle.
+ * Object-level authorization across the published API. Pins are private by construction.
  */
 
 import type { APIResponse } from "@playwright/test";

@@ -1,17 +1,4 @@
-"""Tests for the profile page's click-to-edit-in-place contact fields + birthday.
-
-Covers:
-- Own-profile view renders each of the 6 contact fields (phone/whatsapp/
-  signal/telegram/discord/matrix) and birth_date as a click-to-edit element
-  only once it actually has a value - an empty field (and, at the section
-  level, an entirely-empty Contact/Additional Details section) is hidden
-  rather than shown with an "Add ..." placeholder; adding a first value is
-  the Edit Profile page's job, not this page's.
-- Other viewers see plain read-only text (only for populated fields, same
-  as before) and the section still disappears entirely when nothing to show.
-- ProfileFieldUpdateView's field="phone_number"/etc and field="birth_date"
-  POST paths, previously untested despite already existing.
-"""
+"""Tests for the profile page's click-to-edit-in-place contact fields + birthday."""
 
 from __future__ import annotations
 

@@ -1,21 +1,4 @@
-"""The article conflict check has to be serialised, not just present.
-
-`save_article_checked` reads the latest revision id, compares it to the one the
-editor started from, and then writes. Without a lock that sequence is a TOCTOU:
-two editors who both loaded revision R both read `latest_id == R`, both pass the
-check, and both append. One editor's save then silently stops being the current
-article - the precise outcome the conflict check exists to prevent, and they were
-told it succeeded.
-
-Nothing else catches it. `ArticleRevision` carries no revision number and no
-unique constraint, and "latest" is just `-created`, so there is no database-level
-guard to fall back on. A *first* save is safe without a lock because
-`Article.pin`/`.wiki` are `OneToOneField` - the second insert loses there.
-
-The lock is asserted by inspecting the SQL actually issued, rather than by racing
-two threads: a thread race is timing-dependent and would be flaky in CI, while
-`FOR UPDATE` appearing in the statement is exactly the mechanism under test.
-"""
+"""The article conflict check has to be serialised, not just present."""
 
 from __future__ import annotations
 
@@ -102,10 +85,9 @@ class ArticleConflictLockingTests(TestCase):
 class ConcealedViewerConflictCheckTests(TestCase):
     """A concealed viewer's conflict check is scoped to what they were shown, not the true latest.
 
-    ``concealment_active`` is hardcoded False today (the reputation ledger it needs doesn't exist
-    yet), so this branch is currently dead in production - mocked here so a regression is caught
-    before the day it starts returning True, rather than after.
-    """
+    ``concealment_active`` is hardcoded False today (the reputation ledger it needs doesn't exist yet), so this
+    branch is currently dead in production - mocked here so a regression is caught before the day it starts
+    returning True, rather than after."""
 
     def setUp(self) -> None:
         super().setUp()

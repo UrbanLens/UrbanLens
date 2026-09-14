@@ -1,15 +1,4 @@
-"""Tests for the standalone MarkupMap model, snapshot conversion, and endpoints.
-
-Covers:
-- PinMarkup.from_snapshot_shape / to_snapshot_shape round-trips (property-based).
-- sanitize_map_data's layer_mode/show_borders handling.
-- MarkupMap.replace_items_from_snapshot + to_snapshot.
-- services.map.map_snapshot.materialize_markup_map create/update/remove semantics.
-- MarkupMapQuerySet.unattached().
-- The /markup-maps/ endpoints: create, item CRUD, view-state, delete, and
-  ownership enforcement.
-- Check-in creation linking a draft map via the ``markup_map`` POST field.
-"""
+"""Tests for the standalone MarkupMap model, snapshot conversion, and endpoints."""
 
 from __future__ import annotations
 
@@ -106,7 +95,6 @@ class ShapeRoundTripTests(SimpleTestCase):
         assert result is not None  # nosec B101
         restored = PinMarkup.from_snapshot_shape(result)
         assert restored is not None  # nosec B101
-        # Radius survives conversion to an edge point and back within 1%.
         if radius > 1:
             self.assertAlmostEqual(restored.geometry["radius"] / radius, 1.0, delta=0.01)
 
@@ -282,11 +270,7 @@ class MaterializeMarkupMapTests(TestCase):
         self.assertFalse(MarkupMap.objects.filter(pk=existing.pk).exists())
 
     def test_context_gives_a_new_map_a_named_default_title(self) -> None:
-        """Regression guard: comments/trip comments/pin visits/list maps all
-        create through this one function - without threading their own
-        context through, every map created from those flows was stuck with a
-        bare date title, even though default_markup_map_title has always
-        supported a named default when given one."""
+        """Regression guard: comments/trip comments/pin visits/list maps all create through this one function - without threading their own context through, every map created from those flows was stuck with a bare date title, even though default_markup_map_title has always supported a named default when given one."""
         pin = baker.make("dashboard.Pin", name="Old Mill")
         markup_map = materialize_markup_map(self.profile, _snapshot(), context=pin)
         assert markup_map is not None  # nosec B101
@@ -559,10 +543,8 @@ class CheckinCreateLinksMapTests(TestCase):
 class DeleteFlagsAttachedContentTests(TestCase):
     """Deleting a MarkupMap flags every Comment/TripComment/DirectMessage that referenced it.
 
-    ``on_delete=SET_NULL`` already detaches the map without touching the
-    host row's text, but without a separate flag there'd be no way to tell
-    "never had a map" from "had one that was deleted" once the FK is nulled.
-    """
+    ``on_delete=SET_NULL`` already detaches the map without touching the host row's text, but without a separate
+    flag there'd be no way to tell "never had a map" from "had one that was deleted" once the FK is nulled."""
 
     def setUp(self) -> None:
         self.user = baker.make("auth.User")

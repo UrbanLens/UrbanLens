@@ -1,15 +1,4 @@
-"""Tests for UL-257: password reset must not silently drop SSO-only accounts.
-
-Django's stock PasswordResetForm.get_users() filters out any account with
-has_usable_password() == False, while PasswordResetView always shows the
-same generic "check your email" success page regardless of whether a
-matching user was found - so an SSO-only user requesting a reset was told
-it worked and then never received anything, with no hint that their
-account has no password at all. SsoAwarePasswordResetForm keeps that
-anti-enumeration property (the requester-facing response never reveals
-which branch fired) while routing SSO-only accounts to a distinct email
-that names their sign-in provider instead of a reset link.
-"""
+"""Tests for UL-257: password reset must not silently drop SSO-only accounts."""
 
 from __future__ import annotations
 

@@ -1,14 +1,4 @@
-"""Re-running keyword generation for an image must not crash on its own rows.
-
-``generate_keywords_for_image`` replaces a provider's keywords by deleting the old
-rows and inserting the new ones. The delete and the insert are not isolated from
-another worker doing the same thing: ``uq_image_keyword`` then rejects the second
-insert.
-
-The only caller is the Celery task ``generate_photo_keywords``, and Celery delivers at
-least once - a worker lost mid-task has its message redelivered, so two runs for one
-image is an ordinary occurrence rather than a rare interleaving.
-"""
+"""Re-running keyword generation for an image must not crash on its own rows."""
 
 from __future__ import annotations
 

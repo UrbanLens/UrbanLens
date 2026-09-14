@@ -1,42 +1,4 @@
-/**
- * Signing in, and the two Django behaviours that make it more than one POST.
- *
- * **CSRF is two halves that must match.** Django compares a cookie against a
- * form field, so the token has to be fetched from the login page before it can
- * be posted back. k6 keeps a cookie jar per VU, so the cookie half is automatic
- * once the GET has happened; the field half is read out of that jar here.
- *
- * **Over HTTPS, Django also checks `Referer`.** A run against
- * `https://…dev.urbanlens.org` with no `Referer` header is refused before the
- * view executes, and the refusal renders as a 403 page at the URL that was
- * posted to - indistinguishable from a wrong password unless something looks at
- * the body. Both headers are sent on every unsafe request here, and the failure
- * message says which of the three causes it was.
- *
- * These accounts must come from `provision_integration_env`, which clears
- * `AccountKdf`. With a salt present the browser derives the credential before
- * posting it, and the plaintext in the manifest stops being what the form
- * sends - so a raw POST like this one would fail for an account that a human
- * has since logged into through a browser.
- *
- * **Sign in once, then adopt.** Password verification is PBKDF2 and costs
- * hundreds of milliseconds of CPU by design, so a VU pool that each signed
- * itself in would spend its ramp-up mounting a CPU attack on the box it is
- * trying to measure. Measured on a dev stack: one login took 1.0s and every
- * other request under 0.25s, but sixty VUs each doing their own login produced
- * zero completed iterations in fifty seconds. `setup` signs in once per role
- * and every VU adopts the resulting cookies - which is also the more honest
- * model, since the neighbour is meant to be a user who already has a session,
- * not one who logs in five times a second.
- *
- * **Adopted cookies go in an explicit jar, not the VU's.** k6 resets a VU's
- * own cookie jar at the start of every iteration, so cookies installed once
- * survive exactly one request. What that produced was not an error: the second
- * iteration onwards was redirected to the sign-in page, k6 followed the 302
- * and recorded a fast 200, and the run reported a healthy p95 for the login
- * page while believing it had measured the map. A jar constructed here lives
- * as long as the VU does and is passed explicitly on every request.
- */
+/** Signing in, and the two Django behaviours that make it more than one POST. */
 
 import http from "k6/http";
 import { fail } from "k6";
@@ -48,17 +10,11 @@ const LOGIN_PATH = "/accounts/login/";
  *
  * @param {string} baseUrl Origin under test, no trailing slash.
  * @param {{username: string, password: string, role: string}} account
- * @returns {{baseUrl: string, role: string, csrfToken: string}} A handle to
- *     pass to the request helpers below.
+ * @returns {{baseUrl: string, role: string, csrfToken: string}} A handle to pass to the request helpers below.
  */
 export function signIn(baseUrl, account) {
     const loginUrl = `${baseUrl}${LOGIN_PATH}`;
-    // A jar of its own, so this always starts anonymous. Signing two roles in
-    // one after another through the shared VU jar does not sign the second one
-    // in at all: `/accounts/login/` redirects an already-authenticated request
-    // to the map, k6 follows the 302, and both the GET and the POST land
-    // somewhere that is not the login form - so the function returns the *first*
-    // role's session believing it minted the second's.
+    // Own jar so this always starts anonymous: the shared VU jar would redirect an already-authenticated login to the map.
     const jar = new http.CookieJar();
     const form = http.get(loginUrl, { tags: { endpoint: "login_form", phase: "setup" }, responseType: "text", jar });
     if (form.status !== 200) {
@@ -78,18 +34,11 @@ export function signIn(baseUrl, account) {
         { csrfmiddlewaretoken: token, username: account.username, password: account.password },
         {
             headers: unsafeHeaders(baseUrl, loginUrl),
-            // Deliberately not followed. A successful sign-in is a 302 and a
-            // failed one is a 200 rendering the form again, so the status alone
-            // is the answer - and following it lands on the post-login page,
-            // which for the account this suite exists to make enormous means
-            // paying for a full map render inside `setup`. That took the heavy
-            // sign-in from under a second to over sixty, and timed setup out.
+            // Not followed: 302 means success, 200 means the form again. Following would also pay for a full map render.
             redirects: 0,
             jar,
             tags: { endpoint: "login", phase: "setup" },
-            // Overrides the run's `discardResponseBodies`, for the failure path:
-            // a re-rendered form says why in its body, and a 403 page says
-            // whether this was CSRF.
+            // Kept for the failure path: the form body says why, and a 403 page says whether it was CSRF.
             responseType: "text",
         },
     );
@@ -114,12 +63,7 @@ export function signIn(baseUrl, account) {
 }
 
 /**
- * Adopt cookies minted by `signIn` into *this* VU's jar.
- *
- * Each k6 VU is its own runtime with its own cookie jar, so a session
- * established in `setup` does not reach them by itself. Passing the cookies
- * through `setup`'s return value and installing them here means one password
- * verification for the whole run instead of one per VU.
+ * Adopt cookies minted by `signIn` into *this* VU's jar. Each k6 VU is its own runtime with its own cookie jar, so a session established in `setup` does not reach them by itself.
  *
  * @param {string} baseUrl Origin under test, no trailing slash.
  * @param {string} role Which account these cookies belong to.
@@ -155,9 +99,7 @@ export function cookiesFor(baseUrl, jar) {
  * The current CSRF token for a jar.
  *
  * @param {string} baseUrl Origin under test, no trailing slash.
- * @param {object} jar The jar to read. Defaults to the VU's own, which is
- *     correct inside `setup` and wrong everywhere else - see the note on
- *     `adopt` about k6 resetting it between iterations.
+ * @param {object} jar The jar to read. Defaults to the VU's own, which is correct inside `setup` and wrong everywhere else - see the note on `adopt` about k6 resetting it between iterations.
  */
 export function csrfToken(baseUrl, jar) {
     const cookies = (jar || http.cookieJar()).cookiesForURL(`${baseUrl}/`);
@@ -189,14 +131,7 @@ function jarParam(session) {
 /**
  * POST a form, refreshing the CSRF token from the jar each time.
  *
- * Re-read rather than cached because Django rotates the token on login and may
- * rotate it again; a cached token turns into a 403 halfway through a run, which
- * reads as the endpoint failing rather than as the harness failing.
- *
- * @param {object} extra Merged into k6's request params. `timeout` above all:
- *     its default of 60s is shorter than several of the things measured here,
- *     and a request the harness cut off is recorded as an error the server
- *     never made.
+ * @param {object} extra Merged into k6's request params. `timeout` above all: its default of 60s is shorter than several of the things measured here, and a request the harness cut off is recorded as an error the server never made.
  */
 export function postForm(session, path, body, tags, extra) {
     const url = `${session.baseUrl}${path}`;

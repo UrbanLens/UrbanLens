@@ -1,57 +1,11 @@
 """URL routes for the external API, mounted at ``dashboard/api/external/v1/``.
 
-Versioned and namespaced separately from the internal REST surface
-(``dashboard/rest/``, see ``dashboard/urls.py``) because this one has a public
-consumer contract - a third-party application holding a user's API key - that
-the internal API doesn't.
-
-Routing is split across the ``urls_*.py`` siblings, one module per domain, so
-that many people can add endpoints at once without every change serialising on
-this file. Those modules are stitched in by plain list concatenation, *not*
-``include()``: every external route has to stay in the single flat
-``external_api:`` namespace, because ``reverse("external_api:pins.detail")``
-calls are spread across the codebase and ``schema.preprocess_external_api_only``
-selects endpoints by URL prefix. An ``include()`` would insert a namespace
-segment and break both at once - reverse() with a NoReverseMatch that names a
-route which visibly exists.
-
-THE ORDERING RULE
------------------
-Django resolves a request by walking ``urlpatterns`` in order and taking the
-first pattern that matches, so a generic segment declared ahead of a literal one
-swallows it. This is not a theoretical hazard, and its symptom is actively
-misleading: ``pins/deleted/`` sitting behind ``pins/<str:pin_slug>/`` does not
-produce "no such route" - it dispatches to the pin-detail view, which looks up a
-pin slugged "deleted", fails to find one, and answers 404 for a completely
-unrelated reason. Nothing in the response distinguishes that from a genuinely
-missing pin, so the bug is close to undebuggable from the outside.
-
-Appending the domain modules onto the end of a hand-ordered list would have made
-that the *default* outcome. Any new single-segment literal under a prefix that
-already has a generic route - ``pins/``, ``wikis/``, ``trips/``, ``lists/``,
-``labels/``, ``messages/``, ``photos/``, ``profiles/``, ``safety/checkins/`` -
-would land after the pattern that eats it, and the author, editing only their
+Any new single-segment literal under a prefix that already has a generic route - ``pins/``,
+``wikis/``, ``trips/``, ``lists/``, ``labels/``, ``messages/``, ``photos/``, ``profiles/``,
+``safety/checkins/`` - would land after the pattern that eats it, and the author, editing only their
 own domain module, would have no reason to even look at this file.
-
-So declaration order is deliberately *not* what decides matching here. The
-combined list is run through :func:`order_by_specificity`, which re-sorts it by
-how narrowly each path segment matches: literals first, then the tightly
-constrained converters (``int``, ``uuid``), then ``slug``, then ``str``, then
-``path``. Equal keys keep their relative order, because Python's sort is stable,
-so a module's internal ordering still decides ties between identically shaped
-routes. The invariant that buys us is the one that matters: a literal route can
-never be shadowed by a generic one, regardless of which module declared it or in
-what order the modules happen to be concatenated.
-
-``tests/hypothesis/test_external_api_url_resolution.py`` holds the line. It
-reverses every registered route and resolves the resulting path back, asserting
-it lands on the route it came from - which is exactly the assertion a shadowed
-pattern fails. It is data-driven off this urlconf, so routes added later are
-covered without anyone remembering to extend it.
-
-This file is closed to further edits. Add routes to the ``urls_*.py`` module
-that owns your domain instead; if no module fits, say so rather than reopening
-this one.
+Add routes to the ``urls_*.py`` module that owns your domain instead; if no module fits, say so
+rather than reopening this one.
 """
 
 from __future__ import annotations
@@ -99,11 +53,7 @@ app_name = "external_api"
 #: using the same grammar Django's own ``_route_to_regex`` parses routes with.
 _ROUTE_PARAMETER_RE: Final = re.compile(r"<(?:([^>:]+):)?([^>]+)>")
 
-#: How *broadly* each built-in converter matches, smallest set first. This is a
-#: subset ordering, not a preference: ``int`` (``[0-9]+``) and ``uuid`` accept
-#: strictly less than ``slug`` (``[-a-zA-Z0-9_]+``), which accepts strictly less
-#: than ``str`` (``[^/]+``), which accepts strictly less than ``path`` (which is
-#: the only one that will cross a ``/``). Sorting narrow-before-broad therefore
+#: How *broadly* each built-in converter matches, smallest set first. Sorting narrow-before-broad therefore
 #: means a segment can only ever be claimed by the tightest pattern that fits it.
 _CONVERTER_BREADTH: Final[Mapping[str, int]] = {
     "int": 1,
@@ -113,10 +63,9 @@ _CONVERTER_BREADTH: Final[Mapping[str, int]] = {
     "path": 5,
 }
 
-#: Breadth assumed for a converter we don't recognise - a project-registered one,
-#: say. Treating it as ``str`` puts it alongside the broadest single-segment
-#: converter, which is the safe assumption: we may order it later than strictly
-#: necessary, but never earlier than something it could swallow.
+#: Breadth assumed for a converter we don't recognise - a project-registered one, say. Treating it as ``str``
+#: puts it alongside the broadest single-segment converter, which is the safe assumption: we may order it later
+#: than strictly necessary, but never earlier than something it could swallow.
 _UNKNOWN_CONVERTER_BREADTH: Final[int] = _CONVERTER_BREADTH["str"]
 
 #: Breadth of a segment with no captures at all. Zero, because a literal matches
@@ -128,14 +77,11 @@ def _segment_specificity(segment: str) -> tuple[int, int]:
     """Rank a single path segment by how broadly it matches.
 
     Args:
-        segment: One ``/``-delimited piece of a ``path()`` route, e.g. ``"pins"``,
-            ``"<str:pin_slug>"`` or the empty string a trailing slash leaves behind.
+        segment: One ``/``-delimited piece of a ``path()`` route, e.g. ``"pins"``, ``"<str:pin_slug>"``
+        or the empty string a trailing slash leaves behind.
 
     Returns:
-        A ``(breadth, no_literal_text)`` pair, ordered narrowest-first. The
-        second element is the tie-break for mixed segments such as
-        ``"page-<int:number>"``: a converter fenced in by literal text accepts
-        less than the same converter standing alone, so it sorts ahead of it.
+        A ``(breadth, no_literal_text)`` pair, ordered narrowest-first.
     """
     parameters = _ROUTE_PARAMETER_RE.findall(segment)
     if not parameters:
@@ -150,17 +96,13 @@ def _segment_specificity(segment: str) -> tuple[int, int]:
 def _route_specificity(route: str) -> tuple[tuple[int, int], ...]:
     """Build the full sort key for a route: its segments' ranks, left to right.
 
-    Comparing these tuples lexicographically implements "leftmost, narrowest
-    segment wins", which is the rule a human applies by eye when hand-ordering a
-    urlconf. Two routes that share a prefix and differ only in length compare by
-    length, and that is harmless: ``path()`` patterns are anchored at both ends,
-    so ``pins/<str:pin_slug>/`` cannot match ``pins/x/comments/`` no matter which
-    of them is declared first. Only routes with the *same* segment count can
-    shadow each other, and for those the segment ranks decide.
+    Two routes that share a prefix and differ only in length compare by length, and that is harmless:
+    ``path()`` patterns are anchored at both ends, so ``pins/<str:pin_slug>/`` cannot match
+    ``pins/x/comments/`` no matter which of them is declared first.
 
     Args:
-        route: A route string as passed to ``path()``, with no leading slash -
-            e.g. ``"pins/<str:pin_slug>/notes/"``.
+        route: A route string as passed to ``path()``, with no leading slash - e.g.
+        ``"pins/<str:pin_slug>/notes/"``.
 
     Returns:
         One ``(breadth, no_literal_text)`` pair per segment, in path order.
@@ -171,19 +113,9 @@ def _route_specificity(route: str) -> tuple[tuple[int, int], ...]:
 def order_by_specificity(patterns: Sequence[URLPattern]) -> list[URLPattern]:
     """Re-sort a flat list of ``path()`` routes so no literal can be shadowed.
 
-    Django's resolver is first-match-wins over declaration order, which makes a
-    urlconf assembled from independently-authored modules unsafe by default: the
-    module that happens to be concatenated first silently wins every collision.
-    Rather than asking thirteen domain modules to coordinate an ordering none of
-    them can see, this recomputes it from the routes themselves - literals ahead
-    of converters, narrow converters ahead of broad ones - so the correct order
-    is a property of the routes rather than of the concatenation.
-
-    The sort is stable, so routes with identical keys keep their declared
-    relative order. That matters for genuinely ambiguous pairs (two ``<str:>``
-    routes of the same shape, say): this function will not invent a winner, it
-    just preserves the author's. The resolution round-trip test flags those as
-    the conflicts they are.
+    Rather than asking thirteen domain modules to coordinate an ordering none of them can see, this
+    recomputes it from the routes themselves - literals ahead of converters, narrow converters ahead of
+    broad ones - so the correct order is a property of the routes rather than of the concatenation.
 
     Args:
         patterns: The concatenated ``urlpatterns`` of every domain module.
@@ -192,13 +124,7 @@ def order_by_specificity(patterns: Sequence[URLPattern]) -> list[URLPattern]:
         A new list holding the same patterns, ordered narrowest-match-first.
 
     Raises:
-        TypeError: If an entry is not a plain ``path()`` route. ``include()``
-            would break the flat ``external_api:`` namespace this API's
-            ``reverse()`` calls and schema preprocessing both depend on, and a
-            ``re_path()`` regex cannot be decomposed into segments, so neither
-            can be ordered - and an unorderable route in this list would quietly
-            reintroduce exactly the shadowing this function exists to prevent.
-            Failing at import is loud; a silent 404 in production is not.
+        TypeError: If an entry is not a plain ``path()`` route.
     """
     for entry in patterns:
         if isinstance(entry, URLResolver):
@@ -208,17 +134,15 @@ def order_by_specificity(patterns: Sequence[URLPattern]) -> list[URLPattern]:
     return sorted(patterns, key=lambda entry: _route_specificity(str(entry.pattern)))
 
 
-#: The routes that predate the per-domain split. Frozen for the same reason the
-#: module is: the sync-critical surface native clients build their local schema
-#: from lives in here. New endpoints go in the domain modules below.
+#: The routes that predate the per-domain split.
 _CORE_URLPATTERNS: list[URLPattern] = [
     path("whoami/", views.WhoAmIView.as_view(), name="whoami"),
     path("auth/session/", views.AuthSessionView.as_view(), name="auth.session"),
     path("settings/", views.AccountSettingsView.as_view(), name="settings"),
     path("pins/", views.PinsView.as_view(), name="pins"),
-    # The canonical example of the ordering rule in this module's docstring:
-    # "deleted" is a literal that a pin slug would otherwise swallow whole.
-    # order_by_specificity now guarantees it wins regardless of where it sits.
+    # The canonical example of the ordering rule in this module's docstring: "deleted" is a literal that a pin
+    # slug would otherwise swallow whole. order_by_specificity now guarantees it wins regardless of where it
+    # sits.
     path("pins/deleted/", views.PinTombstonesView.as_view(), name="pins.deleted"),
     path("pins/<str:pin_slug>/comments/", views_wiki.PinCommentsView.as_view(), name="pins.comments"),
     path("pins/<str:pin_slug>/comments/<int:comment_id>/", views_wiki.PinCommentDetailView.as_view(), name="pins.comments.detail"),
@@ -257,9 +181,8 @@ _CORE_URLPATTERNS: list[URLPattern] = [
     path("labels/<uuid:label_uuid>/customization/", views.LabelCustomizationView.as_view(), name="labels.customization"),
     path("labels/<uuid:label_uuid>/merge/", views.LabelMergeView.as_view(), name="labels.merge"),
     path("labels/<uuid:label_uuid>/", views.LabelDetailView.as_view(), name="labels.detail"),
-    # Community wikis. Every one of these resolves through
-    # services.wiki.wiki_access.resolve_visible_wiki - see views_wiki's module
-    # docstring for the anti-enumeration guarantee that depends on it.
+    # Community wikis. Every one of these resolves through services.wiki.wiki_access.resolve_visible_wiki - see
+    # views_wiki's module docstring for the anti-enumeration guarantee that depends on it.
     path("wikis/<str:location_slug>/", views_wiki.WikiDetailApiView.as_view(), name="wikis.detail"),
     path("wikis/<str:location_slug>/history/", views_wiki.WikiHistoryView.as_view(), name="wikis.history"),
     path("wikis/<str:location_slug>/history/<int:edit_id>/revert/", views_wiki.WikiRevertView.as_view(), name="wikis.history.revert"),
@@ -312,12 +235,7 @@ _CORE_URLPATTERNS: list[URLPattern] = [
     path("profiles/<str:profile_slug>/notes/", views.ProfileNotesView.as_view(), name="profiles.notes"),
     path("profiles/<str:profile_slug>/notes/<uuid:note_uuid>/", views.ProfileNoteDetailView.as_view(), name="profiles.notes.detail"),
     path("profiles/<str:profile_slug>/", views.ProfileDetailView.as_view(), name="profiles.detail"),
-    # Messaging. The literal "messages/..." routes and the "<str:peer_slug>"
-    # ones share a shape, so the specificity sort is what keeps a profile
-    # slugged "settings", "groups" or "conversations" from shadowing - or being
-    # shadowed by - the endpoint of that name. views_messaging.RESERVED_PEER_SLUGS
-    # refuses those slugs as peers as well, so both defenses have to fail before
-    # a request can be misrouted.
+    # Messaging.
     path("messages/conversations/", views_messaging.ConversationsView.as_view(), name="messages.conversations"),
     path("messages/settings/", views_messaging.MessageSettingsView.as_view(), name="messages.settings"),
     path("messages/groups/", views_messaging.GroupsView.as_view(), name="messages.groups"),
@@ -342,18 +260,13 @@ _CORE_URLPATTERNS: list[URLPattern] = [
     path("safety/checkins/<str:checkin_slug>/maps/", views.SafetyCheckinMapsView.as_view(), name="safety.checkins.maps"),
     path("safety/checkins/<str:checkin_slug>/maps/<uuid:map_uuid>/", views.SafetyCheckinMapDetailView.as_view(), name="safety.checkins.maps.detail"),
     path("safety/checkins/<str:checkin_slug>/", views.SafetyCheckinDetailApiView.as_view(), name="safety.checkins.detail"),
-    # The machine-readable contract (and a browsable view of it) for exactly
-    # this surface - internal endpoints are excluded by
-    # schema.preprocess_external_api_only. Served without auth: the schema is
-    # the published contract, not user data.
+    # The machine-readable contract (and a browsable view of it) for exactly this surface - internal endpoints
+    # are excluded by schema.preprocess_external_api_only.
     path("schema/", SpectacularAPIView.as_view(authentication_classes=[], permission_classes=[]), name="schema"),
     path("docs/", SpectacularSwaggerView.as_view(authentication_classes=[], permission_classes=[], url_name="external_api:schema"), name="docs"),
 ]
 
-# Concatenation, not include(): see the module docstring for why the flat
-# namespace is load-bearing. The modules are listed alphabetically purely so
-# merges stay boring - order_by_specificity makes the sequence semantically
-# irrelevant, which is the entire point of doing it this way.
+# Concatenation, not include(): see the module docstring for why the flat namespace is load-bearing.
 urlpatterns: list[URLPattern] = order_by_specificity(
     _CORE_URLPATTERNS
     + urls_assistant.urlpatterns

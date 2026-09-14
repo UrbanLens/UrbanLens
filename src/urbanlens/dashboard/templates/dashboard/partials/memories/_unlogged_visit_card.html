@@ -1,20 +1,4 @@
-{% comment %}
-A single card in the Memories "log your visits" list.
-
-The quick-log form posts just a date to memories.visit and swaps the whole list
-(#memories-unlogged-band). "Add details" instead loads the full visit form into
-the shared Memories visit dialog via memoriesOpenVisitDialog(), where the user
-can attach photos, draw a map, add notes, and tag people.
-
-"Not visited" and the dismiss (X) button both post to memories.unlogged.action
-and swap just this card by id - "Not visited" clears the pin's visited status
-entirely (it drops off the map's visited filters too), while dismiss only hides
-the suggestion, leaving the pin's visited status untouched.
-
-Context:
-  pin   - the Pin to log a visit for
-  today - ISO date string bounding/prefilling the date input
-{% endcomment %}
+{% comment %}A single card in the Memories "log your visits" list.{% endcomment %}
 <article class="unlogged-card" id="unlogged-card-{{ pin.slug }}">
     <button type="button" class="unlogged-card-dismiss" title="Remove from this list"
             hx-post="{% url 'memories.unlogged.action' pin.slug 'dismiss' %}"

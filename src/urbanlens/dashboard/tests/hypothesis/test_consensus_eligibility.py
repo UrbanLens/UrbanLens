@@ -1,9 +1,4 @@
-"""Tests for Consensus wiki eligibility (services.consensus.eligibility).
-
-Only wikis whose Location the requesting profile has a *visited* pin for
-are ever offered as rounds - not merely pinned, per the Consensus design
-spec (stricter than SpotGuessr's "pinned by everyone" rule).
-"""
+"""Tests for Consensus wiki eligibility (services.consensus.eligibility)."""
 
 from __future__ import annotations
 

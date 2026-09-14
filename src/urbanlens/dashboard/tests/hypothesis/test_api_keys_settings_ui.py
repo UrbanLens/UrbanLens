@@ -1,11 +1,4 @@
-"""Tests for the Settings > Security > API Keys management UI.
-
-Mirrors the shape of passkey rename/delete and TOTP action tests in spirit:
-creation must reveal the plaintext exactly once, revocation must be scoped to
-the requesting user and take effect immediately (the external API can no
-longer authenticate with it), and both actions must never touch another
-user's keys.
-"""
+"""Tests for the Settings > Security > API Keys management UI."""
 
 from __future__ import annotations
 
@@ -150,10 +143,8 @@ class ApiKeysSettingsPageContentTests(TestCase):
 class ApiKeyListPaginationTests(TestCase):
     """P69: the key list grows forever, because revoking never removes a row.
 
-    Revoked keys are shown on purpose - ``revoke_all_api_keys``' docstring says
-    so, and an owner needs to see that a key went away - which is exactly why
-    the list cannot be trimmed and has to page instead.
-    """
+    Revoked keys are shown on purpose - ``revoke_all_api_keys``' docstring says so, and an owner needs to see
+    that a key went away - which is exactly why the list cannot be trimmed and has to page instead."""
 
     def setUp(self) -> None:
         baker.make(User)
@@ -172,10 +163,8 @@ class ApiKeyListPaginationTests(TestCase):
     def _listed(self, response) -> list[str]:
         """The key names this response actually rendered, newest first.
 
-        By name rather than by counting list items: the API-key list reuses the
-        passkey list's classes, so a count would also pick up the Security
-        section's passkeys on a full settings page.
-        """
+        By name rather than by counting list items: the API-key list reuses the passkey list's classes, so a
+        count would also pick up the Security section's passkeys on a full settings page."""
         return re.findall(r"<strong>(key-\d{3}|the-one-that-still-works)</strong>", response.content.decode())
 
     def test_the_settings_page_renders_only_one_page_of_keys(self) -> None:

@@ -5,19 +5,9 @@
 // Reuses the shared card/card-header/card__body structure used by pin details.
 
 // -- Wiki hero: suggest-edits/delete/back-to-pin actions + community-wiki
-// notice, docked into the shared hero's top corners instead of their own row
-// below it (see _wiki_detail_hero_body.html) - these live outside .wiki-page
-// entirely since the hero itself renders in base.html's {% block hero %},
-// above and outside .wiki-page's own container. #wiki-hero got its own
-// `position: relative` from the shared .ul-page-hero rule, so these can dock
-// to its corners rather than the whole page.
+// notice, docked into the shared hero's top corners instead of their own row below it.
 #wiki-hero {
-    // Label/title/address render via the shared _page_hero.html component -
-    // these rules only add what its generic hero classes don't already
-    // provide. (Previously nested under `.wiki-page`, which never actually
-    // matched here - the hero renders in base.html's `{% block hero %}`,
-    // above and outside `.wiki-page`'s own container - so this had silently
-    // never applied; moved here as part of the same hero cleanup.)
+    // Label/title/address render via the shared _page_hero.html component.
     .wiki-eyebrow {
         display: inline-flex;
         align-items: center;
@@ -73,12 +63,7 @@
         transition: top .3s ease, right .3s ease;
         box-shadow: 0px 5px 20px rgba(0,0,0,0.5);
 
-        // Once the header has scrolled out of view, the notice would otherwise
-        // float in the middle of the page since it's position: fixed - tuck it
-        // into the top-right corner instead. This is the state that can actually
-        // overlap the map, so it needs to be above the map's own controls/toolbar
-        // (z-index 1000, see .map-buttons / _layout.scss) - matches the convention
-        // already established in _pin_lists.scss.
+        // Once the header has scrolled out of view, the notice would otherwise float in the middle of the page since it's position: fixed.
         &.wiki-notice--pinned {
             position: fixed;
             top: 0.2rem;
@@ -108,11 +93,7 @@
         }
     }
 
-    // The corner-docked actions/notice above need more room than short
-    // eyebrow/title/subtitle copy alone once they drop into normal flow on
-    // narrow screens - grow past the shared hero's fixed height instead of
-    // overflowing it (mirrors .ul-page-hero--wide's own height:auto escape
-    // hatch, scoped to this hero only so no other page is affected).
+    // The corner-docked actions/notice above need more room than short eyebrow/title/subtitle copy alone once they drop into normal flow.
     @include down($breakpoint-sm) {
         height: auto;
         min-height: 13.2rem;
@@ -120,10 +101,7 @@
     }
 }
 
-// Shared "delete" styling for both the hero's "Delete wiki" button and the
-// Edit History tab's per-entry "Revert + delete" button (wiki_history.html
-// combines this with .wiki-revert-btn) - kept as one unscoped rule since
-// both buttons use this exact class name and should look identical.
+// Shared "delete" styling for both the hero's "Delete wiki" button and the Edit History tab's per-entry "Revert + delete" button.
 .wiki-delete-btn {
     background: $color-red-600;
     border-color: $color-red-600;
@@ -163,12 +141,7 @@
             gap: .55rem;
         }
 
-        // Links row (_pin_links_row.html, shared with the pin details page) -
-        // its .field-label/.field-value/.detail-item styling normally only
-        // exists scoped to the pin page's own flex-wrap grid layout, which
-        // this card doesn't have, so the row rendered with no styling at all
-        // (no label weight, no chip spacing) - give it its own plain-row
-        // treatment that fits .wiki-meta-body's column layout instead.
+        // Links row (_pin_links_row.html, shared with the pin details page).
         .detail-item {
             display: flex;
             flex-direction: column;
@@ -286,19 +259,13 @@
             text-align: left;
         }
 
-        // The count badge sits snug next to the title instead of also
-        // stretching (flex:1 above) and splitting the header's width evenly
-        // with it, which pushed the badge out to the horizontal midpoint.
+        // The count badge sits snug next to the title instead of also stretching (flex:1 above) and splitting the header's width evenly with it,.
         .badge {
             flex: 0 0 auto;
         }
     }
 
-    // A dark-theme rule in _layout.scss ([data-theme="dark"] .card .card-header)
-    // outranks the light-mode gradient above by specificity, unconditionally
-    // darkening every card header including the wiki's - restore the wiki's
-    // intended blue tint in dark mode too (equal specificity, later in the
-    // compiled stylesheet, so it wins the cascade tie).
+    // A dark-theme rule in _layout.scss ([data-theme="dark"].card.card-header) outranks the light-mode gradient above by specificity,.
     [data-theme="dark"] & .card-header {
         background: linear-gradient(180deg, rgba(8, 145, 178, .18), rgba(255, 255, 255, 0));
     }
@@ -383,9 +350,7 @@
     }
 
     // -- Community ratings (composite + your own vote per field) -----------
-    // The card gets extra room once About/the layout above frees up a
-    // column - queried against the card's own box (not the viewport) since
-    // its width depends on which grid track it lands in.
+    // The card gets extra room once About/the layout above frees up a column.
     .wiki-ratings {
         container-type: inline-size;
         container-name: wiki-ratings;
@@ -502,9 +467,7 @@
     .location-map .map-wrapper {
         position: relative;
         width: 100%;
-        // Mirrors #map's own height below so this wrapper has a definite
-        // size for @include map-query-container to safely contain against
-        // (`contain: size` collapses an "auto" height to 0 otherwise).
+        // Mirrors #map's own height below so this wrapper has a definite size for @include map-query-container to safely contain against.
         height: clamp(320px, 52vw, 560px);
         // Clips the off-canvas (translateX(-100%)) .detail-pin-list-panel so
         // it doesn't bleed into the page to the left of the map card.
@@ -871,9 +834,7 @@
         }
     }
 
-    // Unscoped like its light-mode counterpart near the top of this file -
-    // shared by the hero's "Delete wiki" button (now outside .wiki-page) and
-    // the Edit History tab's per-entry revert+delete button (still inside it).
+    // Unscoped like its light-mode counterpart near the top of this file.
     .wiki-delete-btn {
         background: $color-red-700;
         border-color: $color-red-700;
@@ -886,13 +847,7 @@
     }
 }
 // -- Wiki Media gallery (external providers + shared photos, with voting) -------
-// The Private Pin page's Media tiles are styled under
-// `body.page-location-details .pin-detail-grid` and don't reach the wiki, so
-// the same class names are re-styled here for the wiki's own Media section
-// (see pages/location/wiki.html + controllers/wiki_media.py). Unlike the pin
-// page, down-voted items are NOT hidden: the wiki ranks by net vote score and
-// keeps everything visible, so there is deliberately no
-// `.media-item--not-relevant { display: none }` rule here.
+// The Private Pin page's Media tiles are styled under `body.page-location-details.pin-detail-grid` and don't reach the wiki, so.
 .wiki-media {
     .media-view-panel[hidden] { display: none; }
 

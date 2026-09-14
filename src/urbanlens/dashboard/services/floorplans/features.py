@@ -1,25 +1,4 @@
-"""A floorplan's drawable items as GeoJSON, filtered by viewport, storey and kind.
-
-The map-facing counterpart to the document (``serialization.document_for``).
-Two different questions:
-
-- *"What is this building's plan?"* - the document: nested, whole, editable,
-  and the shape the editor round-trips.
-- *"What should I draw right now?"* - this: flat GeoJSON features for one
-  storey inside one viewport, which is what a renderer (Leaflet, QGIS,
-  anything that speaks GeoJSON) actually consumes.
-
-This is where plan-local metres become WGS-84. The projection mirrors
-``frontend/ts/shared/floorplan/coords.ts`` exactly - same Earth radius, same
-equirectangular approximation about the plan origin - because the editor draws
-in local metres and the map draws these features, and a disagreement between
-the two would show up as a plan that shifts when you switch views.
-
-Filtering happens in Python rather than the database: walls are stored as four
-float columns, not geometry, so there is no spatial index to defer to. That is
-the right trade - the bbox exists to bound what crosses the wire, and one
-storey of one building is a few hundred rows to begin with.
-"""
+"""A floorplan's drawable items as GeoJSON, filtered by viewport, storey and kind."""
 
 from __future__ import annotations
 
@@ -45,11 +24,7 @@ EARTH_RADIUS_M = 6371008.8
 
 
 class PlanProjection:
-    """Plan-local metres to WGS-84 for one plan origin.
-
-    The server-side twin of ``coords.ts``'s class of the same name; keep the
-    two in step.
-    """
+    """Plan-local metres to WGS-84 for one plan origin."""
 
     def __init__(self, origin_lat: float, origin_lng: float) -> None:
         self.origin_lat = origin_lat
@@ -82,19 +57,13 @@ def _overlaps(points: list[list[float]], bbox: tuple[float, float, float, float]
 
 def _opening_state(opening: FloorplanOpening) -> str:
     """Whether this opening is presently secured, as one word.
-
-    A door may carry several locks, and the useful answer is about the door
-    rather than about any one of them: a padlock on and a deadbolt off still
-    means the door does not open. Only when every lock is known to be off does
-    the door read as unlocked; with no locks recorded, or none of them known,
-    the honest answer is that nobody has said.
+    A door may carry several locks, and the useful answer is about the door rather than about any one of them: a padlock on and a deadbolt off still means the door does not open.
 
     Args:
         opening: The opening, with its locks prefetched.
 
     Returns:
-        ``"locked"``, ``"unlocked"`` or ``"unknown"``.
-    """
+        ``"locked"``, ``"unlocked"`` or ``"unknown"``."""
     states = [lock.state for lock in opening.locks.all()]
     if any(state == "locked" for state in states):
         return "locked"
@@ -116,20 +85,14 @@ def feature_collection(
 
     Args:
         floorplan: The plan version to read.
-        bbox: ``(min_lng, min_lat, max_lng, max_lat)`` in WGS-84; only items
-            overlapping it.
+        bbox: ``(min_lng, min_lat, max_lng, max_lat)`` in WGS-84; only items overlapping it.
         level: Restrict to one storey by its level number.
-        kind: Restrict walls to one :class:`FloorplanWallKind`, or markers to
-            one :class:`FloorplanMarkerKind`.
+        kind: Restrict walls to one :class:`FloorplanWallKind`, or markers to one :class:`FloorplanMarkerKind`.
         item_types: Which of wall/room/marker to include.
         limit: Hard cap on features returned.
 
     Returns:
-        A ``FeatureCollection`` dict, with ``truncated`` set on its top level
-        when the cap was reached - silence about a cut-off list reads as
-        "that's everything", which it would not be. Empty when the plan has no
-        origin, since nothing can be placed on a map without one.
-    """
+        A ``FeatureCollection`` dict, with ``truncated`` set on its top level when the cap was reached - silence about a cut-off list reads as "that's everything", which it would not be."""
     from urbanlens.dashboard.models.floorplans.model import FloorplanFloor, FloorplanMarker, FloorplanRoomSeed, FloorplanWall
 
     projection = _projection(floorplan)
@@ -189,12 +152,10 @@ def feature_collection(
                             "t_end": opening.t_end,
                             "swing": opening.swing,
                             "sill_meters": opening.sill_meters,
-                            # One word for what a reader wants to know about a
-                            # door, rather than the locks themselves: a lock's
-                            # type, condition and what opens it are the
-                            # document's business, and a map wants to colour a
-                            # door. Locked if any lock on it is - a door with a
-                            # padlock on and a deadbolt off is locked.
+                            # One word for what a reader wants to know about a door, rather than the
+                            # locks themselves: a lock's type, condition and what opens it are the
+                            # document's business, and a map wants to colour a door.
+                            # Locked if any lock on it is - a door with a padlock on and a deadbolt
                             "lock_state": _opening_state(opening),
                         }
                         for opening in wall.openings.all()
@@ -264,9 +225,7 @@ def bounds_of(floorplan: Floorplan) -> list[float] | None:
         floorplan: The plan version.
 
     Returns:
-        ``[min_lng, min_lat, max_lng, max_lat]``, or None when the plan has no
-        origin or nothing placed.
-    """
+        ``[min_lng, min_lat, max_lng, max_lat]``, or None when the plan has no origin or nothing placed."""
     from urbanlens.dashboard.models.floorplans.model import FloorplanFloor, FloorplanMarker, FloorplanRoomSeed, FloorplanWall
 
     projection = _projection(floorplan)

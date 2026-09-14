@@ -1,10 +1,4 @@
-"""Tests for RedataCidGateway.resolve_cids against REData's shipped contract
-(``../REData/docs/api-reference.md``, "Google Maps CID resolution").
-
-Constructs the gateway with a mock ``session`` (Gateway.__post_init__ leaves a
-non-default session untouched, skipping the DB-backed rate-limiting wrapper -
-see gateway.py) so these stay pure unit tests with no database access.
-"""
+"""Tests for RedataCidGateway.resolve_cids against REData's shipped contract (``../REData/docs/api-reference.md``, "Google Maps CID resolution")."""
 
 from __future__ import annotations
 

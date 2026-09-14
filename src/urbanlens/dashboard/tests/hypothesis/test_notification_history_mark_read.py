@@ -1,14 +1,4 @@
-"""pin_shared and visit_suggested notifications must be markable read from
-their own row, like every other notification type already is.
-
-notification_item.html's friend_request, safety_ci_due, and generic (else)
-branches all wire hx-post="{% url 'notifications.read' n.id %}" onto the <li>
-itself, gated on n.is_unread. The pin_shared and visit_suggested branches did
-not - the bell dropdown's own bulk-mark-read-on-GET masked this there, but
-NotificationHistoryView deliberately does not bulk-mark-read (so unread rows
-stay distinguishable in history), so a pending share/suggestion viewed only
-via /notifications/ stayed UNREAD forever unless actually accepted/declined.
-"""
+"""pin_shared and visit_suggested notifications must be markable read from their own row, like every other notification type already is."""
 
 from __future__ import annotations
 

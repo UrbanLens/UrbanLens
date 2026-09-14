@@ -2,22 +2,9 @@
 #
 # Run the neighbour load test against a deployment, and return a verdict.
 #
-# The question is not "how fast is the site". It is the owner's requirement:
-# *no action a user takes should impact the availability of the site for other
-# users, ever*. So the run measures one account's latency while a **different**
-# account does progressively more expensive things, and the verdict is about the
-# first account only.
+# Verdict is about one account's latency while a different account does progressively costlier things.
 #
-# Three things this wrapper does that running k6 by hand does not:
-#
-#   - it seeds the target, because a run against an empty account takes fifteen
-#     minutes to report that nothing is slow;
-#   - it measures the baseline on the same host minutes before the measured
-#     pass, because a fixed millisecond budget is a claim about one machine on
-#     one day, and this suite is meant to run on shared boxes;
-#   - it samples `pg_stat_activity` throughout, because connection exhaustion
-#     (P104) is invisible in every latency number right up until it is visible
-#     in all of them at once.
+# Seeds the target, baselines on the same host first, and samples pg_stat_activity throughout.
 #
 # Usage:
 #   bin/run_perf_tests.sh --url http://localhost:21810 \
@@ -96,11 +83,7 @@ done
 
 # -- refuse anywhere that matters -------------------------------------------
 #
-# Two independent checks rather than one. A URL can be an IP or a tunnel
-# hostname that says nothing about what is behind it, and a container name can
-# be right while the URL points somewhere else entirely - so both are checked,
-# and either one is enough to refuse.
-
+# URL and container name are checked independently; either one refuses.
 refuse() {
 	echo "error: $1" >&2
 	echo "This suite writes rows, edits labels and imports pins as a real user. It is for dev environments only." >&2
@@ -113,10 +96,7 @@ if [[ -z "${BASE_URL}" ]]; then
 	exit 2
 fi
 
-# Allow-list, not a block-list. A block-list has to guess every hostname that
-# might one day be production; this only has to know the one shape that is
-# definitely safe. Anything on urbanlens.org that is not a dev environment is
-# refused whether or not anyone thought to name it here.
+# Allow-list: only *.dev.urbanlens.org is definitely safe.
 case "${BASE_URL}" in
 	*staging*) refuse "${BASE_URL} names staging." ;;
 	*prod*) refuse "${BASE_URL} names production." ;;
@@ -155,7 +135,7 @@ if [[ -n "${PROVISION_CONTAINER}" ]]; then
 		--out "${REMOTE_MANIFEST}"
 	MANIFEST="${OUT_DIR}/manifest.json"
 	docker cp "${PROVISION_CONTAINER}:${REMOTE_MANIFEST}" "${MANIFEST}"
-	# It holds live passwords and API keys and has just landed on a shared host.
+	# Manifest holds live credentials on a shared host.
 	chmod 600 "${MANIFEST}"
 fi
 
@@ -170,14 +150,8 @@ MANIFEST="$(cd "$(dirname "${MANIFEST}")" && pwd)/$(basename "${MANIFEST}")"
 run_k6() {
 	local summary_name="$1"
 	shift
-	# --network=host so a target on this machine resolves the same way it does
-	# here; the manifest is mounted read-only at a fixed path so the script's
-	# `open()` does not have to know where it came from.
-	#
-	# --user, because the manifest is mode 600 and holds live passwords. The k6
-	# image runs as its own uid, which cannot read it - and loosening the file
-	# instead would put credentials within reach of everything else on a shared
-	# host for the length of the run.
+	# --network=host so local targets resolve; manifest mounted read-only at a fixed path.
+	# --user so the mode-600 manifest stays readable without loosening it on a shared host.
 	docker run --rm -i \
 		--network=host \
 		--user "$(id -u):$(id -g)" \

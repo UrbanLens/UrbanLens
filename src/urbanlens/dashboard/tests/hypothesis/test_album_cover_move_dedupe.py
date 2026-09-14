@@ -226,11 +226,8 @@ class PhotoMetadataConflictResolveViewTests(TestCase):
         self.assertEqual(self.new_image.caption, "second caption")
 
     def test_form_encoded_body_picks_the_existing_value(self) -> None:
-        # The manual-POST fallback path (no JSON body) - see
-        # PhotoMetadataConflictResolveView.post and docs/PROBLEMS.md's mypy
-        # sweep: request.POST.items() is stub-typed as str | list[object]
-        # even though Django's QueryDict.items() only ever yields the last
-        # single value per key, never a list.
+        # The manual-POST fallback path (no JSON body) - QueryDict.items()
+        # only ever yields the last single value per key, never a list.
         response = self.client.post(self.url, {"field_caption": "0"})
 
         self.assertEqual(response.status_code, HTTPStatus.OK, response.content)

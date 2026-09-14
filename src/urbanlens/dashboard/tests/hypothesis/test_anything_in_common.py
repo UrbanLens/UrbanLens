@@ -1,20 +1,4 @@
-"""Tests for the "Users with anything in common" visibility option and the
-friends-always-qualify rule.
-
-Covers:
-- VisibilityChoice contains ANYTHING_IN_COMMON and is ordered least → most restrictive
-- New-profile defaults changed from ANYONE to ANYTHING_IN_COMMON, except
-  friend_request_visibility, which was moved back to ANYONE (see
-  models/profile/model.py's comment on the field): invite_by_email's
-  unregistered-address branch always sends the invite, so gating the
-  registered-account branch behind ANYTHING_IN_COMMON made having an account
-  strictly harder to reach by friend request than not having one.
-- Accepted friends qualify for every relationship-based visibility option
-  (everything except NO_ONE) across profile, contact, image, trip-activity,
-  and friend-request checks
-- ANYTHING_IN_COMMON permits users sharing a pin, a friend, or a trip - or who
-  are already friends - and blocks complete strangers
-"""
+"""Tests for the "Users with anything in common" visibility option and the friends-always-qualify rule."""
 
 from __future__ import annotations
 
@@ -99,8 +83,7 @@ class VisibilityChoiceEnumTests(SimpleTestCase):
 
 
 class VisibilityDefaultsTests(TestCase):
-    """New profiles default to ANYTHING_IN_COMMON where they previously used ANYONE -
-    except friend_request_visibility, moved back to ANYONE (see module docstring)."""
+    """New profiles default to ANYTHING_IN_COMMON where they previously used ANYONE - except friend_request_visibility, moved back to ANYONE (see module docstring)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -211,13 +194,8 @@ class ImageVisibilityFriendTests(TestCase):
         # unshared photo would only ever re-assert the first gate.
         wiki = baker.make("dashboard.Wiki")
         self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=wiki)
-        # visible_to()'s container gate asks whether the VIEWER can reach this
-        # specific wiki (earned only by a pin at its place - see
-        # models/wiki/CLAUDE.md), not merely whether the photo sits on *some*
-        # wiki. Giving the viewer their own pin there opens that gate without
-        # giving the uploader one, so no common-pin relationship is created as
-        # a side effect - keeping these tests isolated to the relationship
-        # gate the class is named for.
+        # visible_to()'s container gate asks whether the VIEWER can reach this specific wiki (earned only by a
+        # pin at its place - see models/wiki/CLAUDE.md), not merely whether the photo sits on *some* wiki.
         Pin.objects.create(profile=self.viewer, location=wiki.location)
 
     def _set_upload_visibility(self, visibility: str) -> None:
@@ -350,13 +328,6 @@ class FriendRequestVisibilityTests(TestCase):
         self.assertEqual(self._request_friend().status_code, 403)
 
     def test_no_one_blocks_even_an_existing_friend(self) -> None:
-        # request_friend special-cases NO_ONE with its own early return, ahead
-        # of visibility_permits (which every other option here goes through) -
-        # so, unlike every other choice in this file, not even the
-        # friends-always-qualify rule reaches it. Covered on a friend rather
-        # than a stranger so a regression that reordered the check behind the
-        # friendship test - reintroducing the friends-bypass this option
-        # exists to deny - would actually be caught.
         self._set_visibility(VisibilityChoice.NO_ONE)
         _befriend(self.requester, self.target)
         self.assertEqual(self._request_friend().status_code, 403)

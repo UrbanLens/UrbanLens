@@ -1,32 +1,5 @@
 """Boundary voting - recency-weighted community choice of the official boundary.
-
-When more than one external provider has property geometry for a place
-(REData's county parcel vs. Overpass's OpenStreetMap perimeter), users pick
-which one is most accurate. The winner becomes ``Place.geometry`` - the
-official outline every resolution and access path consumes
-(``Place.objects.resolve_for_point``, ``wiki_access``,
-``BoundaryManager.resolve_for_*``). Materializing the winner onto the place
-(:func:`apply_winning_boundary`) rather than consulting the tally per lookup
-is deliberate: resolution runs containment in SQL over many places at once
-and cannot call a Python weighting function per row.
-
-The vote is per *place*, not per location, which is what makes it a community
-decision at all: everyone who pinned one property is voting on the same
-outline instead of each quietly correcting their own copy of it.
-
-Only externally-sourced candidate rows are votable. The spec's whole point
-is letting users choose between *accurate official* datasets while still
-preventing arbitrarily large hand-drawn boundaries from becoming the match
-area - so wiki/pin drawings (any ``Boundary.polygon``) are never options,
-and only ``BoundaryType.PROPERTY`` candidates count because the vote is over
-which parcel outline is right (a building's footprint has no competing
-sources to choose between).
-
-Weighting: each vote is worth ``0.5 ** (age_days / HALF_LIFE_DAYS)`` - a
-half-life decay, so a fresh vote outweighs a stale one and two votes of the
-same age tie exactly. On an exact tie (including zero votes) REData wins,
-then the deterministic source-priority order below.
-"""
+Materializing the winner onto the place (:func:`apply_winning_boundary`) rather than consulting the tally per lookup is deliberate: resolution runs containment in SQL over many places at once and cannot call a Python weighting function per row."""
 
 from __future__ import annotations
 
@@ -52,7 +25,6 @@ logger = logging.getLogger(__name__)
 HALF_LIFE_DAYS = 180
 
 #: A leader needs at least this multiple of the runner-up's weight to count
-#: as consensus (used to stop auto-prompting for more votes).
 CONSENSUS_RATIO = 1.5
 
 #: Deterministic tie-break order: REData is survey-grade county GIS geometry,
@@ -66,27 +38,19 @@ _SOURCE_PRIORITY = {
 
 class BoundaryVoteError(Exception):
     """A boundary vote could not be cast (bad candidate, wrong place...).
-
-    The message is for logs, not the response: an HTTP-facing catch site
-    should author its own user-facing text rather than relaying it.
-    """
+    The message is for logs, not the response: an HTTP-facing catch site should author its own user-facing text rather than relaying it."""
 
 
 def vote_weight(voted_at: datetime, now: datetime | None = None) -> float:
     """The recency weight of a vote cast (or last changed) at ``voted_at``.
-
-    Half-life decay: a vote loses half its weight every
-    :data:`HALF_LIFE_DAYS`. Votes of identical age get identical weight, and
-    a hypothetical future timestamp is clamped to "just now" rather than
-    given a super-unit weight.
+    Votes of identical age get identical weight, and a hypothetical future timestamp is clamped to "just now" rather than given a super-unit weight.
 
     Args:
         voted_at: When the vote was cast or last changed.
         now: Evaluation time; defaults to ``timezone.now()``.
 
     Returns:
-        A weight in (0, 1].
-    """
+        A weight in (0, 1]."""
     now = now or timezone.now()
     age_days = max((now - voted_at).total_seconds(), 0.0) / 86_400
     return 0.5 ** (age_days / HALF_LIFE_DAYS)
@@ -99,19 +63,13 @@ def _priority(boundary: Boundary) -> tuple[int, str, int]:
 
 def boundary_options(place: Place | None) -> list[Boundary]:
     """The votable candidate boundaries for a place, in priority order.
-
-    Only externally-sourced property candidates with actual geometry qualify
-    (see the module docstring for why user-drawn rows and building rows are
-    excluded).
+    Only externally-sourced property candidates with actual geometry qualify: hand-drawn rows could claim an arbitrary match area, and building footprints have no competing sources.
 
     Args:
-        place: The place whose official boundary may be voted on; None (a
-            coordinate no provider knows) has nothing to vote on.
+        place: The place whose official boundary may be voted on; None (a coordinate no provider knows) has nothing to vote on.
 
     Returns:
-        Candidate Boundary rows, REData first; empty when the provider chain
-        hasn't produced per-source candidates for this place.
-    """
+        Candidate Boundary rows, REData first; empty when the provider chain hasn't produced per-source candidates for this place."""
     if place is None:
         return []
     candidates = Boundary.objects.source_candidates_for_place(place).of_type(BoundaryType.PROPERTY).exclude(generated_polygon__isnull=True)
@@ -130,17 +88,11 @@ def _weights(place: Place | None, options: list[Boundary], now: datetime | None 
 def winning_boundary(place: Place | None) -> Boundary | None:
     """The candidate boundary the community's weighted votes select.
 
-    With no votes at all (or an exact weight tie) the REData candidate wins,
-    then the next source in priority order - matching the provider chain's
-    own REData-first default.
-
     Args:
         place: The place to resolve the winner for.
 
     Returns:
-        The winning candidate row, or None when the place has no
-        candidates at all.
-    """
+        The winning candidate row, or None when the place has no candidates at all."""
     options = boundary_options(place)
     if not options:
         return None
@@ -150,18 +102,13 @@ def winning_boundary(place: Place | None) -> Boundary | None:
 
 def has_consensus(place: Place | None) -> bool:
     """Whether the community has settled on a boundary for this place.
-
-    Consensus requires at least one vote, and either only one candidate
-    having any votes at all or the leader's summed weight being at least
-    :data:`CONSENSUS_RATIO` times the runner-up's. Used to stop auto-opening
-    the vote dialog - voting stays possible via the manual button.
+    Consensus requires at least one vote, and either only one candidate having any votes at all or the leader's summed weight being at least :data:`CONSENSUS_RATIO` times the runner-up's.
 
     Args:
         place: The place to check.
 
     Returns:
-        True once the vote is effectively decided.
-    """
+        True once the vote is effectively decided."""
     options = boundary_options(place)
     if len(options) < 2:
         # Nothing to decide between - but also nothing contested, so no
@@ -179,20 +126,13 @@ def has_consensus(place: Place | None) -> bool:
 
 def apply_winning_boundary(place: Place | None) -> Boundary | None:
     """Materialize the vote winner onto ``Place.geometry``.
-
-    No-op when nobody has voted: the place then keeps whatever the provider
-    chain gave it, which is already REData-first - the spec's zero-vote
-    default. With votes, the winner's polygon overwrites the place's geometry
-    so every resolution and access path respects the community's choice
-    without consulting the tally per lookup.
+    With votes, the winner's polygon overwrites the place's geometry so every resolution and access path respects the community's choice without consulting the tally per lookup.
 
     Args:
         place: The place whose official boundary should be synced.
 
     Returns:
-        The winning candidate that was applied, or None when nothing changed
-        hands (no votes, no candidates, or no geometry).
-    """
+        The winning candidate that was applied, or None when nothing changed hands (no votes, no candidates, or no geometry)."""
     from urbanlens.dashboard.models.place.model import Place as PlaceModel
     from urbanlens.dashboard.services.places import resolution
 
@@ -215,11 +155,7 @@ def apply_winning_boundary(place: Place | None) -> Boundary | None:
 
 def cast_boundary_vote(place: Place | None, profile: Profile, boundary_id: int) -> BoundaryVote:
     """Cast or change ``profile``'s vote for one of ``place``'s candidates.
-
-    One row per (place, profile): re-voting updates the row's choice and
-    its ``updated`` timestamp, refreshing its recency weight - even when the
-    choice is unchanged (re-affirming counts). The canonical boundary is
-    re-synced immediately so matching reflects the new tally.
+    The canonical boundary is re-synced immediately so matching reflects the new tally.
 
     Args:
         place: The place being voted on.
@@ -230,9 +166,7 @@ def cast_boundary_vote(place: Place | None, profile: Profile, boundary_id: int) 
         The created or updated vote row.
 
     Raises:
-        BoundaryVoteError: The boundary isn't one of this place's votable
-            candidates.
-    """
+        BoundaryVoteError: The boundary isn't one of this place's votable candidates."""
     options = {option.pk: option for option in boundary_options(place)}
     choice = options.get(boundary_id)
     if choice is None:
@@ -255,13 +189,7 @@ def boundary_vote_context(place: Place | None, profile: Profile | None, *, conce
         conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
-        None when fewer than two candidates exist (nothing to vote on - no
-        button, no dialog). Otherwise a dict with ``options`` (id, source,
-        label, GeoJSON polygon, whether it's the viewer's current choice),
-        ``my_vote_id``, ``has_votes``, ``has_consensus``, and ``auto_open``
-        (True only when nobody *else* has voted yet, per the spec - once other
-        people's votes exist the dialog stays behind the manual button).
-    """
+        None when fewer than two candidates exist (nothing to vote on - no button, no dialog)."""
     from urbanlens.dashboard.services.geo.geo import geometry_to_geojson
 
     options = boundary_options(place)
@@ -271,17 +199,9 @@ def boundary_vote_context(place: Place | None, profile: Profile | None, *, conce
     my_vote_id = my_vote.boundary_id if my_vote else None
 
     # Other people's votes only, and this is deliberately not "all votes".
-    #
-    # `auto_open` is an *inverted* tell: a place nobody has voted on opens this
-    # dialog on arrival, so a concealed viewer who does not get it has been
-    # shown that other people have been here - the concealment announcing
-    # itself by staying quiet. Concealing the votes therefore has to conceal
-    # them from this predicate too, or the dialog stops opening for exactly the
-    # viewer it is hiding them from.
-    #
-    # Excluding the viewer's own vote also fixes a contradiction that predates
-    # concealment: once you had voted, `has_votes` was true because of your own
-    # row, so the dialog stopped auto-opening for you on every other place too.
+    # `auto_open` is an *inverted* tell: a place nobody has voted on opens this dialog on arrival,
+    # so a concealed viewer who does not get it has been shown that other people have been here -
+    # the concealment announcing itself by staying quiet.
     others = BoundaryVote.objects.for_place(place)
     if profile is not None:
         others = others.exclude(profile=profile)
@@ -301,12 +221,7 @@ def boundary_vote_context(place: Place | None, profile: Profile | None, *, conce
         ],
         "my_vote_id": my_vote_id,
         "has_votes": has_votes,
-        # Concealed viewers get False, not the real answer. has_consensus is
-        # True when the leader has weight and the runner-up has none, so the
-        # viewer's own vote alone makes it True - which means True *before* I
-        # voted says somebody else did, and False *after* I voted says a
-        # competing voter exists. Either reading defeats the concealment two
-        # lines above.
+        # Either reading defeats the concealment two lines above.
         "has_consensus": False if conceal else has_consensus(place),
         "auto_open": not has_votes,
     }

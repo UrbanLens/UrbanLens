@@ -1,21 +1,4 @@
-"""Paging through a list with tied sort keys must not repeat or drop rows.
-
-``PaginatedListMixin.paginated_response`` documents its own precondition - "Must
-have a deterministic ordering, or pages will overlap and drop rows" - and then
-does nothing to establish it. Thirty call sites pass it a queryset; whether each
-one's ordering is deterministic is left to whoever wrote it.
-
-Most orderings end in a timestamp, which is unique enough in practice. Several end
-in a plain ``CharField``: ``WikiOwner.name``, ``PinAlias.name``, ``Album.name``.
-Postgres is free to return tied rows in any order, and it does not have to pick
-the same order for the ``LIMIT/OFFSET`` behind page 1 as for page 2 - so a row can
-appear on both pages while another appears on neither. Nothing errors; the caller
-just silently never sees that row.
-
-Rather than auditing thirty call sites and hoping the thirty-first remembers, the
-tie-break is appended inside ``paginated_response``. These tests pin the property
-at that boundary, which is where the guarantee now lives.
-"""
+"""Paging through a list with tied sort keys must not repeat or drop rows."""
 
 from __future__ import annotations
 

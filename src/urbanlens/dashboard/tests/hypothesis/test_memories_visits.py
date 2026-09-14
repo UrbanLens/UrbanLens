@@ -1,9 +1,4 @@
-"""Tests for services.memories.visits.maybe_suggest_photo_visit().
-
-All tests require the database. A Pin's coordinates (the field distance
-queries run against) live on its linked Location, whose PostGIS point is
-auto-synced from latitude/longitude on save.
-"""
+"""Tests for services.memories.visits.maybe_suggest_photo_visit()."""
 
 from __future__ import annotations
 

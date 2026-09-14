@@ -1,18 +1,4 @@
-"""A name that sanitizes away must be refused, not stored blank.
-
-Alias creation validated that the *raw* submitted name was non-empty, then
-``save()`` ran it through ``sanitize_name``. A name made entirely of dropped
-characters - an emoji, ``<>`` - therefore passed the "Name is required" check and
-persisted as an empty-string alias: a blank row in the pin's alias list that also
-consumes its one free slot under the case-insensitive unique constraint, so the
-next such attempt fails with a duplicate-key error instead of a useful message.
-
-Both creation paths now validate the sanitized value, which is the one that will
-actually be stored, and reject it with the message they already had.
-
-The pin-name sync path was never affected: it guards on ``is_meaningful_name``
-before ensuring an alias row, so it could not produce a blank one.
-"""
+"""A name that sanitizes away must be refused, not stored blank."""
 
 from __future__ import annotations
 

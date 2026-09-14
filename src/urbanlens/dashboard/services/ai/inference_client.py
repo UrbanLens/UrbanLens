@@ -1,9 +1,4 @@
-"""HTTP (and, for local dev, in-process) client for the AI inference service.
-
-The one module under ``urbanlens`` that imports ``urbanlens_ai`` - see that
-package's own docstring for the import-direction rule this keeps (nothing
-under ``urbanlens_ai`` may import back).
-"""
+"""HTTP (and, for local dev, in-process) client for the AI inference service."""
 
 from __future__ import annotations
 
@@ -63,15 +58,7 @@ class InferenceError(RuntimeError):
 
 
 class InferenceClient(Protocol):
-    """Sends a normalized request somewhere and returns the answer.
-
-    Two calls, because the inference service has two shapes of work:
-    :meth:`send` is a chat completion (text, or text plus an
-    :class:`~urbanlens_ai.schema.ImagePart` for vision), and
-    :meth:`classify` is an image classifier - no prompt, no tokens, labels
-    out. See ``urbanlens_ai.schema.ClassifyRequest`` for why the second is
-    not folded into the first.
-    """
+    """Sends a normalized request somewhere and returns the answer."""
 
     def send(self, request: InferenceRequest) -> InferenceResponse: ...
 
@@ -79,13 +66,7 @@ class InferenceClient(Protocol):
 
 
 class RemoteInferenceClient:
-    """Calls the sandboxed ``ai-inference`` service over HTTP.
-
-    Used whenever ``UL_AI_INFERENCE_URL`` is configured - every staging/
-    production deployment, and any local dev setup that opts into running
-    the sandbox stack. Presents a bearer token; holds no provider credential
-    of its own.
-    """
+    """Calls the sandboxed ``ai-inference`` service over HTTP."""
 
     def __init__(self, base_url: str, token: str, timeout_seconds: float) -> None:
         self._base_url = base_url.rstrip("/")
@@ -129,14 +110,7 @@ class RemoteInferenceClient:
 
 class LocalInferenceClient:
     """Calls the provider SDKs in-process - local dev/tests only.
-
-    Bypasses the sandbox entirely (provider keys come from *this* process's
-    own settings), so :func:`~services.sandbox.guard.check_direct_inference`
-    must pass before every call - see that guard for the exact policy. This
-    is the fallback ``get_gateway()`` picks when ``UL_AI_INFERENCE_URL`` is
-    unset, so a plain local checkout with no sandbox stack running still
-    works exactly as the pre-sandbox code did.
-    """
+    This is the fallback ``get_gateway()`` picks when ``UL_AI_INFERENCE_URL`` is unset, so a plain local checkout with no sandbox stack running still works exactly as the pre-sandbox code did."""
 
     def send(self, request: InferenceRequest) -> InferenceResponse:
         from urbanlens.dashboard.services.sandbox.guard import check_direct_inference
@@ -172,16 +146,7 @@ class LocalInferenceClient:
             raise InferenceError(str(exc)) from exc
 
     def _build_config(self) -> InferenceConfig:
-        """Build an ``InferenceConfig`` from this process's own Django settings.
-
-        ``urbanlens_ai.config.InferenceConfig`` normally reads straight from
-        the process environment (see that module) - correct for its real
-        deployment, which gets real container env vars and no ``.env`` file.
-        A local checkout may instead have these set only in ``.env``
-        (loaded by Django's pydantic ``AppSettings``, not by this process's
-        raw environment), so this constructs the config explicitly from
-        ``AppSettings`` instead of re-reading the environment independently.
-        """
+        """Build an ``InferenceConfig`` from this process's own Django settings."""
         from urbanlens.UrbanLens.settings.app import settings
         from urbanlens_ai.config import InferenceConfig
 
@@ -189,7 +154,7 @@ class LocalInferenceClient:
             # Never read by this path (no HTTP hop, nothing to authenticate) -
             # required only because InferenceConfig also serves the real
             # ai-inference service, where it is load-bearing.
-            ai_inference_token="unused-direct-in-process-call",  # noqa: S106 -- placeholder, not a credential; see comment above
+            ai_inference_token="unused-direct-in-process-call",  # noqa: S106 -- placeholder, not a credential; see...
             anthropic_api_key=settings.anthropic_api_key,
             openai_api_key=settings.openai_api_key,
             cloudflare_ai_api_key=settings.cloudflare_ai_api_key,
@@ -199,11 +164,7 @@ class LocalInferenceClient:
 
 def get_inference_client() -> InferenceClient:
     """Pick the client every :class:`~services.ai.gateway.LLMGateway` sends through.
-
-    Remote whenever ``UL_AI_INFERENCE_URL`` is configured (every staging/
-    production deployment); local otherwise, so a plain checkout with no
-    sandbox stack running still works.
-    """
+    Remote whenever ``UL_AI_INFERENCE_URL`` is configured (every staging/ production deployment); local otherwise, so a plain checkout with no sandbox stack running still works."""
     from urbanlens.UrbanLens.settings.app import settings
 
     if settings.ai_inference_url:

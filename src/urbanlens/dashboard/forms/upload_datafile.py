@@ -3,16 +3,12 @@ from django import forms
 from urbanlens.dashboard.services.ai.document_import import SUPPORTED_DOCUMENT_EXTENSIONS
 from urbanlens.dashboard.services.import_export.archive_extractor import _ARCHIVE_ALLOWED_EXTENSIONS
 
-# Mirrors the 500 MB cap already enforced downstream for the analogous export/import
-# ZIP upload (see controllers.tools._MAX_IMPORT_SIZE_BYTES) - rejecting an oversized
-# file here, at the form layer, avoids ever handing it to archive extraction.
 _MAX_UPLOAD_FILE_SIZE_BYTES = 500 * 1024 * 1024  # 500 MB
 
-# Extensions accepted for a single uploaded file: outer archive containers
-# (extract_archive/is_archive only actually recognise ZIP and GZIP/TGZ magic bytes -
-# a bare ".tar" without gzip compression is not supported), the individual location-data
-# formats archive_extractor knows how to pull out of - or accept directly outside of -
-# an archive, and the plain-text/Word documents routed to the AI import pipeline.
+# Extensions accepted for a single uploaded file: outer archive containers (extract_archive/is_archive only
+# actually recognise ZIP and GZIP/TGZ magic bytes - a bare ".tar" without gzip compression is not supported),
+# the individual location-data formats archive_extractor knows how to pull out of - or accept directly outside
+# of - an archive, and the plain-text/Word documents routed to the AI import pipeline.
 _ARCHIVE_CONTAINER_EXTENSIONS = frozenset({"zip", "tgz", "gz"})
 _ALLOWED_UPLOAD_EXTENSIONS = _ARCHIVE_CONTAINER_EXTENSIONS | _ARCHIVE_ALLOWED_EXTENSIONS | SUPPORTED_DOCUMENT_EXTENSIONS
 
@@ -48,8 +44,8 @@ class _MultipleFileField(forms.FileField):
             List of validated uploaded-file objects.
 
         Raises:
-            ValidationError: When no files are provided and the field is required,
-                or when a file exceeds the size ceiling or has a disallowed extension.
+            ValidationError: When no files are provided and the field is required, or when a file exceeds
+            the size ceiling or has a disallowed extension.
         """
         if not data:
             raise forms.ValidationError(self.error_messages["required"], code="required")
@@ -66,24 +62,23 @@ class _MultipleFileField(forms.FileField):
     def _validate_upload(self, uploaded_file) -> None:
         """Reject an uploaded file that is too large or has an unsupported extension.
 
-        This is a defense-in-depth check at the form layer - the consuming view
-        feeds these bytes into archive detection/extraction, which should never
-        see an oversized or clearly-unsupported file in the first place.
+        This is a defense-in-depth check at the form layer - the consuming view feeds these bytes into
+        archive detection/extraction, which should never see an oversized or clearly-unsupported file in the
+        first place.
 
         Args:
             uploaded_file: The cleaned uploaded-file object to validate.
 
         Raises:
-            ValidationError: When the file exceeds ``_MAX_UPLOAD_FILE_SIZE_BYTES``
-                or its extension is not in ``_ALLOWED_UPLOAD_EXTENSIONS``.
+            ValidationError: When the file exceeds ``_MAX_UPLOAD_FILE_SIZE_BYTES`` or its extension is not
+            in ``_ALLOWED_UPLOAD_EXTENSIONS``.
         """
         from urbanlens.dashboard.services.media.storage import cap_to_ingress
 
         name = uploaded_file.name or ""
         size = getattr(uploaded_file, "size", None)
-        # Lowered to whatever the ingress will carry: a body the proxy rejects
-        # never reaches this validator, so the user would get an opaque error
-        # from the proxy after uploading rather than this message before.
+        # Lowered to whatever the ingress will carry: a body the proxy rejects never reaches this validator, so
+        # the user would get an opaque error from the proxy after uploading rather than this message before.
         max_bytes = cap_to_ingress(_MAX_UPLOAD_FILE_SIZE_BYTES)
         if size is not None and size > max_bytes:
             raise forms.ValidationError(

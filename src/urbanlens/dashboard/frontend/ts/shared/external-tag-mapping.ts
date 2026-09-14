@@ -3,18 +3,7 @@ import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
 
 /**
- * Site-admin tag mapping page: drag-and-drop between equivalence groups (via
- * Sortable, one instance per `.exttag-group-list`, all sharing one `group:`
- * name so a chip can move between any of them) plus click/shift-click
- * multi-select on the ungrouped pool for the "Group selected" bulk action.
- *
- * Both interactions are ports of the exact patterns already proven in
- * `organize-priority.ts`: a stable outer container (`#panel-external-tags`,
- * never itself swapped) owns delegated click listeners and the
- * `htmx:afterSwap` re-init, since `#external-tag-mapping-body` and
- * everything inside it *is* swapped wholesale by every server action here -
- * listeners bound directly to its descendants would go stale after the
- * first swap.
+ * Site-admin tag mapping page: drag-and-drop between equivalence groups.
  */
 export function initExternalTagMapping(): void {
     const panel = document.getElementById("panel-external-tags");
@@ -61,9 +50,7 @@ export function initExternalTagMapping(): void {
                     group: "exttag-map",
                     animation: 150,
                     ghostClass: "exttag-chip--ghost",
-                    // The preferred-star button lives inside each draggable
-                    // chip; without this a click on it can be swallowed as a
-                    // nascent drag instead of reaching its own hx-post handler.
+                    // The preferred-star button lives inside each draggable chip.
                     filter: ".exttag-preferred-btn",
                     preventOnFilter: false,
                     onEnd: (evt) => {
@@ -95,9 +82,7 @@ export function initExternalTagMapping(): void {
             }
             toast.success("Tag moved.");
         } catch (err) {
-            // The drag already relocated the DOM node - put it back. Exact
-            // position within the origin list doesn't matter (chip order
-            // within a group/pool carries no meaning), just which list.
+            // The drag already relocated the DOM node - put it back.
             fromList.appendChild(item);
             toast.error(`Move failed: ${(err as Error).message}`);
         }
@@ -172,11 +157,7 @@ export function initExternalTagMapping(): void {
         updateBulkBar();
     });
 
-    // #external-tag-mapping-body is swapped wholesale by the search box, the
-    // preferred-star buttons, and the "Confirm as group" forms (all plain
-    // htmx hx-post/hx-get with hx-swap="outerHTML") - Sortable references and
-    // the selection state don't survive that, same reasoning as
-    // organize-priority.ts's own afterSwap rebind.
+    // #external-tag-mapping-body is swapped wholesale by the search box, the preferred-star buttons, and the "Confirm as group" forms.
     panel.addEventListener("htmx:afterSwap", (e) => {
         const detail = (e as CustomEvent).detail as { target?: HTMLElement };
         if (detail.target?.id === "external-tag-mapping-body") boot();

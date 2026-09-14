@@ -1,9 +1,7 @@
 """Shared template components for the Memories section.
 
-* ``{% memories_tabs active %}`` renders the Timeline | Maps | Sharing |
-  Journal | Visits | Locations tab strip (``partials/memories/_photos_tabs.html``).
-  The tag computes the unlogged-visits count itself, so every Memories subpage
-  shows an identical nav without each view having to supply the count.
+- ``{% memories_tabs active %}`` renders the Timeline | Maps | Sharing | Journal | Visits |
+  Locations tab strip (``partials/memories/_photos_tabs.html``). The ...
 """
 
 from __future__ import annotations
@@ -19,20 +17,15 @@ register = template.Library()
 def memories_tabs(context: template.Context, active: str) -> dict[str, Any]:
     """Render the Memories section's tab strip.
 
-    The "Visits" tab only appears when the viewer has visited-but-unlogged
-    pins; the count is reused from the page context when the view already
-    fetched it (e.g. for the unlogged-visits band), and computed here
-    otherwise so no subpage can accidentally drop the tab.
-
-    The "Locations" tab (batch-scan pin suggestions from the Immich sweep and
-    the Tools-page folder scanner) only appears when the viewer has pending
-    suggestions, following the same pattern as "Visits".
+    The "Visits" tab only appears when the viewer has visited-but-unlogged pins; the count is reused
+    from the page context when the view already fetched it (e.g. for the unlogged-visits band), and
+    computed here otherwise so no subpage can accidentally drop the tab.
 
     Args:
-        context: The calling template's context (used for ``request`` and
-            optional prefetched ``unlogged_visits``/``suggestions`` lists).
-        active: Which tab is current - ``"timeline"``, ``"maps"``,
-            ``"sharing"``, ``"journal"``, ``"visits"``, or ``"locations"``.
+        context: The calling template's context (used for ``request`` and optional prefetched
+        ``unlogged_visits``/``suggestions`` lists).
+        active: Which tab is current - ``"timeline"``, ``"maps"``, ``"sharing"``, ``"journal"``,
+        ``"visits"``, or ``"locations"``.
 
     Returns:
         Context for ``partials/memories/_photos_tabs.html``.

@@ -1,10 +1,5 @@
 /**
- * parseCoordinates()/isPlusCode() are the "did the user just paste raw
- * coordinates or a Plus Code into the address bar" detectors that run before
- * any network geocoding call, on the main map and safety check-in address
- * bars alike. The regex/heuristic logic is easy to get subtly wrong (axis
- * order, DMS parsing, Plus Code shorthand) and has no DOM dependency, so it's
- * tested directly rather than through the DOM-bound engine.
+ * parseCoordinates()/isPlusCode() are the "did the user just paste raw coordinates or a Plus Code into the address bar" detectors that.
  */
 import { describe, expect, test } from "bun:test";
 import { isPlusCode, parseCoordinates } from "./location-search-engine";
@@ -23,9 +18,7 @@ describe("parseCoordinates", () => {
     });
 
     test("swaps axis order when the first number can only be a longitude", () => {
-        // 151.2093 is out of latitude range (>90) but valid as a longitude,
-        // and -33.8678 is only valid as a latitude - the engine should
-        // recover the intended point (Sydney) rather than reject it.
+        // 151.2093 is out of latitude range (>90) but valid as a longitude, and -33.8678 is only valid as a latitude.
         expect(parseCoordinates("151.2093,-33.8678")).toEqual({ lat: -33.8678, lng: 151.2093 });
     });
 

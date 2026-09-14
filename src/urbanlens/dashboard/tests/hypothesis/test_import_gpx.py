@@ -1,10 +1,4 @@
-"""Tests for services.import_formats.gpx.gpx_to_dict() - GPX waypoint import.
-
-Tracks/routes are deliberately never imported as pins (see the module docstring
-for the rationale), so the regression coverage here specifically checks that a
-file containing both waypoints and a multi-point track only produces pins for
-the waypoints.
-"""
+"""Tests for services.import_formats.gpx.gpx_to_dict() - GPX waypoint import."""
 
 from __future__ import annotations
 

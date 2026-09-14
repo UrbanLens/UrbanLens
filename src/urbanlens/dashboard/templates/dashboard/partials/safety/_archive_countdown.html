@@ -1,14 +1,4 @@
-{% comment %}
-Live countdown to when a resolved safety check-in will be encrypted and its PII scrubbed
-(services.safety.schedule_checkin_archival/archive_checkin). Only rendered when at least one
-other viewer (an accepted partner or a contact) exists - a check-in with no other possible
-viewer archives immediately, with nothing to count down to.
-
-Re-synced whenever a `safetyArchiveScheduled` event arrives over the check-in's existing chat
-websocket (see _chat_panel.html), so every open tab's clock agrees without polling.
-
-Expects: archive_at (a datetime - checkin.archive_scheduled_at).
-{% endcomment %}
+{% comment %}Live countdown to when a resolved safety check-in will be encrypted and its PII scrubbed.{% endcomment %}
 <div class="card safety-archive-countdown" id="safety-archive-countdown" data-archive-at="{{ archive_at|date:'c' }}">
     <i class="material-symbols-outlined">lock_clock</i>
     <span>This check-in's details will be encrypted <span id="safety-archive-countdown-text">soon</span> - anyone who could see it can still leave a final comment until then.</span>

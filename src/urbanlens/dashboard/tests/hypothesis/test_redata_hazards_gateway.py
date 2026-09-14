@@ -1,10 +1,4 @@
-"""Tests for RedataHazardsGateway against REData's ``/hazards/`` contract
-(``../REData/docs/api-reference.md``, "GET /hazards/ - recorded natural-hazard events").
-
-Constructs the gateway with a mock ``session`` (Gateway.__post_init__ leaves a
-non-default session untouched, skipping the DB-backed rate-limiting wrapper -
-see gateway.py) so these stay pure unit tests with no database access.
-"""
+"""Tests for RedataHazardsGateway against REData's ``/hazards/`` contract (``../REData/docs/api-reference.md``, "GET /hazards/ - recorded natural-hazard events")."""
 
 from __future__ import annotations
 

@@ -1,11 +1,4 @@
-/**
- * Vault > Documents: the parallel page to Vault Photos (Batch 5) - upload,
- * grid tile rendering with a type icon, the shared lightbox's document mode
- * (iframe preview instead of an <img>), and delete. Written against a real
- * browser per project convention ("verify behavior, not code") since the
- * icon mapping, the grid's missing-imageSelector wiring, and the lightbox's
- * image/document toggle only really prove out with an actual page load.
- */
+/** Vault > Documents: the parallel page to Vault Photos (Batch 5) - upload, grid tile rendering with a type icon, the shared lightbox's document mode (iframe preview instead of an <img>), and delete. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { AppShell } from "../../lib/pages/app-shell.js";
@@ -73,12 +66,7 @@ test.describe("vault documents page", () => {
     test("the lightbox opens a document in preview mode, not image mode", async ({ page, guard }) => {
         await page.goto(appRoutes.vaultDocuments);
 
-        // Pre-existing, unrelated to this batch (see docs/PROBLEMS.md, "A photo's
-        // grid tile can 404/500 for a few seconds right after upload", addendum):
-        // process_image_upload converts a document to PDF (LibreOffice) in the
-        // background, replacing the just-uploaded file at its original path - an
-        // iframe preview opened before that finishes briefly 404s. Not what this
-        // test is about - it's asserting on the lightbox's document-mode wiring.
+        // Background conversion replaces the file after upload, so an early preview briefly 404s; allow it (not what this asserts).
         guard.allow(/\/media\/pin_images\/.*vault-doc-.*\.(txt|pdf)/);
 
         const fileInput = page.locator("#documents-file-input");

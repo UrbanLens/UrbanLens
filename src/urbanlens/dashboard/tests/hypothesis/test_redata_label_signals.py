@@ -1,13 +1,4 @@
-"""Integration tests for the REData label-suggestion signal wiring.
-
-Covers ``models.labels.signals`` (taxonomy sync/retire on save/delete/reparent)
-and the ``Pin.labels`` ``m2m_changed`` receiver in ``models.pin.signals``
-(assignment sync). Every enqueue is deferred to ``transaction.on_commit``,
-so these use Django's ``captureOnCommitCallbacks(execute=True)`` - the same
-pattern already used for achievement signals - rather than calling handlers
-directly, to prove the actual signal wiring (dispatch_uid, sender, m2m
-reverse/forward) works end to end. Every REData HTTP call is mocked.
-"""
+"""Integration tests for the REData label-suggestion signal wiring."""
 
 from __future__ import annotations
 

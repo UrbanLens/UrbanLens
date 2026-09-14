@@ -11,7 +11,7 @@ from urbanlens.dashboard.models.reviews.queryset import Manager
 
 
 class Review(abstract.DashboardModel):
-    """A profile's 0-5 star rating for a pin. Written-review text is not supported."""
+    """A profile's 0-5 star rating for a pin."""
 
     rating = IntegerField(validators=[MinValueValidator(0), MaxValueValidator(5)])
 

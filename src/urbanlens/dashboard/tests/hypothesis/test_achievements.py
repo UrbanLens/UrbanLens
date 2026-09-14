@@ -195,10 +195,8 @@ class MetricComputationTests(AchievementTestsBase):
     def test_photos_uploaded_excludes_external_sources(self) -> None:
         """Attaching someone else's Yelp photo is not an upload.
 
-        The Yelp row carries a ``media_source_key`` because a real materialised
-        row always does - that column, not ``source``, is what says the profile
-        merely up-voted somebody else's photograph.
-        """
+        The Yelp row carries a ``media_source_key`` because a real materialised row always does - that column,
+        not ``source``, is what says the profile merely up-voted somebody else's photograph."""
         baker.make(Image, profile=self.profile, source=ImageSource.UPLOAD, _quantity=2)
         baker.make(
             Image, profile=self.profile, source=ImageSource.YELP, media_source_key="yelp", media_item_key="0" * 40
@@ -208,10 +206,8 @@ class MetricComputationTests(AchievementTestsBase):
     def test_photos_uploaded_counts_a_photo_from_your_own_library(self) -> None:
         """An Immich or Google Photos pick is the user's own picture.
 
-        Here so the gate cannot be narrowed back to ``source == UPLOAD``: that
-        reads green against the Yelp case above while silently dropping every
-        photo a user imported from an account they connected.
-        """
+        Here so the gate cannot be narrowed back to ``source == UPLOAD``: that reads green against the Yelp case
+        above while silently dropping every photo a user imported from an account they connected."""
         baker.make(Image, profile=self.profile, source=ImageSource.IMMICH)
         baker.make(Image, profile=self.profile, source=ImageSource.GOOGLE_PHOTOS)
         self.assertEqual(get_metric("photos_uploaded").value_for(self.profile), 2)
@@ -429,12 +425,7 @@ class AwardingTests(AchievementTestsBase):
 class SignalIntegrationTests(AchievementTestsBase):
     """The end-to-end path: a contribution lands, the award appears.
 
-    Streak days are written synchronously inside the contribution's own
-    transaction. The evaluation enqueue is deferred to ``transaction.on_commit``
-    so nothing is queued against rows that may still roll back; Django's
-    ``TestCase`` never commits, so award assertions drive the hook explicitly
-    via ``captureOnCommitCallbacks``.
-    """
+    Streak days are written synchronously inside the contribution's own transaction."""
 
     def test_creating_pins_awards_without_an_explicit_evaluation(self) -> None:
         from urbanlens.dashboard.tasks import evaluate_achievements_for_profile
@@ -541,11 +532,9 @@ class SignalIntegrationTests(AchievementTestsBase):
     def test_a_cosmetic_edit_does_not_requeue_the_backfill(self) -> None:
         """`on_achievement_saved` fired on *every* save of an active award.
 
-        Its own docstring says "newly defined or re-activated", but the handler
-        never looked at `created` or at whether anything relevant had changed -
-        so renaming an award, recolouring it, or dragging it up the list
-        re-queued an evaluation across every profile on the site.
-        """
+        Its own docstring says "newly defined or re-activated", but the handler never looked at `created` or at
+        whether anything relevant had changed - so renaming an award, recolouring it, or dragging it up the list
+        re-queued an evaluation across every profile on the site."""
         achievement = self._achievement(metric="pins_created", threshold=3, name="Stable")
 
         with (
@@ -581,12 +570,8 @@ class SignalIntegrationTests(AchievementTestsBase):
     def test_a_field_excluded_from_update_fields_is_not_re_baselined(self) -> None:
         """A value that never reached the database must not be recorded as persisted.
 
-        `save()` re-baselines the qualifying markers so a second save of the same
-        instance is not mistaken for another change. If it re-baselined a field
-        the caller excluded from `update_fields`, that field's *real* change
-        would later look like no change - a backfill missed silently. Erring the
-        other way only costs a redundant one.
-        """
+        `save()` re-baselines the qualifying markers so a second save of the same instance is not mistaken for
+        another change."""
         from urbanlens.dashboard.tasks import backfill_achievement
 
         baker.make(Pin, profile=self.profile, _quantity=3)

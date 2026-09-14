@@ -1,29 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if a model opts into field versioning without the machinery that records it.
-
-Provenance has to be recorded at write time. Inferring it afterwards from edit
-history does not work here, and the reason is instructive: three writers
-already bypass the wiki's existing history entirely - a bulk ``update()`` in
-``tasks.py``, a bare ``save()`` in ``wiki_creation.py``, and one in
-``markup.py`` that omits ``updated`` from ``update_fields``. None of the three
-is visible to a ``post_save`` receiver.
-
-So the recording is interception rather than a funnel callers must remember:
-``VersionedModel.save()`` and ``VersionedQuerySet.update()``/``bulk_update()``.
-This check is what stops a model half-adopting it. Three ways to end up with
-silent gaps, all of which look fine in review:
-
-1. ``versioned_fields`` declared on a model that does not inherit
-   ``VersionedModel`` - nothing records anything, and the field list reads as
-   though something does.
-2. ``VersionedModel`` inherited but the manager's queryset is not a
-   ``VersionedQuerySet`` - instance saves are recorded and every ``update()``
-   is not, which is the worse half.
-3. ``versioned_fields`` naming a field the model does not have - a rename that
-   silently stopped versioning a column.
-
-Exits non-zero listing each problem. Safe to run by hand from the repo root.
-"""
+"""Fail if a model opts into field versioning without the machinery that records it."""
 
 from __future__ import annotations
 
@@ -41,10 +17,8 @@ _QUERYSET = "VersionedQuerySet"
 def _base_names(node: ast.ClassDef) -> set[str]:
     """Return the class's base names, however they were written.
 
-    Handles both ``VersionedModel`` and ``abstract.VersionedModel``; this
-    codebase uses the dotted form for model bases and the bare form inside the
-    abstract package itself.
-    """
+    Handles both ``VersionedModel`` and ``abstract.VersionedModel``; this codebase uses the dotted form for
+    model bases and the bare form inside the abstract package itself."""
     names: set[str] = set()
     for base in node.bases:
         if isinstance(base, ast.Name):
@@ -144,11 +118,7 @@ _ALL_FIELD_NAMES: set[str] | None = None
 def _field_exists_anywhere(field_name: str) -> bool:
     """Whether any model in the tree declares a field by this name.
 
-    Deliberately loose. A versioned model inherits fields from several abstract
-    bases, so checking only its own body would flag every inherited column;
-    checking the whole tree still catches the case that matters, which is a
-    rename leaving a name nothing answers to.
-    """
+    Deliberately loose."""
     global _ALL_FIELD_NAMES  # noqa: PLW0603
     if _ALL_FIELD_NAMES is None:
         _ALL_FIELD_NAMES = set()
@@ -168,10 +138,8 @@ def _field_exists_anywhere(field_name: str) -> bool:
 def _queryset_problems(versioned_models: dict[str, pathlib.Path]) -> list[str]:
     """Report versioned models whose queryset does not intercept bulk writes.
 
-    This is the half that matters most: ``update()`` skips ``save()`` and every
-    signal, so a model with the mixin but a plain queryset records instance
-    saves and silently drops every bulk write.
-    """
+    This is the half that matters most: ``update()`` skips ``save()`` and every signal, so a model with the
+    mixin but a plain queryset records instance saves and silently drops every bulk write."""
     problems: list[str] = []
     for model_name, model_path in sorted(versioned_models.items()):
         queryset_path = model_path.parent / "queryset.py"

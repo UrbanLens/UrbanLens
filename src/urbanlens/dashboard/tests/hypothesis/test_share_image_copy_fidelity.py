@@ -1,10 +1,4 @@
-"""Accepting a share must copy an image faithfully, not reinvent it from defaults.
-
-``create_pin_from_share`` builds the recipient's ``Image`` rows field by field. Any
-field it forgets silently takes the model default rather than the source row's value,
-and two of those defaults are wrong in a way nobody would see in review: ``source``
-defaults to ``UPLOAD`` and ``media_type`` defaults to ``PHOTO``.
-"""
+"""Accepting a share must copy an image faithfully, not reinvent it from defaults."""
 
 from __future__ import annotations
 
@@ -102,13 +96,7 @@ class SharedImageCopyFidelityTests(TestCase):
 class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
     """Accepting a share gives you the place, not the person's account of it.
 
-    A share carries what is true about the site - its dates, and what was
-    observed there. It does not carry how somebody chose to decorate their own
-    pin, and it does not carry their labels: a Label belongs to one profile, so
-    copying them hung the sharer's rows off the recipient's pin, showing one
-    person's private organising scheme to another and leaving the recipient
-    holding references they cannot manage.
-    """
+    A share carries what is true about the site - its dates, and what was observed there."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -268,14 +256,11 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
 class PendingScanImagesAreNotSharedTests(TestCase):
     """A still-pending photo must not be copied into an accepted share.
 
-    ``create_pin_from_share`` points the copy at the *same stored file* the
-    sender's row uses and never runs ``process_image_upload`` on it - so a
-    copy of a still-``pending_scan`` original would be immediately visible in
-    the recipient's own pin, pointing at the sender's raw, unstripped-GPS
-    bytes, with nothing ever going to clear it (unlike a same-profile dedup
-    sibling, there is no ``_sync_deduped_siblings`` for a cross-profile share
-    copy). ``share.images.exclude(pending_scan=True)`` is what prevents that.
-    """
+    ``create_pin_from_share`` points the copy at the *same stored file* the sender's row uses and never runs
+    ``process_image_upload`` on it - so a copy of a still-``pending_scan`` original would be immediately visible
+    in the recipient's own pin, pointing at the sender's raw, unstripped-GPS bytes, with nothing ever going to
+    clear it (unlike a same-profile dedup sibling, there is no ``_sync_deduped_siblings`` for a cross-profile
+    share copy)."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -17,9 +17,8 @@ from urbanlens.dashboard.services.device_scan.mac_address import InvalidMacAddre
 
 logger = logging.getLogger(__name__)
 
-#: Hard ceiling on devices per upload - generous for a single walked route,
-#: but bounded so one malformed/malicious payload can't force an unbounded
-#: number of DB writes inline in the request.
+#: Hard ceiling on devices per upload - generous for a single walked route, but bounded so one
+#: malformed/malicious payload can't force an unbounded number of DB writes inline in the request.
 MAX_DEVICES_PER_UPLOAD = 200
 
 #: Same reasoning, per device: a walked route's signal-strength trail is
@@ -39,9 +38,8 @@ class DeviceSignalReadingInputSerializer(serializers.Serializer):
 class DeviceScanEntryInputSerializer(serializers.Serializer):
     """One device's data within a scan upload.
 
-    ``detected=False`` reports that an expected device (see
-    ``expected_marker_uuid``, sourced from a prior ``device-scans/nearby/``
-    response) was searched for near (``estimated_latitude``,
+    ``detected=False`` reports that an expected device (see ``expected_marker_uuid``, sourced from a
+    prior ``device-scans/nearby/`` response) was searched for near (``estimated_latitude``,
     ``estimated_longitude``) but not found - it carries no ``readings``.
     """
 

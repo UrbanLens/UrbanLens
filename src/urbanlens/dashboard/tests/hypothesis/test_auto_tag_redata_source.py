@@ -1,18 +1,4 @@
-"""Automatic tagging of pins is sourced from REData, not keyword matching.
-
-Keyword tagging asked each user to write the phrases that should imply each of
-their labels - work almost nobody did, so the feature mostly did nothing. The
-pin path now asks REData which of the owner's own tag/category labels apply to
-the place, and applies the confident ones.
-
-What the tests pin down is the boundary, because the suggestion comes from
-outside: REData answers about the profile's whole taxonomy, so eligibility
-(the per-label opt-out, protected labels) is enforced *here* rather than
-trusted upstream, and a low-confidence guess is not applied at all.
-
-Wikis are deliberately unchanged: they have no owner, so there is no per-user
-taxonomy for REData to match against.
-"""
+"""Automatic tagging of pins is sourced from REData, not keyword matching."""
 
 from __future__ import annotations
 

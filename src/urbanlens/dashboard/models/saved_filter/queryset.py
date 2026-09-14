@@ -1,11 +1,8 @@
-# Generic imports
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
 
-# Django Imports
-# App Imports
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:

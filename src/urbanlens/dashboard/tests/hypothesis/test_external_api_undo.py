@@ -1,11 +1,4 @@
-"""Tests for the external API's undo domain.
-
-Covers the two invariants unique to this domain: a credential missing a
-model_label's paired domain scope has that entry *omitted* from the list
-(never a 403), and restoring requires both ``undo:write`` and that same
-paired domain-write scope. The rest follows this API's usual anti-enumeration
-rule - another profile's entry, or an unknown uuid, is always a 404.
-"""
+"""Tests for the external API's undo domain."""
 
 from __future__ import annotations
 

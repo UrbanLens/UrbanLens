@@ -1,9 +1,4 @@
-"""Tests for the API rate limiter's new rolling 30-day window.
-
-Covers ApiRateLimit.calls_per_30_days, ServiceDefaults' matching field,
-check_rate_limit()'s new window check, and SiteAdminApiLimitsView's POST
-handling of the new form field / category grouping for the tabs UI.
-"""
+"""Tests for the API rate limiter's new rolling 30-day window."""
 
 from __future__ import annotations
 
@@ -82,13 +77,9 @@ class CheckRateLimitThirtyDayWindowTests(TestCase):
     def test_calls_well_within_the_30_day_window_still_count(self) -> None:
         """Guards the window's *width*, not just its outer edge.
 
-        ``test_calls_older_than_30_days_do_not_count`` alone wouldn't catch the
-        window being implemented too narrow (e.g. a copy-paste of ``this_week``'s
-        7-day span, or ``today``'s calendar day) - a call 31 days old sits
-        outside any of those spans too, so that test would still pass. A call
-        made well inside 30 days, but well past a day or a week, must still be
-        counted toward the limit.
-        """
+        ``test_calls_older_than_30_days_do_not_count`` alone wouldn't catch the window being implemented too
+        narrow (e.g. a copy-paste of ``this_week``'s 7-day span, or ``today``'s calendar day) - a call 31 days
+        old sits outside any of those spans too, so that test would still pass."""
         for _ in range(3):
             _log_call(self.service, days_ago=20)
         self.assertFalse(check_rate_limit(self.service))
@@ -163,12 +154,7 @@ class ApiLimitsAdminPageThirtyDayFieldTests(TestCase):
 
 
 class RequestCancelledErrorMessageTests(SimpleTestCase):
-    """The cancellation exceptions must carry the service key and a single, un-nested message.
-
-    Regression guard: the subclasses used to pass their formatted message to the
-    base class's ``service`` parameter, producing doubled-up log lines like
-    ``Request cancelled for service 'Rate limit exceeded for service 'nps'''``.
-    """
+    """The cancellation exceptions must carry the service key and a single, un-nested message."""
 
     def test_base_error_message_and_service(self) -> None:
         exc = RequestCancelledError("nps")

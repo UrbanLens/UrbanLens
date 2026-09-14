@@ -23,9 +23,7 @@
 }
 
 // -- Empty state: matches the icon-in-circle/title/text pattern used by     --
-// -- other empty landing pages (e.g. .trips-empty) instead of rendering     --
-// -- nothing but the compose form, which gave no sense of what this section --
-// -- is for.
+// other empty landing pages (e.g..trips-empty) instead of rendering -- -- nothing but the compose form, which gave no sense of what.
 .comment-panel-empty {
     text-align: center;
     padding: 3rem 1.5rem 2rem;
@@ -75,13 +73,7 @@
         border-bottom: none;
     }
 
-    // Both this modifier and .comment-replies .comment-item below represent the
-    // same role (a reply row, nested one level deeper than a top-level comment)
-    // and must stay in sync - a reply row carries both classes, and the second,
-    // higher-specificity selector always wins in the cascade. Previously these
-    // had separately hand-picked colors that agreed by coincidence in light mode
-    // but not in dark mode, so the intended dark-mode elevation bump silently
-    // never applied. --ul-surface-raised keeps them identical in both themes.
+    // Both this modifier and.comment-replies.comment-item below represent the same role.
     &--reply {
         background: var(--ul-surface-raised);
         padding-left: 1.2rem;
@@ -274,9 +266,7 @@
     .material-symbols-outlined { font-size: 1rem; }
 }
 
-// Shown in place of the image while its async malware scan is still pending
-// (see tasks.scan_comment_image) - only the uploader ever sees this; other
-// viewers don't see the comment at all until the scan clears it.
+// Shown in place of the image while its async malware scan is still pending - only the uploader ever sees this.
 .comment-image-scanning {
     display: inline-flex;
     align-items: center;
@@ -600,13 +590,7 @@
     border-radius: 10px;
     overflow: hidden;
     position: relative;
-    // Leaflet's internal panes carry their own z-index (up to 700, for
-    // popups) that would otherwise escape this box - position:relative alone
-    // doesn't contain them, since it only creates a new stacking context when
-    // paired with a z-index. `isolation: isolate` forces that containment so
-    // the live thumbnail map can never paint over sibling UI floated outside
-    // it (e.g. the DM bubble's menu button/timestamp, or this card's own
-    // edit/bookmark buttons).
+    // Leaflet's internal panes carry their own z-index (up to 700, for popups) that would otherwise escape this box.
     isolation: isolate;
 }
 
@@ -672,10 +656,7 @@
     cursor: pointer;
 }
 
-// Replaces Leaflet's on-map attribution control (disabled via
-// attributionControl: false) - kept in the dialog's own toolbar instead of
-// floating over the map, same principle as the main map's page-footer
-// attribution. Text is filled in by MapLayers' onAttribution callback.
+// Replaces Leaflet's on-map attribution control (disabled via attributionControl: false).
 .comment-map-attribution {
     margin-left: auto;
     font-size: .68rem;
@@ -690,9 +671,7 @@
     max-height: 95vh;
 
     &[open] {
-        // Explicit height so flex children (body, map) have a real reference to
-        // grow into. Without this, flex: 1 on the body resolves to flex-basis: 0
-        // and Leaflet reads a 0px container height.
+        // Explicit height so flex children (body, map) have a real reference to grow into.
         height: min(95vh, 70em);
     }
 }
@@ -703,12 +682,7 @@
     flex: 1;
     overflow: hidden;
 
-    // The class's own unconditional `display: flex` above otherwise beats the
-    // browser's default `[hidden] { display: none }` (author styles always
-    // win over the UA stylesheet, even at equal specificity), so toggling
-    // `.hidden` from JS (_switchComposerTab in base.html) had no visual
-    // effect - both this panel and #cmc-tab-panel-existing rendered stacked
-    // at once regardless of which tab was "active".
+    // The class's own unconditional `display: flex` above otherwise beats the browser's default `[hidden] { display.
     &[hidden] { display: none; }
 }
 
@@ -720,9 +694,7 @@
     gap: .75rem;
     flex-shrink: 0;
 
-    // Same fix as .comment-map-composer-body above - #cmc-title-row (this
-    // class plus .cmcc-title-row) is toggled via `_titleRow.hidden` in
-    // base.html for standalone/screenshot mode and needs the same guard.
+    // Same fix as.comment-map-composer-body above.
     &[hidden] { display: none; }
 }
 
@@ -751,9 +723,7 @@
     font-size: .85rem;
 }
 
-// Inline variant of the map pages' floating jump-to search bar: sits in the
-// composer's controls row instead of floating over the map, but reuses all
-// the .addr-search-* internals (input, suggestions dropdown, sections).
+// Inline variant of the map pages' floating jump-to search bar.
 .addr-search-bar--composer {
     position: relative;
     top: auto;
@@ -795,9 +765,7 @@
 }
 
 // -- Tab strip (Draw New / Choose Existing) -------------------------------------
-// Hidden entirely unless the caller passes opts.existingMapPicker (see
-// window._openCommentMapComposer's docstring) - every other caller of this
-// shared dialog (comments/visits/trips/screenshot) never shows this.
+// Hidden entirely unless the caller passes opts.existingMapPicker.
 .cmc-tabs {
     display: flex;
     flex-shrink: 0;
@@ -838,10 +806,7 @@
     &[hidden] { display: none; }
 }
 
-// _switchComposerTab (base.html) hides #comment-map-composer-save while on the
-// "Choose Existing" tab; the btn-base mixin itself now carries the
-// `&[hidden] { display: none }` guard (see _mixins.scss), so no scoped
-// override is needed here anymore.
+// _switchComposerTab (base.html) hides #comment-map-composer-save while on the "Choose Existing" tab.
 
 .cmc-existing-search {
     max-width: none;
@@ -853,9 +818,7 @@
     overflow-y: auto;
 }
 
-// Shared by the DM composer's existing-map tab (rendered by
-// DirectMessageMapPickerView/_map_picker.html) - mirrors the safety
-// check-in map picker's item styling (.safety-map-picker-item et al).
+// Shared by the DM composer's existing-map tab (rendered by DirectMessageMapPickerView/_map_picker.html).
 .dm-map-picker-list {
     list-style: none;
     margin: 0;
@@ -906,10 +869,7 @@
     pointer-events: none;
 }
 
-// Replaces Leaflet's on-map attribution control in the composer (see
-// .comment-map-attribution for the read-only viewer's equivalent). Sits in
-// the dialog-footer, which is otherwise right-aligned - margin-right: auto
-// pins this to the opposite side from the Cancel/Attach buttons.
+// Replaces Leaflet's on-map attribution control in the composer.
 .cmc-attribution {
     margin-right: auto;
     font-size: .68rem;
@@ -918,12 +878,7 @@
 }
 
 // -- Comment image-attach dialog (Upload New / Choose Existing) ---------------
-// Reuses .cmc-tabs/.cmc-tab (above) for the tab strip - every `display`
-// declaration below is guarded with `&[hidden] { display: none; }` from the
-// start, having just fixed the map composer for exactly this same class of
-// bug (author styles beat the browser's default [hidden] rule at equal
-// specificity, so an un-guarded `display` silently defeats `.hidden` toggles
-// from JS).
+// Reuses.cmc-tabs/.cmc-tab (above) for the tab strip - every `display` declaration below is guarded with `&[hidden] { display: none.
 .comment-image-composer-dialog {
     @include dialog-base(560px);
 }
@@ -1102,9 +1057,7 @@
 // [data-theme="dark"] comment overrides → _dark.scss
 
 .comment-image-label {
-    // Was a <label> wrapping the file input directly; now a <button> that
-    // opens the attach-photo dialog instead, so the browser's default button
-    // chrome needs resetting the same way .comment-map-btn does.
+    // Was a <label> wrapping the file input directly.
     background: none;
     border: none;
     cursor: pointer;

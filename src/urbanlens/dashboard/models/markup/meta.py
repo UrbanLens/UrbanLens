@@ -34,9 +34,7 @@ def normalize_layer_mode(value: object, default: str = ...) -> str: ...
 def normalize_layer_mode(value: object, default: None) -> str | None: ...
 def normalize_layer_mode(value: object, default: str | None = MapLayerMode.STREET.value) -> str | None:
     """Normalize a layer-mode identifier to a canonical MapLayerMode value.
-
-    Accepts canonical values as-is and maps legacy aliases ("standard",
-    "topo", ...) still present in old client snapshots.
+    Accepts canonical values as-is and maps legacy aliases ("standard", "topo", ...) still present in old client snapshots.
 
     Args:
         value: The candidate layer-mode identifier.

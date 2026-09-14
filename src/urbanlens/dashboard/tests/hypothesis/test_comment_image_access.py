@@ -1,14 +1,4 @@
-"""``authorize_comment_image`` must apply every gate the comment thread itself applies.
-
-A comment's image is served through a separate media-authorization path
-(``services.media.access.authorize_comment_image``) rather than alongside the
-comment text, so it has always needed its own copy of the visibility gates -
-author ``comment_visibility``, a pending malware scan, host (pin/trip)
-membership, and an ``@loc``/``@activity`` mention the viewer hasn't resolved.
-The first three were covered; the mention gate was not, so a wiki or trip
-comment `visible_comment_tree`/`build_comment_tree` drops entirely for naming
-an unpinned location still served its own attached image.
-"""
+"""``authorize_comment_image`` must apply every gate the comment thread itself applies."""
 
 from __future__ import annotations
 

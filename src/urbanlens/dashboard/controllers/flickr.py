@@ -1,20 +1,4 @@
-"""Flickr integration controller.
-
-Three groups of views:
-
-- Settings ("Connect Flickr"): ``FlickrSettingsView`` (read-only subsection
-  partial), ``FlickrConnectView``/``FlickrCallbackView`` (OAuth 1.0a 3-legged
-  flow), ``FlickrDisconnectView``.
-- Pin detail ("Import from Flickr"): server-side geo search over *one user's
-  own* OAuth-connected library (no thumbnail proxy needed - Flickr's photo
-  URLs are public, capability-scoped per photo) and a Celery-backed import
-  with progress polling.
-- Pin/wiki Media ("Import a Flickr Album"): given the public URL of *any*
-  Flickr user's public album/photoset (no OAuth involved - see
-  ``services.apis.flickr.public``), preview its photos and import selected
-  ones. Same picker + Celery-progress-polling shape as the section above,
-  parameterized over a pin or a wiki target.
-"""
+"""Flickr integration controller."""
 
 from __future__ import annotations
 
@@ -82,9 +66,9 @@ def _request_token_cache_key(oauth_token: str) -> str:
 def _within_radius(pin_point: tuple[float, float], photo: FlickrPhoto, radius_m: int) -> bool:
     """Whether a photo is within ``radius_m`` of the pin, re-checking locally.
 
-    Flickr's search already filters server-side, so this only re-verifies
-    photos that reported coordinates - one with none is kept as-is (Flickr
-    included it in the radius search results, so it's trusted).
+    Flickr's search already filters server-side, so this only re-verifies photos that reported
+    coordinates - one with none is kept as-is (Flickr included it in the radius search results, so it's
+    trusted).
 
     Args:
         pin_point: (latitude, longitude) of the pin.
@@ -234,9 +218,9 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
                     name="flickr_search_near",
                 )
                 if photos is not None:
-                    # Flickr's radius search is already server-side; re-check distance
-                    # locally only for photos that reported coordinates (some may not),
-                    # matching the search's own radius rather than trusting it blindly.
+                    # Flickr's radius search is already server-side; re-check distance locally only for photos that
+                    # reported coordinates (some may not), matching the search's own radius rather than trusting it
+                    # blindly.
                     pin_point = (latitude, longitude)
                     photos = [photo for photo in photos if _within_radius(pin_point, photo, radius_m)]
         except GatewayRequestError as exc:
@@ -291,12 +275,10 @@ class PinFlickrImportProgressView(LoginRequiredMixin, View):
         return response
 
 
-# -- Public Flickr album import (pin + wiki) ----------------------------------
-#
-# Shared logic lives in the module-level helpers below; each pin/wiki View
-# pair is a thin wrapper supplying its own target resolution + URL names
-# (mirroring how PinGalleryView/WikiGalleryView share _photo_gallery.html but
-# differ in permission checks and which FK gets set).
+# -- Public Flickr album import (pin + wiki) ---------------------------------- Shared logic lives in the
+# module-level helpers below; each pin/wiki View pair is a thin wrapper supplying its own target resolution +
+# URL names (mirroring how PinGalleryView/WikiGalleryView share _photo_gallery.html but differ in permission
+# checks and which FK gets set).
 
 
 def _album_base_context(*, target_kind: str, lookup_url: str, import_url: str) -> dict:
@@ -314,8 +296,8 @@ def _album_lookup_response(request: HttpRequest, *, dedupe_urls: set[str], conte
 
     Args:
         request: The POST request carrying ``album_url``.
-        dedupe_urls: The target's existing ``Image.source_url`` values, so
-            already-imported photos can be flagged/disabled in the grid.
+        dedupe_urls: The target's existing ``Image.source_url`` values, so already-imported photos can
+        be flagged/disabled in the grid.
         context: The target-specific base context (URLs, target_kind, etc.).
 
     Returns:
@@ -346,14 +328,13 @@ def _album_import_response(request: HttpRequest, *, target_kind: str, target_id:
         target_kind: ``"pin"`` or ``"wiki"``.
         target_id: PK of the pin or wiki.
         profile: The requesting profile.
-        album_url: The album URL submitted with the form (re-resolved inside
-            the task rather than trusting a client-supplied photo list).
+        album_url: The album URL submitted with the form (re-resolved inside the task rather than
+        trusting a client-supplied photo list).
         photo_ids: Selected Flickr photo ids.
         progress_url_for: Builds the polling URL given a task id.
 
     Returns:
-        The initial progress fragment, or a 503 fragment when the queue is
-        unavailable.
+        The initial progress fragment, or a 503 fragment when the queue is unavailable.
     """
     from urbanlens.dashboard.tasks import import_flickr_album_photos
 
@@ -372,8 +353,7 @@ def _album_progress_response(request: HttpRequest, *, task_id: str, progress_url
         progress_url: This same view's own URL (for the fragment's next poll).
 
     Returns:
-        The progress fragment, with an ``HX-Trigger`` toast + gallery refresh
-        once the task settles.
+        The progress fragment, with an ``HX-Trigger`` toast + gallery refresh once the task settles.
     """
     progress = get_task_progress(task_id)
     context = {"progress_url": progress_url, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}

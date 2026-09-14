@@ -8,17 +8,8 @@ from model_bakery.baker import Baker
 class SignalSafeBaker(Baker):
     """A ``model_bakery`` Baker that tolerates the ``Profile`` auto-create signal.
 
-    ``dashboard.models.profile.signals.create_user_profile`` runs on every
-    ``User`` post_save and creates that user's ``Profile`` via
-    ``get_or_create``. When ``baker.make()`` builds a ``Profile`` itself
-    (directly, or transitively while filling an unrelated FK such as
-    ``Pin.profile``), it first auto-generates a related ``User``, which fires
-    that signal and inserts the ``Profile`` row - then baker tries to insert
-    its *own* ``Profile`` instance for the same user, violating the
-    one-profile-per-user unique constraint. Configured as ``BAKER_CUSTOM_CLASS``
-    in test settings so every caller is covered without touching individual
-    tests.
-    """
+    ``dashboard.models.profile.signals.create_user_profile`` runs on every ``User`` post_save and creates that
+    user's ``Profile`` via ``get_or_create``."""
 
     def instance(
         self,

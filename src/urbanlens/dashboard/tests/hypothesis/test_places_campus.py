@@ -1,17 +1,4 @@
-"""Regression tests for the multi-building campus that started all this.
-
-Hudson River State Hospital has 124 buildings. Importing them used to give
-each new child pin its own Location, and each Location its own copy of the
-*parcel* polygon - fetched by point lookup, which returns the parcel when you
-ask about a building. Every point on the campus was then inside 125 boundaries
-at once, and every visitor was told that 124 other locations covered their pin.
-
-These tests pin the three symptoms that came from that one cause:
-
-1. No competing places, however many buildings there are.
-2. A building's page draws the building, not the 200-acre parcel.
-3. One community page for the property, not one per coordinate.
-"""
+"""Regression tests for the multi-building campus that started all this."""
 
 from __future__ import annotations
 

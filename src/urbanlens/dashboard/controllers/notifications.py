@@ -50,8 +50,8 @@ _HISTORY_PAGE_SIZE = 30
 def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
     """Return the profile's preference row, creating the default one if absent.
 
-    Thin alias kept for this module's existing callers; the implementation
-    lives in ``services.notifications.notification_center`` so the external API shares it.
+    Thin alias kept for this module's existing callers; the implementation lives in
+    ``services.notifications.notification_center`` so the external API shares it.
 
     Args:
         profile: The owner whose preferences to read.
@@ -97,15 +97,14 @@ def action_taken_response(
 ) -> HttpResponse:
     """HTMX response after the user answers an actionable notification.
 
-    From the bell dropdown (``surface=inbox``, the default), returns an empty
-    body so HTMX can animate the row out. From the history page
-    (``surface=history``), re-renders the settled notification row in place.
+    From the bell dropdown (``surface=inbox``, the default), returns an empty body so HTMX can animate
+    the row out.
 
     Args:
         request: Incoming request (reads ``surface`` from POST).
         profile: Acting profile.
-        notification: The notification that was answered, when known (required
-            for history-page re-render).
+        notification: The notification that was answered, when known (required for history-page
+        re-render).
         extra_triggers: Additional ``HX-Trigger`` events to merge in.
 
     Returns:
@@ -157,10 +156,9 @@ def _render_dropdown(request: HttpRequest, profile: Profile) -> HttpResponse:
 class NotificationDropdownView(LoginRequiredMixin, View):
     """GET /notifications/dropdown/ - renders the bell dropdown partial.
 
-    Viewing the dropdown marks its notifications read (UL-348) - not just clicking
-    one individually. Action buttons (accept/decline friend request, pin share,
-    visit suggestion) are gated on the underlying request's own pending state, not
-    on notification read/unread, so this doesn't hide anything still actionable.
+    Action buttons (accept/decline friend request, pin share, visit suggestion) are gated on the
+    underlying request's own pending state, not on notification read/unread, so this doesn't hide
+    anything still actionable.
     Dismissed (already-answered) rows are excluded; see the history page for those.
     """
 
@@ -237,9 +235,8 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
                 "prefs": prefs,
                 "pref_fields": _PREF_FIELDS,
                 "saved": saved,
-                # WhatsApp/SMS delivery only makes sense once the profile has a
-                # number to deliver to - the template disables those columns
-                # (without touching stored preferences) until then.
+                # WhatsApp/SMS delivery only makes sense once the profile has a number to deliver to - the
+                # template disables those columns (without touching stored preferences) until then.
                 "has_whatsapp_number": bool(profile.whatsapp_number),
                 "has_phone_number": bool(profile.phone_number),
             },
@@ -253,9 +250,8 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
     def post(self, request):
         profile = request.user.profile
         prefs = _get_or_create_prefs(profile)
-        # Mirrors the template's disabled WhatsApp/SMS columns: without a
-        # number on file there's nowhere to deliver to, so neither channel
-        # can be turned on server-side either, regardless of what a client sends.
+        # Mirrors the template's disabled WhatsApp/SMS columns: without a number on file there's nowhere to
+        # deliver to, so neither channel can be turned on server-side either, regardless of what a client sends.
         can_whatsapp = bool(profile.whatsapp_number)
         can_sms = bool(profile.phone_number)
         for field, _ in _PREF_FIELDS:

@@ -1,21 +1,4 @@
-"""`parse_multipolygon_geojson` is the one place seven features parse a drawn shape.
-
-It had no direct test. Its `except (GEOSException, TypeError, ValueError)` did not
-name `GDALException`, which is what `GEOSGeometry` actually raises for most
-malformed GeoJSON - including the bare `{}` a client sends when it has nothing to
-submit. Every caller treats `InvalidPolygonGeoJSONError` as "answer 400"; an
-uncaught `GDALException` is a 500 instead.
-
-The reach is wider than the boundary editor it was found through:
-
-- `controllers/boundary.py` (both the pin and the wiki editor)
-- `external_api/views_wiki.py` and `external_api/serializers.py` - the public API
-- `controllers/pin_lists.py` smart boundaries, `forms/search.py` saved-filter
-  regions, `services/search/filter_criteria.py`, and KML/JSON import
-
-`GDALException` is not a subclass of `GEOSException`, so no amount of catching
-the latter covers it.
-"""
+"""`parse_multipolygon_geojson` is the one place seven features parse a drawn shape."""
 
 from __future__ import annotations
 

@@ -1,21 +1,4 @@
-/**
- * The fixture page and the real page must agree about what exists.
- *
- * Three separate defects have now come from them disagreeing: the fixture
- * pinned the map to 900px and a layout question was answered by the fixture's
- * CSS; the fixture omitted the class that makes the floor strip a column, so
- * the strip laid out sideways; and the fixture had no #floorplan-floor-fields,
- * so a panel that exists on the site was missing from every test.
- *
- * None of those were caught by a test failing. They were caught by a test
- * *passing* and the result looking wrong, which is the expensive way.
- *
- * This catches ids. It does not catch a missing *class*, which is what the
- * second one was - and that one turned out to be the cause of the first: the
- * map element had no .floorplan-map class, so the site's height rule never
- * applied, so the fixture pinned a size to compensate. Both overrides are gone
- * now and the site's stylesheet lays the fixture out alone.
- */
+/** The fixture page and the real page must agree about what exists. */
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -50,28 +33,10 @@ function allTemplates(): string {
     return parts.join("\n");
 }
 
-/**
- * Ids the editor reads from the surrounding page rather than its own markup.
- *
- * Both are optional-chained at the call site, so their absence is a no-op
- * rather than a fault, and neither is part of what the fixture is testing.
- */
+/** Ids the editor reads from the surrounding page rather than its own markup. Both are optional-chained at the call site, so their absence is a no-op rather than a fault, and neither is part of what the fixture is testing. */
 const SITE_CHROME = new Set(["map-overlays-dialog", "page-footer-attribution-text"]);
 
-/**
- * Whether some template declares this id.
- *
- * A partial builds its ids from a parameter - `id="icon-value-{{ picker_id }}"`
- * - so the finished id never appears in any file. A leading segment followed by
- * an interpolation counts as a declaration.
- *
- * Args:
- *     id: The id the editor looks up.
- *     templates: Every template's text.
- *
- * Returns:
- *     True when some template declares it, whole or composed.
- */
+/** Whether some template declares this id. A partial builds its ids from a parameter - `id="icon-value-{{ picker_id }}"` - so the finished id never appears in any file. */
 function declared(id: string, templates: string): boolean {
     if (templates.includes(`"${id}"`) || templates.includes(`'${id}'`)) return true;
     // Only at a segment boundary, and only a real one. Walking every prefix
@@ -87,14 +52,7 @@ function declared(id: string, templates: string): boolean {
 
 describe("the editor template's own markup", () => {
     test("no control in the editor uses a native title tooltip", () => {
-        // The site has a delegated [data-tooltip] tooltip, styled to match
-        // everything else. A native title beside it renders as browser chrome -
-        // different shape, different delay, no styling - so one control using
-        // one and its neighbour the other is visible.
-        //
-        // Both halves, because controls are declared in one file and built in
-        // the other: reading only the template missed two the editor created
-        // itself, one of them written after this check existed.
+        // Native title beside the styled [data-tooltip] renders as mismatched browser chrome; check both template and editor sources.
         const template = readFileSync(EDITOR_TEMPLATE, "utf8");
         const declared = (template.match(/<button\b[^>]*\btitle="/g) ?? []).length;
         const built = (readFileSync(EDITOR, "utf8").match(/\.title\s*=/g) ?? []).length;
@@ -103,21 +61,14 @@ describe("the editor template's own markup", () => {
     });
 
     test("every icon-only control names itself", () => {
-        // The toolbar is seven buttons containing nothing but an icon glyph, so
-        // without an aria-label each one announces as "button". This is read
-        // from the template rather than the rendered fixture: the fixture's
-        // copies of these controls are deliberately bare, and asking it would
-        // be asking about the wrong markup.
+        // Read from the template: the fixture's copies are deliberately bare. An icon ligature is not words, so strip <i> before counting text.
         const template = readFileSync(EDITOR_TEMPLATE, "utf8");
         const buttons = template.match(/<button\b[\s\S]*?<\/button>/g) ?? [];
         expect(buttons.length).toBeGreaterThan(5);
 
         const unnamed = buttons
             .filter((button) => !/aria-label=/.test(button))
-            // A button with its own words needs no label - but an icon's
-            // ligature is not words. <i>undo</i> is how Material Symbols names
-            // a glyph, and counting it as text makes this check pass for every
-            // icon-only button in the file, which is all of them.
+            // An icon's ligature is not words; counting it as text passes every icon-only button.
             .filter((button) => !button.replace(/<i\b[\s\S]*?<\/i>/g, "").replace(/<[^>]*>/g, "").trim())
             .map((button) => (button.match(/id="([^"]+)"|data-tool="([^"]+)"/) ?? ["(anonymous)"])[0]);
 

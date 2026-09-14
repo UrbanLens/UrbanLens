@@ -1,21 +1,5 @@
 """Built-in photo keywording plugins.
-
-Three independent strategies, each storing its own ``ImageKeyword`` rows so
-they coexist and can be regenerated separately:
-
-- **Embedded metadata** (:class:`PhotoMetadataKeywordsPlugin`): the established
-  way - XMP ``dc:subject`` and IPTC keyword tags photographers embed via
-  Lightroom/digiKam etc. Local, free, always on.
-- **AI vision** (:class:`AiVisionKeywordsPlugin`): asks the site's AI provider
-  to describe the photo. Costs real money per call, so it requires the
-  ``AI_PHOTO_PROCESSING`` subscription feature (deliberately separate from the
-  cheaper text-only ``AI`` feature) plus the user's AI toggles. Images are
-  downscaled before being sent.
-- **Content classifier** (:class:`ClassifierKeywordsPlugin`): Cloudflare
-  Workers AI ResNet-50 image classification - near-free label+confidence
-  pairs, no subscription needed, but still an external call so it respects the
-  user's external-APIs toggle.
-"""
+Three independent strategies, each storing its own ``ImageKeyword`` rows so they coexist and can be regenerated separately:"""
 
 from __future__ import annotations
 
@@ -91,11 +75,6 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
 
     def is_available_for(self, image: Image) -> bool:
         """Gate on the AI photo processing subscription and every AI toggle.
-
-        Requires: site-wide AI enabled, an uploader with AI and external APIs
-        enabled on their profile, and the uploader holding the
-        ``AI_PHOTO_PROCESSING`` subscription feature (vision calls cost more
-        than the text features the plain ``AI`` feature covers).
 
         Args:
             image: The uploaded image.
@@ -180,9 +159,6 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
 
     def generate(self, image: Image) -> list[KeywordResult]:
         """Downscale the photo and classify its content into keyword labels.
-
-        ImageNet-style labels often bundle synonyms ("castle, fortress"); each
-        synonym becomes its own keyword sharing the label's confidence.
 
         Args:
             image: The uploaded image.

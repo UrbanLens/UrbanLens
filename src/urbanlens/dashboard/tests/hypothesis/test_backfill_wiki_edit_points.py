@@ -1,17 +1,4 @@
-"""Tests for `backfill_wiki_edit_points` (services.consensus.points), P90.
-
-Extracted from migration `0032_v0_8_0`'s `_0052__backfill` RunPython step
-specifically so it could be exercised by a test - see the function's own
-docstring - but nothing ever wrote one. Called directly against real
-`WikiEdit` rows, the same way migration 0054's merge rule and 0049's email
-normalization are tested (no migration machinery involved), because the
-function takes a model class rather than an apps registry and does not care
-which one it is called with.
-
-Pre-backfill state is set with a queryset `update()` rather than `save()` so
-creating the fixture rows doesn't itself run the points-award signal a
-second time and mask what the backfill did.
-"""
+"""Tests for `backfill_wiki_edit_points` (services.consensus.points), P90."""
 
 from __future__ import annotations
 
@@ -49,14 +36,8 @@ class BackfillWikiEditPointsTests(TestCase):
     def test_the_reverting_row_is_marked_is_revert_and_keeps_its_own_award(self) -> None:
         """`reverted_by` is stored on the *target*, pointing at the row that reverted it.
 
-        So it is the reverting row - not the target - that shows up in the
-        reverse `reverts` relation the backfill queries, and it is the
-        reverting row that gets `is_revert=True`. Its docstring says a
-        revert's own prior award is left in place rather than drained; the
-        `update()` that sets `consensus_points` explicitly excludes
-        `is_revert=True` rows, including ones the same call just marked,
-        which is what actually leaves it standing.
-        """
+        So it is the reverting row - not the target - that shows up in the reverse `reverts` relation the
+        backfill queries, and it is the reverting row that gets `is_revert=True`."""
         target = self._edit()
         reverter = self._edit(changes={"description": {"from": "New", "to": "Old"}})
         target.reverted_by = reverter
@@ -100,13 +81,9 @@ class BackfillWikiEditPointsTests(TestCase):
     def test_already_scored_non_consensus_rows_are_overwritten_to_the_flat_rate_too(self) -> None:
         """The real behavior, not the defensive one: the second update() has no "already scored" guard.
 
-        Any non-revert row with an editor and no consensus_round matches it,
-        whatever `consensus_points` already holds - including a value a live
-        per-diff award (`points_for_changes`) legitimately computed, which
-        need not equal the flat `MANUAL_EDIT_POINTS` this stamps on. Encoded
-        here because it is easy to assume the function is idempotent/protective
-        of existing scores, and the code does not actually behave that way.
-        """
+        Any non-revert row with an editor and no consensus_round matches it, whatever `consensus_points` already
+        holds - including a value a live per-diff award (`points_for_changes`) legitimately computed, which need
+        not equal the flat `MANUAL_EDIT_POINTS` this stamps on."""
         already_scored = self._edit()
         self._set_points(already_scored, 6)  # e.g. a real weighted multi-field award, != MANUAL_EDIT_POINTS
 

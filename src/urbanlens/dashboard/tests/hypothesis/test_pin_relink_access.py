@@ -1,21 +1,4 @@
-"""Relinking a pin must not be a way to *earn* access to a location.
-
-Wiki visibility is deliberately gated on discovery: you see a location's
-community wiki only once you hold a pin at it (or anywhere in its access
-domain). ``location_visible_to`` grants on an exact ``Location`` match, so
-"which Location does my pin point at" is not a neutral preference - it is the
-thing that confers access.
-
-``PinRelinkView`` scopes the *pin* to the requester but resolved the target
-``Location`` straight from the URL slug with no visibility check. Since a
-Location's slug is its ``official_name`` when it has one, the slug of any
-notable place is guessable, and pointing your own pin at it grants you its wiki.
-
-Every legitimate target already passes the check: the picker offers the pin's
-current location plus ``competing_wiki_locations``, which filters to
-``accessible_domain_ids``, and the wiki page's switch button offers the same
-accessible candidates.
-"""
+"""Relinking a pin must not be a way to *earn* access to a location."""
 
 from __future__ import annotations
 

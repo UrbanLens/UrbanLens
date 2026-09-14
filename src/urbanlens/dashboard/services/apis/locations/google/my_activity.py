@@ -1,25 +1,4 @@
-"""Google Takeout "My Activity" (Maps) importer.
-
-Processes the flat ``MyActivity.html`` file Google Takeout produces for the "My
-Activity" > Maps category (distinct from "Timeline"/Semantic Location History,
-which is JSON and already handled by ``location_history.py``). Every "Directions
-to <place>" entry is treated as evidence the user travelled there: entries whose
-destination falls within ``MY_ACTIVITY_MATCH_RADIUS_M`` metres of an existing pin
-owned by the target profile get a PinVisit record created directly, exactly like
-the Location History importer. Unmatched entries are not discarded and pins are
-never auto-created for them (a "Directions to" lookup covers everyday life -
-grocery stores, gas stations, a friend's house - not just places worth mapping),
-so they are queued as a self-directed VisitSuggestion the user can accept or
-reject from their notifications. Other Maps activity types ("Searched for X",
-"Viewed area around X") are out of scope and skipped.
-
-Typical usage (called from maps.GoogleMapsGateway.import_pins_streaming):
-
-    from urbanlens.dashboard.services.apis.locations.google.my_activity import (
-        looks_like_my_activity,
-        import_my_activity_streaming,
-    )
-"""
+"""Google Takeout "My Activity" (Maps) importer."""
 
 from __future__ import annotations
 
@@ -41,11 +20,10 @@ logger = logging.getLogger(__name__)
 
 MY_ACTIVITY_MATCH_RADIUS_M = 100
 
-# Entries are split on this boundary before any other regex runs, so each
-# "Directions to" search is scoped to a single entry's bounded HTML rather than
-# scanning across however many unrelated entries (Search, YouTube, other Maps
-# activity) sit between two real matches in a huge file - without this, a lazy
-# `.*?` spanning the whole document would be quadratic on adversarial input.
+# Entries are split on this boundary before any other regex runs, so each "Directions to" search is
+# scoped to a single entry's bounded HTML rather than scanning across however many unrelated entries
+# (Search, YouTube, other Maps activity) sit between two real matches in a huge file - without this,
+# a lazy `.*?` spanning the whole document would be quadratic on adversarial input.
 _ENTRY_SPLIT_RE = re.compile(r'<div class="outer-cell')
 
 _MAPS_HEADER_RE = re.compile(r'<p class="mdl-typography--title">\s*Maps\s*<br\s*/?>\s*</p>', re.IGNORECASE)
@@ -84,13 +62,10 @@ def looks_like_my_activity(text: str) -> bool:
     """Cheap sniff for a Google Takeout My Activity HTML export.
 
     Args:
-        text: A prefix of the decoded file text - a few KB is enough, the
-            marker classes appear near the top of every My Activity export.
+        text: A prefix of the decoded file text - a few KB is enough, the marker classes appear near the top of every My Activity export.
 
     Returns:
-        True when the text carries the Material Design Lite class Google's My
-        Activity template always emits, alongside a "Maps" activity entry.
-    """
+        True when the text carries the Material Design Lite class Google's My Activity template always emits, alongside a "Maps" activity entry."""
     return "mdl-typography--title" in text and "Maps" in text
 
 
@@ -100,13 +75,7 @@ def _clean_destination_name(name_html: str) -> str:
 
 
 def _extract_coordinates(href: str, tail: str) -> tuple[float, float] | None:
-    """Return the destination (latitude, longitude) for a "Directions to" entry.
-
-    Prefers the last plain-text "lat,lng" line in *tail* (unambiguous - a
-    multi-stop entry's URL can carry more than one coordinate-shaped segment).
-    Falls back to the coordinate embedded in the "dir//" maps *href* when no
-    plain-text coordinate line is present.
-    """
+    """Return the destination (latitude, longitude) for a "Directions to" entry."""
     coords = _COORD_RE.findall(tail)
     if not coords:
         url_match = _COORD_RE.search(href)
@@ -131,16 +100,11 @@ def _extract_coordinates(href: str, tail: str) -> tuple[float, float] | None:
 def _parse_timestamp(text: str) -> datetime | None:
     """Parse a Google Takeout activity timestamp, e.g. "Jul 3, 2026, 1:18:25 PM EDT".
 
-    Tries a fast strptime plus a hardcoded US timezone-abbreviation lookup
-    first (covers the overwhelming majority of real exports), falling back to
-    ``dateparser`` - already a project dependency - for anything else.
-
     Args:
         text: Timestamp text, tags already stripped.
 
     Returns:
-        A tz-aware datetime, or None if the text isn't a recognisable timestamp.
-    """
+        A tz-aware datetime, or None if the text isn't a recognisable timestamp."""
     text = text.strip()
     if not text:
         return None
@@ -149,7 +113,7 @@ def _parse_timestamp(text: str) -> datetime | None:
     offset_hours = _TZ_OFFSET_HOURS.get(tz_abbr.upper()) if body else None
     if offset_hours is not None:
         try:
-            naive = datetime.strptime(body, _TIMESTAMP_FORMAT)  # noqa: DTZ007  # the zone comes from the trailing abbreviation, applied below
+            naive = datetime.strptime(body, _TIMESTAMP_FORMAT)  # noqa: DTZ007  # the zone comes from the trailing...
         except ValueError:
             pass
         else:
@@ -164,11 +128,7 @@ def _parse_timestamp(text: str) -> datetime | None:
 
 
 def _extract_timestamp(tail: str) -> datetime | None:
-    """Return the timestamp from a "Directions to" entry's trailing ``<br>``-separated lines.
-
-    Tries each line from last to first (the timestamp is normally the final
-    line, but this tolerates entries missing the origin/coordinate lines).
-    """
+    """Return the timestamp from a "Directions to" entry's trailing ``<br>``-separated lines."""
     lines = [html.unescape(_TAG_RE.sub("", line)).strip() for line in _BR_SPLIT_RE.split(tail)]
     for line in reversed(lines):
         if not line:
@@ -186,9 +146,7 @@ def parse_my_activity_entries(html_bytes: bytes) -> Generator[dict[str, Any], No
         html_bytes: Raw ``MyActivity.html`` file bytes.
 
     Yields:
-        Dict with keys: ``destination_name`` (str, HTML-unescaped link text),
-        ``latitude``, ``longitude`` (float), ``visited_at`` (tz-aware datetime).
-    """
+        Dict with keys: ``destination_name`` (str, HTML-unescaped link text), ``latitude``, ``longitude`` (float), ``visited_at`` (tz-aware datetime)."""
     try:
         text = html_bytes.decode("utf-8")
     except UnicodeDecodeError:
@@ -233,32 +191,15 @@ def import_my_activity_streaming(
     radius_m: int = MY_ACTIVITY_MATCH_RADIUS_M,
 ) -> Iterator[str]:
     r"""Stream SSE events while importing Google Takeout My Activity (Maps).
-
-    Each parsed "Directions to" entry whose destination matches an existing
-    pin gets an idempotent PinVisit(source=HISTORY) created directly, mirroring
-    ``location_history.import_location_history_streaming``. Entries that match
-    no pin are queued as a self-directed VisitSuggestion instead of being
-    discarded or auto-creating a pin - see ``services.visits.visits.create_visit_suggestion``.
-
-    SSE event shapes emitted:
-
-    - ``{type: "start",    total, subtype: "my_activity"}``
-    - ``{type: "progress", current, total, percent, matched, suggested,
-          skipped, subtype: "my_activity"}``
-    - ``{type: "complete", total, matched, suggested, skipped,
-          subtype: "my_activity"}``
-    - ``{type: "error",    message, subtype: "my_activity"}``
+    Entries that match no pin are queued as a self-directed VisitSuggestion instead of being discarded or auto-creating a pin - see ``services.visits.visits.create_visit_suggestion``.
 
     Args:
-        files: List of ``(filename, raw_bytes)`` pairs already extracted
-               from any archive by the caller.
-        profile: The user profile whose pins are used for proximity matching
-            and to whom unmatched entries are suggested.
+        files: List of ``(filename, raw_bytes)`` pairs already extracted from any archive by the caller.
+        profile: The user profile whose pins are used for proximity matching and to whom unmatched entries are suggested.
         radius_m: Match radius in metres (default 100 m).
 
     Yields:
-        SSE-formatted strings (``data: {...}\\n\\n``).
-    """
+        SSE-formatted strings (``data: {...}\\\\n\\\\n``)."""
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.location.queryset import quantize_coordinate
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
@@ -326,10 +267,10 @@ def import_my_activity_streaming(
                 latitude=quantize_coordinate(entry["latitude"], "latitude"),
                 longitude=quantize_coordinate(entry["longitude"], "longitude"),
             ).first()
-            # create_visit_suggestion only dedupes against an already-accepted visit -
-            # a pending suggestion for the same place+date needs its own check here,
-            # or re-uploading the same export before the user responds would raise a
-            # duplicate suggestion every time (mirrors _suggest_for_unfiled_photo).
+            # create_visit_suggestion only dedupes against an already-accepted visit - a pending
+            # suggestion for the same place+date needs its own check here, or re-uploading the same
+            # export before the user responds would raise a duplicate suggestion every time (mirrors
+            # _suggest_for_unfiled_photo).
             already_pending = VisitSuggestion.objects.for_profile(profile).pending().for_place(location=location, latitude=entry["latitude"], longitude=entry["longitude"]).filter(visited_at__date=entry["visited_at"].date()).exists()
             suggestion = (
                 None

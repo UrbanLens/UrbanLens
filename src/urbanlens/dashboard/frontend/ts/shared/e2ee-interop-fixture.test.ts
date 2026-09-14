@@ -1,22 +1,5 @@
 /**
  * Guards the committed E2EE interop fixture against the live crypto.
- *
- * `docs/e2ee-interop-fixture.json` is generated from this module's own crypto
- * and exists so a native client (the Flutter app's E2eeService) can replay each
- * step and match byte-for-byte. Nothing in this repo read it back, so the
- * coupling ran one way only: change `KDF_OPSLIMIT`/`KDF_MEMLIMIT` - a plausible
- * hardening change - and the committed fixture silently stops describing what
- * the web client actually does. The native implementation keeps passing against
- * a stale contract and diverges from the server it has to interoperate with,
- * with no signal from here.
- *
- * Only the deterministic steps are checkable: the KDF derivations, and the
- * secretbox unwrap of the private key. The keypair/nonce/salt generation in the
- * fixture is random by construction and is covered by e2ee-crypto.test.ts.
- *
- * If this fails because the crypto changed deliberately, regenerate the fixture:
- *   bun run src/urbanlens/dashboard/frontend/ts/tools/generate-e2ee-fixture.ts > docs/e2ee-interop-fixture.json
- * and tell whoever owns the native client - that is the whole point of the file.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -36,9 +19,7 @@ const b64 = (bytes: Uint8Array): string => sodium.to_base64(bytes, sodium.base64
 
 describe("committed E2EE interop fixture still matches this client's crypto", () => {
     test("the fixture records the KDF parameters this client uses", () => {
-        // A native client hard-codes these from the fixture; drifting them here
-        // without regenerating leaves it deriving different keys from the same
-        // password.
+        // A native client hard-codes these from the fixture.
         expect(fixture.kdf.opslimit).toBe(KDF_OPSLIMIT);
         expect(fixture.kdf.memlimit).toBe(KDF_MEMLIMIT);
     });

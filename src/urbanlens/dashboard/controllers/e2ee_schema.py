@@ -1,14 +1,9 @@
 """Schema serializers for the E2EE key-distribution API.
 
-Documentation-only: the views parse JSON by hand (deliberately - key blobs
-are validated as opaque size-bounded strings, and DRF field coercion adds
-nothing), but the published OpenAPI schema previously said `object` about
-every payload here. A native client generates its E2EE types from these, so
-each field mirrors the view's actual reads/writes exactly; drift is caught by
-`test_external_api_schema_e2ee.py`.
-
-Blob fields are base64-encoded byte strings whose maximum lengths are
-enforced in the views (`valid_blob`); they are documented as plain strings.
+A native client generates its E2EE types from these, so each field mirrors the view's actual
+reads/writes exactly; drift is caught by `test_external_api_schema_e2ee.py`.
+Blob fields are base64-encoded byte strings whose maximum lengths are enforced in the views
+(`valid_blob`); they are documented as plain strings.
 """
 
 from __future__ import annotations
@@ -138,13 +133,7 @@ class E2EEResetRequestSerializer(serializers.Serializer):
 
 
 class E2EEResetResponseSerializer(serializers.Serializer):
-    """POST reset response: the new bundle version and what happened to history.
-
-    Declared explicitly because the endpoint never returned the generic
-    ``{"ok": true}`` its schema previously claimed, and because
-    ``not_rewrapped`` is the only signal a client gets that some of the
-    caller's threads are now permanently unreadable.
-    """
+    """POST reset response: the new bundle version and what happened to history."""
 
     version = serializers.IntegerField(help_text="The new key bundle version.")
     rewrapped = serializers.IntegerField(help_text="Key copies re-sealed to the new keypair; these stay readable.")

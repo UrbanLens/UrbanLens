@@ -102,10 +102,7 @@ class SavedFilterMatchCountsViewTests(TestCase):
         self.assertEqual(data["counts"][str(saved_filter.uuid)], 2)
 
     def test_pins_fingerprint_is_computed_once_per_request_not_once_per_filter(self) -> None:
-        """Regression: get_or_compute_matching_uuids used to recompute the profile's pin
-        fingerprint (a DB aggregate) once per saved filter the profile owns, on every single
-        request to this view. With N saved filters that was N redundant, identical queries per
-        toggle instead of 1. See docs/audits/GOALS_CODE_AUDIT.md ("Saved filter performance")."""
+        """With N saved filters that was N redundant, identical queries per toggle instead of 1."""
         for i in range(5):
             SavedFilter.objects.create(profile=self.profile, name=f"Extra {i}", criteria={})
         self.assertGreater(self.profile.saved_filters.count(), 5)

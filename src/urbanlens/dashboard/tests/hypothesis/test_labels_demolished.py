@@ -1,10 +1,4 @@
-"""Tests for services.labels - auto-applying the protected "Demolished" status.
-
-Mirrors services.visits.visits.add_visited_status's contract for pins, plus the
-wiki-side counterpart that uses one canonical global label instead of a
-per-profile one (a Wiki has no owning profile - see services.labels'
-module docstring).
-"""
+"""Tests for services.labels - auto-applying the protected "Demolished" status."""
 
 from __future__ import annotations
 
@@ -62,8 +56,6 @@ class AddDemolishedStatusToWikiTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        # Deterministic regardless of whether migration 0087 already seeded
-        # the global row in this test database.
         Label.objects.filter(profile=None, kind="status", name="Demolished").delete()
         self.global_demolished = ensure_label(profile=None, kind="status", name="Demolished", is_protected=True)
 

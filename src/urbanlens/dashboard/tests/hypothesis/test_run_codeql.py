@@ -1,10 +1,4 @@
-"""CodeQL wrapper: only a finalised database is reusable, and notes stay quiet.
-
-A failed JavaScript extract still writes ``codeql-database.yml``. Treating that
-file as success makes ``database analyze`` fail with "needs to be finalized".
-Findings without a per-result ``level`` take the rule default, so notes must
-not be dumped on every run.
-"""
+"""CodeQL wrapper: only a finalised database is reusable, and notes stay quiet."""
 
 from __future__ import annotations
 

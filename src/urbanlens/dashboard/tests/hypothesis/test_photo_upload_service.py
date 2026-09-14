@@ -1,16 +1,4 @@
-"""Behavioral lock on the Vault photo-upload path.
-
-Written to characterize ``controllers.vault_photos.PhotoUploadView.post`` *before*
-its body was extracted into ``services.photos.photo_upload.upload_photo``, and kept
-afterwards so the extraction stays honest: the web uploader and the external
-API's ``POST photos/`` now share one implementation, and this is what catches
-that implementation drifting away from what the page has always done.
-
-Every assertion here is about the HTMX/JSON contract the Vault page's
-uploader JS depends on - the status codes in particular, since the page
-distinguishes a duplicate (409) from a rejected file (400) from a quota
-overrun (413) purely by status.
-"""
+"""Behavioral lock on the Vault photo-upload path."""
 
 from __future__ import annotations
 

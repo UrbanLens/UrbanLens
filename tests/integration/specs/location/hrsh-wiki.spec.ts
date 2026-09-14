@@ -1,41 +1,7 @@
 /**
- * The community wiki for the campus: how it comes into being, and what it knows.
- *
- * ## "The wiki is created automatically" is true in a way nobody can see
- *
- * A pin's `post_save` enqueues `ensure_draft_wiki_for_location`, which really
- * does create a `Wiki` row without anyone asking. But it creates it with
- * `officially_created=False`, and `Wiki.officially_created`'s own comment is
- * explicit that this is not a wiki yet:
- *
- * > Every user- and API-visible surface must treat officially_created=False the
- * > same as "no wiki exists yet".
- *
- * `WikiManager.get_for_location` and `resolve_visible_wiki` both honour that, so
- * `GET /wikis/{location_slug}/` answers **404** for a draft. A test asserting
- * "the wiki appears on its own" would therefore be asserting against the design.
- *
- * What the draft is *for* is enrichment: Google place linking, name resolution,
- * boundary generation and Wikipedia seeding all run against it before anyone
- * clicks. So the observable claim - and the one worth testing - is not that the
- * wiki appears, but that **it is already populated the moment it is created**.
- * That is the only externally visible evidence the background draft did its job.
- *
- * Promotion has exactly one entry point in the whole product, and it is not in
- * the published API: `POST /dashboard/map/pin/<slug>/wiki/create/`, from a
- * browser session. That is why this file needs `page` and cannot be an API spec.
- *
- * ## A caveat on the pinned-user count
- *
- * `wiki_community_summary` counts `location.pins` - pins on that one Location
- * row - while *access* is by `Place.domain_root`. Five people pinning five
- * coordinates on this campus create five Locations, share one wiki, and each
- * contributes 1 to their own Location's count. So on this fixture the masked
- * branch is reached no matter how many accounts pin the place, and the "fewer
- * than 3" assertion below **cannot fail for the right reason**. It is kept
- * because the copy is worth pinning down, and the vacuity is recorded here so
- * nobody later mistakes it for real coverage. Making it non-vacuous needs the
- * count to follow the access domain, which is an application change.
+ * The community wiki for the campus: how it comes into being, and what it knows. A pin's
+ * `post_save` enqueues `ensure_draft_wiki_for_location`, which really does create a `Wiki` row
+ * without anyone asking.
  */
 
 import { ensureCampusWiki, expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";

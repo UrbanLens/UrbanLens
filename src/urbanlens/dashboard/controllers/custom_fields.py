@@ -1,12 +1,6 @@
 """Custom field views - define per-user fields and edit their values on targets.
 
-Field definitions are managed from Settings > Customize (and inline from the pin
-detail panel). Values are edited wherever the target is displayed: the pin detail
-page, another user's profile page, and the photo / markup-map lightboxes.
-
-Everything here is strictly private to the requesting user: fields are looked up
-through ``profile=request.user.profile`` and targets are checked for ownership
-(pins, photos, maps) before a value is written.
+Field definitions are managed from Settings > Customize (and inline from the pin detail panel).
 """
 
 from __future__ import annotations
@@ -86,8 +80,8 @@ def rows_for_target(profile: Profile, entity_type: str, target: Any) -> list[dic
         target: The Pin / Image / Profile / MarkupMap the values are attached to.
 
     Returns:
-        List of ``{"field": CustomField, "value": CustomFieldValue | None}`` dicts
-        in field display order.
+        List of ``{"field": CustomField, "value": CustomFieldValue | None}`` dicts in field display
+        order.
     """
     fields = list(CustomField.objects.for_entity(profile, entity_type))
     values_by_field_id = {v.field_id: v for v in CustomFieldValue.objects.filter(field__in=fields).for_target(target).select_related("field")}
@@ -104,11 +98,10 @@ def rows_for_target(profile: Profile, entity_type: str, target: Any) -> list[dic
 def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldValue | None, str | None]:
     """Create, update, or clear the value of ``field`` on ``target``.
 
-    An empty ``raw`` deletes the stored value (the field simply has no value on
-    that target anymore).
+    An empty ``raw`` deletes the stored value (the field simply has no value on that target anymore).
 
     Args:
-        field: The field being written. Must match the target's entity type.
+        field: The field being written.
         target: The Pin / Image / Profile / MarkupMap instance.
         raw: The user-entered value.
 
@@ -154,9 +147,8 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
         logger.info("custom field value rejected: %s", e)
         return None, "That item wasn't found (or you can't reference it)."
     except CustomFieldValueError as e:
-        # Only EmptyValueError reaches here in practice - raw is already
-        # stripped and checked non-blank above - but the base class is caught
-        # too so a future subclass fails safe instead of raising uncaught.
+        # Only EmptyValueError reaches here in practice - raw is already stripped and checked non-blank above -
+        # but the base class is caught too so a future subclass fails safe instead of raising uncaught.
         logger.warning("unexpected custom field value error: %s", e)
         return None, "That value couldn't be saved."
     value.save()
@@ -195,12 +187,11 @@ def _parse_definition(request: HttpRequest) -> tuple[dict[str, Any], str | None]
     """Extract and validate a field definition from a create/update POST.
 
     Reads ``name``, ``field_type``, ``style``, ``options`` (select fields), and
-    ``slider_min``/``slider_max`` (slider style), validating each against the
-    chosen type.
+    ``slider_min``/``slider_max`` (slider style), validating each against the chosen type.
 
     Returns:
-        Tuple of (definition dict with ``name``/``field_type``/``style``/``config``
-        keys, error message or None). The dict is empty when there's an error.
+        Tuple of (definition dict with ``name``/``field_type``/``style``/``config`` keys, error message
+        or None).
     """
     name = (request.POST.get("name") or "").strip()
     field_type = (request.POST.get("field_type") or "").strip() or CustomFieldType.TEXT
@@ -257,7 +248,7 @@ def create_field(profile: Profile, entity_type: str, request: HttpRequest) -> st
         profile: The owning profile.
         entity_type: A :class:`CustomFieldEntity` value.
         request: POST carrying ``name``, ``field_type``, and optionally
-            ``style``/``options``/``slider_min``/``slider_max``.
+        ``style``/``options``/``slider_min``/``slider_max``.
 
     Returns:
         None on success, or a user-facing error message.
@@ -388,10 +379,9 @@ _FIXED_DEFAULT_STEP = 11.0
 def _render_pin_panel(request: HttpRequest, profile: Profile, pin: Pin, error: str | None = None) -> HttpResponse:
     """Render the Private Pin page's custom-fields area.
 
-    The response is one wrapper (``#pin-custom-fields-panel``) holding the
-    Custom Fields card (display=default rows), one standalone card per
-    display=section field, and one draggable overlay per display=fixed field -
-    so every value save or definition change re-renders all three placements
+    The response is one wrapper (``#pin-custom-fields-panel``) holding the Custom Fields card
+    (display=default rows), one standalone card per display=section field, and one draggable overlay per
+    display=fixed field - so every value save or definition change re-renders all three placements
     consistently in a single swap.
     """
     rows = rows_for_target(profile, CustomFieldEntity.PIN, pin)
@@ -454,10 +444,10 @@ class PinCustomFieldValueView(LoginRequiredMixin, View):
 class CustomFieldPositionView(LoginRequiredMixin, View):
     """POST: remember where the user dragged a fixed-display field.
 
-    The position is per-field (fields are already per-user) and applies to
-    every Private Pin page, per the feature request. Values are viewport
-    percentages, clamped server-side so a bad client can't park a field
-    off-screen for good.
+    The position is per-field (fields are already per-user) and applies to every Private Pin page, per
+    the feature request.
+    Values are viewport percentages, clamped server-side so a bad client can't park a field off-screen
+    for good.
     """
 
     def post(self, request: HttpRequest, field_id: int) -> HttpResponse:

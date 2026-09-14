@@ -1,18 +1,4 @@
-"""Tests for Image.image's upload_to path handling.
-
-Covers the SuspiciousFileOperation regression: an uploaded filename longer
-than the field's old default max_length (100) - real-world archival/scan
-filenames routinely are - overflowed Storage.get_available_name's truncation
-math and crashed the upload outright instead of storing the file. Now doubly
-moot for length purposes (the stored stem is a fixed-length opaque token,
-never the uploaded name), but still worth proving nothing regresses for an
-extreme filename.
-
-Every generated path now carries a random ``<bucket>/<token>/`` directory
-ahead of an opaque filename (see ``pin_image_upload_path``'s docstring - the
-directory is what stops a filename from being a guessable URL; the opaque
-name is what stops the URL from spelling out the uploaded file's own name).
-"""
+"""Tests for Image.image's upload_to path handling."""
 
 from __future__ import annotations
 
@@ -80,10 +66,6 @@ class PinImageUploadPathTests(SimpleTestCase):
         self.assertTrue(path.endswith(".jpg"))
 
     def test_camera_prefix_never_reaches_storage(self):
-        # is_camera_generated_filename() used to match on the *stored* name's
-        # prefix; it now reads Image.original_filename instead (see
-        # test_image_attribution.py), specifically so nothing recognisable
-        # from the upload has to survive into the stored path at all.
         long_camera_name = "PXL_20260709_123456" + ("_extra" * 20) + ".jpg"
         path = pin_image_upload_path(Image(), long_camera_name)
         self.assertNotIn("PXL_20260709_123456", path)

@@ -1,12 +1,4 @@
-"""Tests for the REData-backed reference-document media providers (Smithsonian,
-Library of Congress, Internet Archive) -
-``services.apis.locations.redata_reference_documents_gateway``.
-
-Mirrors ``test_redata_context_gateway.py``'s conventions: a mocked ``session``
-for the gateway-level tests (no DB, no network), and a mocked
-``RedataReferenceDocumentsGateway.search`` for the provider-level tests, since
-those only care about turning a result dict into a ``MediaItem``.
-"""
+"""Tests for the REData-backed reference-document media providers (Smithsonian, Library of Congress, Internet Archive) - ``services.apis.locations.redata_reference_documents_gateway``."""
 
 from __future__ import annotations
 
@@ -27,12 +19,6 @@ from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gate
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 
-    # See test_redata_media_gateway.py's identical trick: gives the mixin's own
-    # methods real assertX()/provider_cls typing under mypy without unittest
-    # actually discovering and running _ProviderMediaMappingMixin on its own
-    # (it has no provider_cls/redata_provider/display_name set) - a
-    # unittest.TestCase subclass is collected by class regardless of name, so
-    # the real base must stay `object` at runtime.
     _MixinBase = SimpleTestCase
 else:
     _MixinBase = object

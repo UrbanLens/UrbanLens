@@ -1,15 +1,4 @@
-"""Tests for EpaFacility - the persistent, project-wide EPA ECHO facility record.
-
-Covers the model's own upsert/lookup helpers. ``plugins.builtin.epa_echo``'s
-``_fetch_epa_echo_data`` calls ``record_detail_result`` for every facility
-REData's points-of-interest lookup returns (see
-``test_epa_echo_nearby_research.py``'s ``FetchEpaEchoDataExactMatchTests`` for
-that integration) - ``record_search_result``/``known_details_by_registry_id``
-below are no longer called by that fetch (REData resolves every candidate's
-detail in one call, unlike the old direct EPA ECHO API's separate,
-rate-limited per-candidate Detailed Facility Report fetch), but remain valid,
-tested model-level API.
-"""
+"""Tests for EpaFacility - the persistent, project-wide EPA ECHO facility record."""
 
 from __future__ import annotations
 
@@ -116,11 +105,7 @@ class RecordDetailResultTests(TestCase):
         self.assertEqual(entry.longitude, -75.0)
 
     def test_coordinate_less_detail_is_recorded_but_never_clobbers_real_coordinates(self) -> None:
-        """A REData row with no coordinates for a facility still marks it as
-        detail-fetched - it can never be an exact-site match, and recording
-        that fact saves re-fetching it for every nearby pin - but its None
-        coordinates must not erase a search-derived latitude or a previous
-        richer detail's coordinates."""
+        """A REData row with no coordinates for a facility still marks it as detail-fetched - it can never be an exact-site match, and recording that fact saves re-fetching it for every nearby pin - but its None coordinates must not erase a search-derived latitude or a previous richer detail's coordinates."""
         EpaFacility.record_search_result("R1", name="Test", address="1 Main St", latitude=40.0, data={})
         entry = EpaFacility.record_detail_result(
             "R1", name="Test", address="1 Main St", latitude=None, longitude=None, data={}

@@ -1,19 +1,4 @@
-"""Tests for the data-consolidating pin merge and its PinMergeSuggestion review queue.
-
-Covers:
-- PinMergeSuggestion.objects.upsert - order-independent dedup of pending
-  suggestions for the same pair, and the default-survivor heuristic.
-- plan_merge_conflicts - only Article/Boundary/CustomFieldValue collisions
-  surface as a real conflict needing a user decision.
-- merge_pins - every rule in its per-relation table (safe bulk reassigns,
-  auto-dedup, ask-the-user conflicts, child-pin reparenting), atomicity, and
-  that the loser is gone with a PinTombstone left behind.
-- accept_pin_merge_suggestion / reject_pin_merge_suggestion.
-- PinMergeSuggestionActionView over HTTP - ownership, already-handled, and
-  unresolved-conflict guards.
-- The legacy-CID collision trigger raising exactly one suggestion, deduped
-  across repeated collisions.
-"""
+"""Tests for the data-consolidating pin merge and its PinMergeSuggestion review queue."""
 
 from __future__ import annotations
 
@@ -233,11 +218,9 @@ class PlanMergeConflictsTests(TestCase):
 class PlanMergeConflictsBulkTests(TestCase):
     """The batched form answers identically, in three queries however many pairs.
 
-    The dialog behind "Organize this property" plans conflicts for every
-    candidate pin standing inside the property before the owner picks anything,
-    and that list is capped at 500 - so per-pair queries there are the whole
-    cost of the page.
-    """
+    The dialog behind "Organize this property" plans conflicts for every candidate pin standing inside the
+    property before the owner picks anything, and that list is capped at 500 - so per-pair queries there are the
+    whole cost of the page."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -308,10 +291,8 @@ class PlanMergeConflictsBulkTests(TestCase):
     def test_an_unsaved_pin_has_nothing_to_collide_with(self) -> None:
         """It can hold none of the three relations, so the answer is "no conflicts".
 
-        Worth pinning because the batched fetch has to skip it - there is no id
-        to query for - and the comparison then has to answer rather than fail on
-        the missing entry.
-        """
+        Worth pinning because the batched fetch has to skip it - there is no id to query for - and the
+        comparison then has to answer rather than fail on the missing entry."""
         saved = self._pin(article=True, boundary=True, custom_field=True)
         unsaved = Pin(profile=self.profile, location=saved.location)
 

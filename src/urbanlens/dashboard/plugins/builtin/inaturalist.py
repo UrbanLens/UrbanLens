@@ -51,19 +51,15 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
             label = obs.get("common_name") or obs.get("scientific_name") or "Unknown species"
             value = obs.get("observed_on") or "Date unknown"
             if (obs.get("attributes") or {}).get("obscured"):
-                # A provider deliberately coarsened this sighting's location
-                # (common for threatened species, sometimes by tens of
-                # kilometres) - showing it as an ordinary precise sighting
-                # would misrepresent it.
+                # A provider deliberately coarsened this sighting's location (common for threatened
+                # species, sometimes by tens of kilometres) - showing it as an ordinary precise
+                # sighting would misrepresent it.
                 value += " (approximate location)"
             meta.append(
                 {
                     "label": label,
                     "value": value,
-                    # Links straight to this specific sighting, not iNaturalist's
-                    # homepage. The field is `url` on REData's NatureObservation;
-                    # reading iNaturalist's own `uri` spelling left every row
-                    # unlinked until 2026-08-19.
+                    # Links straight to this specific sighting, not iNaturalist's homepage.
                     "href": obs.get("url") or "",
                 },
             )

@@ -1,14 +1,4 @@
-/**
- * The pins domain end to end, against a real database.
- *
- * Pin creation is shared: the external API's POST and the map UI's "Add pin"
- * form both go through `create_pin_for_profile`, so the fuzzy-location dedup,
- * the geocoding gate, the slug allocation and the background enrichment all
- * apply either way. That makes this the one endpoint worth exercising against
- * real data rather than a fixture - the dedup in particular behaves differently
- * against a database that already contains locations, which is precisely the
- * situation a unit test never reproduces.
- */
+/** The pins domain end to end, against a real database. */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";

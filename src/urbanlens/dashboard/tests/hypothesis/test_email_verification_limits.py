@@ -1,12 +1,4 @@
-"""Secondary-email verification sends are bounded - they were the one ungoverned path.
-
-Every other arbitrary-address send goes through the `email_safety` ledger;
-adding/resending verification emails had no rate limit, no resend cooldown,
-and no ledger entry (PROBLEMS 2026-08-13: relay and mail-bomb, both cheap).
-Both paths now consult the same per-profile caps as invites and log under
-``EmailType.EMAIL_VERIFICATION``; resend also has a fixed cooldown per
-address.
-"""
+"""Secondary-email verification sends are bounded - they were the one ungoverned path."""
 
 from __future__ import annotations
 

@@ -47,11 +47,10 @@ def _owned_editable_labels(profile, uuids: list) -> list[Label]:
 class LabelReorderView(ExternalApiView):
     """POST: set the caller's display-priority order across their own tag/category/status labels.
 
-    ``uuids`` is the complete desired order, first = highest priority. Global
-    labels named in the request are left untouched (see
-    ``LabelReorderResponseSerializer.skipped_global_uuids``) - ``Label.order``
-    is a single shared column, and rewriting it for a label everyone sees
-    would move it for every other user on the site.
+    ``uuids`` is the complete desired order, first = highest priority.
+    Global labels named in the request are left untouched (see
+    ``LabelReorderResponseSerializer.skipped_global_uuids``) - ``Label.order`` is a single shared
+    column, and rewriting it for a label everyone sees would move it for every other user on the site.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -114,9 +113,8 @@ class LabelBulkDeleteView(ExternalApiView):
 class LabelBulkEditView(ExternalApiView):
     """POST: apply the same icon/color/description/order and/or parent-hierarchy change to several labels.
 
-    Every field but ``uuids`` is optional and independent. See
-    ``serializers_labels_bulk.LabelBulkEditSerializer`` for exact null/absent
-    semantics.
+    Every field but ``uuids`` is optional and independent.
+    See ``serializers_labels_bulk.LabelBulkEditSerializer`` for exact null/absent semantics.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -136,11 +134,8 @@ class LabelBulkEditView(ExternalApiView):
         if not labels:
             return Response({"error": "No matching labels."}, status=404)
 
-        # Unknown parent/child uuids are refused, not dropped - silently
-        # building a smaller hierarchy than the client asked for is worse than
-        # refusing, matching LabelDetailView.patch's single-label semantics.
-        # Resolved up front, before any write, so a 400 here can't leave the
-        # icon/color/description/order changes below already committed.
+        # Unknown parent/child uuids are refused, not dropped - silently building a smaller hierarchy than the
+        # client asked for is worse than refusing, matching LabelDetailView.patch's single-label semantics.
         add_parent_uuids = [str(value) for value in data.get("add_parent_uuids") or []]
         parents: list[Label] = []
         if add_parent_uuids:
@@ -194,11 +189,11 @@ class LabelBulkEditView(ExternalApiView):
 class LabelBulkConvertView(ExternalApiView):
     """POST: convert several of the caller's own labels to another kind at once.
 
-    A label already at ``target_kind`` is left untouched. A ``status`` label
-    cannot be converted to anything else - the internal UI has no path out of
-    ``status`` either (see ``LabelBulkConvertView._resolved_target_kind`` in
-    ``controllers/labels.py``) - so those are silently skipped too, alongside
-    the usual foreign/global/protected drops.
+    A label already at ``target_kind`` is left untouched.
+    A ``status`` label cannot be converted to anything else - the internal UI has no path out of
+    ``status`` either (see ``LabelBulkConvertView._resolved_target_kind`` in ``controllers/labels.py``)
+
+    - so those are silently skipped too, alongside the usual foreign/global/protected drops.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {

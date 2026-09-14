@@ -1,10 +1,4 @@
-"""Tests for the distinct-per-list fallback avatar color system.
-
-Covers the pure assignment algorithm (services.profile.avatar_colors) and its two
-wired-in render sites: the group members dialog and the group member search
-results (both listing several people's fallback avatars together, where a
-shared default color made them indistinguishable).
-"""
+"""Tests for the distinct-per-list fallback avatar color system."""
 
 from __future__ import annotations
 

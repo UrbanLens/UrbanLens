@@ -26,9 +26,7 @@ def backup_files(backup_dir: Path | None = None) -> list[Path]:
     root = Path(backup_dir or app_settings.backups_dir)
     if not root.exists():
         return []
-    # Only files matching DatabaseBackup's own naming scheme count - a stray non-backup file
-    # (or a `.tmp` left behind by a killed pg_dump) must never inflate admin-facing stats or
-    # be treated as a completed backup.
+    # Only files matching DatabaseBackup's naming scheme count.
     return sorted(
         (p for p in root.iterdir() if p.is_file() and is_backup_filename(p.name)),
         key=lambda p: p.stat().st_mtime,

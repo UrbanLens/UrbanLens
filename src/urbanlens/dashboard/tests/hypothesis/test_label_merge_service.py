@@ -1,13 +1,4 @@
-"""Tests for ``services.labels.merge`` - the shared label-merge implementation.
-
-These cover the three bugs the extraction fixed, which the controller versions
-had no coverage for at all:
-
-- the merge is now atomic, so a failure partway through rolls the whole thing
-  back instead of leaving attachments split across a half-deleted label;
-- children are reparented onto the target instead of being silently orphaned;
-- wiki attachments move for every pin-style kind, not just categories.
-"""
+"""Tests for ``services.labels.merge`` - the shared label-merge implementation."""
 
 from __future__ import annotations
 

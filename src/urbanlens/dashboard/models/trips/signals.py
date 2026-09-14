@@ -1,10 +1,6 @@
 """Auto-sync push for trips linked to a user's Google Calendar.
-
-When a trip is imported from a Google Calendar event with "keep in sync"
-checked (:attr:`~urbanlens.dashboard.models.calendar_sync.model.TripCalendarLink.auto_sync`),
-any later change to the trip or one of its activities should be reflected on
-the linked calendar event. This is one-way only - edits made on Google
-Calendar are never pulled back into UrbanLens.
+When a trip is imported from a Google Calendar event with "keep in sync" checked (:attr:`~urbanlens.dashboard.models.calendar_sync.model.TripCalendarLink.auto_sync`), any later change to the trip or one of its activities should be reflected on the linked calendar event.
+This is one-way only - edits made on Google Calendar are never pulled back into UrbanLens.
 """
 
 from __future__ import annotations
@@ -21,10 +17,7 @@ from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComme
 
 def queue_calendar_push(trip_id: int | None) -> None:
     """Enqueue a calendar push for a trip, if it has an auto-sync link.
-
-    The existence check avoids scheduling a Celery task (and its DB lookups)
-    for the overwhelming majority of trips that were never imported with
-    "keep in sync" enabled.
+    The existence check avoids scheduling a Celery task (and its DB lookups) for the overwhelming majority of trips that were never imported with "keep in sync" enabled.
 
     Args:
         trip_id: PK of the trip that changed, or None (unsaved FK).
@@ -70,14 +63,8 @@ def sync_trip_on_activity_save(sender: type[TripActivity], instance: TripActivit
 @receiver(pre_delete, sender=TripComment, dispatch_uid="trip_comment_flag_parent_deleted_on_delete")
 def flag_replies_on_parent_delete(sender: type[TripComment], instance: TripComment, **kwargs: Any) -> None:
     """Mark every reply of a trip comment about to be deleted as parent-deleted.
-
-    Mirrors ``models.comments.signals.flag_replies_on_parent_delete`` (UL-219)
-    for ``TripComment``, which has the identical ``parent =
-    ForeignKey("self", on_delete=SET_NULL)`` shape. Runs pre-delete so the
-    affected replies are flagged before Django's collector nulls their
-    ``parent`` FK - by post-delete time there is no reliable way to find them
-    again. Uses bulk ``.update()`` rather than per-row ``.save()`` so this
-    doesn't re-trigger any signal handlers on the reply rows themselves.
+    Mirrors ``models.comments.signals.flag_replies_on_parent_delete`` (UL-219) for ``TripComment``, which has the identical ``parent = ForeignKey("self", on_delete=SET_NULL)`` shape.
+    Runs pre-delete so the affected replies are flagged before Django's collector nulls their ``parent`` FK - by post-delete time there is no reliable way to find them again.
 
     Args:
         sender: The TripComment model class.

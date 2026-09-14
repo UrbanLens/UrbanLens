@@ -50,10 +50,7 @@ nav {
     letter-spacing: -0.01em;
     @include truncate;
 
-    // Gone rather than truncated on a phone. Below about 380px the bar's slack
-    // is smaller than the word, so shrinking it renders two pixels and an
-    // ellipsis - which reads as a rendering fault, not a layout choice. The logo
-    // beside it carries the brand on its own.
+    // Gone rather than truncated on a phone.
     @include down($breakpoint-xs) {
         display: none;
     }
@@ -95,12 +92,12 @@ nav {
     padding: 0;
     gap: 0.25rem;
     flex: 1;
-    
+
     > li {
         &:not(.app-nav-link--active):hover {
             background: rgba(255, 255, 255, 0.1);
         }
-        
+
         &:hover {
             a {
                 color: #fff;
@@ -136,10 +133,7 @@ nav {
     align-items: center;
     gap: 0.5rem;
     margin-left: auto;
-    // Fixed, and deliberately so: these are icon buttons with nothing to give
-    // up. Letting them shrink collapsed the boxes while their contents stayed
-    // put, which looks identical to the overflow it was meant to fix. The brand
-    // absorbs the shrink instead (P52).
+    // Fixed, and deliberately so: these are icon buttons with nothing to give up.
     flex-shrink: 0;
 }
 
@@ -217,11 +211,7 @@ nav {
     max-width: 12rem;
     @include truncate;
 
-    // Dropped rather than truncated on a phone. The surplus at 390px is smaller
-    // than the name itself, so truncating leaves a couple of characters and an
-    // ellipsis, which reads as a rendering fault rather than a choice - and the
-    // avatar beside it already identifies the account, with the full username in
-    // the dropdown it opens.
+    // Dropped rather than truncated on a phone.
     @include down($breakpoint-xs) {
         display: none;
     }
@@ -388,9 +378,7 @@ nav {
 }
 
 // -- Site footer --------------------------------------------------------------
-// Mobile-first flex layout: version sits at the start, everything else
-// (Github link, and on the map page the live attribution text) sits at the
-// end, on every page - not just the map page.
+// Mobile-first flex layout: version sits at the start, everything else (Github link, and on the map page the live attribution text) sits.
 .page-footer {
     background-color: var(--nav-bg);
     color: var(--ul-grey-4);
@@ -481,12 +469,7 @@ nav {
         }
     }
 
-    // .page-footer__github is inline-flex at the base selector (so its
-    // icon/text/link line up when it's a direct flex child of the plain
-    // footer). Here it's nested inside .page-footer__meta, a block div,
-    // so an inline-flex box just shrinks to content and sits left,
-    // ignoring the text-align: right above. Force it block-level and
-    // right-justify its flex children directly instead.
+    // .page-footer__github is inline-flex at the base selector.
     .page-footer__github {
         display: flex;
         justify-content: flex-end;
@@ -1012,9 +995,6 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
         }
 
         // WhatsApp/SMS columns before a number is connected on the profile.
-        // Not the disabled attribute - that would drop the field from the
-        // form entirely, silently clearing any stored preference the next
-        // time an unrelated checkbox in this same auto-saving form changes.
         &--unavailable {
             cursor: not-allowed;
 
@@ -1193,11 +1173,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
         margin-left: 0;
     }
 
-    // The bar's one elastic element, but only once the links are hidden: above
-    // this width the links are what absorb a narrow viewport, and letting the
-    // brand shrink there squeezed its name to nothing at exactly 768px. Below
-    // it, everything to the right is fixed-size icon buttons with nothing to
-    // give up, so the brand is what has to yield (P52).
+    // The bar's one elastic element, but only once the links are hidden.
     .app-nav-brand {
         flex-shrink: 1;
         min-width: 0;
@@ -1215,13 +1191,13 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
             }
         }
     }
-   
+
     .app-nav-brand-name {
         color: var(--ul-grey-9);
     }
 
     .page-footer {
-        color: var(--ul-grey-6);    
+        color: var(--ul-grey-6);
         background-color: rgb(5, 12, 22); // slightly muted nav-bg
 
         &__meta {

@@ -1,23 +1,4 @@
-"""Reordering labels invalidates the cached map pin payload.
-
-Which label supplies a pin's map icon/colour is decided by label ``order``:
-``_ordered_location_labels`` sorts by ``-order`` and ``_winning_display_label``
-takes the first entry carrying an icon. So reordering two icon-bearing labels
-changes what a pin looks like on the map without touching the pin at all.
-
-``refresh_map_pin_cache_for_label`` exists for exactly this hazard - editing a
-label never touches ``Pin.labels.through``, so nothing else would invalidate the
-Redis payload and affected pins "keep serving the old baked-in icon/color". But it
-is a ``post_save`` receiver, and reorder writes through ``bulk_update``, which does
-not fire it. The one write that changes ``order`` was the one write that skipped
-the invalidation.
-
-This asserts the *contract* - that reorder asks for the affected labels' pins to
-be dealt with - rather than reading back a Redis payload. The cache needs a live
-client, and this suite's network guard permits localhost only, so an end-to-end
-round-trip is not available here. What ``touch_pins_for_labels`` then does is
-covered in ``test_map_touch.py``.
-"""
+"""Reordering labels invalidates the cached map pin payload."""
 
 from __future__ import annotations
 

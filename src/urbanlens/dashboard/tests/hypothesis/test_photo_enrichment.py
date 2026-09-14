@@ -1,11 +1,4 @@
-"""Tests for services.photos.photo_enrichment - background photo/Street View/satellite caching.
-
-Covers _save_enriched_image (wiki-attach + quarantine + hand-off), each of the three
-EnrichmentSource subclasses' gate/missing_filter/enrich contracts (never
-retried once attempted, a single bad download never aborts the rest), and
-GoogleMapsGateway.get_satellite_image_bytes's data-URI decoding. The network
-is always mocked - never hits real Google/REData.
-"""
+"""Tests for services.photos.photo_enrichment - background photo/Street View/satellite caching."""
 
 from __future__ import annotations
 
@@ -52,11 +45,8 @@ def _make_location() -> Location:
 class SaveEnrichedImageTests(TestCase):
     """_save_enriched_image - the shared wiki-attach + quarantine + hand-off helper.
 
-    The resize used to happen inline, here, in whichever enrichment task called
-    this - a process holding every third-party API key. It is now
-    ``tasks.process_image_upload``'s job, on the sandbox queue, which is why
-    these assertions run the task explicitly and re-read the row.
-    """
+    It is now ``tasks.process_image_upload``'s job, on the sandbox queue, which is why these assertions run the
+    task explicitly and re-read the row."""
 
     def _process(self, image: Image) -> Image:
         """Run the hand-off the enrichment path enqueues, and return the fresh row."""

@@ -43,11 +43,7 @@ class GroupMessageQuerySet(abstract.DashboardQuerySet):
 
     def visible_window(self, membership: GroupChatMembership) -> Self:
         """Restrict to messages the given membership stint is allowed to see.
-
-        A member only sees messages sent during their current stint: nothing
-        from before they joined (the core "added users can't read prior
-        messages" guarantee), and - because leaving ends the stint - nothing
-        from an absence window either.
+        A member only sees messages sent during their current stint: nothing from before they joined (the core "added users can't read prior messages" guarantee), and - because leaving ends the stint - nothing from an absence window either.
 
         Args:
             membership: The viewer's active membership row.

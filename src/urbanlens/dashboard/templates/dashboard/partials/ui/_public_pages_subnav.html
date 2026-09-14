@@ -1,11 +1,4 @@
-{% comment %}
-About | Values | Thanks & Credits | FAQ tab strip for the public-facing informational
-pages. Included below a page hero via {% block subnav %} - see _site_admin_tabs.html for
-the equivalent site-admin pattern this mirrors.
-
-Context:
-  active - "about", "values", "thanks", or "faq" (which tab is current); omit if none apply
-{% endcomment %}
+{% comment %}About | Values | Thanks & Credits | FAQ tab strip for the public-facing informational pages.{% endcomment %}
 <nav class="ul-subnav-tabs" aria-label="UrbanLens info pages">
     <a href="{% url 'about' %}"
        class="ul-subnav-tab {% if active == 'about' %}is-active{% endif %}"

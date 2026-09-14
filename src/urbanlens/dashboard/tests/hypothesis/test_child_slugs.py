@@ -1,9 +1,4 @@
-"""Child pin/wiki slugs start with a short parent alias and drop whole words.
-
-A building at Hudson River State Hospital should be ``hrsh-stafftenant-house-1900``,
-not a mid-word clip of the building name. Prefix choice and word-boundary
-truncation are pure functions (SimpleTestCase); minting on save is a TestCase.
-"""
+"""Child pin/wiki slugs start with a short parent alias and drop whole words."""
 
 from __future__ import annotations
 

@@ -1,25 +1,13 @@
 """Serializers for the external API's wiki surface.
 
-Split out of ``serializers.py`` purely for size - that module was already
-~600 lines covering pins, sync, settings and push, and the wiki surface adds
-roughly a dozen more types. The conventions are identical: hand-rolled, never
-subclassing the internal serializers, with field-level bounds acting as the
-first line of defense against untrusted input.
+The conventions are identical: hand-rolled, never subclassing the internal serializers, with
+field-level bounds acting as the first line of defense against untrusted input.
+Two shape decisions worth stating explicitly, because they differ from the internal dashboard views:
 
-Two shape decisions worth stating explicitly, because they differ from the
-internal dashboard views:
-
-- **Security is nested** (``{"security": {"fences": "some", ...}}``) for both
-  read and write. ``PinDetailSerializer`` already exposes it nested on read, so
-  nesting the write side keeps one shape across the whole external surface. The
-  internal wiki edit view takes the eight fields flat at the top level; that is
-  not mirrored here.
-- **``base_revision_id`` is required** on an article save, where the internal
-  form lets it be omitted. An omitted value there degrades to ``None``, which
-  the conflict rule treats as "no revision expected" - fine for a form that
-  always renders the field, but for an API an accidentally-omitted key would
-  silently overwrite a concurrent edit. Requiring it (while still allowing an
-  explicit ``null`` for "I believe this article is new") makes that impossible.
+- **Security is nested** (``{"security": {"fences": "some", ...}}``) for both read and write.
+  ``PinDetailSerializer`` already exposes it nested on read, so nes...
+- **``base_revision_id`` is required** on an article save, where the internal form lets it be
+  omitted. An omitted value there degrades to ``None``, which the c...
 """
 
 from __future__ import annotations
@@ -57,11 +45,7 @@ class WikiSecuritySerializer(serializers.Serializer):
 class WikiSecurityUpdateSerializer(serializers.Serializer):
     """The writable half of :class:`WikiSecuritySerializer`.
 
-    Every field is optional, so a caller may submit only the indicators they
-    actually observed. Each is a strict ``ChoiceField`` - an unrecognized value
-    is a 400, never a silently-skipped field (the internal view's behavior; see
-    "Messaging / external API (noted 2026-07-26)" in ``docs/PROBLEMS.md``, the
-    strict-vs-lenient wiki edit item).
+    Every field is optional, so a caller may submit only the indicators they actually observed.
     """
 
     fences = serializers.ChoiceField(choices=SecurityLevel.choices, required=False)
@@ -90,13 +74,12 @@ class WikiStatSerializer(serializers.Serializer):
 class WikiAliasSerializer(serializers.Serializer):
     """An alternate name for a wiki (schema-only).
 
-    The alias list is the full set of names a place is known by, *including* the
-    one it currently goes by - which is flagged rather than omitted, exactly as
-    ``PinAliasSerializer`` does it. Without ``is_current`` a client has no way to
-    tell which entry is the live name, so it can neither mark it in a list nor
-    know which entries are worth offering a "use this name" action for; it would
-    have to re-derive the answer by string-matching against the wiki detail
-    payload, using a normalization rule it has no access to.
+    The alias list is the full set of names a place is known by, *including* the one it currently goes
+    by - which is flagged rather than omitted, exactly as ``PinAliasSerializer`` does it.
+    Without ``is_current`` a client has no way to tell which entry is the live name, so it can neither
+    mark it in a list nor know which entries are worth offering a "use this name" action for; it would
+    have to re-derive the answer by string-matching against the wiki detail payload, using a
+    normalization rule it has no access to.
     """
 
     id = serializers.IntegerField(read_only=True)
@@ -108,18 +91,15 @@ class WikiAliasSerializer(serializers.Serializer):
     def get_is_current(self, alias) -> bool:
         """Whether this alias is the wiki's current community name.
 
-        The wiki comes from the serializer context rather than ``alias.wiki`` so
-        that serializing a whole list costs no per-row query - the view already
-        has the wiki in hand from ``resolve_visible_wiki``.
+        The wiki comes from the serializer context rather than ``alias.wiki`` so that serializing a whole
+        list costs no per-row query - the view already has the wiki in hand from ``resolve_visible_wiki``.
 
         Args:
             alias: The alias being serialized.
 
         Returns:
-            True when this alias matches the wiki's current name, compared
-            loosely enough to ignore case, spacing, and punctuation. False when
-            no wiki was supplied in the context, since nothing can be shown as
-            current without one.
+            True when this alias matches the wiki's current name, compared loosely enough to ignore case,
+            spacing, and punctuation.
         """
         return alias_is_current_name(alias, self.context.get("wiki"))
 
@@ -202,9 +182,9 @@ class WikiDetailSerializer(serializers.Serializer):
 class WikiUpdateSerializer(serializers.Serializer):
     """Validates an untrusted wiki PATCH payload.
 
-    Every field is optional (this is a partial update), and unknown keys are
-    rejected outright rather than ignored - a client misspelling ``decription``
-    should be told so, not handed a 200 for a write that never happened.
+    Every field is optional (this is a partial update), and unknown keys are rejected outright rather
+    than ignored - a client misspelling ``decription`` should be told so, not handed a 200 for a write
+    that never happened.
     """
 
     name = serializers.CharField(max_length=255, required=False)
@@ -223,8 +203,7 @@ class WikiUpdateSerializer(serializers.Serializer):
             The same mapping, unchanged.
 
         Raises:
-            serializers.ValidationError: An unrecognized key was submitted, or
-                nothing recognizable was.
+            serializers.ValidationError: An unrecognized key was submitted, or nothing recognizable was.
         """
         submitted = set(self.initial_data or {})
         unknown = submitted - set(self.fields)
@@ -271,9 +250,8 @@ class ArticleDetailSerializer(serializers.Serializer):
 class ArticleSaveSerializer(serializers.Serializer):
     """Validates an article save.
 
-    ``base_revision_id`` is required (though it may be explicitly ``null``) -
-    see this module's docstring for why an omitted value is not allowed to mean
-    "no opinion".
+    ``base_revision_id`` is required (though it may be explicitly ``null``) - see this module's
+    docstring for why an omitted value is not allowed to mean "no opinion".
     """
 
     content = serializers.CharField(max_length=MAX_ARTICLE_LENGTH, allow_blank=True)
@@ -313,9 +291,8 @@ class CommentMentionSerializer(serializers.Serializer):
 class CommentSerializer(serializers.Serializer):
     """A comment as the external API returns it (schema-only).
 
-    Returns the raw storage-format ``text`` plus resolved ``mentions`` rather
-    than server-rendered HTML, so a native client can lay it out itself instead
-    of embedding a webview.
+    Returns the raw storage-format ``text`` plus resolved ``mentions`` rather than server-rendered HTML,
+    so a native client can lay it out itself instead of embedding a webview.
     """
 
     id = serializers.IntegerField(read_only=True)
@@ -334,8 +311,8 @@ class CommentSerializer(serializers.Serializer):
     def get_fields(self) -> dict:
         """Attach the one-level-deep ``replies`` field.
 
-        Declared here rather than inline because a serializer cannot reference
-        itself during class-body evaluation.
+        Declared here rather than inline because a serializer cannot reference itself during class-body
+        evaluation.
 
         Returns:
             The field map, with ``replies`` added.
@@ -362,18 +339,14 @@ class ReviewSerializer(serializers.Serializer):
 class GalleryImageSerializer(serializers.Serializer):
     """One image in a wiki's gallery (schema-only).
 
-    Field names verified against ``models/images/model.py`` - the model stores
-    an ``image`` file plus optional attribution metadata, and has no separate
-    "url" column, so ``url`` here is derived from ``image.url``.
+    Field names verified against ``models/images/model.py`` - the model stores an ``image`` file plus
+    optional attribution metadata, and has no separate "url" column, so ``url`` here is derived from
+    ``image.url``.
     """
 
     id = serializers.IntegerField(read_only=True)
-    #: The photo's public handle, and the *only* one the generic photo routes
-    #: accept - ``/photos/{image_uuid}/`` and its vote sub-route are addressed
-    #: by uuid, not by pk. Without this field a gallery photo belonging to
-    #: another profile was unaddressable: the gallery is the only endpoint that
-    #: surfaces it, and it published just the integer id, so a client could see
-    #: a community photo but had no way to open or vote on it.
+    #: The photo's public handle, and the *only* one the generic photo routes accept - ``/photos/{image_uuid}/``
+    #: and its vote sub-route are addressed by uuid, not by pk.
     uuid = serializers.UUIDField(read_only=True)
     url = serializers.CharField(read_only=True)
     caption = serializers.CharField(read_only=True, allow_null=True)
@@ -393,10 +366,9 @@ class WikiBoundaryEntrySerializer(serializers.Serializer):
 class WikiBoundaryPayloadSerializer(serializers.Serializer):
     """The wiki page map's full boundary payload (schema-only).
 
-    Field-for-field identical to the internal ``WikiBoundaryView``'s response
-    (see ``controllers.boundary``'s module docstring for the shape) - this is
-    a thin wrapper over the same resolution chain and polling contract, not a
-    redesign.
+    Field-for-field identical to the internal ``WikiBoundaryView``'s response (see
+    ``controllers.boundary``'s module docstring for the shape) - this is a thin wrapper over the same
+    resolution chain and polling contract, not a redesign.
     """
 
     latitude = serializers.FloatField(read_only=True, allow_null=True)

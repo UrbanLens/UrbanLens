@@ -1,17 +1,5 @@
 """Property owner and sale-history models.
-
-Mirrors the ``PinAlias``/``WikiAlias`` split (``models.aliases.model``) - two
-entirely separate models per concept, never a single model with a
-visibility flag. ``PinOwner``/``PinPropertySale`` are private, FK'd straight
-to one ``Pin``, definitionally invisible to anyone else and to the wiki - no
-"private" flag exists because there is nothing else it could mean.
-``WikiOwner``/``WikiPropertySale`` are shared, community-editable data about
-the place (``Location``), visible to anyone with a pin there - the same
-access rule as the rest of the wiki (``services.wiki.wiki_access.location_visible_to``).
-A pin's own Ownership card must only ever query ``PinOwner``/``PinPropertySale``;
-the wiki's Ownership card must only ever query ``WikiOwner``/``WikiPropertySale``
-- never both in the same view, exactly like ``PinAlias``/``WikiAlias`` are
-never queried together.
+Mirrors the ``PinAlias``/``WikiAlias`` split (``models.aliases.model``) - two entirely separate models per concept, never a single model with a visibility flag.
 """
 
 from __future__ import annotations
@@ -66,9 +54,8 @@ class PinOwner(_OwnerBase):
     class Meta(_OwnerBase.Meta):
         db_table = "dashboard_pin_owner"
         constraints = [
-            # Backs the case-insensitive dedup both PinOwnershipPanelView and
-            # PinPropertySaleTabView already perform in Python
-            # (`name__iexact`) with a real DB guarantee against concurrent
+            # Backs the case-insensitive dedup both PinOwnershipPanelView and PinPropertySaleTabView
+            # already perform in Python (`name__iexact`) with a real DB guarantee against concurrent
             # writes racing past that application-level check.
             UniqueConstraint(Lower("name"), "pin", name="uq_pinowner_pin_name_ci"),
         ]
@@ -76,12 +63,7 @@ class PinOwner(_OwnerBase):
 
 class WikiOwner(_OwnerBase):
     """An owner shared with everyone who has this location pinned.
-
-    ``locations`` (not a Wiki FK) so the same real-world owner can be linked
-    to any number of properties, the way one landlord or company genuinely
-    can own many distinct places - unlinking a location never deletes the
-    record (see the controller's remove view): previous ownership is never
-    lost, only no longer "current."
+    ``locations`` (not a Wiki FK) so the same real-world owner can be linked to any number of properties, the way one landlord or company genuinely can own many distinct places - unlinking a location never deletes the record (see the controller's remove view): previous ownership is never lost, only no longer "current."
     """
 
     locations = ManyToManyField("dashboard.Location", related_name="owners", blank=True)

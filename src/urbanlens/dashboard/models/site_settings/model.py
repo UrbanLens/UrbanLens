@@ -254,10 +254,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=250,
         help_text="Maximum size (MB) for a single photo, video, or document upload. Enforced on both the frontend and backend.",
         verbose_name="Max upload file size (MB)",
-        # Capped comfortably under clamd's StreamMaxLength (docker-compose.yml's
-        # clamav service, currently 1000M) - a value above that lets an upload
-        # pass this check and then fail the malware scan with a confusing
-        # "too large to scan" error instead of a clean upfront rejection.
+        # Capped comfortably under clamd's StreamMaxLength (docker-compose.yml's clamav service,
+        # currently 1000M) - a value above that lets an upload pass this check and then fail the
+        # malware scan with a confusing "too large to scan" error instead of a clean upfront
+        # rejection.
         validators=[MinValueValidator(1), MaxValueValidator(900)],
     )
     video_downscale_enabled = BooleanField(
@@ -298,11 +298,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Name source priority",
     )
 
-    # --- Background enrichment ---
-    # Hourly Celery task (tasks.run_scheduled_enrichment) that proactively
-    # backfills high-value external data (official names, aliases, addresses,
-    # boundaries) for every pinned/wiki'd Location, spending only the API
-    # budget left over after organic traffic. See services.locations.enrichment.
+    # --- Background enrichment --- Hourly Celery task (tasks.run_scheduled_enrichment) that
+    # proactively backfills high-value external data (official names, aliases, addresses,
+    # boundaries) for every pinned/wiki'd Location, spending only the API budget left over after
+    # organic traffic.
 
     enrichment_enabled = BooleanField(
         default=True,
@@ -392,15 +391,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Base URL of a Gotify server (e.g. https://gotify.example.com) used to push critical site notifications. Defaults to the UL_GOTIFY_URL environment variable.",
         verbose_name="Gotify server URL",
     )
-    # fail_soft despite being a credential: the usual "fail loud so the caller
-    # drops the row and the user reconnects" rule needs a caller that can do
-    # that, and there isn't one - SiteSettings is a singleton three context
-    # processors load on every render, for anonymous visitors too. Raising here
-    # 500s every page *and* the styled 500 page, which runs the same context
-    # processors. The token is unusable either way once it can't be decrypted,
-    # so Gotify pushes stop regardless; the only choice is whether the site
-    # stays up while an admin re-enters it. The read is still logged loudly with
-    # the field name and the setting to check (see EncryptedTextField).
+    # fail_soft despite being a credential: the usual "fail loud so the caller drops the row and the
+    # user reconnects" rule needs a caller that can do that, and there isn't one - SiteSettings is a
+    # singleton three context processors load on every render, for anonymous visitors too.
+    # Raising here 500s every page *and* the styled 500 page, which runs the same context
     notify_gotify_token = EncryptedTextField(
         blank=True,
         default=os.getenv("UL_GOTIFY_TOKEN", ""),
@@ -409,9 +403,8 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Gotify app token",
     )
 
-    # --- Notification routing ---
-    # Each critical-issue notification type has its own per-channel toggle so the
-    # admin can route different events to different channels (e.g. email only for
+    # --- Notification routing --- Each critical-issue notification type has its own per-channel
+    # toggle so the admin can route different events to different channels (e.g. email only for
     # low-urgency events, email + Gotify push for anything needing prompt attention).
 
     notify_pin_import_errors_email = BooleanField(
@@ -478,10 +471,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(1), MaxValueValidator(1000)],
     )
 
-    # --- Outbound email limits ---
-    # Caps on user-triggered emails to third parties (friend/visit invites).
-    # Subscription roles can raise these per-tier; the largest applicable
-    # limit wins and 0 means unlimited (see services.security.email_safety).
+    # --- Outbound email limits --- Caps on user-triggered emails to third parties (friend/visit
+    # invites).
+    # Subscription roles can raise these per-tier; the largest applicable limit wins and 0 means
+    # unlimited (see services.security.email_safety).
 
     email_limit_per_hour = IntegerField(
         default=5,
@@ -502,10 +495,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(100_000)],
     )
 
-    # --- Subscription features (site-wide default) ---
-    # Features granted to every user, including those with no active subscription
-    # role. Subscription roles can only add features on top of this baseline, never
-    # take one away - see SubscriptionRole.features and user_has_feature().
+    # --- Subscription features (site-wide default) --- Features granted to every user, including
+    # those with no active subscription role.
+    # Subscription roles can only add features on top of this baseline, never take one away - see
+    # SubscriptionRole.features and user_has_feature().
 
     default_features = CharField(
         max_length=500,
@@ -585,9 +578,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
     def get_effective_environment_type(self) -> EnvironmentTypes:
         """Return the active environment type, honoring admin override when set.
-
-        When ``environment_override`` is ``default``, the value comes from
-        ``UL_ENVIRONMENT`` (falling back to local when unset).
+        When ``environment_override`` is ``default``, the value comes from ``UL_ENVIRONMENT`` (falling back to local when unset).
 
         Returns:
             The resolved ``EnvironmentTypes`` value for this site.
@@ -621,12 +612,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
     def show_dev_admin_features(self, user) -> bool:
         """Return whether dev-only admin UI (e.g. the developer toolbar) should be visible to ``user``.
-
         Site admins see it whenever the effective environment is development or local.
-        Non-admin users can also see it, but only when the ``UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS``
-        env var is enabled AND the effective environment is development, local, testing, or
-        staging - this lets QA/test accounts exercise dev tooling without granting them
-        site-admin permission, while staying off by default and never active in production.
 
         Args:
             user: The current request user.

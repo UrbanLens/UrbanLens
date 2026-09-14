@@ -1,26 +1,5 @@
 /**
- * An API key must not be a way into anybody's conversations.
- *
- * This file does not test messaging. It tests that messaging is *unreachable*,
- * which is the whole of what an API key is entitled to know about it.
- *
- * `permissions.OAUTH2_ONLY_SCOPES` restricts `messages:read`/`messages:write`
- * to user-consented OAuth2 tokens, so a PAT-style key is refused across the
- * entire surface **even when its own `scopes` list names those scopes** - and
- * the suite's provisioned keys do name them, which makes this account exactly
- * the adversary the rule exists for. The reasoning in `views_messaging` is
- * worth repeating: a bearer key that ends up in a CI config or a screenshot
- * must not read somebody's direct messages.
- *
- * That is a property with no natural place to fail loudly. A scope added to the
- * wrong list, or a new messaging view that forgets the restriction, opens the
- * whole surface silently - nothing breaks, a door just opens. So every endpoint
- * is asked, rather than a representative one: the risk is precisely that
- * *one* of them is different.
- *
- * The consequence for coverage is recorded in docs/INTEGRATION_TESTS.md: real
- * messaging behaviour cannot be exercised by this suite at all, because doing
- * so needs an OAuth2 authorization-code flow the harness has no way to drive.
+ * An API key must not be a way into anybody's conversations. This file does not test messaging.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

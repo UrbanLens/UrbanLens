@@ -1,12 +1,4 @@
-"""Tests for the LoopNet commercial-listings plugin.
-
-Retrieval calls REData's parcel-uuid and listings endpoints (see the module
-docstring in plugins.builtin.loopnet) - RedataGateway itself is mocked, so no
-real network access occurs. Covers address gating, fetch()'s parcel-uuid ->
-listings pipeline (and its graceful degradation when REData is unconfigured/
-unavailable/has no parcel), and media_items() building proxy URLs for each
-listing's photos.
-"""
+"""Tests for the LoopNet commercial-listings plugin."""
 
 from __future__ import annotations
 
@@ -140,13 +132,7 @@ class FetchTests(TestCase):
     def test_unconfigured_gateway_gracefully_persists_empty(self) -> None:
         """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
 
-        The unconfigured state is forced rather than assumed. This relied on the
-        machine running the tests having no REData credentials, so wherever they
-        *are* configured - the test container included - the gateway constructed
-        happily and went on to make a real call, which the suite's network guard
-        blocked. Same fix, and the same reasoning, as the sibling tests in
-        test_pin_redata_media_proxy.py.
-        """
+        The unconfigured state is forced rather than assumed."""
         with (
             patch.object(
                 RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")

@@ -1,14 +1,4 @@
-{% comment %}
-"Customize" dialog for the homepage's widget layout - pick which widgets
-appear and drag to reorder them. Reuses the shared reorderable-checklist
-component (dashboard/partials/ui/_priority_list.html) - "ranked" there maps
-onto "enabled" here, and unranked/disabled items sort last, which is exactly
-the enabled-then-disabled contract services.home_widgets.effective_widget_layout
-already returns.
-
-Context: home_widget_priority_items (list of (key, label, enabled) tuples),
-home_widget_current_value (comma-separated enabled keys, in order).
-{% endcomment %}
+{% comment %}"Customize" dialog for the homepage's widget layout - pick which widgets appear and drag to reorder them.{% endcomment %}
 <dialog id="home-customize-dialog" class="ul-dialog home-customize-dialog" aria-labelledby="dialog-title-customize-your-homepage">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Customize your homepage" %}
     <div class="ul-dialog-body">

@@ -1,16 +1,4 @@
-"""Tests for the external API's safety check-in surface.
-
-Safety is the most sensitive domain on this surface: the payloads carry
-emergency-contact addresses, destination plans, and the ability to invite a
-partner into a live check-in. The tests here hold four lines in particular:
-
-* the ``safety:*`` scopes are opt-in and absent from the default key grant, so a
-  key issued today reaches none of this;
-* another profile's check-in is *not found*, never forbidden;
-* the contact-portal ``token`` never appears in any payload;
-* PATCH honors the same field locks as the web autosave, reporting ignored
-  fields as warnings rather than failing the request.
-"""
+"""Tests for the external API's safety check-in surface."""
 
 from __future__ import annotations
 
@@ -71,9 +59,8 @@ class _SafetyApiTestCase(TestCase):
         """Retire the setUp check-in so a fresh one can be created.
 
         Must move ``status`` to a terminal value, not just stamp ``resolved_at``:
-        ``SafetyCheckin.objects.active()`` - the queryset enforcing one active
-        check-in per scope - keys off status alone.
-        """
+        ``SafetyCheckin.objects.active()`` - the queryset enforcing one active check-in per scope - keys off
+        status alone."""
         SafetyCheckin.objects.filter(pk=self.checkin.pk).update(
             status=SafetyCheckinStatus.CHECKED_IN, resolved_at=timezone.now()
         )
@@ -108,11 +95,7 @@ class SafetyScopeTests(_SafetyApiTestCase):
     def test_default_api_key_grant_cannot_reach_safety(self) -> None:
         """The security line this whole surface rests on.
 
-        Emergency-contact addresses and partner-invite ability are categorically
-        more sensitive than pins. Every key issued before these endpoints existed
-        must stay unable to reach them - silently widening those grants would be
-        an unconsented privilege escalation, not a convenience.
-        """
+        Emergency-contact addresses and partner-invite ability are categorically more sensitive than pins."""
         _key, raw = generate_api_key(self.user, "Default grant")
         self.assertEqual(self.client.get(self.list_url, **_bearer(raw)).status_code, 403)
         self.assertEqual(self.client.get(self.detail_url, **_bearer(raw)).status_code, 403)
@@ -165,11 +148,8 @@ class SafetyOwnerIsolationTests(_SafetyApiTestCase):
 class SafetyContactTokenExposureTests(_SafetyApiTestCase):
     """The contact-portal token must never leave the server.
 
-    ``SafetyCheckinContact.token`` is the sole credential for the session-free
-    contact portal: holding it means being able to read the check-in, post to its
-    chat, and mark the owner safe. Leaking it to an API key would hand out portal
-    access for every contact.
-    """
+    ``SafetyCheckinContact.token`` is the sole credential for the session-free contact portal: holding it means
+    being able to read the check-in, post to its chat, and mark the owner safe."""
 
     def _assert_no_token_anywhere(self, payload: object) -> None:
         """Recursively assert no token key, and no contact token value, appears."""
@@ -438,12 +418,8 @@ class SafetyPartnerTests(_SafetyApiTestCase):
     def test_blocked_invitee_is_400(self) -> None:
         """Same message and status as an unknown username.
 
-        A block existing between the two profiles must not be distinguishable
-        from the invitee not existing at all - confirming one confirms the
-        other's account is real. Uses a real, resolvable invitee - blocking
-        never triggers for an already-nonexistent username, so the test would
-        be meaningless without one.
-        """
+        A block existing between the two profiles must not be distinguishable from the invitee not existing at
+        all - confirming one confirms the other's account is real."""
         invitee = baker.make(User, username="apartner")
         Profile.objects.get_or_create(user=invitee)
 
@@ -530,11 +506,9 @@ class SafetyPreferencesApiTests(_SafetyApiTestCase):
 class SafetyCheckinMapsTests(_SafetyApiTestCase):
     """The check-in maps endpoint answers with the standard paginated envelope.
 
-    Regression coverage for the bare top-level array this endpoint used to answer
-    with - it could never gain a field later without breaking clients, so it was
-    normalized onto ``{count,next,previous,results}`` (see
-    ``docs/notes/mobile_app_notes.md`` Part 7).
-    """
+    Regression coverage for the bare top-level array this endpoint used to answer with - it could never gain a
+    field later without breaking clients, so it was normalized onto ``{count,next,previous,results}`` (see
+    ``docs/notes/mobile_app_notes.md`` Part 7)."""
 
     def setUp(self) -> None:
         super().setUp()

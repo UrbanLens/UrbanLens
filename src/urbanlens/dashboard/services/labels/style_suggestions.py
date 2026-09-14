@@ -27,12 +27,7 @@ class LabelStyleSuggestion:
 
 
 def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
-    """Ask AI to choose an emoji and color for a label when the user may use AI.
-
-    The suggestion is best-effort: callers can safely fall back to the default label
-    appearance when subscription, profile preference, site settings, or the AI gateway
-    prevents a suggestion.
-    """
+    """Ask AI to choose an emoji and color for a label when the user may use AI."""
     if not ai_features_enabled(profile):
         return LabelStyleSuggestion()
 

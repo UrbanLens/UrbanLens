@@ -41,17 +41,13 @@ export interface LightboxItem {
     uuid: string;
     isMine: boolean;
     canRelevance: boolean;
-    // null for every gallery/album item (relevance marking isn't a concept
-    // there); a real tri-state for Media-gallery items, which can be voted/
-    // marked relevant or not.
+    // null for every gallery/album item (relevance marking isn't a concept there).
     relevant: boolean | null;
     latitude: number | null;
     longitude: number | null;
     mapHidden: boolean;
     copiedFromLabel: string;
-    // Only ever set by Media-gallery items (see media-lightbox.ts) - which
-    // provider's result this is, and its dedupe key within that provider.
-    // Gallery/album items leave both unset.
+    // Only ever set by Media-gallery items - which provider's result this is, and its dedupe key within that provider.
     mediaSource?: string;
     mediaKey?: string;
 }
@@ -180,9 +176,7 @@ export function renderPhotoTile(tile: PhotoTile, opts: { inAlbum: boolean; album
         ? `<button type="button" class="album-item-remove" title="Remove from this album" aria-label="Remove from this album" data-image-id="${tile.id}"><i class="material-symbols-outlined">close</i></button>`
         : "";
     const caption = tile.caption ? `<p class="album-item-caption"></p>` : "";
-    // src and the caption text are set as properties, not interpolated: both
-    // are user-controlled, and a quote in either would close the attribute it
-    // sat in. See inner-html-escaping.test.ts.
+    // src and the caption text are set as properties, not interpolated.
     li.innerHTML = `${check}<button type="button" class="gallery-thumb-btn" data-photo-open><img alt="" class="gallery-thumb" loading="lazy" decoding="async"></button>${remove}${caption}`;
     const captionEl = li.querySelector(".album-item-caption");
     if (captionEl) captionEl.textContent = tile.caption;

@@ -1,22 +1,4 @@
-"""Muting a friend actually silences them.
-
-For as long as the flag existed it suppressed nothing. The profile page's Mute
-button and the external API's ``PATCH /friends/{uuid}/mute/`` both recorded the
-preference faithfully, and no delivery path read it: the muter kept receiving
-friend-request, pin-share, trip-invite and comment notifications, each with an
-unread row in the bell.
-
-That was structural rather than an oversight. Around thirty places create a
-``NotificationLog``, so honouring the preference meant remembering it thirty
-times, and a notification type added later could not inherit a rule that lived
-nowhere. ``NotificationLog.objects.notify()`` is now the one place, and
-``bin/check_notification_choke_point.py`` fails the build for a production call
-site that goes around it.
-
-These tests pin what the preference does and, as importantly, what it must not
-do: it is one person's volume control on another person's *social* activity,
-not an opt-out from being told that somebody has not come back from a site.
-"""
+"""Muting a friend actually silences them."""
 
 from __future__ import annotations
 
@@ -93,12 +75,8 @@ class NotificationsMutedTests(TestCase):
     def test_mute_survives_the_relationship_being_removed(self) -> None:
         """``remove()`` keeps the row, so the preference outlives the friendship.
 
-        Worth stating rather than discovering: someone who muted a person and
-        then un-friended them stays un-notified if the pair reconnect, because
-        ``request()`` reuses the row. Unmuting is one click, and the opposite
-        default - silently restoring a person you muted - is the worse
-        surprise.
-        """
+        Worth stating rather than discovering: someone who muted a person and then un-friended them stays
+        un-notified if the pair reconnect, because ``request()`` reuses the row."""
         self.friendship.mute(self.muter)
         self.friendship.remove()
 
@@ -108,12 +86,8 @@ class NotificationsMutedTests(TestCase):
 class ProfilesMutingTests(TestCase):
     """The batch form, which has to reach the same answer as the per-row one.
 
-    It exists for ``_notify_group_message``, which resolves every per-member
-    fact up front so a 50-member group does not pay a lookup per member on the
-    synchronous send path. A batch query that disagreed with
-    :func:`notifications_muted` would silence the wrong people only in group
-    chats, which is exactly the kind of divergence nobody notices.
-    """
+    It exists for ``_notify_group_message``, which resolves every per-member fact up front so a 50-member group
+    does not pay a lookup per member on the synchronous send path."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -206,10 +180,8 @@ class NotifyChokePointTests(TestCase):
     def test_a_muted_source_writes_no_row_at_all(self) -> None:
         """Not "writes it read" - the row is what every delivery channel hangs off.
 
-        The live WebSocket toast, the WhatsApp/SMS alert and the native push
-        are all ``post_save`` receivers on ``NotificationLog``, so declining to
-        write is what produces actual silence rather than a quieter bell.
-        """
+        The live WebSocket toast, the WhatsApp/SMS alert and the native push are all ``post_save`` receivers on
+        ``NotificationLog``, so declining to write is what produces actual silence rather than a quieter bell."""
         self.friendship.mute(self.muter)
 
         self.assertIsNone(_notify(self.muter, self.other))
@@ -248,20 +220,9 @@ class NotifyChokePointTests(TestCase):
 class ReciprocalRowsTests(TestCase):
     """Two rows can join one pair, and neither mute path may fall over on it.
 
-    Not reachable any more: ``friendship_one_row_per_pair`` refuses the second
-    row as of 2026-09-05, and migration 0054 merges any that exist. This still
-    matters because a database that predates that migration can hold the pair,
-    and the code that copes with it is still live - ``between()`` returning the
-    oldest row rather than raising ``MultipleObjectsReturned``, and
-    ``notifications_muted`` reading the predicate rather than a single row.
-    Once mute was consulted on every notification, the raise would have been a
-    500 on every message between such a pair.
-
-    The setup therefore drops the constraint to build the state. The drop rolls
-    back with the test's own transaction, so it is scoped to this class and
-    cannot leak into another - and it is the honest way to test "what happens to
-    data we no longer create".
-    """
+    This still matters because a database that predates that migration can hold the pair, and the code that
+    copes with it is still live - ``between()`` returning the oldest row rather than raising
+    ``MultipleObjectsReturned``, and ``notifications_muted`` reading the predicate rather than a single row."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -302,13 +263,8 @@ class ReciprocalRowsTests(TestCase):
 class MuteSurvivesOtherWritesTests(TestCase):
     """A mute is a preference somebody set; nothing else may quietly undo it.
 
-    The mute columns are written by a targeted ``UPDATE`` that leaves the
-    in-memory instance untouched, so any other write of the *whole* row from a
-    stale instance overwrites them - and nothing would report it. Two shapes of
-    that were live before 2026-08-20: every status transition did a bare
-    ``save()``, and ``block_profile`` additionally swaps ``from_profile`` and
-    ``to_profile``, which relabels which column belongs to whom.
-    """
+    The mute columns are written by a targeted ``UPDATE`` that leaves the in-memory instance untouched, so any
+    other write of the *whole* row from a stale instance overwrites them - and nothing would report it."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -348,10 +304,8 @@ class MuteSurvivesOtherWritesTests(TestCase):
     def test_a_request_does_not_clobber_a_mute(self) -> None:
         """Re-requesting after a removal is the ordinary way back to a friendship.
 
-        Passes even against the bare-``save()`` version, because ``request``
-        loads the row itself and so is never stale - kept because the property
-        is worth holding, not because it catches that bug.
-        """
+        Passes even against the bare-``save()`` version, because ``request`` loads the row itself and so is
+        never stale - kept because the property is worth holding, not because it catches that bug."""
         self.friendship.remove()
         Friendship.objects.all().between(self.actor, self.other).mute(self.other)
 
@@ -364,10 +318,8 @@ class MuteSurvivesOtherWritesTests(TestCase):
     def test_accept_still_reaches_the_achievement_signal(self) -> None:
         """Why this is `update_fields` and not `queryset.update()`.
 
-        `queryset.update()` would sidestep the lost update outright, and also
-        skip `post_save` - which the achievements system subscribes to for this
-        model precisely to see a friendship *reach* ACCEPTED.
-        """
+        `queryset.update()` would sidestep the lost update outright, and also skip `post_save` - which the
+        achievements system subscribes to for this model precisely to see a friendship *reach* ACCEPTED."""
         from django.db.models.signals import post_save
 
         seen: list[tuple[bool, frozenset[str] | None]] = []
@@ -421,11 +373,7 @@ class MuteSurvivesOtherWritesTests(TestCase):
 class BatchedMuteIsCheckedAgainstItsOwnSourceTests(TestCase):
     """A batch resolved for one sender must not be applied to another.
 
-    The optimisation hands ``notify`` an answer it cannot re-derive, so the
-    answer says who it is about. Without that, reusing a batch across senders
-    would suppress the wrong notifications - silently, and only on the paths
-    that batch, which is the hardest kind of divergence to notice.
-    """
+    The optimisation hands ``notify`` an answer it cannot re-derive, so the answer says who it is about."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -467,11 +415,9 @@ class BatchedMuteIsCheckedAgainstItsOwnSourceTests(TestCase):
 class NotifyFieldSpellingTests(TestCase):
     """``profile_id=`` must reach the same preference as ``profile=``.
 
-    Both are legitimate ways to write the row, and a check that read only the
-    instance form would make the preference depend on how a producer happened
-    to hold its profiles - a hole no reviewer would see, because the call looks
-    identical.
-    """
+    Both are legitimate ways to write the row, and a check that read only the instance form would make the
+    preference depend on how a producer happened to hold its profiles - a hole no reviewer would see, because
+    the call looks identical."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -1,14 +1,4 @@
-"""Memories > Maps: map titles are edit-in-place.
-
-Click the title, it becomes an input, blurring/Enter autosaves via a POST to
-the existing markup_map.view_state endpoint (the same one the map editor
-widget already autosaves title/viewport changes through - see
-controllers/markup.py's _apply_view_state, which only touches whatever
-fields are present in the request body). This file covers the page's
-rendered markup carries the right hooks for that client-side behavior;
-markup_map.view_state's own save/ownership behavior is already covered by
-test_markup_map.py.
-"""
+"""Memories > Maps: map titles are edit-in-place."""
 
 from __future__ import annotations
 

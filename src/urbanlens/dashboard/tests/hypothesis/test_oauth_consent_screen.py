@@ -1,10 +1,4 @@
-"""Tests for the styled OAuth2 consent screen (``oauth2_provider/authorize.html``).
-
-Before this, the page was django-oauth-toolkit's unstyled default - loading a
-dead Bootstrap 2 CDN link - and it is the only user-visible gate before a
-client is granted a scope like ``messages:*`` against someone's encrypted
-mailbox. See ``docs/notes/mobile_app_notes.md`` Part 7.
-"""
+"""Tests for the styled OAuth2 consent screen (``oauth2_provider/authorize.html``)."""
 
 from __future__ import annotations
 

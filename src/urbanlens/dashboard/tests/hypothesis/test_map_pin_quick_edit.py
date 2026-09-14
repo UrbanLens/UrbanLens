@@ -1,25 +1,4 @@
-"""Tests for MapController.map_pin_json and MapController.patch_pin (the map
-popup's "Edit Pin" quick-edit flow).
-
-Invariants verified:
-  - map_pin_json names the pin's labels by id and defines them in the same
-    response - the map popup's edit dialog matches labels by id to pre-fill the
-    label picker, and names aren't guaranteed unique across label kinds/owners.
-    This response follows an edit, so it is the one most likely to carry a label
-    the client has not seen before.
-  - patch_pin round-trips the ids taken straight back out of it: saving a pin
-    without changing its labels must not clear them (regression test for a bug
-    where the edit dialog silently dropped a pin's labels on save because it
-    could only match them by name).
-  - patch_pin honors clear_custom_icon by removing an existing custom icon,
-    but leaves it alone when the flag isn't sent.
-  - map_pin_json separates "icon"/"color" (effective, possibly label-inherited
-    display values) from "own_icon"/"own_custom_icon_url"/"own_color" (the
-    pin's own overrides only). The edit dialog must pre-fill from the "own_*"
-    fields - regression test for a bug where resaving a pin with no icon of
-    its own silently baked in whichever label's icon it was currently
-    inheriting for display, without the user ever touching the icon picker.
-"""
+"""Tests for MapController.map_pin_json and MapController.patch_pin (the map popup's "Edit Pin" quick-edit flow)."""
 
 from __future__ import annotations
 

@@ -1,16 +1,4 @@
-"""Tests for migration 0048's data pass over the newly-encrypted free-text fields.
-
-``AlterField`` never rewrites stored bytes, so retrofitting ``EncryptedTextField``
-onto a populated column leaves plaintext behind that raises ``InvalidToken`` on
-its first ORM read (``fail_soft`` fields degrade to empty instead, which is worse
-- the value looks deleted rather than broken). ``encrypt_existing_preference_fields``
-is the companion pass that closes that gap.
-
-Rows are seeded with raw SQL to reproduce the pre-migration state, exactly as
-``test_encrypted_tokens_migration`` does for the 0007/0018 token pass. The
-migration module's name starts with a digit, so ``importlib`` is used rather than
-a normal import.
-"""
+"""Tests for migration 0048's data pass over the newly-encrypted free-text fields."""
 
 from __future__ import annotations
 

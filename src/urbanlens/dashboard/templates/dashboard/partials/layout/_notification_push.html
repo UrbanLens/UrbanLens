@@ -1,11 +1,6 @@
 {% load static %}{% if user.is_authenticated %}
 {# -- Live notification push -------------------------------------------------- #}
-{# Connects to ws/notifications/ (UserNotificationConsumer). Each pushed        #}
-{# notification refreshes the nav bell badge (via the existing HTMX            #}
-{# notifCountRefresh trigger), shows a toast, and - when the tab is hidden and  #}
-{# the user granted permission on the settings page - a desktop Notification.   #}
-{# If the socket can't be established, it degrades to polling the badge every   #}
-{# minute until the connection comes back.                                      #}
+{# Connects to ws/notifications/ (UserNotificationConsumer). #}
 <script>
 (function () {
     var WS_PATH = '/ws/notifications/';

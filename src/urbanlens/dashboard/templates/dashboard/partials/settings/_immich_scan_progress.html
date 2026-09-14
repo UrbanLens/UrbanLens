@@ -1,8 +1,4 @@
-{% comment %}
-Immich library scan progress fragment - returned by ImmichLibraryScanStartView and
-polled by ImmichLibraryScanProgressView. Mirrors partials/pins/_immich_import_progress.html.
-Context: task_id, state, percent, message, error
-{% endcomment %}
+{% comment %}Immich library scan progress fragment - returned by ImmichLibraryScanStartView and polled by ImmichLibraryScanProgressView.{% endcomment %}
 
 {% if state == "SUCCESS" %}
 <div class="immich-import-progress" id="immich-scan-progress">

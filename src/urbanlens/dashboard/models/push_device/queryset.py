@@ -14,7 +14,7 @@ class PushDeviceQuerySet(abstract.DashboardQuerySet):
     """QuerySet for :class:`~urbanlens.dashboard.models.push_device.model.PushDevice`."""
 
     def active(self) -> PushDeviceQuerySet:
-        """Restrict to devices that can still receive pushes (not revoked)."""
+        """Restrict to devices that can still receive pushes."""
         return self.filter(revoked_at__isnull=True)
 
     def for_profile(self, profile: Profile) -> PushDeviceQuerySet:

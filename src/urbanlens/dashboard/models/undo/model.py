@@ -1,20 +1,6 @@
 """UndoAction - a durable, restorable record of a destructive action.
-
-The serialized payload needed to undo the action lives directly on this
-row (``payload``), not in a cache: a cache entry can vanish well before its
-nominal TTL for reasons that have nothing to do with elapsed time (no shared
-Redis/Valkey configured, so Django falls back to a per-process locmem cache
-that a different worker/process can't see; or the entry gets evicted early
-under memory pressure on a shared cache instance) - which previously showed
-up as an undo entry that still listed as recent and un-expired, but silently
-failed with "no longer available" the moment it was actually restored.
-Storing the payload in the same durable row as the rest of the undo index
-removes that whole failure mode: this row's own ``created`` timestamp is the
-single source of truth for whether it's still restorable.
-
-``undone_at`` is the redo stack: undoing an entry stamps it rather than
-deleting it, so the same payload can be applied forward again. A new action
-discards every stamped entry (the history has forked).
+Storing the payload in the same durable row as the rest of the undo index removes that whole failure mode: this row's own ``created`` timestamp is the single source of truth for whether it's still restorable.
+``undone_at`` is the redo stack: undoing an entry stamps it rather than deleting it, so the same payload can be applied forward again.
 """
 
 from __future__ import annotations
@@ -60,12 +46,9 @@ class UndoAction(abstract.FrontendDashboardModel):
     model_label = CharField(max_length=50)
     kind = CharField(max_length=12, choices=UndoKind.choices, default=UndoKind.DELETE)
     object_repr = CharField(max_length=255)
-    # DjangoJSONEncoder because handlers snapshot model fields as-is, and some
-    # (SafetyCheckin's checkin_by/escalated_at/... datetimes and grace_period
-    # duration) aren't plain-JSON types. The cache this payload used to live
-    # in pickled values, so raw datetimes round-tripped silently; a bare
-    # JSONField made every such delete crash at stash time instead. Restore
-    # feeds the ISO strings back through normal model-field coercion
+    # DjangoJSONEncoder because handlers snapshot model fields as-is, and some (SafetyCheckin's
+    # checkin_by/escalated_at/... datetimes and grace_period duration) aren't plain-JSON types.
+    # Restore feeds the ISO strings back through normal model-field coercion
     # (DateTimeField/DurationField.to_python), so no decoder is needed.
     payload = JSONField(encoder=DjangoJSONEncoder)
     undone_at = DateTimeField(null=True, blank=True)

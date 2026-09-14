@@ -1,23 +1,4 @@
-"""Manual pin <-> wiki child-marker sync over the external API.
-
-The matching logic itself belongs to ``services.pins.pin_wiki_sync`` and is tested
-there; what these cover is everything the *endpoint* is responsible for, which
-is exactly the set of things a naive port gets wrong:
-
-1. **Ownership.** The service trusts the Pin it is handed - it writes child
-   wikis attributed to a profile and creates pins owned by ``pin.profile``
-   without re-checking anything. Resolving through the owner-scoped lookup is
-   what stops a caller pushing someone else's pins onto a wiki.
-2. **A missing wiki is a 200 with ``wiki_exists: false``**, not a 404. A 404
-   here would be indistinguishable from "no such pin", and the client needs to
-   tell "nothing to do" from "this property has no community page yet".
-3. **Both scopes are required.** ``HasApiKeyScope`` requires every declared
-   scope, so push needs ``pins:write`` *and* ``wiki:write`` - half the consent
-   is not consent.
-4. **The request body is bounded.** The service silently slices at
-   ``MAX_SYNC_ITEMS``, so an unbounded list would be accepted, truncated, and
-   reported as a complete success.
-"""
+"""Manual pin <-> wiki child-marker sync over the external API."""
 
 from __future__ import annotations
 
@@ -74,20 +55,17 @@ class PinWikiSyncApiTests(TestCase):
             raw_key: A raw key to use instead of the fixture's.
 
         Returns:
-            Request kwargs carrying the Authorization header.
-        """
+            Request kwargs carrying the Authorization header."""
         return {"HTTP_AUTHORIZATION": f"Bearer {raw_key or self.raw_key}"}
 
     def _url(self, direction: str, *, pin_slug: str | None = None) -> str:
         """Build a wiki-sync URL.
 
         Args:
-            direction: ``"push"`` or ``"pull"``.
-            pin_slug: Pin to address; defaults to the fixture pin.
+            direction: ``"push"`` or ``"pull"``. pin_slug: Pin to address; defaults to the fixture pin.
 
         Returns:
-            The fully-built URL.
-        """
+            The fully-built URL."""
         slug = pin_slug or self.pin.slug or str(self.pin.uuid)
         return f"{BASE}/{slug}/wiki-sync/{direction}/"
 
@@ -98,8 +76,7 @@ class PinWikiSyncApiTests(TestCase):
             scopes: Raw scope values to store on the row.
 
         Returns:
-            The raw key value.
-        """
+            The raw key value."""
         api_key, raw = generate_api_key(self.user, "Scoped")
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         return raw
@@ -116,13 +93,10 @@ class PinWikiSyncApiTests(TestCase):
         """Add one child pin under the fixture pin.
 
         Args:
-            latitude: The child's latitude.
-            longitude: The child's longitude.
-            name: The child's name.
+            latitude: The child's latitude. longitude: The child's longitude. name: The child's name.
 
         Returns:
-            The created child pin.
-        """
+            The created child pin."""
         location, _created = Location.objects.get_exact_or_create(latitude, longitude)
         return baker.make("dashboard.Pin", profile=self.profile, parent_pin=self.pin, location=location, name=name)
 
@@ -130,12 +104,10 @@ class PinWikiSyncApiTests(TestCase):
         """POST a push with the given child-pin uuids.
 
         Args:
-            uuids: Raw uuid strings for the body.
-            raw_key: A raw key to use instead of the fixture's.
+            uuids: Raw uuid strings for the body. raw_key: A raw key to use instead of the fixture's.
 
         Returns:
-            The Django test-client response.
-        """
+            The Django test-client response."""
         return self.client.post(
             self._url("push"), {"child_pin_uuids": uuids}, content_type="application/json", **self._headers(raw_key)
         )
@@ -182,10 +154,8 @@ class PinWikiSyncApiTests(TestCase):
     def test_push_ignores_uuids_that_are_not_this_pins_children(self) -> None:
         """A uuid naming another user's pin cannot be used to publish it.
 
-        The filter is scoped to ``pin.detail_pins``, so a foreign uuid simply
-        does not match - the same no-op the internal toolbar performs when a
-        selection has gone stale.
-        """
+        The filter is scoped to ``pin.detail_pins``, so a foreign uuid simply does not match - the same no-op
+        the internal toolbar performs when a selection has gone stale."""
         self._wiki()
         their_pin = create_pin_for_profile(self.other_profile, name="Theirs", latitude=1.0, longitude=1.0).pin
 

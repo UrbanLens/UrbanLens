@@ -1,13 +1,4 @@
-{% comment %}
-Cost tracking editor: KPI cards, the stacked monthly chart, and the two
-admin-defined item lists (components, operating costs) - swapped as a single
-unit after every mutation so the numbers never go stale after an edit.
-
-Context: components, operating_costs, breakdown (CostBreakdown), total_recorded_expenses,
-         average_monthly_expense, cost_per_user, active_user_count, chart_labels,
-         chart_hardware, chart_operating, chart_api, public_costs_page_enabled,
-         component_form_errors / operating_form_errors (optional)
-{% endcomment %}
+{% comment %}Cost tracking editor: KPI cards, the stacked monthly chart, and the two admin-defined item lists (components, operating costs).{% endcomment %}
 <div id="cost_admin_body">
 
     {% if component_form_errors %}

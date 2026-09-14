@@ -1,6 +1,28 @@
 """Integration coverage for grandfathered access after a real-estate parcel split.
 
-Two mechanisms, tested separately because they are triggered independently: Split-family permanence, Engagement grandfathering
+Two mechanisms, tested separately because they are triggered independently and
+must not be confused with each other:
+
+- **Split-family permanence** (:class:`GrandfatheredParcelSplitAccessTests`).
+  When a parcel (M) splits into successors (N, O, P -
+  ``services.places.splits.process_split``), every profile who held the
+  undivided parcel is permanently granted the *whole* family - the split and
+  every successor together, regardless of which one their own pin
+  re-resolves onto (:meth:`PlaceAccessGrantManager.snapshot_family`). A
+  profile who independently pins every current successor at once is also
+  permanently snapshotted at that point. Once granted, no amount of
+  unpinning ever takes it away again; a brand-new profile who holds fewer
+  than every current successor gets none of it, and the parent wiki must
+  never be discoverable (including as a candidate on the pin detail page's
+  linked-wikis list) until it's actually earned.
+
+- **Engagement grandfathering** (:class:`WikiEngagementGrandfatheringTests`,
+  see P88). Independent of any split: a profile who actually viewed a wiki,
+  or shared content to it, while they held access keeps that access even
+  after every qualifying pin is later moved or deleted
+  (:meth:`PlaceAccessGrantManager.record_engagement`). Viewing once while
+  access is legitimately held is enough to keep it forever; a profile who
+  never engaged loses access the moment their last qualifying pin is gone.
 """
 
 from __future__ import annotations

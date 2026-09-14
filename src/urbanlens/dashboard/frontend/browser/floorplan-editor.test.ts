@@ -1,28 +1,4 @@
-/**
- * Gesture tests for the floorplan editor, in a real browser.
- *
- * Everything else about the editor can be tested as pure functions, and is.
- * Dragging cannot: it is the point where this code meets Leaflet, pointer
- * capture, and a DOM that rebuilds itself mid-gesture, and every serious defect
- * in the drag work came from that seam rather than from the arithmetic either
- * side of it. Two of them - a drag that ended after one frame because render()
- * destroys the element it was bound to, and a drag that froze because it
- * snapped to the wall it was itself dragging - are invisible to a unit test by
- * construction.
- *
- * The page is a harness rather than the Django template: the template needs a
- * server, and what is under test is the bundle's behaviour, not Django's
- * rendering. The bundle is the real built artifact.
- *
- * Run with `bun run test:browser`. It lives outside `frontend/ts/` on purpose:
- * bunfig.toml preloads happy-dom for everything under there, and unregistering
- * it - which this file must do, since a simulated DOM and a real browser cannot
- * both own the globals - would strip the DOM from every other test in the same
- * process. A separate directory means a separate `bun test` invocation.
- *
- * Requires `bun run build` first, and a chromium Playwright can launch; see
- * bin/browser_libs.sh for the shared libraries this host needs.
- */
+/** Gesture tests for the floorplan editor, in a real browser. Everything else about the editor can be tested as pure functions, and is. */
 
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -42,20 +18,10 @@ const ROOT = join(import.meta.dir, "../../../../..");
 const STATIC_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/static");
 const BUNDLE = join(STATIC_DIR, "dashboard/js/floorplan-editor.js");
 
-/**
- * These drive the built bundle, so they need `bun run build` to have run.
- * Skipped rather than failed without it: a missing build is a setup gap, and a
- * red suite that means "you did not build" trains people to ignore red suites.
- */
+/** These drive the built bundle, so they need `bun run build` to have run. */
 const BUILT = existsSync(BUNDLE);
 
-/**
- * Test-controlled save behaviour.
- *
- * A conflict is a server state, not a client one, so the only honest way to
- * reach it is for the server to answer the way a real one would when another
- * tab has saved first.
- */
+/** Test-controlled save behaviour. A conflict is a server state, not a client one, so the only honest way to reach it is for the server to answer the way a real one would when another tab has saved first. */
 interface SaveSpy {
     conflict: boolean;
     fail: boolean;
@@ -70,33 +36,15 @@ interface SaveSpy {
 
 const saves: SaveSpy = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true, lastName: "", lastValidFrom: "" as string | null, lastRotation: -1 };
 
-/**
- * Clear what the save handler last recorded, before a test that asserts on it.
- *
- * Assigning the fields inline narrows them for the rest of the test - the
- * handler that writes them back runs in the browser, which TypeScript cannot
- * see - so `saves.lastValidFrom = null` made every later comparison against a
- * date an error. Resetting through a function keeps the declared types.
- */
+/** Clear what the save handler last recorded, before a test that asserts on it. */
 function resetSaveSpy(fields: Partial<SaveSpy>): void {
     Object.assign(saves, fields);
 }
 
-/**
- * Answer a save the way the server does: with the document it was given, every
- * client-side id replaced by a real one.
- *
- * The fixture used to answer with a fixed plan whatever it was sent, which
- * meant applyServerIds never had anything to apply and the whole
- * local-id-to-real-id cycle went unexercised in the browser.
- */
+/** Answer a save the way the server does: with the document it was given, every client-side id replaced by a real one. */
 function echoSaved(document: unknown, versions: unknown): unknown {
     let issued = 0;
-    // The real save view answers with the row's actual provenance and the uuid
-    // it was stored under - "local" once the save has forked a community plan
-    // into the viewer's own, which is what stops the next autosave forking it
-    // again. Echoing the payload alone would leave both fields absent and the
-    // fixture would fork forever.
+    // Echo provenance and uuid too: echoing the payload alone forks forever.
     const rename = (value: unknown): unknown => {
         if (Array.isArray(value)) return value.map(rename);
         if (!value || typeof value !== "object") return value;
@@ -107,10 +55,7 @@ function echoSaved(document: unknown, versions: unknown): unknown {
     };
     const saved = rename(document) as Record<string, unknown>;
     const uuid = saved.uuid ?? "srv-plan";
-    // save() strips `versions` before sending and the real view answers with the
-    // list rebuilt from rows, so echoing only what arrived emptied the version
-    // list on every save - which hid it, and left everything past the first save
-    // unexercised. The entry just written carries the name it was written with.
+    // Rebuild the version list from rows like the real view; echoing arrivals emptied it past the first save.
     const list = Array.isArray(versions)
         ? (versions as Array<Record<string, unknown>>).map((entry) =>
               entry.uuid === uuid ? { ...entry, name: saved.name, valid_from: saved.valid_from ?? null } : entry,
@@ -159,20 +104,8 @@ async function planCentre(): Promise<{ x: number; y: number }> {
 }
 
 /** A four-wall square, 10m on a side, as the editor's own document shape. */
-/**
- * A grid of rooms, for asking what a real survey costs to redraw.
- *
- * Args:
- *     cells: Rooms per side. 12 gives 312 walls and 144 faces.
- */
-/** Markers scattered over a grid plan.
- *
- * A survey-sized plan is not only walls: a hazard or a stairwell per few rooms is
- * ordinary, and every one of them is a Leaflet marker rebuilt on each drag frame.
- * The perf fixture carried `markers: []`, so the measured cost of a drag excluded
- * markers entirely - and with them the most expensive thing render() does per
- * marker, which is assembling the popup's DOM.
- */
+/** A grid of rooms (cells per side), for asking what a real survey costs to redraw. */
+/** Markers scattered over a grid plan. A survey-sized plan is not only walls: a hazard or a stairwell per few rooms is ordinary, and every one of them is a Leaflet marker rebuilt on each drag frame. */
 function gridMarkers(cells: number, step: number): unknown[] {
     const out: unknown[] = [];
     const kinds = ["hazard", "stair", "elevator"];
@@ -369,12 +302,7 @@ let browser: Browser;
 let page: Page;
 let server: ReturnType<typeof Bun.serve>;
 
-/**
- * Load the harness with the real bundle and a stubbed server.
- *
- * Served over HTTP rather than injected: the bundle is a module that imports a
- * chunk by relative URL, which cannot resolve without a real origin.
- */
+/** Load the harness with the real bundle and a stubbed server. Served over HTTP rather than injected: the bundle is a module that imports a chunk by relative URL, which cannot resolve without a real origin. */
 async function openEditor(
     viewport = { width: 1200, height: 800 },
     hasTouch = false,
@@ -401,14 +329,7 @@ async function openEditor(
     await settle();
 }
 
-/**
- * Wait until the plan stops moving on screen.
- *
- * The editor fits the view to the plan once it loads, and Leaflet animates
- * that. Measuring during the animation reads the zoom settling as the geometry
- * changing, which is the difference between a test that fails once in ten runs
- * and one that means something.
- */
+/** Wait until the plan stops moving on screen. The editor fits the view to the plan once it loads, and Leaflet animates that. */
 async function settle(): Promise<void> {
     let previous = "";
     for (let attempt = 0; attempt < 40; attempt++) {
@@ -425,16 +346,7 @@ async function settle(): Promise<void> {
     }
 }
 
-/**
- * The screen extent of every wall on the floor, and a point on the topmost one.
- *
- * Measured as a union rather than per element, and read in the page rather than
- * through Playwright's boundingBox(). Both matter: render() destroys and
- * rebuilds every layer on each frame, so "the first .floorplan-wall" is not the
- * same wall before and after a gesture - measuring one that way reports a plain
- * click as a 70px move - and a straight wall is a zero-height line, which
- * Playwright treats as invisible and refuses to measure at all.
- */
+/** The screen extent of every wall on the floor, and a point on the topmost one. Measured as a union rather than per element, and read in the page rather than through Playwright's boundingBox(). */
 async function planExtent(): Promise<{ top: number; left: number; bottom: number; width: number; height: number; grab: { x: number; y: number } }> {
     const measured = await page.evaluate(() => {
         const nodes = [...document.querySelectorAll(".floorplan-wall")];
@@ -2016,17 +1928,11 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("clearing the plan name leaves it unnamed, and the list still labels it", async () => {
-        // The default used to be applied inside save(), so "no name" was stored as
-        // a copy of whatever the floor happened to be called at that moment: the
-        // placeholder stopped applying once saved, and renaming the floor left the
-        // plan carrying the old name. The version list has always had a fallback of
-        // its own, which is where a derived default belongs.
+        // Derived defaults belong in the version list, not frozen from the floor name at save.
         saves.attempts = 0;
         await openEditor();
 
-        // Give the floor a nickname first: the default that used to be frozen in
-        // was the floor's name, so without one the two behaviours agree and this
-        // test would pass against the bug it exists for.
+        // Nickname the floor first, or both behaviours agree and the test passes against the bug.
         await page.locator(".floorplan-floor-fields__name").fill("Boiler floor");
         for (let waited = 0; waited < 40 && saves.attempts === 0; waited++) await page.waitForTimeout(250);
 

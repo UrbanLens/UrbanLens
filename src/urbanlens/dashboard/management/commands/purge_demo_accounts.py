@@ -1,14 +1,6 @@
 """Delete demo accounts whose day is up.
 
-Run on a schedule on the demo instance. Selection is by username prefix and age:
-a demo account carries :data:`DEMO_USERNAME_PREFIX` and its ``date_joined`` is
-when it was seeded, so no extra column is needed to track expiry - which is what
-keeps the real site free of a migration it has no use for.
-
-Dry-run by default. This deletes accounts and everything hanging off them, and
-the one failure mode worth engineering against is running it somewhere it was
-not meant to run: the same image serves the real site, and a username prefix is
-a weaker guard than a separate database. ``--execute`` is the deliberate act.
+Run on a schedule on the demo instance.
 """
 
 from __future__ import annotations
@@ -77,10 +69,7 @@ class Command(BaseCommand):
                 user.delete()
                 deleted += 1
                 continue
-            # Reused rather than reimplemented: this is the path that also
-            # clears the profile's stored files. Its "your account was deleted"
-            # email is guarded on a non-empty address, and demo accounts are
-            # seeded with none, so nothing is sent.
+            # Reused rather than reimplemented: this is the path that also clears the profile's stored files.
             hard_delete_profile(profile)
             deleted += 1
 

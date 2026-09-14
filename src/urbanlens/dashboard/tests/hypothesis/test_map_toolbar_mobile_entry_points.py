@@ -1,15 +1,4 @@
-"""Tests that every map panel has a toolbar entry point, not just an edge handle.
-
-Regression coverage for the pin list being unreachable on mobile: its only
-trigger was ``#pin-list-handle``, whose ``.panel-handle`` class is hidden below
-``$breakpoint-sm``. ``_togglePinListPanel()`` had always looked up a
-``#pin-list-button`` that no template rendered, so the intended toolbar entry
-was designed and dropped - leaving the panel openable on desktop only.
-
-The edge handles stay desktop-only by design (they slide by a side panel's
-width, which is meaningless once the panels become bottom sheets), so the
-toolbar button is the sole mobile route in and must not regress.
-"""
+"""Tests that every map panel has a toolbar entry point, not just an edge handle."""
 
 from __future__ import annotations
 

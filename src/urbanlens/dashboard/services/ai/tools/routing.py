@@ -1,11 +1,4 @@
-"""The assistant's distance/drive-time tool - calls OSRM directly, never REData.
-
-``services.apis.locations`` has a REData-first chokepoint for routing
-(``routing_resolution``), the same shape as ``weather_resolution``'s for
-weather - this deliberately bypasses it, straight to ``OSRMGateway``, so the
-sandboxed AI worker's "no REData" guarantee (``docs/AI_PIPELINE.md``) holds
-for this tool without needing REData reachable from it at all.
-"""
+"""The assistant's distance/drive-time tool - calls OSRM directly, never REData."""
 
 from __future__ import annotations
 
@@ -22,9 +15,7 @@ from urbanlens.dashboard.services.geo.distance import haversine_km
 
 def _resolve_point(context: ToolContext, pin_slug: str, lat: float | None, lng: float | None) -> tuple[float, float] | None:
     """A ``(lat, lng)`` endpoint from one of the requesting profile's own pins, or an explicit coordinate.
-
-    Never resolves any other profile's pin - see ``Pin.objects.by_profile``.
-    """
+    Never resolves any other profile's pin - see ``Pin.objects.by_profile``."""
     pin_slug = pin_slug.strip()
     if pin_slug:
         from urbanlens.dashboard.models.pin.model import Pin

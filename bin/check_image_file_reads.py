@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if a template reads ``.image.url`` without first checking the file is there.
-
-A row can exist with no stored file. ``Image.display_url``'s own docstring says
-so - "an external gallery item whose download failed still carries its
-``source_url``, and reading ``image.url`` on one of those raises" - and exists
-to be used instead. Sixteen reads across eleven templates ignored it anyway, so
-one such row returned a 500 for the whole panel rather than one missing
-thumbnail: the visit history, the pin-share dialog, the DM bubble, the profile
-photo strip, both cover heroes, and more.
-
-Two shapes are fine, and getting either wrong would make this noise:
-
-* **``display_url``/``thumb_url``.** They fall back rather than raise. This is
-  what an ``Image`` should be read through.
-* **A guard.** ``{% if comment.image %}`` around a read of ``comment.image.url``
-  is correct and is what the comment attachments already do - those are the
-  ``Comment`` model's own ``ImageField``, not an ``Image``, and have no
-  ``display_url`` to reach for. Any enclosing ``{% if %}`` naming the same
-  expression counts, however far above the read it sits.
-
-Exits non-zero listing each unguarded read. Safe to run by hand from the repo
-root.
-"""
+"""Fail if a template reads ``.image.url`` without first checking the file is there."""
 
 from __future__ import annotations
 
@@ -78,18 +56,13 @@ def _tracked_templates(root: pathlib.Path) -> list[pathlib.Path]:
 def _unguarded(text: str) -> list[tuple[int, str]]:
     """Reads of ``.image.url`` that no enclosing tag guards.
 
-    Enclosing, not merely earlier: a guard protects the block it opens and
-    nothing else. Matching "anywhere above" instead lets an unrelated earlier
-    loop that happens to reuse a variable name vouch for a later one - which is
-    a plausible shape in a codebase with several similar `{% for %}` galleries,
-    and would silently defeat the whole check.
+    Enclosing, not merely earlier: a guard protects the block it opens and nothing else.
 
     Args:
         text: One template's source.
 
     Returns:
-        ``(line number, the expression read)`` for each unguarded read.
-    """
+        ``(line number, the expression read)`` for each unguarded read."""
     text = _blank_out(_COMMENT_LINE, _blank_out(_COMMENT_BLOCK, text))
     # One entry per open block: the expressions that block's own tag guards.
     # An `{% else %}` replaces the top entry, since the guard does not hold in

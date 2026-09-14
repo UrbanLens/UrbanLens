@@ -1,13 +1,4 @@
-"""Regression tests for the Import Pins dialog's video/AI feature gating.
-
-The dialog template (dashboard/pages/location/import/csv.html) accepts photo/
-video drops and gates video + AI-parsed-file support on
-`can_upload_videos`/`can_use_ai_features`. Both come from the
-`add_feature_access` context processor (settings/base.py), not from
-PinController.import_form's own context dict - these tests guard that
-wiring so a future change to the context-processor list can't silently
-disable the gate for this page.
-"""
+"""Regression tests for the Import Pins dialog's video/AI feature gating."""
 
 from __future__ import annotations
 

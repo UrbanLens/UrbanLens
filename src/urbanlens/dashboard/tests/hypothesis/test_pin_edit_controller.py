@@ -175,11 +175,8 @@ class PinEditDateFieldsTests(TestCase):
     def _assert_no_naive_datetime_warning(self, body: dict) -> None:
         """Post `body` and fail if Django had to guess a zone for last_visited.
 
-        A round-trip through the database always comes back aware, so asserting
-        on the stored value proves nothing. The defect is visible only at the
-        moment of assignment: Django warns, then interprets the value in the
-        current zone rather than the one the user meant.
-        """
+        A round-trip through the database always comes back aware, so asserting on the stored value proves
+        nothing."""
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             response = self._post(body)
@@ -226,15 +223,8 @@ class PinEditDateFieldsTests(TestCase):
 class PinOverviewAddressBackfillDispatchTests(TestCase):
     """A route-less location's address backfill is dispatched to Celery, never geocoded inline.
 
-    Successor to the old inline-geocoding failure regression test: the view
-    used to call ensure_location_address (a live Google Geocoding call)
-    synchronously on every /overview/ visit for a route-less location - first
-    500ing on rate-limit errors, then (after that was fixed) still blocking
-    the render on the API round-trip. It now enqueues
-    tasks.backfill_location_address instead, mirroring the place-name lazy
-    dispatch - so a rate-limited/slow/down geocoding API can no longer affect
-    this page's render at all.
-    """
+    It now enqueues tasks.backfill_location_address instead, mirroring the place-name lazy dispatch - so a
+    rate-limited/slow/down geocoding API can no longer affect this page's render at all."""
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
@@ -302,15 +292,10 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
 class PinOverviewEditableDescriptionTests(TestCase):
     """The pin description renders as a click-to-edit-in-place element.
 
-    Only the markup itself (data-raw-description, the editable marker class)
-    lives in pin_overview_partial.html - the actual wiring (the pin.edit POST
-    URL, the click-to-edit JS) lives in the FULL page's own inline <script>
-    (pages/location/index.html, mirroring the hero title's identical pattern),
-    not in this bare partial. See PinDescriptionEditableTests below for that
-    - this class covers only what PinOverviewView's own partial response
-    actually contains (matches the correction applied to the equivalent,
-    now-deleted PinOverviewEditableTitleTests class -.
-    """
+    Only the markup itself (data-raw-description, the editable marker class) lives in pin_overview_partial.html
+    - the actual wiring (the pin.edit POST URL, the click-to-edit JS) lives in the FULL page's own inline
+    <script> (pages/location/index.html, mirroring the hero title's identical pattern), not in this bare
+    partial."""
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
@@ -347,10 +332,7 @@ class PinOverviewEditableDescriptionTests(TestCase):
         self.assertIn('data-raw-description=""', content)
 
     def test_populated_description_does_not_carry_the_empty_modifier(self) -> None:
-        """Asserted against the partial, not the full page: the full page's
-        inline click-to-edit script mentions ``pin-description--empty`` as a
-        string literal (it toggles the class), so a whole-page ``assertNotIn``
-        can never pass regardless of the pin's description."""
+        """Asserted against the partial, not the full page: the full page's inline click-to-edit script mentions ``pin-description--empty`` as a string literal (it toggles the class), so a whole-page ``assertNotIn`` can never pass regardless of the pin's description."""
         content = self._get().content.decode()
         self.assertNotIn("pin-description--empty", content)
 
@@ -358,12 +340,10 @@ class PinOverviewEditableDescriptionTests(TestCase):
 class PinDescriptionEditableTests(TestCase):
     """Full-page coverage: the description's click-to-edit JS and pin.edit wiring.
 
-    Mirrors PinHeroEditableNameTests (test_pin_hero_editable_name.py) for the
-    title - the pin.edit POST URL is only ever present in the full page's own
-    inline <script> (pages/location/index.html), never in the bare
-    PinOverviewView partial response (see PinOverviewEditableDescriptionTests
-    above), so this has to render via the real pin.details view.
-    """
+    Mirrors PinHeroEditableNameTests (test_pin_hero_editable_name.py) for the title - the pin.edit POST URL is
+    only ever present in the full page's own inline <script> (pages/location/index.html), never in the bare
+    PinOverviewView partial response (see PinOverviewEditableDescriptionTests above), so this has to render via
+    the real pin.details view."""
 
     def setUp(self) -> None:
         self.profile = baker.make(User).profile
@@ -385,10 +365,7 @@ class PinDescriptionEditableTests(TestCase):
         self.assertContains(response, "pin-description-input")
 
     def test_renaming_description_via_pin_edit_updates_the_displayed_value(self) -> None:
-        """End-to-end: the endpoint the description's inline editor posts to
-        actually updates the pin (already covered in depth elsewhere for the
-        edit dialog - this just confirms the click-to-edit markup/endpoint
-        pairing is real, matching PinHeroEditableNameTests's equivalent test)."""
+        """End-to-end: the endpoint the description's inline editor posts to actually updates the pin (already covered in depth elsewhere for the edit dialog - this just confirms the click-to-edit markup/endpoint pairing is real, matching PinHeroEditableNameTests's equivalent test)."""
         response = self.client.post(reverse("pin.edit", args=[self.pin.slug]), {"description": "Now fully collapsed."})
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
@@ -396,14 +373,11 @@ class PinDescriptionEditableTests(TestCase):
 
 
 class PinEditRatingClearTests(TestCase):
-    """Rating lives on Review, not Pin - regression coverage for the "clear
-    rating" (x) button, which submits rating=0.
+    """Rating lives on Review, not Pin - regression coverage for the "clear rating" (x) button, which submits rating=0.
 
-    A prior reassignment (rating=0 -> rating=None) meant the downstream
-    `elif rating == 0` delete branch could never actually match, so clicking
-    "clear" silently left the underlying Review row (and thus the displayed
-    rating) untouched.
-    """
+    A prior reassignment (rating=0 -> rating=None) meant the downstream `elif rating == 0` delete branch could
+    never actually match, so clicking "clear" silently left the underlying Review row (and thus the displayed
+    rating) untouched."""
 
     def setUp(self) -> None:
         self.factory = RequestFactory()

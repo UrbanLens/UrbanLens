@@ -1,14 +1,4 @@
-{% comment %}
-Pin-search results for manually filing a photo onto one of the user's pins.
-
-Context:
-  results  - list[AutocompleteResult] (pin type only)
-  image_id - PK of the photo being filed
-  query    - the raw search string
-  lightbox - True when rendering into the shared lightbox's pin picker
-             (window._lightboxPickPin) instead of an organize-queue card,
-             which has no #photo-card-<id> to hx-swap into.
-{% endcomment %}
+{% comment %}Pin-search results for manually filing a photo onto one of the user's pins.{% endcomment %}
 {% for r in results %}
 {% if lightbox %}
 <button type="button" class="photo-pin-result" data-pin-slug="{{ r.pin_slug }}" onclick="window._lightboxPickPin(this)">

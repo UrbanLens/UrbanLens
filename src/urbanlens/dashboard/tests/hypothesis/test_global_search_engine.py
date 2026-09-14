@@ -78,10 +78,7 @@ class PinSearchTests(TestCase):
         self.assertNotIn("Elsewhere Spot", titles)
 
     def test_result_subtitle_is_the_address_not_a_duplicate_name(self):
-        """Regression guard: the subtitle used to be location.display_name (a
-        NAME - wiki/official name), which for two same-named pins was often
-        identical to the title itself, leaving users with no way to tell
-        duplicate-named search results apart. It must be the address instead."""
+        """It must be the address instead."""
         self.location.street_number = "123"
         self.location.route = "Main St"
         self.location.save(update_fields=["street_number", "route"])

@@ -16,15 +16,7 @@ class ArticleQuerySet(DashboardQuerySet):
     """Custom queryset for :class:`~urbanlens.dashboard.models.article.model.Article`."""
 
     def visible_to(self, profile: Profile) -> ArticleQuerySet:
-        """Articles the given profile is allowed to read.
-
-        Pin articles are strictly private to the pin's owner. Wiki articles
-        follow whatever ``services.wiki.wiki_access`` says, asked rather than
-        restated: this used to check for a pin on the wiki's exact location or
-        the ``created_by`` column, which is one of that rule's four clauses plus
-        one it does not have. Both halves were visible to users - a pin sharing
-        the place's domain opens the wiki page but not its article, and a
-        creator with no pin could read an article on a page that answers 404.
+        """Articles the given profile is allowed to read. Pin articles are strictly private to the pin's owner.
 
         Args:
             profile: The requesting profile.

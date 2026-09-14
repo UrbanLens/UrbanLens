@@ -1,29 +1,4 @@
-"""Regression test: a persistently unreachable REData must not retry forever.
-
-Before this fix, resolve_deferred_pin_locations treated every non-auth REData
-request failure (network error, non-200, unparseable body) as an ordinary
-"pending" result and retried with max_retries=None - identical to a batch that
-was making real progress on REData's own end. A REData outage (or a
-misconfigured UL_REDATA_API_URL/UL_REDATA_API_KEY) would then retry every
-120s forever with no cap and no user notification - unlike the already-handled
-auth_failed case.
-
-A still-pending retry itself is scheduled with throw=False - the expected,
-routine wait for REData isn't an error, so it shouldn't raise a Retry (which
-would log a WARNING + full traceback via the task_retry signal, see
-UrbanLens/celery.py) on every single attempt.
-
-retry()'s args list is [profile_id, remaining_lists, auto_tag, total,
-consecutive_request_failures, consecutive_no_progress, started_at]. Tests index
-the counters from the *start* (``_ARG_REQUEST_FAILURES``/``_ARG_NO_PROGRESS``):
-they used to index from the end, which silently shifted onto the wrong values
-the moment ``started_at`` was appended.
-
-The counters no longer end the batch on their own - they only widen the gap
-between retries. ``_DEFERRED_LOOKUP_DEADLINE`` (two days from ``started_at``) is
-what ends it, so a large import whose cids resolve an hour later is no longer
-turned into hundreds of PinImportFailure rows after ten minutes.
-"""
+"""Regression test: a persistently unreachable REData must not retry forever."""
 
 from __future__ import annotations
 
@@ -109,10 +84,7 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
         self.assertEqual(notification.importance, Importance.HIGH)
 
     def test_a_successful_response_resets_the_counter(self) -> None:
-        """A batch that's still pending on REData's own end (not a request failure) is
-        real progress - it must not inherit whatever failure streak preceded it, or a
-        REData instance that recovers after N-1 failures would still get cut off early
-        by a stale counter."""
+        """A batch that's still pending on REData's own end (not a request failure) is real progress - it must not inherit whatever failure streak preceded it, or a REData instance that recovers after N-1 failures would still get cut off early by a stale counter."""
         recovered = CidResolutionResult(provider=PROVIDER_REDATA, pending=[12345], request_failed=False)
         with (
             mock.patch(

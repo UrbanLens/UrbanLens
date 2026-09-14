@@ -1,12 +1,4 @@
-"""Immich API gateway.
-
-All calls operate on *one user's own* self-hosted Immich server using the API
-key stored on that user's :class:`~urbanlens.dashboard.models.immich.ImmichAccount`
-row - there is no site-wide Immich instance. Immich's REST API is documented
-at https://immich.app/docs/api/ and, unlike Google Photos, returns raw GPS
-coordinates per asset (``GET /api/map/markers``), which is what makes
-"photos near this pin" possible at all.
-"""
+"""Immich API gateway."""
 
 from __future__ import annotations
 
@@ -48,16 +40,7 @@ class MapMarker:
 
 @dataclass(frozen=True, slots=True)
 class SearchAsset:
-    """One asset returned by ``POST /api/search/metadata``.
-
-    Unlike :class:`MapMarker`, this endpoint doesn't require (or guarantee)
-    GPS coordinates - a match found this way isn't necessarily near any
-    particular point. ``lat``/``lon``/``city`` come from the same ``exifInfo``
-    block ``map/markers`` and ``taken_at`` already draw from, so a single
-    paginated sweep of this endpoint (see ``iter_library_assets``) is enough
-    to recover location + capture date together without a second API call
-    per asset.
-    """
+    """One asset returned by ``POST /api/search/metadata``."""
 
     id: str
     taken_at: datetime.datetime | None = None
@@ -128,8 +111,7 @@ class ImmichGateway(Gateway):
             params: Optional query parameters.
 
         Returns:
-            Tuple of (content bytes, content-type, filename derived from the
-            response's Content-Disposition header, or the asset id when absent).
+            Tuple of (content bytes, content-type, filename derived from the response's Content-Disposition header, or the asset id when absent).
 
         Raises:
             GatewayRequestError: On a network error, a non-2xx response, or a
@@ -197,8 +179,7 @@ class ImmichGateway(Gateway):
             is_archived: When False (default), excludes archived/trashed assets.
 
         Returns:
-            One MapMarker per geolocated asset. Assets without GPS coordinates
-            are never returned by this endpoint, so no filtering is needed here.
+            One MapMarker per geolocated asset.
 
         Raises:
             GatewayRequestError: On a network error or non-2xx response.
@@ -209,19 +190,11 @@ class ImmichGateway(Gateway):
     def library_asset_count(self) -> int:
         """Return the true total number of assets in the user's library.
 
-        ``POST /search/metadata``'s own ``assets.total`` field is deprecated
-        and, on current Immich servers, actually mirrors the current page's
-        item count rather than a library-wide total - so it must never be used
-        as a progress-bar denominator (see ``iter_library_assets``, which
-        yields it unchanged for pagination bookkeeping only, not for display).
-        ``POST /search/statistics`` returns the real count.
-
         Returns:
             Total matching assets, or 0 if the endpoint errors.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
-        """
+            GatewayRequestError: On a network error or non-2xx response."""
         body = self._post("/search/statistics", json={})
         return int(body.get("total") or 0)
 
@@ -234,8 +207,7 @@ class ImmichGateway(Gateway):
             size: Maximum number of assets to return in this page.
 
         Returns:
-            Tuple of (assets on this page, the token to request the next page - falsy
-            when this was the last page, total assets matching the filter).
+            Tuple of (assets on this page, the token to request the next page - falsy when this was the last page, total assets matching the filter).
 
         Raises:
             GatewayRequestError: On a network error or non-2xx response.
@@ -269,22 +241,16 @@ class ImmichGateway(Gateway):
 
     def iter_library_assets(self, *, page_size: int = _DEFAULT_PAGE_SIZE) -> Iterator[tuple[list[SearchAsset], int]]:
         """Page through every asset in the user's library, yielding one page at a time.
-
-        Used for a full-library location sweep, where downloading every asset
-        would be far too expensive - this only fetches the lightweight metadata
-        (id, GPS, capture date, city) already present in the search response.
+        Used for a full-library location sweep, where downloading every asset would be far too expensive - this only fetches the lightweight metadata (id, GPS, capture date, city) already present in the search response.
 
         Args:
             page_size: Assets requested per page.
 
-        Yields:
-            One (assets on this page, total assets in the library) tuple per
-            page, in Immich's default (most recent first) order. Stops when
-            Immich reports no further page, or after ``_MAX_LIBRARY_PAGES`` as
-            a runaway-loop guard.
-
         Raises:
             GatewayRequestError: On a network error or non-2xx response.
+
+        Yields:
+            One (assets on this page, total assets in the library) tuple per page, in Immich's default (most recent first) order.
         """
         page: Any = None
         for _ in range(_MAX_LIBRARY_PAGES):
@@ -297,11 +263,6 @@ class ImmichGateway(Gateway):
 
     def search_by_dates(self, dates: Sequence[datetime.date]) -> list[SearchAsset]:
         """Return the user's own assets taken on any of the given calendar dates.
-
-        Issues one metadata search per date (Immich's search takes a single
-        ``takenAfter``/``takenBefore`` range, not a set of discrete days) and
-        merges/dedupes the results - callers should keep ``dates`` short (see
-        ``photo_import.MAX_VISIT_DATES``).
 
         Args:
             dates: Calendar dates to search, in the account's local time.
@@ -383,9 +344,7 @@ def _parse_taken_at(item: dict[str, Any]) -> datetime.datetime | None:
         item: One raw asset object from the search response.
 
     Returns:
-        The parsed ``exifInfo.dateTimeOriginal`` (falling back to
-        ``fileCreatedAt``), or None when neither is present or parseable.
-    """
+        The parsed ``exifInfo.dateTimeOriginal`` (falling back to ``fileCreatedAt``), or None when neither is present or parseable."""
     value = (item.get("exifInfo") or {}).get("dateTimeOriginal") or item.get("fileCreatedAt")
     if not value:
         return None

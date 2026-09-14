@@ -1,25 +1,11 @@
 """Export the site's public locations for import into a demo instance.
 
-Run on the **real** site; read-only. Writes JSON that
-``import_public_locations`` loads on the demo instance.
-
-What "public" means here is not a judgement call this command makes. A location
-is public only when its ``PublicPinCandidate`` reached ``PASSED`` - the outcome
-of the community vote in ``services.pins.public_pins``. Nothing else qualifies,
-and in particular **a location having a wiki does not**: wiki visibility is
-*earned* per viewer (you must already hold a pin on that place or its place
-domain), and ``resolve_visible_wiki`` deliberately 404s indistinguishably "so
-guessing slugs can never reveal which locations other users have pinned".
-Exporting wiki-backed locations would publish precisely the set that design
-protects, for every place any user has ever pinned.
-
-The same reasoning bounds what travels with each location. Coordinates and the
-wiki's *cached* material - photos nobody authored, alternate names - describe
-the place. Comments, articles, edit history and votes describe **people**, and
-are never exported, so no profile, username or authored text can ride along.
-
-An empty export is the correct and expected result on a site where no candidate
-has passed yet. It is not a failure.
+Nothing else qualifies, and in particular **a location having a wiki does not**: wiki visibility is
+*earned* per viewer (you must already hold a pin on that place or its place domain), and
+``resolve_visible_wiki`` deliberately 404s indistinguishably "so guessing slugs can never reveal
+which locations other users have pinned".
+Exporting wiki-backed locations would publish precisely the set that design protects, for every
+place any user has ever pinned.
 """
 
 from __future__ import annotations
@@ -85,16 +71,13 @@ class Command(BaseCommand):
 
         Returns:
             Name, aliases and cached photo URLs, or None when there is no wiki.
-            Deliberately omits articles, comments, edits and every ``created_by``
-            - those are authored by identifiable people.
         """
         wiki = getattr(location, "wiki", None)
         if wiki is None:
             return None
 
-        # profile__isnull=True is the whole test for "nobody authored this":
-        # images cached from a provider carry no owner, images a user uploaded
-        # always do.
+        # profile__isnull=True is the whole test for "nobody authored this": images cached from a provider carry
+        # no owner, images a user uploaded always do.
         photos = [image.image.name for image in wiki.images.filter(profile__isnull=True).order_by("pk") if getattr(image, "image", None) and image.image.name]
         aliases = list(wiki.aliases.order_by("pk").values_list("name", flat=True))
         return {"name": wiki.name or "", "aliases": aliases, "photos": photos}

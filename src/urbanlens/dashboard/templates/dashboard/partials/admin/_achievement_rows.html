@@ -1,19 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-The award editor - one card per award, plus the create form - swapped as a
-single unit after every mutation.
-
-Cards rather than table rows because each award is an independent form, and a
-form cannot span table cells without the browser hoisting it out of the table.
-
-Each card's medal doubles as its icon picker trigger, so choosing an icon (or
-a colour, via the small inline style patch on each swatch) previews live
-without any bespoke JS - see _achievements.scss's "Site-admin editor" section.
-
-Context: achievements (annotated with earned_count), stats, metric_groups,
-         metrics, icon_categories, color_choices, default_icon, default_color,
-         form_errors (optional)
-{% endcomment %}
+{% comment %}The award editor - one card per award, plus the create form - swapped as a single unit after every mutation.{% endcomment %}
 <div id="achievement_admin">
 
     {% if form_errors %}
@@ -127,10 +113,7 @@ Context: achievements (annotated with earned_count), stats, metric_groups,
                     </label>
                     <div class="ul-field ul-field--wide">
                         <span>Colour</span>
-                        {% comment %}The ids live on the container, not repeated into every
-                        swatch's handler: that handler was 297 bytes x 21 colours on every row
-                        (P68). pickAchievementColor reads them back out - see
-                        entries/achievements.ts.{% endcomment %}
+                        {% comment %}The ids live on the container, not repeated into every swatch's handler.{% endcomment %}
                         <div class="color-picker" id="achv-color-{{ picker_id }}"
                              data-color-value-id="achv-color-value-{{ picker_id }}"
                              data-color-medal-id="achv-medal-{{ picker_id }}">

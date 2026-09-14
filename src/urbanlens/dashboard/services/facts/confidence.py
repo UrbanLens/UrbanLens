@@ -1,17 +1,4 @@
-"""Recomputing a Fact's confidence from its accumulated evidence.
-
-Dispatches per ``Fact.data_type``: NUMBER/POINT facts converge via a
-trust-and-recency-weighted centroid (generalizing
-``services.photos.photo_coordinates.recompute_estimated_coordinates``); every other
-data type (TEXT/CHOICE/BOOL/DATE) converges via trust-weighted agreement
-clustering with Bayesian-smoothed confidence, extending
-``ConsensusProfile``'s Beta-Bernoulli trust pattern (see
-``services.consensus.trust``) rather than inventing a new statistic.
-
-Called async via ``tasks.recompute_fact_confidence`` after every new
-``FactEvidence`` row (see ``services.facts.evidence.record_evidence``) -
-never inline, per the project's Celery-everything-slow standard.
-"""
+"""Recomputing a Fact's confidence from its accumulated evidence."""
 
 from __future__ import annotations
 
@@ -39,10 +26,9 @@ MIN_EVIDENCE_FOR_ESTIMATE = 5
 #: confidence >= this promotes a fact to CONFIRMED.
 CONFIRM_THRESHOLD = 0.75
 
-#: When the leading and runner-up candidates' weighted shares are within this
-#: margin, the fact is CONTESTED rather than merely TENTATIVE - the signal
-#: Consensus's recheck-round selection (``services.consensus.selection``)
-#: looks for.
+#: When the leading and runner-up candidates' weighted shares are within this margin, the fact is
+#: CONTESTED rather than merely TENTATIVE - the signal Consensus's recheck-round selection
+#: (``services.consensus.selection``) looks for.
 CONTESTED_MARGIN = 0.15
 
 #: Half-life, in days, of an evidence row's contribution to confidence -
@@ -51,7 +37,6 @@ EVIDENCE_HALF_LIFE_DAYS = 365.0
 
 #: Weakly-informative Beta(2, 2) prior, mirroring
 #: ``ConsensusProfile.DEFAULT_TRUST_ALPHA``/``DEFAULT_TRUST_BETA`` - a single
-#: piece of evidence should never read as 100% confidence.
 PRIOR_ALPHA = 2.0
 PRIOR_BETA = 2.0
 
@@ -129,9 +114,7 @@ def _cluster_categorical(weighted: list[_WeightedEvidence]) -> tuple[list[tuple[
     """Group categorical evidence into agreement clusters.
 
     Returns:
-        ``(totals, total_weight)`` - ``totals`` is ``[(cluster_weight, value), ...]``
-        sorted heaviest-first; ``total_weight`` is the sum of all of them.
-    """
+        ``(totals, total_weight)`` - ``totals`` is ``[(cluster_weight, value), ...]`` sorted heaviest-first; ``total_weight`` is the sum of all of them."""
     clusters: list[list[_WeightedEvidence]] = []
     for item in weighted:
         cluster = next((cluster for cluster in clusters if _values_agree(cluster[0].value, item.value)), None)
@@ -140,13 +123,10 @@ def _cluster_categorical(weighted: list[_WeightedEvidence]) -> tuple[list[tuple[
         else:
             cluster.append(item)
 
-    # key= on the weight alone: a bare `reverse=True` sorts the tuples, so two
-    # clusters of equal weight fall through to comparing their *values*. That was
-    # never the intent, and it raises for values that aren't mutually comparable -
-    # reachable here because FactEvidence keeps a per-row `data_type` so old rows
-    # stay interpretable after a key's registered type changes (one fact can hold a
-    # text row and a bool row), and every `value_*` column is nullable. Sorting on
-    # weight only leaves ties in evidence order, which is stable and cannot raise.
+    # key= on the weight alone: a bare `reverse=True` sorts the tuples, so two clusters of equal
+    # weight fall through to comparing their *values*.
+    # That was never the intent, and it raises for values that aren't mutually comparable -
+    # reachable here because FactEvidence keeps a per-row `data_type` so old rows stay interpretable
     totals = sorted(((sum(item.weight for item in cluster), cluster[0].value) for cluster in clusters), key=lambda total: total[0], reverse=True)
     total_weight = sum(weight for weight, _value in totals)
     return totals, total_weight
@@ -173,26 +153,16 @@ def resolve_categorical(
     previously_confirmed: bool,
 ) -> tuple[Any, float, str]:
     """Decide the reported ``(value, confidence, status)`` for a categorical fact.
-
-    A previously-``CONFIRMED`` value only changes if the new leading cluster
-    both disagrees with it and itself clears ``CONFIRM_THRESHOLD`` - a
-    confirmed value doesn't flip-flop on one noisy new observation. When the
-    leading cluster is held back by that gate, confidence/status describe
-    the *held* value's own standing, never the challenger's - so they always
-    describe whatever value is actually being reported, not a value the
-    fact isn't holding.
+    When the leading cluster is held back by that gate, confidence/status describe the *held* value's own standing, never the challenger's - so they always describe whatever value is actually being reported, not a value the fact isn't holding.
 
     Args:
-        totals: Cluster weights from :func:`_cluster_categorical`, heaviest
-            first.
+        totals: Cluster weights from :func:`_cluster_categorical`, heaviest first.
         total_weight: Sum of every cluster's weight.
         previous_value: The fact's currently stored value.
-        previously_confirmed: Whether the fact's status was already
-            ``CONFIRMED`` going into this recomputation.
+        previously_confirmed: Whether the fact's status was already ``CONFIRMED`` going into this recomputation.
 
     Returns:
-        ``(value, confidence, status)``.
-    """
+        ``(value, confidence, status)``."""
     if not totals:
         return None, 0.0, FactStatus.UNCONFIRMED
 
@@ -213,19 +183,8 @@ def resolve_categorical(
 def recompute(fact_id: int) -> None:
     """Recompute one Fact's ``confidence``/``status``/value from its accumulated evidence.
 
-    A no-op (beyond bumping ``evidence_count``/``last_evidence_at``) below
-    ``MIN_EVIDENCE_FOR_ESTIMATE`` active evidence rows. For categorical facts
-    (TEXT/CHOICE/BOOL/DATE), a previously-``CONFIRMED`` value is protected
-    from flip-flopping by :func:`resolve_categorical`. NUMBER/POINT facts
-    always recompute their centroid/mean fresh, mirroring
-    ``services.photos.photo_coordinates.recompute_estimated_coordinates`` - a
-    weighted average can't suddenly jump to a wildly different value from
-    one new observation the way a discrete categorical winner can, so no
-    equivalent gate is needed there.
-
     Args:
-        fact_id: pk of the ``Fact`` to recompute.
-    """
+        fact_id: pk of the ``Fact`` to recompute."""
     try:
         fact = Fact.objects.get(pk=fact_id)
     except Fact.DoesNotExist:

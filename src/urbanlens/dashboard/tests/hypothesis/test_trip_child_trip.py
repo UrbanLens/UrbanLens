@@ -1,23 +1,4 @@
-"""Tests for UL-228: linking a "child trip" to a trip activity.
-
-A TripActivity can optionally link a whole separate Trip (child_trip);
-that trip's own activities then render as read-only "ghost markers" on
-the parent trip's map, labeled "[child trip name] activity title".
-
-TripChildTripSearchView (the autocomplete backing the picker) already
-scoped suggestions to Trip.objects.filter(profiles=profile) - trips the
-linking user actually belongs to. But TripActivitiesView.post/
-TripActivityUpdateView.post resolved child_trip_uuid with no such scoping
-at all, so any authenticated trip member could link an arbitrary trip
-(one they have no access to) by crafting the POST directly, and that
-trip's activity titles/coordinates/schedule would then render for every
-member of the trip they *do* have access to. Separately,
-TripMapDataView's ghost-marker loop never checked the child activity's
-own location_hidden flag, unlike the identical check already applied to
-the parent trip's own activities a few lines above it - so a
-legitimately-linked child trip's "Secret Location" activities leaked
-their real coordinates anyway.
-"""
+"""Tests for UL-228: linking a "child trip" to a trip activity."""
 
 from __future__ import annotations
 
@@ -143,13 +124,10 @@ class ChildTripGhostMarkerVisibilityTests(TestCase):
     def test_child_activity_hidden_only_by_adders_privacy_setting_is_also_excluded(self) -> None:
         """Ghost markers must respect trip_pin_location_visibility, not just location_hidden.
 
-        Regression for build_trip_map_points checking only location_hidden for child-trip
-        activities - the same viewer-aware gate the parent trip's own activities already get
-        (via viewer_hidden_activity_ids) was missing here, so an activity the adder never
-        flagged location_hidden, but whose visibility setting excludes this viewer, still
-        rendered a real marker with real coordinates. See docs/audits/GOALS_CODE_AUDIT.md
-        ("Trip activities sourcing").
-        """
+        Regression for build_trip_map_points checking only location_hidden for child-trip activities - the same
+        viewer-aware gate the parent trip's own activities already get (via viewer_hidden_activity_ids) was
+        missing here, so an activity the adder never flagged location_hidden, but whose visibility setting
+        excludes this viewer, still rendered a real marker with real coordinates."""
         other_user = baker.make("auth.User")
         other_profile = other_user.profile
         other_profile.trip_pin_location_visibility = VisibilityChoice.NO_ONE
@@ -171,18 +149,10 @@ class ChildTripGhostMarkerVisibilityTests(TestCase):
         self.assertFalse(any("Privacy-Restricted Stop" in label for label in labels))
 
     def test_child_trip_activities_are_excluded_when_viewer_is_not_a_child_trip_member(self) -> None:
-        """A parent-trip viewer with no membership in the linked child trip must
-        not see any of its ghost markers, regardless of the adder's own
-        trip_pin_location_visibility setting.
+        """A parent-trip viewer with no membership in the linked child trip must not see any of its ghost markers, regardless of the adder's own trip_pin_location_visibility setting.
 
-        Regression: build_trip_map_points only ever checked
-        viewer_hidden_activity_ids (the *adder's* privacy setting) for child
-        activities - never whether this viewer belongs to the child trip at
-        all. So linking a private child trip into a broadly-joined parent trip
-        exposed every one of its real coordinates/titles to every parent-trip
-        member, none of whom the child trip's own members ever agreed to share
-        with.
-        """
+        Regression: build_trip_map_points only ever checked viewer_hidden_activity_ids (the *adder's* privacy
+        setting) for child activities - never whether this viewer belongs to the child trip at all."""
         outsider_user = baker.make("auth.User")
         outsider = outsider_user.profile
         TripMembership.objects.create(trip=self.trip, profile=outsider)

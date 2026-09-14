@@ -1,11 +1,4 @@
-"""Tests for server-side previews of non-web-renderable Media-gallery items.
-
-Covers the format decisions (:mod:`services.media.previews`), the actual
-raster conversion for TIFF/PDF/HEIC-shaped sources, and the signed generic
-endpoint's refusal to fetch anything this server didn't itself emit.
-
-No real network access occurs - the endpoint's own fetch is patched.
-"""
+"""Tests for server-side previews of non-web-renderable Media-gallery items."""
 
 from __future__ import annotations
 
@@ -171,10 +164,8 @@ class MediaPreviewViewTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.url = reverse("media.preview")
-        # Rendered previews are cached by source URL, and the cache outlives an
-        # individual test - so each test gets its own URL rather than
-        # inheriting whatever a previously-run one left cached for a shared
-        # one.
+        # Rendered previews are cached by source URL, and the cache outlives an individual test - so each test
+        # gets its own URL rather than inheriting whatever a previously-run one left cached for a shared one.
         self.source = f"https://upload.wikimedia.org/{self.id().rsplit('.', 1)[-1]}.tif"
 
     def test_an_unsigned_request_is_refused_without_fetching(self) -> None:
@@ -245,9 +236,6 @@ class MediaPreviewViewTests(TestCase):
         self.assertEqual(mock_fetch.call_count, 1, "a failed conversion must be cached, not retried per tile render")
 
     def test_a_queued_render_does_not_refetch_the_source_either(self) -> None:
-        # The in-flight window: between queueing and the worker finishing, every
-        # other tile request for the same item must be a cheap 404, not another
-        # 60MB download.
         signed = {"u": self.source, "sig": sign_source_url(self.source)}
         with (
             patch(

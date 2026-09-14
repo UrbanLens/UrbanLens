@@ -75,11 +75,7 @@ class PendingFriendInvitationTests(TestCase):
         )
 
     def test_process_pending_invitations_matches_gmail_variant(self) -> None:
-        """A pending invite to one Gmail spelling must still be found when the
-        invitee registers under a dot/+ variant of the same address - see
-        FriendInvitation.email_normalized. Previously this orphaned the
-        invitation: a case-insensitive-exact match doesn't strip Gmail dots.
-        """
+        """A pending invite to one Gmail spelling must still be found when the invitee registers under a dot/+ variant of the same address - see FriendInvitation.email_normalized."""
         inviter = baker.make(User).profile
         invitee = baker.make(User, email="john.doe.3@gmail.com", is_active=False)
         invitation = FriendInvitation.objects.create(
@@ -128,12 +124,7 @@ class PendingFriendInvitationTests(TestCase):
 
 
 class PendingSubscriptionGrantRedemptionTests(TestCase):
-    """Accepting an invite that carries a subscription grant applies it.
-
-    Previously untested despite the grant/redeem code (controllers/account.py's
-    _apply_pending_invitation, via PendingSubscriptionGrant.objects.for_invitation())
-    having existed for a while.
-    """
+    """Accepting an invite that carries a subscription grant applies it."""
 
     def test_accepting_the_invite_grants_the_subscription(self) -> None:
         inviter = baker.make(User).profile
@@ -191,11 +182,9 @@ class EmailNormalizedFieldTests(TestCase):
 class EmailNormalizedBackfillMigrationTests(TestCase):
     """The 0048 migration's data backfill, exercised directly against a real row.
 
-    Regression coverage for the migration function itself (app label/field-name
-    typos, the only()/iterator()/bulk_update plumbing) that a plain model-level
-    test of save() can't reach, since save() already keeps email_normalized
-    populated on every row created through the ORM during the test run.
-    """
+    Regression coverage for the migration function itself (app label/field-name typos, the
+    only()/iterator()/bulk_update plumbing) that a plain model-level test of save() can't reach, since save()
+    already keeps email_normalized populated on every row created through the ORM during the test run."""
 
     def test_backfill_normalizes_a_row_left_blank(self) -> None:
         import importlib

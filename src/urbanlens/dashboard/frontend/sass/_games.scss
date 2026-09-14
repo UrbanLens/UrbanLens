@@ -1,8 +1,6 @@
 // Games hub - the front door to the game suite.
 //
-// The hub, the shared subnav strip and the game pages themselves all read the
-// same --ul-game-* accent contract, so a card previews the colour the game it
-// links to will actually be wearing.
+// The hub, the shared subnav strip and the game pages themselves all read the same --ul-game-* accent contract, so a card previews.
 
 @use 'sass:map';
 @use 'variables' as *;
@@ -12,9 +10,7 @@
 // `body.page-<name>` (declared in _game_shell.scss) only exists on that game's
 // own page, so the hub re-states each accent scoped to [data-game].
 //
-// The derived properties are re-declared alongside the accent they derive from:
-// a derivative inherited from `body` was already computed against `body`'s
-// accent and would silently ignore this override.
+// The derived properties are re-declared alongside the accent they derive.
 //
 // A game absent from this map keeps the hub's own deep-purple accent, so a
 // fourth GAMES entry still renders sensibly with no change here.
@@ -71,9 +67,7 @@ $game-accents: (
 }
 
 // -- Shared subnav strip ------------------------------------------------------------
-// The tab strip is rendered on all four pages, so its accent treatment lives
-// with the hub rather than being repeated per game. The "All Games" tab has no
-// [data-game] and so wears whichever page it is sitting on.
+// The tab strip is rendered on all four pages, so its accent treatment lives with the hub rather than being repeated per game.
 .ul-game-subnav {
     .ul-subnav-tab {
         &:hover,
@@ -98,9 +92,7 @@ $game-accents: (
 }
 
 // -- Hub layout ----------------------------------------------------------------------
-// `body.page-games > div.container` is unpadded full bleed (see
-// _game_shell.scss), so the hub supplies its own gutter - matched to
-// .ul-game-shell's, so hub -> game keeps the same edges.
+// `body.page-games > div.container` is unpadded full bleed, so the hub supplies its own gutter.
 .ul-game-hub {
     gap: $space-lg;
     padding: $space-lg $space-md $space-xl;
@@ -121,9 +113,7 @@ $game-accents: (
     margin-bottom: 0;
 }
 
-// A flex row rather than a grid: it centers a partial last row (e.g. a fourth
-// game dangling alone), which `justify-content: center` on a grid container
-// cannot do since it only centers the track set, not per-row content.
+// A flex row rather than a grid: it centers a partial last row (e.g. a fourth game dangling alone), which `justify-content.
 .games-grid {
     display: flex;
     flex-wrap: wrap;
@@ -131,10 +121,7 @@ $game-accents: (
     gap: $space-lg;
 }
 
-// Same poster-tile look as SpotGuessr's mode cards (`shell.mode-card`): a
-// full-bleed accent gradient rather than a neutral surface with an accent
-// hairline, so each entry reads as a distinct "box art" rather than a plain
-// list row.
+// Same poster-tile look as SpotGuessr's mode cards (`shell.mode-card`).
 .games-card {
     @include shell.mode-card;
     --ul-game-mode: var(--ul-game-accent);
@@ -219,10 +206,7 @@ $game-accents: (
     line-height: 1.5;
 }
 
-// An inert <span> inside the card's own <a>, so its motion is driven entirely
-// by the parent's hover/focus rather than its own. The pill itself rides the
-// contrast colour rather than the accent - the card is already an accent
-// fill, so an accent-on-accent pill would disappear.
+// An inert <span> inside the card's own <a>, so its motion is driven entirely by the parent's hover/focus rather than its own.
 .games-card-play {
     position: relative;
     margin-top: auto;

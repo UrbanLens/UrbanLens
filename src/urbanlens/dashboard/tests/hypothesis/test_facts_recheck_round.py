@@ -1,12 +1,4 @@
-"""Tests for Consensus's Facts-driven recheck-round selection (services.consensus.selection).
-
-``_pick_recheck_round`` is tested directly against a hand-built wiki pool
-(mirrors ``test_consensus_photos.py``'s style of exercising a strategy
-function directly rather than through the full eligibility pipeline); the
-probability-gated wiring into ``pick_next_round_content`` is tested
-separately with the underlying selection mocked out, isolating "does this
-get called and its result returned" from "does it pick the right wiki."
-"""
+"""Tests for Consensus's Facts-driven recheck-round selection (services.consensus.selection)."""
 
 from __future__ import annotations
 

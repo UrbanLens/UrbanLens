@@ -1,13 +1,5 @@
 /**
- * Guards the contract between hotkeys.ts's DEFAULT_HOTKEYS and the Settings >
- * Shortcuts section's own copy of it.
- *
- * That section has no bundled TS entry point to import DEFAULT_HOTKEYS from
- * (see settings/index.html), so its HOTKEY_DEFAULTS object duplicates the
- * action ids/labels/descriptions/default keys by hand instead - the same
- * cross-language tradeoff pin-cache.contract.test.ts already guards for
- * PIN_CACHE_VERSION. This test parses the template and fails the build if the
- * two drift, rather than letting the settings page quietly go stale.
+ * Guards the contract between hotkeys.ts's DEFAULT_HOTKEYS and the Settings > Shortcuts section's own copy of it.
  */
 
 import { describe, expect, test } from "bun:test";

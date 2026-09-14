@@ -11,11 +11,7 @@ from urbanlens_ai import policy
 from urbanlens_ai.providers.base import ProviderAdapter, ProviderError
 from urbanlens_ai.schema import ImagePart, InferenceRequest, InferenceResponse, Message, StopReason, TextBlock, ToolUseBlock, Usage
 
-#: Anthropic's own stop_reason values that map onto our normalized set
-#: unchanged; anything else (``stop_sequence``, ``pause_turn``, ``refusal``,
-#: or a future value this adapter doesn't know yet) becomes ``"other"``
-#: rather than raising, so a new Anthropic API addition degrades to "the
-#: turn ended for some reason" instead of a hard failure.
+#: Unknown future stop_reasons map to "other" rather than raising.
 _KNOWN_STOP_REASONS: frozenset[str] = frozenset({"end_turn", "max_tokens", "tool_use"})
 
 

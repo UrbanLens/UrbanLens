@@ -1,20 +1,5 @@
 /**
  * Every surface that offers bulk delete must say whether it also offers wiki.
- *
- * `photo-context-menu.ts` and `album-items.ts` read two dataset attributes:
- * `galleryBulkUrl` gates Delete, `galleryWikiUrl` gates Send-to-wiki. They were
- * one attribute until a Vault album needed the first without the second - a
- * vault photo has no location to infer a wiki from.
- *
- * Splitting them left `_photo_gallery.html` - the flat Photos tab on a pin,
- * which is *the* place a photo gets contributed to a wiki - still emitting only
- * the first. The reader fell through to `undefined`, and the menu item stopped
- * appearing entirely: a working feature silently gone, with no error anywhere.
- *
- * So the rule is that emitting one without the other is always a mistake. An
- * empty value is a fine answer; an absent attribute is not, because absent and
- * "deliberately none" look identical to the reader and only one of them is
- * intended.
  */
 
 import { describe, expect, test } from "bun:test";

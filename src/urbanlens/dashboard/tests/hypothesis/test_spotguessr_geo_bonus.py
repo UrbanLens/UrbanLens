@@ -66,14 +66,8 @@ class BonusPointsForGuessTests(SimpleTestCase):
     def setUp(self) -> None:
         """Reset shared state before each guess so the tests stay order-independent.
 
-        ``_reverse_geocode_admin_cached`` memoizes into the Django cache keyed by
-        rounded coordinates, and the cache is process-wide rather than per-test.
-        Several tests below reuse the same guess point with different mocked
-        Nominatim answers, so without this a value cached by an earlier test is
-        returned and the patched gateway is never consulted - which made the
-        outcome depend on which tests ran first (the file passing under a full
-        run and failing when run alone).
-        """
+        ``_reverse_geocode_admin_cached`` memoizes into the Django cache keyed by rounded coordinates, and the
+        cache is process-wide rather than per-test."""
         cache.clear()
         self.location = Location(country="USA", administrative_area_level_1="New York", locality="Albany")
 

@@ -1,15 +1,5 @@
 /**
- * Shared map-export module: rasterizes the CURRENTLY VISIBLE view of a
- * Leaflet map (active base tile layer + borders overlay, if on + drawn
- * markup shapes) onto a canvas sized to the map's actual on-screen container
- * dimensions, then triggers a one-click JPEG download. Used everywhere a
- * markup map is viewed or edited: the standalone map composer, the read-only
- * viewer dialog, and the safety check-in route map.
- *
- * All four tile providers this site uses (OSM, CARTO, OpenTopoMap, Esri
- * ArcGIS) send `Access-Control-Allow-Origin: *`, so tiles can be fetched with
- * `crossOrigin = "anonymous"` and drawn onto the canvas without tainting it -
- * no third-party screenshot library needed.
+ * Shared map-export module: rasterizes the CURRENTLY VISIBLE view of a Leaflet map.
  */
 import type { MapLayersInstance } from "./map-layers";
 import { MapLayers } from "./map-layers";
@@ -65,11 +55,7 @@ async function drawTileLayerGrid(ctx: CanvasRenderingContext2D, map: L.Map, tile
     const fetchZoom = typeof maxNative === "number" ? Math.min(zoom, maxNative) : zoom;
     const drawSize = TILE_SIZE * 2 ** (zoom - fetchZoom);
 
-    // TileLayer.getTileUrl() ignores the .z on the coords it's passed and
-    // instead reads its own private _tileZoom, which Leaflet only sets when a
-    // layer is added to a map (onAdd -> _setView). This layer is a disposable
-    // instance created solely for export and never attached, so _tileZoom
-    // would otherwise be undefined, producing a broken URL for every tile.
+    // TileLayer.getTileUrl() ignores the.z on the coords it's passed and instead reads its own private _tileZoom, which Leaflet only sets.
     (tileLayer as unknown as { _tileZoom: number })._tileZoom = fetchZoom;
 
     const bounds = map.getBounds();

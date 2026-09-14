@@ -29,10 +29,7 @@ function savedInStoreyOrder(): FloorplanDocument {
 
 describe("applyServerIds", () => {
     test("floors keep their own uuid when the response is in a different order", () => {
-        // FloorplanFloor orders by level, so the server always answers in
-        // storey order however the payload was arranged. Matching positionally
-        // handed each floor its neighbour's uuid, and the next save then
-        // overwrote the wrong row.
+        // FloorplanFloor orders by level, so the server always answers in storey order however the payload was arranged.
         const doc = unsortedDoc();
         applyServerIds(snapshotForSend(doc), savedInStoreyOrder());
 
@@ -79,11 +76,7 @@ describe("applyServerIds", () => {
     });
 
     test("renumbering the stack mid-save does not misfile the uuids", () => {
-        // Deleting a floor renumbers every floor above it, and the editor does
-        // that the moment the button is pressed - which can land while a save
-        // is still in flight. The level a floor has when the response arrives
-        // is then not the level it was sent under, so the key has to be the one
-        // recorded at send time, not read back off the live object.
+        // Deleting a floor renumbers every floor above it, and the editor does that the moment the button is pressed.
         const doc = unsortedDoc();
         const sent = snapshotForSend(doc);
         // The basement is deleted; ground becomes the new basement, and so on.
@@ -96,10 +89,7 @@ describe("applyServerIds", () => {
     });
 
     test("a door's locks get their real ids back too", () => {
-        // A lock left holding a client-only id is deleted as an orphan on the
-        // next save and recreated under a new one, taking anything attached to
-        // it with it - and the whole point of a lock record is that it
-        // accumulates notes about the same physical lock.
+        // A lock left holding a client-only id is deleted as an orphan on the next save and recreated under a new one, taking anything attached.
         const doc = unsortedDoc();
         const ground = doc.floors[0];
         if (!ground) throw new Error("no floor");
@@ -124,10 +114,7 @@ describe("applyServerIds", () => {
     });
 
     test("a pool row takes its real uuid, and what cites it follows", () => {
-        // _Pools looks the existing pool up by real uuid, so a second save
-        // still carrying "local-1" matches nothing, creates a second row and
-        // deletes the first as stale - the row destroyed and rebuilt on every
-        // autosave, with nothing visible to show for it.
+        // _Pools looks the existing pool up by real uuid, so a second save still carrying "local-1" matches nothing, creates a second row.
         const doc = unsortedDoc();
         const ground = doc.floors[0];
         if (!ground) throw new Error("no floor");
@@ -163,9 +150,7 @@ describe("applyServerIds", () => {
     });
 
     test("a reference with no image gets its real id too", () => {
-        // Added by URL rather than from a photo. Matching on the image it stood
-        // for could not name this one at all, so it kept a client-side id and
-        // was destroyed and rebuilt on every save.
+        // Added by URL rather than from a photo.
         const doc = unsortedDoc();
         doc.reference_pool = [{ uuid: "local-1", url: "https://example.test/plan.pdf" }];
         const saved = savedInStoreyOrder();

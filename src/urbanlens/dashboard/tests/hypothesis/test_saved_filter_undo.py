@@ -1,16 +1,4 @@
-"""Deleting a saved filter is restorable from Undo History, tint included.
-
-`_RESTORABLE_FIELDS` used to list `("name", "icon", "criteria", "order")` -
-omitting `color`/`opacity`, so undoing a deleted filter brought it back
-untinted. `test_undo_round_trip`'s generic sweep can't see this class of bug:
-`model_bakery` leaves a field with an explicit Django-level default (`color`'s
-`default=""`, `opacity`'s `default=100`) unset rather than fuzzing it, so
-"before" and "after" are both the same default and nothing looks lost. This
-builds the filter with an explicit non-default color/opacity instead.
-
-See PROBLEMS.md, "undoing a deleted saved filter drops its colour and
-opacity".
-"""
+"""Deleting a saved filter is restorable from Undo History, tint included."""
 
 from __future__ import annotations
 

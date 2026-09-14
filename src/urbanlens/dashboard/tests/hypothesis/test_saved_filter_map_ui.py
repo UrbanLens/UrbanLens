@@ -1,30 +1,4 @@
-"""Regression coverage for the main map's saved-filter sidebar/toolbar UI bugs.
-
-Covers two bugs reported against the filters sidebar's "Saved Filters"
-section: clicking a chip merged in structured ``label_groups`` criteria
-(from the map's own formula bar) but silently ignored the flat
-``tags``/``exclude_tags`` shape a filter saved via the Filters tab's simple
-include/exclude picker actually uses (that dialog has no formula-bar UI, so
-every label-only filter created there stored *only* ``tags``/``exclude_tags``)
-- for such a filter, clicking the chip merged nothing at all and looked like
-a dead click. It also never gave the clicked chip any visual "applied" state.
-
-Both fixes live in inline ``<script>`` markup inside
-``dashboard/pages/map/index.html`` (``applySavedFilter()``), which has no
-dedicated JS test runner in this project, so these tests instead assert
-against the rendered page source - a lightweight guard against the specific
-fix regressing, not a full behavioral test of the browser-side merge logic.
-
-Also covers the ``#filter-form`` race: sliders, the debounced name/custom-
-field inputs, and the saved-filters toolbar's manual ``htmx.trigger(form,
-'change')`` calls are all independent triggers hitting the same
-``hx-target="#map-body"`` with no ``hx-sync`` - out-of-order responses could
-silently overwrite a just-applied toolbar filter's result with a stale one
-from an earlier in-flight request, exactly matching the reported "clicking a
-toolbar filter causes no changes" symptom when sidebar filters were already
-active. ``hx-sync="this:replace"`` makes htmx cancel/replace the in-flight
-request instead of racing it.
-"""
+"""Regression coverage for the main map's saved-filter sidebar/toolbar UI bugs."""
 
 from __future__ import annotations
 

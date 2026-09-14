@@ -8,23 +8,16 @@ from django.dispatch import receiver
 
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 
-#: MarkupMap fields whose change can alter geometric pin-inference detection
-#: (see ``services.sharing.map_pin_share_detection.detect_shared_pins``, which only
-#: ever reads the saved viewport off the map itself - everything else it
-#: needs comes from the map's ``items``, covered by the PinMarkup receivers
-#: below). Saves that touch only other fields (title, layer/border display
-#: prefs, the explicit ``pin``/``cloned_from``/``shared_by`` links, etc.) are
-#: trivial for detection purposes and shouldn't pay for a resync.
+#: MarkupMap fields whose change can alter geometric pin-inference detection (see
+#: ``services.sharing.map_pin_share_detection.detect_shared_pins``, which only ever reads the saved
+#: viewport off the map itself - everything else it needs comes from the map's ``items``, covered by
+#: the PinMarkup receivers below).
 _GEOMETRY_RELEVANT_MAP_FIELDS = frozenset({"center_latitude", "center_longitude", "zoom"})
 
 
 def _defer_sync(markup_map_id: int) -> None:
     """Schedule a pin-inference resync for ``markup_map_id`` once the current transaction commits.
-
-    Re-fetches the map at commit time (rather than reusing the signal's
-    ``instance``) so the resync always sees the final, fully-saved state -
-    important since ``MarkupMap.replace_items_from_snapshot`` triggers this
-    once per item it recreates.
+    Re-fetches the map at commit time (rather than reusing the signal's ``instance``) so the resync always sees the final, fully-saved state - important since ``MarkupMap.replace_items_from_snapshot`` triggers this once per item it recreates.
 
     Args:
         markup_map_id: Primary key of the map to resync.
@@ -44,10 +37,7 @@ def _defer_sync(markup_map_id: int) -> None:
 
 def defer_pin_inference_sync(markup_map_id: int) -> None:
     """Public seam for code that recreates map items without firing their signals.
-
-    ``bulk_create`` never fires ``post_save``, so a caller rebuilding a map's
-    items in bulk (the undo restore) must schedule the resync itself - this is
-    the same deferred sync every per-item signal below uses.
+    ``bulk_create`` never fires ``post_save``, so a caller rebuilding a map's items in bulk (the undo restore) must schedule the resync itself - this is the same deferred sync every per-item signal below uses.
 
     Args:
         markup_map_id: Primary key of the map to resync.
@@ -58,12 +48,7 @@ def defer_pin_inference_sync(markup_map_id: int) -> None:
 @receiver(post_save, sender=MarkupMap, dispatch_uid="markup_map_sync_pin_inferences_on_save")
 def sync_pin_inferences_on_map_save(sender: type[MarkupMap], instance: MarkupMap, created: bool = False, update_fields=None, **kwargs) -> None:
     """Resync detected pins whenever a map's viewport is created or changed.
-
-    Skips the (expensive, boundary-lookup-heavy) resync for saves that only
-    touch fields detection never reads - title renames, layer/border display
-    toggles, and similar - by checking ``update_fields``. When
-    ``update_fields`` isn't given (a full save), always resync: with no way
-    to know what changed, failing safe means treating it as geometry-relevant.
+    Skips the (expensive, boundary-lookup-heavy) resync for saves that only touch fields detection never reads - title renames, layer/border display toggles, and similar - by checking ``update_fields``.
     """
     geometry_relevant = created or update_fields is None or bool(set(update_fields) & _GEOMETRY_RELEVANT_MAP_FIELDS)
     if geometry_relevant:
@@ -87,12 +72,7 @@ def sync_pin_inferences_on_item_delete(sender: type[PinMarkup], instance: PinMar
 @receiver(pre_delete, sender=MarkupMap, dispatch_uid="markup_map_flag_map_removed_on_delete")
 def flag_map_removed_on_map_delete(sender: type[MarkupMap], instance: MarkupMap, **kwargs) -> None:
     """Mark every comment/trip comment/DM that references this map as having had its map removed.
-
-    Runs pre-delete (rather than post-delete) so the affected rows are
-    flagged before Django's collector nulls out their ``markup_map`` FK via
-    ``on_delete=SET_NULL`` - by post-delete time there is no reliable way to
-    find them again. Uses bulk ``.update()`` rather than per-row ``.save()``
-    so this doesn't re-trigger any of those models' own signal handlers.
+    Runs pre-delete (rather than post-delete) so the affected rows are flagged before Django's collector nulls out their ``markup_map`` FK via ``on_delete=SET_NULL`` - by post-delete time there is no reliable way to find them again.
     """
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage

@@ -1,11 +1,6 @@
 """Per-user Google Calendar integration models.
-
-Each user connects *their own* Google account via OAuth; the tokens stored
-here grant access to that user's personal calendar only. There is no
-site-wide calendar. ``GoogleCalendarAccount`` holds the OAuth tokens for one
-profile, and ``TripCalendarLink`` records which trips have been mirrored to
-(or created from) which calendar events so imports and exports stay
-idempotent.
+Each user connects *their own* Google account via OAuth; the tokens stored here grant access to that user's personal calendar only.
+``GoogleCalendarAccount`` holds the OAuth tokens for one profile, and ``TripCalendarLink`` records which trips have been mirrored to (or created from) which calendar events so imports and exports stay idempotent.
 """
 
 from __future__ import annotations
@@ -81,9 +76,7 @@ class GoogleCalendarAccount(abstract.DashboardModel):
     @property
     def is_token_expired(self) -> bool:
         """Whether the access token is expired or about to expire.
-
-        A 60-second safety margin is applied so a token that expires mid-call
-        is treated as already expired.
+        A 60-second safety margin is applied so a token that expires mid-call is treated as already expired.
 
         Returns:
             True when the token must be refreshed before use.
@@ -101,12 +94,7 @@ class GoogleCalendarAccount(abstract.DashboardModel):
 
 class TripCalendarLink(abstract.DashboardModel):
     """Association between a trip (or one of its activities) and one user's Google Calendar event.
-
-    Each member exports a trip to their *own* calendar, so a trip can have
-    one link per profile. Exports mirror the trip itself as an all-day event
-    (``activity`` is null) plus one timed event per scheduled activity
-    (``activity`` set). The link also dedupes imports: an event that already
-    has a link for this profile is never imported twice.
+    Each member exports a trip to their *own* calendar, so a trip can have one link per profile.
     """
 
     trip = ForeignKey(
@@ -162,11 +150,8 @@ class TripCalendarLink(abstract.DashboardModel):
                 fields=("trip", "profile", "activity"),
                 name="db_trip_calendar_link_activity_unique",
             ),
-            # One Google event maps to at most one link per profile, so a
-            # re-import of the same event cannot silently build a second trip.
-            # Partial: trip-level links for a *timed* import deliberately carry
-            # an empty google_event_id (the activity-level row owns that id), and
-            # those must still coexist.
+            # One Google event maps to at most one link per profile, so a re-import of the same
+            # event cannot silently build a second trip.
             UniqueConstraint(
                 fields=("profile", "google_event_id"),
                 condition=~Q(google_event_id=""),

@@ -1,24 +1,13 @@
-// Shared game shell: the full-bleed chrome, HUD, stage, panels and rail that
-// SpotGuessr / Trivia / Consensus / the games hub all render inside, plus the
-// component mixins their own partials @include onto their existing class names.
+// Shared game shell: the full-bleed chrome, HUD, stage, panels and rail that SpotGuessr / Trivia / Consensus / the games hub all render.
 //
-// The per-game partials keep every class name in their DOM contract; the only
-// thing they take from here is the *body* of each component rule (via the
-// mixins at the bottom of this file). That keeps one source of truth for how a
-// score row, a chat log or a timer looks without renaming anything the
-// TypeScript writes or reads.
+// The per-game partials keep every class name in their DOM contract.
 //
-// Load order matters: this file must come after `page_hero` (so the hero
-// overrides below win) and before `spotguessr` / `trivia` / `consensus` /
-// `games` (so those can override shell defaults).
+// Load order matters: this file must come after `page_hero` (so the hero overrides below win) and before `spotguessr` / `trivia` /.
 @use 'sass:color';
 @use 'variables' as *;
 
 // -- Token contract -------------------------------------------------------------
-// Every --ul-game-* property is declared on `body`, including the ones derived
-// from --ul-game-accent. A derived property declared on :root would compute
-// against :root's accent and silently ignore the `body.page-<game>` override
-// below, so both halves have to sit on the same element.
+// Every --ul-game-* property is declared on `body`, including the ones derived from --ul-game-accent.
 body {
     // canvas + chrome
     --ul-game-canvas: var(--ul-grey-0);
@@ -56,11 +45,7 @@ body {
     --ul-game-bad-border: var(--ul-color-danger-border);
     --ul-game-flat: var(--ul-grey-6);
 
-    // The far end of a mode-card gradient. It shades away from the card's own
-    // text colour: in light mode the accent is dark and the label is white, so
-    // the ramp darkens; in dark mode the accent is light and the label is
-    // near-black, so darkening it would drop the label below AA and the ramp
-    // lightens instead.
+    // The far end of a mode-card gradient.
     --ul-game-mode-shade: #{$color-grey-10b};
 
     // podium - mixed into the row surface so it inverts with the theme
@@ -117,10 +102,7 @@ html[data-theme="dark"] body {
 }
 
 // -- Per-game accents -----------------------------------------------------------
-// The only per-game colour in the codebase. --ul-game-accent-contrast clears
-// 4.5:1 on an --ul-game-accent fill; --ul-game-accent-ink clears 4.5:1 on the
-// page canvas. Trivia's amber is fill-only: as small text on white it is
-// ~2.1:1, which is why its ink token is neutral grey rather than the accent.
+// The only per-game colour in the codebase. --ul-game-accent-contrast clears 4.5:1 on an --ul-game-accent fill.
 body.page-spotguessr {
     --ul-game-accent: #{$color-teal-700};
     --ul-game-accent-strong: #{$color-teal-900};
@@ -220,9 +202,7 @@ body.page-games {
     width: 100%;
     margin: 0;
 
-    // Panels, HUD controls and every [data-*-only] wrapper set an explicit
-    // display, which beats the UA stylesheet's [hidden] rule regardless of
-    // specificity. One guard for the whole page root.
+    // Panels, HUD controls and every [data-*-only] wrapper set an explicit display, which beats the UA stylesheet's [hidden] rule regardless.
     [hidden] {
         display: none !important;
     }
@@ -243,9 +223,7 @@ body.page-games {
 }
 
 // -- HUD ---------------------------------------------------------------------------
-// Shown on every panel, not only while playing: it is the sole host of the
-// focus-mode, fullscreen and players/chat controls, and a host sitting in a
-// multiplayer waiting room needs all three before a round starts.
+// Shown on every panel, not only while playing.
 .ul-game-hud {
     display: grid;
     position: relative;
@@ -393,9 +371,7 @@ body.page-games {
         animation: ul-game-panel-out var(--ul-game-dur-move) ease forwards;
     }
 
-    // The first screen of all three games. The card treatment lives here rather
-    // than in each game's own launcher class so /spotguessr, /trivia and
-    // /consensus open at the same width on the same surface.
+    // The first screen of all three games.
     &--launcher {
         @include surface($radius-md, 1);
         box-shadow: var(--ul-shadow-md);
@@ -544,9 +520,7 @@ body.page-games {
     &[hidden] { display: none !important; }
 }
 
-// Street View mode's interactive panorama (google.maps.StreetViewPanorama) -
-// sized the same way .ul-game-map fills .ul-game-mapwrap, since a flex child
-// with no intrinsic size collapses to 0x0 otherwise.
+// Street View mode's interactive panorama (google.maps.StreetViewPanorama).
 .ul-game-media__panorama {
     position: absolute;
     inset: 0;
@@ -590,9 +564,7 @@ body.page-games {
         pointer-events: auto;
     }
 
-    // The shared layers component docks itself absolutely against the main map
-    // page's canvas (_map.scss). Inside a game toolbar it only has to be a flex
-    // item that still anchors its own flyout.
+    // The shared layers component docks itself absolutely against the main map page's canvas (_map.scss).
     > .map-layers-panel {
         position: relative;
         bottom: auto;
@@ -788,9 +760,7 @@ body.page-games {
     margin-top: $space-sm;
 }
 
-// The hero gradient behind these chips is a pale wash in light mode, so a white
-// fill would leave them invisible there. They ride the theme-aware row tokens
-// instead, which invert with the rest of the shell.
+// The hero gradient behind these chips is a pale wash in light mode, so a white fill would leave them invisible there.
 .ul-game-stat {
     display: flex;
     flex-direction: column;
@@ -834,9 +804,7 @@ body.page-games {
 }
 
 // -- Focus mode (tier 1) --------------------------------------------------------------------
-// CSS only, so iOS Safari - which has no Element.requestFullscreen - degrades
-// rather than breaking. The shell stays exactly where it is in the DOM; only
-// its painting box changes.
+// CSS only, so iOS Safari - which has no Element.requestFullscreen - degrades rather than breaking.
 body.ul-game-immersive {
     overflow: hidden;
 
@@ -858,9 +826,7 @@ body.ul-game-immersive {
 }
 
 // -- True fullscreen (tier 2) ------------------------------------------------------------
-// The fullscreen element is the shell itself, never a portalled node, so it
-// stays a descendant of .ul-game and keeps the [hidden] guard plus every
-// body.page-<game> custom property.
+// The fullscreen element is the shell itself, never a portalled node, so it stays a descendant of.ul-game and keeps the [hidden] guard.
 .ul-game-shell:fullscreen,
 .ul-game-shell.is-fullscreen {
     --ul-game-chrome-top: 0px;
@@ -989,9 +955,7 @@ body.ul-game-immersive {
 }
 
 // -- Component mixins ------------------------------------------------------------------------
-// Per-game partials `@use 'game_shell' as shell;` and @include these onto their
-// OWN existing class names, so every id/class the TypeScript reads or writes
-// survives while the appearance has a single source of truth.
+// Per-game partials `@use 'game_shell' as shell;` and @include these onto their OWN existing class names, so every id/class.
 
 @mixin hideable {
     &[hidden] {
@@ -1006,9 +970,7 @@ body.ul-game-immersive {
     line-height: 1.5;
 }
 
-// The play panel is never re-mounted between rounds, so an animation declared
-// straight on the clue would fire once and never again. It hangs off a class
-// the round renderer re-applies instead - see playEntrance() in game-shell.ts.
+// The play panel is never re-mounted between rounds, so an animation declared straight on the clue would fire once and never again.
 @mixin clue {
     margin: 0;
     text-align: center;

@@ -1,13 +1,4 @@
-"""Deleting a photo removes its bytes, whichever path deleted it.
-
-The media gate serves a file whose owning row has gone to any authenticated user -
-a documented decision (docs/PROBLEMS.md, "Authenticated media gate - residual
-per-family risk"), reasonable while orphans are rare. They were not rare: Django
-has not removed a FileField's file on row delete since 1.3, file cleanup lived
-only in `delete_stored_file`, and nothing called it on a cascade. So a photo
-deleted with its owner's account, or by any queryset delete, left bytes that
-anyone holding the URL could still fetch.
-"""
+"""Deleting a photo removes its bytes, whichever path deleted it."""
 
 from __future__ import annotations
 

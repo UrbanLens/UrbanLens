@@ -1,15 +1,4 @@
-"""Tests for the EPA ECHO plugin's exact-site/nearby-list split.
-
-Covers:
-- EpaEchoDetailPanelSource shows an unconditional card when a facility's
-  REData-reported coordinates are close enough to the pin's own to plausibly
-  BE that pin, and 204s (renders nothing) otherwise.
-- EpaEchoNearbyPanelSource lists nearby facilities, excluding whichever one
-  was matched as the exact site (it already has its own card).
-- EpaFacilityNameProvider only suggests a name when an exact-site match exists.
-- _fetch_epa_echo_data's distance-based exact-match logic against a handful
-  of REData points-of-interest rows.
-"""
+"""Tests for the EPA ECHO plugin's exact-site/nearby-list split."""
 
 from __future__ import annotations
 
@@ -130,10 +119,7 @@ class EpaEchoDetailPanelSourceTests(TestCase):
 
 
 class EpaEchoDetailPanelSourceFetchLinkTests(TestCase):
-    """fetch() must add the matched facility's EPA compliance report to the pin's
-    (and wiki's) links - the same URL already shown inline via render_context's
-    footer_link, but persisted as a real PinLink/WikiLink so it survives on the
-    pin's own Links list, mirroring NominatimPanelSource._add_osm_link."""
+    """fetch() must add the matched facility's EPA compliance report to the pin's (and wiki's) links - the same URL already shown inline via render_context's footer_link, but persisted as a real PinLink/WikiLink so it survives on the pin's own Links list, mirroring NominatimPanelSource._add_osm_link."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -246,8 +232,7 @@ class EpaEchoNearbyPanelSourceTests(TestCase):
         self.assertIsNone(self.source.render_context(self.pin, data))
 
     def test_each_facility_links_to_its_own_compliance_report(self) -> None:
-        """Regression guard: this list used to have one generic footer_link to EPA
-        ECHO's homepage instead of linking each entry to its own report."""
+        """Regression guard: this list used to have one generic footer_link to EPA ECHO's homepage instead of linking each entry to its own report."""
         data = {
             "facilities": [
                 {"name": "Facility A", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"}
@@ -312,10 +297,7 @@ class EpaFacilityNameProviderTests(TestCase):
 
 
 class FetchEpaEchoDataExactMatchTests(TestCase):
-    """_fetch_epa_echo_data's distance-based exact-match selection, against a mocked
-    RedataPointsOfInterestGateway. Unlike the direct EPA ECHO API this replaced, REData
-    resolves every candidate's coordinates and compliance attributes in a single call -
-    there is no separate, rate-limited per-candidate detail fetch left to test."""
+    """_fetch_epa_echo_data's distance-based exact-match selection, against a mocked RedataPointsOfInterestGateway. Unlike the direct EPA ECHO API this replaced, REData resolves every candidate's coordinates and compliance attributes in a single call - there is no separate, rate-limited per-candidate detail fetch left to test."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -417,11 +399,7 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
 
 
 class PropagateExactSiteToNearbyLocationsTests(TestCase):
-    """_propagate_exact_site_to_nearby_locations: once an exact-site EPA match is
-    confirmed for one Location, nearby pinned Locations whose own epa_echo cache
-    has no match yet should immediately pick up the same match, instead of
-    waiting on their own next fetch cycle (which could be stale for
-    `SiteSettings.external_data_cache_days`)."""
+    """_propagate_exact_site_to_nearby_locations: once an exact-site EPA match is confirmed for one Location, nearby pinned Locations whose own epa_echo cache has no match yet should immediately pick up the same match, instead of waiting on their own next fetch cycle (which could be stale for `SiteSettings.external_data_cache_days`)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -568,18 +546,7 @@ class DetailPanelFetchPropagatesExactSiteTests(TestCase):
 class FacilityFromPoiKeyNamesTests(SimpleTestCase):
     """The plugin's field names have to match the ones REData actually emits.
 
-    Two were guessed before REData's `epa_echo` provider module existed - the
-    docstring said so - and guessed wrong: `quarters_in_noncompliance` for
-    `quarters_with_violation`, and `last_inspection` for `last_inspection_date`.
-    Nothing failed. Every regulated facility simply printed "last inspected no
-    recorded inspection" and no non-compliance count, on a live page, for as
-    long as the guess stood.
-
-    The fixture below is REData's real shape, read from
-    `REData/src/redata/parcels/services/epa_echo/lookup.py`'s `attributes`
-    block - not the plugin's own shape, which is what made the original
-    mismatch invisible to tests.
-    """
+    Nothing failed."""
 
     def _redata_row(self) -> dict:
         return {

@@ -1,14 +1,4 @@
-"""Tests for parcel-vs-building scope (services.locations.site_scope).
-
-Scope decides whether a pin/wiki is described by *its own* building records or
-by the buildings nested under it. The rules are small but load-bearing - every
-building-level panel consults them - so they are pinned down here: an explicit
-user choice always wins, and otherwise the count of child markers typed as
-buildings decides.
-
-No external services are involved; the parcel-buildings lookups these tests
-exercise read the LocationCache directly.
-"""
+"""Tests for parcel-vs-building scope (services.locations.site_scope)."""
 
 from __future__ import annotations
 

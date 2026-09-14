@@ -1,11 +1,4 @@
-"""Tests for the Facts confidence-recomputation math (services.facts.confidence).
-
-Pure math over primitives (weighted evidence, cluster totals), no DB -
-mirrors ``test_consensus_trust.py``'s approach of hypothesis-testing the
-underlying formulas directly rather than through the DB-touching
-``recompute()`` entry point, whose end-to-end behavior is covered by
-``test_facts_evidence.py``'s integration tests instead.
-"""
+"""Tests for the Facts confidence-recomputation math (services.facts.confidence)."""
 
 from __future__ import annotations
 

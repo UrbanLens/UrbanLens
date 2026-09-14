@@ -21,13 +21,7 @@ from urbanlens.dashboard.models.routes.queryset import RouteManager
 
 
 class RouteSource(TextChoices):
-    """Origin of a Route record.
-
-    - GPX_TRACK: A ``<trk>`` recording imported from a GPX file.
-    - GPX_ROUTE: A ``<rte>`` planned route imported from a GPX file.
-    - GOOGLE_TAKEOUT_SEMANTIC: An ``activitySegment`` imported from Google
-      Takeout Semantic Location History.
-    """
+    """Origin of a Route record."""
 
     GPX_TRACK = "gpx_track", "GPX Track"
     GPX_ROUTE = "gpx_route", "GPX Route"
@@ -36,15 +30,8 @@ class RouteSource(TextChoices):
 
 class Route(abstract.FrontendDashboardModel):
     """A recorded path a profile travelled, imported from GPX or Google Takeout.
-
-    The stored ``path`` is a simplified polyline (see
-    ``services.import_formats.route_geometry.simplify_and_measure``) - raw GPS
-    points are not retained after import. ``distance_meters`` is computed from
-    the raw points before simplification, so it remains accurate regardless of
-    how aggressively the display geometry was simplified.
-
-    Unlike Pin/Location, routes are personal GPS data with no shared/wiki
-    analog, so they are always scoped to the owning profile.
+    The stored ``path`` is a simplified polyline (see ``services.import_formats.route_geometry.simplify_and_measure``) - raw GPS points are not retained after import.
+    ``distance_meters`` is computed from the raw points before simplification, so it remains accurate regardless of how aggressively the display geometry was simplified.
 
     Attributes:
         profile: Owning profile - routes are never shared between profiles.

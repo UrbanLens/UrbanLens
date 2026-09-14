@@ -18,14 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class GoogleCalendarAccountManager(abstract.DashboardManager):
-    """Adds a lookup that self-heals when a stored token can't be decrypted.
-
-    Mirrors ``ImmichAccountManager.get_for_profile()`` - a field-encryption-key
-    change (see ``models.fields.EncryptedTextField``) leaves any previously-saved
-    ``access_token``/``refresh_token`` permanently unreadable, so every page or
-    task that touches the account crashes with ``InvalidToken`` unless callers
-    treat that the same as "never connected" and remove the now-useless row.
-    """
+    """Adds a lookup that self-heals when a stored token can't be decrypted."""
 
     def get_for_profile(self, profile: Profile) -> GoogleCalendarAccount | None:
         """Return this profile's Google Calendar connection, or None if absent or undecryptable.

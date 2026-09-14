@@ -66,12 +66,7 @@ class WriteImageThumbnailTests(TestCase):
         self.assertFalse(image.thumbnail)
 
     def test_regenerating_keeps_a_thumbnail_another_row_still_uses(self) -> None:
-        """A deduplicated upload shares its thumbnail; force must not blank it.
-
-        ``attach_deduped_copy`` gives the new row the earlier row's stored file
-        *and* thumbnail name rather than copying either, so replacing one row's
-        preview used to delete a file the other row was still pointing at.
-        """
+        """A deduplicated upload shares its thumbnail; force must not blank it."""
         shared = baker.make_recipe("dashboard.image")
         shared.image.save("shot.jpg", ContentFile(_jpeg()), save=True)
         write_image_thumbnail(shared)

@@ -1,12 +1,4 @@
-{% comment %}
-Message bubbles, day separators, and key-change notices for one page of a
-conversation's timeline. Included by both `_thread.html` (the initial, most
-recent page) and `_thread_messages_page.html` (older-history pages fetched
-via infinite scroll) so the two render identically and never drift. Context:
-`timeline`, `partner`, `viewer_id`, `my_slug`, `reaction_picker_emojis`,
-`image_permission_status`, `display_name` (partner's masked-if-needed
-display name, from `display_identity_for` - used by the quoted-reply header).
-{% endcomment %}
+{% comment %}Message bubbles, day separators, and key-change notices for one page of a conversation's timeline.{% endcomment %}
 {% load dashboard_tags %}
 {% for item in timeline %}
 {% ifchanged item.created|date:"Y-m-d" %}
@@ -30,10 +22,7 @@ display name, from `display_identity_for` - used by the quoted-reply header).
   {% else %}
   {% if message.reply_to_id %}
   <div class="dm-quote-box">
-    {# A 1:1 thread only ever has two participants - the quoted sender is #}
-    {# either the partner (masked the same as everywhere else in this      #}
-    {# thread, via the display_name context var) or the viewer's own past  #}
-    {# message. #}
+    {# A 1:1 thread only ever has two participants. #}
     <span class="dm-quote-box__author">{% if message.reply_to.sender_id == partner.pk %}{{ display_name }}{% else %}You{% endif %}</span>
     <span class="dm-quote-box__snippet"{% if message.reply_to.is_encrypted %} data-e2ee-ct="{{ message.reply_to.ciphertext }}" data-e2ee-nonce="{{ message.reply_to.nonce }}" data-e2ee-kv="{{ message.reply_to.key_version }}" data-e2ee-truncate="80"{% endif %}>{{ message.reply_to|message_preview:viewer_id }}</span>
   </div>
@@ -55,10 +44,7 @@ display name, from `display_identity_for` - used by the quoted-reply header).
     </div>
     {% else %}
     <div class="dm-image-consent">
-      {# A placeholder, not the real image blurred with CSS. The consent prompt #}
-      {# below is asking whether this sender may show the recipient an image;   #}
-      {# emitting its URL here answered that question before it was asked, since #}
-      {# a blur is a style one devtools inspection (or a saved page) undoes.     #}
+      {# A placeholder, not the real image blurred with CSS. #}
       <div class="dm-image-consent__blur">
         {% for image in images %}
         <div class="dm-bubble__image dm-bubble__image--blurred dm-image-consent__placeholder" aria-hidden="true">
@@ -83,14 +69,11 @@ display name, from `display_identity_for` - used by the quoted-reply header).
   {% endif %}
   {% endwith %}
   {% if message.markup_map_id %}
-  {# stringformat first: `add` on a str + raw int returns '' (its int-coercion #}
-  {# and concat attempts both fail), which collapsed every map message onto one #}
-  {# duplicate DOM id and made each thumbnail/dialog show the thread's first map. #}
+  {# stringformat first: `add` on a str + raw int returns '' (its int-coercion and concat attempts both fail), which collapsed every map. #}
   {% with message_id_str=message.id|stringformat:"s" %}
   {% with map_id="dm-"|add:message_id_str %}
   {% if message.markup_map.title %}
-  {# A second, explicit way to open the map besides clicking the thumbnail - #}
-  {# mirrors how @pin/@trip shares above link straight to the shared thing. #}
+  {# A second, explicit way to open the map besides clicking the thumbnail mirrors how @pin/@trip shares above link straight to the shared. #}
   <button type="button" class="dm-map-card__title-link" onclick="_expandCommentMap('{{ map_id }}')">
     <i class="material-symbols-outlined">map</i> {{ message.markup_map.title }}
   </button>

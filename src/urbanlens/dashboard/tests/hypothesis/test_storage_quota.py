@@ -1,14 +1,4 @@
-"""Tests for the storage quota service and upload downscale policy.
-
-Covers:
-- get_quota_bytes() - site default, role overrides, largest-wins, 0 = unlimited
-- get_storage_used_bytes() - sums file_size, skipping unmeasured rows
-- quota_error_for_upload() - boundary behaviour at the quota edge
-- get_downscale_policy() / get_entitled_policy() - site policy, subscriber
-  exemption, and the user's voluntary cap (which can only tighten)
-- estimate_bytes_per_photo() / estimate_photos_remaining() - monotonicity
-- allowed_user_dimension_values() - only caps below the entitlement
-"""
+"""Tests for the storage quota service and upload downscale policy."""
 
 from __future__ import annotations
 
@@ -40,8 +30,6 @@ def _make_profile():
 
 
 def _grant_role(profile, **role_fields):
-    # Bakery's default unique-value sequencing keeps repeated calls collision-free;
-    # avoid a fixed default slug since "vip" is now seeded as baseline data by migration 0019.
     role = baker.make(SubscriptionRole, **role_fields)
     granter = baker.make(User)
     grant_subscription(profile.user, role, granter, months=None)

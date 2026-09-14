@@ -1,32 +1,4 @@
-{% comment %}
-The single "organize this property?" suggestion, shown once per pin the first
-time its detail page is opened. Covers both halves together - creating a child
-pin per building here, and nesting existing top-level pins that stand inside
-this property - because they are one question about one pin's hierarchy, and
-two dialogs for that would be two interruptions. See
-controllers.pin_restructure.
-
-Reuses the shared onboarding-card markup (see ts/shared/onboarding-tour.ts and
-_map.scss's .page-onboarding-card rules) so it reads as the same kind of
-suggestion the rest of the app makes, with no styles of its own.
-
-All three actions swap this element away: Yes applies the plan (and toasts its
-own result), No dismisses this pin permanently, and "Don't show again" also
-turns the account-wide setting off.
-
-Context:
-    pin: the pin being viewed.
-    building_count / sample_names: buildings here with no pin yet.
-    nestable_count / nestable: the owner's top-level pins inside this property
-        (nestable is capped for display; nestable_count is the real total).
-
-This re-fetches itself whenever the pin's children change, because the parcel
-panel's own import button targets nothing here - without it, adding the last
-buildings from there leaves this card describing work that is already done.
-`data-ext-panel-204` hands the empty case to the page's shared 204 handler:
-having nothing left to suggest answers 204, and the card flies away rather
-than sitting there stale.
-{% endcomment %}
+{% comment %}The single "organize this property?" suggestion, shown once per pin the first time its detail page is opened.{% endcomment %}
 <section class="page-onboarding-card" id="pin-restructure-offer"
          data-ext-panel-204
          hx-get="{% url 'pin.restructure.offer' pin.slug %}"

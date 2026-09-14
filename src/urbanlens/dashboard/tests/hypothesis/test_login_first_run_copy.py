@@ -1,12 +1,4 @@
-"""Tests for UL-179: the login page shouldn't say "Welcome back" the very
-first time anyone sees it on a fresh install.
-
-Uses SiteSettings.bootstrap_admin_onboarding_complete rather than
-User.objects.exists() - by the time a brand-new install's first user
-reaches this page, their account already exists (registration happens
-before login), so a plain "any users exist" check would already read False
-before the user ever saw the "first run" copy it's meant to gate.
-"""
+"""Tests for UL-179: the login page shouldn't say "Welcome back" the very first time anyone sees it on a fresh install."""
 
 from __future__ import annotations
 
@@ -28,10 +20,7 @@ class LoginFirstRunCopyTests(TestCase):
         self.assertNotContains(response, "Welcome back")
 
     def test_during_bootstrap_admin_onboarding_still_shows_welcome(self) -> None:
-        """The window this fix actually targets: the first user has
-        registered (and been promoted to bootstrap admin) but hasn't yet
-        finished the setup wizard - exactly when they'd see this login page
-        for the first time after creating their account."""
+        """The window this fix actually targets: the first user has registered (and been promoted to bootstrap admin) but hasn't yet finished the setup wizard - exactly when they'd see this login page for the first time after creating their account."""
         user = baker.make(User)
         settings = SiteSettings.get_current()
         settings.bootstrap_admin_user = user

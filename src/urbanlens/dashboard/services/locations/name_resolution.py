@@ -1,18 +1,5 @@
 """Plugin-driven place-name candidates and the resolver that picks a winner.
-
-Plugins contribute :class:`NameProvider` objects (via
-``UrbanLensPlugin.get_name_providers``) that yield raw name candidates for a
-:class:`~urbanlens.dashboard.models.location.model.Location`, usually read
-from :class:`~urbanlens.dashboard.models.cache.location_cache.LocationCache`
-rows their panels already populate. The candidates are cleaned and
-quality-gated in :mod:`urbanlens.dashboard.services.locations.naming`, then a
-:class:`NameResolver` picks the official name.
-
-The resolver is a strategy interface: :class:`RuleBasedNameResolver` is the
-default (source agreement first, then admin-configured priority), and a future
-AI-backed arbiter can slot in behind :func:`default_name_resolver` without any
-caller changing.
-"""
+The resolver is a strategy interface: :class:`RuleBasedNameResolver` is the default (source agreement first, then admin-configured priority), and a future AI-backed arbiter can slot in behind :func:`default_name_resolver` without any caller changing."""
 
 from __future__ import annotations
 
@@ -38,23 +25,14 @@ class NameCandidate:
 
     Attributes:
         name: The cleaned surface form of the candidate name.
-        source: The provider slug the candidate came from. Doubles as the
-            alias ``source`` value when persisted and as the key looked up in
-            the admin-configured priority list.
-    """
+        source: The provider slug the candidate came from."""
 
     name: str
     source: str
 
 
 class NameProvider:
-    """One source of place-name candidates, contributed by a plugin.
-
-    Providers are instantiated by plugins at discovery time and must not touch
-    the database or the network in ``__init__``; :meth:`candidates` runs
-    lazily at request/Celery time and should only read already-cached data
-    (fetching happens in the plugin's panel/task machinery, not here).
-    """
+    """One source of place-name candidates, contributed by a plugin."""
 
     def __init__(self, *, source: str, verbose_name: str = "") -> None:
         """Initialize the provider.
@@ -68,9 +46,7 @@ class NameProvider:
 
     def candidates(self, location: Location) -> list[str | None]:
         """Return raw name candidates for a location.
-
-        Values are cleaned and quality-gated by the caller, so returning
-        ``None`` or junk entries is acceptable.
+        Values are cleaned and quality-gated by the caller, so returning ``None`` or junk entries is acceptable.
 
         Args:
             location: The location to name.
@@ -82,12 +58,7 @@ class NameProvider:
 
 
 class LocationCacheNameProvider(NameProvider):
-    """Declarative provider reading top-level keys from a fresh LocationCache row.
-
-    Covers the common case where a plugin's panel already caches an API payload
-    per location and the place name lives at one or more top-level keys of
-    that payload (e.g. Wikipedia's ``title``, NPS's ``fullName``).
-    """
+    """Declarative provider reading top-level keys from a fresh LocationCache row."""
 
     def __init__(self, *, source: str, cache_source: str, keys: tuple[str, ...], verbose_name: str = "") -> None:
         """Initialize the provider.
@@ -110,8 +81,7 @@ class LocationCacheNameProvider(NameProvider):
             location: The location to name.
 
         Returns:
-            The raw values at each configured key, or an empty list when no
-            fresh cache row exists or the payload is not a dict.
+            The raw values at each configured key, or an empty list when no fresh cache row exists or the payload is not a dict.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
@@ -142,28 +112,7 @@ class NameResolver(ABC):
 
 class RuleBasedNameResolver(NameResolver):
     """Default resolver: source agreement beats priority, priority beats arrival order.
-
-    Candidates are grouped by
-    :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison`
-    so trivially different spellings of the same name count as agreement.
-    Groups are ranked by:
-
-    1. Whether two or more distinct sources agree on the name (agreement wins
-       over any single source, however prioritized).
-    2. The best priority rank among the group's sources. Rank is the index in
-       the configured priority list; sources not in the list rank after all
-       listed ones, in arrival order.
-    3. First-seen order, as a stable tiebreak.
-
-    The winning group's surface form is the member from its highest-priority
-    source. There are deliberately no numeric confidence scores - agreement
-    count and admin-configured priority are the only signals.
-
-    ``override_source``, when set, skips all of the above: the first
-    candidate from that source wins outright, even against a two-source
-    agreement. Used to make REData's building name dominate when naming a
-    detail (child) pin's location - see :func:`default_name_resolver`.
-    """
+    Candidates are grouped by :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison` so trivially different spellings of the same name count as agreement."""
 
     def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None) -> None:
         """Initialize the resolver.
@@ -225,51 +174,22 @@ class RuleBasedNameResolver(NameResolver):
         return min(groups[best_key], key=lambda item: self._rank(item[1].source, item[0]))[1]
 
 
-#: Name-provider source whose candidate wins outright when naming a detail
-#: (child) pin's location - see the ``location`` handling below. Hardcodes a
-#: specific plugin's source slug into this core module, the same kind of
-#: named-source special-case as ``naming._FALLBACK_ONLY_SOURCES``.
+#: Name-provider source whose candidate wins outright when naming a detail (child) pin's location -
+#: see the ``location`` handling below.
+#: Hardcodes a specific plugin's source slug into this core module, the same kind of named-source
+#: special-case as ``naming._FALLBACK_ONLY_SOURCES``.
 _CHILD_PIN_PREFERRED_SOURCE = "redata_building"
 
 
 def default_name_resolver(profile: Profile | None = None, *, location: Location | None = None) -> NameResolver:
     """Return the resolver used for official-name selection.
 
-    This is the single seam where a future AI-backed resolver plugs in (e.g.
-    switched by a SiteSettings choice); today it is always the rule-based
-    resolver driven by the site-wide admin-configured source priority. Name
-    resolution is an intentionally system-driven decision - individual users
-    cannot override the source ordering with their own preference.
-
     Args:
         profile: The profile whose action triggered this resolution, if any.
-            Unused by the current resolver but kept for a future
-            profile-aware (e.g. AI-backed) resolver to consume.
-
-            **Read this before consuming it.** One caller is a panel fetch
-            (``plugins.builtin.nominatim``), and panel fetches are
-            single-flighted per *location*, not per pin - see
-            ``services.pins.external_data.schedule_panel_fetch``. Several users
-            viewing the same place produce one fetch, and the profile it carries
-            is simply whoever's poll claimed the flight marker first. A resolver
-            that let this profile influence the outcome would therefore make a
-            *shared* location's name depend on which user happened to load the
-            page first, non-deterministically. That is precisely what the
-            paragraph above rules out today; a profile-aware resolver would need
-            the caller to establish whose preference legitimately applies rather
-            than inheriting a race winner.
-        location: The location being named, if known. When it has at least
-            one detail (child) pin (``Pin.parent_pin`` - see
-            ``models.pin.model``), REData's building name is given outright
-            priority over every other source for naming it - a child pin
-            typically represents one specific building within a larger
-            property, so the county/CRIS-sourced building name is a much
-            stronger signal there than for an ordinary root pin, where it
-            still competes normally via the admin-configured priority order.
+        location: The location being named, if known.
 
     Returns:
-        The resolver to use for official-name selection.
-    """
+        The resolver to use for official-name selection."""
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
     override_source = None

@@ -25,11 +25,7 @@ class LocationExposureQuerySet(abstract.DashboardQuerySet):
 
     def near(self, profile_id: int, location: Location, *, radius_meters: int) -> LocationExposureQuerySet:
         """Exposure rows for ``profile_id`` within ``radius_meters`` of ``location``.
-
-        The one spatial query every resolution/propagation step in
-        ``services.sharing.share_provenance`` shares, so "same place" always means the
-        same thing (a radius match, never an exact Location-row match) no
-        matter which caller is asking.
+        The one spatial query every resolution/propagation step in ``services.sharing.share_provenance`` shares, so "same place" always means the same thing (a radius match, never an exact Location-row match) no matter which caller is asking.
 
         Args:
             profile_id: PK of the profile whose exposures to search.
@@ -50,13 +46,7 @@ class LocationExposureManager(abstract.DashboardManager.from_queryset(LocationEx
 
     def record(self, *, profile_id: int, location_id: int, share_id: int, source: ExposureSource) -> tuple[LocationExposure, bool]:
         """Get-or-create the (profile, location, share) exposure row.
-
-        Consolidates the near-identical ``get_or_create`` calls scattered
-        across ``services.sharing.share_provenance`` (``record_share_exposure``,
-        ``propagate_exposures_for_pin_move``), which only ever differed in
-        ``source``. Any ``DatabaseError`` is left to the caller - this
-        performs no exception handling of its own, matching plain
-        ``get_or_create`` behavior.
+        Consolidates the near-identical ``get_or_create`` calls scattered across ``services.sharing.share_provenance`` (``record_share_exposure``, ``propagate_exposures_for_pin_move``), which only ever differed in ``source``.
 
         Args:
             profile_id: PK of the exposed profile.
@@ -80,11 +70,7 @@ class PinShareQuerySet(abstract.DashboardQuerySet):
 
     def already_shared_with(self, recipient: Profile | int, *, pin: Pin | None = None, location: Location | None = None) -> PinShareQuerySet:
         """Whether ``pin`` (or, when there's no pin, ``location``) has already been shared with ``recipient``.
-
-        Two independent dedup checks that share one purpose - avoid sending
-        the same place to the same recipient twice - keyed differently
-        depending on whether the sharer has their own pin at the place yet.
-        Exactly one of ``pin``/``location`` should be given.
+        Two independent dedup checks that share one purpose - avoid sending the same place to the same recipient twice - keyed differently depending on whether the sharer has their own pin at the place yet.
 
         Args:
             recipient: The prospective recipient profile (or a raw pk).
@@ -100,11 +86,7 @@ class PinShareQuerySet(abstract.DashboardQuerySet):
 
     def reusable_for(self, recipient: Profile | int, location: Location) -> PinShareQuerySet:
         """Earlier still-actionable shares of ``location`` already sent to ``recipient``.
-
-        Used when a place was already shared before: rather than creating a
-        duplicate, later mentions (e.g. a repeated DM detection) reuse the
-        earliest pending/detected share so the recipient's "Add to map"
-        affordance points at one consistent share.
+        Used when a place was already shared before: rather than creating a duplicate, later mentions (e.g. a repeated DM detection) reuse the earliest pending/detected share so the recipient's "Add to map" affordance points at one consistent share.
 
         Args:
             recipient: The recipient profile (or a raw pk).
@@ -119,9 +101,7 @@ class PinShareQuerySet(abstract.DashboardQuerySet):
 
     def pending_pin_ids_for(self, recipient: Profile | int, pins: Iterable[Pin]) -> QuerySet[Any, Any]:
         """PKs of ``pins`` that already have a pending share to ``recipient``.
-
-        Used when bundling a pin's descendants into one share so an already-
-        pending child share isn't duplicated.
+        Used when bundling a pin's descendants into one share so an already- pending child share isn't duplicated.
 
         Args:
             recipient: The recipient profile (or a raw pk).

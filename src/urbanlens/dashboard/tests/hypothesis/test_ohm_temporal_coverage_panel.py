@@ -1,11 +1,4 @@
-"""Tests for services.locations.temporal_imagery: the beta time-slider's backend.
-
-Covers the coverage panel's gate()/fetch() (mirroring
-test_usgs_earthquakes_panel.py's style), temporal_slider_years()'s visibility
-decision, and get_temporal_features()'s per-year caching - including the
-cross-year isolation the module's own docstring calls out as the detail most
-worth getting right.
-"""
+"""Tests for services.locations.temporal_imagery: the beta time-slider's backend."""
 
 from __future__ import annotations
 

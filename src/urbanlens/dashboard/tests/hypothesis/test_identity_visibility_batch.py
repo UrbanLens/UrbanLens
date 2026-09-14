@@ -1,25 +1,4 @@
-"""The two identity batch paths must agree with ``can_view_profile``, row by row.
-
-``visible_profile_pks`` shows many people to one viewer; ``viewers_who_can_see``
-shows one person to many viewers. They are mirror images, and both exist purely
-for speed.
-
-The batch path exists only for speed: rendering a list of people called
-``can_view_profile`` once per row, and every relationship helper it reaches
-rebuilt the *viewer's* own sets (pinned locations, accepted friends, trip ids)
-on each call.
-
-Speed is not worth a divergence here. If the batch answers "visible" where the
-single-subject path answers "masked", a real name and avatar appear for someone
-the viewer has no standing right to identify. So these tests do not check the
-batch against hand-written expectations - they check it against
-``can_view_profile`` itself, across every ``VisibilityChoice`` and every
-relationship that can satisfy one, and assert the two agree exactly.
-
-The mixed-list tests are the ones that matter most: a batching bug is far more
-likely to smear one row's answer across its neighbours than to get a
-single-row list wrong.
-"""
+"""The two identity batch paths must agree with ``can_view_profile``, row by row."""
 
 from __future__ import annotations
 
@@ -118,12 +97,7 @@ class VisibleProfilePksAgreementTests(TestCase):
         self._assert_agrees([with_common, without])
 
     def test_common_pin_across_different_locations_sharing_a_place(self) -> None:
-        """A pin fifty metres away on the same parcel must still count as
-        "common pin" - the same fix already proven in
-        services.pins.common_pins.pinned_place_keys, now shared by
-        _have_common_pin/visible_profile_pks/viewers_who_can_see instead of
-        each comparing raw Location rows. See docs/audits/GOALS_CODE_AUDIT.md
-        ("Cross-pin aggregate comparison level")."""
+        """A pin fifty metres away on the same parcel must still count as "common pin" - the same fix already proven in services.pins.common_pins.pinned_place_keys, now shared by _have_common_pin/visible_profile_pks/viewers_who_can_see instead of each comparing raw Location rows."""
         place = baker.make(Place, kind=PlaceKind.PARCEL)
         viewer_location = baker.make(Location, place=place)
         baker.make(Pin, profile=self.viewer, location=viewer_location, parent_pin=None)
@@ -252,15 +226,8 @@ class VisibleProfilePksAgreementTests(TestCase):
 class ViewersWhoCanSeeAgreementTests(TestCase):
     """The mirror: one subject, many viewers, same contract.
 
-    Written because a group message carries its sender's name, so the name has
-    to pass every recipient's own visibility - a question ``visible_profile_pks``
-    cannot batch, because it batches over subjects. Resolving it the other way
-    round cost a query per member, twice per send.
-
-    Held to ``can_view_profile`` for the same reason as its mirror, and more
-    sharply: this one decides whether a *whole room* sees a name, so a
-    divergence is not one leaked identity but every recipient at once.
-    """
+    Written because a group message carries its sender's name, so the name has to pass every recipient's own
+    visibility - a question ``visible_profile_pks`` cannot batch, because it batches over subjects."""
 
     def setUp(self) -> None:
         super().setUp()

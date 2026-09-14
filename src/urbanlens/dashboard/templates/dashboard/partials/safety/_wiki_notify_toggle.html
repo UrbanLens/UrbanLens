@@ -1,17 +1,5 @@
 {% load humanize %}
-{% comment %}
-"Also notify the community wiki" toggle for the check-in create/detail forms.
-
-Rendered empty when no community wiki covers the destination point - the option
-only exists for places the community has already written about. Re-fetched via
-HTMX (safety.checkin.wiki_option) whenever the destination marker moves.
-
-Expects: wiki (Wiki or None), checked (bool), last_wiki_edit (datetime or None),
-wiki_editor_count (int, defaults to 0 if omitted).
-
-Markup follows the Materialize checkbox convention (label > input + span) -
-Materialize hides the native input and draws the box on the sibling span.
-{% endcomment %}
+{% comment %}"Also notify the community wiki" toggle for the check-in create/detail forms.{% endcomment %}
 {% if wiki %}
 <div class="form-row safety-wiki-notify">
     <label class="safety-wiki-notify-row" {% if locked %}aria-disabled="true"{% endif %}>

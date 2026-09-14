@@ -1,26 +1,4 @@
-"""Guards on the external API's scope vocabulary and who may hold each scope.
-
-Four separate invariants, all of which are the kind that break silently:
-
-1. ``ApiKeyScope`` and ``OAUTH2_PROVIDER["SCOPES"]`` must stay identical.
-   They are duplicated because settings load before the app registry and so
-   cannot import a model - nothing but a test can catch them drifting.
-2. ``_default_api_key_scopes()`` must keep returning exactly its original four
-   values. Adding the newer scopes there would retroactively widen every
-   already-issued key's grant to cover messages, photos and safety check-ins
-   that the key's owner never consented to.
-3. The ``messages:*`` scopes must be unreachable by a PAT-style key even if one
-   somehow carries them.
-4. Every scope name must keep its ``:read``/``:write``/``:manage`` suffix,
-   because ``external_api.throttling.request_tier`` reads the rate-limit tier
-   straight off that suffix. A scope minted without one (``games:play`` was the
-   near miss) silently lands its endpoints in the loose hourly *read* budget,
-   which is sized for a mobile client's bulk sync and is far too generous for
-   mutating work.
-
-Most of this needs no database, so it lives in ``SimpleTestCase`` classes that
-run without Postgres.
-"""
+"""Guards on the external API's scope vocabulary and who may hold each scope."""
 
 from __future__ import annotations
 
@@ -72,12 +50,10 @@ class _FakeRequest:
 class _FakeTieredView:
     """Stand-in for a view that declares its scopes per HTTP method.
 
-    ``request_tier`` only ever reads ``throttle_tier_by_method`` and
-    ``required_scopes_by_method`` off the view, so the real viewset machinery
-    is irrelevant here - and deliberately avoided, since instantiating one
-    would tie this assertion to whatever endpoints happen to exist today
-    rather than to the scope *vocabulary*, which is what these tests guard.
-    """
+    ``request_tier`` only ever reads ``throttle_tier_by_method`` and ``required_scopes_by_method`` off the view,
+    so the real viewset machinery is irrelevant here - and deliberately avoided, since instantiating one would
+    tie this assertion to whatever endpoints happen to exist today rather than to the scope *vocabulary*, which
+    is what these tests guard."""
 
     def __init__(self, required_scopes_by_method: dict[str, frozenset[str]]) -> None:
         self.required_scopes_by_method = required_scopes_by_method
@@ -111,21 +87,17 @@ class ScopeVocabularyTests(SimpleTestCase):
     def test_games_scopes_exist_with_their_agreed_values(self) -> None:
         """The games pair is spelled exactly as the mobile client and consent screen expect.
 
-        Literals rather than the enum members, for the same reason
-        ``ORIGINAL_DEFAULT_SCOPES`` is: repointing ``GAMES_READ`` at some other
-        string would invalidate every grant already issued against the old one,
-        and a test that read the value off the member could not notice.
-        """
+        Literals rather than the enum members, for the same reason ``ORIGINAL_DEFAULT_SCOPES`` is: repointing
+        ``GAMES_READ`` at some other string would invalidate every grant already issued against the old one, and
+        a test that read the value off the member could not notice."""
         self.assertEqual(ApiKeyScope.GAMES_READ.value, "games:read")
         self.assertEqual(ApiKeyScope.GAMES_WRITE.value, "games:write")
 
     def test_games_scopes_are_mirrored_into_settings(self) -> None:
         """The games pair reached ``OAUTH2_PROVIDER["SCOPES"]``, labels included.
 
-        ``test_settings_scopes_match_enum_exactly`` already covers this in
-        aggregate, but only reports "the dicts differ"; this names the pair, so
-        a half-applied change lands on an obviously-relevant failure.
-        """
+        ``test_settings_scopes_match_enum_exactly`` already covers this in aggregate, but only reports "the
+        dicts differ"; this names the pair, so a half-applied change lands on an obviously-relevant failure."""
         declared = settings.OAUTH2_PROVIDER["SCOPES"]
         self.assertEqual(declared.get("games:read"), ApiKeyScope.GAMES_READ.label)
         self.assertEqual(declared.get("games:write"), ApiKeyScope.GAMES_WRITE.label)
@@ -133,13 +105,8 @@ class ScopeVocabularyTests(SimpleTestCase):
     def test_every_scope_lands_in_the_tier_its_suffix_implies(self) -> None:
         """The suffix convention is load-bearing for rate limiting, not cosmetic.
 
-        ``request_tier`` classifies a request by looking for ``:write`` or
-        ``:manage`` at the end of the scopes the method requires. A scope whose
-        name breaks the convention (a bare ``games:play``, say) therefore reads
-        as a *read* and gets charged against the deliberately generous hourly
-        read budget - so the vocabulary itself has to be checked, not just the
-        throttle code.
-        """
+        ``request_tier`` classifies a request by looking for ``:write`` or ``:manage`` at the end of the scopes
+        the method requires."""
         for scope in ApiKeyScope:
             with self.subTest(scope=scope.value):
                 expected = TIER_READ if scope.value.endswith(":read") else TIER_WRITE
@@ -149,11 +116,7 @@ class ScopeVocabularyTests(SimpleTestCase):
 class DefaultScopeImmutabilityTests(SimpleTestCase):
     """The default PAT grant must not widen when the vocabulary grows.
 
-    This is a deliberate security decision, not an oversight: see
-    ``_default_api_key_scopes``'s docstring. If a scope-picker UI later makes
-    per-key grants selectable, *that* is when this list may change - and this
-    test should be updated as part of the same, intentional change.
-    """
+    This is a deliberate security decision, not an oversight: see ``_default_api_key_scopes``'s docstring."""
 
     def test_default_scopes_are_exactly_the_original_four(self) -> None:
         """No new scope has been added to the implicit grant every key receives."""
@@ -185,12 +148,8 @@ class DefaultScopeImmutabilityTests(SimpleTestCase):
     def test_no_scope_added_after_the_original_four_leaks_into_the_default_grant(self) -> None:
         """A blanket version of the above, so the next domain can't be forgotten.
 
-        The enumerated list is kept because a named failure is easier to act
-        on, but it only protects the scopes somebody remembered to add to it.
-        This one holds for every scope the vocabulary ever grows, which is the
-        actual invariant: the implicit grant is frozen, so *anything* outside
-        the original four appearing in it is an unconsented widening.
-        """
+        The enumerated list is kept because a named failure is easier to act on, but it only protects the scopes
+        somebody remembered to add to it."""
         granted = set(_default_api_key_scopes())
         for scope in ApiKeyScope:
             if scope.value in ORIGINAL_DEFAULT_SCOPES:
@@ -236,11 +195,9 @@ class Oauth2OnlyScopeTests(SimpleTestCase):
     def test_games_scopes_are_not_oauth2_only(self) -> None:
         """A PAT may play games - the DM restriction is about E2EE key material.
 
-        Worth pinning down rather than leaving implicit: the games surface has
-        no per-device secrets and a leaked key can at worst inflate someone's
-        leaderboard score, so extending ``OAUTH2_ONLY_SCOPES`` to cover it
-        would lock server-side integrations out for no security gain.
-        """
+        Worth pinning down rather than leaving implicit: the games surface has no per-device secrets and a
+        leaked key can at worst inflate someone's leaderboard score, so extending ``OAUTH2_ONLY_SCOPES`` to
+        cover it would lock server-side integrations out for no security gain."""
         self.assertNotIn(ApiKeyScope.GAMES_READ, OAUTH2_ONLY_SCOPES)
         self.assertNotIn(ApiKeyScope.GAMES_WRITE, OAUTH2_ONLY_SCOPES)
 

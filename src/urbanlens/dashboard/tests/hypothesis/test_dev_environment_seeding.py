@@ -1,16 +1,4 @@
-"""A new dev environment gets an account somebody can actually log into.
-
-``bin/dev_env.py create`` used to hand back a URL onto an empty database: every
-page an empty state, and no way in without building an account by hand. Worse,
-running the demo seeder against it produced zero pins and logged "the location
-pool is empty", which reads as a broken seeder rather than as an un-imported
-catalog.
-
-So the tests here pin the two halves that make the difference: the catalog is
-populated before seeding when it can be, and when it cannot be, the account is
-still created, still has a named landmark pin, and the reason travels back to
-the caller as text instead of only into a log nobody reads.
-"""
+"""A new dev environment gets an account somebody can actually log into."""
 
 from __future__ import annotations
 

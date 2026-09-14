@@ -1,23 +1,4 @@
-"""Equal-weight evidence clusters must not be ordered by comparing their *values*.
-
-``_cluster_categorical`` builds ``(weight, value)`` tuples and sorts them
-``reverse=True``. Tuple ordering falls through to the second element whenever the
-first ties, so two clusters of identical weight get ranked by comparing their
-values — which is never what was intended, and raises when the values are not
-mutually comparable.
-
-That is reachable rather than theoretical. ``FactEvidence`` stores ``data_type``
-per row precisely so "old rows stay interpretable" after a fact key's registered
-type changes (see the model docstring), so one fact can legitimately hold a
-`value_text` row and a `value_bool` row at once. Every ``value_*`` column is
-nullable too, so `None` can reach the same comparison. Either combination raises
-``TypeError`` inside ``recompute_fact_confidence`` — a Celery task, so the fact
-silently stops being recomputed.
-
-Sorting by weight alone fixes it. Python's sort is stable, so ties then keep
-evidence order instead of value order; both are arbitrary, but only one of them
-can crash.
-"""
+"""Equal-weight evidence clusters must not be ordered by comparing their *values*."""
 
 from __future__ import annotations
 
@@ -95,11 +76,7 @@ class ClusterTieBreakTests(SimpleTestCase):
 class ClusterCategoricalPropertyTests(SimpleTestCase):
     """Invariants that must hold for *any* evidence list.
 
-    The example-based tests above pin the two combinations that actually crashed.
-    These generalise them: the existing suite only ever exercised
-    ``_cluster_categorical`` with a single ``"a"``-valued row, which is why a
-    tie-break over mixed types went unnoticed.
-    """
+    The example-based tests above pin the two combinations that actually crashed."""
 
     @given(values=st.lists(_FACT_VALUES, min_size=1, max_size=8), weight=_TIE_PRONE_WEIGHTS)
     @settings(**_HYP)

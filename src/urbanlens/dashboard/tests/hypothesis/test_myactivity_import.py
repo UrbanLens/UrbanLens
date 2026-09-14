@@ -1,15 +1,4 @@
-"""Tests for services.apis.locations.google.my_activity - Google Takeout My Activity (Maps) import.
-
-Covers:
-- parse_my_activity_entries(): extracting "Directions to X" entries from the flat
-  HTML Google emits, while skipping other Maps activity types (Searched for X,
-  Viewed area around X) and non-Maps entries.
-- _parse_timestamp(): the fast US-timezone-abbreviation path and the dateparser fallback.
-- import_my_activity_streaming(): matched destinations log a PinVisit directly (mirroring
-  the Location History importer); unmatched destinations raise a self-directed
-  VisitSuggestion instead of being discarded or auto-creating a pin, with idempotency
-  on re-import for both branches.
-"""
+"""Tests for services.apis.locations.google.my_activity - Google Takeout My Activity (Maps) import."""
 
 from __future__ import annotations
 

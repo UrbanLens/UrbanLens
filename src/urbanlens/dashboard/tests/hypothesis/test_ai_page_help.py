@@ -1,11 +1,4 @@
-"""Tests for services.ai.page_help (plan §10, batch 4).
-
-The contract test parses themes/header.html's own primary-nav ``{% url %}``
-tags - the same template-parsing approach hotkeys.contract.test.ts already
-uses for Settings > Shortcuts - so a new nav link with no PAGE_HELP entry
-fails the build instead of quietly leaving the assistant unable to explain
-that page.
-"""
+"""Tests for services.ai.page_help (plan §10, batch 4)."""
 
 from __future__ import annotations
 

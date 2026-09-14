@@ -1,20 +1,4 @@
-"""PyNaCl interop tests for the direct-message E2EE blob formats.
-
-The browser encrypts everything with libsodium (``e2ee-crypto.ts``); the
-server stores opaque blobs and can decrypt nothing. These tests pin the wire
-formats documented in ``docs/designs/e2ee.md`` by round-tripping them through PyNaCl,
-which shares libsodium's implementation - so a format drift on either side
-fails here instead of silently corrupting real users' history.
-
-The exact correspondences asserted:
-
-- Wrapping key derivation: ``crypto_pwhash`` Argon2id (interactive limits) →
-  ``nacl.pwhash.argon2id.kdf``.
-- Private-key wrapping: ``crypto_secretbox_easy`` with a prepended nonce →
-  ``nacl.secret.SecretBox`` (nonce || ciphertext layout).
-- Conversation-key sealing: ``crypto_box_seal`` → ``nacl.public.SealedBox``.
-- Message encryption: ``crypto_secretbox_easy`` → ``nacl.secret.SecretBox``.
-"""
+"""PyNaCl interop tests for the direct-message E2EE blob formats."""
 
 from __future__ import annotations
 

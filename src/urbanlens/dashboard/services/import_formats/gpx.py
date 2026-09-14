@@ -1,10 +1,4 @@
-"""GPX (waypoints/tracks/routes) pin import.
-
-Only ``<wpt>`` waypoints are imported as pins. Tracks and routes are recorded paths
-(a hiking app logs a trackpoint every few seconds), not points of interest - importing
-every trackpoint would flood the map with GPS breadcrumbs rather than useful pins, so
-``<trk>``/``<rte>`` content is intentionally ignored.
-"""
+"""GPX (waypoints/tracks/routes) pin import."""
 
 from __future__ import annotations
 
@@ -32,28 +26,21 @@ def gpx_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
         user_profile: The profile to associate with each pin.
 
     Returns:
-        List of pin dicts with keys ``latitude``, ``longitude``, ``profile``,
-        ``name``, ``description``.
+        List of pin dicts with keys ``latitude``, ``longitude``, ``profile``, ``name``, ``description``.
 
     Raises:
         gpxpy.gpx.GPXException: If the file is not valid GPX.
         UnicodeDecodeError: If the file is not UTF-8 text.
         defusedxml.ElementTree.ParseError: If the file is not well-formed XML.
-        ValueError: If the XML attempts a forbidden DTD/entity-expansion/
-            external-entity reference (an XXE attempt).
-    """
+        ValueError: If the XML attempts a forbidden DTD/entity-expansion/ external-entity reference (an XXE attempt)."""
     pins: list[dict[str, Any]] = []
     try:
         text = file_contents.decode("utf-8")
 
-        # gpxpy builds its XML tree internally (preferring raw lxml.etree.XML,
-        # falling back to stdlib ElementTree.XML - see gpxpy.parser.GPXParser),
-        # with no parameter to inject a hardened parser and no XXE hardening of
-        # its own. Pre-parse the same text with defusedxml first, purely to
-        # reject a malicious payload (DTD declarations, entity expansion,
-        # external entity references) before it ever reaches gpxpy; the parsed
-        # tree itself is discarded here since gpxpy still does the real,
-        # GPX-aware parse on the now-vetted text immediately below.
+        # gpxpy builds its XML tree internally (preferring raw lxml.etree.XML, falling back to
+        # stdlib ElementTree.XML - see gpxpy.parser.GPXParser), with no parameter to inject a
+        # hardened parser and no XXE hardening of its own.
+        # Pre-parse the same text with defusedxml first, purely to reject a malicious payload (DTD
         parse_xml_defused(text)
 
         gpx = gpxpy.parse(text)

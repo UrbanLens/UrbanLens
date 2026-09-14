@@ -4,9 +4,7 @@ from typing import Literal, Required, TypedDict
 
 
 class Logger(TypedDict, total=False):
-    """
-    Expected format for a "logger" in the settings file.
-    """
+    """Logger entry in the settings file."""
 
     level: int | str
     handlers: list[str]
@@ -35,12 +33,7 @@ class LogRoot(TypedDict, total=False):
 
 
 class SettingsLog(TypedDict, total=False):
-    """
-    Expected format for the logging portion of the settings file.
-
-    This mirrors the schema accepted by ``logging.config.dictConfig``, so a valid
-    ``SettingsLog`` can be passed straight through to it.
-    """
+    """Logging section; passes straight to dictConfig."""
 
     version: Required[Literal[1]]
     formatters: dict[str, LogFormatter]
@@ -58,11 +51,7 @@ class BrowserSync(TypedDict):
 
 
 class SettingsFile(TypedDict):
-    """
-    Expected format of the settings file.
-
-    This is useful to provide type hints in our editor.
-    """
+    """Settings file shape (for editor hints)."""
 
     version: int
     logging: SettingsLog

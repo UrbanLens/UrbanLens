@@ -144,7 +144,7 @@
                 {% endwith %}
 
                 {# -- Attached map snapshot: small live preview, click to enlarge -- #}
-                {# Custom compact preview (badge trigger) + the shared viewer dialog. #}
+                {# Custom compact preview (badge trigger) + the shared viewer dialog #}
                 {% if visit.map_data %}
                 <div class="comment-map-preview visit-map-preview" data-comment-id="visit-{{ visit.id }}"
                      data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"

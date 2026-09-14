@@ -1,33 +1,4 @@
-"""One sender's message budget, whichever door the message comes through.
-
-Every write the chat sockets perform is also reachable over plain HTTP. The
-socket budget landed first (P31), and on its own it is theatre: the same
-``create_direct_message`` / ``create_group_message`` / ``create_chat_message``
-calls sit behind ``ConversationSendView``, ``GroupSendView`` and
-``SafetyCheckinMessageView``, which are plain Django ``View``s that DRF's
-throttle classes do not cover. A POST loop routes straight around a limit the
-socket enforces.
-
-So the budget lives in the service layer, where both doors meet, and these tests
-assert that from both sides:
-
-- the HTTP path alone is bounded, and
-- a budget already spent over the socket is *still* spent when the sender
-  switches to HTTP.
-
-The second is the one that matters. A per-door limit that happens to exist on
-both doors is not the same thing as one budget, and only the cross-door test can
-tell them apart.
-
-**There are five doors, not two.** The first version of this file covered the
-socket and the two web views and stopped there, which is what let the external
-API - three more views calling the identical create functions - answer a
-throttled send with a 500. ``MessageRateLimitedError`` is a bare ``ValueError``,
-and DRF's exception handler returns ``None`` for anything that is not an
-``APIException``, which Django then renders as a server error. The mapping lives
-in ``uniform_exception_handler`` rather than in each view, so a view added later
-inherits it.
-"""
+"""One sender's message budget, whichever door the message comes through."""
 
 from __future__ import annotations
 
@@ -263,13 +234,10 @@ class ChargePlacementTests(TestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=3)
     def test_a_recipient_who_refuses_messages_does_not_cost_the_sender_their_budget(self) -> None:
-        """The default ``direct_message_visibility`` is ANYTHING_IN_COMMON, so
-        messaging someone new and being refused is ordinary use of a site built
-        around discovering other people - not abuse to be charged for.
+        """The default ``direct_message_visibility`` is ANYTHING_IN_COMMON, so messaging someone new and being refused is ordinary use of a site built around discovering other people - not abuse to be charged for.
 
-        ``create_group_message`` already checks membership before charging; this
-        is the same precondition on the other function.
-        """
+        ``create_group_message`` already checks membership before charging; this is the same precondition on the
+        other function."""
         from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
         from urbanlens.dashboard.services.messaging.direct_messages import (
             RecipientNotAcceptingMessagesError,

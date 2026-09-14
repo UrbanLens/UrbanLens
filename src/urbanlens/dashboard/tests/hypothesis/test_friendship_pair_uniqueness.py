@@ -1,26 +1,4 @@
-"""One `Friendship` row per pair, enforced by the database rather than assumed.
-
-`unique_together = ("from_profile", "to_profile")` stops a duplicate in one
-direction and permits `A->B` *and* `B->A` to both exist. Every reader assumed
-they could not: the model docstring says "exactly one row per pair", `between()`
-matches either direction, and the mute columns are per-side of *one* row - so a
-reciprocal pair split one relationship's state across two rows, and `between()`
-had to pick.
-
-Two properties, and the second is the one a constraint alone would not give:
-
-- The pair cannot be created any more. Either direction is refused once the
-  other exists, whichever way round it is written.
-- The direction still means what it meant. `from_profile` is "who asked", which
-  `Pending`/`Requested` and `request_message` depend on - so this is a
-  constraint on the *ordered* pair rather than a normalisation of the columns
-  into id order, which would have inverted that for half the table.
-
-The merge rule applied to rows that already exist is tested here too, against the
-function itself (it was migration 0054's; the v0.8.0 squash inlined it into
-`0032_v0_8_0`, and its constraint into the `0033_v0_8_0_indexes` companion): it has to be safe for every combination
-of statuses, because nothing recorded which of two conflicting ones was right.
-"""
+"""One `Friendship` row per pair, enforced by the database rather than assumed."""
 
 from __future__ import annotations
 
@@ -86,10 +64,7 @@ class FriendshipPairConstraintTests(TestCase):
     def test_a_request_that_loses_the_race_returns_the_row_that_won(self) -> None:
         """Two opposite requests at once: the constraint refuses the second.
 
-        Before it, this produced two rows for one relationship with the mute
-        columns split across them. `request()` now returns the winner rather
-        than raising - the two people wanted the same thing.
-        """
+        Before it, this produced two rows for one relationship with the mute columns split across them."""
         winner = self._make(self.b, self.a, status=FriendshipStatus.REQUESTED)
         # Standing in for the interleaving: `between()` finds nothing, then the
         # insert collides with the row the other request already committed.
@@ -228,11 +203,9 @@ def _run_merge(rows: list[_Row]) -> None:
 class ReciprocalMergeBehaviourTests(TestCase):
     """What the migration does to a pair that already exists.
 
-    Exercised against the function rather than through a real migration run,
-    because the constraint this ships with makes the pair uncreatable - which is
-    the point of it, and also why this state can only be reached by a database
-    that predates it.
-    """
+    Exercised against the function rather than through a real migration run, because the constraint this ships
+    with makes the pair uncreatable - which is the point of it, and also why this state can only be reached by a
+    database that predates it."""
 
     def test_the_keeper_is_the_row_between_would_have_answered_with(self) -> None:
         """Lowest pk, which is what `between()` has been returning."""
@@ -292,12 +265,8 @@ class ReciprocalMergeBehaviourTests(TestCase):
     def test_an_adopted_block_brings_its_direction_with_it(self) -> None:
         """The one way this migration could corrupt rather than merge.
 
-        `Friendship` has no "blocked_by" column - `from_profile` *is* the
-        blocker - so taking the reversed row's BLOCKED status without its ends
-        records the blocked party as the blocker. This codebase has had that
-        defect once already, from another cause, and carries a read-only audit
-        command for it.
-        """
+        `Friendship` has no "blocked_by" column - `from_profile` *is* the blocker - so taking the reversed row's
+        BLOCKED status without its ends records the blocked party as the blocker."""
         older = _Row(1, 10, 20, FriendshipStatus.ACCEPTED)
         # Profile 20 blocked profile 10.
         newer = _Row(2, 20, 10, FriendshipStatus.BLOCKED)
@@ -347,19 +316,8 @@ class _RealApps:
 class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
     """The merge run over real rows, against the constraints production carries.
 
-    `ReciprocalMergeBehaviourTests` above drives the merge through `_Row`, whose
-    `save()` is a no-op - so none of those tests can see a database constraint,
-    the swap cases included. `unique_together = ("from_profile", "to_profile")`
-    predates this branch and is still on the model, and when the loser's status
-    wins, the merge writes the keeper into the loser's *exact* `(from_profile,
-    to_profile)`. Whether that collides depends on whether the loser is still
-    there - which no stub can answer.
-
-    Reaching the state needs `friendship_one_row_per_pair` dropped, since that is
-    what makes the pair uncreatable. Not a contrivance: it is the database this
-    migration runs against, one that predates 0055. The DDL rolls back with the
-    test's transaction.
-    """
+    `ReciprocalMergeBehaviourTests` above drives the merge through `_Row`, whose `save()` is a no-op - so none
+    of those tests can see a database constraint, the swap cases included."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -444,16 +402,8 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
     def test_the_merge_and_the_constraint_cannot_share_a_transaction(self) -> None:
         """Why they are two migrations - demonstrated, not asserted.
 
-        The merge's UPDATE and DELETE queue deferred FK trigger events, and
-        Postgres refuses to build an index over a table holding them. 0054 and
-        0055 were split for this; the v0.8.0 squash first folded them back into
-        one file and raised exactly this on the first database that had a pair to
-        merge. One migration is one transaction, so moving the constraint to the
-        end of the same file would not have helped either.
-
-        If this ever stops raising, the separation it justifies is still harmless
-        - but the reason recorded for it has changed and is worth re-measuring.
-        """
+        The merge's UPDATE and DELETE queue deferred FK trigger events, and Postgres refuses to build an index
+        over a table holding them."""
         self._pair(self.a, self.b, FriendshipStatus.ACCEPTED, FriendshipStatus.BLOCKED)
         constraint = next(item for item in Friendship._meta.constraints if item.name == "friendship_one_row_per_pair")
         _MERGE._0054_merge_reciprocal_rows(_RealApps, None)
@@ -494,17 +444,10 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
 class IndexWorkLivesInItsOwnMigrationTests(SimpleTestCase):
     """The merge and the constraint it clears the way for must stay in two migrations.
 
-    A release squash collapses a branch's migrations into one file, and one file
-    is one transaction - which is the whole hazard: see
-    `ReciprocalMergeAgainstTheDatabaseTests.test_the_merge_and_the_constraint_cannot_share_a_transaction`
-    for the failure itself. The squash tool splits index and constraint creation
-    into an `_indexes` companion so that stays true across future squashes; this
-    is what notices if it stops.
-
-    Asserted against the migration graph rather than by applying it, because a
-    from-scratch database cannot see the problem: with no rows the merge returns
-    before touching anything.
-    """
+    A release squash collapses a branch's migrations into one file, and one file is one transaction - which is
+    the whole hazard: see
+    `ReciprocalMergeAgainstTheDatabaseTests.test_the_merge_and_the_constraint_cannot_share_a_transaction` for
+    the failure itself."""
 
     def _module_of(self, predicate) -> str:
         """The one migration module whose operations satisfy `predicate`."""
@@ -545,13 +488,9 @@ class IndexWorkLivesInItsOwnMigrationTests(SimpleTestCase):
     def test_no_new_release_migration_creates_an_index_beside_a_data_migration(self) -> None:
         """The general form of the rule, for the files a squash produces.
 
-        Scoped to release squashes rather than the whole directory: a
-        hand-written migration pairing a backfill with an index on a table it
-        just created is safe and commonplace, and flagging those would make this
-        all noise. What a squash does is different - it folds together files that
-        were deliberately kept apart, and v0.4.0's own `_data`/`_indexes` naming
-        shows the split was a convention here before it was lost.
-        """
+        Scoped to release squashes rather than the whole directory: a hand-written migration pairing a backfill
+        with an index on a table it just created is safe and commonplace, and flagging those would make this all
+        noise."""
         directory = Path(migrations_package.__file__).resolve().parent
         offenders = []
         for path in sorted(directory.glob("[0-9]*_v[0-9]*.py")):

@@ -1,18 +1,4 @@
-"""The historic-register panel reaches REData's whole registry, not one inventory.
-
-REData registers 25 historic inventories - the nationwide National Register plus
-state SHPO layers and city/county registers - and UrbanLens read exactly one of
-them, New York's CRIS, inside New York only. That was not curation: the CRIS
-panel renders CRIS's own raw ArcGIS column names, so it *has* to name its
-provider, and restricting the request left everything else unread.
-
-What is worth testing here is not that a card renders. It is that the provider
-list is arrived at from REData rather than written down, that the rows are read
-from the fields REData standardizes rather than any one provider's, and that a
-register with no display name still appears - the exact mistake that made
-REData's `s2cloudless` invisible in the satellite carousel, where a name map was
-doubling as a permission list.
-"""
+"""The historic-register panel reaches REData's whole registry, not one inventory."""
 
 from __future__ import annotations
 

@@ -66,13 +66,10 @@ _QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
 def _executable_text(command: str) -> str:
     """`command` with heredoc bodies and quoted strings removed.
 
-    Text inside a heredoc or a quoted string is DATA, not a command. Without
-    this, writing a commit message that mentions `sed -i ... CLAUDE.md` -- or a
-    doc explaining what this hook blocks -- gets blocked by the hook itself.
-    That happened while this file was being written.
-
-    Stripping quotes keeps the real cases: `sed -i 's/a/b/' CLAUDE.md` still
-    shows `sed -i` and `CLAUDE.md` once the script argument is gone.
+    Heredoc/quoted text is DATA, not a command - without this, merely
+    mentioning `sed -i ... CLAUDE.md` (e.g. in a commit message) blocks.
+    Stripping quotes keeps the real cases: `sed -i 's/a/b/' CLAUDE.md`
+    still shows `sed -i` and `CLAUDE.md` once the script argument is gone.
     """
     return _QUOTED.sub(" ", _HEREDOC.sub(" ", command))
 
@@ -96,10 +93,8 @@ def _bash_writes_to(command: str, fragment: str) -> bool:
     return bool(re.search(r"\b(" + _MUTATORS + r")[^|;&\n]*" + escaped, text))
 
 
-# A filename character. Used to require that a protected name matches a WHOLE
-# path component: without this, `.CLAUDE.md.swp` (vim's swap file) and
-# `CLAUDE.md.orig` (a merge leftover) both contain "CLAUDE.md" as a substring
-# and were blocked, which is wrong -- they are different files. That happened.
+# A filename character. A protected name must match a WHOLE path component,
+# so `.CLAUDE.md.swp` and `CLAUDE.md.orig` don't count as CLAUDE.md.
 _NAME_CHAR = r"[A-Za-z0-9._-]"
 
 

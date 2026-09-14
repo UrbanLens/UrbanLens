@@ -1,22 +1,4 @@
-"""A photo upload must not be able to store an active document type.
-
-`image_upload_error`'s magic-byte check deliberately fails *open* for formats
-`filetype` cannot fingerprint - correct for documents, but **SVG has no
-magic-byte signature at all**. A scripted `.svg` therefore passed sniffing,
-passed antivirus (script in markup matches no virus signature), and was stored.
-
-That mattered because the stored *extension* decides the Content-Type the file
-is later served with: nginx's mime.types maps `.svg` to `image/svg+xml`, this
-app sets no Content-Security-Policy, and `X-Content-Type-Options: nosniff` is no
-help because nothing is being sniffed - the file genuinely is an SVG. Navigating
-to it executes its script with the app's own origin. Avatars are the worst case:
-`media.MediaGateView` serves `avatars/` to any signed-in user, by design, because
-they render site-wide.
-
-Photos are now allowlisted by extension. Documents are deliberately *not* - they
-legitimately arrive as `.docx` and friends and are converted after upload - so
-these tests pin that asymmetry too.
-"""
+"""A photo upload must not be able to store an active document type."""
 
 from __future__ import annotations
 
@@ -73,22 +55,9 @@ class PhotoUploadGauntletTests(TestCase):
     def test_renaming_the_svg_to_jpg_is_now_refused_outright(self) -> None:
         """Was "accepted but harmless"; it is refused now, which is strictly better.
 
-        The extension allowlist's reasoning has not changed and is still why it
-        exists: the *stored extension* determines the served Content-Type, so
-        SVG bytes under a `.jpg` name were already inert - the browser is told
-        image/jpeg and `nosniff` keeps it that way.
-
-        What changed is the layer underneath. Photo uploads now require the bytes
-        to positively identify as an image, added after the integration suite
-        found a shell script being stored as `not-really.png`. SVG has no
-        magic-byte signature, so it fails that check too - accidentally, but
-        correctly: a file whose bytes are not an image has no business in the
-        photo library whatever it is named.
-
-        Kept as a test of the *outcome* rather than deleted, because "inert" and
-        "refused" are different guarantees and it is worth recording which one is
-        in force.
-        """
+        The extension allowlist's reasoning has not changed and is still why it exists: the *stored extension*
+        determines the served Content-Type, so SVG bytes under a `.jpg` name were already inert - the browser is
+        told image/jpeg and `nosniff` keeps it that way."""
         upload = SimpleUploadedFile("avatar.jpg", _SCRIPTED_SVG, content_type="image/jpeg")
 
         error = image_upload_error(upload, MediaKind.PHOTO, skip_malware_scan=True)

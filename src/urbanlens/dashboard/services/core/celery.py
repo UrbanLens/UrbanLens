@@ -44,21 +44,13 @@ class TaskProgress:
 
 def update_task_progress(task: Any, *, current: int, total: int, message: str = "") -> None:
     """Update Celery task metadata in a consistent progress format.
-
-    Best-effort, and deliberately broad in what it swallows, matching
-    ``channel_broadcast.send_group_message``'s "never raises" contract. Progress is a
-    side channel: ``update_state`` writes to the result backend, so a backend hiccup
-    used to propagate out of whichever task was reporting and fail work that had
-    already succeeded. With ``CELERY_TASK_ACKS_LATE`` and the ``autoretry_for=(OSError,)``
-    most tasks carry, that failure also redelivers the task, re-running side effects
-    that are not all idempotent.
+    Best-effort, and deliberately broad in what it swallows, matching ``channel_broadcast.send_group_message``'s "never raises" contract.
 
     Args:
         task: The bound task instance (``self`` in a ``bind=True`` task).
         current: Items completed so far.
         total: Total items; coerced to at least 1 so the percentage is always defined.
-        message: Human-readable status line for polling clients.
-    """
+        message: Human-readable status line for polling clients."""
     safe_total = max(int(total or 1), 1)
     safe_current = max(0, min(int(current or 0), safe_total))
     percent = int((safe_current / safe_total) * 100)
@@ -103,17 +95,11 @@ def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, que
         *args: Positional arguments passed to the task.
         countdown: Seconds to delay execution, if any.
         queue: Celery queue to dispatch to; None uses the task's default route.
-        expires: Seconds from now after which the broker should drop this task
-            unexecuted, rather than run it late. First-class (not part of
-            ``**kwargs``, which are task arguments, not ``apply_async``
-            options) for the assistant turn task: a turn whose caller has
-            already timed out and shown an error must not still execute and
-            spend a provider call minutes later once a worker slot frees up.
+        expires: Seconds from now after which the broker should drop this task unexecuted, rather than run it late.
         **kwargs: Keyword arguments passed to the task.
 
     Returns:
-        The AsyncResult on success, or None when the broker was unreachable.
-    """
+        The AsyncResult on success, or None when the broker was unreachable."""
     try:
         apply_kwargs: dict[str, Any] = {}
         if countdown is not None:

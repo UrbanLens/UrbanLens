@@ -32,9 +32,7 @@
 {% block content %}
 <div class="tools-page page-content">
 
-    {# ══════════════════════════════════════════════════════════════════ #}
-    {# DATA: export/import your own data                                  #}
-    {# ══════════════════════════════════════════════════════════════════ #}
+    {# DATA: export/import your own data #}
     <div class="tools-section-panel tools-grid" id="panel-data" role="tabpanel">
 
         {# -- Export card ------------------------------------------------------- #}
@@ -334,9 +332,7 @@
 
     </div>{# /panel-data #}
 
-    {# ══════════════════════════════════════════════════════════════════ #}
-    {# FIND PINS: turn photos/library data you already have into pins     #}
-    {# ══════════════════════════════════════════════════════════════════ #}
+    {# FIND PINS: turn photos/library data you already have into pins #}
     <div class="tools-section-panel tools-grid" id="panel-find" role="tabpanel" hidden>
 
         {# -- Photo location scan card -------------------------------------------- #}
@@ -421,7 +417,7 @@
                     </button>
                 </div>
                 {% if immich_active_scan_task_id %}
-                {# A scan is already running (started before a navigation away from this page) - resume polling immediately instead of showing a fresh, misleading "start" button state. #}
+                {# A scan is already running (started before a navigation away from this page). #}
                 {% include "dashboard/partials/settings/_immich_scan_progress.html" with task_id=immich_active_scan_task_id state="PROGRESS" %}
                 {% else %}
                 <div id="immich-scan-progress"></div>
@@ -438,9 +434,7 @@
 
     </div>{# /panel-find #}
 
-    {# ══════════════════════════════════════════════════════════════════ #}
-    {# ACCOUNT: connecting with other people, admin utilities             #}
-    {# ══════════════════════════════════════════════════════════════════ #}
+    {# ACCOUNT: connecting with other people, admin utilities #}
     <div class="tools-section-panel tools-grid" id="panel-account" role="tabpanel" hidden>
 
         {# -- Admin Tools card (admins only) ------------------------------------ #}

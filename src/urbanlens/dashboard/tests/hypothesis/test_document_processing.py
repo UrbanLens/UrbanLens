@@ -1,9 +1,4 @@
-"""Unit tests for services.media.documents - LibreOffice/pypdf/OCR-backed document processing.
-
-External binaries (soffice/tesseract) and libraries (pypdf/pdf2image/pytesseract)
-are mocked throughout: these tests verify the Python-side decision logic, not
-the actual conversion/OCR, which needs Docker.
-"""
+"""Unit tests for services.media.documents - LibreOffice/pypdf/OCR-backed document processing."""
 
 from __future__ import annotations
 
@@ -154,18 +149,8 @@ class ExtractPdfTextTests(TestCase):
 class OcrResourceBoundsTests(TestCase):
     """A PDF's page geometry is attacker-supplied; the raster it becomes must not be.
 
-    `pdf2image` defaults to 200 DPI with no size limit, and a page's dimensions
-    come from its own MediaBox - which the spec allows up to 14400pt (200
-    inches) a side. A 426-byte PDF declaring that renders to 40,000 x 40,000 px,
-    roughly 4.8 GB as RGB, per page, up to `_OCR_MAX_PAGES` deep. Verified
-    against the installed poppler: `pdfinfo` reports the declared 14400 x 14400
-    pts for exactly such a file, so nothing upstream normalises it.
-
-    Both bounds here are asserted against the *call*, not the render: what
-    matters is that a limit is passed to poppler at all, and actually rendering
-    the pathological case in a test would spend the memory the bound exists to
-    prevent.
-    """
+    `pdf2image` defaults to 200 DPI with no size limit, and a page's dimensions come from its own MediaBox -
+    which the spec allows up to 14400pt (200 inches) a side."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

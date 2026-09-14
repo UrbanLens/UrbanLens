@@ -1,16 +1,5 @@
 """Article models - long-form, Wikipedia-style write-ups for pins and wikis.
-
-An :class:`Article` is the full free-form article body for exactly one host:
-
-- ``wiki`` set: the community article for a shared place. Everyone who can see
-  the wiki can read it, and anyone with access may edit it (every edit is
-  recorded as an :class:`ArticleRevision`, so vandalism can be reverted).
-- ``pin`` set: a user's private article about their own pin. Only the pin's
-  owner can ever read or edit it.
-
-Content is authored in Markdown (with footnote references) and rendered to
-sanitized HTML by :mod:`urbanlens.dashboard.services.wiki.articles`. The rendered
-HTML is cached on the row (``content_html``) so page views never re-render.
+An :class:`Article` is the full free-form article body for exactly one host: Everyone who can see the wiki can read it, and anyone with access may edit it (every edit is recorded as an :class:`ArticleRevision`, so vandalism can be reverted). - ``pin`` set: a user's private article about their own pin.
 """
 
 from __future__ import annotations
@@ -28,11 +17,6 @@ from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
-#: edit_summary used by services.wiki.wiki_seed's system-initiated saves (editor
-#: left None deliberately, not because an account was deleted) - the single
-#: source of truth for both the writer (wiki_seed.py imports this rather than
-#: redefining its own copy) and the reader (ArticleRevision.editor_display_name
-#: below, which needs to tell the two null-editor cases apart).
 EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA = "Seeded from Wikipedia"
 SYSTEM_EDIT_SUMMARIES = frozenset({EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA})
 
@@ -47,12 +31,10 @@ class Article(abstract.DashboardModel):
     edit trail lives in :class:`ArticleRevision`.
     """
 
-    #: True only on a concealed projection built by
-    #: ``services.wiki.concealment.conceal_article`` - a copy of this row
-    #: carrying the newest revision one viewer is entitled to see, rather than
-    #: the live one. Declared here so the distinction is visible from the model
-    #: and reading it is a plain attribute access. A row loaded from the
-    #: database is never concealed.
+    #: True only on a concealed projection built by ``services.wiki.concealment.conceal_article`` -
+    #: a copy of this row carrying the newest revision one viewer is entitled to see, rather than
+    #: the live one.
+    #: Declared here so the distinction is visible from the model and reading it is a plain
     _ul_concealed: bool = False
 
     # Markdown source of the current article text.
@@ -108,12 +90,7 @@ class Article(abstract.DashboardModel):
         return "Article"
 
     def editable_by(self, profile: Profile) -> bool:
-        """Whether ``profile`` may edit this article.
-
-        Pin articles: only the pin's owner. Wiki articles: anyone who can see
-        the wiki (a pin at the location, or being its creator) - callers are
-        expected to have already resolved visibility via the standard wiki
-        access gate, so this only re-checks the pin-privacy side.
+        """Whether ``profile`` may edit this article. Pin articles: only the pin's owner.
 
         Args:
             profile: The profile attempting the edit.
@@ -146,11 +123,7 @@ class Article(abstract.DashboardModel):
 
 class ArticleRevision(abstract.DashboardModel):
     """One saved version of an article's Markdown source.
-
-    A new revision is written on every successful save (including restores),
-    each carrying the *complete* text at that moment - so any revision can be
-    viewed, diffed against its predecessor, or restored wholesale without
-    replaying a chain of diffs.
+    A new revision is written on every successful save (including restores), each carrying the *complete* text at that moment - so any revision can be viewed, diffed against its predecessor, or restored wholesale without replaying a chain of diffs.
     """
 
     # Complete Markdown source as of this revision.
@@ -190,15 +163,6 @@ class ArticleRevision(abstract.DashboardModel):
     @property
     def editor_display_name(self) -> str:
         """The name to show for who made this revision.
-
-        ``editor`` is null both when the account that made it has since been
-        deleted (``Profile``'s own ``on_delete=SET_NULL``) and when the
-        revision was a system-initiated save that never had one to begin with
-        (``services.wiki.wiki_seed`` passes ``editor=None`` deliberately when
-        seeding a starting article from Wikipedia) - those need different
-        labels, so this checks the edit summary against the known
-        system-generated ones instead of assuming every null editor means a
-        deleted account.
 
         Returns:
             The editor's username, "Wikipedia" for a system-seeded revision,

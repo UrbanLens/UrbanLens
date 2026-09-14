@@ -28,9 +28,7 @@ class PinTombstoneQuerySet(abstract.DashboardQuerySet):
 
     def deleted_since(self, since: datetime) -> PinTombstoneQuerySet:
         """Restrict to pins deleted at or after ``since``.
-
-        ``created`` is the deletion moment - a tombstone row is written in the
-        same transaction as the pin's hard delete and never updated afterwards.
+        ``created`` is the deletion moment - a tombstone row is written in the same transaction as the pin's hard delete and never updated afterwards.
 
         Args:
             since: Inclusive lower bound on the deletion time.
@@ -46,10 +44,7 @@ class PinTombstoneManager(abstract.DashboardManager.from_queryset(PinTombstoneQu
 
     def record(self, *, profile_id: int, pin_uuid) -> None:
         """Record that the pin identified by ``pin_uuid`` was deleted.
-
-        Idempotent - recording the same uuid twice keeps the original
-        deletion timestamp, which is the correct sync semantic (the client
-        cares that the pin is gone, not that a second delete was attempted).
+        Idempotent - recording the same uuid twice keeps the original deletion timestamp, which is the correct sync semantic (the client cares that the pin is gone, not that a second delete was attempted).
 
         Args:
             profile_id: Primary key of the profile that owned the pin.
@@ -59,11 +54,7 @@ class PinTombstoneManager(abstract.DashboardManager.from_queryset(PinTombstoneQu
 
     def prune_older_than(self, cutoff: timedelta) -> int:
         """Delete tombstones older than ``cutoff``, returning how many were removed.
-
-        A sync client whose last sync predates the oldest retained tombstone
-        can no longer trust deletions incrementally and must full-resync; any
-        scheduled pruning must therefore keep tombstones at least as long as
-        the longest plausible client offline window.
+        A sync client whose last sync predates the oldest retained tombstone can no longer trust deletions incrementally and must full-resync; any scheduled pruning must therefore keep tombstones at least as long as the longest plausible client offline window.
 
         Args:
             cutoff: Age beyond which tombstones are removed.

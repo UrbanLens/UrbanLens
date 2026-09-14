@@ -1,29 +1,5 @@
 """Turning Celery's event stream into Prometheus metrics.
-
-Per-task outcome and duration need the worker to say what it did, and the
-workers cannot be scraped: ``media-worker`` and ``media-worker-batch`` run
-``cap_drop: ALL`` on an isolated network specifically so they have no inbound
-surface. Celery's event stream solves that in the direction that already works -
-every worker publishes to the broker it is already connected to, and one
-consumer elsewhere turns those events into metrics.
-
-This module is only the translation. The transport (the event receiver loop and
-the HTTP server) lives in the ``celery_metrics_exporter`` management command, so
-the interesting logic here is exercisable without a broker or a socket.
-
-Cardinality is the thing to be careful about: ``task`` is a label, and an
-unbounded set of label values is how a Prometheus instance falls over. Names are
-therefore learned from the stream but capped - the first
-:data:`MAX_TASK_LABELS` distinct names get their own series and everything after
-that collapses into :data:`OVERFLOW`.
-
-Checking names against the app's own task registry would be the more precise
-guard, and is what this did first, but it is not affordable here: populating that
-registry means importing every task module (GDAL, Pillow, GeoPandas and the rest
-arrive with them), which measured at +167 MiB against an exporter whose whole
-container budget is a few hundred. Doubling a process's memory to learn ninety-
-odd strings is the wrong trade when a counter bounds the same risk for free.
-"""
+Per-task outcome and duration need the worker to say what it did, and the workers cannot be scraped: ``media-worker`` and ``media-worker-batch`` run ``cap_drop: ALL`` on an isolated network specifically so they have no inbound surface."""
 
 from __future__ import annotations
 
@@ -44,27 +20,20 @@ UNKNOWN = "unknown"
 #: see rather than blending into "name missing".
 OVERFLOW = "other"
 
-#: How many distinct task names get their own series. Comfortably above the ~95
-#: this deployment registers, so the cap is a backstop against a worker on a
-#: different build or a dynamically-named task rather than a limit reached in
-#: normal operation.
+#: How many distinct task names get their own series.
+#: a different build or a dynamically-named task rather than a limit reached in normal operation.
 MAX_TASK_LABELS = 200
 
-#: Buckets for task runtime. Wider at the top than the HTTP histogram: a request
-#: that takes a minute is broken, whereas an archive import legitimately runs for
-#: the best part of an hour, and CELERY_TASK_TIME_LIMIT (3600s) is where a task
-#: is killed - so that boundary is a bucket, to separate "slow" from "hit the
-#: limit".
+#: Buckets for task runtime.
+#: Wider at the top than the HTTP histogram: a request that takes a minute is broken, whereas an
+#: archive import legitimately runs for the best part of an hour, and CELERY_TASK_TIME_LIMIT (3600s)
+#: is where a task is killed - so that boundary is a bucket, to separate "slow" from "hit the
 RUNTIME_BUCKETS = (0.1, 0.5, 1.0, 5.0, 15.0, 60.0, 300.0, 900.0, 3600.0, float("inf"))
 
 
 class CeleryEventMetrics:
     """Prometheus metrics fed by Celery worker events.
-
-    Holds its own registry rather than using the global default, so a test can
-    build one per case and assert on it without the leakage that makes
-    module-level metrics awkward to test.
-    """
+    Holds its own registry rather than using the global default, so a test can build one per case and assert on it without the leakage that makes module-level metrics awkward to test."""
 
     def __init__(self, registry: CollectorRegistry | None = None, max_task_labels: int = MAX_TASK_LABELS) -> None:
         """Build the metric families.
@@ -111,11 +80,7 @@ class CeleryEventMetrics:
                 the event arrived before the name was known.
 
         Returns:
-            :data:`UNKNOWN` when there is no name, the name itself while fewer
-            than ``max_task_labels`` distinct names have been seen, and
-            :data:`OVERFLOW` once that cap is reached. Names already admitted
-            keep their series, so the cap freezes the label set rather than
-            starting to drop tasks that were already being reported.
+            :data:`UNKNOWN` when there is no name, the name itself while fewer than ``max_task_labels`` distinct names have been seen, and :data:`OVERFLOW` once that cap is reached.
         """
         if not name:
             return UNKNOWN
@@ -149,11 +114,10 @@ class CeleryEventMetrics:
 
         if state == "succeeded":
             runtime = event.get("runtime")
-            # Only succeeded events carry a runtime. A failed task's duration is
-            # not comparable to a successful one's - it is the time to the
-            # exception - so it is deliberately not folded into the same
-            # histogram, where it would drag the latency percentiles toward
-            # whatever the failure mode happened to cost.
+            # Only succeeded events carry a runtime.
+            # A failed task's duration is not comparable to a successful one's - it is the time to
+            # the exception - so it is deliberately not folded into the same histogram, where it
+            # would drag the latency percentiles toward whatever the failure mode happened to cost.
             if isinstance(runtime, (int, float)):
                 self.task_runtime.labels(task=label).observe(float(runtime))
 

@@ -1,21 +1,6 @@
 """Which pins and wikis a photo is attached to.
-
-``Image`` carries a single ``pin`` and a single ``wiki`` foreign key, which says
-a photo belongs to at most one of each. That is not true of this application:
-child pins mean one photo of a building is legitimately a photo of the building's
-pin *and* of the parcel pin above it, and in the general case of several. The
-same holds for wikis.
-
-A join row per attachment says that properly, and it also gives the durability
-the floorplan work needs. Deleting a pin takes its own attachment rows and
-nothing else - the ``Image`` survives, along with every other thing citing it -
-so a photo cited by a floorplan cannot be destroyed by tidying up somewhere
-unrelated. What collects an image is having nothing left that references it, not
-one particular owner going away.
-
-The existing ``Image.pin``/``Image.wiki`` columns are still written and still
-read; this sits alongside them rather than replacing them, so nothing has to be
-cut over in the same change that introduces it.
+``Image`` carries a single ``pin`` and a single ``wiki`` foreign key, which says a photo belongs to at most one of each.
+Deleting a pin takes its own attachment rows and nothing else - the ``Image`` survives, along with every other thing citing it - so a photo cited by a floorplan cannot be destroyed by tidying up somewhere unrelated.
 """
 
 from __future__ import annotations
@@ -37,10 +22,7 @@ class ImageAttachmentManager(abstract.DashboardManager.from_queryset(ImageAttach
 
 class ImageAttachment(abstract.DashboardModel):
     """One photo's attachment to one pin, or to one wiki.
-
-    Exactly one of ``pin``/``wiki`` is set: a row is an attachment to a specific
-    thing, and "attached to both" is two rows, which is what makes counting
-    references to a photo a single query rather than a special case per owner.
+    Exactly one of ``pin``/``wiki`` is set: a row is an attachment to a specific thing, and "attached to both" is two rows, which is what makes counting references to a photo a single query rather than a special case per owner.
 
     Attributes:
         image: The photo.
@@ -70,10 +52,10 @@ class ImageAttachment(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_image_attachments"
         constraints = [
-            # Enforced rather than documented: a row with both set would be
-            # counted twice by every reference count, and a row with neither
-            # attaches the photo to nothing while still keeping it alive - which
-            # is the one thing that would defeat collecting unreferenced photos.
+            # Enforced rather than documented: a row with both set would be counted twice by every
+            # reference count, and a row with neither attaches the photo to nothing while still
+            # keeping it alive - which is the one thing that would defeat collecting unreferenced
+            # photos.
             CheckConstraint(
                 condition=(Q(pin__isnull=False) & Q(wiki__isnull=True)) | (Q(pin__isnull=True) & Q(wiki__isnull=False)),
                 name="ck_image_attachment_one_owner",

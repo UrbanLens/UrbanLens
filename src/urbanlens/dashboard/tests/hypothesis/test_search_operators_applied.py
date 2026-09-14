@@ -1,9 +1,4 @@
-"""Real filtering/sorting effect of the `label:`/`by:`/`has:`/`is:`/`sort:` operators.
-
-`test_search_operators.py` only tests parsing (ParsedQuery fields, describe_filters() chips).
-These operators were parsed correctly but never consumed by any provider - this file is the
-"they actually change the result set" counterpart, added when that gap was closed.
-"""
+"""Real filtering/sorting effect of the `label:`/`by:`/`has:`/`is:`/`sort:` operators."""
 
 from __future__ import annotations
 
@@ -130,9 +125,7 @@ class AuthorOperatorTests(TestCase):
         self.assertIn("Alices Spot", _titles(response, "pins"))
 
     def test_by_someone_else_never_returns_own_pins(self):
-        """Pins are owner-only by construction - `by:` can't be used to fish
-        for another profile's private pin, since the base queryset never
-        contains anything but the searcher's own rows."""
+        """Pins are owner-only by construction - `by:` can't be used to fish for another profile's private pin, since the base queryset never contains anything but the searcher's own rows."""
         baker.make(Pin, profile=self.profile, name="Alices Spot")
 
         response = GlobalSearchEngine().search(self.profile, "by:bob")

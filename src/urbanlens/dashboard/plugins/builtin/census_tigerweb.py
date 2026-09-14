@@ -23,7 +23,7 @@ class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
     title = "US Census Geography"
 
     def fetch(self, pin: Pin) -> None:
-        """Look up the pin's coordinates in TIGERweb and cache the result."""
+        """Look up the pin's coordinates in TIGERweb."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.census_tigerweb import CensusTigerwebGateway
 
@@ -33,7 +33,7 @@ class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
         LocationCache.set(pin.location, self.cache_source, geography, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Build the geography card from TIGERweb's state/county/place/tract lookup."""
+        """Build the geography card from TIGERweb lookup."""
         data = data or {}
         state = data.get("state")
         if not state:
@@ -61,7 +61,7 @@ class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
 
 
 class CensusTigerwebPlugin(UrbanLensPlugin):
-    """US Census Bureau TIGERweb geography lookups for pinned locations. USA only."""
+    """US Census Bureau TIGERweb geography lookups."""
 
     name: ClassVar[str] = "census_tigerweb"
     verbose_name: ClassVar[str] = "US Census TIGERweb"

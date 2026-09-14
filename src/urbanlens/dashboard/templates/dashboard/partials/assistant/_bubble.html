@@ -1,16 +1,4 @@
-{% comment %}
-One assistant-chat entry. Shared by _messages.html's loop (the full history)
-and AssistantTurnPollView's single-bubble poll response (outerHTML swap) -
-see controllers/assistant.py. A pending entry ({"pending": True, "turn_id"})
-self-polls; anything else (including a resolved turn) is a plain bubble.
-
-A resolved entry may also carry ``proposals`` - write tools the model asked
-for that need the user's explicit confirmation before they run (see
-_proposal.html, which renders each one - a live confirm button, or its
-already-resolved state if this bubble is being re-rendered on reload).
-
-Context: entry, and for a pending entry only: next_attempt, poll_delay.
-{% endcomment %}
+{% comment %}One assistant-chat entry.{% endcomment %}
 {% if entry.pending %}
 <div id="assistant-turn-{{ entry.turn_id }}" class="assistant-msg assistant-msg--assistant assistant-msg--pending"
      hx-get="{% url 'assistant.turn' entry.turn_id %}?attempt={{ next_attempt|default:1 }}"

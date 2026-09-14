@@ -1,15 +1,4 @@
-"""Tests for automatic building classification of sub-markers.
-
-The detail-pin dialog's Type select defaults to "Auto", which submits a blank
-``pin_type``. These tests pin down what that blank means end to end: a
-provisional type now, a background classification task queued, and
-``pin_type_is_user_provided`` left False so the classifier is allowed to act -
-versus an explicit pick, which is recorded as the user's own and never
-touched again.
-
-Celery is mocked throughout; the classifier itself is covered by
-test_site_scope.py.
-"""
+"""Tests for automatic building classification of sub-markers."""
 
 from __future__ import annotations
 
@@ -113,10 +102,8 @@ class DetailPinEditTypeTests(TestCase):
     def test_a_json_float_literal_opacity_is_ignored_rather_than_a_500(self) -> None:
         """`json.loads` accepts the bare literal `Infinity`; `int(float("inf"))` raises OverflowError.
 
-        This view parses the body itself rather than through DRF (whose parser
-        rejects the literal outright), so the value really does reach `safe_int`.
-        The opacity should fall back to its default, not take the request down.
-        """
+        This view parses the body itself rather than through DRF (whose parser rejects the literal outright), so
+        the value really does reach `safe_int`."""
         before = self.child.detail_bg_opacity
         for literal in ("Infinity", "-Infinity", "NaN"):
             with self.subTest(literal=literal), patch(_ENQUEUE):

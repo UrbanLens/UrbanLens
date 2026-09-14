@@ -421,10 +421,7 @@
         gap: 2px;
     }
 
-    // Rendered from Markdown (see PinVisit.notes_html) via the same .article-body
-    // typography as the article/wiki editor - no white-space:pre-wrap here,
-    // since paragraph/list breaks are now real HTML elements, not literal
-    // newlines in escaped plain text.
+    // Rendered from Markdown via the same.article-body typography as the article/wiki editor.
     .visit-weather {
         display: flex;
         align-items: center;
@@ -645,12 +642,7 @@
         }
     }
 
-    // form-row--two-col is a global grid layout (see _components.scss); this
-    // dialog's own .form-row rule above sets display:flex at equal selector
-    // specificity, so it has to be re-overridden here (source order wins the
-    // tie) - the label/input typography from the .form-row rule above still
-    // applies to these nested fields regardless, since the element keeps both
-    // classes.
+    // form-row--two-col is a global grid layout.
     .form-row--two-col {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -663,9 +655,7 @@
         }
     }
 
-    // Same WYSIWYG editor as the article/wiki editor (see _article.scss and
-    // frontend/ts/entries/article-wysiwyg.ts), sized for a short note inside
-    // a dialog rather than a full-length article.
+    // Same WYSIWYG editor as the article/wiki editor, sized for a short note inside a dialog rather than a full-length article.
     .visit-notes-editor {
         .article-editor-canvas,
         .article-editor-textarea,
@@ -910,13 +900,7 @@
 .sat-carousel {
     display: flex;
     flex-direction: column;
-    // Matches .sv-carousel's own reservation for its controls/dots bars below
-    // (see .sv-carousel) - without this, the satellite image only ever grew
-    // to its own min-height regardless of how tall the grid row's
-    // align-items:stretch made this card's outer box (e.g. whenever Street
-    // View's interactive embed, the one thing in this row with real
-    // variable-height content, made its own sibling card taller), leaving a
-    // blank gap below the image instead of the image filling the space.
+    // Matches.sv-carousel's own reservation for its controls/dots bars below.
     height: calc(100% - 4rem);
 
     .sat-slides-wrapper,
@@ -1042,7 +1026,7 @@
     display: flex;
     flex-direction: column;
     height: calc(100% - 4rem);
-    
+
     .sv-slides-wrapper, .sv-slide, .sv-embed {
         height: 100%;
     }
@@ -1136,10 +1120,7 @@
         width: 100%;
     }
 
-    // Escape hatch when the interactive embed's own (client-side) API key/
-    // referrer restriction rejects the request - Google renders its own raw
-    // rejection message inside that cross-origin iframe, which our JS has no
-    // way to detect, so this stays available rather than us trying to guess.
+    // Escape hatch when the interactive embed's own (client-side) API key/ referrer restriction rejects the request.
     .sv-embed-fallback-btn {
         @include btn-ghost;
         width: 100%;
@@ -1177,12 +1158,7 @@
         flex-direction: column;
     }
 
-    // The extract is real block markup (headings/paragraphs/lists) from
-    // WikipediaGateway's server-side cleaning/trimming - shown in full now
-    // that this panel is its own standalone Article sub-tab rather than one
-    // card in a `.pin-aux-grid` row of unrelated cards (which used to force a
-    // client-side height clamp here so a long article couldn't stretch its
-    // shorter siblings - for that history).
+    // The extract is real block markup (headings/paragraphs/lists) from WikipediaGateway's server-side cleaning/trimming.
     .wikipedia-extract {
         > :first-child { margin-top: 0; }
         > :last-child { margin-bottom: 0; }
@@ -1368,13 +1344,7 @@
 }
 
 // -- Generic simple info panel (Photon, Census, EPA, iNaturalist, GDELT, USGS quakes) --
-// The NPS panel shipped with bespoke markup and no stylesheet at all - every
-// `nps-*` class in `pin_nps.html` matched nothing, so the card rendered with
-// only the generic `.card` chrome. These are the rules its own markup needs;
-// the fact grid deliberately mirrors `.simple-info-panel`'s `.simple-info-meta`
-// values so the two panels read alike. Not shared as one selector because
-// hoisting that rule out of `.simple-info-panel` changes its specificity for
-// every panel that uses it, which is a bigger change than this panel is worth.
+// The NPS panel shipped with bespoke markup and no stylesheet at all.
 .nps-info {
     .nps-image-wrap {
         max-height: 11rem;
@@ -1569,17 +1539,15 @@
 }
 
 // -- Condensed plugin-panel tabs (Regional Data: US Census, EPA, Wildlife, Seismic) --
-// Secondary-to-our-core-purpose data, condensed into one card with tabs
-// instead of four standalone auto-loading cards - each tab's content is
-// fetched only once clicked (see pin.panel / _pin_plugin_tabs.html).
+// Secondary-to-our-core-purpose data, condensed into one card with tabs instead of four standalone auto-loading cards.
 .card-tabs {
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
     padding: 0 $space-md;
     border-bottom: 1px solid var(--ul-border);
-    background: rgba(0,0,0,0.04);   
-    
+    background: rgba(0,0,0,0.04);
+
     &::-webkit-scrollbar {
         display: none;
     }
@@ -1617,10 +1585,7 @@
         font-size: 1.05rem;
     }
 
-    // This class's own unconditional `display: flex` above otherwise beats
-    // the browser's default `[hidden] { display: none }` UA rule - a tab
-    // button hidden via JS (e.g. the Wikipedia sub-tab when no article
-    // exists) would stay visibly rendered anyway.
+    // This class's own unconditional `display: flex` above otherwise beats the browser's default `[hidden] { display: none }` UA rule.
     &[hidden] {
         display: none;
     }
@@ -1629,11 +1594,7 @@
 .pin-plugin-tab-body {
     padding: $space-md;
 
-    // Any panel fragment swapped in here (the pending placeholder or the
-    // final _simple_info_panel.html render) arrives as its own nested .card -
-    // strip its chrome so it blends into this tab body instead of looking
-    // like a card-within-a-card, and hide its icon+title header since the
-    // active tab button already names it.
+    // Any panel fragment swapped in here (the pending placeholder or the final _simple_info_panel.html render) arrives as its own nested.
     .card {
         border: none;
         box-shadow: none;
@@ -2115,11 +2076,7 @@
 }
 
 // -- Combined "Organization" card: Labels + "Add to a list" ----------------
-// One header covers both - labels already have a universal look site-wide, so
-// no separate sub-header is needed to identify them. Adding either a label or
-// a list membership happens from the single "+" menu in the card header (see
-// .organization-add-wrap below); the header's own collapse chevron (injected
-// by the collapsible-sections script) covers the whole card.
+// One header covers both - labels already have a universal look site-wide, so no separate sub-header is needed to identify them.
 
 .organization-card {
     .tag-panel--embedded {
@@ -2593,9 +2550,7 @@ body.page-location-details {
 }
 
 // -- Community wiki box --------------------------------------------------------
-// A floating info box that sits in the title row, to the right of the pin's
-// name - it's metadata about the pin (link + detach action), not a first-class
-// page section, so it stays out of the Details card entirely.
+// A floating info box that sits in the title row, to the right of the pin's name.
 
 .pin-wiki-box {
     position: relative;
@@ -2741,10 +2696,7 @@ body.page-location-details {
             border-color: var(--ul-surface-2-border);
         }
 
-        // The checkbox's own accent-color is too subtle a signal on its own
-        // (unlike the seed-photo grid's much bolder ribbon/checkmark
-        // treatment) - highlight the whole row so a selected alias/field
-        // reads as clearly "on" at a glance, not just a small tick.
+        // The checkbox's own accent-color is too subtle a signal on its own.
         &:has(input:checked) {
             background: var(--ul-color-accent-bg, rgba(99, 102, 241, .1));
             border-color: var(--primary-color);
@@ -3016,9 +2968,7 @@ body.page-location-details {
     }
 }
 
-// Photo picker: same thumbnail-grid-with-checkbox-overlay pattern as the wiki
-// seed picker (.wiki-seed-photo-grid) - unselected photos read as "private"
-// under a greyscale filter and diagonal ribbon until opted in.
+// Photo picker: same thumbnail-grid-with-checkbox-overlay pattern as the wiki seed picker (wiki-seed-photo-grid).
 .pin-share-photo-grid {
     list-style: none;
     margin: 0;
@@ -3993,10 +3943,7 @@ body.page-location-details {
 }
 
 // -- Link chip row (_pin_links_row.html) - shared between the pin details
-// page's own "Links" card and the wiki page's "About" card, so this is
-// intentionally unscoped rather than nested under body.page-location-details
-// like the rest of this file - it used to live there, which meant the wiki
-// page's links rendered with none of this styling at all.
+// page's own "Links" card and the wiki page's "About" card, so this is intentionally unscoped rather than nested under.
 .pin-links-value {
     display: flex;
     flex-wrap: wrap;
@@ -4039,9 +3986,7 @@ body.page-location-details {
 
 }
 
-// "Read with AI" sparkle - only rendered for accounts with the AI feature
-// (see _ai_extract_button.html). Top-level: appears beside external links in
-// the Links card and inside Wikipedia/LoopNet/web-search/plugin info panels.
+// "Read with AI" sparkle - only rendered for accounts with the AI feature.
 .ai-extract-btn {
     display: inline-flex;
     align-items: center;
@@ -4178,17 +4123,12 @@ body.page-location-details .pin-detail-grid {
                 color: var(--ul-grey-8, #1e293b);
             }
 
-            // Links spans the full row like .detail-row.full-width, but lives
-            // inside .detail-items (a flex-wrap row of compact chips) rather
-            // than the grid, so it needs its own full-row override there.
+            // Links spans the full row like.detail-row.full-width, but lives inside.detail-items (a flex-wrap row of compact chips) rather than.
             .detail-item--links {
                 flex: 1 0 100%;
                 border-left: none;
 
-                // .detail-item's own `display: flex` above has equal specificity
-                // to the [hidden] UA rule it would otherwise lose to, so an empty
-                // links row (hidden until "Add a link" is clicked in the header -
-                // see pin_overview_partial.html) needs this to actually disappear.
+                // .detail-item's own `display: flex` above has equal specificity to the [hidden] UA rule it would otherwise lose to, so an empty links.
                 &[hidden] {
                     display: none;
                 }
@@ -4200,33 +4140,21 @@ body.page-location-details .pin-detail-grid {
         .map-wrapper {
             position: relative;
             width: 100%;
-            // The default responsive height, overridden per-user by an inline
-            // style (see set_map_height/PinController) once they've dragged
-            // the resize handle below - min-height stays the floor either way,
-            // and gives this wrapper a definite size for @include
-            // map-query-container to safely contain against (`contain: size`
-            // collapses an "auto" height to 0 otherwise).
+            // The default responsive height, overridden per-user by an inline style once they've dragged the resize handle below.
             height: min(52vh, 540px);
             min-height: 320px;
-            // Clips the off-canvas (translateX(-100%)) .detail-pin-list-panel so
-            // it doesn't bleed into the page to the left of the map card - without
-            // this the collapsed drawer is still painted, just outside the wrapper.
+            // Clips the off-canvas (translateX(-100%)).detail-pin-list-panel so it doesn't bleed into the page to the left of the map card.
             overflow: hidden;
             @include map-query-container;
         }
 
-        // 100% of .map-wrapper rather than duplicating its height value - keeps
-        // #map in sync automatically whether that height comes from the default
-        // CSS rule above or a resize-handle-dragged inline style, with nothing
-        // to keep manually synced between the two elements.
+        // 100% of.map-wrapper rather than duplicating its height value.
         #map {
             height: 100%;
             width: 100%;
         }
 
-        // A sibling of .map-wrapper (not a child) - .map-wrapper has its own
-        // overflow:hidden (to clip the off-canvas pin-list drawer, see above),
-        // which would clip a child handle positioned at/past its bottom edge.
+        // A sibling of.map-wrapper (not a child) -.map-wrapper has its own overflow:hidden.
         .map-resize-handle {
             height: 12px;
             margin-top: -6px; // visually straddles the map's bottom border
@@ -4260,16 +4188,7 @@ body.page-location-details .pin-detail-grid {
     }
 
     // -- Combined Media section: All/Mine view switch ------------------------
-    // "Mine" nests the (unmodified) photo-gallery partial - _photo_gallery.html
-    // is also used standalone on the wiki/safety check-in pages, so rather than
-    // fork it for this one context, its own card chrome and header (icon,
-    // "Photos" title, badge, Import/Select buttons) are neutralized here so it
-    // reads as part of the surrounding Media card instead of a second nested
-    // one - the outer header's own Import/Select buttons already operate on
-    // whichever view (All/Mine) is currently active (see mediaDispatchSelect
-    // in index.html). The All/Mine switch itself is just another #media-tabs
-    // entry (see rebuildMediaTabs in index.html) - one .card-tab strip instead
-    // of a second, separately-styled row.
+    // "Mine" nests the (unmodified) photo-gallery partial.
     .media-view-panel[hidden] { display: none; }
 
     #pin-gallery-panel {
@@ -4291,22 +4210,13 @@ body.page-location-details .pin-detail-grid {
 
         .media-gallery-grid {
             display: grid;
-            // auto-fit (not auto-fill): empty tracks collapse to 0 instead of
-            // reserving unused space, so a page with fewer than 5 items lets
-            // those items' `1fr` share grow to fill the row - auto-fill would
-            // keep the leftover tracks empty-but-present, holding items at
-            // their minimum width.
+            // auto-fit (not auto-fill): empty tracks collapse to 0 instead of reserving unused space, so a page with fewer than 5 items lets those.
             grid-template-columns: repeat(auto-fit, minmax(min(100%, 96px), 1fr));
             gap: clamp(.5rem, 1.5vw, .85rem);
             padding: .75rem;
             min-height: 12rem;
             max-height: 40rem;
-            // Adaptive pagination briefly un-hides every item on the current
-            // batch to measure how many actually fit (see
-            // measureVisiblePageSize in location/index.html) before re-hiding
-            // the excess - without this, that instant (and any measurement
-            // that ends up taller than this cap) visibly spilled a huge grid
-            // out past the card's boundary instead of being clipped.
+            // Adaptive pagination briefly un-hides every item on the current batch to measure how many actually fit before re-hiding the excess.
             overflow: hidden;
 
             @include up($breakpoint-sm) {
@@ -4331,10 +4241,7 @@ body.page-location-details .pin-detail-grid {
             color: var(--ul-grey-5);
             font-size: .9rem;
 
-            // A class-based `display` always beats the browser's default
-            // `[hidden] { display: none }` UA rule on specificity, so the
-            // element stays visibly rendered (as `display: flex`) even while
-            // marked `hidden` unless this is spelled out explicitly.
+            // A class-based `display` always beats the browser's default `[hidden] { display.
             &[hidden] {
                 display: none;
             }
@@ -4346,10 +4253,7 @@ body.page-location-details .pin-detail-grid {
             position: relative;
             display: flex;
             flex-direction: column;
-            // Bounds how far a tile can grow when auto-fit gives it more than
-            // one column's worth of space (few items on the page) - without
-            // this, a single leftover item on a wide row would stretch edge
-            // to edge instead of just looking comfortably larger.
+            // Bounds how far a tile can grow when auto-fit gives it more than one column's worth of space (few items on the page).
             max-width: 24rem;
             margin-inline: auto;
             width: 100%;
@@ -4370,11 +4274,7 @@ body.page-location-details .pin-detail-grid {
                 transform .2s cubic-bezier(.22, 1, .36, 1),
                 box-shadow .2s ease;
 
-            // Draggable onto the map to save + set coordinates (see
-            // mediaItemDragStart, map-annotations.ts). Excludes the "photos"
-            // preview tab's own-upload tiles, which aren't draggable - those
-            // are already Image rows, managed via the "Mine" tab's own
-            // drag-to-map (.photo-panel-item).
+            // Draggable onto the map to save + set coordinates.
             &[draggable="true"] {
                 cursor: grab;
 
@@ -4417,11 +4317,7 @@ body.page-location-details .pin-detail-grid {
             width: 100%;
             min-height: 96px;
             max-height: 220px;
-            // A fixed aspect-ratio crops tall/wide originals hard against that
-            // exact ratio; min/max-height instead just bounds how short/tall
-            // the tile can get, so an oddly-shaped photo keeps more of its
-            // natural framing (still object-fit: cover, so it always fills
-            // the tile - no letterboxing - just not forced to one fixed ratio).
+            // A fixed aspect-ratio crops tall/wide originals hard against that exact ratio.
             aspect-ratio: 4 / 5;
             object-fit: cover;
             object-position: top center;
@@ -4455,9 +4351,7 @@ body.page-location-details .pin-detail-grid {
             background: var(--ul-surface-raised-border);
         }
 
-        // The whole tile used to be an <a>; the thumbnail is now a plain
-        // button (click opens the lightbox) so it must reset every default
-        // button style to keep the tile looking identical to before.
+        // The whole tile used to be an <a>; the thumbnail is now a plain button (click opens the lightbox) so it must reset every default button.
         .media-item-thumb-btn {
             display: flex;
             flex-direction: column;
@@ -4482,17 +4376,12 @@ body.page-location-details .pin-detail-grid {
         .media-gallery--only-relevant .media-item:not(.media-item--relevant) {
             display: none;
         }
-        // The "Not Relevant" source tab shows items the Visibility setting
-        // above would otherwise hide - kept as its own class so the two
-        // independent filters (tabs vs. the Visibility submenu) don't fight.
+        // The "Not Relevant" source tab shows items the Visibility setting above would otherwise hide.
         .media-gallery--tab-not-relevant .media-item--not-relevant {
             display: flex;
             opacity: .55;
         }
-        // Items excluded by the active source tab must actually disappear;
-        // !important wins over both the Visibility rules above and the tab
-        // override so pagination (which already skips excluded items) and
-        // what's on screen never disagree.
+        // Items excluded by the active source tab must actually disappear.
         .media-item.media-tab-excluded {
             display: none !important;
         }
@@ -4582,9 +4471,7 @@ body.page-location-details .pin-detail-grid {
         }
 
         // -- Source tabs ---------------------------------------------------------
-        // Underline tab-bar (matches .import-photos-tab in the Import Photos
-        // dialog) instead of the old pill/chip look - a row of always-visible
-        // buttons reads more like navigation than a set of toggleable filters.
+        // Underline tab-bar (matches.import-photos-tab in the Import Photos dialog) instead of the old pill/chip look.
         .media-tab-count {
             padding: 0 .4rem;
             font-size: .68rem;
@@ -4957,13 +4844,7 @@ body.page-location-details .pin-detail-grid {
 
 // -- Pin detail layout ---------------------------------------------------------
 //
-// Mobile-first, content-aware layout for the pin details page. The grid avoids
-// brittle fixed spans: every card starts as a full-width section, then available
-// space is divided with auto-fit tracks so visible cards naturally expand,
-// collapse, and wrap without leaving holes when optional sections are hidden.
-// Named grid areas for the primary pin-detail cards. Optional / external-data
-// cards live inside .pin-aux-grid (area: aux) and reflow with auto-fit when
-// sections are removed at runtime (HTMX 204).
+// Mobile-first, content-aware layout for the pin details page.
 .pin-detail-grid {
     --pin-detail-gap: clamp(.85rem, 2vw, 1.35rem);
     --pin-detail-pad: clamp(.75rem, 2.4vw, 1.5rem);
@@ -5042,12 +4923,7 @@ body.page-location-details .pin-detail-grid {
     }
 }
 
-// Satellite Imagery / Street View / Photos, and Visit History / Labels /
-// Aliases: each row starts every card at an equal share of the row and lets
-// `auto-fit` redivide that space among whichever cards are actually visible.
-// Collapsing a card (`.is-collapsed`, see _collapsible.scss) removes it from
-// flow, so its siblings grow to fill the freed space instead of leaving a
-// blank track the way named grid-area placement would.
+// Satellite Imagery / Street View / Photos, and Visit History / Labels / Aliases.
 .pin-media-row,
 .pin-lists-row {
     display: grid;
@@ -5090,9 +4966,7 @@ body.page-location-details .pin-detail-grid {
     }
 }
 
-// Admin-only floating panel (toggled via the Dev Tools toolbar) listing the
-// search term/coordinates and cache status behind every external-API result
-// currently loaded on the Private Pin page.
+// Admin-only floating panel (toggled via the Dev Tools toolbar) listing the search term/coordinates and cache status behind every.
 .pin-debug-overlay {
     position: fixed;
     top: 4.5rem;

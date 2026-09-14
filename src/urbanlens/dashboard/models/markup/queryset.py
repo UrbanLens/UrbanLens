@@ -15,12 +15,7 @@ class PinMarkupQuerySet(abstract.FrontendDashboardQuerySet):
 
     def bulk_create(self, objs, *args, **kwargs):
         """Create the items, coercing their colours the way ``save`` would.
-
-        ``bulk_create`` issues raw SQL and never calls ``save``, so the
-        model-level colour validation - the thing standing between a stored
-        string and the client's ``innerHTML`` - does not apply to it. Doing it
-        here rather than in the one caller that exists today means a future
-        bulk writer cannot reopen the hole by not knowing about it.
+        ``bulk_create`` issues raw SQL and never calls ``save``, so the model-level colour validation - the thing standing between a stored string and the client's ``innerHTML`` - does not apply to it.
 
         Args:
             objs: The items to create.

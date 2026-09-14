@@ -61,9 +61,7 @@ describe("deriveFaces", () => {
     });
 
     test("a partition landing mid-wall still splits the room (T-junction)", () => {
-        // The partition's endpoints sit on the interior of the top and bottom
-        // walls rather than at any existing corner. Without splitting those
-        // walls at the touch point nothing would close.
+        // The partition's endpoints sit on the interior of the top and bottom walls rather than at any existing corner.
         const walls: Segment[] = [
             { wallId: "bottom", a: { x: 0, y: 0 }, b: { x: 4, y: 0 } },
             { wallId: "right", a: { x: 4, y: 0 }, b: { x: 4, y: 3 } },
@@ -128,9 +126,7 @@ describe("deriveFaces", () => {
     });
 
     test("a wall shorter than the heal gap is not bridged to itself", () => {
-        // Both ends of a short stub are dangling, and they are each other's
-        // nearest candidate - so the healer used to fold the wall onto its own
-        // midpoint, which the editor then wrote back as a zero-length wall.
+        // Both ends of a short stub are dangling, and they are each other's nearest candidate.
         const stub: Segment[] = [{ wallId: "stub", a: { x: 0, y: 0 }, b: { x: 0.4, y: 0 } }];
         const result = deriveFaces(stub);
         expect(result.healed).toEqual([]);
@@ -204,9 +200,7 @@ describe("deriveFaces", () => {
     });
 
     test("a corridor of rooms derives the right count at scale", () => {
-        // The spatial index in planarize prunes pairs that cannot meet; this
-        // pins that it prunes only those. A corridor is the shape real floors
-        // take, and the one the index actually helps.
+        // The spatial index in planarize prunes pairs that cannot meet; this pins that it prunes only those.
         const walls: Segment[] = [];
         const rooms = 40;
         const depth = 6;

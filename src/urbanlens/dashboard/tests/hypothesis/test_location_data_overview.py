@@ -1,10 +1,4 @@
-"""Tests for the Location Data card's "Overview" tab.
-
-Covers PinController.location_data_overview() (the aggregation endpoint) and
-_location_data_overview_fields() (the per-source adapter that turns each
-source's cached data into generic {label, value, href} facts, merged across
-sources into one unattributed summary -.
-"""
+"""Tests for the Location Data card's "Overview" tab."""
 
 from __future__ import annotations
 

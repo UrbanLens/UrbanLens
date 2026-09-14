@@ -1,14 +1,4 @@
-"""Mention parsing and rendering for comment text.
-
-Storage formats:
-  Location mention : @[Display Name](loc:{uuid})
-  Activity mention : @act:{n}   (trip context only)
-
-Rendering:
-  - @loc mentions whose location UUID the viewer hasn't pinned → entire comment hidden
-  - @loc mentions whose location UUID the viewer has pinned → rendered as hyperlink
-  - @act:{n} → resolved via activity_index_map to an activity link
-"""
+"""Mention parsing and rendering for comment text."""
 
 from __future__ import annotations
 
@@ -29,10 +19,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import TripActivity
 
-#: The literal every location mention contains, exposed so a caller can cheaply
-#: prefilter in SQL for text that *might* carry one - text without it cannot be
-#: dropped by the mention gate, so it need not be fetched and rendered to find
-#: out. The pattern below is built from it, so the two cannot drift apart.
+#: The literal every location mention contains, exposed so a caller can cheaply prefilter in SQL for
+#: text that *might* carry one - text without it cannot be dropped by the mention gate, so it need
+#: not be fetched and rendered to find out.
+#: The pattern below is built from it, so the two cannot drift apart.
 LOCATION_MENTION_MARKER = "](loc:"
 
 _LOC_RE = re.compile(r"@\[([^\]]+)" + re.escape(LOCATION_MENTION_MARKER) + r"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\)")
@@ -46,11 +36,8 @@ def _linkify(segment: str) -> SafeString:
         segment: Raw (untrusted) comment text between mentions.
 
     Returns:
-        Safe HTML - urlize(autoescape=True) escapes everything it doesn't turn
-        into a link, so marking the result safe mirrors Django's own ``urlize``
-        template filter and keeps ``format_html_join`` from double-escaping it.
-    """
-    return mark_safe(urlize(segment, nofollow=True, autoescape=True))  # noqa: S308 # nosec B703 B308 - input is fully escaped by urlize
+        Safe HTML - urlize(autoescape=True) escapes everything it doesn't turn into a link, so marking the result safe mirrors Django's own ``urlize`` template filter and keeps ``format_html_join`` from double-escaping it."""
+    return mark_safe(urlize(segment, nofollow=True, autoescape=True))  # noqa: S308 # nosec B703 B308 - input is...
 
 
 def extract_location_uuids(text: str) -> list[uuid.UUID]:
@@ -60,18 +47,13 @@ def extract_location_uuids(text: str) -> list[uuid.UUID]:
 
 def extract_location_mentions(text: str) -> list[tuple[str, str]]:
     """Return every ``@[Display](loc:uuid)`` mention as a (display, uuid) pair.
-
-    The display-text counterpart to :func:`extract_location_uuids`, for callers
-    that render mentions themselves rather than taking the HTML from
-    :func:`render_comment_text` (e.g. a native client that has no webview).
+    The display-text counterpart to :func:`extract_location_uuids`, for callers that render mentions themselves rather than taking the HTML from :func:`render_comment_text` (e.g. a native client that has no webview).
 
     Args:
         text: Raw comment text in storage format.
 
     Returns:
-        One ``(display_text, location_uuid_string)`` tuple per mention, in
-        order of appearance.
-    """
+        One ``(display_text, location_uuid_string)`` tuple per mention, in order of appearance."""
     return [(match.group(1), match.group(2)) for match in _LOC_RE.finditer(text)]
 
 
@@ -85,11 +67,7 @@ def render_comment_text(
     viewer_pinned_uuids: set[uuid.UUID],
     activity_index_map: dict[int, TripActivity] | None = None,
 ) -> str | None:
-    """Render comment text to safe HTML, resolving @mentions.
-
-    Returns None if the comment should be hidden from this viewer.
-    ``activity_index_map`` maps map_index → TripActivity (trip context only).
-    """
+    """Render comment text to safe HTML, resolving @mentions."""
     if not is_visible_to(text, viewer_pinned_uuids):
         return None
 

@@ -49,14 +49,7 @@ class PinSuggestionStatus(abstract.TextChoices):
 
 class PinSuggestion(abstract.DashboardModel):
     """A place a batch photo scan (Immich library sweep or local folder scan) found evidence of visiting.
-
-    Unlike :class:`~urbanlens.dashboard.models.visit_suggestions.model.VisitSuggestion`,
-    this is always self-directed (no recipient/notification-preference routing) and may
-    propose creating a brand-new pin rather than only logging a visit on one that already
-    exists. Created in bulk by ``services.pins.pin_suggestions.ingest_location_hits``, which
-    matches each discovered coordinate against the profile's existing pins (their
-    effective property boundary, exactly as ``services.visits.visits.find_pin_containing_point``
-    does for live geolocation) and clusters whatever doesn't match into new-pin candidates.
+    Unlike :class:`~urbanlens.dashboard.models.visit_suggestions.model.VisitSuggestion`, this is always self-directed (no recipient/notification-preference routing) and may propose creating a brand-new pin rather than only logging a visit on one that already exists.
 
     Attributes:
         profile: Owner this suggestion belongs to and would create pins/visits for.

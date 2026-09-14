@@ -1,27 +1,4 @@
-"""Volume bounds on the direct-message and game-session sockets.
-
-The safety check-in socket was converted first, to prove the mixin's shape
-against one real consumer (P31). These are the other two families, and each has
-a hazard the safety socket does not:
-
-- **The DM socket fans out to somebody else's group.** A ``typing`` frame writes
-  no row, but it broadcasts into the *recipient's* group - so leaving it
-  unbudgeted, as the "only writes cost anything" reading would, leaves the
-  cheapest amplifier on the socket unmetered.
-- **The DM socket had no ``isinstance(data, dict)`` guard at all.** A frame of
-  ``[]`` parses as valid JSON and then raises ``AttributeError`` on ``.get``,
-  which kills the connection. The game socket has the guard; this one never did.
-- **The game socket is one class serving three games**, so a bound added here
-  has to be exercised through a real subclass rather than the private base.
-
-Order of assertions matters in the group-chat case: an empty frame must not
-spend the write budget, or a client with a bug in its composer would throttle
-its user out of a conversation they never typed in.
-
-``TransactionTestCase`` for the same reason as every other consumer test here,
-and the cache is cleared per test because that class carries no cache isolation
-and the budgets are cache counters.
-"""
+"""Volume bounds on the direct-message and game-session sockets."""
 
 from __future__ import annotations
 
@@ -82,23 +59,14 @@ async def _drain(comm: WebsocketCommunicator) -> list[dict]:
 async def _settle(count_rows) -> int:
     """Wait for the consumer to finish the frames already sent to it.
 
-    ``send_to`` only enqueues, and neither of these sockets answers an accepted
-    frame on the connection that sent it - the direct-message broadcast goes out
-    through Celery, and the game broadcast reaches the *group*. So draining what
-    comes back is not a synchronisation point here: it returns as soon as
-    nothing has arrived, which is immediately, and the assertion then counts
-    rows the consumer has not written yet. A flood test written that way reads
-    "1" and looks like a working throttle.
-
-    Polls until the count holds still across two reads, which is the only
-    signal available when the socket says nothing.
+    ``send_to`` only enqueues, and neither of these sockets answers an accepted frame on the connection that
+    sent it - the direct-message broadcast goes out through Celery, and the game broadcast reaches the *group*.
 
     Args:
         count_rows: Async callable returning the row count to watch.
 
     Returns:
-        The settled count.
-    """
+        The settled count."""
     deadline = time.monotonic() + 10.0
     previous = -1
     while time.monotonic() < deadline:
@@ -174,10 +142,8 @@ class DirectMessageVolumeTests(TransactionTestCase):
     def test_typing_indicators_are_budgeted(self) -> None:
         """The one frame on this socket that writes nothing and still fans out.
 
-        It broadcasts into the *recipient's* group, so an unbudgeted ``typing``
-        is the cheapest amplifier here: no row, no validation, one channel-layer
-        send per frame to somebody else's open tabs.
-        """
+        It broadcasts into the *recipient's* group, so an unbudgeted ``typing`` is the cheapest amplifier here:
+        no row, no validation, one channel-layer send per frame to somebody else's open tabs."""
         _run(self._typing_is_budgeted())
 
     async def _typing_is_budgeted(self) -> None:
@@ -223,14 +189,11 @@ class DirectMessageVolumeTests(TransactionTestCase):
         _run(self._oversized_frame_refused())
 
     async def _oversized_frame_refused(self) -> None:
-        """The body is 500 characters: well over the 200-character frame cap, and
-        well under ``MAX_DIRECT_MESSAGE_LENGTH`` (1,000).
+        """The body is 500 characters: well over the 200-character frame cap, and well under ``MAX_DIRECT_MESSAGE_LENGTH`` (1,000).
 
-        Sizing it above the *body* limit instead would pass against unbounded
-        code, because the service's own length check already answers an
-        over-long body with an error frame and saves nothing - so the test would
-        assert the frame cap and measure a validator.
-        """
+        Sizing it above the *body* limit instead would pass against unbounded code, because the service's own
+        length check already answers an over-long body with an error frame and saves nothing - so the test would
+        assert the frame cap and measure a validator."""
         comm = self._communicator(self.sender)
         connected, _ = await comm.connect()
         self.assertTrue(connected)
@@ -328,13 +291,10 @@ class TriviaSessionVolumeTests(TransactionTestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=1)
     def test_a_ping_does_not_spend_the_message_budget(self) -> None:
-        """The client sends one every 45 seconds, because Cloudflare closes an idle
-        tunnelled socket at about 100. Charging those against the write budget
-        would throttle a user for sitting in a lobby.
+        """The client sends one every 45 seconds, because Cloudflare closes an idle tunnelled socket at about 100. Charging those against the write budget would throttle a user for sitting in a lobby.
 
-        The frame budget is left at its production value here, so the pings are
-        charged where they belong and the message that follows still arrives.
-        """
+        The frame budget is left at its production value here, so the pings are charged where they belong and
+        the message that follows still arrives."""
         _run(self._pings_are_not_writes())
 
     async def _pings_are_not_writes(self) -> None:

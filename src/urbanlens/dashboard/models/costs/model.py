@@ -17,13 +17,9 @@ if TYPE_CHECKING:
 
 
 class CostComponent(abstract.DashboardModel):
-    """A depreciating hardware/infrastructure asset an admin has defined, e.g. "Hard Drives".
-
-    Its replacement cost is amortized evenly over ``deprecation_years`` to produce a
-    monthly figure (see ``monthly_amortized_cost``) that feeds into the site's overall
-    effective monthly running cost. ``retired_at`` records when a component stopped
-    counting toward that figure - it is kept (not deleted) so all-time expense totals
-    stay accurate.
+    """A depreciating hardware/infrastructure asset an admin has defined, e.g.
+    "Hard Drives".
+    Its replacement cost is amortized evenly over ``deprecation_years`` to produce a monthly figure (see ``monthly_amortized_cost``) that feeds into the site's overall effective monthly running cost.
 
     Attributes:
         name: Display name, e.g. "Hard Drives".
@@ -91,10 +87,9 @@ class CostComponent(abstract.DashboardModel):
 
 
 class OperatingCost(abstract.DashboardModel):
-    """A recurring monthly operating cost an admin has defined, e.g. "Electricity".
-
-    ``retired_at`` records when a cost stopped being charged - it is kept (not
-    deleted) so all-time expense totals stay accurate.
+    """A recurring monthly operating cost an admin has defined, e.g.
+    "Electricity".
+    ``retired_at`` records when a cost stopped being charged - it is kept (not deleted) so all-time expense totals stay accurate.
 
     Attributes:
         name: Display name, e.g. "Electricity".

@@ -1,16 +1,6 @@
 /**
- * Site paths, in one place.
- *
- * Specs address pages through these rather than through string literals, so a
- * route that moves is one edit here instead of a grep across the suite. The
- * values are the output of Django's own `reverse()` against this urlconf, not
- * transcriptions of the pattern strings - `dashboard/urls.py` nests `include()`
- * several levels deep and the assembled path is not obvious from reading it.
- *
- * Deliberately not exhaustive. A route earns an entry when a spec navigates to
- * it; the "every page in the navigation still loads" sweep discovers its
- * targets from the rendered menu instead, so it stays correct as pages are
- * added.
+ * Site paths, in one place. Specs address pages through these rather than through string literals,
+ * so a route that moves is one edit here instead of a grep across the suite.
  */
 
 /** Reachable without signing in. */

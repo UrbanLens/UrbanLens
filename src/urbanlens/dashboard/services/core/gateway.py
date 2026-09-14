@@ -1,16 +1,5 @@
 """Base gateway class for external API integrations.
-
-Subclasses declare a ``service_key`` class variable (e.g. ``"nps"``) to opt
-into automatic rate limiting and call logging via ``_RateLimitedSession``.
-When ``service_key`` is set the plain ``requests.Session`` is replaced in
-``__post_init__`` with a wrapper that checks ``ApiRateLimit`` config before
-every request and writes an ``ApiCallLog`` row after.
-
-Subclasses that override ``__post_init__`` **must** call
-``Gateway.__post_init__(self)`` so the session swap takes effect.
-Do not use zero-argument ``super()`` - it fails in ``slots=True`` dataclasses
-when the ``__class__`` cell references the pre-slots class object.
-"""
+Subclasses that override ``__post_init__`` **must** call ``Gateway.__post_init__(self)`` so the session swap takes effect."""
 
 from __future__ import annotations
 
@@ -55,12 +44,7 @@ class ServiceMeta(ABCMeta):
 
 @dataclass(slots=True, kw_only=True)
 class Service(ABC, metaclass=ServiceMeta):
-    """An abstract class to serve as a template for our services.
-
-    Class variables (set on subclasses, not dataclass fields):
-        service_key: Unique identifier for this service (e.g. ``"nps"``).
-            Must be set to enable automatic rate limiting and call logging.
-    """
+    """An abstract class to serve as a template for our services."""
 
     paid_service: ClassVar[bool] = False
     service_key: ClassVar[str | None] = None
@@ -78,10 +62,7 @@ class Gateway(Service, ABC):
 
     def __post_init__(self) -> None:
         """Replace the plain session with a rate-limited wrapper when applicable.
-
-        A custom session (e.g. a test mock) is preserved as-is; only the
-        default ``requests.Session`` instance is swapped for a rate-limited one.
-        """
+        A custom session (e.g. a test mock) is preserved as-is; only the default ``requests.Session`` instance is swapped for a rate-limited one."""
         key = type(self).service_key
         if key and type(self.session) is requests.Session:
             from urbanlens.dashboard.services.core.rate_limiter import _RateLimitedSession
@@ -91,12 +72,6 @@ class Gateway(Service, ABC):
     @staticmethod
     def endpoint_for_log(url: str) -> str:
         """How this gateway's URLs are described in ``ApiCallLog``.
-
-        Defaults to the URL itself, which is what every point-lookup service
-        wants. Override where the URL encodes something not worth keeping - a
-        map tile's path *is* a coordinate somebody was looking at, and the log
-        exists to track volume and cost per service, which the coordinate does
-        not contribute to.
 
         Args:
             url: The URL about to be requested.
@@ -108,11 +83,7 @@ class Gateway(Service, ABC):
 
 
 class GatewayRequestError(RuntimeError):
-    """Raised when an external gateway call fails or returns an unusable response.
-
-    Swap this for whatever error base class UrbanLens's other gateways already
-    raise, if one exists -- this is a self-contained stand-in.
-    """
+    """Raised when an external gateway call fails or returns an unusable response."""
 
 
 class GatewayRateLimitedError(GatewayRequestError):

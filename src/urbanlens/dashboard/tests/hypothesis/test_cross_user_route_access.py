@@ -1,16 +1,4 @@
-"""No owner-scoped route may serve, or accept a write from, someone who doesn't own it.
-
-A sweep rather than a per-view test: authorization here is enforced view by view
-(``get_object_or_404(..., profile__user=request.user)``, ``_get_group``,
-``resolve_visible_wiki``, ...), so the failure mode is a *new* route that forgets
-to do it. A per-view test only ever covers the views someone remembered to write
-one for; this covers every route that exists, including the next one added.
-
-It also catches routes wired to a method that isn't there - ``as_view({"get":
-"..."})`` resolves the handler name at request time, so a typo'd or removed
-handler is a 500 that nothing else notices until a user hits it. That is exactly
-how the dead ``google_images`` route was found.
-"""
+"""No owner-scoped route may serve, or accept a write from, someone who doesn't own it."""
 
 from __future__ import annotations
 
@@ -36,9 +24,8 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 #: added here needs to be justified: the whole point of the sweep is that the
 #: default is "a stranger gets nothing".
 _ALLOWED_200 = {
-    # Searches the *caller's own* trips; the slug in the URL is only used to
-    # exclude the parent trip from the caller's results, so it reveals nothing
-    # about that trip and returns the caller's data either way.
+    # Searches the *caller's own* trips; the slug in the URL is only used to exclude the parent trip from the
+    # caller's results, so it reveals nothing about that trip and returns the caller's data either way.
     "trips.child_trip_search",
 }
 
@@ -132,12 +119,8 @@ class CrossUserRouteAccessTests(TestCase):
     def test_a_stranger_cannot_mutate_another_users_objects(self) -> None:
         """POST/DELETE as a stranger must never report success.
 
-        ``204 No Content`` with an empty body is this codebase's HTMX idiom for
-        "nothing to swap", and several custom-field views use it as their
-        *refusal* (see ``PhotoCustomFieldsView._resolve``: a non-owner resolves
-        the object to None and the view returns 204 without writing). So an empty
-        204 is accepted here; any other 2xx means the write went through.
-        """
+        ``204 No Content`` with an empty body is this codebase's HTMX idiom for "nothing to swap", and several
+        custom-field views use it as their the object to None and the view returns 204 without writing)."""
         self.client.force_login(self.intruder)
 
         leaks: list[str] = []
@@ -156,13 +139,7 @@ class CrossUserRouteAccessTests(TestCase):
     def test_a_child_id_cannot_be_smuggled_through_the_callers_own_parent(self) -> None:
         """Nested routes must re-scope the child to the parent in the URL.
 
-        The parent ownership check passes here on purpose - the caller owns the
-        pin/trip/location in the URL. What must not pass is the *child*: an
-        activity, visit or alias belonging to someone else. A view that resolves
-        the child by id alone (``get_object_or_404(TripActivity, pk=...)``
-        without ``trip=trip``) acts on another user's row while looking properly
-        authorized.
-        """
+        The parent ownership check passes here on purpose - the caller owns the pin/trip/location in the URL."""
         parents = {
             "pin_slug": self.intruder_pin.slug,
             "trip_slug": self.intruder_trip.slug,

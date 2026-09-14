@@ -1,16 +1,4 @@
-"""A photo shared between a pin and a wiki must survive being deleted from either side.
-
-``wiki_creation._seed_photos`` and ``PinGalleryBulkView``'s "send to wiki" action both
-repoint an existing pin photo's ``wiki`` FK rather than copying the row - one ``Image``
-can serve a pin and a wiki at once. Every place a user can delete a single photo
-(``PinImageView.delete``, ``WikiImageView.delete``, ``PinGalleryBulkView``'s bulk
-delete, and the mobile API's ``PhotoDetailView.delete``) used to call
-``image.delete()`` unconditionally, destroying the other surface's copy with no
-guard at all - worse than the pin-to-pin sharing case, which at least has
-``delete_stored_file``'s reference-count check (see
-``test_shared_image_file_deletion.py``). See docs/audits/GOALS_CODE_AUDIT.md
-("Pin-to-wiki sharing").
-"""
+"""A photo shared between a pin and a wiki must survive being deleted from either side."""
 
 from __future__ import annotations
 
@@ -219,18 +207,9 @@ class PinGalleryBulkDeleteTests(_DualOwnershipTestCase):
 class WithdrawingAContributedPhotoTests(_DualOwnershipTestCase):
     """The community quota bonus ends when its contributor withdraws the photo.
 
-    The reward is one-way against *other people's* later actions - votes taken
-    back, or the wiki deleted by an editor or by the low-engagement sweep -
-    because someone comfortably inside their quota must not be pushed over it
-    by a change they did not make. The contributor removing their own photo
-    from the wiki is the case that rule was never meant to cover: the
-    contribution the bonus paid for has stopped existing.
-
-    The two cases are indistinguishable at the column - every one of them ends
-    as ``wiki_id IS NULL`` with no record of who did it - so the intent has to
-    be stated where the caller knows it, which is why these tests exercise the
-    call sites rather than a signal.
-    """
+    The reward is one-way against *other people's* later actions - votes taken back, or the wiki deleted by an
+    editor or by the low-engagement sweep - because someone comfortably inside their quota must not be pushed
+    over it by a change they did not make."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -288,12 +267,10 @@ class WithdrawingAContributedPhotoTests(_DualOwnershipTestCase):
     def test_deleting_the_wiki_leaves_the_bonus_intact(self) -> None:
         """`Image.wiki` is SET_NULL, and nobody's storage should move because of it.
 
-        This passes on the code before the revoke existed, and is meant to: it
-        is not evidence for the revoke but a guard against the two shapes that
-        would have been easier to write - a `post_save` receiver, or a rule in
-        the storage aggregate - both of which take the bonus back here, where
-        the action was somebody else's.
-        """
+        This passes on the code before the revoke existed, and is meant to: it is not evidence for the revoke
+        but a guard against the two shapes that would have been easier to write - a `post_save` receiver, or a
+        rule in the storage aggregate - both of which take the bonus back here, where the action was somebody
+        else's."""
         image = self._rewarded_photo()
 
         Wiki.objects.filter(pk=self.wiki.pk).delete()

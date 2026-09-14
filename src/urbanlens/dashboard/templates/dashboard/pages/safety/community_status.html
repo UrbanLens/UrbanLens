@@ -2,17 +2,7 @@
 {% load vendor_assets %}
 {% load humanize %}
 
-{% comment %}
-Read-only shared view of a safety check-in - reached either from a comment posted to a
-destination's community wiki at escalation (services.safety.post_checkin_to_community_wiki),
-or by a logged-in registered emergency contact from their safety overview page's
-"Shared with you" section (viewer_is_contact=True).
-
-Deliberately limited: status, owner, expected check-in time, and the destination map.
-The trip plan, contact message, emergency contacts, photos, and chat stay owner-only -
-opting into the wiki post shares that the owner is overdue and where, not the whole
-check-in, and a contact gets the same limited view rather than the full owner page.
-{% endcomment %}
+{% comment %}Read-only shared view of a safety.{% endcomment %}
 
 {% block header %}
 {% vendor_asset "leaflet_css" %}

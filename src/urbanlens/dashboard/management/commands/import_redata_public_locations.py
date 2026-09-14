@@ -1,18 +1,11 @@
 """Pull REData's public-locations catalog into a demo instance.
 
-Run on the **demo** instance. Companion to ``import_public_locations`` - both
-write into the same manifest via ``services.demo.locations.merge_into_manifest``,
-so running either, in any order, any number of times, never erases what the
-other contributed.
-
-REData's ``/public-locations/`` is a real, documented endpoint
-(``GET /api/v1/public-locations/``, scope ``public_locations:read``) but as of
-2026-08-20 is not yet deployed anywhere UrbanLens can reach - this command is
-meant to be run (or scheduled) safely before that is true. It reports "0
-locations" rather than erroring when REData is unreachable, unconfigured, or
-simply doesn't have the endpoint yet, matching
-``services.demo.locations.redata_demo_locations``'s own degrade-to-empty
-contract.
+Companion to ``import_public_locations`` - both write into the same manifest via
+``services.demo.locations.merge_into_manifest``, so running either, in any order, any number of
+times, never erases what the other contributed.
+It reports "0 locations" rather than erroring when REData is unreachable, unconfigured, or simply
+doesn't have the endpoint yet, matching ``services.demo.locations.redata_demo_locations``'s own
+degrade-to-empty contract.
 """
 
 from __future__ import annotations

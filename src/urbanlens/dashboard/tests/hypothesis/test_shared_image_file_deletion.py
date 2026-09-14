@@ -1,10 +1,4 @@
-"""Deleting your own photo must not break it for people you shared it with.
-
-``create_pin_from_share`` copies a photo by assigning the *same* storage key
-(``image=image.image.name``) - the bytes are deliberately not duplicated. Deleting an
-``Image`` row, however, calls ``image.image.delete()``, which removes that file from
-storage outright. Nothing checks whether another row still points at it.
-"""
+"""Deleting your own photo must not break it for people you shared it with."""
 
 from __future__ import annotations
 

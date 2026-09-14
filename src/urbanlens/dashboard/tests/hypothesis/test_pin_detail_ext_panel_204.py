@@ -1,21 +1,4 @@
-"""Regression tests for the Private Pin page's "external panel 204 removal" marker.
-
-A hardcoded JS Set of section ids (previously named `_extSections`) decided which
-auto-loading external-data cards got their "Loading..." placeholder removed when
-a fetch legitimately found nothing (204 No Content - HTMX does not swap on 204,
-so without this handling the placeholder is stuck forever). That Set had already
-drifted out of sync with the actual panels on the page - missing Azure Maps, GDELT
-(News), Photon, and (once added) EPA Site Details and Building Characteristics -
-so any of those returning 204 left a permanently-spinning card with no console
-error and no server-side error either, since the fetch itself succeeded.
-
-Replaced with a `data-ext-panel-204` attribute set directly on each qualifying
-card (including the generic simple_info_panels loop, so any future panel added
-there is covered automatically) and a JS handler keyed off that attribute instead
-of a hand-maintained id list. These tests just confirm every card that's supposed
-to carry the marker actually renders it - the JS 204/error/timeout handling itself
-isn't unit-testable here (no browser), matching this page's existing JS-only fixes.
-"""
+"""Regression tests for the Private Pin page's "external panel 204 removal" marker."""
 
 from __future__ import annotations
 
@@ -50,10 +33,9 @@ class ExtPanel204MarkerTests(TestCase):
     def test_bespoke_cards_carry_the_marker(self) -> None:
         """Cards with their own dedicated controller/route (not the generic simple_info_panels loop).
 
-        Nominatim is deliberately excluded here - it moved into the "Location
-        Data" tab strip (see LocationDataTabsTests) and is no longer a
-        standalone auto-loading card, so it no longer carries this marker.
-        """
+        Nominatim is deliberately excluded here - it moved into the "Location Data" tab strip (see
+        LocationDataTabsTests) and is no longer a standalone auto-loading card, so it no longer carries this
+        marker."""
         content = self._content()
         for section_id in (
             "wikipedia-section",
@@ -95,14 +77,10 @@ class ExtPanel204MarkerTests(TestCase):
         self.assertIn("data-ext-panel-204", content[max(0, idx - 200) : idx + 200])
 
     def test_generic_loop_panels_carry_the_marker(self) -> None:
-        """gdelt/epa_echo_detail - panels from the same bug report stuck on "Loading..."
-        forever - come from the same simple_info_panels loop, which now carries the
-        marker unconditionally.
+        """gdelt/epa_echo_detail - panels from the same bug report stuck on "Loading..." forever - come from the same simple_info_panels loop, which now carries the marker unconditionally.
 
-        photon/overture_building_attributes are deliberately excluded here - they
-        moved into the "Location Data" tab strip (see LocationDataTabsTests) and
-        are no longer part of simple_info_panels.
-        """
+        photon/overture_building_attributes are deliberately excluded here - they moved into the "Location Data"
+        tab strip (see LocationDataTabsTests) and are no longer part of simple_info_panels."""
         content = self._content()
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         panel_keys = [panel.key for panel in response.context["simple_info_panels"]]
@@ -143,13 +121,8 @@ class ExtPanel204MarkerTests(TestCase):
 class ExtPanel204StartsHiddenTests(TestCase):
     """Optional cards must not flash a header+spinner before their fetch resolves.
 
-    Every data-ext-panel-204 card used to render visibly (header + .view-loading)
-    from the very first paint, then either fill in or fly away on a 204 - so a
-    section that usually has nothing to show (most of them, most of the time)
-    flashed and vanished. Each such card's initial server-rendered markup must
-    now also carry `hidden`, so it never paints until its HTMX response (a real
-    200, revealing it) arrives; a 204 removes it exactly as before.
-    """
+    Each such card's initial server-rendered markup must now also carry `hidden`, so it never paints until its
+    HTMX response (a real 200, revealing it) arrives; a 204 removes it exactly as before."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -208,20 +181,11 @@ class ExtPanel204StartsHiddenTests(TestCase):
 
 
 class PendingPanelPlaceholderMarkerTests(TestCase):
-    """The self-polling "still fetching" placeholder (panel_pending.html) must carry
-    the same data-ext-panel-204 marker as the panel it stands in for.
+    """The self-polling "still fetching" placeholder (panel_pending.html) must carry the same data-ext-panel-204 marker as the panel it stands in for.
 
-    It didn't: the marker was applied to the section's initial (first-load)
-    render only, not to panel_pending.html's own outer div - so once a panel's
-    background fetch hadn't landed yet and the page swapped in this
-    self-polling placeholder via outerHTML, the marker was gone from that
-    point on. If the poll budget then ran out (MAX_POLL_ATTEMPTS) and the
-    server's final response was a 204, the page's 204-removal handler no
-    longer recognized the element (isExtPanel204 checks the attribute, which
-    no longer existed) and the "Loading..." placeholder never got removed -
-    only a full page reload (which reconstructs the section fresh, with the
-    marker) fixed it. This is the "stuck in a loading state" bug report.
-    """
+    It didn't: the marker was applied to the section's initial (first-load) render only, not to
+    panel_pending.html's own outer div - so once a panel's background fetch hadn't landed yet and the page
+    swapped in this self-polling placeholder via outerHTML, the marker was gone from that point on."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -255,13 +219,7 @@ class PendingPanelPlaceholderMarkerTests(TestCase):
 
 
 class ConsistentLoadingPlaceholderTests(TestCase):
-    """Every initial "Loading..." placeholder on the Private Pin page uses the same
-    small per-panel .view-loading spinner - a user reported the one at the very
-    top of the page (under the title, before #pin-overview's first hx-load swap)
-    as a jarring full-width gray bar, distinct from every other panel's spinner
-    because it used ad-hoc inline styles instead of the shared class. Several
-    other sections further down the page (Visit History, Categories, Aliases,
-    Custom Fields, Ownership, Markup Maps) had the identical anti-pattern."""
+    """Every initial "Loading..." placeholder on the Private Pin page uses the same small per-panel .view-loading spinner - a user reported the one at the very top of the page (under the title, before #pin-overview's first hx-load swap) as a jarring full-width gray bar, distinct from every other panel's spinner because it used ad-hoc inline styles instead of the shared class. Several other sections further down the page (Visit History, Categories, Aliases, Custom Fields, Ownership, Markup Maps) had the identical anti-pattern."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -286,10 +244,7 @@ class ConsistentLoadingPlaceholderTests(TestCase):
 
 
 class LocationDataTabsTests(TestCase):
-    """Nominatim, Photon, and Building Characteristics used to be
-    three separate standalone cards with no explanation of how they related to
-    one another - merged into one "Location Data" card with tabs (see
-    _pin_location_data_tabs.html and PinController.view's location_data_tabs)."""
+    """Nominatim, Photon, and Building Characteristics used to be three separate standalone cards with no explanation of how they related to one another - merged into one "Location Data" card with tabs (see _pin_location_data_tabs.html and PinController.view's location_data_tabs)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -315,9 +270,6 @@ class LocationDataTabsTests(TestCase):
         self.assertNotIn('id="nominatim-section"', content)
 
     def test_tab_204_handler_present_to_avoid_a_stuck_spinner(self) -> None:
-        """Regression guard: a tab button's hx-target is a shared body div, not
-        itself, so the generic data-ext-panel-204 handler (which just removes
-        the element carrying the marker) can't apply here - there must be a
-        dedicated handler keyed off .pin-plugin-tab-btn instead."""
+        """Regression guard: a tab button's hx-target is a shared body div, not itself, so the generic data-ext-panel-204 handler (which just removes the element carrying the marker) can't apply here - there must be a dedicated handler keyed off .pin-plugin-tab-btn instead."""
         content = self._content()
         self.assertIn("isPluginTabBtn", content)

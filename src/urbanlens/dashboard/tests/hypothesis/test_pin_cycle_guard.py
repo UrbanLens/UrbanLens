@@ -1,17 +1,4 @@
-"""Property-based tests for Pin.would_create_cycle.
-
-Pin.parent_pin allows pins to be nested to arbitrary depth (a detail pin may
-itself have detail pins). The only thing that must never happen is a loop in
-that chain (A -> B -> C -> A), since future code walks the chain assuming it
-terminates. Key invariants:
-
-1. A None parent never creates a cycle.
-2. A pin can never become its own parent.
-3. Making a pin the parent of its own ancestor closes a loop and is rejected.
-4. This holds at arbitrary chain depth, not just directly adjacent pins.
-5. Unrelated pins never register as a cycle.
-6. The check terminates even against data that already contains a corrupted cycle.
-"""
+"""Property-based tests for Pin.would_create_cycle."""
 
 from __future__ import annotations
 

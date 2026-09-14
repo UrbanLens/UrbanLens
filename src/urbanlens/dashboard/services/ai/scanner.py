@@ -1,16 +1,4 @@
-"""
-Prompt injection detection and sanitization for untrusted content passed to LLMs.
-
-Two entry points:
-    scan(text, source)     -> ScanResult with risk score, match list, and sanitized text
-    sanitize(text, source) -> str (clean version, shortcut for scan().sanitized)
-    wrap_user_data(text)   -> str wrapped in <USER_DATA> delimiters with escape attempts stripped
-
-Integrate at two levels:
-  - Gateway level: call scan() on every user prompt before it reaches the model.
-  - Construction level: call wrap_user_data() on each user-supplied field before
-    embedding it in the prompt, so the model knows to treat it as inert data.
-"""
+"""Prompt injection detection and sanitization for untrusted content passed to LLMs."""
 
 from __future__ import annotations
 
@@ -87,18 +75,14 @@ class ScanResult:
 
 
 def scan(text: str, source: str = "unknown") -> ScanResult:
-    """
-    Scan untrusted text for prompt injection patterns.
+    """Scan untrusted text for prompt injection patterns.
 
     Args:
         text: Content to check.
         source: Origin label used in log messages ("user", "web", or "unknown").
 
     Returns:
-        ScanResult with risk_score in [0, 1], match list, and pre-sanitized text.
-        When risk_score >= 0.3, sanitized replaces high-confidence matches with
-        [CONTENT FILTERED]; otherwise sanitized == original.
-    """
+        ScanResult with risk_score in [0, 1], match list, and pre-sanitized text."""
     if not text or not text.strip():
         return ScanResult(original=text, sanitized=text, is_suspicious=False, risk_score=0.0, source=source)
 
@@ -148,17 +132,13 @@ def sanitize(text: str, source: str = "unknown") -> str:
 
 def wrap_user_data(text: str) -> str:
     """Wrap user-supplied text in <USER_DATA> delimiters for the LLM context boundary.
-
-    Any pre-existing <USER_DATA> / </USER_DATA> tags in the input are stripped first
-    so that an attacker cannot escape the sandbox by injecting a closing tag.
+    Any pre-existing <USER_DATA> / </USER_DATA> tags in the input are stripped first so that an attacker cannot escape the sandbox by injecting a closing tag.
 
     Args:
         text: Raw user-supplied content (pin name, description, etc.).
 
     Returns:
-        Empty string if text is blank, otherwise the content wrapped in
-        <USER_DATA>...</USER_DATA> tags.
-    """
+        Empty string if text is blank, otherwise the content wrapped in <USER_DATA>...</USER_DATA> tags."""
     if not text or not text.strip():
         return ""
     neutralized = _ESCAPE_PATTERN.sub("", text).strip()

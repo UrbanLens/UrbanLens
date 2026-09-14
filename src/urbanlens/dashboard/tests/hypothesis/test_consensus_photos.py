@@ -1,13 +1,4 @@
-"""Tests for Consensus photo eligibility/capture (services.consensus.fields' PHOTO_COORDINATES strategy, services.consensus.photos).
-
-An Image only ever becomes a ``PHOTO_COORDINATES`` round candidate through
-``wiki.images`` - i.e. only once explicitly attached to that specific wiki
-(``Image.wiki`` set) - never merely because a player who can see the wiki
-also owns some other private photo. This is the same privacy invariant
-SpotGuessr's own photo selection enforces (a prior bug, fixed in commit
-``afc7ee8b``, leaked private pin photos into other players' game sessions
-when this gate was missing).
-"""
+"""Tests for Consensus photo eligibility/capture (services.consensus.fields' PHOTO_COORDINATES strategy, services.consensus.photos)."""
 
 from __future__ import annotations
 

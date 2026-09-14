@@ -1,11 +1,5 @@
 /**
- * Windowed photo grids: fetch further pages as the user scrolls, and drop
- * decoded image bytes for tiles that have left the viewport plus a buffer so
- * a large album or the Vault's full library stays usable on a phone.
- *
- * The album grid (default `itemSelector`/`imageSelector`/`renderTile`) and the
- * Vault gallery grid (its own markup - see vault-photo-grid.ts) share this one
- * scroll/fetch/prune engine rather than each growing its own copy.
+ * Windowed photo grids: fetch further pages as the user scrolls, and drop decoded image bytes for tiles that have left the viewport plus.
  */
 
 import { renderPhotoTile, tileFromJson, tileHasImage } from "./photo-tile";
@@ -60,7 +54,9 @@ function recycleGridImages(grid: HTMLElement, imageSelector: string): void {
 interface BindOptions {
     inAlbum: boolean;
     albumSlug?: string;
-    /** CSS selector for one loaded tile, used to count what's already in the DOM. Default: the album grid's. */
+    /**
+ * CSS selector for one loaded tile, used to count what's already in the DOM.
+ */
     itemSelector?: string;
     /**
      * CSS selector for a tile's `<img>`, used for off-screen pruning. Default:
@@ -100,19 +96,11 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     const renderTile = opts.renderTile ?? defaultRenderTile(opts);
     if (!itemsUrl || !total) return () => {};
 
-    // Recomputed from the DOM on every fetch, not tracked as running state:
-    // a caller can insert/remove tiles of its own between fetches (the Vault
-    // gallery's own upload/delete flows do), and a stale counter would then
-    // request the wrong offset - skipping some photos or re-fetching ones
-    // already on the page as visible duplicates.
+    // Recomputed from the DOM on every fetch, not tracked as running state.
     const currentLoaded = () => grid.querySelectorAll(itemSelector).length;
     if (currentLoaded() >= total) return () => {};
     let fetching = false;
-    // A caller can unbind mid-fetch (changing the sort re-fetches from
-    // scratch, which unbinds and rebinds this same grid element) - without
-    // this, a fetch already in flight resolves after the sentinel it captured
-    // has been removed from the DOM, and `insertBefore(fragment, sentinel)`
-    // throws because the reference node is no longer a child of `grid`.
+    // A caller can unbind mid-fetch (changing the sort re-fetches from scratch, which unbinds and rebinds this same grid element).
     let unbound = false;
     const abort = new AbortController();
 
@@ -170,10 +158,7 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     );
     observer.observe(sentinel);
 
-    // Coalesced into one frame: recycleGridImages reads a bounding rect per
-    // loaded tile - a forced synchronous layout each - and scroll fires far
-    // more often than the page paints. Once a few thousand tiles are in the
-    // DOM the uncoalesced version measured every one of them per event.
+    // Coalesced into one frame: recycleGridImages reads a bounding rect per loaded tile - a forced synchronous layout each.
     let recycleQueued = false;
     const onScroll = () => {
         if (recycleQueued) return;
@@ -183,11 +168,7 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
             if (!unbound) recycleGridImages(grid, imageSelector);
         });
     };
-    // A grid whose tiles have no <img> (Vault Documents: an icon and a
-    // filename) opts out with an explicit `imageSelector: null` and skips the
-    // listeners entirely, rather than scanning for a selector that can never
-    // match. Omitting the option keeps the default selector - album grids rely
-    // on that - so the opt-out has to be the explicit null, not a falsy check.
+    // A grid whose tiles have no <img> (Vault Documents: an icon and a filename) opts out with an explicit `imageSelector.
     const recycles = opts.imageSelector !== null;
     if (recycles) {
         window.addEventListener("scroll", onScroll, { passive: true });

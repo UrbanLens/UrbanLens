@@ -39,10 +39,9 @@ def _api_keys_section_response(request: HttpRequest, user: User, **extra: object
 class ApiKeySectionView(LoginRequiredMixin, View):
     """GET: the API Keys section on its own, for a pagination click.
 
-    The full settings page still renders this section inline - the list is a
-    handful of small queries, not something worth a second round trip - so this
-    exists for the pagination bar, which needs a stable URL of its own rather
-    than ``request.path``.
+    The full settings page still renders this section inline - the list is a handful of small queries,
+    not something worth a second round trip - so this exists for the pagination bar, which needs a
+    stable URL of its own rather than ``request.path``.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -77,9 +76,8 @@ class ApiKeyRevokeView(LoginRequiredMixin, View):
         if _is_htmx(request):
             return _api_keys_section_response(request, request.user)
         messages.success(request, "API key revoked.")
-        # The page the form was on, carried across the redirect the same way
-        # the htmx path carries it in the POST body - otherwise revoking from
-        # page two lands the user back on page one with no explanation.
+        # The page the form was on, carried across the redirect the same way the htmx path carries it in the
+        # POST body - otherwise revoking from page two lands the user back on page one with no explanation.
         page = request.POST.get(API_KEYS_PAGE_PARAM) or ""
         query = f"?{API_KEYS_PAGE_PARAM}={page}" if page else ""
         return redirect(f"{reverse('settings.view')}{query}#api-keys-settings-section")

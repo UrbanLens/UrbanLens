@@ -1,8 +1,4 @@
-"""AI link-extraction views - start a run from the pin page, review past runs.
-
-The review page is deliberately not linked anywhere in the site's navigation
-(per the feature request); users reach it through the completion notification.
-"""
+"""AI link-extraction views."""
 
 from __future__ import annotations
 
@@ -30,7 +26,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Review page cap - plenty for a per-user history at <=~20 runs/day.
+#: Review page cap (<=~20 runs/day).
 _REVIEW_PAGE_LIMIT = 100
 
 

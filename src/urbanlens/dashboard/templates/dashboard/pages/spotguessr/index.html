@@ -30,11 +30,7 @@
 
     <div class="ul-game-shell" id="sg-shell" data-game-shell>
 
-        {% comment %}
-        Every live-state element the TypeScript writes to lives here, not in the
-        panels - one bar that stays put while panels swap underneath it. The
-        shell only renders it while a playing panel is showing.
-        {% endcomment %}
+        {% comment %}Every live-state element the TypeScript writes to lives here, not in the panels.{% endcomment %}
         <header class="ul-game-hud" data-game-hud>
             <div class="ul-game-hud__group ul-game-hud__group--lead">
                 <span class="ul-game-hud__identity">
@@ -178,17 +174,10 @@
             </section>
         </div>
 
-        {% comment %}
-        The dialog and the score-card template live inside .ul-game-shell so they
-        stay painted when the shell is promoted to the fullscreen top layer.
-        {% endcomment %}
+        {% comment %}The dialog and the score-card template live inside.ul-game-shell so they stay painted when the shell is promoted to the fullscreen.{% endcomment %}
         {% include "dashboard/pages/spotguessr/_settings_dialog.html" %}
 
-        {% comment %}
-        Cloned by renderScoreCard() (spotguessr.ts) for every row in the reveal
-        results list, live scoreboard, and summary panel - one canonical markup
-        definition instead of three separate bare-text builders.
-        {% endcomment %}
+        {% comment %}Cloned by renderScoreCard() (spotguessr.ts) for every row in the reveal results list, live scoreboard, and summary panel.{% endcomment %}
         <template id="sg-score-card-template">
             <li class="spotguessr-score-card">
                 <span class="spotguessr-score-card-rank"></span>

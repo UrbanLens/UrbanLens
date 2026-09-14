@@ -1,24 +1,8 @@
 #!/usr/bin/env bash
-#
 # Make Playwright's chromium runnable on a host with no root.
-#
-# Chromium needs a handful of GTK/ATK/ALSA shared libraries that a headless
-# server image does not ship, and installing them is `apt-get install`, which
-# needs a password this environment does not have. But *downloading* a package
-# does not: `apt-get download` writes to the current directory as an ordinary
-# user, and `dpkg-deb -x` unpacks it anywhere. Point LD_LIBRARY_PATH at the
-# result and the browser starts.
-#
-# Without this, `bun run test:browser` reports every gesture test as failing to
-# launch, and the floorplan editor's drag behaviour goes unverified - which is
-# exactly the part of it that cannot be covered any other way.
-#
 # Usage:
 #   bin/browser_libs.sh                      # fetch and unpack, once per machine
 #   eval "$(bin/browser_libs.sh --env)"      # print the export for this shell
-#
-# The test file sets LD_LIBRARY_PATH itself from the same location, so running
-# it needs nothing beyond having run this script once.
 
 set -euo pipefail
 

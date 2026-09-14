@@ -1,30 +1,4 @@
-"""Two more columns reachable from a request with nothing enforcing their width.
-
-Carried from the chunk-559 sweep, which found these but had not driven them:
-
-- ``Image.caption`` is ``CharField(500)`` and six write paths take it straight
-  from a request - a safety check-in photo, two pin media paths, wiki media,
-  albums, and map overlays (which stores the submitted *name* as the caption).
-  The chunk-559 scan reported only one of the six, because the others reach the
-  column through a service call rather than a visible ``Image.objects.create``.
-
-- ``SiteSettings.default_name_source_priority`` is ``CharField(500)`` built by
-  comma-joining submitted slugs. Each token is filtered by
-  ``re.fullmatch(r"[a-z0-9_-]+", slug)``, which constrains the *characters* and
-  not the length: one long token, or enough short ones, overflows the column.
-
-Both are ``DataError`` 500s. Captions get a 400 rather than truncation for the
-same reason names do - the user wrote the words and should be told, not have
-them silently clipped.
-
-An earlier version of this file said the map-overlay path could not be driven
-because "it fetches a remote image first, which the test network guard refuses".
-That is true of `_image_from_request`'s `media_url`/`image_url` branches and not
-of its **direct-upload** branch, which takes `request.FILES["image"]` and
-`request.POST["name"]` straight to `services.photos.photo_upload.upload_photo` -
-a plain multipart POST with no network call, exactly like the safety-checkin path
-above it. `MapOverlayCaptionLengthTests` drives it (P57).
-"""
+"""Two more columns reachable from a request with nothing enforcing their width."""
 
 from __future__ import annotations
 
@@ -124,12 +98,8 @@ class SafetyPhotoCaptionLengthTests(TestCase):
 class MapOverlayCaptionLengthTests(TestCase):
     """The overlay's submitted *name* becomes the Image caption, and is bounded.
 
-    `_image_from_request`'s upload branch hands `request.POST["name"]` to
-    `upload_photo` as the caption, and that service checks the column width
-    (`photo_upload.py:142`) before anything reaches the database. No remote fetch
-    is involved, so the network guard is irrelevant here - see this module's
-    docstring for the claim that said otherwise.
-    """
+    `_image_from_request`'s upload branch hands `request.POST["name"]` to `upload_photo` as the caption, and
+    that service checks the column width (`photo_upload.py:142`) before anything reaches the database."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -148,12 +118,8 @@ class MapOverlayCaptionLengthTests(TestCase):
     def test_an_overlong_overlay_name_is_refused(self) -> None:
         """Refused as a rendered error, not a status code.
 
-        `fail()` answers 400 only for the JSON caller (the lightbox's "use as
-        floorplan overlay"); the HTMX dialog gets 200 with the message swapped
-        into the list partial. So the assertion carrying the meaning is that
-        nothing was stored - asserting only on the status would have called this
-        broken when it is not, which is what a first draft of this test did.
-        """
+        `fail()` answers 400 only for the JSON caller (the lightbox's "use as floorplan overlay"); the HTMX
+        dialog gets 200 with the message swapped into the list partial."""
         oversized = "o" * (column_max_length(Image, "caption") + 1)
 
         response = self._post(oversized)

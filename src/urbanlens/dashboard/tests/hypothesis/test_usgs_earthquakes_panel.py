@@ -1,9 +1,4 @@
-"""Tests for the USGS Earthquake Hazards panel's fetch(), gate(), and event-type filtering.
-
-Now sourced through REData's ``/hazards/`` endpoint instead of a direct USGS
-FDSN call - that endpoint is shared across hazard kinds, so fetch() filters
-down to earthquakes for this specifically-seismic panel.
-"""
+"""Tests for the USGS Earthquake Hazards panel's fetch(), gate(), and event-type filtering."""
 
 from __future__ import annotations
 

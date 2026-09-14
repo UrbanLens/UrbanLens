@@ -1,22 +1,4 @@
-"""What a wiki co-editor can and cannot see of somebody else's pin.
-
-A wiki is shared by everyone with a pin at its place, so "another user with wiki
-access" is not an attacker - it is the ordinary situation, and it is the one in
-which private pin data is most likely to be exposed by accident. Two defects of
-exactly that shape were found and fixed while this file was being written:
-uploading to your own pin published the photo to the location's wiki, and photo
-search returned other people's photos along with the *name of the pin* they
-belong to.
-
-Each test drives the app's own entry point - the view, or the exact queryset a
-view uses - rather than asserting on the model layer. A rule enforced in a
-queryset nobody calls protects nobody.
-
-The suite deliberately carries positive controls: for every "the neighbour must
-not see this" there is a "and the owner still can", or "and a deliberately shared
-one still appears". Without them the whole file could pass by breaking the
-feature it guards.
-"""
+"""What a wiki co-editor can and cannot see of somebody else's pin."""
 
 from __future__ import annotations
 
@@ -69,21 +51,14 @@ class WikiNeighbourTestCase(TestCase):
     def _processed(self, image: Image, **fields) -> Image:
         """Finish a fixture upload the way ``tasks.process_image_upload`` would.
 
-        A fresh upload is stored raw and gated to its uploader until that task
-        runs (see ``Image.pending_scan``). This file is about the *sharing*
-        gate, so leaving it pending would make every negative assertion here
-        pass for the wrong reason - a photo invisible because it is unprocessed,
-        not because it was never shared - which is exactly the vacuous shape the
-        positive controls in this module exist to catch. Set directly rather
-        than by running the task: a real Pillow decode per fixture buys nothing.
+        A fresh upload is stored raw and gated to its uploader until that task runs (see
+        ``Image.pending_scan``).
 
         Args:
-            image: The freshly uploaded row.
-            **fields: Any other columns to stamp in the same write.
+            image: The freshly uploaded row. **fields: Any other columns to stamp in the same write.
 
         Returns:
-            The same row, re-read.
-        """
+            The same row, re-read."""
         Image.objects.filter(pk=image.pk).update(pending_scan=False, **fields)
         image.refresh_from_db()
         return image
@@ -219,11 +194,7 @@ class PrivatePhotoBytesTests(WikiNeighbourTestCase):
     def test_an_unshared_pin_photo_is_refused_whatever_the_setting_says(self) -> None:
         """A photo on your pin is your record of a place, not a publication.
 
-        `photo_upload_visibility` decides who may see a photo you have *shared*.
-        It used to decide who may see an unshared one too, and its default
-        (`ANYTHING_IN_COMMON`) accepts `common_pin` - so pinning the same place
-        as somebody was enough to read their pin photos.
-        """
+        `photo_upload_visibility` decides who may see a photo you have *shared*."""
         private = self._private_photo()
         self._as_neighbour()
 

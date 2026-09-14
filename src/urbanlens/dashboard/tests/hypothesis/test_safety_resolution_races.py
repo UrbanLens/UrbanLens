@@ -1,17 +1,4 @@
-"""A check-in resolved mid-sweep must not be dragged back into the escalation path.
-
-The three safety beat tasks fetch their rows, then spend real time per row -
-rendering and sending email, one contact at a time. The owner checking in during
-that window is not an exotic race: the reminder sweep runs precisely when the
-check-in is due, which is exactly when owners act.
-
-``_resolve_as_found_safe`` already guards its transition with a conditional
-UPDATE. The sweep-driven transitions wrote ``status`` straight from their
-in-memory instance, so a resolved row could be pushed back to
-``AWAITING_CHECKIN`` - and ``SafetyCheckin.objects.overdue()`` selects on
-exactly that status, so the next tick would call every emergency contact for
-someone who had already checked in.
-"""
+"""A check-in resolved mid-sweep must not be dragged back into the escalation path."""
 
 from __future__ import annotations
 
@@ -119,11 +106,8 @@ class CheckinResolvedMidSweepTests(_CheckinRaceTestCase):
 class StaleInstanceResolutionTests(_CheckinRaceTestCase):
     """``check_in``/``cancel_checkin`` must not clobber a resolution that landed first.
 
-    Both used to write ``status``/``resolved_at``/``resolved_by_label`` straight
-    from their (possibly stale) in-memory instance. A contact marking the owner
-    safe in the same moment would have their resolution overwritten and every
-    side effect (broadcast, conclusion, archival scheduling) run twice.
-    """
+    A contact marking the owner safe in the same moment would have their resolution overwritten and every side
+    effect (broadcast, conclusion, archival scheduling) run twice."""
 
     def _resolve_behind_the_scenes(self, checkin: SafetyCheckin) -> None:
         """Resolve the DB row directly, bypassing the in-memory instance."""

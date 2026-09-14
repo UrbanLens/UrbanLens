@@ -4,7 +4,7 @@ import logging
 
 
 class HealthCheckAccessLogFilter(logging.Filter):
-    """Silences the ASGI access log line for the health check endpoint.
+    """Drop ASGI access log lines for the health endpoint.
 
     Args:
         record: The log record to evaluate.

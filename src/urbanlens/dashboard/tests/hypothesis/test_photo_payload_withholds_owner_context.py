@@ -1,16 +1,4 @@
-"""A photo somebody may see does not come with the bookkeeping around it.
-
-`build_photo_payload` is the one place the external API turns an Image into JSON,
-and it already withholds the owner-only parts: which pin the photo is filed
-under, which visit it belongs to, whether its owner has dismissed it from
-organising. Those are correct today, and this file exists so they stay that way -
-adding a field to a payload is the easiest possible change to make, and the
-hardest to notice is one that carries private context along with a public
-picture.
-
-The distinction the payload draws is the useful one: a photo can be visible
-through a pin gallery while the *fact that it is filed under that pin* is not.
-"""
+"""A photo somebody may see does not come with the bookkeeping around it."""
 
 from __future__ import annotations
 

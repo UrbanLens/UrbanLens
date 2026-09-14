@@ -1,11 +1,8 @@
 """How an album's photos are ordered.
 
-``Album.sort`` names the method; adding a method is a one-place change here.
-Date and name sorts are live queries over photo metadata, so a later upload or
-a caption/EXIF edit moves that photo without rewriting anyone else's
-``AlbumItem.order``. Custom order is the exception: ``order`` stays null until
-the user drags, at which point every current item is numbered and later
-uploads (still null) sort after the numbered ones.
+Date and name sorts are live queries over photo metadata, so a later upload or caption edit
+moves that photo without rewriting ``AlbumItem.order``. Custom order is the exception: ``order``
+stays null until the user drags.
 """
 
 from __future__ import annotations
@@ -51,10 +48,8 @@ class AlbumSortSpec:
     def apply[QS: QuerySet](self, queryset: QS) -> QS:
         """Return *queryset* ordered by this method.
 
-        Generic over the queryset's own type (rather than the plain
-        ``QuerySet`` base) so a caller chaining a custom queryset's own
-        methods after this one - e.g. ``AlbumItemQuerySet.in_display_order``
-        - doesn't lose that type.
+        Generic over the queryset's own type so chaining a custom queryset's own methods
+        after this one keeps that type.
 
         Args:
             queryset: ``AlbumItem`` rows, typically already scoped to one album.

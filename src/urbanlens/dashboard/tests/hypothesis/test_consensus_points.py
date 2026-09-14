@@ -1,9 +1,4 @@
-"""Tests for the Consensus leveling formula (services.consensus.points).
-
-Pure math, no DB - see points_required_for_level's docstring for the
-curve's shape rationale (logarithmic cost-density, never free, never
-unreachable).
-"""
+"""Tests for the Consensus leveling formula (services.consensus.points)."""
 
 from __future__ import annotations
 
@@ -75,12 +70,7 @@ class LevelForPointsTests(SimpleTestCase):
 
 
 class PointsForChangesTests(SimpleTestCase):
-    """Weighting one edit's diff, and the ceiling that keeps it in its place.
-
-    The award used to be a flat 3 per edit, so a one-word alias earned what a
-    rewritten description did, and a dialog submit touching every field earned
-    3 per field with no ceiling.
-    """
+    """Weighting one edit's diff, and the ceiling that keeps it in its place."""
 
     def test_an_empty_diff_earns_nothing(self) -> None:
         self.assertEqual(points_for_changes({}), 0)
@@ -116,9 +106,6 @@ class PointsForChangesTests(SimpleTestCase):
     def test_the_cap_stays_below_an_in_game_answer(self) -> None:
         """The stated intent of the award, asserted rather than only commented.
 
-        ``points.py`` says the out-of-game wiki edit is "deliberately worth less
-        than any in-game path so playing the game is still the primary way to
-        rack up points". A retune that lifts the cap past a solo answer would
-        invert that silently.
-        """
+        ``points.py`` says the out-of-game wiki edit is "deliberately worth less than any in-game path so
+        playing the game is still the primary way to rack up points"."""
         self.assertLess(MANUAL_EDIT_POINTS_CAP, SOLO_ANSWER_POINTS)

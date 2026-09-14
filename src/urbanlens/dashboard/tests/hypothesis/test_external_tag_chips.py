@@ -1,10 +1,4 @@
-"""Tests for _external_tag_chips.html - the read-only external-tag chip partial.
-
-Mirrors test_wiki_about_card.py's render_to_string approach. The negative
-assertions (no remove button, no HTMX form) guard against ever accidentally
-merging in _label_chips.html's editable membership-widget behavior - this
-partial renders provider data a user cannot edit.
-"""
+"""Tests for _external_tag_chips.html - the read-only external-tag chip partial."""
 
 from __future__ import annotations
 

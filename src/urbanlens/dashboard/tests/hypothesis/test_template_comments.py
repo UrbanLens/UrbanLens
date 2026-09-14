@@ -4,10 +4,6 @@ Django's single-line comment form is ``{# ... #}``. An opener that does not
 meet ``#}`` before the newline is not a comment - the tokens go out as text and
 the visitor sees them. ``{% comment %}`` is the supported multi-line form, and
 a ``{#`` inside one is not rendered, so the check must leave those alone.
-
-The regex this used to be (``{#[^}]*$``) both misses (``{{ var }}`` inside an
-unclosed comment contains ``}``) and over-matches. The property is about
-``{#`` / ``#}`` pairing per line, not about ``}``.
 """
 
 from __future__ import annotations

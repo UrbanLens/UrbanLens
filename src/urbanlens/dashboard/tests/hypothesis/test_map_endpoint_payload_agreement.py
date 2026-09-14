@@ -1,20 +1,4 @@
-"""Every endpoint that hands the map a pin must hand it the same shape.
-
-Three endpoints feed the same client-side `_pinStore` and the same versioned
-localStorage cache: `map.pins` (the bulk fetch), `map.pin.json` (the targeted
-refresh after an edit) and `map.search` (the filter panel). Only the first
-returned `MapPinPayloadService`'s payload as-is; the other two went through
-`map_data_context`, which rewrote it - tags collapsed to a comma-separated string
-with the objects moved to a `tags_data` key, categories to a string, dates
-reformatted, status capitalized.
-
-Nothing failed when they disagreed, because each was self-consistent. The
-damage showed up on the client, which reads `tags_data` for the edit dialog's
-label pre-fill and for client-side label filtering: a pin loaded in bulk has no
-such key, so its labels read as empty, while the same pin re-fetched after an
-edit has them. Two shapes in one store, and the cache persisted whichever
-arrived last.
-"""
+"""Every endpoint that hands the map a pin must hand it the same shape."""
 
 from __future__ import annotations
 

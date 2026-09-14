@@ -13,12 +13,7 @@ class _MessagePrefixMixin:
     Shared message-prefixing behavior for our custom TestCase/SimpleTestCase variants.
     """
 
-    # Deprecated, in favor of fn. Named with a leading underscore (unlike a
-    # plain "target"/"method_name") because those are exactly the attribute
-    # names test subclasses reach for on their own domain objects (see e.g.
-    # ProfileDetailVisibilityTests.target, a Profile) - an un-prefixed name
-    # here shadowed those, forcing mypy to widen every such attribute to
-    # "type | None" and flag every subsequent access as a union-attr error.
+    # Deprecated, in favor of fn.
     _message_target: type | None = None
     # Deprecated, in favor of fn
     _message_method_name: str | None = None
@@ -104,20 +99,18 @@ class _MessagePrefixMixin:
 class _CacheIsolationMixin:
     """Start every test with an empty cache.
 
-    Django rolls the database back between tests; it does not roll the cache
-    back. Those two facts interact badly, because rollback *reuses primary
-    keys*: a test that warms a cache entry keyed on a model's pk (the panel
-    system's ``ulfetch:ready:<source>:loc<id>`` markers, for one) leaves it
-    behind for the next test, whose freshly-created row is handed the same pk
-    and therefore finds a cache someone else warmed.
+    Django rolls the database back between tests; it does not roll the cache back. Those two facts
+    interact badly, because rollback *reuses primary keys*: a test that warms a cache entry keyed
+    on a model's pk (the panel system's ``ulfetch:ready:<source>:loc<id>`` markers, for one) leaves
+    it behind for the next test, whose freshly-created row is handed the same pk and therefore
+    finds a cache someone else warmed.
 
-    The failure is order-dependent, so it shows up as a test that passes alone
-    and fails in a suite - and points at whichever test happened to run first
-    rather than at itself.
+    The failure is order-dependent, so it shows up as a test that passes alone and fails in a
+    suite - and points at whichever test happened to run first rather than at itself.
 
-    The request-scoped ``SiteSettings`` memo is reset for the same reason: a
-    response the test client never finished sends no ``request_finished``, which
-    leaves the memo holding a row a rolled-back test created.
+    The request-scoped ``SiteSettings`` memo is reset for the same reason: a response the test
+    client never finished sends no ``request_finished``, leaving the memo holding a row a
+    rolled-back test created.
     """
 
     def setUp(self) -> None:

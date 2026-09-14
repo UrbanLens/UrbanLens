@@ -1,13 +1,4 @@
-"""Tests for the wiki extras added in the P2 parity pass: boundary, cover photo,
-alias nickname toggle, ownership/sale history, and article-revision hard-delete.
-
-Every endpoint here inherits the same anti-enumeration invariant as the rest
-of the wiki surface (``services.wiki.wiki_access.resolve_visible_wiki``): a wiki
-the caller has not earned access to is a 404, never a 403. That exhaustive
-property is covered once, for the whole surface, by
-``test_external_api_wiki_oracle.py``; these tests check each endpoint's own
-behavior instead of re-proving the shared gate.
-"""
+"""Tests for the wiki extras added in the P2 parity pass: boundary, cover photo, alias nickname toggle, ownership/sale history, and article-revision hard-delete."""
 
 from __future__ import annotations
 

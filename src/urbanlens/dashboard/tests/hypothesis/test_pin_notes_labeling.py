@@ -1,13 +1,4 @@
-"""Tests for the pin-comments panel's "Notes" wording (UL prompt: rename the
-Comments subnav to Notes on the Private Pin page).
-
-A pin's comments are private to its owner - there's no one else to converse
-with - so "Comments" implied a shared discussion that doesn't exist there.
-Wiki (and trip) comments are genuinely shared between users and must keep the
-"Comments" label; both render through the same comment_panel.html/Comment
-model, distinguished only by ``context_type``, so these tests also guard
-against the pin-only wording leaking into the shared-comments contexts.
-"""
+"""Tests for the pin-comments panel's "Notes" wording (UL prompt: rename the Comments subnav to Notes on the Private Pin page)."""
 
 from __future__ import annotations
 

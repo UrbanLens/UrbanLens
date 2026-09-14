@@ -1,18 +1,4 @@
-"""What the parcel record already knew about where you would be standing.
-
-REData resolves four Census Special Land Use Area categories on every parcel
-fetch - national park, correctional facility, college/university, military
-installation - by point-in-polygon against TIGERweb's own layer, and UrbanLens
-cached the answer and rendered none of it. Alongside it sat `flood_zone_code`
-and `deed_document_links`, fetched and equally unread.
-
-For this application the land-use categories are not another attribute of the
-property. Two of them describe ground where being present is a different
-statute rather than a trespass question, and the record had already said so.
-These tests pin that the panel says it too, and says it prominently - in the
-chips, before the tax and valuation detail, not buried at the end of a
-definition list.
-"""
+"""What the parcel record already knew about where you would be standing."""
 
 from __future__ import annotations
 
@@ -54,10 +40,8 @@ class SpecialLandUseRowTests(SimpleTestCase):
     def test_an_unnamed_area_still_produces_a_row(self) -> None:
         """*That* you are inside one matters whether or not the layer names it.
 
-        TIGERweb rows are confirmed to omit fields per category, so a missing
-        name is expected data, not corruption - and dropping the row would turn
-        "inside a correctional facility" into silence.
-        """
+        TIGERweb rows are confirmed to omit fields per category, so a missing name is expected data, not
+        corruption - and dropping the row would turn "inside a correctional facility" into silence."""
         rows = special_land_use_rows({"correctional_facility": {"geoid": "9"}})
 
         self.assertEqual(

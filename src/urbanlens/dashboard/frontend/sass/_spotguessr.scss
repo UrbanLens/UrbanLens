@@ -1,10 +1,6 @@
 // SpotGuessr gameplay, multiplayer lobby, and chat (UL-391..UL-393).
 //
-// Layout, chrome, motion and the shared component look all come from
-// _game_shell.scss - the rules here only bind that look onto SpotGuessr's own
-// class names (which the TypeScript reads and writes verbatim) and add what is
-// genuinely specific to this game: the three mode cards, the settings dialog,
-// and the area-restriction controls.
+// Layout, chrome, motion and the shared component look all come from _game_shell.scss.
 @use 'variables' as *;
 @use 'game_shell' as shell;
 
@@ -23,9 +19,7 @@
     }
 }
 
-// The play panel only names a `rail` grid area while the drawer is open. Without
-// this the closed rail would be auto-placed into an implicit row under the stage
-// on wide screens (below md it is an out-of-flow drawer, so it is unaffected).
+// The play panel only names a `rail` grid area while the drawer is open.
 @include up($breakpoint-md) {
     .spotguessr-page .ul-game-panel--play > .ul-game-rail {
         display: none;
@@ -293,13 +287,7 @@
     width: 100%;
 }
 
-// Escape hatch shown over the interactive Street View panorama - see
-// showStreetViewFallback() in spotguessr.ts. A definitive client-side
-// OK/not-OK signal (google.maps.StreetViewService) already swaps to the
-// static fallback image automatically; this button covers the cases that
-// signal can't catch (e.g. a key/referrer restriction that still resolves a
-// pano id but renders degraded), so it stays available rather than the game
-// trying to detect that too.
+// Escape hatch shown over the interactive Street View panorama - see showStreetViewFallback() in spotguessr.ts.
 #sg-street-view-fallback-btn {
     position: absolute;
     right: $space-sm;
@@ -326,9 +314,7 @@
 
 // -- Reveal ----------------------------------------------------------------------
 
-// The big animated point counter on reveal (animateCountUp() in spotguessr.ts
-// ticks #sg-reveal-points-value up from 0) - the headline number of the
-// "reward loop" moment; the distance/bonus breakdown stays in #sg-reveal-detail.
+// The big animated point counter on reveal (animateCountUp() in spotguessr.ts ticks #sg-reveal-points-value up from 0).
 .spotguessr-reveal-points {
     display: flex;
     align-items: baseline;
@@ -349,9 +335,7 @@
     letter-spacing: .04em;
 }
 
-// Per-round Glicko-2 rating change, shown alongside points/distance on reveal
-// (services.spotguessr.ratings.RatingChange, serialized as reveal.rating_delta) -
-// see updateRatingDeltaDisplay() in spotguessr.ts, which reassigns className.
+// Per-round Glicko-2 rating change, shown alongside points/distance on reveal.
 .spotguessr-rating-delta {
     @include shell.delta;
     margin: 0;
@@ -477,9 +461,7 @@
     font-variant-numeric: tabular-nums;
 }
 
-// Optional per-card rating-delta chip (reveal results and the summary recap both
-// populate it - the live scoreboard doesn't, so it stays empty and collapsed via
-// :empty there). renderScoreCard() reassigns this element's className.
+// Optional per-card rating-delta chip.
 .spotguessr-score-card-rating-delta {
     @include shell.delta;
     font-size: .75rem;

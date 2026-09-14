@@ -1,12 +1,4 @@
-/**
- * A pin's detail page.
- *
- * The busiest page in the application: it resolves boundaries, asks REData
- * about the parcel, looks for a wiki, loads enrichment panels contributed by
- * plugins, and renders its own map. That makes it the single best page to point
- * an integration run at, because almost every dependent service is reachable
- * from it - and the single most likely place for one of them to fail quietly.
- */
+/** A pin's detail page. The busiest page in the application: it resolves boundaries, asks REData about the parcel, looks for a wiki, loads enrichment panels contributed by plugins, and renders its own map. */
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
@@ -41,12 +33,7 @@ export class PinDetailPage {
         return this.page.locator(`.ul-subnav-tab[data-tab="${name}"]`);
     }
 
-    /**
-     * Switches to `name` and waits for its panel to become the active one.
-     *
-     * Tab switching is client-side (`page-tabs.js`), so there is no navigation
-     * or HTMX exchange to wait on - only the class change.
-     */
+    /** Switches to `name` and waits for its panel to become the active one. Tab switching is client-side (`page-tabs.js`), so there is no navigation or HTMX exchange to wait on - only the class change. */
     async openTab(name: PinTab): Promise<void> {
         const button = this.tab(name);
         await button.click();

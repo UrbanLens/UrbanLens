@@ -59,10 +59,10 @@ class PasskeyRegisterOptionsView(LoginRequiredMixin, View):
 class PasskeyRegisterView(LoginRequiredMixin, View):
     """POST: verify a completed registration ceremony and save the new passkey.
 
-    ``purpose=unlock`` saves the credential with ``is_login_factor=False``:
-    it can wrap the account's E2EE key (see ``E2EEPasskeyWrapView``) but never
-    routes the account through a 2FA challenge at sign-in. Anything else (the
-    default) is a normal second-factor passkey.
+    ``purpose=unlock`` saves the credential with ``is_login_factor=False``: it can wrap the account's
+    E2EE key (see ``E2EEPasskeyWrapView``) but never routes the account through a 2FA challenge at
+    sign-in.
+    Anything else (the default) is a normal second-factor passkey.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -88,10 +88,9 @@ class PasskeyRegisterView(LoginRequiredMixin, View):
         except WebAuthnError as exc:
             logger.info("passkey registration rejected: %s", exc)
             return JsonResponse({"error": "That passkey could not be registered."}, status=400)
-        # The id lets an unlock enrollment undo itself: whether the authenticator
-        # really supports PRF is only knowable client-side, after this call, and
-        # an unlock-only credential that cannot wrap anything is dead weight -
-        # it is not a login factor either.
+        # The id lets an unlock enrollment undo itself: whether the authenticator really supports PRF is only
+        # knowable client-side, after this call, and an unlock-only credential that cannot wrap anything is dead
+        # weight - it is not a login factor either.
         return JsonResponse({"ok": True, "name": credential.name, "id": credential.pk}, status=201)
 
 

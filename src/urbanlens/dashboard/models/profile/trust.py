@@ -14,8 +14,7 @@ from urbanlens.dashboard.models.profile.queryset import ProfileTrustManager
 class ProfileTrust(abstract.DashboardModel):
     """A private 1-5 star trust rating one user keeps about another user's profile.
 
-    Only the *author* can see their own rating; the *subject* profile owner
-    cannot.  Each author may hold at most one trust rating per subject.
+    Visible only to the author; the subject cannot see it.
     """
 
     rating = IntegerField(

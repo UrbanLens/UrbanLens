@@ -1,18 +1,4 @@
-"""DB-backed tests for map-based pin-share detection and "Add to my maps".
-
-Covers:
-- detect_shared_pins - zoomed-in (viewport-only) vs zoomed-out (markup-gated)
-  matching, scoped to the sender's own root pins.
-- share_markup_map_with_profile / _record_detected_share - creates DETECTED
-  PinShare rows, deduplicated per (pin, recipient), reusing the same
-  parent_share chain rule as explicit shares.
-- PinShare.chain_share_count / MemoriesSharingView pick up detected shares
-  transparently.
-- clone_markup_map / MarkupMapCloneView - "Add to my maps" clone + visibility
-  gating.
-- MarkupMapShareCreateView - friends-only standalone map sharing.
-- PinShareCreateView - optional map attachment validation.
-"""
+"""DB-backed tests for map-based pin-share detection and "Add to my maps"."""
 
 from __future__ import annotations
 
@@ -90,12 +76,8 @@ class DetectSharedPinsTests(_MapShareTestCase):
     def test_zoomed_in_excludes_an_in_frame_pin_the_map_is_not_aimed_at(self) -> None:
         """Being on screen is not being shared.
 
-        A snapshot carries the viewport and the drawn shapes - never the
-        sender's pins - so a recipient cannot learn about a pin the sender
-        neither centred on nor drew anything near. Whole-frame containment
-        recorded a share for every pin across roughly 9 x 7 km at the default
-        threshold zoom, which then surfaced on the recipient's Sharing page.
-        """
+        A snapshot carries the viewport and the drawn shapes - never the sender's pins - so a recipient cannot
+        learn about a pin the sender neither centred on nor drew anything near."""
         off_centre = baker.make(Location, latitude=f"{_LAT + 0.004:.6f}", longitude=f"{_LNG:.6f}")
         bystander = Pin.objects.create(profile=self.profiles["a"], location=off_centre)
         markup_map = self._map(zoom=16)
@@ -180,12 +162,10 @@ class DetectSharedPinsTests(_MapShareTestCase):
 class ArrowTailDegeneracyTests(SimpleTestCase):
     """An arrow whose tail sits on the target points nowhere in particular.
 
-    ``bearing_degrees`` from a point to itself is not merely arbitrary, it is
-    unstable: a pin's boundary centroid lands ~1e-14 degrees off the tail
-    through ordinary float error, which used to yield a confident angle that
-    fell inside the 35-degree tolerance often enough to record DETECTED shares
-    of pins the sender never called out.
-    """
+    ``bearing_degrees`` from a point to itself is not merely arbitrary, it is unstable: a pin's boundary
+    centroid lands ~1e-14 degrees off the tail through ordinary float error, which used to yield a confident
+    angle that fell inside the 35-degree tolerance often enough to record DETECTED shares of pins the sender
+    never called out."""
 
     @staticmethod
     def _arrow(coordinates: list[list[float]]) -> PinMarkup:

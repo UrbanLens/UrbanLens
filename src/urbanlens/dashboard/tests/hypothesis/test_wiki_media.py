@@ -1,16 +1,4 @@
-"""Tests for the wiki Media gallery: vote aggregation, voting endpoint, and the
-per-source provider view (controllers/wiki_media.py + MediaRelevanceQuerySet).
-
-The wiki reuses the Location-scoped ``MediaRelevance`` model as a community
-vote store, so these cover the three behaviors that make that work without a
-schema change:
-
-* ``vote_scores`` aggregates every profile's marks into a net score (up - down).
-* A pin-detail relevance mark already counts toward the wiki score (carry-over),
-  because the model is keyed by Location, not Pin.
-* External media renders straight from the shared ``LocationCache``; only
-  photos intentionally shared to the wiki (``Image.wiki``) show under "photos".
-"""
+"""Tests for the wiki Media gallery: vote aggregation, voting endpoint, and the per-source provider view (controllers/wiki_media.py + MediaRelevanceQuerySet)."""
 
 from __future__ import annotations
 
@@ -279,10 +267,7 @@ class WikiMediaVoteViewTests(TestCase):
         queue_vote.assert_not_called()
 
     def test_voting_with_a_pin_owned_image_id_at_the_same_location_is_ignored(self) -> None:
-        """A photo that was only ever uploaded to a Pin (never sent to the
-        wiki) must not be votable through the wiki just because it shares the
-        wiki's Location - the lookup has to scope to the wiki's own attached
-        media, not merely to the location."""
+        """A photo that was only ever uploaded to a Pin (never sent to the wiki) must not be votable through the wiki just because it shares the wiki's Location - the lookup has to scope to the wiki's own attached media, not merely to the location."""
         pin_only_image = Image.objects.create(
             image=SimpleUploadedFile("pin-only.jpg", b"y", content_type="image/jpeg"),
             location=self.location,

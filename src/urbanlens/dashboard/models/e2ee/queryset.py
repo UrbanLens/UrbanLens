@@ -52,10 +52,7 @@ class E2EEPasskeyWrapQuerySet(abstract.DashboardQuerySet):
 
     def usable_for_bundle(self, bundle) -> E2EEPasskeyWrapQuerySet:
         """Wraps that can still unwrap this bundle's current keypair.
-
-        A wrap whose ``bundle_version`` lags the bundle encrypts a superseded
-        private key (a reset happened without the cleanup running) - serving it
-        would produce an unlock that silently yields the wrong identity.
+        A wrap whose ``bundle_version`` lags the bundle encrypts a superseded private key (a reset happened without the cleanup running) - serving it would produce an unlock that silently yields the wrong identity.
 
         Args:
             bundle: The MessagingKeyBundle being unlocked.

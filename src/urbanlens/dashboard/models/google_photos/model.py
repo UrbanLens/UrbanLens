@@ -1,11 +1,5 @@
 """Per-user Google Photos Picker connection.
-
-A separate model from ``GoogleCalendarAccount`` even though both are Google
-OAuth grants against the same site-wide client (``UL_GOOGLE_CLIENT_ID``/
-``UL_GOOGLE_CLIENT_SECRET``): Calendar and Photos are independent features a
-user may connect one of without the other, and Google issues distinct token
-pairs per distinct scope grant, so conflating them into one row would make
-"disconnect Calendar" accidentally revoke Photos access and vice versa.
+A separate model from ``GoogleCalendarAccount`` even though both are Google OAuth grants against the same site-wide client (``UL_GOOGLE_CLIENT_ID``/ ``UL_GOOGLE_CLIENT_SECRET``): Calendar and Photos are independent features a user may connect one of without the other, and Google issues distinct token pairs per distinct scope grant, so conflating them into one row would make "disconnect Calendar" accidentally revoke Photos access and vice versa.
 """
 
 from __future__ import annotations
@@ -46,9 +40,7 @@ class GooglePhotosAccount(abstract.DashboardModel):
     @property
     def is_token_expired(self) -> bool:
         """Whether the access token is expired or about to expire.
-
-        A 60-second safety margin is applied so a token that expires mid-call
-        is treated as already expired.
+        A 60-second safety margin is applied so a token that expires mid-call is treated as already expired.
 
         Returns:
             True when the token must be refreshed before use.

@@ -1,13 +1,3 @@
-{% comment %}
-Shared body for the parcel-panel import action and the restructure offer. The
-enclosing dialog lives on the Private Pin page so either HTMX-loaded button can
-replace this body, open it, and initialize its Leaflet preview afterwards.
-
-Rendered fresh (this file, header included) only when the dialog is first
-opened - see controllers.pin_restructure._render_building_dialog. A submit
-always closes the dialog; the page's own #pin-restructure-offer card catches
-up via the pinDetailPinsChanged event the response fires (see
-_toast(..., refresh=True)) rather than the dialog re-rendering itself.
-{% endcomment %}
+{% comment %}Shared body for the parcel-panel import action and the restructure offer.{% endcomment %}
 {% include "dashboard/partials/ui/_dialog_header.html" with title=dialog_title %}
 {% include "dashboard/partials/pins/_building_import_dialog_body.html" %}

@@ -106,9 +106,7 @@ describe("closing the tab", () => {
 });
 
 describe("clicking a link", () => {
-    // The scheme/modifier/download filtering all lives in leave-confirmation.ts and
-    // is covered there; these check that this guard is wired to it and that its own
-    // dirty/in-flight state is what drives it.
+    // The scheme/modifier/download filtering all lives in leave-confirmation.ts and is covered there.
     test("goes straight through when nothing is pending", async () => {
         const event = await clickLink(link());
         expect(event.defaultPrevented).toBe(false);

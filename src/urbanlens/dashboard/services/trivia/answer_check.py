@@ -1,11 +1,5 @@
 """AI fallback for a Trivia answer that doesn't exact-match the canonical one.
-
-Only ever consulted on a normalized-string mismatch
-(``services.trivia.session.submit_answer``) - an exact match never reaches
-this module. Gated on ``SiteFeature.AI``; a profile without that
-subscription feature always falls back to exact-match-only, never blocked
-from playing.
-"""
+Only ever consulted on a normalized-string mismatch (``services.trivia.session.submit_answer``) - an exact match never reaches this module."""
 
 from __future__ import annotations
 
@@ -31,12 +25,7 @@ Respond with EXACTLY ONE of the following tokens, wrapped in ANSWER tags, and no
 
 def is_answer_equivalent(raw_answer: str, accepted_answer: str, *, profile: Profile) -> bool:
     """Ask AI whether ``raw_answer`` means the same thing as ``accepted_answer``, differently phrased.
-
-    Only called after a normalized-string mismatch already ruled out an
-    exact match. Fails closed to "not equivalent" (the answer counts as
-    wrong) on any AI unavailability or unparseable response - it never
-    upgrades a wrong answer to correct just because the AI call itself
-    failed.
+    Only called after a normalized-string mismatch already ruled out an exact match.
 
     Args:
         raw_answer: What the player typed, as typed.
@@ -44,8 +33,7 @@ def is_answer_equivalent(raw_answer: str, accepted_answer: str, *, profile: Prof
         profile: The answering profile - used for the AI subscription-feature gate.
 
     Returns:
-        True only if the AI explicitly judges the two equivalent.
-    """
+        True only if the AI explicitly judges the two equivalent."""
     from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
     if not user_has_feature(profile.user, SiteFeature.AI):
@@ -61,10 +49,9 @@ def is_answer_equivalent(raw_answer: str, accepted_answer: str, *, profile: Prof
     try:
         raw = gateway.send_prompt(prompt)
     except Exception:
-        # A transport-level failure (provider outage, DNS, an unrecognized
-        # model tripping the token-counting library, etc.) must never bubble
-        # up and 500 the player's answer submission - it's just another form
-        # of "AI unavailable right now," same as a None response.
+        # A transport-level failure (provider outage, DNS, an unrecognized model tripping the
+        # token-counting library, etc.) must never bubble up and 500 the player's answer submission
+        # - it's just another form of "AI unavailable right now," same as a None response.
         logger.exception("Trivia answer-check call failed unexpectedly; treating as no match")
         log_api_call("trivia_answer_check", success=False)
         return False

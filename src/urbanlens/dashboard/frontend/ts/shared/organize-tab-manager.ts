@@ -453,10 +453,7 @@ export class OrgTabManager {
         if (sharedCustomIcon) {
             iconNochange.checked = true;
             if (iconValue) iconValue.value = "";
-            // escHtml, not raw: this value is read back out of a data attribute,
-            // where the DOM has already decoded any entity Django wrote, so a
-            // quote in it would close the src attribute rather than sit inside
-            // it. Every other interpolation in this file already escapes.
+            // escHtml, not raw: this value is read back out of a data attribute, where the DOM has already decoded any entity Django wrote, so.
             if (iconCurrent) iconCurrent.innerHTML = `<img src="${escHtml(sharedCustomIcon)}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
         } else if (sharedIcon !== null) {
             iconNochange.checked = false;
@@ -589,9 +586,7 @@ export class OrgTabManager {
                 this.onRowsUpdated();
                 if (converting) {
                     toast.success(ids.length === 1 ? `1 ${this.cfg.entitySingular.toLowerCase()} converted.` : `${ids.length} ${this.cfg.entityPluralLower} converted.`);
-                    // This request bypassed htmx (plain fetch), so the destination tab's
-                    // rows never see the converted items - refresh it explicitly and jump
-                    // there, mirroring the single-item edit form's kindChanged handling.
+                    // This request bypassed htmx (plain fetch), so the destination tab's rows never see the converted items.
                     if (target?.rowsUrl && target.rowsTarget) {
                         window.htmx?.ajax("GET", target.rowsUrl, { target: target.rowsTarget, swap: "innerHTML" });
                     }
@@ -757,9 +752,7 @@ export class OrgTabManager {
                     fd.append("icon", editIcon);
                     fd.append("color", editColor);
                     const editUrl = this.cfg.endpoints.mergeEditTemplate.replace("99999", capturedId);
-                    // Caught here rather than by the merge's own catch below: the
-                    // merge already succeeded, so a failure to save the renamed
-                    // icon/colour is a warning, not "Merge failed".
+                    // Caught here rather than by the merge's own catch below.
                     try {
                         html = await fetchText(editUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: fd, reportsItsOwnErrors: true });
                     } catch {
@@ -781,12 +774,8 @@ export class OrgTabManager {
 
     // ── Shared fetch/DOM helpers ─────────────────────────────────────────
     /**
-     * POST and hand back the rendered rows.
-     *
-     * Every caller catches and toasts the server's own sentence, so this opts
-     * out of base.html's generic net rather than letting one refusal be
-     * announced twice.
-     */
+ * POST and hand back the rendered rows.
+ */
     private async postForHtml(url: string, body: unknown): Promise<string> {
         return sendForText(url, "POST", body, { reportsItsOwnErrors: true });
     }

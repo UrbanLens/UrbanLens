@@ -1,18 +1,4 @@
-"""P89: `MarkupJsonView`'s `?children=1` wiki path must apply concealment.
-
-The single-wiki path (``_resolve_owner``'s wiki branch) narrows through
-``visible_rows`` before returning. The ``?children=1`` aggregation branch,
-94 lines further down the same ``get()``, rebuilt ``items`` from a raw
-``PinMarkup.objects.filter(parent_wiki__in=subtree)`` that never touched
-``visible_rows`` at all - so a concealed viewer asking for the descendant
-subtree got every wiki's markup back unfiltered, not just their own and
-their friends'. See ``docs/PROBLEMS.md`` P89.
-
-Not a live leak while ``concealment_active()`` stays hardcoded False (as it
-is today) - every test below that exercises the bug forces it on, matching
-the pattern already used in ``test_wiki_concealment.py`` /
-``test_concealed_render.py`` / ``test_concealment_own_contribution_round4.py``.
-"""
+"""P89: `MarkupJsonView`'s `?children=1` wiki path must apply concealment."""
 
 from __future__ import annotations
 

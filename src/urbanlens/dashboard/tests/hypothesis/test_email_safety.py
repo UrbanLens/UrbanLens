@@ -1,13 +1,4 @@
-"""Tests for the outbound-email safety controls.
-
-Covers:
-- hash_email - one-way, normalization-aware hashing (property-based)
-- get_email_limits - site default vs. subscription-role override resolution
-  (largest wins, 0 = unlimited)
-- email_rate_limit_error - hour/day/month windows
-- has_sent_join_email / record_email_sent - one join email per address ever
-- invite_by_email - returns 429 at the cap and never re-emails an address
-"""
+"""Tests for the outbound-email safety controls."""
 
 from __future__ import annotations
 
@@ -55,14 +46,9 @@ class HashEmailTests(SimpleTestCase):
     def test_hash_does_not_contain_address(self, email):
         """The stored digest is not a place the address can be read back out of.
 
-        Local parts made only of hex digits are excluded, and not for
-        convenience: the digest is itself 64 hex characters, so a short all-hex
-        local part turns up inside one by coincidence often enough to fail this
-        at random - ``0846@a.com`` hashes to ``5ece20846df4...``. Those examples
-        say nothing about whether the address was stored, and without the
-        exclusion this test fails a few runs in a hundred on an address it was
-        never meant to be making a claim about.
-        """
+        Local parts made only of hex digits are excluded, and not for convenience: the digest is itself 64 hex
+        characters, so a short all-hex local part turns up inside one by coincidence often enough to fail this
+        at random - ``0846@a.com`` hashes to ``5ece20846df4...``."""
         local = email.split("@", 1)[0].lower()
         assume(len(local) >= 4)
         assume(not all(character in "0123456789abcdef" for character in local))

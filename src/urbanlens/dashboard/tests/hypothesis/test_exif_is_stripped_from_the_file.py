@@ -1,20 +1,4 @@
-"""EXIF is recorded in the database and removed from the file we serve.
-
-A photo contributed to a wiki is served to everyone who can reach that wiki, and
-until now it carried its whole EXIF block with it - camera make, model and serial,
-lens, software, timestamps, and GPS unless the uploader had found the location
-opt-out. The block was re-attached deliberately on save, so this was not a leak
-through a gap; the pipeline put it back.
-
-Orientation is the reason it was kept: browsers rotate from tag 274, and this
-pipeline had no ``exif_transpose``, so dropping the block made a photo render
-ninety degrees wrong. Stripping therefore has to bake the rotation into the
-pixels first - which is what TIFF already did, since Pillow rotates it on load.
-
-The case that matters most is a photo needing neither a resize nor a conversion:
-the rewrite used to be skipped entirely for those, so the original file survived
-untouched with everything in it.
-"""
+"""EXIF is recorded in the database and removed from the file we serve."""
 
 from __future__ import annotations
 

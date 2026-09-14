@@ -62,17 +62,7 @@ def invalidate_profile_map_center(sender: type[Pin], instance: Pin, created: boo
 @receiver(post_delete, sender=Pin, dispatch_uid="pin_record_tombstone")
 def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
     """Durably record the deletion for external-API delta-sync clients.
-
-    Written synchronously (not ``on_commit``) so the tombstone commits or
-    rolls back together with the delete itself.
-
-    Only fires when the deletion originated on pins (a single ``pin.delete()``
-    or a Pin queryset delete, including the cascade over ``parent_pin``
-    children either triggers). When the deletion is a cascade from the owning
-    profile/user - account deletion - no tombstones are written: the rows
-    would FK a profile that is itself mid-delete (and was collected before
-    they existed), and an account deletion leaves no sync clients behind to
-    tell.
+    Written synchronously (not ``on_commit``) so the tombstone commits or rolls back together with the delete itself.
     """
     origin = kwargs.get("origin")
     origin_model = getattr(origin, "model", type(origin))
@@ -86,15 +76,7 @@ def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_touch_pin")
 def touch_pin_for_labels(sender, instance, action: str, *, reverse: bool = False, pk_set: set[int] | None = None, **kwargs) -> None:
     """A pin gaining or losing a label changes its chips, and can change its icon.
-
-    Writing ``Pin.labels.through`` does not write the pin row, so ``auto_now``
-    does not fire and the client's poll sees nothing.
-
-    ``reverse`` decides what ``instance`` is. Written from the label's side -
-    ``label.pins.add(pin)``, which ``services.labels.merge`` and the undo handler
-    both use - it is the *Label*, and the pin ids are in ``pk_set``. Reading
-    ``instance.pk`` as a pin there writes to whichever pin shares the label's
-    number and leaves the pins that actually changed alone.
+    Writing ``Pin.labels.through`` does not write the pin row, so ``auto_now`` does not fire and the client's poll sees nothing.
     """
     from urbanlens.dashboard.services.map_pins.touch import touch_pin, touch_pins
 
@@ -160,13 +142,7 @@ def touch_pins_for_cleared_customization(sender: type[LabelCustomization], insta
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_propagate_visited")
 def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_set=None, reverse: bool = False, **kwargs) -> None:
     """Mark a child pin's ancestors Visited when the child gains the Visited label.
-
-    Visiting a child pin (an entrance, a building on a campus) means the parent
-    place was visited too, so the profile's "Visited" status label cascades up
-    the ``parent_pin`` chain. The whole chain is stamped in one pass with a
-    cycle-safe walk (see ``Pin.ancestor_chain``); the m2m adds this performs
-    re-fire this handler for each ancestor, but their ``pk_set`` only contains
-    newly-added rows, so the cascade terminates once the chain is stamped.
+    Visiting a child pin (an entrance, a building on a campus) means the parent place was visited too, so the profile's "Visited" status label cascades up the ``parent_pin`` chain.
     """
     if action != "post_add" or reverse or not pk_set or instance.parent_pin_id is None:
         return
@@ -182,16 +158,7 @@ def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_sync_redata_assignments")
 def sync_redata_assignments_for_pin_labels(sender, instance, action: str, reverse: bool, pk_set: set[int] | None, **kwargs) -> None:
     """Forward a pin's tag/category label set to REData whenever it changes.
-
-    ``Pin.labels`` is mutated from ~20 call sites across the codebase (manual
-    tagging, keyword/AI auto-tag, imports, label-merge, undo) - this
-    m2m_changed receiver is the one choke point that sees all of them,
-    forward (``pin.labels.add(label)``) and reverse
-    (``label.pins.add(pin)``, used by ``services.labels.merge``) alike.
-
-    ``reverse`` matters here, as it does in ``touch_pin_for_labels`` above: in
-    the reverse direction ``instance`` is the *Label*, not a Pin, and ``pk_set``
-    holds the affected *pin* ids rather than label ids.
+    ``reverse`` matters here, as it does in ``touch_pin_for_labels`` above: in the reverse direction ``instance`` is the *Label*, not a Pin, and ``pk_set`` holds the affected *pin* ids rather than label ids.
     """
     if action not in {"post_add", "post_remove", "post_clear"}:
         return
@@ -230,21 +197,15 @@ def touch_pin_for_deleted_review(sender, instance: Review, **kwargs) -> None:
         touch_pin(instance.pin_id)
 
 
-# -- Wiki-sync: mirror rating/vulnerability/priority/danger onto WikiStatVote ---
-# One-way only (pin -> wiki): the wiki has no single owner, so there's no
-# equivalent "wiki value" to pull back the other way - see
-# Profile.sync_rating_to_wiki etc. and models.wiki_stat_vote.model.WikiStatVote's
-# own docstring on why a composite average, not a single stored field, is
-# the wiki-side representation of these dimensions.
+# -- Wiki-sync: mirror rating/vulnerability/priority/danger onto WikiStatVote --- One-way only (pin
+# -> wiki): the wiki has no single owner, so there's no equivalent "wiki value" to pull back the
+# other way - see Profile.sync_rating_to_wiki etc. and models.wiki_stat_vote.model.WikiStatVote's
+# own docstring on why a composite average, not a single stored field, is the wiki-side
 
 
 def _sync_pin_stat_to_wiki(wiki_id: int, profile_id: int, field: str, value: int | None) -> None:
     """Upsert (1-5) or clear (anything else) one profile's WikiStatVote for a field.
-
-    Mirrors WikiStatVoteView's own upsert-or-delete behavior exactly, so a
-    pin's star rating going back to "unset" clears the vote the same way
-    manually clearing it on the wiki page would - never leaves a stale 0/None
-    row skewing the wiki's composite average.
+    Mirrors WikiStatVoteView's own upsert-or-delete behavior exactly, so a pin's star rating going back to "unset" clears the vote the same way manually clearing it on the wiki page would - never leaves a stale 0/None row skewing the wiki's composite average.
     """
 
     def _run() -> None:
@@ -315,21 +276,7 @@ def sync_pin_stats_to_wiki(sender: type[Pin], instance: Pin, **kwargs) -> None:
 @receiver(post_save, sender=Pin, dispatch_uid="pin_ensure_wiki")
 def ensure_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
     """Queue background creation of the Wiki for a newly pinned Location.
-
-    Fires for every pin-creation path (manual add, CSV/Google Maps import,
-    Flickr, Immich, GPX) since it's a model-level signal rather than a
-    per-importer call - that's what makes this "still happens for bulk
-    imports, but in the background" without slowing any of them down: the
-    enqueue itself is a cheap non-blocking broker publish (see
-    ``tasks.ensure_wiki_for_location``). The page is published from the moment
-    it exists and fills in as enrichment lands - default boundaries are still
-    generated lazily on first pin-detail-page view, unchanged.
-
-    Skipped when the triggering profile has community features disabled -
-    their own action shouldn't kick off community-wiki background work for a
-    location, though another profile's pin there will. Queued on_commit, like
-    every other Celery-enqueuing signal in this module - a pin creation that
-    ultimately rolls back should never have queued anything.
+    Fires for every pin-creation path (manual add, CSV/Google Maps import, Flickr, Immich, GPX) since it's a model-level signal rather than a per-importer call - that's what makes this "still happens for bulk imports, but in the background" without slowing any of them down: the enqueue itself is a cheap non-blocking broker publish (see ``tasks.ensure_wiki_for_location``).
     """
     if not created or instance.location_id is None or not instance.profile.community_enabled:
         return

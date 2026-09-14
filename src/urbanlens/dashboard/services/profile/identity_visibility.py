@@ -1,14 +1,4 @@
-"""Resolve how a profile's identity should be displayed to a given viewer.
-
-Content involving a person (a message, a trip activity, a comment) stays
-fully visible even when their privacy settings don't permit the viewer to
-see their profile - only their name/avatar/profile-link are masked in that
-case, since the viewer has no standing access to know who they are. This is
-the shared building block behind ``services.messaging.direct_messages.display_identity_for``
-(1:1 DMs) and every place multiple people's identities render together in a
-shared space they don't all fully know each other in (trip member lists,
-group chat members/messages).
-"""
+"""Resolve how a profile's identity should be displayed to a given viewer."""
 
 from __future__ import annotations
 
@@ -34,30 +24,16 @@ def resolve_visible_identity(
     """Return how ``subject`` should be displayed to ``viewer`` right now.
 
     Args:
-        viewer: The profile viewing the shared space, or None for an
-            anonymous/system viewer (always masked, unless ``subject`` allows
-            ``ANYONE``).
+        viewer: The profile viewing the shared space, or None for an anonymous/system viewer (always masked, unless ``subject`` allows ``ANYONE``).
         subject: The profile whose identity is being displayed.
-        placeholder: Display name used when masked - callers showing several
-            simultaneously-masked people in one list should use
-            ``resolve_visible_identities`` instead so each gets a distinct
-            placeholder rather than all sharing this same string.
-        visible_pks: Pre-resolved output of ``Profile.visible_profile_pks`` for a
-            batch of subjects. When given, membership replaces this subject's own
-            ``can_view_profile`` call, which costs several queries each and re-derives
-            the viewer's own friend/trip/pin sets every time. The two are held to
-            identical answers by ``test_identity_visibility_batch``.
+        placeholder: Display name used when masked - callers showing several simultaneously-masked people in one list should use ``resolve_visible_identities`` instead so each gets a distinct placeholder rather than all sharing this same string.
+        visible_pks: Pre-resolved output of ``Profile.visible_profile_pks`` for a batch of subjects.
 
     Returns:
-        Dict with ``display_name``, ``display_avatar_url`` (str or None),
-        ``display_profile_url`` (str or None), and ``is_masked`` (bool).
+        Dict with ``display_name``, ``display_avatar_url`` (str or None), ``display_profile_url`` (str or None), and ``is_masked`` (bool).
 
     Note:
-        Deliberately does not resolve the supporter badge - ``Profile.display_supporter_badge``
-        is a live property callers can read straight off ``subject`` after masking is
-        applied, but only once they've also checked ``is_masked``: a masked identity's
-        own supporter status must not leak alongside its scrubbed name/avatar.
-    """
+        Deliberately does not resolve the supporter badge - ``Profile.display_supporter_badge`` is a live property callers can read straight off ``subject`` after masking is applied, but only once they've also checked ``is_masked``: a masked identity's..."""
     can_view = subject.pk in visible_pks if visible_pks is not None else subject.can_view_profile(viewer)
     if can_view:
         from django.urls import reverse
@@ -79,32 +55,19 @@ def resolve_visible_identity(
 def resolve_identity_for_viewers(subject: Profile, viewers: Sequence[Profile], *, placeholder: str = DEFAULT_MASKED_PLACEHOLDER) -> dict[int, dict[str, Any]]:
     """One person's identity, as each of many viewers would see it.
 
-    The mirror of :func:`resolve_visible_identities`, which shows many people to
-    one viewer. This is the shape a group message needs: the payload carries the
-    sender's name, and that name has to pass each recipient's own visibility -
-    which cost a query per recipient, twice per send, because the notification
-    step and the live broadcast each resolved it separately.
-
-    Every masked viewer sees the same placeholder, unlike
-    :func:`resolve_visible_identities`: there is only one person here, so there
-    is nobody to be confused with.
-
     Args:
         subject: The profile being displayed.
         viewers: The profiles it is being displayed to.
         placeholder: Display name used when masked.
 
     Returns:
-        Mapping of ``viewer.pk`` to the shape :func:`resolve_visible_identity`
-        returns.
-    """
+        Mapping of ``viewer.pk`` to the shape :func:`resolve_visible_identity` returns."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
     allowed = ProfileModel.viewers_who_can_see(subject, viewers)
-    # `visible_pks` is the existing way to hand this function an
-    # already-decided answer; with a single subject the two possible sets are
-    # "just them" and "nobody", so both outcomes are built once here rather
-    # than per viewer.
+    # `visible_pks` is the existing way to hand this function an already-decided answer; with a
+    # single subject the two possible sets are "just them" and "nobody", so both outcomes are built
+    # once here rather than per viewer.
     unmasked = resolve_visible_identity(None, subject, visible_pks={subject.pk})
     masked = resolve_visible_identity(None, subject, visible_pks=set(), placeholder=placeholder)
     return {viewer.pk: (unmasked if viewer.pk in allowed else masked) for viewer in viewers}
@@ -112,42 +75,22 @@ def resolve_identity_for_viewers(subject: Profile, viewers: Sequence[Profile], *
 
 def resolve_visible_identities(viewer: Profile | None, subjects: Sequence[Profile]) -> dict[int, dict[str, Any]]:
     """Resolve display identity for several people shown together in one list.
-
-    Two people masked in the same list would otherwise both show the exact
-    same generic placeholder and the same flat fallback-avatar color,
-    reading as the same person twice. Masked entries are numbered ("Member
-    1", "Member 2", ...) in list order, and every entry (masked or not)
-    gets a distinct ``avatar_color_class`` via ``services.profile.avatar_colors`` -
-    the color is derived from the real profile server-side and never
-    discloses who a masked person is, but keeps them visually distinct from
-    one another the same way unmasked members already are.
-
-    Each ``subject`` is also mutated in place (``display_name``,
-    ``display_avatar_url``, ``display_profile_url``, ``is_masked``,
-    ``avatar_color_class`` set directly on it), so templates that already
-    hold a reference to the same object (e.g. ``membership.profile``) can
-    use it directly without a dict lookup by a template-side variable key,
-    which Django's template language doesn't support.
+    Two people masked in the same list would otherwise both show the exact same generic placeholder and the same flat fallback-avatar color, reading as the same person twice.
 
     Args:
         viewer: The profile viewing the shared space.
         subjects: The people whose identities are being displayed together.
 
     Returns:
-        Mapping of ``subject.pk`` to the same shape ``resolve_visible_identity``
-        returns, plus an ``avatar_color_class`` key on every entry - for
-        callers (e.g. per-message sender resolution) that can't rely on
-        object-identity mutation because their own objects were built from a
-        separate query than ``subjects``.
-    """
+        Mapping of ``subject.pk`` to the same shape ``resolve_visible_identity`` returns, plus an ``avatar_color_class`` key on every entry - for callers (e.g. per-message sender resolution) that can't rely on object-identity mutation because their own..."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.services.profile.avatar_colors import assign_avatar_colors
 
     subjects = list(subjects)
-    # Resolved for the whole list, not per subject: every caller here is rendering
-    # people together (group members, message senders, trip participants), and
-    # ``can_view_profile`` re-derives the viewer's own friend/trip/pin sets on each
-    # call - so a list of members cost that work once per member.
+    # Resolved for the whole list, not per subject: every caller here is rendering people together
+    # (group members, message senders, trip participants), and ``can_view_profile`` re-derives the
+    # viewer's own friend/trip/pin sets on each call - so a list of members cost that work once per
+    # member.
     visible_pks = ProfileModel.visible_profile_pks(viewer, subjects)
     results: dict[int, dict[str, Any]] = {}
     masked_ordinal = 0
@@ -170,23 +113,9 @@ def resolve_visible_identities(viewer: Profile | None, subjects: Sequence[Profil
 def mask_profile_references(viewer: Profile | None, refs: Iterable[Profile]) -> None:
     """Resolve and apply masked identity across EVERY reference to the same profiles.
 
-    The same real profile routinely shows up as more than one distinct
-    Python object instance when it's reached via different query paths in
-    the same render - a Trip's ``creator`` FK vs. a ``TripMembership.profile``
-    FK for that same person on another trip, or a top-level Comment's
-    ``profile`` vs. one of their own replies' ``profile``.
-    ``resolve_visible_identities``'s in-place mutation only reaches whichever
-    instance is actually passed to it, so every occurrence has to be visited
-    directly - deduplicating first (by pk, for a stable/consistent masked
-    ordinal and to avoid resolving the same profile twice) and then applying
-    the result back to every instance in ``refs``, not just the deduplicated
-    ones.
-
     Args:
         viewer: The profile viewing the shared space.
-        refs: Every Profile reference about to be rendered together -
-            duplicates (by real identity, not object identity) expected.
-    """
+        refs: Every Profile reference about to be rendered together - duplicates (by real identity, not object identity) expected."""
     refs = list(refs)
     unique_by_pk: dict[int, Profile] = {}
     for subject in refs:

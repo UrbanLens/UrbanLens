@@ -1,25 +1,5 @@
 """Native push delivery: device registration and UnifiedPush dispatch.
-
-The delivery counterpart of the browser's Channels WebSocket push
-(``models.notifications.signals``): every ``NotificationLog`` insert enqueues
-``tasks.dispatch_native_push``, which calls :func:`send_push_to_profile` here
-to POST the notification payload to each of the recipient's active
-:class:`~urbanlens.dashboard.models.push_device.model.PushDevice` rows.
-
-Only the UnifiedPush transport dispatches today (an app-chosen push server -
-ntfy et al. - receives a plain POST of the JSON payload at the registered
-endpoint URL, per the UnifiedPush application-server contract). FCM rows are
-accepted at registration for the future Play-flavor client but are skipped at
-dispatch until that flavor exists.
-
-Registering an arbitrary URL the server will later POST to is an SSRF vector,
-so :func:`register_device` validates UnifiedPush endpoints: https-or-http
-scheme only, no embedded credentials, and the hostname must not resolve to a
-private/loopback/link-local address. DNS-rebinding after registration remains
-theoretically possible (the check is at registration time, not per-send);
-accepted as a residual risk for v1 since the payload is a notification body
-and responses are never surfaced to the caller.
-"""
+Only the UnifiedPush transport dispatches today (an app-chosen push server - ntfy et al. - receives a plain POST of the JSON payload at the registered endpoint URL, per the UnifiedPush application-server contract)."""
 
 from __future__ import annotations
 
@@ -52,14 +32,7 @@ DISPATCH_TIMEOUT_SECONDS = 5
 
 
 class PushRegistrationError(ValueError):
-    """Raised when a submitted device registration can't be accepted.
-
-    The message is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a fallback)
-    and author its own user-facing text, rather than relaying the message -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``.
-    """
+    """Raised when a submitted device registration can't be accepted."""
 
 
 class MissingAddressError(PushRegistrationError):
@@ -80,11 +53,7 @@ class EndpointResolutionError(PushRegistrationError):
 
 class EndpointUnreachableError(PushRegistrationError):
     """The UnifiedPush endpoint resolves to a private/loopback/link-local/CGNAT address.
-
-    Distinct from :class:`EndpointResolutionError` so callers can tell "we
-    don't know where this points" apart from "we know exactly where this
-    points, and it's the SSRF guard's job to refuse it".
-    """
+    Distinct from :class:`EndpointResolutionError` so callers can tell "we don't know where this points" apart from "we know exactly where this points, and it's the SSRF guard's job to refuse it"."""
 
 
 def _validate_unifiedpush_endpoint(address: str) -> None:
@@ -97,9 +66,7 @@ def _validate_unifiedpush_endpoint(address: str) -> None:
         InvalidEndpointUrlError: The URL is malformed or uses a non-HTTP scheme.
         EndpointCredentialsError: The URL carries a username/password.
         EndpointResolutionError: The hostname doesn't resolve.
-        EndpointUnreachableError: The hostname resolves to a private/loopback/
-            link-local/CGNAT address.
-    """
+        EndpointUnreachableError: The hostname resolves to a private/loopback/ link-local/CGNAT address."""
     parts = urlsplit(address)
     if parts.scheme not in ("https", "http") or not parts.hostname:
         raise InvalidEndpointUrlError(f"UnifiedPush endpoint scheme/hostname invalid: scheme={parts.scheme!r} hostname={parts.hostname!r}")
@@ -109,11 +76,8 @@ def _validate_unifiedpush_endpoint(address: str) -> None:
         infos = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
     except OSError as exc:
         raise EndpointResolutionError(f"UnifiedPush endpoint hostname failed to resolve: host={parts.hostname!r}") from exc
-    # is_blocked_address rather than an inline copy of the same five checks: this
-    # used to duplicate them, and so missed the RFC 6598 CGNAT range (100.64/10)
-    # that the shared helper blocks. Python's ipaddress does not classify CGNAT as
-    # private, and cloud providers route internal-only infrastructure through it -
-    # so a divergent copy of this check is a divergent SSRF guard.
+    # Python's ipaddress does not classify CGNAT as private, and cloud providers route internal-only
+    # infrastructure through it - so a divergent copy of this check is a divergent SSRF guard.
     for info in infos:
         if is_blocked_address(ipaddress.ip_address(info[4][0])):
             raise EndpointUnreachableError(f"UnifiedPush endpoint host={parts.hostname!r} resolved to blocked address {info[4][0]}")
@@ -121,11 +85,6 @@ def _validate_unifiedpush_endpoint(address: str) -> None:
 
 def register_device(profile: Profile, *, transport: str, address: str, name: str = "") -> PushDevice:
     """Register (or re-activate) a push destination for a profile.
-
-    Idempotent on ``(profile, address)``: re-registering an address the
-    profile already has updates its transport/name, clears any revocation,
-    and resets the failure count - an app re-registering after reinstall or
-    endpoint rotation must never be told "already exists".
 
     Args:
         profile: The owning profile.
@@ -141,8 +100,7 @@ def register_device(profile: Profile, *, transport: str, address: str, name: str
         InvalidEndpointUrlError: A UnifiedPush endpoint isn't a well-formed http(s) URL.
         EndpointCredentialsError: A UnifiedPush endpoint URL embeds credentials.
         EndpointResolutionError: A UnifiedPush endpoint's hostname doesn't resolve.
-        EndpointUnreachableError: A UnifiedPush endpoint resolves to a blocked address.
-    """
+        EndpointUnreachableError: A UnifiedPush endpoint resolves to a blocked address."""
     address = (address or "").strip()
     if not address:
         raise MissingAddressError("register_device called with an empty device address.")
@@ -166,32 +124,24 @@ def unregister_device(profile: Profile, device_uuid: UUID | str) -> bool:
     """Revoke one of the profile's devices, if it exists.
 
     Args:
-        profile: The owning profile - another profile's device uuid is
-            indistinguishable from a nonexistent one.
+        profile: The owning profile - another profile's device uuid is indistinguishable from a nonexistent one.
         device_uuid: The device's public uuid.
 
     Returns:
-        True when a device was revoked; False when nothing matched (already
-        revoked devices count as matched, keeping the call idempotent).
-    """
+        True when a device was revoked; False when nothing matched (already revoked devices count as matched, keeping the call idempotent)."""
     return PushDevice.objects.for_profile(profile).filter(uuid=device_uuid).update(revoked_at=timezone.now()) > 0
 
 
 def send_push_to_profile(profile_id: int, payload: dict) -> int:
     """Deliver a notification payload to every active device of a profile.
-
-    Failures are per-device and never raise: one dead endpoint must not stop
-    delivery to the user's other devices, and delivery as a whole is
-    best-effort on top of the always-written ``NotificationLog`` row.
+    Failures are per-device and never raise: one dead endpoint must not stop delivery to the user's other devices, and delivery as a whole is best-effort on top of the always-written ``NotificationLog`` row.
 
     Args:
         profile_id: Primary key of the recipient profile.
-        payload: JSON-serializable notification payload (see
-            ``models.notifications.signals.as_push_payload``).
+        payload: JSON-serializable notification payload (see ``models.notifications.signals.as_push_payload``).
 
     Returns:
-        Number of devices successfully delivered to.
-    """
+        Number of devices successfully delivered to."""
     delivered = 0
     for device in PushDevice.objects.filter(profile_id=profile_id).active():
         if device.transport != PushTransport.UNIFIEDPUSH:

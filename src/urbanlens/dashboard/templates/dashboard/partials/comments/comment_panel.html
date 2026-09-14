@@ -1,9 +1,5 @@
 {% load dashboard_tags %}
-{# "Notes" here is pin-only wording (context_type == "pin") - a pin's comments  #}
-{# are private to its owner, so "Comments" implied a shared conversation that   #}
-{# doesn't exist. Wiki/trip comments are genuinely shared between users and    #}
-{# keep the "Comments" label - they're a different model instance of the same  #}
-{# Comment model/template, not a different feature. #}
+{# "Notes" here is pin-only wording (context_type == "pin"). #}
 <div class="comment-panel card" id="comment-panel"
      data-collapse-scope="{{ context_type }}" data-collapse-section="comments">
   <div class="card-header">

@@ -1,34 +1,4 @@
-"""Photo keywording never decodes an upload outside the sandbox tier.
-
-``CLAUDE.md``: anything handing user-uploaded bytes to a parser must be
-decorated ``@untrusted_parse`` and reached only from a task declaring
-``queue=SANDBOX_QUEUE``.
-
-Keywording broke that rule. ``generate_image_keywords`` declares no queue, so
-it runs on the ordinary worker - the one holding REData, OAuth and database
-credentials, on a network with full egress - and it called Pillow on the
-stored upload to build the 512px copy providers get. A decoder
-memory-corruption bug in an uploaded image would have landed exactly where
-``media-worker`` exists to keep it out of.
-
-The decode now happens once, in the sandbox, into ``Image.analysis_thumbnail``
-(``services.media.images.write_image_analysis_thumbnail``); keywording reads
-those bytes and parses nothing
-(``services.photos.photo_keywords.analysis_jpeg_bytes``).
-
-Four claims, each failing differently:
-
-1. The keywording path imports no image parser and calls no decode
-   (:class:`KeywordPathDoesNotDecodeTests`).
-2. The writer is sandbox-gated, and the task that calls it declares the
-   sandbox queue (:class:`AnalysisThumbnailIsSandboxedTests`).
-3. A photo with no analysis copy is skipped, never decoded as a fallback -
-   the failure mode that would quietly reintroduce the hole
-   (:class:`MissingAnalysisCopyTests`).
-4. The copy is a real image file in the same storage family as every other
-   photo, so it is served from the media origin with the same rules
-   (:class:`AnalysisCopyStorageTests`).
-"""
+"""Photo keywording never decodes an upload outside the sandbox tier."""
 
 from __future__ import annotations
 
@@ -106,11 +76,7 @@ class AnalysisThumbnailIsSandboxedTests(SimpleTestCase):
     def test_every_task_reaching_the_writer_declares_the_sandbox_queue(self) -> None:
         """No task can reach the image decode without being on media-worker's queue.
 
-        Transitive on purpose. The decode sits behind a plain helper
-        (``_process_photo_upload``), so checking only functions that call it
-        directly would pass while a default-queue task two hops away happily
-        reached it - which is the shape the original defect had.
-        """
+        Transitive on purpose."""
         import urbanlens.dashboard.tasks as tasks_module
 
         tree = ast.parse(pathlib.Path(tasks_module.__file__).read_text(encoding="utf-8"))

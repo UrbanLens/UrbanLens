@@ -1,23 +1,4 @@
-"""One account's own data must not grow the SQL text of the queries it runs.
-
-`MapPinPayloadService` decides a pin's fallback cover photo by excluding the
-photos this profile has marked "not relevant". It did that by reading every such
-mark into Python and inlining them as a literal `IN (...)` list, so the
-statement the map sends grew by roughly 43 bytes per vote - every batch, every
-page, every document, for the life of the account. A user with ten thousand
-votes was sending Postgres a several-hundred-kilobyte statement to parse, per
-batch, to draw their own map.
-
-Nothing in the repo could see it. The query *count* is flat, the row count is
-flat, the payload is byte-identical, and the plan is the same shape. Only the
-statement's length moves, which is why that is what these assert.
-
-A non-correlated subquery is what replaces the list: Postgres evaluates it once
-and hashes it, the statement is the same text at any vote count, and the extra
-round trip that built the set in Python goes away with it. A *correlated*
-`EXISTS` was rejected - `MediaRelevance` is indexed on `(profile, location)`, so
-resolving one per pin row would have no index to use.
-"""
+"""One account's own data must not grow the SQL text of the queries it runs."""
 
 from __future__ import annotations
 

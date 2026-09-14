@@ -1,10 +1,4 @@
-"""JSON-shape builders shared by the HTTP controller and the WebSocket consumer.
-
-Mirrors ``services.spotguessr.serializers`` - one source of truth for both
-the HTTP endpoints and the real-time broadcasts, since UL-392-style
-multiplayer needs the exact same shapes. A round's answer is never included
-until it's actually revealed.
-"""
+"""JSON-shape builders shared by the HTTP controller and the WebSocket consumer."""
 
 from __future__ import annotations
 
@@ -34,16 +28,7 @@ def serialize_round(round_: TriviaRound) -> dict[str, Any]:
 
 def serialize_reveal(round_: TriviaRound, answer: TriviaAnswer) -> dict[str, Any]:
     """One answer's own result - the HTTP response to whoever just answered.
-
-    The correct answer is only included once ``round_`` is actually revealed
-    (every joined participant has answered). Solo sessions complete the
-    round on this very answer, so they always see it immediately; in
-    multiplayer, an early answerer must not learn it before their teammates
-    have answered too - the session's live chat would otherwise let them
-    relay it and defeat the round entirely. A withheld round is completed
-    for the answerer by the ``round.revealed`` broadcast
-    (``serialize_round_reveal``) once everyone else catches up.
-    """
+    The correct answer is only included once ``round_`` is actually revealed (every joined participant has answered)."""
     data: dict[str, Any] = {
         "round_id": round_.pk,
         "question_id": round_.question_id,

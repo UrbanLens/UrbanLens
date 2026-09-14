@@ -1,9 +1,4 @@
-"""Tests for services.device_scan.type_guessing.
-
-The core invariant: a client-supplied guess always wins and is never
-overwritten by a heuristic re-guess on a later upload with no guess of its
-own - see resolve_device_type's docstring.
-"""
+"""Tests for services.device_scan.type_guessing."""
 
 from __future__ import annotations
 

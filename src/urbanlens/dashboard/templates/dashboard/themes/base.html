@@ -12,7 +12,6 @@
     <link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
-    <!-- Compiled and minified CSS -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     {% vendor_asset "fontawesome_css" %}
 
@@ -26,10 +25,8 @@
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
 
-    <!-- Compiled and minified JavaScript -->
     {% vendor_asset "htmx_js" %}
 
-    <!--Let browser know website is optimized for mobile-->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
         // In <head>, and not deferred: an `onerror` for an image that 404s fires
@@ -111,13 +108,7 @@
     {% endif %}
 
     {% if assistant_global_enabled %}
-    {% comment %}
-    Global assistant surface (plan §8/UL-293) - present on every page, not
-    just /assistant/. The dialog's body is a loading skeleton until
-    assistant-overlay.ts fetches _overlay_body.html the first time it opens;
-    the composer/message log inside it are the same partials and endpoints
-    /assistant/ itself renders, so there is only ever one chat implementation.
-    {% endcomment %}
+    {% comment %}Global assistant surface (plan §8/UL-293) - present on every page, not just /assistant/.{% endcomment %}
     <button type="button" id="ul-assistant-fab" class="ul-assistant-fab" aria-label="Open assistant"
             aria-haspopup="dialog" aria-controls="assistant-overlay"
             data-tooltip="Ask the assistant" data-tooltip-float="true" data-tooltip-pos="above">
@@ -146,11 +137,7 @@
     </dialog>
     {% endif %}
 
-    {% comment %}
-    Fixed bottom-left tools menu, shared across every page. Currently only surfaces
-       sections the user collapsed on the current page (see the collapsible-sections
-       script below), but it's built to hold other page tools later - see _updateRestoreControls.
-    {% endcomment %}
+    {% comment %}Fixed bottom-left tools menu, shared across every page.{% endcomment %}
     <div class="tools-fab" id="tools-fab" hidden>
         <div class="tools-fab-menu" id="tools-fab-menu" hidden>
             <div class="tools-fab-group" data-tools-fab-group="collapse-restore" hidden>
@@ -164,7 +151,6 @@
         </button>
     </div>
 
-    <!--  Scripts-->
     {{ keyboard_shortcuts|json_script:"ul-hotkeys" }}
     <script>
         window.UL_HOTKEYS = JSON.parse(document.getElementById('ul-hotkeys').textContent);
@@ -341,15 +327,9 @@
             if (rect.height > 0) inputEl.style.minHeight = rect.height + 'px';
         };
     </script>
-    {# Comment utilities - the reply-form toggle and image preview live in #}
-    {# frontend/ts/shared/comment-compose.ts, the emoji reactions in #}
-    {# shared/reaction-picker.ts, @mention autocomplete in #}
-    {# shared/mention-autocomplete.ts, and the RSVP/album popup dismissal in #}
-    {# shared/popup-dismiss.ts. All are installed by core.js above. #}
+    {# Comment utilities - the reply-form toggle and image preview live in frontend/ts/shared/comment-compose.ts, the emoji reactions. #}
 
-    {# Scroll-to-hash after an HTMX swap lives in frontend/ts/shared/scroll-to-hash.ts, #}
-    {# the unsaved-changes guard in shared/autosave-guard.ts, and dialog backdrop #}
-    {# closing in shared/dialog-backdrop.ts. All are installed by core.js above. #}
+    {# Scroll-to-hash after an HTMX swap lives in frontend/ts/shared/scroll-to-hash.ts, the unsaved-changes guard. #}
 
     {# -- Comment map composer dialog -------------------------------------------- #}
     <dialog id="comment-map-composer" class="comment-map-composer-dialog ul-dialog" aria-labelledby="comment-map-composer-title">
@@ -359,9 +339,7 @@
           <i class="material-symbols-outlined">close</i>
         </button>
       </div>
-      {# Only shown when the caller passes opts.existingMapPicker (currently just #}
-      {# the DM composer) - every other caller (comments/visits/trips/screenshot) #}
-      {# never sees this and keeps the exact single-panel dialog it always had.  #}
+      {# Only shown when the caller passes opts.existingMapPicker (currently just the DM composer). #}
       <div class="cmc-tabs" id="cmc-tabs" hidden role="tablist">
         <button type="button" class="cmc-tab is-active" id="cmc-tab-btn-draw" data-tab="draw" role="tab" aria-selected="true">Draw New</button>
         <button type="button" class="cmc-tab" id="cmc-tab-btn-existing" data-tab="existing" role="tab" aria-selected="false">Choose Existing</button>
@@ -369,14 +347,10 @@
       <div class="comment-map-composer-body" id="cmc-tab-panel-draw">
         <div class="comment-map-composer-controls">
           <label class="cmcc-label">Go to</label>
-          {# Shared jump-to search component - same multi-source search as the #}
-          {# main map: local pins, addresses (Nominatim), Google Places,       #}
-          {# coordinates, Plus Codes.                                          #}
+          {# Shared jump-to search component - same multi-source search as the main map. #}
           {% map_search_bar prefix="cmcc" show_history=False extra_class="addr-search-bar--composer" %}
         </div>
-        {# Title field - only shown in standalone mode (the "take a screenshot" #}
-        {# buttons), where the map isn't attached to a comment/visit/trip form  #}
-        {# and needs its own identity for browsing later on Memories > Maps.   #}
+        {# Title field - only shown in standalone mode (the "take a screenshot" buttons), where the map isn't attached to a comment/visit/trip. #}
         <div class="comment-map-composer-controls cmcc-title-row" id="cmc-title-row" hidden>
           <label class="cmcc-label" for="cmc-title-input">Title</label>
           <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200">
@@ -506,16 +480,10 @@
             <button type="button" id="confirm-dialog-ok" class="btn btn--danger-filled">Confirm</button>
         </div>
     </dialog>
-    {# The confirm dialog's behaviour - plus urbanlensConfirmExternalLink and #}
-    {# deletePinCascade, which build on it - lives in frontend/ts/shared/confirm-dialog.ts #}
-    {# and is installed by core.js above. It binds these elements on first use, not at #}
-    {# load, because that bundle runs in the head and this markup is further down. #}
+    {# The confirm dialog's behaviour - plus urbanlensConfirmExternalLink and deletePinCascade, which build on it. #}
 
     {# -- Comment map composer + viewer JS -------------------------------------- #}
-    {# Leaflet is NOT re-loaded here - pages with maps (pin detail, wiki, trips) already load  #}
-    {# it in {% block header %} along with their plugins (MarkerCluster, Leaflet.draw).         #}
-    {# Re-loading would clobber those plugins by replacing window.L.  Comment-map code          #}
-    {# guards every Leaflet call with typeof L checks so it degrades gracefully on other pages. #}
+    {# Leaflet is NOT re-loaded here - pages with maps (pin detail, wiki, trips) already load it in {% block header %} along with their. #}
     <script>
     (function () {
         // Tile layers come from the shared window.MapLayers factory
@@ -1474,11 +1442,7 @@
     }());
     </script>
 
-    {# Collapsible sections + the tools-FAB restore list live in #}
-    {# frontend/ts/shared/collapsible-sections.ts, and the empty-card dismissal in #}
-    {# shared/fly-to-dismiss.ts; both are installed by core.js above. They bind once #}
-    {# the document is ready rather than at load, because that bundle runs in the #}
-    {# head where document.body does not exist yet. #}
+    {# Collapsible sections + the tools-FAB restore list live in frontend/ts/shared/collapsible-sections.ts, and the empty-card dismissal. #}
 
     {% include 'dashboard/partials/ui/_tooltips_script.html' %}
     {% include 'dashboard/partials/ui/_page_explainer_script.html' %}

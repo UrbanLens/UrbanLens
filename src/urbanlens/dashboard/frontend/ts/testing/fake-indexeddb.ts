@@ -1,12 +1,5 @@
 /**
  * Minimal in-memory IndexedDB stand-in for tests.
- *
- * happy-dom ships no IndexedDB, which is why the E2EE key store and the client
- * that depends on it had no test coverage. This implements exactly the surface
- * `shared/e2ee-store.ts` uses - open/upgrade, put/get/delete, and a
- * forward-only cursor - and dispatches every callback asynchronously, as the
- * real API does: callers create a request and assign `onsuccess` afterwards, so
- * firing synchronously would run no handler at all.
  */
 
 type Handler = (() => void) | null;
@@ -151,7 +144,6 @@ const DEFAULT_STORE = "keys";
 
 /**
  * Install the fake as `globalThis.indexedDB`.
- *
  * @param storeName - Object store to pre-create, matching the module under test.
  * @returns A handle for seeding and inspecting the stored data.
  */

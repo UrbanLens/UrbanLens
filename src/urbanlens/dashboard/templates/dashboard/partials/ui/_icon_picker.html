@@ -51,18 +51,13 @@
         </div>
         {% endif %}
 
-        {% comment %}The category tabs arrive with the catalogue they filter - 28 of them
-        per picker was the second-largest thing this partial rendered (P68). "All" stays
-        because it is per-picker state: it is the tab that starts active.{% endcomment %}
+        {% comment %}The category tabs arrive with the catalogue they filter.{% endcomment %}
         <div class="icon-picker-tabs" id="icon-tabs-{{ picker_id }}">
             <button type="button" class="icon-tab active" data-cat=""
                     onclick="IconPicker.setTab('{{ picker_id }}', '', this)">All</button>
         </div>
 
-        {% comment %}The catalogue itself is fetched on first open, not rendered here:
-        it is 594 KB and identical in every picker, and a page carrying several of them
-        paid for each one (P68). IconPicker.toggle fills this in and marks the current
-        value selected.{% endcomment %}
+        {% comment %}The catalogue itself is fetched on first open, not rendered here.{% endcomment %}
         <div class="icon-picker-grid" id="icon-grid-{{ picker_id }}" data-grid-url="{% icon_picker_grid_url %}">
             <button type="button"
                     class="icon-picker-item icon-picker-none {% if not current_icon and not current_custom_icon_url %}selected{% endif %}"

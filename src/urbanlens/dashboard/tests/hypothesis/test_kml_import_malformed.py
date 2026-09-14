@@ -1,20 +1,4 @@
-"""One malformed KML must skip that file, not abort the whole import.
-
-The bulk importer's per-file handler exists precisely so a bad file is logged and
-skipped while the rest of the user's upload proceeds. Its exception tuple listed
-`XMLParseError` - which is `defusedxml.ElementTree.ParseError` - and neither of
-the two errors a malformed KML actually produces is that type:
-
-    fastkml KMLParseError  -> FastKMLError -> Exception
-    lxml    XMLSyntaxError -> ParseError -> LxmlSyntaxError -> SyntaxError
-
-Both escaped the parser's own handler *and* the caller's, so a KML with
-unparseable coordinates or a truncated tag took down the entire import stream -
-losing every other file in the same upload, not just the broken one.
-
-Both failures are reachable from ordinary bad input, which is what these fixtures
-are: coordinates that are not numbers, and a file cut off mid-tag.
-"""
+"""One malformed KML must skip that file, not abort the whole import."""
 
 from __future__ import annotations
 

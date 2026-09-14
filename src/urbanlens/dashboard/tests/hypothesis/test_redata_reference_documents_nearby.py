@@ -1,23 +1,4 @@
-"""Tests for the reference-documents-nearby panel and its gateway method.
-
-``RedataReferenceDocumentsGateway.get_reference_documents`` (gateway) wires up
-``GET /api/v1/reference-documents/`` - the near-a-coordinate half of REData's
-reference-documents endpoints, distinct from the by-name ``.../search/`` half
-``test_redata_reference_documents_gateway.py`` already covers and this test
-module leaves untouched.
-
-``ReferenceDocumentsNearbyPanelSource`` (panel) turns that envelope's two
-providers - Wikipedia articles, Wikidata claims - into one info card. The
-behaviour worth pinning: REData's own degrade shape (Wikidata's claim
-enrichment can fail independently of the entity search, per
-``WikidataGateway``'s module docstring - entities come back labelled but
-without claims, not as an error) must render as a partial card, never as a
-missing panel; and a total blackout (``complete=False`` with no results at
-all) must not be cached, so the panel retries instead of freezing empty for a
-whole cache window - the same rule ``RedataInfoPanelSource``/
-``test_outage_not_cached_as_empty.py`` establish generically, exercised here
-against this panel's own gateway call.
-"""
+"""Tests for the reference-documents-nearby panel and its gateway method."""
 
 from __future__ import annotations
 
@@ -231,10 +212,7 @@ class RenderContextTests(TestCase):
         self.assertIsNone(ctx["footer_link"])
 
     def test_wikidata_entity_with_degraded_claims_still_renders_via_wikipedia(self) -> None:
-        """REData's claim-enrichment query can fail independently of the entity search -
-        the entity comes back labelled but with every claim field blank, a normal 200,
-        not an error (see WikidataGateway's own docstring). The card must still render
-        from the Wikipedia half rather than disappearing."""
+        """REData's claim-enrichment query can fail independently of the entity search - the entity comes back labelled but with every claim field blank, a normal 200, not an error (see WikidataGateway's own docstring). The card must still render from the Wikipedia half rather than disappearing."""
         degraded_entity = _wikidata_doc(date_text="", creator="", attributes={"wikidata_id": "Q4859028"})
         data = {"documents": [_wikipedia_doc(), degraded_entity]}
         ctx = self.source.render_context(self.pin, data)
@@ -351,9 +329,8 @@ class FetchTests(TestCase):
     def test_a_total_blackout_is_not_cached(self) -> None:
         """complete=False with no results at all means 'could not ask' - must stay retryable.
 
-        Exercises RedataInfoPanelSource's shared outage rule against this panel's own
-        gateway call - see test_outage_not_cached_as_empty.py for the general case.
-        """
+        Exercises RedataInfoPanelSource's shared outage rule against this panel's own gateway call - see
+        test_outage_not_cached_as_empty.py for the general case."""
         envelope = LocationContextEnvelope(count=0, complete=False, results=[])
         with mock.patch(f"{_GATEWAY_MODULE}.RedataReferenceDocumentsGateway") as gateway_cls:
             gateway_cls.return_value.get_reference_documents.return_value = envelope
@@ -387,9 +364,7 @@ class FetchTests(TestCase):
                 self.source.fetch(self.pin)
 
     def test_is_gated_behind_the_places_feature(self) -> None:
-        """Decided 2026-09-08: a near-a-coordinate search is inherently about somewhere
-        other than the pin's own place - see the module docstring and
-        test_panel_feature_gate.py for the framework this relies on."""
+        """Decided 2026-09-08: a near-a-coordinate search is inherently about somewhere other than the pin's own place - see the module docstring and test_panel_feature_gate.py for the framework this relies on."""
         from urbanlens.dashboard.models.subscriptions import SiteFeature
 
         self.assertEqual(self.source.required_feature, SiteFeature.PLACES)

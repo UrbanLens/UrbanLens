@@ -1,16 +1,4 @@
-"""Tests for the Private Pin page's "Organization" combined label/list dialog.
-
-Covers three related bugs fixed together:
-
-- The "+" button used to open a dropdown choosing between two separate dialogs
-  (one for labels, one for lists). It now opens a single dialog with "Labels"
-  and "Lists" tabs (``_label_dialog.html``), and only the pin route gets the
-  "Lists" tab - location/image label dialogs are unaffected.
-- The custom fields "add a field" form was only hidden once the pin already
-  had at least one field, so it showed unprompted on pins with none.
-- A pin whose (legacy) ``Location`` had no slug hid the wiki create/view
-  button entirely instead of falling back or backfilling the slug.
-"""
+"""Tests for the Private Pin page's "Organization" combined label/list dialog."""
 
 from __future__ import annotations
 
@@ -55,11 +43,7 @@ class PinOrganizeDialogTests(TestCase):
         del wiki
 
     def test_lists_tab_add_button_uses_the_list_slug_not_a_nonexistent_uuid(self) -> None:
-        """Regression guard: this dialog's per-list "add" button called
-        addPinsToList(pin_list.uuid) - PinList has no uuid field, so Django
-        silently rendered an empty string, calling addPinsToList('') and
-        making every add-to-list attempt from the pin details page 404
-        (the map page's own add-to-list dialog already used .slug correctly)."""
+        """Regression guard: this dialog's per-list "add" button called addPinsToList(pin_list.uuid) - PinList has no uuid field, so Django silently rendered an empty string, calling addPinsToList('') and making every add-to-list attempt from the pin details page 404 (the map page's own add-to-list dialog already used .slug correctly)."""
         pin_list = baker.make("dashboard.PinList", profile=self.profile, name="My Favorites")
 
         response = self.client.get(reverse("label.pin", kwargs={"label_kind": "tag", "pin_slug": self.pin.slug}))
@@ -68,11 +52,7 @@ class PinOrganizeDialogTests(TestCase):
         self.assertNotContains(response, "addPinsToList('')")
 
     def test_lists_tab_excludes_people_labels(self) -> None:
-        """This dialog's own Labels tab already correctly excludes People
-        labels (via location_labels()) - locking that in. The actual bug
-        reported alongside this was a *different*, unfiltered Label.objects
-        query in the CSV/GPX import wizard's label list (see
-        test_import_wizard_label_list_excludes_people_labels below)."""
+        """This dialog's own Labels tab already correctly excludes People labels (via location_labels()) - locking that in. The actual bug reported alongside this was a *different*, unfiltered Label.objects query in the CSV/GPX import wizard's label list (see test_import_wizard_label_list_excludes_people_labels below)."""
         from urbanlens.dashboard.models.labels.meta import KIND_TAG, KIND_USER
         from urbanlens.dashboard.models.labels.model import Label
 
@@ -86,10 +66,7 @@ class PinOrganizeDialogTests(TestCase):
         del person, tag
 
     def test_import_wizard_label_list_excludes_people_labels(self) -> None:
-        """Regression guard: the CSV/GPX import wizard's per-row label
-        dropdown was built from an unfiltered Label.objects.visible_to(...)
-        query, so People labels (which can't be applied to pins) leaked into
-        it even though every other pin-label picker already excludes them."""
+        """Regression guard: the CSV/GPX import wizard's per-row label dropdown was built from an unfiltered Label.objects.visible_to(...) query, so People labels (which can't be applied to pins) leaked into it even though every other pin-label picker already excludes them."""
         from urbanlens.dashboard.models.labels.meta import KIND_TAG, KIND_USER
         from urbanlens.dashboard.models.labels.model import Label
 
@@ -105,10 +82,8 @@ class PinOrganizeDialogTests(TestCase):
 class LabelCreateAndAddTests(TestCase):
     """Inline "create a new label" from the pin/wiki Add Labels dialog.
 
-    Mirrors LabelImageMembershipView's existing create_and_add support (see
-    test_media_labels.py) - the same action, extended to the pin and location
-    membership routes.
-    """
+    Mirrors LabelImageMembershipView's existing create_and_add support (see test_media_labels.py) - the same
+    action, extended to the pin and location membership routes."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -225,12 +200,9 @@ class PinWikiLinkVisibilityTests(TestCase):
     def test_overview_fragment_backfills_the_slug_even_without_a_prior_page_load(self) -> None:
         """PinOverviewView must not depend on PinController.view having run first.
 
-        The backfill used to live only in PinController.view - a direct hit to
-        the HTMX overview endpoint (e.g. a bookmarked fragment URL, or any
-        future caller that skips the full page load) would render with the
-        wiki link permanently hidden even though nothing else was wrong with
-        the pin.
-        """
+        The backfill used to live only in PinController.view - a direct hit to the HTMX overview endpoint (e.g.
+        a bookmarked fragment URL, or any future caller that skips the full page load) would render with the
+        wiki link permanently hidden even though nothing else was wrong with the pin."""
         location = baker.make("dashboard.Location", latitude="43.000000", longitude="-77.000000", route="Main St")
         pin = baker.make("dashboard.Pin", profile=self.profile, location=location, name="Legacy Pin 2")
         type(location).objects.filter(pk=location.pk).update(slug=None)

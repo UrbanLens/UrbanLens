@@ -16,32 +16,8 @@ if TYPE_CHECKING:
 
 class EpaFacility(abstract.DashboardModel):
     """A single EPA-regulated facility, keyed by its FRS Registry ID and persisted indefinitely.
-
-    Every facility UrbanLens ever discovers via EPA ECHO (whether from a
-    nearby-facility search or a full Detailed Facility Report lookup) is
-    recorded here, project-wide - not scoped to any one pin or user. A
-    facility discovered while checking one pin's exact-site match becomes
-    instantly reusable for any OTHER pin near it, without spending any of
-    ECHO's tightly rate-limited API budget again (see ``epa_echo.py``'s
-    ``_fetch_epa_echo_data``, which routinely exhausts that budget after only
-    2-3 calls per fetch). This is reference data, not a time-limited cache: a
-    facility's registry ID and physical coordinates don't change, so rows are
-    never expired or re-fetched automatically - only enriched further as more
-    is learned about them.
-
-    ``latitude``/``longitude`` are only populated once full facility detail
-    has actually been fetched (``detail_fetched_at`` set) via
-    ``record_detail_result`` - ``record_search_result`` alone (a facility
-    merely sighted in a search result, with no known coordinates yet) leaves
-    them null, so a search-only row can't yet support a real distance check.
-    ``plugins.builtin.epa_echo``'s current REData-backed fetch always has full
-    detail (including coordinates) up front and so only ever calls
-    ``record_detail_result`` - ``record_search_result`` remains valid,
-    independently-tested model API for a future source that only offers a
-    coordinate-less search step. A row with ``detail_fetched_at`` set but
-    still-null coordinates is also meaningful: the source genuinely has no
-    coordinates for that facility, so it can never be an exact-site match -
-    recording that saves re-fetching it to re-rule it out.
+    Every facility UrbanLens ever discovers via EPA ECHO (whether from a nearby-facility search or a full Detailed Facility Report lookup) is recorded here, project-wide - not scoped to any one pin or user.
+    This is reference data, not a time-limited cache: a facility's registry ID and physical coordinates don't change, so rows are never expired or re-fetched automatically - only enriched further as more is learned about them.
     """
 
     registry_id = models.CharField(max_length=50, unique=True, db_index=True)
@@ -49,10 +25,10 @@ class EpaFacility(abstract.DashboardModel):
     address = models.CharField(max_length=255, blank=True, default="")
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
-    #: Merged normalized facility fields - whatever combination of search-result
-    #: and Detailed Facility Report data is currently known (compliance_status,
-    #: significant_violator, programs, ...). See _fetch_epa_echo_data for the
-    #: exact shape written here.
+    #: Merged normalized facility fields - whatever combination of search-result and Detailed
+    #: Facility Report data is currently known (compliance_status, significant_violator, programs,
+    #: ...).
+    #: See _fetch_epa_echo_data for the exact shape written here.
     data = models.JSONField(default=dict)
     #: When the Detailed Facility Report (with real coordinates) was last
     #: fetched. None means this row only reflects a nearby-search listing so
@@ -90,10 +66,7 @@ class EpaFacility(abstract.DashboardModel):
     @classmethod
     def record_search_result(cls, registry_id: str, *, name: str, address: str, latitude: float | None, data: dict[str, Any]) -> None:
         """Upsert a facility from a nearby-search result.
-
-        Never overwrites an existing row's coordinates or ``detail_fetched_at``
-        - a richer, already-fetched Detailed Facility Report must survive a
-        later search-only sighting of the same facility.
+        Never overwrites an existing row's coordinates or ``detail_fetched_at`` - a richer, already-fetched Detailed Facility Report must survive a later search-only sighting of the same facility.
 
         Args:
             registry_id: EPA FRS Registry ID.
@@ -117,13 +90,7 @@ class EpaFacility(abstract.DashboardModel):
     @classmethod
     def record_detail_result(cls, registry_id: str, *, name: str, address: str, latitude: float | None, longitude: float | None, data: dict[str, Any]) -> EpaFacility:
         """Upsert a facility's fetched Detailed Facility Report.
-
-        A DFR without coordinates (ECHO has no Permits data for some
-        facilities) is still recorded - ``detail_fetched_at`` marks it as
-        "already checked, can never be an exact-site match" so future fetches
-        never re-spend rate-limited budget on it - but ``None`` coordinates
-        never overwrite real ones already on the row (e.g. a search-derived
-        latitude, or a previous richer DFR).
+        A DFR without coordinates (ECHO has no Permits data for some facilities) is still recorded - ``detail_fetched_at`` marks it as "already checked, can never be an exact-site match" so future fetches never re-spend rate-limited budget on it - but ``None`` coordinates never overwrite real ones already on the row (e.g. a search-derived latitude, or a previous richer DFR).
 
         Args:
             registry_id: EPA FRS Registry ID.
@@ -156,12 +123,6 @@ class EpaFacility(abstract.DashboardModel):
     @classmethod
     def _get_or_create_row(cls, registry_id: str, *, defaults: dict[str, Any]) -> tuple[EpaFacility, bool]:
         """``get_or_create`` hardened against the concurrent-fetch race.
-
-        The two EPA panel sources deliberately share one upstream fetch and can
-        briefly run concurrently (see ``epa_echo.py``'s module docstring), so
-        two workers may both miss the ``get`` and race the ``create`` - the
-        loser's ``IntegrityError`` on the unique ``registry_id`` must resolve
-        to the winner's row instead of aborting its whole panel fetch.
 
         Args:
             registry_id: EPA FRS Registry ID (the unique key raced on).

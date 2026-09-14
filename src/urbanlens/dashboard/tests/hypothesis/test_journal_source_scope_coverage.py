@@ -1,22 +1,4 @@
-"""Every journal source must declare the scopes the API needs to serve it.
-
-The journal is a multi-domain feed: visit notes, pin/wiki/trip comment bodies,
-ratings and private article text all arrive through one endpoint.
-``JOURNAL_SOURCES`` lists the providers; ``MemoriesJournalView.JOURNAL_SOURCE_SCOPES``
-maps each onto the scopes a credential must hold before that domain is included.
-
-The *safety* direction is already handled by construction:
-``filter_sources_by_grants`` iterates the scope mapping, so a source with no entry
-is never granted, and an empty scope set is omitted rather than granted. Adding a
-source and forgetting the scopes cannot leak it - which is what the comment on
-``JOURNAL_SOURCES`` claims, and it is true.
-
-The *completeness* direction is not covered, and that is what this pins. A source
-missing from the mapping is silently unavailable through the API forever - no
-error, no empty-scope warning, just a domain that never appears - and nothing
-would fail. The reverse (a scope entry for a source that no longer exists) is
-also drift, and hides that the mapping has stopped describing reality.
-"""
+"""Every journal source must declare the scopes the API needs to serve it."""
 
 from __future__ import annotations
 

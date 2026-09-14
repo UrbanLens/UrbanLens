@@ -44,15 +44,11 @@
 {% block content %}
 <div class="settings-page page-content">
 
-    {# ======================================================================= #}
-    {# Privacy tab                                                             #}
-    {# ======================================================================= #}
+    {# Privacy tab #}
     <div class="settings-tab-panel active" data-tab-panel="privacy" id="tab-panel-privacy">
 
     {# -- Privacy ------------------------------------------------------------- #}
-    {# Community, Memories, and External Services each bulk-gate what UrbanLens tracks or #}
-    {# exposes about you, so their toggles live here as subsections rather than their own #}
-    {# top-level pages - Privacy is the natural home for "what does the site do with me". #}
+    {# Community, Memories, and External Services each bulk-gate what UrbanLens tracks or exposes about you, so their toggles live here. #}
     <section class="settings-section ul-section" id="privacy-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">lock</i>
@@ -498,9 +494,7 @@
     </section>
     </div> {# /tab-panel-privacy #}
 
-    {# ======================================================================= #}
-    {# Connections tab                                                         #}
-    {# ======================================================================= #}
+    {# Connections tab #}
     <div class="settings-tab-panel" data-tab-panel="connections" id="tab-panel-connections">
     <section class="settings-section ul-section" id="connections-settings-section">
         <div class="settings-section-header">
@@ -671,9 +665,7 @@
     </section>
     </div> {# /tab-panel-connections #}
 
-    {# ======================================================================= #}
-    {# Messages tab                                                            #}
-    {# ======================================================================= #}
+    {# Messages tab #}
     <div class="settings-tab-panel" data-tab-panel="messages" id="tab-panel-messages">
     <section class="settings-section ul-section" id="direct-message-settings-section">
         <div class="settings-section-header">
@@ -774,9 +766,7 @@
     </section>
     </div> {# /tab-panel-messages #}
 
-    {# ======================================================================= #}
-    {# Security tab                                                            #}
-    {# ======================================================================= #}
+    {# Security tab #}
     <div class="settings-tab-panel" data-tab-panel="security" id="tab-panel-security">
 
     {# -- Password (change, or first-time set for social sign-in accounts) ---- #}
@@ -843,9 +833,7 @@
     </section>
     </div> {# /tab-panel-security #}
 
-    {# ======================================================================= #}
-    {# Map & Display tab                                                       #}
-    {# ======================================================================= #}
+    {# Map & Display tab #}
     <div class="settings-tab-panel" data-tab-panel="map" id="tab-panel-map">
 
     {# -- Style --------------------------------------------------------------- #}
@@ -1284,9 +1272,7 @@
     </section>
     </div> {# /tab-panel-map #}
 
-    {# ======================================================================= #}
-    {# AI tab (only exists for users whose subscription grants AI features)    #}
-    {# ======================================================================= #}
+    {# AI tab (only exists for users whose subscription grants AI features) #}
     {% if can_use_ai_features %}
     <div class="settings-tab-panel" data-tab-panel="ai" id="tab-panel-ai">
 
@@ -1365,9 +1351,7 @@
     </div> {# /tab-panel-ai #}
     {% endif %}
 
-    {# ======================================================================= #}
-    {# Account tab                                                             #}
-    {# ======================================================================= #}
+    {# Account tab #}
     <div class="settings-tab-panel" data-tab-panel="account" id="tab-panel-account">
 
     {# -- Account Info ------------------------------------------------------------ #}
@@ -1581,9 +1565,7 @@
     </section>
     </div> {# /tab-panel-account #}
 
-    {# ======================================================================= #}
-    {# Advanced tab                                                            #}
-    {# ======================================================================= #}
+    {# Advanced tab #}
     <div class="settings-tab-panel" data-tab-panel="advanced" id="tab-panel-advanced">
 
     {# -- Customize (custom fields) ------------------------------------------- #}
@@ -1611,10 +1593,7 @@
     </section>
 
     {# -- Keyboard shortcuts ------------------------------------------------------ #}
-    {# Rendered entirely by JS (see the ul-hotkeys- functions near the bottom of #}
-    {# this page): the row labels/descriptions/defaults live in hotkeys.ts, and #}
-    {# this page has no bundled TS entry to import them from, so they're mirrored #}
-    {# in plain JS here rather than duplicated a third time as template context. #}
+    {# Rendered entirely by JS: the row labels/descriptions/defaults live in hotkeys.ts, and this page has no bundled TS entry to import them. #}
     <section class="settings-section ul-section" id="hotkeys-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">keyboard</i>

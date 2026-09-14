@@ -1,16 +1,4 @@
-{% comment %}
-Hero body for the wiki page (pages/location/wiki.html) - so this page uses
-the same shared gradient hero every other page uses instead of its own
-one-off banner. Expects `wiki`, `location`, and `user_pin`
-in context.
-
-The suggest-edits/delete/back-to-pin actions and the community-wiki notice
-render here (absolutely positioned over the hero's top corners - see
-.wiki-hero-actions/.wiki-notice in _wiki.scss) rather than in their own row
-below the hero, to avoid spending extra page height on them. On narrow
-screens they drop out of the corners and stack in normal flow instead, since
-the hero's fixed height has no room to fit everything at once that small.
-{% endcomment %}
+{% comment %}Hero body for the wiki page (pages/location/wiki.html).{% endcomment %}
 <p class="ul-page-hero__eyebrow wiki-eyebrow">
     <i class="material-symbols-outlined">public</i> Community Wiki
     {% include "dashboard/partials/ui/_scope_badge.html" %}
@@ -30,9 +18,7 @@ the hero's fixed height has no room to fit everything at once that small.
         Suggest edits
     </button>
     {% if parent_wiki %}
-    {# Wikis nest themselves (a building's inside its campus's), so a nested #}
-    {# page needs a way up. Only rendered when the viewer has earned the     #}
-    {# parent - see the controller's visible_parent_wiki call.               #}
+    {# Wikis nest themselves (a building's inside its campus's), so a nested page needs a way up. #}
     <a href="{% url 'location.wiki' parent_wiki.location.slug %}" class="wiki-parent-link btn btn--secondary btn--sm"
        title="This place sits inside {{ parent_wiki.name }}">
         <i class="material-symbols-outlined">arrow_upward</i> {{ parent_wiki.name|truncatechars:32 }}

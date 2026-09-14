@@ -1,12 +1,4 @@
-"""Tests for SaveMapPositionView (POST /settings/map-position/).
-
-Server-side confirmation for UL-255 ("remember last map position doesn't
-work") - locks in that the write side is correctly implemented and gated, so
-a future investigation doesn't re-suspect it. See docs/PROBLEMS.md for the
-more likely actual cause: a separate, unrelated shareable-map-view-URL
-feature on the map page takes precedence over the server-remembered value
-on page load, independent of anything tested here.
-"""
+"""Tests for SaveMapPositionView (POST /settings/map-position/)."""
 
 from __future__ import annotations
 

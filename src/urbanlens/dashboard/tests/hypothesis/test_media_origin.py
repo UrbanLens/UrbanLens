@@ -1,17 +1,4 @@
-"""Serving uploads from their own origin (``UL_MEDIA_BASE_URL``).
-
-The split only works if three separate things hold, and each of them fails
-silently in a different way:
-
-- The cookie reaches the media origin at all. Get ``Domain`` wrong and every
-  image on the site 404s while the app itself looks fine.
-- The media gate accepts it, and accepts *only* it - a tampered, expired, or
-  deactivated-user cookie must be as good as no cookie.
-- Framing and MEDIA_URL follow. ``X-Frame-Options: SAMEORIGIN`` is correct
-  same-origin and wrong the moment the lightbox frames another host, and
-  ``MEDIA_URL`` is what carries the whole change out to ~100 ``.url`` call
-  sites without touching any of them.
-"""
+"""Serving uploads from their own origin (``UL_MEDIA_BASE_URL``)."""
 
 from __future__ import annotations
 
@@ -56,8 +43,7 @@ class CookieDomainTests(SimpleTestCase):
 
     @override_settings(UL_MEDIA_BASE_URL="https://media.dev.urbanlens.org", SITE_URL="https://dev.urbanlens.org")
     def test_prefers_the_deeper_shared_domain_over_the_apex(self) -> None:
-        # Scoping this to urbanlens.org would hand the cookie to staging and
-        # production as well.
+        # Scoping this to urbanlens.org would hand the cookie to staging and production as well.
         self.assertEqual(cookie_domain(), "dev.urbanlens.org")
 
     @override_settings(UL_MEDIA_COOKIE_DOMAIN="explicit.example.net")
@@ -303,17 +289,8 @@ class MediaUrlTests(SimpleTestCase):
 class SettingsNamesAreRealTests(SimpleTestCase):
     """The settings this module reads have to be ones that actually exist.
 
-    ``override_settings`` will happily *invent* a setting that production does
-    not define, so a suite built entirely on overrides can pass while the real
-    code path reads ``""`` forever. That is not hypothetical: ``cookie_domain``
-    originally read ``settings.UL_SITE_URL`` - the environment variable's
-    spelling, where the setting is ``SITE_URL`` - which made it return ``""``
-    on every real deployment, silently turning ``set_media_cookie`` into a
-    no-op and 404ing the entire media origin. Every test above passed
-    throughout, because they each overrode the name into existence.
-
-    These assert against the *unoverridden* settings object for that reason.
-    """
+    ``override_settings`` will happily *invent* a setting that production does not define, so a suite built
+    entirely on overrides can pass while the real code path reads ``""`` forever."""
 
     def test_site_url_is_the_real_setting_name(self) -> None:
         from django.conf import settings

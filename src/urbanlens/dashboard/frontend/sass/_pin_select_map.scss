@@ -1,9 +1,4 @@
-// Shared map + click/drag-select UX for pages that review a list of
-// geolocated items alongside a card grid (Memories > Locations,
-// Memories > Visits). Behavior lives in static/js/pin-select-map.js;
-// these are the generic classes that JS toggles/expects. Page-specific
-// card content keeps its own stylesheet (e.g. _pin_suggestions.scss,
-// _memories.scss) - only the map/marker/selection-checkbox chrome lives here.
+// Shared map + click/drag-select UX for pages that review a list of geolocated items alongside a card grid.
 
 @use 'variables' as *;
 

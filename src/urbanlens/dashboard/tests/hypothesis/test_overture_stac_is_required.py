@@ -1,24 +1,4 @@
-"""P110: `stac=True` is a request, and the library grants it only when it can.
-
-`test_overture_maps_stac_narrowing.py` guards that we ask for the narrowing.
-This guards the half that turned out to matter more: what happens when Overture
-refuses to answer.
-
-`overturemaps/core.py`'s `_get_files_from_stac` catches every exception, prints,
-and returns `None`; the caller then opens the entire theme rather than the
-handful of intersecting partitions. So the OOM mitigation resolved on 2026-08-31
-is switched off by Overture rate-limiting us — and enrichment calling Overture
-per location is what earns the rate limit. The more work is queued, the more
-certain the mitigation is to be off exactly when it is needed.
-
-Observed 2026-09-10: a worker child at 1,743 MB inside `arrow_to_geopandas`,
-reached from `enrich_wiki_location`, while the STAC index was answering
-`HTTP Error 429`.
-
-Fixed 2026-09-10: the gateway resolves the file list itself and refuses when the
-index cannot answer, with a short per-process circuit so a refusal stops the
-next lookup rather than adding to the storm.
-"""
+"""P110: `stac=True` is a request, and the library grants it only when it can."""
 
 from __future__ import annotations
 
@@ -41,10 +21,7 @@ _STAC_LOOKUP = "overturemaps.core._get_files_from_stac"
 class TheLibraryFallsBackToThePlanetTests(SimpleTestCase):
     """Pinning the third-party behaviour this depends on, so an upgrade is visible.
 
-    Not a test of our code. It is here because the whole mitigation rests on a
-    detail of someone else's error handling, and a release that changed it -
-    in either direction - should be noticed here rather than in a worker's RSS.
-    """
+    Not a test of our code."""
 
     def test_a_failed_stac_lookup_returns_none_rather_than_raising(self) -> None:
         from overturemaps import core
@@ -177,11 +154,7 @@ def _bbox():
 class TheLookupCannotHangTests(SimpleTestCase):
     """The library gives its own HTTP call no timeout at all.
 
-    `_get_files_from_stac` does `with urlopen(stac_url) as response`, with no
-    `timeout=`. A stalled connection therefore parks the calling thread forever,
-    and this is reached from the request path as well as from tasks - observed
-    as an app serving nothing at 0% CPU, every worker thread waiting.
-    """
+    `_get_files_from_stac` does `with urlopen(stac_url) as response`, with no `timeout=`."""
 
     def setUp(self) -> None:
         super().setUp()

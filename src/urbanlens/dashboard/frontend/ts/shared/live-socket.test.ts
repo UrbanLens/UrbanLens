@@ -10,12 +10,6 @@ const PAGE_URL = "https://urbanlens.test/";
 
 /**
  * Put the document back on an https page.
- *
- * The scheme the helper picks comes from ``location``, and the happy-dom
- * document is shared by every test file in the run: ``leave-confirmation.test.ts``
- * navigates it away, so whichever file follows inherits an about:blank location
- * and would see ``ws://`` here for reasons that have nothing to do with this
- * module.
  */
 function restorePageUrl(): void {
     (window as unknown as { happyDOM?: { setURL(url: string): void } }).happyDOM?.setURL(PAGE_URL);
@@ -28,9 +22,6 @@ type Listener = (event: never) => void;
 
 /**
  * A WebSocket the test drives by hand.
- *
- * ``close()`` emits a close event, as a real socket does - which is the whole
- * reason a deliberate close can be mistaken for a dropped one.
  */
 class StubSocket {
     static readonly CONNECTING = 0;
@@ -97,11 +88,6 @@ interface Scheduled {
 
 /**
  * A clock the test steps by hand.
- *
- * ``bun-types`` does not declare bun's own ``jest.useFakeTimers``, and stubbing
- * the four globals is what the rest of this suite does with ``fetch`` anyway. It
- * also exposes ``pendingTimers()``, which is the only direct way to prove a
- * teardown left nothing armed.
  */
 let scheduled = new Map<number, Scheduled>();
 let now = 0;
@@ -201,9 +187,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    // window and document are shared across the whole file, so a handle left
-    // open here would still be listening for "online" during a later test and
-    // would reconnect into its socket list.
+    // window and document are shared across the whole file, so a handle left open here would still be listening for "online" during a later.
     for (const handle of handles) handle.close();
     restoreClock();
     globalThis.WebSocket = realWebSocket;

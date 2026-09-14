@@ -1,17 +1,4 @@
-"""Attaching a photo to the pins and wikis it belongs to, and collecting it when nothing does.
-
-A photo is not owned by one place. A picture of a building belongs to the
-building's pin and, because child pins are a feature, to the parcel pin above it;
-a photo contributed to a community wiki belongs to that wiki and to the
-contributor's own pin. :class:`~urbanlens.dashboard.models.images.attachment.ImageAttachment`
-holds those as rows so there can be any number of them, and so removing one
-removes exactly one.
-
-The counterpart is collection. Detaching the last thing that pointed at a photo
-should not leave the bytes behind forever, but "nothing points at it" is a much
-narrower condition than it looks, and getting it wrong deletes somebody's
-library.
-"""
+"""Attaching a photo to the pins and wikis it belongs to, and collecting it when nothing does."""
 
 from __future__ import annotations
 
@@ -29,12 +16,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Sources whose rows exist only to back a citation: bytes fetched on a user's
-#: behalf because something referred to them. An upload is not in this set, and
-#: that is the whole point - a photo somebody uploaded is their Memories library
-#: whether or not it is currently attached to anything, and collecting it because
-#: the last attachment went away would delete their own picture out from under
-#: them.
+#: Sources whose rows exist only to back a citation: bytes fetched on a user's behalf because
+#: something referred to them.
+#: An upload is not in this set, and that is the whole point - a photo somebody uploaded is their
+#: Memories library whether or not it is currently attached to anything, and collecting it because
 COLLECTABLE_SOURCES = frozenset({ImageSource.LINKED_URL})
 
 
@@ -44,12 +29,10 @@ def attach_to_pin(image: Image, pin: Pin, *, added_by: Profile | None = None) ->
     Args:
         image: The photo.
         pin: The pin it belongs to.
-        added_by: Who attached it, for wikis and shared plans where that is not
-            inferable from the pin.
+        added_by: Who attached it, for wikis and shared plans where that is not inferable from the pin.
 
     Returns:
-        The attachment row, existing or new.
-    """
+        The attachment row, existing or new."""
     attachment, created = ImageAttachment.objects.get_or_create(image=image, pin=pin, defaults={"added_by": added_by})
     if created:
         logger.debug("Attached image %s to pin %s", image.pk, pin.pk)
@@ -65,8 +48,7 @@ def attach_to_wiki(image: Image, wiki: Wiki, *, added_by: Profile | None = None)
         added_by: The contributing profile.
 
     Returns:
-        The attachment row, existing or new.
-    """
+        The attachment row, existing or new."""
     attachment, created = ImageAttachment.objects.get_or_create(image=image, wiki=wiki, defaults={"added_by": added_by})
     if created:
         logger.debug("Attached image %s to wiki %s", image.pk, wiki.pk)
@@ -75,17 +57,13 @@ def attach_to_wiki(image: Image, wiki: Wiki, *, added_by: Profile | None = None)
 
 def reference_count(image: Image) -> int:
     """How many things currently point at this photo.
-
-    Counts every kind of citation, not only attachments: a floorplan reference
-    keeps a photo alive exactly as much as a pin does, which is the reason
-    ``FloorplanReference.image`` is SET_NULL rather than CASCADE.
+    Counts every kind of citation, not only attachments: a floorplan reference keeps a photo alive exactly as much as a pin does, which is the reason ``FloorplanReference.image`` is SET_NULL rather than CASCADE.
 
     Args:
         image: The photo.
 
     Returns:
-        The number of references. Zero means nothing would notice it going.
-    """
+        The number of references."""
     return (
         ImageAttachment.objects.filter(image=image).count()
         + image.floorplan_references.count()
@@ -97,29 +75,22 @@ def reference_count(image: Image) -> int:
 
 def collect_if_unreferenced(image: Image) -> bool:
     """Delete a fetched photo once nothing refers to it any more.
-
-    Deliberately narrow. Only rows in :data:`COLLECTABLE_SOURCES` are eligible -
-    bytes fetched to back a citation, which have no independent reason to exist -
-    and only when every kind of reference is gone. An uploaded photo is never
-    collected here however unattached it is, because it is its owner's library.
+    Only rows in :data:`COLLECTABLE_SOURCES` are eligible - bytes fetched to back a citation, which have no independent reason to exist - and only when every kind of reference is gone.
 
     Args:
         image: The photo to consider.
 
     Returns:
-        True if it was deleted.
-    """
+        True if it was deleted."""
     if image.source not in COLLECTABLE_SOURCES:
         return False
     if reference_count(image) > 0:
         return False
     logger.info("Collecting unreferenced fetched image %s (%s)", image.pk, image.source_url or "no source url")
-    # The file first, and through delete_stored_file rather than by hand: sharing
-    # a pin reuses the same storage key for several rows, so the bytes go only
-    # when nothing else points at them. Django has not deleted a FileField's file
-    # on row delete since 1.3, and there is no pre_delete receiver for Image, so
-    # dropping the row alone leaves an orphan - which the media gate serves to any
-    # authenticated user.
+    # The file first, and through delete_stored_file rather than by hand: sharing a pin reuses the
+    # same storage key for several rows, so the bytes go only when nothing else points at them.
+    # Django has not deleted a FileField's file on row delete since 1.3, and there is no pre_delete
+    # receiver for Image, so dropping the row alone leaves an orphan - which the media gate serves
     from urbanlens.dashboard.services.media.images import delete_stored_file
 
     delete_stored_file(image)

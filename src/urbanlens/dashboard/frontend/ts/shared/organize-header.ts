@@ -16,10 +16,7 @@ const TAB_FILTER_NS: Record<string, OrgNamespace> = { categories: "cat", tags: "
 class OrganizeHeader {
     private tabs = new Map<string, OrgTabConfig>();
     private activeTab: string;
-    // The persisted preference - only ever changed by an explicit view-button
-    // click (setSharedView). Rendering never reads this directly; it always
-    // goes through effectiveView(), which is what keeps a transient narrow
-    // window from being confused with the user actually asking for "list".
+    // The persisted preference - only ever changed by an explicit view-button click (setSharedView).
     private sharedView: string;
     private lastEffectiveView: string | null = null;
     private actionsEl: HTMLElement | null = null;
@@ -67,11 +64,7 @@ class OrganizeHeader {
 
     setSharedView(view: string): void {
         this.sharedView = view;
-        // Best-effort: remembering the preference must never stop the view from
-        // actually changing. setItem throws on a full quota - which this app can
-        // genuinely reach, since the map caches every pin under `ul_pins_v5_*` -
-        // and an uncaught throw here skips syncViewButtons/applyView/filters
-        // below, so the click appears to do nothing at all.
+        // Best-effort: remembering the preference must never stop the view from actually changing. setItem throws on a full quota.
         try {
             localStorage.setItem("organize_view", view);
         } catch {
@@ -139,12 +132,8 @@ class OrganizeHeader {
     }
 
     /**
-     * Re-render for the current viewport, without ever touching the stored
-     * preference - a resize firing continuously through a drag, or a user
-     * genuinely on a narrow device, must not overwrite a "gallery" choice
-     * made on desktop. Widening back past the breakpoint restores it with
-     * no extra bookkeeping, since sharedView itself was never changed.
-     */
+ * Re-render for the current viewport, without ever touching the stored preference.
+ */
     private enforceMobileGalleryFallback(): void {
         if (this.effectiveView() === this.lastEffectiveView) return;
         this.renderEffectiveView();
@@ -280,18 +269,7 @@ export function installOrgTabSwitching(): void {
     });
 }
 
-// ── Tab content prewarming -------------------------------------------------
-// Every `.organize-panel` (the 5 label-kind tabs plus Display Order) carries
-// hx-get+hx-trigger="revealed" whenever it still needs a real fetch - either
-// because its rows were deferred at first paint (see organize.py's
-// build_organize_page_context) or, for the active tab, because it still needs
-// its pin-count stats backfilled. "revealed" only fires once a panel is
-// actually unhidden by a tab click, so switching tabs always shows a loading
-// placeholder first. This warms every *other* tab's content in the background
-// so a later tab click usually finds it already there - sequential, one
-// request at a time, and only starting once the active tab's own load has
-// finished, so it never competes with the content the user is actually
-// looking at for bandwidth or server time.
+// ── Tab content prewarming ------------------------------------------------- Every `.organize-panel`.
 function isRenderedVisible(el: HTMLElement): boolean {
     return el.offsetParent !== null;
 }
@@ -301,10 +279,7 @@ function prewarmOrgPanel(panels: HTMLElement[], index: number): void {
     const panel = panels[index];
     const url = panel?.getAttribute("hx-get");
     const targetSel = panel?.getAttribute("hx-target");
-    // Cleared before firing, not after: a click on this tab while the prewarm
-    // request is in flight must not also fire htmx's own "revealed" fetch and
-    // race it, and a click after this queue moves on must find nothing left
-    // to trigger (the content is either already here or on its way).
+    // Cleared before firing, not after: a click on this tab while the prewarm request is in flight must not also fire htmx's own "revealed".
     panel?.removeAttribute("hx-trigger");
     panel?.removeAttribute("hx-get");
     panel?.removeAttribute("hx-target");
@@ -345,16 +320,7 @@ export function installOrgTabPrewarm(): void {
     activeTarget.addEventListener("htmx:responseError", start, { once: true });
 }
 
-// ── Section switching (Labels | Lists | Filters) --------------------------
-// A second, independent tab tier above `.organize-tab`/`.organize-panel`:
-// switches between the three top-level sections of the Organize page. Lists
-// and Filters lazy-load their content via HTMX the first time they're shown
-// (hx-trigger="revealed" on `.organize-section-panel`, see organize/index.html) -
-// this only ever toggles which section is visible, it never touches that content.
-// Kept in sync with the server-side hero branch in organize/index.html's
-// {% block hero %} - the section switch below is client-side only (no page
-// reload), so the hero has to be updated here too or it stays stuck on
-// whatever section was active on the initial page load.
+// ── Section switching (Labels | Lists | Filters) -------------------------- A second, independent tab tier above.
 const ORG_SECTION_HERO: Record<string, { icon: string; title: string; subtitle: string }> = {
     labels: { icon: "tune", title: "Organize", subtitle: "Manage the tags, categories, statuses, and people labels used to organize your data." },
     lists: { icon: "bookmarks", title: "Lists", subtitle: "Group your pins into curated collections you can browse, share, and filter by." },
@@ -369,12 +335,7 @@ function updateOrgSectionHero(section: string): void {
     const subtitleEl = document.querySelector<HTMLElement>(".ul-page-hero__subtitle");
     if (iconEl) iconEl.textContent = hero.icon;
     if (titleEl) {
-        // _page_hero.html's server-rendered markup is `<h1>{icon}{title}</h1>`,
-        // which Django's whitespace between tags turns into a whitespace-only
-        // text node BEFORE the icon too - `.find()` without filtering picked
-        // that one, so the title got written before the icon instead of after
-        // it, leaving the real (never-updated) title text node still showing
-        // the old section's name next to the icon.
+        // _page_hero.html's server-rendered markup is `<h1>{icon}{title}</h1>`, which Django's whitespace between tags turns into.
         const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim());
         if (textNode) textNode.textContent = ` ${hero.title} `;
     }
@@ -396,9 +357,7 @@ export function installOrgSectionSwitching(): void {
             });
             updateOrgSectionHero(section);
             const url = new URL(window.location.href);
-            // "labels" isn't a real ?tab= value server-side - it's implied by
-            // whichever label sub-tab (tags/categories/...) was last active,
-            // which installOrgTabSwitching persists to localStorage.
+            // "labels" isn't a real ?tab= value server-side.
             const tabParam = section === "labels" ? (localStorage.getItem("organize_tab") ?? "tags") : section;
             url.searchParams.set("tab", tabParam);
             window.history.replaceState({}, "", url.toString());

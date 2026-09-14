@@ -1,10 +1,4 @@
-"""The shared test helpers must fail when they are supposed to.
-
-``run_concurrently`` and ``assert_agrees`` exist to make two error-prone patterns
-routine - real-thread race tests, and holding a fast reimplementation to the
-function it replaced. A helper that silently passes is worse than no helper,
-because every test built on it inherits the false confidence.
-"""
+"""The shared test helpers must fail when they are supposed to."""
 
 from __future__ import annotations
 

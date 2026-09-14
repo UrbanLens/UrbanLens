@@ -1,23 +1,5 @@
 #!/usr/bin/env python3
-"""Build the Sphinx documentation, and fail if it produces no API reference.
-
-``sphinx-build`` reports "build succeeded" for a configuration that emits three
-pages and reads no docstring at all, which is what this repository shipped until
-2026-09-05: ``docs/conf.py`` and ``docs/index.rst`` existed, nothing ran
-``sphinx-apidoc``, no ``automodule`` directive was ever written, and the output
-was ``index.html``, ``genindex.html`` and ``search.html``. Meanwhile ``CLAUDE.md``
-justified its Google-docstring standard with "Sphinx consumes them".
-
-So exit status is not the check. This asserts the build produced module pages,
-which is the only claim anyone actually cares about, and prints how many.
-
-Usage:
-    bin/build_docs.py [--out DIR] [--strict]
-
-``--strict`` turns Sphinx warnings into errors. Not the default: the Markdown in
-this directory was written for GitHub, and MyST has opinions about some of it
-that are not worth blocking a docs build over yet.
-"""
+"""Build the Sphinx documentation, and fail if it produces no API reference."""
 
 from __future__ import annotations
 

@@ -1,29 +1,5 @@
 /**
- * Shared label pickers - the one implementation behind every place labels are
- * picked (docs/PROBLEMS.md "Saved-filter include/exclude label picker" entry;
- * extraction authorized 2026-07-23).
- *
- * Two factories, installed globally as `window.UrbanLensLabelPicker` via the
- * core.js classic bundle (see entries-classic/core.ts):
- *
- * - `createFilterPicker(options)` - the rich include/exclude picker extracted
- *   from the main map's filter sidebar: click-to-include /
- *   right-click-to-exclude, removable chips, drag between the Include and
- *   Exclude columns (or out to remove), an AND/OR combinator toggle, and a
- *   formula bar (`(Visited / "Want To Go") - Demolished`) whose parsed groups
- *   serialize to the `label_groups` JSON shape `PinQuerySet.apply_label_groups`
- *   consumes. Consumers: the main map sidebar and the saved-filter
- *   dialog/detail page.
- * - `createChipPicker(options)` - the flat search-and-chips picker (previously
- *   duplicated as the map page's `_makeLabelChipPicker` and the saved-filter
- *   scripts' `_sfMakeLabelPicker`). Consumers: the bulk-edit dialog's
- *   add/remove label sections (two independent candidate pools, so the rich
- *   include/exclude pairing deliberately does not apply there).
- *
- * The DOM contract is class-based (`.fp-label-avail` buttons carrying
- * `data-label-id/-name/-text/-color/-icon`, chip/columns markup styled by
- * `_map.scss`'s `fp-*` rules, which are global) with every element handed in
- * explicitly - no hardcoded ids, so several pickers can coexist on one page.
+ * Shared label pickers - the one implementation behind every place labels are picked.
  */
 
 /** One selectable label, as read off an availability button's data attributes. */
@@ -1176,8 +1152,7 @@ export function createChipPicker(options: ChipPickerOptions): ChipPickerApi {
 }
 
 // ---------------------------------------------------------------------------
-// Global installation (core.js)
-// ---------------------------------------------------------------------------
+// Global installation (core.js) ---------------------------------------------------------------------------
 
 export interface UrbanLensLabelPickerGlobal {
     createFilterPicker: typeof createFilterPicker;

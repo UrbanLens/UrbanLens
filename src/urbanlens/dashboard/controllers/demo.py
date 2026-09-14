@@ -1,17 +1,4 @@
-"""The demo instance's one-click login.
-
-Only reachable when ``UL_DEMO_MODE`` is on, and the route itself is registered
-conditionally - an instance holding real data has no such URL at all, rather
-than a URL that guards itself. That distinction matters: a guard is a line of
-code somebody can move, while an unregistered route cannot be reached by
-mistake.
-
-Every visit mints a **new** account. Sharing one would mean the first visitor to
-delete everything, or type something unpleasant into a bio, defines the product
-for everyone after them, with no owner to revert it - and two visitors editing
-one account see each other's changes mid-session, which is neither a demo nor
-isolated.
-"""
+"""The demo instance's one-click login."""
 
 from __future__ import annotations
 
@@ -25,9 +12,8 @@ from django.views import View
 
 logger = logging.getLogger(__name__)
 
-#: Backend path used to log the seeded account in. Named explicitly because the
-#: project runs several authentication backends and ``auth_login`` cannot pick
-#: one on its own for a user it did not authenticate.
+#: Named explicitly because the project runs several authentication backends and ``auth_login`` cannot pick one
+#: on its own for a user it did not authenticate.
 _AUTH_BACKEND = "urbanlens.dashboard.services.auth.auth_backend.EmailOrUsernameModelBackend"
 
 
@@ -37,9 +23,8 @@ class DemoLoginView(View):
     def post(self, request: HttpRequest) -> HttpResponse:
         """Create a demo account and log the visitor into it.
 
-        POST rather than GET deliberately: seeding writes several hundred rows,
-        and a GET would be fired by every crawler, link preview and prefetch
-        that ever saw the button.
+        POST rather than GET deliberately: seeding writes several hundred rows, and a GET would be fired by
+        every crawler, link preview and prefetch that ever saw the button.
 
         Args:
             request: The current request.

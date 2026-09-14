@@ -1,16 +1,4 @@
-"""Phase 6 of the external API parity-polish pass: Memories timeline, on-this-day, and the
-batch-scan pin-suggestion review queue.
-
-Covers:
-
-1. **Memories timeline** wraps ``services.memories.aggregator.get_memory_events`` with the
-   external API's standard page envelope, defaulting to the trailing 90 days.
-2. **On-this-day** mirrors the internal callout's past-year/this-month-day query across visits,
-   routes, and photos, excluding the current year.
-3. **Pin suggestions** exposes ``PinSuggestion`` - a genuinely new external surface, since the
-   existing ``PinSuggestionsView``/``pin-suggestions/`` route only ever *creates* one. Accept/reject
-   are owner-scoped and 404 (not 403) for another profile's suggestion or an already-handled one.
-"""
+"""Phase 6 of the external API parity-polish pass: Memories timeline, on-this-day, and the batch-scan pin-suggestion review queue."""
 
 from __future__ import annotations
 

@@ -98,16 +98,9 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
         self.assertEqual(self._dispatched_location_ids(mock_enqueue), [])
 
     def test_page_render_never_calls_the_live_resolver(self) -> None:
-        """The actual reported bug: rendering the pin page must never itself
-        make a live Google Places/Geocoding call, cached or not.
+        """The actual reported bug: rendering the pin page must never itself make a live Google Places/Geocoding call, cached or not.
 
-        ``safely_enqueue_task`` is stubbed so this measures the *render* path
-        only. The view legitimately dispatches resolve_location_place_name,
-        which legitimately resolves - and this suite runs with
-        UL_CELERY_TASK_ALWAYS_EAGER outside Docker, where dispatching runs it
-        inline. Leaving it unstubbed tests Celery's eager mode rather than the
-        view (and fails, since the eager task resolves during the request).
-        """
+        ``safely_enqueue_task`` is stubbed so this measures the *render* path only."""
         self.profile.external_apis_enabled = True
         self.profile.save(update_fields=["external_apis_enabled"])
         with (

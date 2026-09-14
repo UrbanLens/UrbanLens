@@ -1,16 +1,4 @@
-"""CommentReactionView must apply wiki concealment, like every sibling
-by-id wiki-comment path already does.
-
-concealment_active() is hardcoded False in production (no reputation-
-threshold data yet - see services.wiki.concealment's own docstring), so this
-is dormant today. But CommentReactionView resolved its by-id lookup with no
-concealment narrowing at all, unlike _wiki_comment_addressable_by (reply-
-parent resolution, delete) and the external API's identical endpoint - so
-once concealment activates, a concealed viewer could react to (and be
-notified as having reacted to) a wiki comment concealment is supposed to
-hide from them entirely: both an existence oracle (200 vs 404) and a real
-notification revealing a stranger interacted with the comment.
-"""
+"""CommentReactionView must apply wiki concealment, like every sibling by-id wiki-comment path already does."""
 
 from __future__ import annotations
 

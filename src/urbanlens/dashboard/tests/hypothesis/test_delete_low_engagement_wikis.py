@@ -1,13 +1,4 @@
-"""Tests for the delete_low_engagement_wikis management command.
-
-Locks in the two independent deletion criteria - <=2 distinct pin owners, or
-no active user edit - and the edge cases that make each nontrivial: pin
-ownership is deduped per profile (not per pin), and "user edit" excludes both
-reverted edits and null-editor (seed/system) edits, mirroring the precedent
-in ``services.visits.safety.destination_wiki_activity``. Also locks in that
-deletion cascades to child wikis regardless of the child's own engagement,
-since that's an easy thing to get wrong silently.
-"""
+"""Tests for the delete_low_engagement_wikis management command."""
 
 from __future__ import annotations
 
@@ -106,14 +97,7 @@ class DeleteLowEngagementWikisTests(TestCase):
         self.assertFalse(Wiki.objects.filter(pk=wiki.pk).exists())
 
     def test_annotation_counts_are_accurate_across_both_joined_relations(self) -> None:
-        """Regression guard: combining two Count(distinct=True) annotations
-        from separate reverse relations (pins, edits) in one query risks a
-        join fan-out inflating the counts. Give the wiki enough pin owners to
-        clear that threshold on its own, but zero *active* user edits (one
-        reverted, one null-editor) so it still matches - via the edit
-        criterion - and gets its counts printed. If the pins join inflated
-        user_edit_count, or vice versa, the printed numbers would be wrong
-        even though the keep/delete outcome could still look right."""
+        """Regression guard: combining two Count(distinct=True) annotations from separate reverse relations (pins, edits) in one query risks a join fan-out inflating the counts. Give the wiki enough pin owners to clear that threshold on its own, but zero *active* user edits (one reverted, one null-editor) so it still matches - via the edit criterion - and gets its counts printed."""
         wiki = _wiki()
         _add_pin_owners(wiki, 4)
         _add_user_edit(wiki, reverted=True)
@@ -136,13 +120,6 @@ class DeleteLowEngagementWikisTests(TestCase):
         self.assertFalse(Wiki.objects.filter(pk=child.pk).exists())
 
     def test_pin_owner_count_dedupes_multiple_pins_from_the_same_profile(self) -> None:
-        # A profile can only have one pin per Location (db_pin_unique_location_per_profile),
-        # so exercising the dedup means each of 2 profiles pinning two
-        # *different* locations, all explicitly linked to the same wiki: 4
-        # pins total, but only 2 distinct owners. If pin_owner_count counted
-        # raw pins instead of distinct profiles it would read 4 (above the
-        # threshold) and wrongly survive; deduped correctly it's 2 and this
-        # wiki should be deleted.
         wiki = _wiki()
         for _ in range(2):
             owner = Profile.objects.get(user=baker.make(User))

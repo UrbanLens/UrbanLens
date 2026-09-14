@@ -1,15 +1,7 @@
 /**
- * Profiles, read from your own seat and from somebody else's.
- *
- * The privacy surface. A profile serializer decides, per field, whether the
- * person asking is allowed to see it, and the decision depends on who they are
- * relative to the subject - themselves, a friend, a stranger. That is three
- * different renderings of one object, and a test that only ever asks as the
- * owner sees the one rendering that is always permissive.
- *
- * `is_self` and `friendship_status` are in the response precisely so a client
- * can tell which rendering it received, which makes them the honest thing to
- * assert on.
+ * Profiles, read from your own seat and from somebody else's. A profile serializer decides, per
+ * field, whether the person asking is allowed to see it, and the decision depends on who they are
+ * relative to the subject - themselves, a friend, a stranger.
  */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";

@@ -1,12 +1,4 @@
-"""Tests for the external API's pin bulk-action endpoints: delete, merge, edit.
-
-The behavior most worth pinning down: a pin in ``uuids``/``source_uuids`` that
-isn't the caller's own is silently dropped, not refused (`pins/deleted/` +
-`pins/` are the sync surface an offline client trusts, and a queued batch
-replay shouldn't fail wholesale over one pin gone on another device) - but an
-unresolvable label or parent uuid is a 400, since the client asked for
-something specific and impossible.
-"""
+"""Tests for the external API's pin bulk-action endpoints: delete, merge, edit."""
 
 from __future__ import annotations
 

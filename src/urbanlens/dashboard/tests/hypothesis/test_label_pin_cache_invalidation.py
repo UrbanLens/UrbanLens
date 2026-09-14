@@ -1,14 +1,4 @@
-"""Tests for a bug where editing a label's icon/color left the map pin cache stale.
-
-A pin's rendered marker (icon/color) can come from a label it carries
-(``Pin.effective_icon``/``effective_color``), not just its own fields. The
-client's map pin cache only refreshes when the server's ``Max(Pin.updated)``
-advances (see ``map_pins_meta`` in controllers/maps.py), but editing a label
-never touched any Pin row - so a badge icon change was invisible to the
-cache-freshness check and users kept seeing the old icon until something else
-happened to invalidate the cache. LabelEditView/LabelCustomizeView now bump
-``Pin.updated`` for every pin carrying the edited label.
-"""
+"""Tests for a bug where editing a label's icon/color left the map pin cache stale."""
 
 from __future__ import annotations
 

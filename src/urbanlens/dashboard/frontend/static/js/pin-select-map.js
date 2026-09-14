@@ -1,13 +1,5 @@
 /**
- * Reusable Leaflet map + click/drag-select UX for a page that reviews a list
- * of geolocated items (pin suggestions, unlogged visits, etc.) alongside a
- * card grid, with a bulk-action toolbar for whatever is currently selected.
- *
- * Originally built for Memories > Locations (the batch-scan pin-suggestion
- * review queue) and generalized so Memories > Visits can share the exact
- * same map/selection behavior instead of re-implementing it - see
- * dashboard/partials/ui/_bulk_toolbar.html + bulk-toolbar.js for the toolbar
- * half of this pairing.
+ * Leaflet map + click/drag-select UX pairing a geolocated-item list with a card grid and bulk-action toolbar.
  *
  * Usage:
  *   window.PinSelectMap.create(document.getElementById('my-map'), {
@@ -44,9 +36,7 @@
         var itemsKey = opts.itemsKey || 'items';
         var refreshEvent = opts.refreshEvent || 'refreshQueue';
 
-        // attributionControl: false - required attribution text belongs in the
-        // page footer (#page-footer-attribution-text), not floating over the
-        // map, matching every other map on the site (see footer.html).
+        // Attribution lives in the page footer, not over the map.
         var map = L.map(mapEl, { attributionControl: false }).setView([20, 0], 2);
         window.MapLayers.create(map, {
             root: document.getElementById(opts.layersPanelId),
@@ -76,12 +66,7 @@
             if (cb) cb.checked = selectedIds.has(id);
         }
 
-        // -- Hover highlight: hovering a marker highlights its list card and
-        // vice versa, mirroring the trip detail page's map/activity-list
-        // pairing (tripHighlightMarker/tripHighlightActivity). Opt-in via
-        // opts.cardSelector (a CSS selector matching each card's root
-        // element, e.g. '.unlogged-card') - callers that don't pass it just
-        // don't get this half of the pairing.
+        // Hover pairs markers with cards (opt-in via opts.cardSelector).
         function setHover(id, on) {
             var marker = markerMap.get(id);
             if (marker) {

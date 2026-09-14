@@ -1,9 +1,4 @@
-"""Tests for the media label kind - labels applied to photos/videos/documents.
-
-Media labels are a private, per-profile label kind (like tags) that attach to
-Image rows (never Pin/Wiki) purely to help the owner find that media item via
-the main site search.
-"""
+"""Tests for the media label kind - labels applied to photos/videos/documents."""
 
 from __future__ import annotations
 
@@ -151,11 +146,7 @@ class LabelImageMembershipViewTests(TestCase):
         self.assertNotIn(tag.id, set(self.image.labels.values_list("id", flat=True)))
 
     def test_get_response_omits_the_visible_card_and_header(self) -> None:
-        """Regression guard: this response swaps into #photo-label-panel-slot, a
-        bare div meant to hold nothing but the (invisible until opened) dialog -
-        it used to render the full persistent "Labels" card (header + chip
-        list), leaving a visibly empty box sitting in the photo gallery's
-        layout."""
+        """Regression guard: this response swaps into #photo-label-panel-slot, a bare div meant to hold nothing but the (invisible until opened) dialog - it used to render the full persistent "Labels" card (header + chip list), leaving a visibly empty box sitting in the photo gallery's layout."""
         response = self.client.get(reverse("label.image", kwargs={"image_uuid": self.image.uuid}))
         content = response.content.decode()
         self.assertNotIn("card-header", content)

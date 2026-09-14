@@ -1,11 +1,4 @@
-{% comment %}
-Chat panel for a safety check-in, shared by the owner's detail page and the
-token-gated contact portal. Context: `checkin`, `contact` (None on the owner
-route), `messages`. Real-time delivery is a WebSocket to
-SafetyCheckinChatConsumer (dashboard/consumers.py); the plain form POST to
-SafetyCheckinMessageView only runs when the socket is momentarily down or
-JavaScript is unavailable.
-{% endcomment %}
+{% comment %}Chat panel for a safety check-in, shared by the owner's detail page and the token-gated contact portal.{% endcomment %}
 {% if contact %}
 {% url 'safety.contact.messages' contact.token as chat_url %}
 {% else %}

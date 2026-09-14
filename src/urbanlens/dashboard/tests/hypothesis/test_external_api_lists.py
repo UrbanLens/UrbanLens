@@ -1,11 +1,4 @@
-"""Tests for the external API's pin-list surface.
-
-Covers ``lists/``, ``lists/{slug}/``, ``lists/{slug}/items/`` (including the
-body-carrying DELETE), ``items/reorder/`` and ``resync/`` - the happy paths,
-the scope gate, cross-profile isolation, the pagination envelope, and the two
-behaviors that are easy to get silently wrong: the per-list cap and the
-"only resync when the smart rules actually changed" rule.
-"""
+"""Tests for the external API's pin-list surface."""
 
 from __future__ import annotations
 
@@ -113,12 +106,8 @@ class PinListsCollectionTests(ListsApiTestCase):
     def test_a_racing_create_is_a_clean_400_not_a_500(self) -> None:
         """The loser of the exists()-then-save race gets the same 400, not an IntegrityError 500.
 
-        A concurrent POST can insert its row between this request's ``exists()``
-        pre-check and its ``save()`` - neutering the check reproduces that
-        ordering deterministically. ``save()`` then hits
-        ``uq_pin_list_profile_name`` directly, which the view must absorb into
-        the same response the pre-check already returns.
-        """
+        A concurrent POST can insert its row between this request's ``exists()`` pre-check and its ``save()`` -
+        neutering the check reproduces that ordering deterministically."""
         self._make_list("Dupe")
 
         with mock.patch.object(PinListQuerySet, "exists", return_value=False):
@@ -229,13 +218,7 @@ class PinListDetailTests(ListsApiTestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_concurrent_edit_to_another_field_survives_a_rename(self) -> None:
-        """PATCH must not clobber a field it never touched.
-
-        It used to end with a bare pin_list.save(), writing every column
-        from this request's snapshot - reverting any field a concurrent
-        request (another API call, or the internal PinListEditView) changed
-        in the window between this request's load and its own save.
-        """
+        """PATCH must not clobber a field it never touched."""
         real_get = external_api_views._get_pin_list
 
         def load_then_inject_concurrent_write(*args, **kwargs):

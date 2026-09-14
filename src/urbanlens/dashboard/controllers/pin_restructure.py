@@ -1,20 +1,12 @@
 """One suggestion, offered once per pin: organize this property's hierarchy.
 
-Pinning a campus is one click; modelling it properly is a hundred more. And a
-user who pinned those buildings individually - before child pins existed, or
-via a bulk import - has them all sitting at the top level of their map when
-they belong under one property. Both are offered together the first time the
-owner opens the pin's detail page, as a single dialog with a single yes.
+Pinning a campus is one click; modelling it properly is a hundred more.
 
-Endpoints, all pin-scoped:
-
-- ``offer``   - the dialog, or a quiet 204 when there's nothing to suggest.
-  Self-polls while the parcel's building lookup is still in flight, so nothing
-  ever waits on REData.
-- ``apply``   - do it: create the missing building pins and nest the matching
-  top-level pins.
-- ``dismiss`` - "No" (this pin, permanently) or "Don't show again" (turns the
-  owner's ``suggest_pin_restructure`` setting off for every pin at once).
+- ``offer`` - the dialog, or a quiet 204 when there's nothing to suggest. Self-polls while the
+  parcel's building lookup is still in flight, so nothing ever wai...
+- ``apply`` - do it: create the missing building pins and nest the matching top-level pins.
+- ``dismiss`` - "No" (this pin, permanently) or "Don't show again" (turns the owner's
+  ``suggest_pin_restructure`` setting off for every pin at once).
 """
 
 from __future__ import annotations
@@ -39,8 +31,8 @@ if TYPE_CHECKING:
 def _poll_attempt(request: HttpRequest) -> int:
     """Which poll cycle this request is (0 for the initial load).
 
-    Mirrors ``PinController._poll_attempt`` - the suggestion shares the panel
-    machinery's poll budget without being a panel itself.
+    Mirrors ``PinController._poll_attempt`` - the suggestion shares the panel machinery's poll budget
+    without being a panel itself.
 
     Args:
         request: The current request.
@@ -159,10 +151,7 @@ class PinRestructureOfferView(LoginRequiredMixin, View):
             return HttpResponse(status=204)
 
         if site_scope.parcel_buildings(pin.location) is None:
-            # The parcel's buildings have never been looked up. Schedule it and
-            # poll, rather than making the page wait on a REData round-trip -
-            # the nesting half of the suggestion is worth waiting for it too,
-            # since a plan showing only half of what it will do reads as a bug.
+            # The parcel's buildings have never been looked up.
             attempt = _poll_attempt(request)
             if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(site_scope.PARCEL_BUILDINGS_CACHE_SOURCE, pin):
                 return self._render_plan(request, pin)
@@ -197,10 +186,9 @@ class PinRestructureOfferView(LoginRequiredMixin, View):
 class PinRestructureDismissView(LoginRequiredMixin, View):
     """POST: decline the suggestion, for this pin or for every pin.
 
-    ``?scope=all`` is the dialog's "Don't show again" - it turns the owner's
-    ``suggest_pin_restructure`` setting off, so the suggestion stops appearing
-    everywhere, and still marks this pin so the setting can be turned back on
-    later without this particular pin re-asking.
+    ``?scope=all`` is the dialog's "Don't show again" - it turns the owner's ``suggest_pin_restructure``
+    setting off, so the suggestion stops appearing everywhere, and still marks this pin so the setting
+    can be turned back on later without this particular pin re-asking.
     """
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
@@ -220,9 +208,8 @@ class PinRestructureDismissView(LoginRequiredMixin, View):
 class PinRestructureApplyView(LoginRequiredMixin, View):
     """GET the chooser; POST selected buildings and matching top-level pins.
 
-    Idempotent in the way that matters: the plan is recomputed here rather than
-    trusted from the page, so buildings pinned (or pins nested) since the dialog
-    rendered are simply skipped.
+    Idempotent in the way that matters: the plan is recomputed here rather than trusted from the page,
+    so buildings pinned (or pins nested) since the dialog rendered are simply skipped.
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
@@ -242,23 +229,14 @@ class PinRestructureApplyView(LoginRequiredMixin, View):
         created = pin_restructure.create_building_pins(pin, buildings)
         _queue_wiki_mirror(pin, buildings)
 
-        # Mirrors _selected_buildings, but keyed on its own marker rather than
-        # building_selection: a legacy/no-body POST (this view used to accept
-        # a bare POST and nest unconditionally) must keep nesting every
-        # candidate, while a real all-unchecked *pins* selection from the
-        # current dialog is a deliberate choice - "every one of these is a
-        # duplicate, merge them all" - not the absence of one.
         if "nest_selection" in request.POST:
             included = set(request.POST.getlist("nest_keys"))
             candidates = [candidate for candidate in plan.nestable if str(candidate.pk) in included]
         else:
             candidates = list(plan.nestable)
 
-        # Organizing a pin under a property only ever changes its parent -
-        # nothing about the pin's own data (article, custom fields, ...)
-        # changes. Actually consolidating two pins into one is a separate,
-        # deliberate action (services.pins.pin_merge, reached from the map's
-        # "Merge pins" bulk-select flow), not something this dialog offers.
+        # Organizing a pin under a property only ever changes its parent - nothing about the pin's own data
+        # (article, custom fields, ...) changes.
         nested = pin_restructure.nest_root_pins(pin, candidates)
 
         parts = []
@@ -270,12 +248,7 @@ class PinRestructureApplyView(LoginRequiredMixin, View):
 
 
 def _queue_wiki_mirror(pin, buildings) -> None:
-    """Mirror an import onto the community wiki in the background.
-
-    Deliberately fire-and-forget: the child pins already exist by now, so a
-    wiki-side failure must not turn a successful pin action into a 500 (see
-    docs/PROBLEMS.md, 2026-08-18).
-    """
+    """Mirror an import onto the community wiki in the background."""
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import mirror_buildings_to_wiki
 
@@ -286,9 +259,8 @@ def _queue_wiki_mirror(pin, buildings) -> None:
 class PinBuildingImportView(LoginRequiredMixin, View):
     """GET the chooser; POST selected unpinned buildings on this property.
 
-    The "Buildings on this Property" panel's own action, distinct from the
-    restructure suggestion above: always available (never dismissed), and
-    scoped strictly to buildings - it never re-parents anything.
+    The "Buildings on this Property" panel's own action, distinct from the restructure suggestion above:
+    always available (never dismissed), and scoped strictly to buildings - it never re-parents anything.
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
@@ -313,10 +285,7 @@ class PinBuildingImportView(LoginRequiredMixin, View):
         _queue_wiki_mirror(pin, buildings)
 
         if not created:
-            # Every selected building was skipped - each one's point already
-            # carries a pin of this profile's. Saying "Added 0 building pins"
-            # over a success toast is how this read as a silent failure; still
-            # refresh, so the panel and the suggestion re-derive their counts.
+            # Every selected building was skipped - each one's point already carries a pin of this profile's.
             return _toast(HttpResponse("", status=200), "info", "Those buildings already have your pins on them - nothing new to add.", refresh=True)
 
         message = f"Added {created} building pin{'s' if created != 1 else ''}."

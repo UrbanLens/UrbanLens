@@ -1,9 +1,4 @@
-"""Tests for services.ai.turns - the turn-lifecycle primitives (batch 2c).
-
-No database needed: the lock and turn-record helpers only need a profile
-with a ``.pk`` (a real Profile isn't required to exercise them), and
-everything else is pure cache/dict logic.
-"""
+"""Tests for services.ai.turns - the turn-lifecycle primitives (batch 2c)."""
 
 from __future__ import annotations
 

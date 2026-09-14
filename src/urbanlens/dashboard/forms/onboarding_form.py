@@ -9,18 +9,11 @@ from urbanlens.dashboard.models.profile.model import Profile
 class WelcomeOnboardingForm(forms.ModelForm):
     """One checkbox per feature category, plus a required Terms of Service agreement.
 
-    The three category checkboxes are each checked (fully-featured) by default; unchecking one
-    disables that category. Copy for each is written feature-first ("what this covers"), ending
-    with an explicit "Disabling this will turn off X, Y, Z" sentence, so it's unambiguous that the
-    switch being *on* means the features are active. ``customize_features`` is a UI-only toggle
-    (not persisted) that reveals those three cards - most new users can leave it off and continue
-    with everything enabled, since the toggle is purely progressive disclosure. ``tos_agreed`` is
-    the other exception to the "checked by default" rule - it defaults unchecked, since agreement
-    has to be an explicit action rather than something left on by default. None of the fields are
-    bound to ``Profile`` via ``Meta.fields`` - the three category fields are bulk-applied to one or
-    more underlying settings on ``save()``. The category settings remain independently adjustable
-    afterward from the settings page; this form only offers the bulk "leave on/turn off" choice for
-    a quick first impression.
+    ``customize_features`` is a UI-only toggle (not persisted) that reveals those three cards - most new
+    users can leave it off and continue with everything enabled, since the toggle is purely progressive
+    disclosure.
+    ``tos_agreed`` is the other exception to the "checked by default" rule - it defaults unchecked,
+    since agreement has to be an explicit action rather than something left on by default.
     """
 
     customize_features = forms.BooleanField(

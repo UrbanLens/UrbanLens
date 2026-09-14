@@ -64,11 +64,7 @@ def _checkin(profile: Profile, **kwargs) -> SafetyCheckin:
 
 
 def _enroll(profile: Profile, *, public_key: bytes | None = None) -> MessagingKeyBundle:
-    """Mirrors test_e2ee.py's own _enroll helper - a bundle with a syntactically valid
-    (but not necessarily "real") X25519 public key is enough for anything that only
-    needs a bundle to *exist*; tests that verify the sealed content round-trips use a
-    real generated keypair instead (see SealArchivePayloadInteropTests).
-    """
+    """Mirrors test_e2ee.py's own _enroll helper - a bundle with a syntactically valid (but not necessarily "real") X25519 public key is enough for anything that only needs a bundle to *exist*; tests that verify the sealed content round-trips use a real generated keypair instead (see SealArchivePayloadInteropTests)."""
     return MessagingKeyBundle.objects.create(
         profile=profile,
         public_key=base64.b64encode(public_key or os.urandom(32)).decode(),
@@ -77,11 +73,7 @@ def _enroll(profile: Profile, *, public_key: bytes | None = None) -> MessagingKe
 
 
 class SealArchivePayloadInteropTests(TestCase):
-    """_seal_archive_payload's output opens with plain PyNaCl exactly like the owner's
-    browser will need to - the same class of assertion test_e2ee_interop.py already
-    makes for the DM primitives, exercised here against this feature's actual
-    production function rather than a reimplementation of the primitive.
-    """
+    """_seal_archive_payload's output opens with plain PyNaCl exactly like the owner's browser will need to - the same class of assertion test_e2ee_interop.py already makes for the DM primitives, exercised here against this feature's actual production function rather than a reimplementation of the primitive."""
 
     def test_seal_then_open_round_trips_the_payload(self):
         keypair = nacl.public.PrivateKey.generate()
@@ -160,12 +152,7 @@ class ArchiveCheckinTests(TestCase):
         self.assertEqual(contact.name, "")
 
     def test_scrubs_destination_location_trip_and_markup_map_links(self):
-        """Regression guard: these FKs must not survive archival - a DB-level reader
-        could otherwise join straight through the archived checkin row to plaintext
-        destination/trip/route data, defeating the "only the owner can decrypt this"
-        promise. The linked rows themselves are untouched (severed, not deleted) -
-        they're independently owned/shared resources with their own lifecycle.
-        """
+        """Regression guard: these FKs must not survive archival - a DB-level reader could otherwise join straight through the archived checkin row to plaintext destination/trip/route data, defeating the "only the owner can decrypt this" promise. The linked rows themselves are untouched (severed, not deleted) - they're independently owned/shared resources with their own lifecycle."""
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.markup.model import MarkupMap
         from urbanlens.dashboard.models.trips.model import Trip
@@ -193,10 +180,7 @@ class ArchiveCheckinTests(TestCase):
         self.assertTrue(MarkupMap.objects.filter(pk__in=[markup_map.pk, reference_map.pk]).count() == 2)
 
     def test_payload_captures_location_trip_and_map_content_before_scrubbing(self):
-        """The owner must not lose the destination/trip/route content just because the
-        checkin's own FKs to them are severed - it has to survive inside what they can
-        decrypt. Round-trips through a real keypair, like SealArchivePayloadInteropTests.
-        """
+        """The owner must not lose the destination/trip/route content just because the checkin's own FKs to them are severed - it has to survive inside what they can decrypt. Round-trips through a real keypair, like SealArchivePayloadInteropTests."""
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.markup.model import MarkupMap
 
@@ -241,10 +225,7 @@ class ArchiveCheckinTests(TestCase):
 
 
 class ArchiveCheckinFailureCapTests(TestCase):
-    """archive_checkin's give-up-after-MAX_ARCHIVE_ATTEMPTS backstop for a checkin whose
-    archival keeps failing (docs/PROBLEMS.md: a corrupted MessagingKeyBundle.public_key
-    otherwise fails the same way on every 5-minute sweep forever, with no cap or alert).
-    """
+    """archive_checkin's give-up-after-MAX_ARCHIVE_ATTEMPTS backstop for a checkin whose archival keeps failing (docs/PROBLEMS.md: a corrupted MessagingKeyBundle.public_key otherwise fails the same way on every 5-minute sweep forever, with no cap or alert)."""
 
     def setUp(self):
         self.owner = _profile()
@@ -330,12 +311,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         self.assertEqual(self.checkin.messages.count(), 0)
 
     def test_accepting_a_pending_partner_invite_after_archival_writes_no_plaintext_message(self):
-        """Regression guard: a partner invite can still be legitimately accepted after its
-        checkin has already resolved and archived (e.g. the owner self-checked-in with no
-        other viewers yet, archived immediately, and the invitee accepts hours later) -
-        the ACCEPTED status flip must still happen, but no system chat message may be
-        written into the already-archived (never-to-be-scrubbed-again) record.
-        """
+        """Regression guard: a partner invite can still be legitimately accepted after its checkin has already resolved and archived (e.g. the owner self-checked-in with no other viewers yet, archived immediately, and the invitee accepts hours later) - the ACCEPTED status flip must still happen, but no system chat message may be written into the already-archived (never-to-be-scrubbed-again) record."""
         from urbanlens.dashboard.services.visits.safety import accept_checkin_partner_invite
 
         invitee = _profile()
@@ -348,11 +324,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         self.assertEqual(self.checkin.messages.count(), 0)
 
     def test_mark_found_safe_after_archival_writes_no_plaintext_message(self):
-        """Regression guard: a stale contact token or partner mark-safe link remains a
-        live, POST-able endpoint after resolution/archival (the UI only hides the
-        button) - hitting it again must be a clean no-op, not a fresh plaintext message
-        into a record that already claims to have no more plaintext left.
-        """
+        """Regression guard: a stale contact token or partner mark-safe link remains a live, POST-able endpoint after resolution/archival (the UI only hides the button) - hitting it again must be a clean no-op, not a fresh plaintext message into a record that already claims to have no more plaintext left."""
         from urbanlens.dashboard.services.visits.safety import mark_found_safe
 
         contact = SafetyCheckinContact.objects.create(checkin=self.checkin, email="watcher@example.com", name="Watcher")
@@ -378,11 +350,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
 
 
 class ArchivePayloadMapDedupTests(TestCase):
-    """_build_archive_payload must not double-count a map that ended up in both
-    `markup_map` and `markup_maps` - the attach endpoint's own exclusion of the primary
-    map is UI-only (SafetyCheckinMapPickerView), not re-enforced server-side, so the
-    payload builder is the actual backstop.
-    """
+    """_build_archive_payload must not double-count a map that ended up in both `markup_map` and `markup_maps` - the attach endpoint's own exclusion of the primary map is UI-only (SafetyCheckinMapPickerView), not re-enforced server-side, so the payload builder is the actual backstop."""
 
     def test_a_map_that_is_both_primary_and_attached_is_only_listed_once(self):
         from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -401,11 +369,7 @@ class ArchivePayloadMapDedupTests(TestCase):
 
 
 class MapAttachViewRejectsPrimaryMapTests(TestCase):
-    """SafetyCheckinMapAttachView must not let the primary route map also be attached
-    as a secondary reference map - the picker (SafetyCheckinMapPickerView) already
-    excludes it from candidates shown in the UI, but that alone doesn't stop a direct
-    POST with the primary map's own uuid.
-    """
+    """SafetyCheckinMapAttachView must not let the primary route map also be attached as a secondary reference map - the picker (SafetyCheckinMapPickerView) already excludes it from candidates shown in the UI, but that alone doesn't stop a direct POST with the primary map's own uuid."""
 
     def test_attaching_the_checkins_own_primary_map_is_rejected(self):
         from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -467,10 +431,7 @@ class ScheduleCheckinArchivalTests(TestCase):
 
 
 class ArchivedCheckinDetailViewTests(TestCase):
-    """The detail view's rendered HTML after archival: shows the locked notice, never the
-    pre-scrub plaintext, and offers an unlock affordance only to the true owner - never a
-    partner, even one who could see everything while the check-in was still active.
-    """
+    """The detail view's rendered HTML after archival: shows the locked notice, never the pre-scrub plaintext, and offers an unlock affordance only to the true owner - never a partner, even one who could see everything while the check-in was still active."""
 
     def setUp(self):
         self.owner = _profile()

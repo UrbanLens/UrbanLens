@@ -1,16 +1,5 @@
 """Media archive plugins: providers for the Private Pin page's combined Media gallery.
-
-Each plugin contributes one :class:`~urbanlens.dashboard.services.pins.external_data.MediaPanelSource`,
-which the gallery fetches independently so a slow provider never blocks the
-others.
-
-Smithsonian, Library of Congress and Internet Archive are all now REData-backed
-(``services.apis.locations.redata_reference_documents_gateway`` - see that
-module's docstring) and no longer call their archive directly. Wikimedia
-Commons is intentionally untouched: REData's ``/reference-documents/search/``
-has no ``wikimedia``/``wikimedia_commons`` provider today, so there is nothing
-to migrate it to.
-"""
+Each plugin contributes one :class:`~urbanlens.dashboard.services.pins.external_data.MediaPanelSource`, which the gallery fetches independently so a slow provider never blocks the others."""
 
 from __future__ import annotations
 

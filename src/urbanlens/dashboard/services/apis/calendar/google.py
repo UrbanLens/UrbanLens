@@ -1,19 +1,5 @@
 """Google Calendar API gateway and OAuth helpers.
-
-All calls operate on *one user's own calendar* using tokens from that user's
-:class:`~urbanlens.dashboard.models.calendar_sync.GoogleCalendarAccount` row -
-there is no site-wide calendar or service account. The site's Google OAuth
-client (``UL_GOOGLE_CLIENT_ID`` / ``UL_GOOGLE_CLIENT_SECRET``) is only the
-application identity; each user grants it access to their calendar via the
-"Connect Google Calendar" consent flow.
-
-Module-level helpers wrap the provider-agnostic OAuth mechanics in
-``dashboard/services/google_oauth.py`` with Calendar's own client lookup and
-scopes, preserving their original (pre-extraction) signatures so every
-existing caller keeps working unchanged. The :class:`GoogleCalendarGateway`
-wraps the Calendar v3 events API with automatic token refresh and the
-standard rate-limit/call-log session via ``service_key``.
-"""
+The site's Google OAuth client (``UL_GOOGLE_CLIENT_ID`` / ``UL_GOOGLE_CLIENT_SECRET``) is only the application identity; each user grants it access to their calendar via the "Connect Google Calendar" consent flow."""
 
 from __future__ import annotations
 
@@ -85,8 +71,7 @@ def build_authorization_url(redirect_uri: str, state: str) -> str:
         Fully-formed authorization URL to redirect the user to.
 
     Raises:
-        CalendarNotConfiguredError: When the OAuth client is not configured.
-    """
+        CalendarNotConfiguredError: When the OAuth client is not configured."""
     client_id, _ = _oauth_client()
     return google_oauth.build_authorization_url(client_id, redirect_uri, CALENDAR_SCOPES, state)
 
@@ -99,13 +84,11 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict[str, Any]:
         redirect_uri: The same redirect URI used to obtain the code.
 
     Returns:
-        Token response payload (``access_token``, ``refresh_token``,
-        ``expires_in``, ``id_token``, ``scope``, ...).
+        Token response payload (``access_token``, ``refresh_token``, ``expires_in``, ``id_token``, ``scope``, ...).
 
     Raises:
         CalendarNotConfiguredError: When the OAuth client is not configured.
-        GatewayRequestError: When the token exchange fails.
-    """
+        GatewayRequestError: When the token exchange fails."""
     client_id, client_secret = _oauth_client()
     return google_oauth.exchange_code_for_tokens(client_id, client_secret, code, redirect_uri)
 
@@ -121,8 +104,7 @@ def refresh_access_token(refresh_token: str) -> dict[str, Any]:
 
     Raises:
         CalendarNotConfiguredError: When the OAuth client is not configured.
-        GatewayRequestError: When the refresh fails (e.g. access revoked).
-    """
+        GatewayRequestError: When the refresh fails (e.g. access revoked)."""
     client_id, client_secret = _oauth_client()
     return google_oauth.refresh_access_token(client_id, client_secret, refresh_token)
 
@@ -148,10 +130,8 @@ class GoogleCalendarGateway(Gateway):
     """Events API client bound to one user's connected Google account.
 
     Attributes:
-        account: The user's stored calendar credentials. Tokens are
-            refreshed in place (and persisted) as needed.
-        base_url: Calendar v3 API root.
-    """
+        account: The user's stored calendar credentials.
+        base_url: Calendar v3 API root."""
 
     service_key: ClassVar[str] = "google_calendar"
     paid_service: ClassVar[bool] = False
@@ -173,8 +153,7 @@ class GoogleCalendarGateway(Gateway):
             Headers dict with a valid bearer token.
 
         Raises:
-            GatewayRequestError: When the token cannot be refreshed.
-        """
+            GatewayRequestError: When the token cannot be refreshed."""
         if self.account.is_token_expired:
             self._refresh_token()
         return {"Authorization": f"Bearer {self.account.access_token}"}
@@ -183,9 +162,7 @@ class GoogleCalendarGateway(Gateway):
         """Refresh and persist the account's access token.
 
         Raises:
-            GoogleAuthExpiredError: When no refresh token is stored or the
-                refresh is rejected by Google.
-        """
+            GoogleAuthExpiredError: When no refresh token is stored or the refresh is rejected by Google."""
         if not self.account.refresh_token:
             raise GoogleAuthExpiredError("Google Calendar connection is missing a refresh token. Please reconnect.")
         payload = refresh_access_token(self.account.refresh_token)
@@ -220,7 +197,6 @@ class GoogleCalendarGateway(Gateway):
 
         Raises:
             GoogleAuthExpiredError: When Google rejects the current credentials (401/403).
-            GatewayRequestError: On any other non-success response.
         """
         response = self.session.request(
             method,
@@ -286,7 +262,6 @@ class GoogleCalendarGateway(Gateway):
 
         Raises:
             CalendarEventNotFoundError: When the event does not exist.
-            GatewayRequestError: On other API failures.
         """
         body = self._request("GET", f"{self._events_url}/{event_id}")
         if body is None:
@@ -322,7 +297,6 @@ class GoogleCalendarGateway(Gateway):
 
         Raises:
             CalendarEventNotFoundError: When the event no longer exists.
-            GatewayRequestError: On other API failures.
         """
         updated = self._request("PATCH", f"{self._events_url}/{event_id}", json_body=body)
         if updated is None:
@@ -331,8 +305,6 @@ class GoogleCalendarGateway(Gateway):
 
     def delete_event(self, event_id: str) -> None:
         """Delete an event from the user's calendar.
-
-        Deleting an already-deleted event is treated as success.
 
         Args:
             event_id: Google event identifier.

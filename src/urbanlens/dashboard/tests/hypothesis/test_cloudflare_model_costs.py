@@ -1,14 +1,4 @@
-"""Tests for CloudflareGateway.MODEL_COSTS (docs/PROBLEMS.md follow-up).
-
-SiteSettings.cloudflare_model is free text with no dropdown constraint, so an
-admin can point it at any Workers AI model - but MODEL_COSTS previously had
-exactly one entry (the site default), so every other model silently fell back
-to LLMGateway.DEFAULT_COST_PER_THOUSAND's generic estimate instead of that
-model's real published price (only a WARNING-level log to notice it happened).
-Added real entries (developers.cloudflare.com/workers-ai/platform/pricing,
-verified 2026-07-19) for the other mainstream chat models most likely to
-actually get picked.
-"""
+"""Tests for CloudflareGateway.MODEL_COSTS (docs/PROBLEMS.md follow-up)."""
 
 from __future__ import annotations
 
@@ -37,11 +27,7 @@ class CloudflareModelCostsTests(SimpleTestCase):
         self.assertEqual(gw.cost, Decimal("0.30"))
 
     def test_missing_model_falls_back_to_default_model_not_the_generic_estimate(self) -> None:
-        """factory.py constructs with ``model=site.cloudflare_model or None`` when the site's
-        configured model is blank - CloudflareGateway._lookup_model resolves that ``None`` to
-        DEFAULT_MODEL, so this must price at DEFAULT_MODEL's real rate rather than missing
-        MODEL_COSTS and silently using the generic fallback.
-        """
+        """factory.py constructs with ``model=site.cloudflare_model or None`` when the site's configured model is blank - CloudflareGateway._lookup_model resolves that ``None`` to DEFAULT_MODEL, so this must price at DEFAULT_MODEL's real rate rather than missing MODEL_COSTS and silently using the generic fallback."""
         gw = _gateway(None)
         self.assertEqual(gw.model, DEFAULT_MODEL)
         gw.send_tokens(_SAMPLE_TOKENS)

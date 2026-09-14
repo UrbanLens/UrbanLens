@@ -1,14 +1,4 @@
-"""Bulk metric computation must agree exactly with per-profile computation.
-
-The nightly sweep prices a whole chunk of profiles at a constant number of
-grouped queries via ``Metric.compute_bulk``. Every bulk form must return the
-same numbers ``Metric.compute`` would have, profile by profile - a bulk form
-that drifts silently grants (or withholds) awards for everyone at once. These
-tests pin the agreement for every builtin metric, the tricky groupings
-(pair-table friendships, distinct visit counting), the missing-pk-reads-zero
-contract, and the per-profile fallback for metrics without (or with a broken)
-bulk form.
-"""
+"""Bulk metric computation must agree exactly with per-profile computation."""
 
 from __future__ import annotations
 
@@ -254,13 +244,9 @@ class BulkEdgeCaseTests(TestCase):
 class BulkExclusionFilterTests(TestCase):
     """Every metric with a disqualifying state must exclude it in bulk, not just per-profile.
 
-    ``SEEDERS`` above only ever creates *qualifying* rows, so a bulk form that
-    silently drops its ``WHERE`` clause (counting reverted edits, tentative
-    visits, declined RSVPs, ...) would agree with ``compute`` on every existing
-    test - both sides would just overcount together. Each test here creates a
-    disqualifying row first, asserts both forms read 0 for it, then flips the
-    same row into the qualifying state and asserts both read 1.
-    """
+    ``SEEDERS`` above only ever creates *qualifying* rows, so a bulk form that silently drops its ``WHERE``
+    clause (counting reverted edits, tentative visits, declined RSVPs, ...) would agree with ``compute`` on
+    every existing test - both sides would just overcount together."""
 
     def test_reverted_wiki_edit_does_not_count_until_unreverted(self) -> None:
         profile = _profile()

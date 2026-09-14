@@ -1,13 +1,4 @@
-"""Tests for the account-model querysets: AccountKdf, WebAuthnCredential,
-TOTPDevice, and BackupCode.
-
-Part of the ongoing "every model gets its own queryset/manager" cleanup -
-these four models were still on the bare default manager despite a literal
-copy-pasted `.update_or_create(user=user, defaults={"auth_salt": ...})` call
-(AccountKdf, 3x across controllers/account.py and controllers/e2ee.py) and a
-`.filter(user=user)` shape repeated across services/webauthn.py and
-services/two_factor.py.
-"""
+"""Tests for the account-model querysets: AccountKdf, WebAuthnCredential, TOTPDevice, and BackupCode."""
 
 from __future__ import annotations
 

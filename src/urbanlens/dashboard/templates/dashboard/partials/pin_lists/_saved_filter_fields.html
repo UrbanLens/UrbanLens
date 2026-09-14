@@ -1,15 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-Every editable option of a saved filter - shared by the create/edit dialog
-(_saved_filter_form_dialog.html) and the filter's own dedicated detail page
-(saved_filter_detail.html), so "every option editable" only has one place to
-stay in sync as new filter dimensions get added. The including template
-supplies the surrounding <form> (submit wiring differs between the two).
-
-Context: same as _saved_filter_form_dialog.html - saved_filter (optional),
-criteria, form, security_fields, security_level_choices, security_values,
-selected_tag_ids, selected_exclude_tag_ids, custom_field_values.
-{% endcomment %}
+{% comment %}Every editable option of a saved filter - shared by the create/edit dialog (_saved_filter_form_dialog.html) and the filter's own.{% endcomment %}
 {% include "dashboard/partials/pin_lists/_saved_filter_appearance_fields.html" %}
 <div class="form-row">
     <label for="saved-filter-name-contains">Pin name contains</label>

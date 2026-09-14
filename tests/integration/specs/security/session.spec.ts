@@ -1,16 +1,7 @@
 /**
- * Sessions, CSRF, and redirects after sign-in.
- *
- * A cookie that JavaScript can read, a POST that Django will accept without a
- * CSRF token, or a `next=` that lands on another origin are each a complete
- * account takeover in the presence of a single other bug. The controls: a
- * real sign-in with a token still works (the form is not broken), and a
- * same-origin `next` is still honoured (open-redirect refusals are not
- * "redirects are broken").
- *
- * Every test here uses a context of its own. The rest of the suite shares one
- * saved session per role, and Django's logout flushes that session
- * server-side.
+ * Sessions, CSRF, and redirects after sign-in. A cookie that JavaScript can read, a POST that
+ * Django will accept without a CSRF token, or a `next=` that lands on another origin are each a
+ * complete account takeover in the presence of a single other bug.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

@@ -1,10 +1,4 @@
-"""Additional Pin model tests covering methods not in test_pin_properties.py.
-
-An LLM Believes this file covers the following (this assessment may be correct, or incorrect):
-- effective_color  (mock-based, labels M2M filtered by kind=tag)
-- rating  (DB, requires Review)
-- to_json / to_detail_json  (DB)
-"""
+"""Additional Pin model tests covering methods not in test_pin_properties.py."""
 
 from __future__ import annotations
 
@@ -32,19 +26,8 @@ class PinEffectiveColorTests(SimpleTestCase):
     def _mock_labels(self, mock_labels: MagicMock, labels: list[MagicMock]) -> None:
         """Stand in for ``labels.all()``.
 
-        The stub sits on ``all`` itself because ``icon_source_label`` filters and
-        sorts in Python (to stay on the prefetch cache) instead of calling
-        ``.exclude()``/``.order_by()``. Stubbing a chained call therefore leaves
-        the real call iterating a bare MagicMock, which yields nothing: every
-        expects-a-colour case would see None, and every expects-None case would
-        pass without exercising anything.
-
-        ``kind`` is set so the user-label filter keeps them. ``order``/``name``
-        are set explicitly so that sort has real values to compare - left as
-        MagicMocks the multi-label cases would sort by whatever MagicMock's
-        comparison operators happen to do - and are chosen so list position is
-        the winning order, which is what these tests mean by "first label wins".
-        """
+        The stub sits on ``all`` itself because ``icon_source_label`` filters and sorts in Python (to stay on
+        the prefetch cache) instead of calling ``.exclude()``/``.order_by()``."""
         for index, label in enumerate(labels):
             label.kind = "tag"
             label.order = -index
@@ -284,10 +267,8 @@ class PinToDetailJsonTests(TestCase):
 class PinNameAliasSaveTests(TestCase):
     """Pin.save keeps the alias list in sync with the current name.
 
-    Pins are no longer auto-renamed from external sources; the invariant is
-    that every meaningful persisted name (user-typed or not) has an alias row.
-    Detailed coverage lives in test_name_resolution.py.
-    """
+    Pins are no longer auto-renamed from external sources; the invariant is that every meaningful persisted name
+    (user-typed or not) has an alias row."""
 
     def test_saving_named_pin_records_current_name_alias(self) -> None:
         user = baker.make("auth.User")

@@ -1,20 +1,4 @@
-"""Two payments crediting the same subscription at once must both be kept.
-
-``test_billing_ledger_concurrency`` covers this with two in-process snapshots,
-which proves the *refresh* in ``_lock_and_refresh`` works. It does not prove the
-**lock** works: ``select_for_update`` does nothing observable on one connection,
-so a mutant that drops it and keeps the refresh passes that whole file.
-
-That mutant is not hypothetical - ``bin/run_mutation_tests.sh`` produced it
-(``from_queryset=RoleSubscription.objects.select_for_update()`` -> ``None``) and
-it survived, which is what prompted this file.
-
-The distinction matters in production. Refreshing alone closes the window only
-within a single transaction; two workers on separate connections can both
-refresh, both read the same committed total, both add their own payment and both
-write - and one customer's money is gone. The lock is what serialises them, and
-only real threads on real connections can show it.
-"""
+"""Two payments crediting the same subscription at once must both be kept."""
 
 from __future__ import annotations
 

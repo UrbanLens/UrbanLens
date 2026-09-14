@@ -1,40 +1,4 @@
-"""Notifications raised by activity on a comment thread - replies and reactions.
-
-This module exists to break a layering inversion. The implementations below
-used to live in ``controllers.comments``, and both ``services.comments.comments`` and
-``services.trips.trip_comments`` reached *up* into that controller to call them with
-function-local imports (function-local precisely because a module-level import
-would have made the cycle fatal at import time). A service importing a
-controller means the business rule is only reachable by first loading a view
-layer, so the next caller that cannot do that - a Celery task, a management
-command, the external API - grows its own copy instead, and the copies drift.
-
-The rules that live here, and only here:
-
-- **Never notify someone about their own action.** Both helpers return early
-  when the actor is also the recipient. Without this a user replying to their
-  own comment, or re-reacting to their own, notifies themselves.
-- **Honour the recipient's delivery preference.** ``comment_reply`` and
-  ``comment_liked`` on ``notification_preferences`` can be set to
-  ``DeliveryPreference.NONE``, which must suppress the row entirely rather than
-  writing it and hiding it at render time - a stored notification still shows
-  up in counts and digests. ``SITE``/``EMAIL``/``BOTH`` each do what they say -
-  the in-app row, ``send_notification_email``, or both.
-- **Name the actor only as far as the recipient may see them.** Both helpers
-  resolve the actor through ``resolve_visible_identity`` before building their
-  strings, so a notification never discloses someone the thread it links to
-  would mask - and never pushes that name to a device or an SMS.
-
-- **One deep-link builder for all three comment kinds.** Pin, wiki and trip
-  comments live in different models and reverse to different routes;
-  :func:`comment_url` is the single place that knows the mapping, so a
-  notification can never link to the wrong page or, worse, to a page the
-  recipient can't open.
-
-Both notify functions accept either a ``Comment`` (pin/wiki) or a
-``TripComment``, which is why they read the author off whichever of
-``profile``/``author`` the instance actually has rather than assuming one.
-"""
+"""Notifications raised by activity on a comment thread - replies and reactions."""
 
 from __future__ import annotations
 
@@ -55,21 +19,13 @@ logger = logging.getLogger(__name__)
 
 def comment_url(comment: Any) -> str:
     """Build the page URL (with ``#comment-<id>`` anchor) for any comment kind.
-
-    Dispatches on which foreign key the instance actually carries rather than
-    on its class, so a ``TripComment`` and a ``Comment`` can both be passed
-    without the caller having to know which it holds.
+    Dispatches on which foreign key the instance actually carries rather than on its class, so a ``TripComment`` and a ``Comment`` can both be passed without the caller having to know which it holds.
 
     Args:
         comment: A ``Comment`` (pin or wiki) or a ``TripComment``.
 
     Returns:
-        The absolute path to the comment's page including its anchor, or an
-        empty string when no route could be built. An empty URL is deliberate:
-        a notification with no link is degraded but harmless, whereas raising
-        would abort the reply or reaction that triggered it - the user's actual
-        action - over a broken link.
-    """
+        The absolute path to the comment's page including its anchor, or an empty string when no route could be built."""
     anchor = f"#comment-{comment.id}"
     try:
         if getattr(comment, "trip_id", None):
@@ -87,13 +43,10 @@ def _recipient_of(comment: Any) -> Profile | None:
     """Return the profile that authored *comment*, whichever field holds it.
 
     Args:
-        comment: A ``Comment`` (which names its author ``profile``) or a
-            ``TripComment`` (which names it ``author``).
+        comment: A ``Comment`` (which names its author ``profile``) or a ``TripComment`` (which names it ``author``).
 
     Returns:
-        The authoring profile, or None when the comment has no author (trip
-        comments keep their row when the author is removed).
-    """
+        The authoring profile, or None when the comment has no author (trip comments keep their row when the author is removed)."""
     if hasattr(comment, "profile"):
         return comment.profile
     return getattr(comment, "author", None)
@@ -107,11 +60,7 @@ def _preference(recipient: Profile, field: str) -> DeliveryPreference:
         field: The attribute name on ``notification_preferences`` to read.
 
     Returns:
-        The stored preference, or ``DeliveryPreference.SITE`` when the profile
-        has no preferences row yet. Defaulting to SITE rather than NONE keeps a
-        user who never opened their settings from silently losing every
-        notification.
-    """
+        The stored preference, or ``DeliveryPreference.SITE`` when the profile has no preferences row yet."""
     try:
         return getattr(recipient.notification_preferences, field)
     except AttributeError:
@@ -120,24 +69,14 @@ def _preference(recipient: Profile, field: str) -> DeliveryPreference:
 
 def _actor_names(recipient: Profile, actor: Profile) -> tuple[str, str]:
     """How *actor* may be named to *recipient*, as (display name, handle).
-
-    The comment list resolves authors through ``resolve_visible_identities`` and
-    the template renders the masked name when it says to, so naming the actor
-    outright here would contradict the very thread the notification links to.
-    It also travels further than a page does: a ``NotificationLog`` insert is
-    delivered to registered push devices, and ``notification_text_alerts`` builds
-    an SMS body from the title - a masked name would otherwise reach a lock
-    screen and a text message.
+    The comment list resolves authors through ``resolve_visible_identities`` and the template renders the masked name when it says to, so naming the actor outright here would contradict the very thread the notification links to.
 
     Args:
         recipient: The profile being notified.
         actor: The profile that replied or reacted.
 
     Returns:
-        ``(name, handle)`` - the handle is ``@name`` only when the recipient may
-        actually see who *actor* is; "@Member 2" reads like a real mention and is
-        not one.
-    """
+        ``(name, handle)`` - the handle is ``@name`` only when the recipient may actually see who *actor* is; "@Member 2" reads like a real mention and is not one."""
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     identity = resolve_visible_identity(recipient, actor)
@@ -151,9 +90,7 @@ def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None
     Args:
         actor: The profile that posted the reply.
         parent_comment: The comment that was replied to.
-        reply: The new reply, used for the deep link so the notification lands
-            on the reply itself. Falls back to *parent_comment* when omitted.
-    """
+        reply: The new reply, used for the deep link so the notification lands on the reply itself."""
     recipient = _recipient_of(parent_comment)
     if recipient is None or recipient == actor:
         return
@@ -180,14 +117,9 @@ def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None
 def notify_reaction(actor: Profile, comment: Any) -> None:
     """Tell a comment's author that *actor* reacted to it.
 
-    Only *adding* a reaction should call this. "Someone un-reacted to your
-    comment" is not an event worth a notification, and sending one would let a
-    reaction be toggled repeatedly to spam the author.
-
     Args:
         actor: The profile that just added a reaction.
-        comment: The comment they reacted to - a ``Comment`` or ``TripComment``.
-    """
+        comment: The comment they reacted to - a ``Comment`` or ``TripComment``."""
     recipient = _recipient_of(comment)
     if recipient is None or recipient == actor:
         return

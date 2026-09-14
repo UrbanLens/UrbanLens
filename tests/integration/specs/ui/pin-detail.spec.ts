@@ -1,14 +1,4 @@
-/**
- * The pin detail page.
- *
- * The busiest page in the application, and the one that reaches the most
- * services: it resolves boundaries, asks REData about the parcel, looks for a
- * wiki, loads plugin-contributed enrichment panels, and renders its own map.
- * Most of that is asynchronous and degrades quietly, so the assertions here are
- * about the page's *own* content being right and nothing on it throwing -
- * panel contents depend on what the outside world knows about a coordinate and
- * are not something a test can pin down.
- */
+/** The pin detail page. */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";

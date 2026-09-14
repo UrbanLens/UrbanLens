@@ -1,11 +1,4 @@
-"""Tests for the logged-in homepage dashboard.
-
-The profile page's private-activity section moved to a new homepage
-(``/dashboard/home/``, the authenticated landing page) and was rebuilt as a
-customizable widget dashboard: no more "only visible to you" framing, an
-empty subnav matching other pages, and per-user widget selection/ordering
-persisted via ``Profile.home_widget_layout`` (see services.home.home_widgets).
-"""
+"""Tests for the logged-in homepage dashboard."""
 
 from __future__ import annotations
 
@@ -96,18 +89,9 @@ _PHOTO_MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-home-photos-")
 class RecentPhotosAccessibleNameTests(TestCase):
     """Every photo tile carries a name a screen reader can announce.
 
-    axe reports a missing or blank one as ``image-alt``/``button-name``, both
-    critical, and both have been real here: the button lost its name when the
-    thumbnail 404'd (fixed by moving the label onto the button), and the ``alt``
-    is only non-empty because of a ``|default:`` that truthiness alone does not
-    make safe. A caption of whitespace is truthy, so it wins the default and
-    lands in ``alt`` - and axe treats a whitespace-only ``alt`` as absent.
-
-    Rendered through the real view rather than the template in isolation: the
-    widget only appears when ``home_recent_photos`` is non-empty, so a scan of a
-    freshly provisioned account never reaches this markup at all. That is why
-    the accessibility suite could not confirm the fix on its own.
-    """
+    axe reports a missing or blank one as ``image-alt``/``button-name``, both critical, and both have been real
+    here: the button lost its name when the thumbnail 404'd (fixed by moving the label onto the button), and the
+    ``alt`` is only non-empty because of a ``|default:`` that truthiness alone does not make safe."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -139,12 +123,8 @@ class RecentPhotosAccessibleNameTests(TestCase):
     def test_a_photo_row_with_no_file_does_not_take_the_page_down(self) -> None:
         """The widget renders ``img.image.url``, which raises when the field is blank.
 
-        Such rows are a known condition, not a hypothetical - the wiki gallery
-        endpoint carries an explicit ``exclude(image="")`` for them. Here the
-        result is worse than a missing tile: ``ValueError: The 'image' attribute
-        has no file associated with it`` escapes the template and the whole
-        homepage 500s.
-        """
+        Such rows are a known condition, not a hypothetical - the wiki gallery endpoint carries an explicit
+        ``exclude(image="")`` for them."""
         baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO, image="", caption="no file")
 
         self.assertEqual(self.client.get(reverse("home.view")).status_code, 200)
@@ -249,11 +229,7 @@ class HomeWidgetLayoutSaveViewTests(TestCase):
 class DisabledWidgetsCostNothingTests(TestCase):
     """Most homepage entries are lazy querysets, so a disabled widget is free.
 
-    Two were not. The ten counts behind `home_stats` execute as the context dict
-    is built, and `home_recent_comments` is forced by the `sorted()` that merges
-    pin and trip comments. A user who turned both widgets off still paid for a
-    dozen queries on every homepage load.
-    """
+    Two were not."""
 
     def setUp(self) -> None:
         super().setUp()

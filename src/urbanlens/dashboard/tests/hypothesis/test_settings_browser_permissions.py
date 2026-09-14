@@ -1,9 +1,4 @@
-"""Smoke tests for the Settings > Connections "Browser Permissions" section.
-
-Covers only server-rendered markup - the actual permission status/prompt
-logic lives client-side in shared/permissions-client.ts (no server round
-trip), so there's nothing else here for Django tests to exercise.
-"""
+"""Smoke tests for the Settings > Connections "Browser Permissions" section."""
 
 from __future__ import annotations
 

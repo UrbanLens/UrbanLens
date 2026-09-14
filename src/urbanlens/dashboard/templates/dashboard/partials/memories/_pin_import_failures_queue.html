@@ -1,23 +1,4 @@
-{% comment %}
-The pin-import-failure review queue - pins from an import whose Google Maps
-CID never resolved to a location. Re-fetched via the `refreshQueue` event
-after any resolve/dismiss action (on this section or the pin-suggestions/
-pin-merge-suggestions ones) so the section stays in sync in place.
-
-Shares the `.pin-suggestions-grid`/`.pin-suggestion-card` classes so these
-cards blend into the same visual flow as regular pin suggestions rather than
-reading as a separate section - see locations.html.
-
-Pagination targets this section's own URL and its own `failures_page`
-parameter, for the same two reasons `_pin_suggestions_queue.html` gives plus
-one more: this template also renders inside the full `memories.locations`
-page, beside that queue, and a shared `?page=` would move both sections with
-one click.
-
-Context:
-  pin_import_failures - the current page's pending PinImportFailure rows, newest first
-  failures_page_obj   - the Django Page for this slice
-{% endcomment %}
+{% comment %}The pin-import-failure review queue - pins from an import whose Google Maps CID never resolved to a location.{% endcomment %}
 {% if pin_import_failures %}
 <div class="pin-suggestions-grid" id="pin-import-failures-grid">
     {% for failure in pin_import_failures %}

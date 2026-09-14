@@ -1,17 +1,4 @@
-"""Resolving expected markers must not cost one query per device.
-
-`ingest_scan_upload` runs synchronously inside the upload request and accepts up
-to `MAX_DEVICES_PER_UPLOAD` (200) devices. It used to look up each device's
-`expected_marker_uuid` individually, so a full upload spent up to 200 round-trips
-on marker resolution alone, on top of the per-device device/entry writes.
-
-The scaling assertion is written as "marker resolution adds no more than a
-constant" rather than a fixed query count: the rest of the loop is legitimately
-per-device (a `get_or_create` per MAC, one entry insert, one bulk_create of
-readings), so pinning a total would break on unrelated changes and tell nobody
-anything. Comparing an upload *with* markers against the same upload *without*
-isolates the part under test.
-"""
+"""Resolving expected markers must not cost one query per device."""
 
 from __future__ import annotations
 

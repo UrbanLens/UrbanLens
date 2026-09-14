@@ -1,10 +1,4 @@
-"""Tests for the first-party native app's OAuth2 client provisioning command.
-
-The command must be idempotent (every environment runs it repeatedly), the
-registration must be a public+PKCE client, and the registered redirect URIs
-must actually validate the way the app's platforms need: exact match for the
-custom scheme, port-insensitive loopback (RFC 8252) for desktop.
-"""
+"""Tests for the first-party native app's OAuth2 client provisioning command."""
 
 from __future__ import annotations
 
@@ -73,12 +67,7 @@ class ProvisionMobileOauthClientTests(TestCase):
     def test_client_secret_is_stored_blank_and_unhashed(self) -> None:
         """A public client's secret must stay literally empty.
 
-        ``ClientSecretField.pre_save`` hashes the secret whenever
-        ``hash_client_secret`` is True (its default). Hashing ``""`` means
-        ``identify_hasher("")`` raises, the except branch runs, and
-        ``make_password("")`` is stored - a *valid* hash of the empty string,
-        which a confidential-client check would accept as a correct secret.
-        """
+        ``ClientSecretField.pre_save`` hashes the secret whenever ``hash_client_secret`` is True (its default)."""
         _provision()
         application = Application.objects.get(client_id=DEFAULT_CLIENT_ID)
         self.assertFalse(application.hash_client_secret)
@@ -88,10 +77,8 @@ class ProvisionMobileOauthClientTests(TestCase):
 class FirstPartyClientMigrationTests(TestCase):
     """The 0013 data migration provisions the same registration at migrate time.
 
-    The row these assertions read was created by the migration during test
-    database setup, not by any code in this test - so a regression in the
-    migration surfaces here even though the management command still works.
-    """
+    The row these assertions read was created by the migration during test database setup, not by any code in
+    this test - so a regression in the migration surfaces here even though the management command still works."""
 
     def test_migration_created_the_first_party_client(self) -> None:
         """A fresh database has the registration the shipped app expects."""

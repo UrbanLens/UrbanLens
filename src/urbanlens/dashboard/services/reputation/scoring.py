@@ -1,20 +1,4 @@
-"""Writing to, valuing, and totalling the reputation ledger.
-
-The split between the two halves is the important part:
-
-``record_event`` runs **synchronously**, inside the contributing request's own
-transaction. It is one indexed insert, it cannot be lost to a broker outage,
-and a rolled-back contribution rolls its row back too.
-
-``score_event`` runs **later**, off the request path. Working out how badly a
-target needed a contribution means querying that target's state, and for photos
-it can mean walking external gallery panels - by far the most expensive input in
-the model, and exactly the cost this feature must not add to a page load.
-
-That is why ``ReputationEvent.value`` is nullable: between the two halves a row
-exists and is worth "not yet known", which is a different thing from worth
-nothing.
-"""
+"""Writing to, valuing, and totalling the reputation ledger."""
 
 from __future__ import annotations
 
@@ -50,22 +34,15 @@ def record_event(
 ) -> ReputationEvent | None:
     """Write an unscored ledger row for a contribution that just happened.
 
-    Idempotent: the unique constraint on ``(rule_key, target_kind, target_id)``
-    means a signal firing twice, or a retried Celery task, produces one row.
-
     Args:
         profile: Who contributed.
-        rule_key: A registered rule. An unknown key is logged and ignored
-            rather than raising - a contribution must never fail because the
-            bookkeeping around it is misconfigured.
+        rule_key: A registered rule.
         target: The object contributed, if the rule has one.
         wiki: The wiki it landed on, for per-wiki caps and the admin breakdown.
-        occurred_at: When, defaulting to now. Explicit so a backfill can
-            attribute a row to the past.
+        occurred_at: When, defaulting to now.
 
     Returns:
-        The row, or None when nothing was written.
-    """
+        The row, or None when nothing was written."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
 
     rule = get_rule(rule_key)
@@ -78,12 +55,10 @@ def record_event(
     moment = occurred_at or timezone.now()
 
     target_id = getattr(target, "pk", None)
-    # Fast path. Several subscriptions are not created_only - a photo is
-    # usually attached to its wiki by a later "send to wiki", not at upload -
-    # so ordinary re-saves re-enter here for a contribution already recorded.
-    # Letting those reach the insert costs a savepoint and a rolled-back
-    # IntegrityError on a write path users hit constantly. The constraint is
-    # still the guarantee; this only avoids paying for it in the common case.
+    # Several subscriptions are not created_only - a photo is usually attached to its wiki by a
+    # later "send to wiki", not at upload - so ordinary re-saves re-enter here for a contribution
+    # already recorded.
+    # Letting those reach the insert costs a savepoint and a rolled-back IntegrityError on a write
     if target_id is not None and ReputationEvent.objects.filter(rule_key=rule.key, target_kind=rule.target_kind, target_id=target_id).exists():
         return None
 
@@ -109,18 +84,13 @@ def record_event(
 
 
 def score_event(event: ReputationEvent) -> Decimal | None:
-    """Work out what an unscored row was worth, and store it.
-
-    Applies the rule, then the two central adjustments every rule obeys:
-    diminishing returns within the period, and the per-rule and per-wiki
-    ceilings. Rules do not implement those themselves, so none can forget to.
+    """Work out what an unscored row was worth, and store it. Rules do not implement those themselves, so none can forget to.
 
     Args:
         event: The row to value.
 
     Returns:
-        The stored value, or None when the contribution did not qualify.
-    """
+        The stored value, or None when the contribution did not qualify."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
 
     rule = get_rule(event.rule_key)
@@ -172,26 +142,17 @@ def score_event(event: ReputationEvent) -> Decimal | None:
 
 def _decay_multiplier(event: ReputationEvent) -> Decimal:
     """Return the diminishing-returns factor for this row.
-
-    A full point for the first contribution of a kind in the period, half for
-    the second, a quarter for the third. Counts rows *before* this one so the
-    factor does not depend on the order the scorer happens to reach them in.
-    """
+    Counts rows *before* this one so the factor does not depend on the order the scorer happens to reach them in."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
 
     earlier = (
         ReputationEvent.objects.for_profile(event.profile_id)
         .for_rule(event.rule_key)
         .in_period(event.period_key)
-        # Deliberately not filtered on `retracted`: score_event retracts rows
-        # itself, so excluding them would make this factor depend on the order
-        # the scorer happened to reach siblings in - which is what the docstring
-        # above promises it does not.
-        #
-        # The pk tiebreak matters because occurred_at is explicit so a backfill
-        # can attribute rows to the past; a day-precision backfill ties every
-        # row in a period and would otherwise disable decay for exactly the bulk
-        # import where farming is worth doing.
+        # Deliberately not filtered on `retracted`: score_event retracts rows itself, so excluding
+        # them would make this factor depend on the order the scorer happened to reach siblings in -
+        # which is what the docstring above promises it does not.
+        # The pk tiebreak matters because occurred_at is explicit so a backfill can attribute rows
         .filter(Q(occurred_at__lt=event.occurred_at) | Q(occurred_at=event.occurred_at, pk__lt=event.pk))
         .count()
     )
@@ -202,18 +163,13 @@ def _apply_caps(event: ReputationEvent, value: Decimal) -> tuple[Decimal, str]:
     """Trim *value* to whatever the period ceilings still allow.
 
     Returns:
-        The allowed value, and a short note naming the binding cap (empty when
-        neither bound).
-    """
+        The allowed value, and a short note naming the binding cap (empty when neither bound)."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
 
     # Locked for the length of the caps check and the write that follows it.
-    # Headroom is computed from stored values, so two workers scoring
-    # same-period siblings concurrently would each see the other's row as
-    # worthless and both award full value - overshooting a ceiling whose whole
-    # point is that no rule can forget it. The nightly sweep fans 500-row chunks
-    # out to parallel subtasks, so this is the expected path rather than a race
-    # that needs bad luck.
+    # Headroom is computed from stored values, so two workers scoring same-period siblings
+    # concurrently would each see the other's row as worthless and both award full value -
+    # overshooting a ceiling whose whole point is that no rule can forget it.
     list(ReputationEvent.objects.select_for_update().filter(profile_id=event.profile_id, rule_key=event.rule_key, period_key=event.period_key).values_list("pk", flat=True))
 
     same_rule = ReputationEvent.objects.for_profile(event.profile_id).for_rule(event.rule_key).in_period(event.period_key).exclude(pk=event.pk).total_value()
@@ -237,18 +193,12 @@ def _apply_caps(event: ReputationEvent, value: Decimal) -> tuple[Decimal, str]:
 def retract_event(event: ReputationEvent, *, reason: str) -> bool:
     """Stop a row counting, reversibly.
 
-    A wiki edit's ``reverted`` flag is current state rather than history -
-    reverting a revert clears it - so retraction has to be undoable. That is
-    why this sets a flag instead of deleting the row or writing a compensating
-    negative one.
-
     Args:
         event: The row.
         reason: Short machine-readable label, stored for the audit trail.
 
     Returns:
-        Whether this call changed anything.
-    """
+        Whether this call changed anything."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
 
     updated = ReputationEvent.objects.filter(pk=event.pk, retracted=False).update(retracted=True, retracted_reason=reason)
@@ -262,20 +212,14 @@ def retract_event(event: ReputationEvent, *, reason: str) -> bool:
 
 def retract_events_for_target(target: Any, *, reason: str) -> int:
     """Stop every row recorded about ``target`` counting.
-
-    For an ending that the *contributor* chose - only their caller knows that,
-    which is why the intent is passed in rather than inferred, the same rule
-    ``services.media.quota_rewards`` follows for the community quota bonus.
-    Retraction is reversible (:func:`restore_event`), so an undo can hand the
-    standing back.
+    For an ending that the *contributor* chose - only their caller knows that, which is why the intent is passed in rather than inferred, the same rule ``services.media.quota_rewards`` follows for the community quota bonus.
 
     Args:
         target: The contributed object being withdrawn.
         reason: Short machine-readable label, stored for the audit trail.
 
     Returns:
-        How many rows this call retracted.
-    """
+        How many rows this call retracted."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
     from urbanlens.dashboard.services.reputation.rules import target_kind_for
 
@@ -286,34 +230,22 @@ def retract_events_for_target(target: Any, *, reason: str) -> int:
     return sum(1 for event in rows if retract_event(event, reason=reason))
 
 
-#: What a contribution ended by somebody other than its contributor is worth
-#: afterwards. Deliberately near 1: the removal is a signal, not a verdict, and
-#: D9 says it should cost standing "only very slightly for the time being". A
-#: placeholder rather than a researched figure - changing it re-weights every
-#: future application, and `weight_events_for_target` can re-weight past ones.
+#: What a contribution ended by somebody other than its contributor is worth afterwards.
+#: Deliberately near 1: the removal is a signal, not a verdict, and D9 says it should cost standing
+#: "only very slightly for the time being".
 MODERATED_REMOVAL_WEIGHT = Decimal("0.9")
 
 
 def weight_events_for_target(target: Any, *, weight: Decimal, reason: str) -> int:
     """Scale what every row about ``target`` contributes, without erasing it.
 
-    The middle ground between counting in full and :func:`retract_event`'s
-    all-or-nothing. For an ending the contributor did not choose: the
-    contribution happened, so the ledger keeps it and its original score, and
-    only its weight in the total moves.
-
-    Reversible by calling again with ``weight=1``, and re-weightable by calling
-    again with anything else - neither re-scores, so diminishing returns and the
-    caps are not re-applied.
-
     Args:
         target: The object the rows are about.
-        weight: The multiplier to store. 1 restores full value.
+        weight: The multiplier to store.
         reason: Short machine-readable label, stored for the audit trail.
 
     Returns:
-        How many rows this call changed.
-    """
+        How many rows this call changed."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
     from urbanlens.dashboard.services.reputation.rules import target_kind_for
 
@@ -355,12 +287,7 @@ def restore_event(event: ReputationEvent) -> bool:
 
 
 def _mark_stale(profile_id: int) -> None:
-    """Flag a profile's cached total as lagging the ledger.
-
-    Cheap compare-and-swap rather than a lock: the transition is one-way until
-    the recompute clears it, so a concurrent writer setting the same flag is a
-    harmless no-op.
-    """
+    """Flag a profile's cached total as lagging the ledger."""
     from urbanlens.dashboard.models.reputation.model import ProfileReputation
 
     if ProfileReputation.objects.filter(profile_id=profile_id, is_stale=False).update(is_stale=True):
@@ -374,20 +301,11 @@ def _mark_stale(profile_id: int) -> None:
 def recompute_total(profile: Profile | int) -> Decimal:
     """Rebuild a profile's cached totals from the ledger.
 
-    The ledger is truth and this is a cache, so the sum is recomputed rather
-    than incremented - an incremental total drifts the first time a row is
-    retracted, backfilled, or scored out of order.
-
-    ``lifetime_earned`` deliberately ignores retraction: anything granting
-    durable standing reads it, so that reverting somebody's contributions
-    cannot be used to take away access they already had.
-
     Args:
         profile: Whose totals to rebuild.
 
     Returns:
-        The new total.
-    """
+        The new total."""
     from django.db.models import Sum
 
     from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent

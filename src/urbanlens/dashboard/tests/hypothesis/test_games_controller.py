@@ -53,10 +53,8 @@ class GamesOverviewViewTests(TestCase):
 class GameFeatureGateTests(TestCase):
     """``AlphaFeatureRequiredMixin`` must cover every game route, not just the hub.
 
-    Regression guard for the gap where only ``GamesOverviewView`` checked
-    ``SiteFeature.ALPHA_FEATURES`` and anyone with a URL could play the games
-    directly.
-    """
+    Regression guard for the gap where only ``GamesOverviewView`` checked ``SiteFeature.ALPHA_FEATURES`` and
+    anyone with a URL could play the games directly."""
 
     #: (url_name, args) per game: its landing page plus one in-session route.
     #: In-session pks are dummies - the gate fires in ``dispatch()``, before

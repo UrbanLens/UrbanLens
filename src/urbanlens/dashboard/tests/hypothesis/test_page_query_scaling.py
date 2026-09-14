@@ -1,22 +1,4 @@
-"""Hot pages and endpoints must cost the same queries whatever the user's data size.
-
-The Organize page rendered `{% if not label.profile %}` several times per label
-card to decide whether to show the "global" chip. Accessing ``.profile`` fetches
-the owning row, so each occurrence cost one query per label: 134 queries for a
-profile with 5 pins and 244 for one with 60. ``label.profile_id`` answers the
-same question for free, which is what ``Label.is_global`` now reads - 38 queries
-either way.
-
-The assertion is that the count does not *grow* with the data, not that it equals
-some number. A fixed expected count would break on unrelated changes and teach
-people to bump the constant; growth is the actual defect.
-
-**Measurement trap**: the first user created in a fresh database is auto-promoted
-to site admin (``services.admin.site_admin``), and the admin's page renders
-differently - fewer queries, as it happens. Comparing a first user against a later
-one measures that promotion, not the data size. These tests burn a throwaway user
-in ``setUp`` so every measured profile is an ordinary one.
-"""
+"""Hot pages and endpoints must cost the same queries whatever the user's data size."""
 
 from __future__ import annotations
 
@@ -83,10 +65,7 @@ class PageQueryScalingTests(TestCase):
         self._assert_flat("/dashboard/map/")
 
     def test_the_spotguessr_pin_list_does_not_scale_with_pin_count(self) -> None:
-        """This one served every pin's label, which falls through to
-        ``Location.display_name`` and reads the reverse OneToOne ``wiki`` - one
-        query per pin until ``location__wiki`` was joined in. It was the only
-        growing page out of 98 swept."""
+        """This one served every pin's label, which falls through to ``Location.display_name`` and reads the reverse OneToOne ``wiki`` - one query per pin until ``location__wiki`` was joined in. It was the only growing page out of 98 swept."""
         self._assert_flat("/dashboard/spotguessr/pins/")
 
     def test_is_global_needs_no_query(self) -> None:

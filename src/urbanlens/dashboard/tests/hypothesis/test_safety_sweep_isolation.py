@@ -1,15 +1,4 @@
-"""Tests that one bad safety check-in cannot suppress everyone else's escalation.
-
-The three safety beat tasks each loop over a queryset and call a per-check-in
-service. An exception from any one of them used to abort the whole run, and
-``SafetyCheckin`` has a deterministic ``ordering``, so a row that fails
-repeatably - corrupt contact data, a template that won't render, an address the
-mail backend rejects - would fail at the same position on every tick and every
-check-in behind it would never escalate.
-
-That failure mode is silent and unbounded: the sweep just returns early, and the
-people whose emergency contacts were never called have no way to know.
-"""
+"""Tests that one bad safety check-in cannot suppress everyone else's escalation."""
 
 from __future__ import annotations
 

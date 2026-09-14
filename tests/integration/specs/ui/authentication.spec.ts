@@ -1,13 +1,4 @@
-/**
- * Signing in, signing out, and being refused.
- *
- * Every test here works in a context of its own, with its own fresh sign-in.
- * That is not fastidiousness: the rest of the suite shares one saved session,
- * and Django's logout flushes the session *server-side* - so a sign-out
- * performed against the shared cookie would sign out every test running in
- * parallel, and they would fail with "redirected to login" for reasons nothing
- * in their own code explains.
- */
+/** Signing in, signing out, and being refused. Every test here works in a context of its own, with its own fresh sign-in. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { env } from "../../lib/env.js";

@@ -13,25 +13,14 @@ logger = logging.getLogger(__name__)
 
 def search_web(query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
     """Search the web via REData's ``/search/web/`` provider fallback chain.
-
-    REData already implements the same "try each provider in order, first to
-    answer wins" chain this function used to run locally (SearXNG, Brave,
-    Mojeek, Marginalia, Google Programmable Search, DuckDuckGo) - see
-    ``../REData/docs/api-reference.md``, "GET /search/web/ - web search".
-    There is no local fallback: an install with no REData configured simply
-    has no web search results, which degrades to the "Web Search" pin
-    panel's existing empty state (see ``PinController._web_search_response``)
-    rather than raising.
+    There is no local fallback: an install with no REData configured simply has no web search results, which degrades to the "Web Search" pin panel's existing empty state (see ``PinController._web_search_response``) rather than raising.
 
     Args:
         query: The search string.
         max_results: Maximum number of results to request.
 
     Returns:
-        Result dicts (``title``, ``link``, ``snippet``, ``date``,
-        ``thumbnail``), or ``[]`` when REData is unconfigured or every
-        provider it tried failed to answer.
-    """
+        Result dicts (``title``, ``link``, ``snippet``, ``date``, ``thumbnail``), or ``[]`` when REData is unconfigured or every provider it tried failed to answer."""
     if not redata_configured():
         return []
     from urbanlens.dashboard.services.apis.locations.redata_search_gateway import RedataSearchGateway
@@ -64,7 +53,7 @@ def format_search_date(raw: str | None) -> str:
 
     for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
         try:
-            dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))  # noqa: DTZ007  # tzinfo=UTC is applied on the next line
+            dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))  # noqa: DTZ007  # tzinfo=UTC is applied...
             dt = dt.replace(tzinfo=UTC)
             return _format_relative_search_date(dt)
         except ValueError:

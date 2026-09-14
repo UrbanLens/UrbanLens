@@ -1,29 +1,4 @@
-"""Fail the build when a new data migration reverses to ``noop`` without a reason.
-
-``RunPython.noop`` as a reverse is a claim: "undoing this migration needs no
-data work". That is usually true - a backfill's column is dropped by the schema
-reverse anyway, a seeded row can stay, a cache invalidation has nothing to undo.
-
-It was false twice, in the worst way available. Migrations 0039 and 0007 encrypt
-existing columns **in place**; their ``noop`` reverses meant ``migrate dashboard
-0038`` *succeeded* while leaving ciphertext in columns the pre-migration code
-reads as plaintext. Nothing failed, and the data was unreadable. Both now carry
-real decrypting reverses (audit chunk 459-460).
-
-The distinction that matters is not "does the reverse restore the old values" -
-plenty of data migrations are inherently lossy, and that is fine. It is:
-
-    **After reversing, can the pre-migration code still interpret the data?**
-
-A merge, a dedupe, a cap, a flag reset all leave values that are lossy but
-valid. A format change - encryption, an encoding, a serialisation - does not.
-Only the second kind must never reverse to ``noop``.
-
-Reviewed entries are keyed by **file**, because migrations are append-only in
-practice: a new decision arrives as a new file, which is exactly what this test
-should stop in its tracks. Editing an old migration to add a noop op would slip
-past, and that is an acceptable gap for a file nobody edits.
-"""
+"""Fail the build when a new data migration reverses to ``noop`` without a reason."""
 
 from __future__ import annotations
 
@@ -36,8 +11,6 @@ from urbanlens.dashboard import migrations as migrations_package
 MIGRATIONS_DIR = Path(migrations_package.__file__).resolve().parent
 
 #: Migrations whose ``noop`` reverses were read and judged correct, with why.
-#: Audit chunks 459-460 covered 0026-0044; chunk 544 covered 0001-0020, which
-#: that pass never reached.
 REVIEWED: dict[str, str] = {
     "0001_initial.py": "backfill_pin_point / backfill_primary_email_normalized - fill new columns the schema reverse drops anyway.",
     "0003_v0_4_0_data.py": (
@@ -57,12 +30,8 @@ REVIEWED: dict[str, str] = {
     ),
     "0010_v0_6_0.py": "Backfills (intro_seen, notification uuids, unchanged defaults) plus create_first_party_client, which seeds a row that is harmless to leave behind.",
     "0020_seed_vip_subscription_role.py": "Seeds a subscription role. Leaving it on reverse is harmless; deleting it could orphan subscriptions referencing it.",
-    # NOTE: the migration carries two noop reverses this entry does NOT cover -
-    # _0062_clear_generated_names and _0062_renumber_levels, from the pre-squash
-    # 0062_floorplan_floor_designation.py. That file was never reviewed either (this gap
-    # predates the squash - `git show <pre-squash commit>:.../0062_floorplan_floor_designation.py`
-    # confirms both were already RunPython.noop before v0.7.0), so it is not filled in
-    # here rather than guessed at
+    # NOTE: the migration carries two noop reverses this entry does NOT cover - _0062_clear_generated_names and
+    # _0062_renumber_levels, from the pre-squash 0062_floorplan_floor_designation.py.
     "0030_v0_7_0.py": (
         "mark_existing_external_media_exempt (was 0033) sets a boolean on existing rows - lossy, valid either way. "
         "merge_duplicate_labels (was 0042) clears the way for 0043's unique constraint, same shape as 0005 - "

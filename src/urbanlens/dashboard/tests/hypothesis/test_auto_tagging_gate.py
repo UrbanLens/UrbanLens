@@ -1,16 +1,4 @@
-"""Auto-tagging is granted, then opted *out* of - not opted into.
-
-Reported: the Organize page asked every label two questions (an "auto-tagging"
-checkbox and a comma-separated keyword list) that together made automatic
-tagging something a user had to assemble by hand, per label. It is now a
-capability: a user who has the subscription feature and has not switched it
-off gets it for every tag and category label, minus whichever ones they
-excluded individually.
-
-Statuses, people and media labels are deliberately outside it - REData's
-suggestion service models "which of my labels describes this place", which
-"Visited" and a person's name are not.
-"""
+"""Auto-tagging is granted, then opted *out* of - not opted into."""
 
 from __future__ import annotations
 
@@ -132,11 +120,8 @@ class OrganizeFormTests(TestCase):
 class ControlMatchesServerTests(TestCase):
     """The dialog must not offer a control the server ignores, or hide one it honours.
 
-    This is the invariant the previous gating test existed for (a checkbox was
-    once shown on AI grounds alone, while the server decided on the user's own
-    settings). The gate changed; the invariant did not, so it is asserted here
-    against the one helper both halves now consult.
-    """
+    This is the invariant the previous gating test existed for (a checkbox was once shown on AI grounds alone,
+    while the server decided on the user's own settings)."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -1,12 +1,4 @@
-"""Tests for the external API's AI assistant domain (async 202+poll shape, batch 2c).
-
-A turn now runs on ai-worker: POST enqueues and returns 202 with a turn id,
-GET polls it. Every test patches ``safely_enqueue_task``/``get_task_progress``
-at ``external_api.views_assistant`` (the same seam ``test_ai_assistant.py``
-patches for the web view) rather than a gateway - the gateway only matters
-inside the task now, which is exercised directly in
-``test_ai_assistant.py``/``test_ai_tasks.py``.
-"""
+"""Tests for the external API's AI assistant domain (async 202+poll shape, batch 2c)."""
 
 from __future__ import annotations
 

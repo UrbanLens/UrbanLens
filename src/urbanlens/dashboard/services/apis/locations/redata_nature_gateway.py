@@ -1,10 +1,4 @@
-"""Gateway for REData's ``/nature-observations/`` near-a-coordinate endpoint.
-
-See ``../REData/docs/api-reference.md``, "GET /nature-observations/ - recorded
-wildlife and plants". Replaces the direct, keyless call to the iNaturalist
-observations API with REData's pooled view - one provider today
-(``inaturalist``, worldwide).
-"""
+"""Gateway for REData's ``/nature-observations/`` near-a-coordinate endpoint."""
 
 from __future__ import annotations
 
@@ -45,16 +39,10 @@ class RedataNatureObservationsGateway(RedataLocationContextGateway):
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The parsed envelope. ``coordinate_uncertainty_meters`` and
-            ``attributes.obscured`` are load-bearing: providers deliberately
-            obscure the location of threatened species, sometimes by tens of
-            kilometres, and rendering an obscured point as precise
-            misrepresents it.
+            The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: Every source covering the
-                coordinate failed to answer, or the request to REData failed
-                outright.
+            LocationContextUnavailableError: Every source covering the coordinate failed to answer, or the request to REData failed outright.
         """
         extra_params: dict[str, Any] = {}
         if quality_grade is not None:

@@ -1,13 +1,4 @@
-"""The assistant's undo tools - a two-step peek-then-confirm pair, never a bare "undo that".
-
-``undo_last_action`` is a write: the loop never runs it (``registry.execute``'s
-own ``confirmed=False`` path turns it into a proposal), and that proposal's
-``args`` are exactly what the model passed - the ``undo_uuid`` from a prior
-``undo_peek`` call, not anything the handler computes. The confirm endpoint
-re-verifies that uuid against the *current* top of the stack before restoring
-anything, so a user who does something else between asking and confirming
-can't have that newer action undone in place of the one they were told about.
-"""
+"""The assistant's undo tools - a two-step peek-then-confirm pair, never a bare "undo that"."""
 
 from __future__ import annotations
 

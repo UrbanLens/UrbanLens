@@ -8,35 +8,10 @@
 # Nuclei (bin/run_nuclei_scan.sh) answers "does this deployment match a known
 # vulnerable pattern"; the pytest suite's `security/` specs assert specific
 # application behaviour. Neither actually tests for SQL injection - sqlmap
-# does, and it EXPLOITS rather than merely detects: a confirmed finding here
-# came from sqlmap sending real payloads through real parameters into the
-# real database, not from matching a signature.
+# does, and it EXPLOITS rather than merely detects.
 #
-# That difference is exactly why this wrapper is more restrictive than
-# run_nuclei_scan.sh in two ways nuclei does not need to be:
-#
-#   - target scope is an ALLOWLIST of disposable dev-container hosts, not a
-#     denylist of production ones. staging.urbanlens.org is deliberately not
-#     on that list - it is not a throwaway database, and this is a tool that
-#     actively exploits what it finds (OR-based payloads at --risk=3 can
-#     rewrite an UPDATE/DELETE's WHERE clause to match every row; stacked
-#     queries can run arbitrary follow-up SQL). Only run this against
-#     something you can rebuild from nothing.
-#   - a fixed set of sqlmap flags - the ones that go past confirming an
-#     injection into OS command execution, arbitrary file read/write, or an
-#     interactive shell that bypasses --batch entirely - are refused
-#     unconditionally, however they are passed. There is no opt-in for them
-#     in this wrapper; run sqlmap by hand, outside it, if you mean to go that
-#     far on a target you control.
-#
-# Otherwise deliberately permissive by default (full --risk/--level/--technique,
-# matching Nuclei's "exclude only what is unconditionally unsafe" posture) -
-# safe here specifically because the target is required to be disposable.
-#
-# Same rules as run_nuclei_scan.sh beyond that: manual only, never wired into
-# a push/PR trigger or bundled into integration.yml's own dispatch; --docker
-# is not offered because sqlmap has no compiled dependencies and pip-installs
-# identically everywhere `bin/install_sqlmap.py` can reach a Python interpreter.
+# sqlmap EXPLOITS rather than merely detecting, so targets are an allowlist of disposable dev hosts
+# and OS/file/shell flags are refused outright. Otherwise permissive by default; manual only, no --docker.
 #
 # Usage:
 #   bin/run_sqlmap_scan.sh --url https://s1.dev.urbanlens.org
@@ -54,11 +29,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUITE_DIR="${REPO_ROOT}/tests/integration"
 OUT_DIR="${SUITE_DIR}/reports/sqlmap"
 
-# The schema this wrapper points sqlmap's own --openapi target-derivation at.
-# Must match tests/contract/schema_source.py's SCHEMA_PATH - both read the
-# same published document, and a change to one without the other would go
-# unnoticed until a run against a real deployment came back suspiciously
-# empty.
+# Must match tests/contract/schema_source.py's SCHEMA_PATH; both read the same published document.
 SCHEMA_PATH="/dashboard/api/external/v1/schema/"
 
 BASE_URL="${UL_SQLMAP_BASE_URL:-${UL_E2E_BASE_URL:-}}"
@@ -74,10 +45,7 @@ ALL_TIERS=0
 FAIL_ON_FINDINGS=0
 PASSTHROUGH=()
 
-# Cleaned up on exit: generated sqlmap config files hold a live API key or
-# session cookie in their [Request] section. Same `|| true` per-path pattern
-# as run_nuclei_scan.sh's secret-file cleanup, for the same reason - one path
-# failing to remove must never stop the rest from being attempted.
+# Config files hold live credentials; remove each path independently.
 CLEANUP_PATHS=()
 cleanup() {
 	local p
@@ -87,12 +55,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Flags this wrapper refuses outright, however they arrive (bare, via `--`
-# passthrough, or with a `=value` suffix). All of them go past confirming an
-# injection exists into operating-system command execution, arbitrary
-# filesystem access on the database host, Windows registry access, or an
-# interactive shell/SQL prompt that bypasses --batch entirely - out of scope
-# for an automated scan regardless of how disposable the target is.
+# Flags refused outright however passed: all escalate past confirming injection into OS/file/shell access.
 HARD_BLOCKED_FLAGS=(
 	--os-shell --os-pwn --os-cmd --os-smbrelay --os-bof --priv-esc
 	--file-read --file-write --file-dest
@@ -261,11 +224,7 @@ hostname_of() {
 	printf '%s' "${url,,}"
 }
 
-# An ALLOWLIST rather than run_nuclei_scan.sh's denylist - see the header of
-# this script for why sqlmap needs the stricter default. A leading "." on an
-# entry matches it as a domain suffix (so ".dev.urbanlens.org" allows
-# "s1.dev.urbanlens.org" but not "dev.urbanlens.org" itself); anything else
-# must match the hostname exactly.
+# Allowlist (not denylist): leading "." matches a domain suffix, anything else must match exactly.
 DEFAULT_ALLOWED_HOSTS=".dev.urbanlens.org,localhost,127.0.0.1"
 ALLOWED_HOSTS="${UL_SQLMAP_ALLOWED_HOSTS:-${DEFAULT_ALLOWED_HOSTS}}"
 ALLOW_ANY_HOST="${UL_SQLMAP_ALLOW_ANY_HOST:-0}"
@@ -303,9 +262,8 @@ if [[ "${ALLOW_ANY_HOST}" != "1" ]] && ! host_is_allowed "${TARGET_HOST}"; then
 	exit 2
 fi
 
-# A target sqlmap can't reach at all produces a report that looks identical to
-# a hardened deployment - the "0 findings, no error" trap run_nuclei_scan.sh's
-# own history warns about. Fail loudly here instead.
+# An unreachable target reports identically to a hardened one ("0 findings, no
+# error"). Fail loudly here instead of eyeballing an empty report.
 if command -v curl >/dev/null 2>&1; then
 	curl_status=0
 	curl -sS -o /dev/null --max-time 15 "${BASE_URL}" || curl_status=$?
@@ -327,11 +285,7 @@ SCHEMA_URL="${BASE_URL}${SCHEMA_PATH}?format=json"
 # if any is absent, confirmed against a real 1.10.8 install.
 _INI_SECTIONS=(Target Request Optimization Injection Detection Techniques Fingerprint Enumeration Brute "User-defined function" "File system" Takeover Windows General Miscellaneous Hidden API)
 
-# Emits a minimal sqlmap config file carrying only a live credential, so it
-# never appears in argv/process-list (the same reason run_nuclei_scan.sh
-# builds a -secret-file rather than passing a bearer token as a CLI flag).
-# Prints the generated path on success; exits non-zero (reason on stderr)
-# when the named field is absent from the primary account.
+# Emits a minimal config carrying only a live credential, kept off argv. Prints the path.
 generate_bearer_config() {
 	local field="$1"
 	local out
@@ -362,12 +316,7 @@ generate_bearer_config() {
 	printf '%s' "${out}"
 }
 
-# Signs in as the primary account through a real browser - reusing
-# tests/integration/setup/auth.setup.ts exactly as run_nuclei_scan.sh's
-# mint_session_secret_file does, rather than reimplementing Django's
-# CSRF-protected login form - and turns the resulting cookies into a config
-# file carrying them, again kept off argv. Needs Node; prints the generated
-# path on success.
+# Signs in through a real browser and turns the cookies into a config file, kept off argv. Needs Node.
 mint_session_config() {
 	if ! command -v npm >/dev/null 2>&1; then
 		echo "no npm on PATH - the session tier needs Node to drive a real login" >&2
@@ -424,12 +373,7 @@ mint_session_config() {
 	printf '%s' "${out}"
 }
 
-# Reads report.json's {"success", "data", "error"} shape (lib/utils/api.py) -
-# sqlmap's own exit code stays 0 on a clean run that found nothing, so this is
-# the only reliable finding signal. A TARGET/TECHNIQUES entry in `data` is
-# sqlmap confirming it identified an actual injection point, as opposed to
-# fingerprint/banner/enumeration entries that describe an already-confirmed
-# target further.
+# sqlmap exits 0 on a clean run, so a TARGET entry in `data` is the only reliable finding signal.
 count_findings() {
 	local report_json="$1"
 	if [[ ! -f "${report_json}" ]]; then
@@ -465,15 +409,7 @@ run_api_tier() {
 	local config_args=()
 	[[ -n "${config_file}" ]] && config_args=(-c "${config_file}")
 
-	# --ignore-stdin: without it, sqlmap treats this wrapper's redirected/closed
-	# stdin as a piped target list (lib/parse/cmdline.py's stdinPipe detection
-	# fires on any non-tty stdin, --openapi or not) and _setStdinPipeTargets()
-	# unconditionally overwrites kb.targets with its own lazy reader before
-	# _setOpenApiTargets() ever runs - confirmed against a real 1.10.8 install,
-	# where every --openapi run crashed with "TypeError: object of type '_' has
-	# no len()" and never even reached --report-json. Silent-looking too: the
-	# crash is loud on stderr, but count_findings()'s own "no report.json yet"
-	# fallback reads as a clean 0-finding scan unless the log is actually read.
+	# --ignore-stdin: without it sqlmap reads this wrapper's non-tty stdin as a target list and overwrites --openapi targets.
 	"${SQLMAP_BIN}" ${config_args[@]+"${config_args[@]}"} \
 		--openapi="${SCHEMA_URL}" \
 		--openapi-base="${BASE_URL}" \
@@ -492,12 +428,7 @@ run_api_tier() {
 	TOTAL_FINDINGS=$((TOTAL_FINDINGS + count))
 }
 
-# The session tier reaches genuinely different ground than the API-key tiers:
-# ExternalApiView declares authentication_classes=[ApiKeyAuthentication,
-# OAuth2Authentication] with no SessionAuthentication, so a cookie cannot
-# reach /api/... at all (see docs/INTEGRATION_TESTS.md) - conversely the
-# HTML/HTMX surface only recognises a session. --openapi has nothing to offer
-# here, so this crawls instead.
+# Session tier crawls the HTML surface (cookies can't reach /api/...); --openapi has nothing to offer here.
 run_session_tier() {
 	local config_file="$1"
 	local tier_out_dir="${OUT_DIR}/session"
@@ -508,17 +439,7 @@ run_session_tier() {
 	echo ""
 	echo "=== session ==="
 
-	# --ignore-stdin isn't load-bearing here the way it is in run_api_tier - -u
-	# sets conf.url, which already short-circuits sqlmap's stdin-target
-	# detection - but it costs nothing to keep every invocation in this script
-	# identically defended against it.
-	#
-	# --threads is hardcoded to 1 rather than following $THREADS: sqlmap
-	# refuses outright ("option '--csrf-token' is incompatible with option
-	# '--threads'") whenever --csrf-token is combined with --threads greater
-	# than 1 (lib/core/option.py: `if conf.csrfToken and conf.threads > 1`),
-	# confirmed against a real 1.10.8 run - re-fetching a token+cookie pair per
-	# request isn't safe to parallelise anyway.
+	# --threads stays 1: sqlmap refuses --csrf-token with higher thread counts.
 	"${SQLMAP_BIN}" -c "${config_file}" \
 		-u "${BASE_URL}/" \
 		--crawl="${CRAWL_DEPTH}" --crawl-exclude="${CRAWL_EXCLUDE}" --forms \

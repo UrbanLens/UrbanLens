@@ -27,51 +27,29 @@ logger = logging.getLogger(__name__)
 def _disable_hypothesis_example_patching() -> None:
     """Stop Hypothesis trying to codemod an ``@example`` suggestion on failure.
 
-    When a ``@given`` test fails, Hypothesis' pytest plugin offers a patch
-    adding an ``@example(...)`` for the falsifying input. That is a convenience.
-    Building it runs a ``libcst`` codemod, and in a full-suite run this
-    environment raises ``AttributeError: __provides__`` inside
-    ``libcst.matchers._gather_constructed_visit_funcs`` - which happens inside
-    ``pytest_runtest_makereport``, so it does not merely lose the suggestion: it
-    raises ``INTERNALERROR`` while *building the failure report*, aborting the
-    whole run and destroying the identity of the test that failed. The
-    thirteenth consolidation lost a real failure that way (1 failed, 9,074
-    passed, no test name anywhere in the output).
-
-    It does not reproduce on a single module - a failing ``@given`` test reports
-    perfectly in isolation - so it needs state a long run accumulates, which is
-    exactly when losing the report costs most.
-
-    The plugin already guards this import with ``except ImportError: return``,
-    so making the import fail is its own supported degradation path rather than
-    a monkeypatch of its internals. The trade is explicit: no auto-suggested
-    ``@example`` decorator, in exchange for always being able to see *which*
-    property test failed.
+    Building the suggestion runs a ``libcst`` codemod that raises
+    ``INTERNALERROR`` inside ``pytest_runtest_makereport`` on long runs,
+    aborting the whole run and hiding which test failed. The plugin already
+    guards this import with ``except ImportError: return``, so blocking the
+    import is its supported degradation path. The trade is explicit: no
+    auto-suggested ``@example``, in exchange for always seeing which test
+    failed.
     """
     # None is CPython's own "block this import" sentinel - `import x` raises
     # ImportError when sys.modules[x] is None - but typeshed types the mapping
-    # as dict[str, ModuleType], which the sentinel predates. Narrowly suppressed
-    # with the code actually raised: the previous comment named [assignment],
-    # which silenced nothing and hid the [arg-type] underneath it.
+    # as dict[str, ModuleType], which the sentinel predates.
     sys.modules.setdefault("hypothesis.extra._patching", None)  # type: ignore[arg-type]
 
 
 def _configure_hypothesis() -> None:
     """Point Hypothesis' example database somewhere the test user can write.
 
-    Hypothesis defaults to ``.hypothesis/examples`` beside the current working
-    directory and replays previously-failing examples first on every later
-    run. In the test container that directory is owned by root (``docker exec``
-    defaults to root) while tests run as ``appuser``, so the store was
-    read-only in practice: a once-failing example was replayed forever and
-    newly discovered ones were never recorded. The visible symptom is a test
-    that fails in one large run and passes in isolation with no code change -
-    see PROBLEMS.md, "test_only_submitted_fields_ever_move".
-
-    The directory is deliberately stable rather than per-run: the store is only
-    useful across runs, and ``DirectoryBasedExampleDatabase`` is file-per-entry
-    and safe for concurrent readers/writers. Set ``UL_HYPOTHESIS_EXAMPLE_DIR``
-    to relocate it, or to an empty value to run without a store at all.
+    Hypothesis defaults to ``.hypothesis/examples`` beside the cwd, which in
+    the test container is root-owned while tests run as ``appuser`` - so past
+    failures replay forever and new ones are never recorded. The directory is
+    deliberately stable rather than per-run, and safe for concurrent
+    readers/writers. Set ``UL_HYPOTHESIS_EXAMPLE_DIR`` to relocate it, or to
+    an empty value to run without a store at all.
     """
     from hypothesis import settings as hypothesis_settings
     from hypothesis.database import DirectoryBasedExampleDatabase, ExampleDatabase, InMemoryExampleDatabase
@@ -125,9 +103,8 @@ def block_external_network() -> Iterator[None]:
 def block_ai_gateway() -> Iterator[None]:
     """Stop any test reaching a real LLM provider.
 
-    The mirror of ``TestRunner.setup_test_environment``'s own patching, which
-    pytest never runs - pytest-django ignores ``TEST_RUNNER`` entirely. Without
-    this the guard existed only for ``manage.py test``.
+    Mirrors ``TestRunner.setup_test_environment``'s patching, which pytest
+    never runs since pytest-django ignores ``TEST_RUNNER``.
     """
     with patched_ai_gateway():
         yield

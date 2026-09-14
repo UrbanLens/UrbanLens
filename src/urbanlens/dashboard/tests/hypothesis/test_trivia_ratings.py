@@ -1,11 +1,4 @@
-"""Tests for services.trivia.ratings.apply_round_ratings.
-
-The underlying Glicko-2 math (services.spotguessr.glicko2) is already
-exhaustively tested against Glickman's own worked example in
-test_spotguessr_glicko2.py and reused here unmodified - these tests only
-verify the ORM-facing wiring: which side is treated as which opponent, and
-that both PlayerTriviaRating and TriviaQuestionRating actually get updated.
-"""
+"""Tests for services.trivia.ratings.apply_round_ratings."""
 
 from __future__ import annotations
 

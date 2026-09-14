@@ -1,15 +1,5 @@
 /**
- * Shared "jump to" location search: a debounced multi-source address bar
- * (local pins/locations, OpenStreetMap Nominatim, proxied Google Places,
- * coordinates, Plus Codes) with a keyboard-navigable suggestion dropdown,
- * search history, and a "My Location" GPS shortcut.
- *
- * `LocationSearchEngine.create(options)` owns no page-specific state (map
- * instance, marker layers, pin store, ...) and instead reports selections
- * through the onSelect/onMultiResult callbacks so each page decides what
- * "jumping" means for it (panning a Leaflet map, filling in a destination
- * field, etc). Currently used by the main map's address bar and the safety
- * check-in destination picker.
+ * Shared "jump to" location search: a debounced multi-source address bar.
  */
 
 import { readCachedPinsForSearch } from "./pin-cache";
@@ -60,13 +50,8 @@ export interface LocationSearchOptions {
     };
     resolvePlaceUrl?: string | null;
     /**
-     * Profile UUID for the current user, used to read the main map's
-     * localStorage pin cache (see shared/pin-cache.ts) so a "Your Pins &
-     * Locations" section can render instantly - before the equivalent
-     * server request (sources.localPins) resolves - instead of leaving that
-     * section blank/spinning until the network responds. Best-effort only:
-     * the server response always supersedes these once it arrives.
-     */
+ * Profile UUID for the current user, used to read the main map's localStorage pin cache so a "Your Pins & Locations" section can render.
+ */
     pinCacheProfileUuid?: string | null;
     home?: { title?: string; subtitle?: string; lat: number; lng: number; zoom?: number } | null;
     enableMyLocation?: boolean;
@@ -182,18 +167,7 @@ function sectionKey(label: string): string {
 
 // KNOWN GAP: unlike Google Places (which is proxied through a server-side
 // endpoint - see `sources.googlePlaces` - so it can go through the app's
-// rate-limiter/cost-tracking service layer), Nominatim is called directly
-// from the browser here and in the other `nominatim.openstreetmap.org` fetch
-// call sites in this file (resolvePlusCode's fallback, runNetworkStage's
-// osmSlot fetch). That bypasses the shared rate-limiter/cost-tracking layer
-// entirely and pushes every user's browser straight at Nominatim's free
-// service, which is against its usage policy (which asks for identified,
-// server-side, rate-limited traffic - not unproxied per-keystroke browser
-// calls). The debounce below and on the input handler is the only
-// client-side mitigation currently in place. Fixing this properly requires a
-// new server-side geocoding proxy endpoint (Python controller/URL route)
-// mirroring the Google Places one; that's out of scope for a TS-only change.
-// TODO: route this through a server-side proxy once that endpoint exists.
+// rate-limiter/cost-tracking service layer), Nominatim is called directly from the browser here and in the other.
 async function nominatimSearch(query: string, { limit = 5, viewbox = null as string | null } = {}): Promise<any[]> {
     const url =
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=${limit}&addressdetails=1`
@@ -338,9 +312,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         setUserLocationCache?.(lat, lng);
     }
 
-    // Parsed once per engine instance (not per keystroke) since it's re-read from
-    // localStorage/JSON.parse - the cache itself only changes via a full page
-    // reload of the map, so re-parsing on every keystroke would be wasted work.
+    // Parsed once per engine instance (not per keystroke) since it's re-read from localStorage/JSON.parse.
     let localPinCache: ReturnType<typeof readCachedPinsForSearch> | null = null;
     function getLocalPinCache(): ReturnType<typeof readCachedPinsForSearch> {
         if (localPinCache === null) localPinCache = pinCacheProfileUuid ? readCachedPinsForSearch(pinCacheProfileUuid) : [];
@@ -373,14 +345,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
     }
 
     // -- Result-preview caches (query-narrowing while typing) -------------------
-    // The last authoritative response for each network source, kept purely as a
-    // best-effort instant preview: on every keystroke we re-filter it against the
-    // new query text and show the survivors immediately, instead of leaving that
-    // section blank/spinning until the next debounced fetch resolves. This is
-    // never treated as authoritative - the real fetch (still fired on the normal
-    // debounce) always supersedes it, so it's safe to keep showing a stale-but-
-    // plausible preview even across a backspace/edit rather than only a strict
-    // "query got longer" extension.
+    // The last authoritative response for each network source, kept purely as a best-effort instant preview.
     let localResultCache: SuggestionResult[] | null = null;
     let osmResultCache: SuggestionResult[] | null = null;
     let placesResultCache: SuggestionResult[] | null = null;
@@ -390,13 +355,8 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
     }
 
     /**
-     * Coordinate-based identity key for deduping a cached-pin instant suggestion
-     * against a network one representing the same pin. The two can't be compared
-     * by pin_slug: the localStorage pin cache never stores a pin's slug (only its
-     * uuid - see pin-cache.ts), while the server's AutocompleteResult.pin_slug is
-     * the real slug whenever the pin has one. Coordinates are the one field both
-     * sides agree on.
-     */
+ * Coordinate-based identity key for deduping a cached-pin instant suggestion against a network one representing the same pin.
+ */
     function coordKey(lat?: number, lng?: number): string | null {
         if (lat == null || lng == null) return null;
         return `${lat.toFixed(5)},${lng.toFixed(5)}`;
@@ -623,11 +583,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         fetchOpts?: RequestInit,
         onResults?: (results: SuggestionResult[]) => void,
     ): Promise<void> {
-        // If the slot already has instant (e.g. cache-derived, or pruned-preview -
-        // see renderInstantSlots) suggestions, leave them showing instead of
-        // replacing them with a spinner - they'll be upgraded to the authoritative
-        // results below, or left in place as a fallback if this request comes
-        // back empty or fails.
+        // If the slot already has instant.
         const hadInstantContent = slot.childElementCount > 0;
         if (!hadInstantContent) {
             slot.innerHTML = `<div class="addr-source-loading" data-seq="${seq}">
@@ -646,9 +602,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
             const raw = await resp.json();
             if (seq !== searchSeq) return;
             const results = parser(raw);
-            // This is the authoritative answer for the current query - record it
-            // (even when empty) so the next keystroke's instant preview reflects
-            // it instead of an older, now-superseded cached result set.
+            // This is the authoritative answer for the current query.
             onResults?.(results ?? []);
             if (!results?.length) {
                 if (!hadInstantContent) slot.innerHTML = "";
@@ -755,19 +709,12 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         derivedSlot: HTMLElement;
     }
 
-    // Slots built by the last renderInstantSlots() call, consumed by runNetworkStage()
-    // once its debounce elapses. Kept outside both functions so a keystroke's instant
-    // render and its (later, debounced) network stage can share the same DOM nodes.
+    // Slots built by the last renderInstantSlots() call, consumed by runNetworkStage() once its debounce elapses.
     let pendingSlots: SearchSlots | null = null;
 
     /**
-     * Synchronously (re)builds the whole suggestion box from purely local
-     * computation: coordinate/Plus Code detection, cached-pin matches (see
-     * buildInstantLocalSuggestions), and the generic "Search Suggestions"
-     * entries. None of this needs a network round trip, so it renders on
-     * every keystroke with zero debounce - the suggestion box updates in
-     * place instead of blanking out until the network sources catch up.
-     */
+ * Synchronously (re)builds the whole suggestion box from purely local computation.
+ */
     function renderInstantSlots(seq: number, query: string): SearchSlots {
         const box = suggestions;
 
@@ -829,10 +776,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         }
 
         if (localSlot) {
-            // Combine the always-fresh localStorage cache matches with any still-
-            // consistent survivors from the last network response (e.g. wikis, or
-            // pins not present in the browser's pin cache), deduped by pin_slug so
-            // an upgraded/authoritative match isn't shown twice.
+            // Combine the always-fresh localStorage cache matches with any still- consistent survivors from the last network response.
             const instant = buildInstantLocalSuggestions(query);
             const instantCoords = new Set(instant.map((r) => coordKey(r.lat, r.lng)).filter((k): k is string => k !== null));
             const preview = previewFromCache(localResultCache, query, (r) => {
@@ -906,10 +850,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         }
 
         if (osmSlot) {
-            // See the KNOWN GAP comment on `nominatimSearch` above - this fires on
-            // every debounced keystroke as a direct, unproxied browser call to
-            // Nominatim, bypassing the app's server-side rate-limiter/cost-tracking
-            // layer (unlike the Google Places source just below, which is proxied).
+            // See the KNOWN GAP comment on `nominatimSearch` above.
             fetchSourceIntoSlot(
                 seq,
                 LABEL_OSM,
@@ -1072,11 +1013,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
 
     suggestions.addEventListener("mousedown", (e) => e.preventDefault());
     suggestions.addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
-    // The dropdown is an internal scroller sitting inside the Leaflet map
-    // container, which claims touch drags for map panning - so on a phone the
-    // list could not be scrolled past its first few results. `wheel` above
-    // already guards the desktop equivalent; these are its touch counterparts.
-    // (#filter-panel / #pin-list-panel guard themselves the same way.)
+    // The dropdown is an internal scroller sitting inside the Leaflet map container, which claims touch drags for map panning.
     suggestions.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: true });
     suggestions.addEventListener("touchmove", (e) => e.stopPropagation(), { passive: true });
 
@@ -1104,13 +1041,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
             showEmptySuggestions();
             return;
         }
-        // Render everything that doesn't need the network on every keystroke -
-        // no debounce, no blanking the box while waiting. Only the network
-        // sources (local-pin server search, Nominatim, Google Places) are
-        // debounced, since those are the ones worth rate-limiting. Nominatim in
-        // particular is called directly from the browser (see the KNOWN GAP
-        // comment on `nominatimSearch`), so this interval is kept on the higher
-        // end of typical debounce values to reduce request volume against it.
+        // Render everything that doesn't need the network on every keystroke - no debounce, no blanking the box while waiting.
         const seq = ++searchSeq;
         const slots = renderInstantSlots(seq, q);
         addrBarTimer = setTimeout(() => runNetworkStage(seq, q, slots), 400);
@@ -1179,12 +1110,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
 export type LocationSearchAttachOptions = Omit<LocationSearchOptions, "input" | "suggestions" | "bar" | "clearBtn" | "historyBtn">;
 
 /**
- * Binds the engine to a search bar rendered by the shared
- * {% map_search_bar prefix %} template tag (see
- * dashboard/templatetags/map_components.py). The tag emits a fixed id scheme
- * - `{prefix}-search-bar/-input/-history/-clear/-suggestions` - so callers
- * only supply the prefix and the page-specific callbacks.
- *
+ * Binds the engine to a search bar rendered by the shared {% map_search_bar prefix %} template tag.
  * @param prefix - The id prefix passed to the template tag.
  * @param options - Engine options minus the element references.
  * @returns The engine instance, or null when the bar isn't on the page.

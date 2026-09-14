@@ -13,12 +13,7 @@ DEFAULT_MODEL = DEFAULT_ANTHROPIC_MODEL
 
 
 class AnthropicGateway(LLMGateway):
-    """AI gateway backed by Anthropic's Claude models.
-
-    Unlike the other gateways, Claude reliably follows formatting and
-    tool-protocol instructions (see UL-293's assistant loop), which is why
-    it's the provider pinned for the AI chat assistant.
-    """
+    """AI gateway backed by Anthropic's Claude models."""
 
     PROVIDER: ClassVar[Provider] = "anthropic"
 

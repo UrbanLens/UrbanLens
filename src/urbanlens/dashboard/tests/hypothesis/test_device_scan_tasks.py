@@ -1,11 +1,4 @@
-"""Tests for the device-scan Celery task and its pipeline.
-
-``process_device_scan_upload`` (dashboard.tasks) is covered for its
-always-PROCESSED-or-FAILED contract; ``process_scan_upload``
-(services.device_scan.pipeline) is covered directly for the routing logic it
-implements - type resolution, security-relevant-type gating, multi-wiki
-fan-out, and absence-report routing.
-"""
+"""Tests for the device-scan Celery task and its pipeline."""
 
 from __future__ import annotations
 

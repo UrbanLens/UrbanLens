@@ -103,15 +103,8 @@ class TriviaSessionConsumerTests(TransactionTestCase):
     async def _a_kicked_participant_stops_receiving_session_events(self) -> None:
         """Participation is checked at connect() and never again.
 
-        The kicked player's socket stays subscribed to the session's channel
-        group, so every later broadcast - other players' answers, the chat -
-        keeps arriving. ``test_group_removal_stops_delivery``-style coverage
-        cannot see this: it is a live socket, not a fresh request.
-
-        This codebase already solved the same hazard for safety check-ins;
-        ``_broadcast_partner_access_revoked`` exists precisely because
-        "permission was only checked once, at connect() time".
-        """
+        The kicked player's socket stays subscribed to the session's channel group, so every later broadcast -
+        other players' answers, the chat - keeps arriving."""
         comm = self._communicator(self.guest.user)
         connected, _ = await comm.connect()
         self.assertTrue(connected)

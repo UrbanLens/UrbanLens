@@ -1,15 +1,4 @@
-"""Tests for the saved-filter matching-pins cache.
-
-Covers the stale-cache regression: editing a saved filter's criteria (with no
-pin itself edited in between) must invalidate the cached matching-uuid list,
-since the cache key previously only embedded a fingerprint of the profile's
-pins, never anything derived from the filter's own criteria/updated timestamp
-- so editing a filter served the OLD (sometimes empty) cached result forever,
-while the Lists page's smart-list matching (which never caches this at all)
-correctly reflected the new criteria immediately. This is exactly why a
-saved filter could show 400+ matches as a smart list but 0 via the map
-toolbar.
-"""
+"""Tests for the saved-filter matching-pins cache."""
 
 from __future__ import annotations
 
@@ -90,11 +79,7 @@ class SavedFilterCacheInvalidationTests(TestCase):
         self.assertEqual(cached_again, first)
 
     def test_deleting_a_pin_invalidates_the_cache(self) -> None:
-        """Regression guard: the fingerprint used to be Max(updated) alone, so
-        deleting any pin other than the most-recently-updated one left the key
-        unchanged and the deleted pin's uuid kept matching (wrong toolbar
-        counts, phantom matches) until the cache TTL. The pin COUNT is now
-        part of the fingerprint, so a deletion recomputes immediately."""
+        """The pin COUNT is now part of the fingerprint, so a deletion recomputes immediately."""
         saved_filter = SavedFilter.objects.create(profile=self.profile, name="My Filter", criteria={})
         first = get_or_compute_matching_uuids(self.profile, saved_filter)
         self.assertEqual(set(first), {str(self.tagged_pin.uuid), str(self.other_pin.uuid)})

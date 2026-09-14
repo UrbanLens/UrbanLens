@@ -1,12 +1,4 @@
-"""Gateway for REData's ``GET /geocode/`` and ``GET /geocode/reverse/``.
-
-See ``../REData/docs/api-reference.md``, "GET /geocode/ - free text to
-places" and "GET /geocode/reverse/ - a coordinate to the place there".
-Results are not merged into one cross-provider ranking - each provider's own
-``rank`` is preserved and results are concatenated in registry order (see the
-doc) - so callers that want "the best answer" take the first result of
-whichever provider they trust, not the first result overall.
-"""
+"""Gateway for REData's ``GET /geocode/`` and ``GET /geocode/reverse/``."""
 
 from __future__ import annotations
 
@@ -35,17 +27,10 @@ class RedataGeocodeGateway(RedataLocationContextGateway):
             provider: Restrict which source(s) actually run.
 
         Returns:
-            The parsed envelope - ``results`` in registry order, one entry
-            per provider's own hit (not merged/re-ranked - see the module docstring).
+            The parsed envelope - ``results`` in registry order, one entry per provider's own hit (not merged/re-ranked - see the module docstring).
 
         Note:
-            REData's own ``../REData/docs/api-reference.md`` documents this endpoint's
-            request parameters and its shared envelope, but doesn't show a
-            full worked example of one result entry's own fields. Callers
-            here read ``latitude``/``longitude`` off each result, following
-            the convention used throughout the rest of this API - verify
-            against a live REData instance once its geocoding endpoint is
-            confirmed deployed, and adjust if its real field names differ.
+            REData's own ``../REData/docs/api-reference.md`` documents this endpoint's request parameters and its shared envelope, but doesn't show a full worked example of one result entry's own fields.
         """
         params: dict[str, Any] = {"q": query}
         if latitude is not None:
@@ -68,7 +53,6 @@ class RedataGeocodeGateway(RedataLocationContextGateway):
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The parsed envelope - ``radius_meters`` is nominal here (no
-            vendor exposes a search radius for reverse geocoding).
+            The parsed envelope - ``radius_meters`` is nominal here (no vendor exposes a search radius for reverse geocoding).
         """
         return self.near_point("/api/v1/geocode/reverse/", latitude, longitude, provider=provider, force_refresh=force_refresh)

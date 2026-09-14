@@ -1,11 +1,4 @@
-"""Tests for services.spotguessr.modes - the per-mode strategy registry.
-
-Round generation (services.spotguessr.session), round serialization
-(services.spotguessr.serializers), and the photo-feedback gate
-(services.spotguessr.relevance) all read this registry instead of each
-keeping their own copy of "which modes exist" / "which modes show imagery" -
-these tests guard the registry's own contract directly.
-"""
+"""Tests for services.spotguessr.modes - the per-mode strategy registry."""
 
 from __future__ import annotations
 

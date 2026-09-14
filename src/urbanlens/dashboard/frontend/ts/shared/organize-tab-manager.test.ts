@@ -1,9 +1,5 @@
 /**
- * Regression test for the Organize "create label" dialog reuse bug: the
- * dialog is a persistent `<dialog>` (shown/hidden, never removed), so
- * opening it a second time to create another label must not still show the
- * parent/child selections chosen for the *previous* label - only the icon
- * and color pickers were being reset, the relationship picker was not.
+ * Regression test for the Organize "create label" dialog reuse bug.
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -97,9 +93,7 @@ describe("OrgTabManager onCreate", () => {
     });
 
     test("a suggestion added after creating one label is selectable for the next, without a reset clobbering it", () => {
-        // Simulates the OOB append LabelCreateView now performs after a
-        // successful create: the just-created label becomes a suggestion in
-        // the still-open dialog's picker before the user opens it again.
+        // Simulates the OOB append LabelCreateView now performs after a successful create.
         const container = document.getElementById("new-tag-suggestions-parent")!;
         container.insertAdjacentHTML(
             "beforeend",

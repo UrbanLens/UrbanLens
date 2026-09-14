@@ -1,20 +1,4 @@
-{% comment %}
-The "Shared with you" half of Memories > Sharing.
-
-Fetched the first time its toggle button is clicked rather than rendered with
-the page: the two halves are a client-side toggle, so this was being queried,
-grouped and rendered on every load for a panel nobody had opened.
-
-No chain/reshare counts here - those are rooted at the sender's side - and the
-links go through the recipient-scoped share-detail routes rather than the
-sender's own pin/map pages, which the recipient cannot open.
-
-Context:
-  incoming_share_groups     - this page's pin-share groups, newest share first
-  received_pins_page_obj    - the Django Page for those groups
-  incoming_map_share_groups - this page's map-share groups
-  received_maps_page_obj    - the Django Page for those
-{% endcomment %}
+{% comment %}The "Shared with you" half of Memories > Sharing.{% endcomment %}
 <h2 class="memories-sharing-section-title">Pins</h2>
 {% if incoming_share_groups %}
 <div class="memories-sharing-list">

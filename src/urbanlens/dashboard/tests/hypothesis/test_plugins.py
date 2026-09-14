@@ -1,13 +1,4 @@
-"""Tests for the plugin framework: hook bus, plugin registry, and integrations.
-
-- HookRegistry: pure in-memory; priority ordering property-tested with
-  hypothesis.
-- PluginRegistry: exercised with locally defined dummy plugins on a fresh
-  registry instance (never the app-wide singleton, which real discovery owns).
-- Integration: the builtin plugins really are discovered, feed the rate
-  limiter's merged defaults, and populate external_data's panel registry.
-  DB-free throughout.
-"""
+"""Tests for the plugin framework: hook bus, plugin registry, and integrations."""
 
 from __future__ import annotations
 

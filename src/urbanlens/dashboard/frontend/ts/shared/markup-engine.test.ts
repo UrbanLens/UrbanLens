@@ -1,9 +1,5 @@
 /**
- * These are the sanitization and geometry primitives every draw-session shape
- * (line/arrow/circle/rect/polygon/text/pin) is built from - safeColor/
- * safeNumber guard against malformed server-stored shape specs before they
- * ever reach a Leaflet style option, and bearing/arrowheadSize drive arrow
- * rendering. All pure, no Leaflet/DOM dependency, so tested directly.
+ * These are the sanitization and geometry primitives every draw-session shape (line/arrow/circle/rect/polygon/text/pin) is built.
  */
 import { describe, expect, test } from "bun:test";
 import { MarkupEngine, arrowheadSize, bearing, safeColor, safeNumber, safeOptionalColor } from "./markup-engine";
@@ -47,9 +43,7 @@ describe("safeOptionalColor", () => {
 });
 
 describe("arrowheadSvg", () => {
-    // The returned string is assigned as a divIcon's innerHTML, and callers do
-    // hand it colours straight off a server payload, so it validates its own
-    // input rather than trusting them.
+    // The returned string is assigned as a divIcon's innerHTML, and callers do hand it colours straight off a server payload, so it.
     test("renders a valid colour into the polygon fill", () => {
         expect(MarkupEngine.arrowheadSvg("#1a2b3c", 0)).toContain('fill="#1a2b3c"');
     });

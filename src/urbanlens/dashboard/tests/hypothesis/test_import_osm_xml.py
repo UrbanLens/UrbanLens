@@ -1,10 +1,4 @@
-"""Tests for services.import_formats.osm_xml.osm_xml_to_dict() - OSM XML pin import.
-
-Only tagged <node>/<way> elements should become pins - most nodes in a real
-Overpass export are untagged geometry vertices belonging to a way, and importing
-those too would flood the map with noise. That's the main regression risk
-covered here, alongside way-centroid resolution.
-"""
+"""Tests for services.import_formats.osm_xml.osm_xml_to_dict() - OSM XML pin import."""
 
 from __future__ import annotations
 

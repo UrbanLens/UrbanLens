@@ -1,9 +1,7 @@
 @use 'variables' as *;
 @use 'game_shell' as shell;
 
-// Belt-and-braces alongside the shell's own `.ul-game [hidden]` guard: every
-// panel, dock and rail section below sets an explicit display, which beats the
-// UA stylesheet's [hidden] rule regardless of specificity.
+// Belt-and-braces alongside the shell's own `.ul-game [hidden]` guard.
 .trivia-page {
     [hidden] {
         display: none !important;
@@ -13,9 +11,7 @@
         @include shell.cta;
     }
 
-    // The play panel only allocates a `rail` grid column while the drawer is
-    // open; left in flow the closed rail is auto-placed into an implicit row
-    // beneath the stage. Below md the shell already takes it out of flow.
+    // The play panel only allocates a `rail` grid column while the drawer is open.
     @include up($breakpoint-md) {
         .ul-game-shell:not(.is-rail-open) .ul-game-rail {
             display: none;

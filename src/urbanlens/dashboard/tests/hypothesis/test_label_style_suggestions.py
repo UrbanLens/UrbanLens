@@ -72,10 +72,8 @@ def test_suggest_label_style_validates_ai_answers(monkeypatch: pytest.MonkeyPatc
 def test_suggest_label_style_respects_the_site_wide_ai_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
     """The conjunct the module's own check was missing.
 
-    ``get_gateway`` would have refused anyway; sharing
-    ``services.ai.access.ai_features_enabled`` makes it an early-out instead of
-    a provider gateway built and discarded.
-    """
+    ``get_gateway`` would have refused anyway; sharing ``services.ai.access.ai_features_enabled`` makes it an
+    early-out instead of a provider gateway built and discarded."""
     profile = _make_profile(ai_enabled=True)
     monkeypatch.setattr(
         "urbanlens.dashboard.models.subscriptions.user_has_feature",
@@ -95,11 +93,9 @@ def test_suggest_label_style_respects_the_site_wide_ai_toggle(monkeypatch: pytes
 def test_suggest_label_style_does_not_need_the_assistant_worker(monkeypatch: pytest.MonkeyPatch) -> None:
     """Label styling must survive turning the interactive assistant off.
 
-    It never touches the ``ai-worker`` container - ``get_gateway`` resolves an
-    inference client through the shared ``ai-inference`` tier - so folding this
-    onto ``assistant_available`` would have silently broken it for any install
-    that set ``UL_AI_WORKER_ENABLED=false`` to save resources.
-    """
+    It never touches the ``ai-worker`` container - ``get_gateway`` resolves an inference client through the
+    shared ``ai-inference`` tier - so folding this onto ``assistant_available`` would have silently broken it
+    for any install that set ``UL_AI_WORKER_ENABLED=false`` to save resources."""
     profile = _make_profile(ai_enabled=True)
     monkeypatch.setattr(
         "urbanlens.dashboard.models.subscriptions.user_has_feature",

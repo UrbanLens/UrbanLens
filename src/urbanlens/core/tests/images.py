@@ -1,19 +1,4 @@
-"""Real image bytes for tests that upload one.
-
-Uploading `b"photo-bytes"` named `photo.jpg` used to work, because content
-sniffing failed open on anything `filetype` could not fingerprint. Photos now
-require a positive identification - a file whose bytes are not an image is
-refused - so a test that wants to exercise a successful upload has to supply an
-actual image.
-
-That is a better test regardless of the check: a placeholder string is not
-something the product would ever accept, so a test built on one was describing
-a path no user can take.
-
-Each helper returns bytes for the smallest valid file of its format. They are
-literals rather than generated with Pillow so that these stay usable in a
-``SimpleTestCase`` and cost nothing to construct.
-"""
+"""Real image bytes for tests that upload one."""
 
 from __future__ import annotations
 
@@ -58,13 +43,10 @@ def png_upload(name: str = "photo.png"):
     """A ``SimpleUploadedFile`` holding a real PNG.
 
     Args:
-        name: Filename to upload it under. The extension matters - it decides
-            the Content-Type the file is later served with, and photo uploads
-            are allowlisted by it.
+        name: Filename to upload it under.
 
     Returns:
-        An uploaded file ready to post.
-    """
+        An uploaded file ready to post."""
     from django.core.files.uploadedfile import SimpleUploadedFile
 
     return SimpleUploadedFile(name, PNG_BYTES, content_type="image/png")
@@ -77,8 +59,7 @@ def jpeg_upload(name: str = "photo.jpg"):
         name: Filename to upload it under.
 
     Returns:
-        An uploaded file ready to post.
-    """
+        An uploaded file ready to post."""
     from django.core.files.uploadedfile import SimpleUploadedFile
 
     return SimpleUploadedFile(name, JPEG_BYTES, content_type="image/jpeg")

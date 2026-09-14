@@ -1,10 +1,4 @@
-{% comment %}
-Conversation list for the messages page sidebar. Context: `conversations`
-(merged 1:1 + group rows from services.direct_messages.all_conversations_for),
-`active_slug` (slug of the open 1:1 conversation, or empty string),
-`active_group_uuid` (uuid of the open group conversation, or empty), and
-`viewer_id` (the viewing profile's pk, for tombstone-aware previews).
-{% endcomment %}
+{% comment %}Conversation list for the messages page sidebar.{% endcomment %}
 {% load dashboard_tags %}
 <div id="dm-conversation-list">
   {% if conversations %}

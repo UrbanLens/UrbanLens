@@ -555,11 +555,7 @@
     //padding: 1.5rem 1rem 3rem;
 }
 
-// Invitation banner - shown only to a member who was invited but hasn't
-// joined yet (see TripMembershipJoinView / TripLeaveView). Consenting to
-// join is separate from RSVP (are you actually coming?): until they join,
-// they can view the trip but can't add/edit activities, comment, or vote
-// (see viewer_has_joined gates throughout the trip panels).
+// Invitation banner - shown only to a member who was invited but hasn't joined yet.
 .trip-invite-banner {
     display: flex;
     align-items: center;
@@ -708,10 +704,7 @@
 
 .trip-section {
     position: relative;
-    // Stretch (the grid's default row alignment) only affects this wrapper -
-    // flex it down to the actual panel card so two sections sharing a row
-    // (e.g. Members + Comments) render as equal-height cards instead of the
-    // shorter one leaving blank space below a mismatched card boundary.
+    // Stretch (the grid's default row alignment) only affects this wrapper.
     display: flex;
     flex-direction: column;
 
@@ -801,11 +794,7 @@
     }
 }
 
-// The shared panel-header-grid mixin gives the title column all the leftover
-// flexible space, which pushes the count badge (grid-area: header-meta) all
-// the way over next to the action buttons instead of hugging the title next
-// to it. Scoped to the trip detail page rather than the shared mixin, since
-// other pages using the same card-header component haven't been audited.
+// The shared panel-header-grid mixin gives the title column all the leftover flexible space, which pushes the count badge.
 .trip-detail-page .card-header {
     grid-template-columns: auto auto auto minmax(0, 1fr);
 
@@ -857,13 +846,7 @@
 }
 
 // -- Calendar view ---------------------------------------------------------
-// Shared by two features: the trips-list page's full-page month calendar
-// (.trips-view--calendar) and the trip-detail page's per-trip activity
-// calendar (.activity-view--calendar) - both render the same .cal-* markup
-// (see trips/index.html's tripsCalRender() and trips/detail.html's activity
-// calendar renderer), so base sizing here stays compact enough for the
-// narrower activity-panel context; .trips-view--calendar below opts into
-// larger cells for its own full-width page layout.
+// Shared by two features: the trips-list page's full-page month calendar (trips-view--calendar) and the trip-detail page's per-trip.
 
 .activity-view--calendar {
     padding: .75rem 1rem 1rem;
@@ -1801,9 +1784,7 @@ a.trip-activity-name {
         background: var(--ul-hover-bg);
     }
 
-    // Selection toggles by clicking anywhere on the row (it's a <label>); the
-    // checkbox stays in the DOM for form submission but isn't shown - the
-    // background highlight below is the only selected-state indicator.
+    // Selection toggles by clicking anywhere on the row (it's a <label>).
     .ul-checkbox-wrap {
         display: none;
     }
@@ -1966,9 +1947,7 @@ a.trip-activity-name {
     border-radius: 10px;
     border: 1px solid var(--ul-surface-border);
     position: relative;
-    // Mirrors #trip-map's own height below so this wrapper has a definite
-    // size for @include map-query-container to safely contain against
-    // (`contain: size` collapses an "auto" height to 0 otherwise).
+    // Mirrors #trip-map's own height below so this wrapper has a definite size for @include map-query-container to safely contain against.
     height: 340px;
     @include map-query-container;
 
@@ -2218,9 +2197,7 @@ a.trip-activity-name {
     }
 }
 
-// Prefixes the bare Yes/No/Maybe value with "RSVP:" so it doesn't read as an
-// unexplained status word on its own - most noticeable on the trip owner's
-// own row, whose value ("Yes") otherwise looks like an unlabeled badge.
+// Prefixes the bare Yes/No/Maybe value with "RSVP:" so it doesn't read as an unexplained status word on its own.
 .trip-member-rsvp-label {
     font-weight: 500;
     opacity: .7;
@@ -2579,10 +2556,7 @@ a.trip-activity-name {
     padding: .75rem 1rem 1rem;
 }
 
-// The recorded half of the panel: what the weather actually was, for activities
-// the forecast can no longer speak to. Separated by a rule rather than a second
-// card, because it is the same question about the same trip - only answered by a
-// reanalysis record instead of a forecast.
+// The recorded half of the panel: what the weather actually was, for activities the forecast can no longer speak to.
 .trip-weather-body--recorded {
     border-top: 1px solid var(--ul-border-color);
     padding-top: .75rem;
@@ -3098,11 +3072,7 @@ a.trip-activity-name {
         }
     }
 
-    // _reset.scss also draws its own fake checkbox box on any span that
-    // follows input[type=checkbox] and forces a fixed single-line height on
-    // it - that doubles up with the native checkbox above and clips text
-    // that wraps to a second line. Strip it since this dialog uses the
-    // native (accent-color) checkbox instead.
+    // _reset.scss also draws its own fake checkbox box on any span that follows input[type=checkbox] and forces a fixed single-line height.
     span:not(.lever) {
         display: block !important;
         height: auto !important;
@@ -3221,11 +3191,7 @@ a.trip-activity-name {
         pointer-events: auto;
     }
 
-    // _reset.scss also draws its own fake checkbox box on any span that
-    // follows input[type=checkbox] and forces a fixed single-line height on
-    // it - that doubles up with the native checkbox above and clips text
-    // that wraps to a second line. Strip it since this dialog uses the
-    // native (accent-color) checkbox instead.
+    // _reset.scss also draws its own fake checkbox box on any span that follows input[type=checkbox] and forces a fixed single-line height.
     span:not(.lever) {
         display: block !important;
         height: auto !important;

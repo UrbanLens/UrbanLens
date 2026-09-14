@@ -1,20 +1,4 @@
-"""``pin.categories`` and friends must read the prefetch cache, not re-query.
-
-The accessors used to be ``self.labels.all().categories()``. Chaining a queryset
-method onto ``.all()`` builds a *new* queryset, and a new queryset ignores the
-prefetch cache - so a caller who had carefully done
-``prefetch_related("labels")`` still paid one query per kind per row. Rendering a
-list of pins cost three extra queries each, silently, while looking prefetched.
-
-Measured before the fix, for 25 pins: 2 queries to load them, 77 once the three
-properties were touched. ``services.map_pins.payload`` already avoided this by
-filtering the prefetched list in Python; the mixin now does the same thing for
-everyone.
-
-The assertion compares "load the pins" against "load the pins and touch every
-accessor" rather than pinning a total, so it keeps its meaning if the number of
-queries needed to load a pin changes.
-"""
+"""``pin.categories`` and friends must read the prefetch cache, not re-query."""
 
 from __future__ import annotations
 

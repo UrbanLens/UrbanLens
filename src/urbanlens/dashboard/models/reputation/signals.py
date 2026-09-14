@@ -1,28 +1,5 @@
 """Signal wiring that feeds the reputation ledger.
-
-Every handler does the same three things - decide whether this save is a
-contribution, write the row, and queue the scoring - so they are generated from
-:data:`_SUBSCRIPTIONS` rather than written out one by one. The shape is lifted
-from ``models.achievements.signals``, with two deliberate divergences.
-
-**The write is not deferred; only the scoring is.** Achievements defer
-everything to Celery because every metric is a count over other tables and the
-nightly sweep can rebuild any of it. The ledger has no such backstop - it *is*
-the source of truth - and ``safely_enqueue_task`` returns None on a broker
-outage without raising. So the row is written inside the contributor's
-transaction (a rolled-back contribution rolls its row back too) and only
-``score_reputation_event`` is queued.
-
-**There are retraction handlers.** Achievements have none by design: awards are
-never revoked. Here a contribution that gets reverted has to stop counting, and
-- because reverting a revert clears ``WikiEdit.reverted`` - has to be able to
-start counting again.
-
-**Not everything belongs in this table.** A transition made by a queryset
-``update()`` emits no signal, so a subscription watching for it is dead and
-looks alive. Three rules here started that way; ``invite_accepted`` and
-``wiki_created`` now record at their transitions instead, and
-``bin/check_signal_reachable.py`` fails the build if another one appears.
+Every handler does the same three things - decide whether this save is a contribution, write the row, and queue the scoring - so they are generated from :data:`_SUBSCRIPTIONS` rather than written out one by one.
 """
 
 from __future__ import annotations
@@ -75,11 +52,7 @@ class _Subscription:
 
 def _is_wiki_upload(image: Any) -> bool:
     """Whether an Image row is a photo its own uploader contributed to a wiki.
-
-    ``profile`` on a materialised external row is whoever up-voted it, not the
-    photographer, and a bulk import attaches other people's photos under the
-    importer - so the source check is what makes the attribution trustworthy,
-    not a refinement of it.
+    ``profile`` on a materialised external row is whoever up-voted it, not the photographer, and a bulk import attaches other people's photos under the importer - so the source check is what makes the attribution trustworthy, not a refinement of it.
     """
     from urbanlens.dashboard.models.images.model import ImageSource, MediaKind
 
@@ -168,20 +141,7 @@ def _make_handler(subscription: _Subscription) -> Callable[..., None]:
 
 def on_wiki_edit_reverted(sender: type[Model], instance: Any, created: bool, raw: bool = False, **kwargs: Any) -> None:
     """Keep a wiki edit's ledger row in step with its ``reverted`` flag.
-
-    Both directions, because ``revert_wiki_edit`` clears the flag when the
-    revert is itself reverted - so this is current state, not a one-way
-    subtraction.
-
-    Reverting is not author-only (the history template shows the Revert
-    button to any viewer with wiki access, unlike the author-only Expunge
-    button beside it) - so who performed it decides retract vs. weight (D9):
-    reverting your own edit is a withdrawal and retracts in full; anyone
-    else's revert is a removal the original editor did not choose, so it
-    costs standing at ``MODERATED_REMOVAL_WEIGHT`` instead of erasing it. This
-    is the first caller for that mechanism - P86's own commit audited the
-    photo/comment removal paths and found no live one, but missed this
-    pre-existing route.
+    Both directions, because ``revert_wiki_edit`` clears the flag when the revert is itself reverted - so this is current state, not a one-way subtraction.
     """
     if raw or created:
         return
@@ -231,11 +191,10 @@ def connect() -> None:
         post_save.connect(
             _make_handler(subscription),
             sender=model,
-            # Keyed on the subscription index as well as the model. Django
-            # dedupes on (dispatch_uid, sender), so a model-only uid would let
-            # a second subscription for a model already listed silently replace
-            # the first - one of the two rules would just stop firing, with
-            # nothing to notice it.
+            # Keyed on the subscription index as well as the model.
+            # Django dedupes on (dispatch_uid, sender), so a model-only uid would let a second
+            # subscription for a model already listed silently replace the first - one of the two
+            # rules would just stop firing, with nothing to notice it.
             dispatch_uid=f"reputation_subscription_{index}_{model._meta.label_lower}",  # noqa: SLF001
             weak=False,
         )

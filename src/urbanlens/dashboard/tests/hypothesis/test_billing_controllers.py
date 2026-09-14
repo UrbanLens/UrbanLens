@@ -1,10 +1,4 @@
-"""Tests for controllers.billing - the user-facing Settings > Membership section.
-
-Every Stripe SDK call is made through services.billing.stripe_client, which is mocked
-here rather than the underlying stripe module - these tests verify the controller calls
-the service layer with the right arguments, not Stripe SDK wiring (that's
-test_billing_stripe_client.py's job).
-"""
+"""Tests for controllers.billing - the user-facing Settings > Membership section."""
 
 from __future__ import annotations
 
@@ -42,9 +36,7 @@ class BillingSettingsSectionViewTests(TestCase):
         self.assertNotIn("Not for sale", role_names)
 
     def test_lists_pay_what_you_want_only_role(self) -> None:
-        """The listing query ORs monthly_price_cents__isnull=False with pay_what_you_want=True
-        - test_lists_purchasable_roles above only ever exercises the fixed-price side, so a
-        mutation collapsing that OR into just the fixed-price filter would still pass it."""
+        """The listing query ORs monthly_price_cents__isnull=False with pay_what_you_want=True - test_lists_purchasable_roles above only ever exercises the fixed-price side, so a mutation collapsing that OR into just the fixed-price filter would still pass it."""
         self.client.force_login(self.user)
         baker.make(SubscriptionRole, name="Patron", monthly_price_cents=None, pay_what_you_want=True)
 
@@ -93,10 +85,7 @@ class BillingSettingsSectionViewTests(TestCase):
         self.assertNotIn(subscription, response.context["subscriptions"])
 
     def test_active_subscription_is_visible(self) -> None:
-        """visible_for's ~Q(status=CANCELED) clause is what makes a live subscription show up
-        at all - every other test in this class exercises only CANCELED rows, so a mutation
-        that dropped this clause (requiring banked access even for a currently-paying
-        subscriber) would still pass them all."""
+        """visible_for's ~Q(status=CANCELED) clause is what makes a live subscription show up at all - every other test in this class exercises only CANCELED rows, so a mutation that dropped this clause (requiring banked access even for a currently-paying subscriber) would still pass them all."""
         self.client.force_login(self.user)
         subscription = baker.make(RoleSubscription, user=self.user, status=BillingSubscriptionStatus.ACTIVE)
 

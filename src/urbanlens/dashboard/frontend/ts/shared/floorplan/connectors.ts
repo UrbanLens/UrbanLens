@@ -1,9 +1,5 @@
 /**
  * Which markers on other floors a stair or lift can be joined to.
- *
- * Markers that share a ``connector_id`` are the same physical shaft seen on
- * different storeys, which is what lets the editor show "this stair continues
- * up" and what a reader follows between floors.
  */
 
 import type { Floor, Marker, MarkerKind } from "./document";
@@ -19,24 +15,6 @@ export interface ConnectorCandidate {
 
 /**
  * Rank the connector markers on other floors as link candidates.
- *
- * Every other floor is offered, not just the two adjacent ones. A lift that
- * only opens on the ground and third storeys is an ordinary building, and so is
- * a stair on a plan whose middle floor has not been drawn yet - neither could
- * be linked at all while this only looked one storey up and down.
- *
- * Nearest storey first, and within a storey the marker closest in plan, so the
- * shaft directly overhead is the first button rather than one across the
- * building. Ties break on level so the order does not depend on how the floors
- * happen to be arranged in the document.
- *
- * Args:
- *     floors: Every floor in the document.
- *     current: The floor the selected marker is on.
- *     marker: The selected marker.
- *
- * Returns:
- *     Candidates, best first.
  */
 export function connectorCandidates(floors: readonly Floor[], current: Floor, marker: Marker): ConnectorCandidate[] {
     const found: Array<{ candidate: ConnectorCandidate; storeys: number; plan: number }> = [];

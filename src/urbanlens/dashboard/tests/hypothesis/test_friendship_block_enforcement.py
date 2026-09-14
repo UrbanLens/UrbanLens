@@ -1,20 +1,4 @@
-"""Tests that an actual Friendship.BLOCKED row is enforced as an absolute veto.
-
-Before this fix, `Friendship.block()`/the "Block" button set a Friendship row
-to BLOCKED, but nothing in the direct-message permission chain
-(Profile.accepts_direct_messages_from / services.can_direct_message /
-create_direct_message) ever checked for it - a blocked user could still
-message the blocker freely whenever the blocker's direct_message_visibility
-was anything more permissive than FRIENDS/NO_ONE (the common case, since the
-site default is ANYTHING_IN_COMMON). The existing "*_blocked_*" tests in
-test_direct_messages.py were misleadingly named: they only exercise
-VisibilityChoice.NO_ONE, never a real BLOCKED Friendship row - this file adds
-the coverage that was actually missing.
-
-Friend requests were already correctly guarded (FriendshipStatus.can_request
-excludes BLOCKED), which is why the fix mirrors that precedent for DMs rather
-than inventing new semantics.
-"""
+"""Tests that an actual Friendship.BLOCKED row is enforced as an absolute veto."""
 
 from __future__ import annotations
 
@@ -76,8 +60,7 @@ class BlockedDirectMessageEnforcementTests(TestCase):
         self.blocked = _profile()
 
     def test_blocked_sender_denied_even_with_anyone_visibility(self) -> None:
-        """The bug this fixes: ANYONE is the most permissive setting and
-        previously let a blocked user through completely unchecked."""
+        """The bug this fixes: ANYONE is the most permissive setting and previously let a blocked user through completely unchecked."""
         _set_dm_visibility(self.blocker, VisibilityChoice.ANYONE)
         _block(self.blocker, self.blocked)
         self.assertFalse(can_direct_message(self.blocked, self.blocker))
@@ -90,8 +73,7 @@ class BlockedDirectMessageEnforcementTests(TestCase):
             self.assertFalse(can_direct_message(self.blocked, self.blocker), f"visibility={choice}")
 
     def test_block_overrides_the_already_messaged_reply_exception(self) -> None:
-        """Blocking someone you'd previously messaged must still stop them
-        from replying - the reply exception can't outrank an explicit block."""
+        """Blocking someone you'd previously messaged must still stop them from replying - the reply exception can't outrank an explicit block."""
         _set_dm_visibility(self.blocker, VisibilityChoice.NO_ONE)
         DirectMessage.objects.create(sender=self.blocker, recipient=self.blocked, body="hi, before I blocked you")
         # Without the block, the reply exception would now permit self.blocked -> self.blocker.

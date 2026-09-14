@@ -1,16 +1,4 @@
-"""Creating a pin through the serializer must not block on an AI call.
-
-``AutoTagService.suggest_for_pin`` runs the keyword stage and then, for any label
-the keywords missed, calls the LLM gateway - a network round-trip. The two other
-pin-creation paths (``services.pins.pin_creation`` and the Google Maps import)
-already enqueue ``tasks.suggest_pin_category`` for exactly that reason;
-``PinSerializer.create`` still called the service inline, so every pin created
-through the REST API or an import that goes through this serializer waited on an
-LLM before the response came back.
-
-The tagging itself is best-effort either way - the old code swallowed its
-exceptions - so nothing about the response contract depends on it having run.
-"""
+"""Creating a pin through the serializer must not block on an AI call."""
 
 from __future__ import annotations
 

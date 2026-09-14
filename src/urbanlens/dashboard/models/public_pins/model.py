@@ -1,14 +1,6 @@
 """Public-pin voting - the community process that can make a Location public.
-
-A tiny, highly selective set of locations can be voted "public" by the users
-who have them pinned. Public locations are suggested to every account
-(opt-out), which gives new users a populated map without exposing anything
-vulnerable. Eligibility is computed entirely server-side by
-``services.pins.public_pins`` on a schedule - users never see the rule engine,
-only the vote buttons when a place qualifies.
-
-Votes are anonymous in the UI: only the voter ever sees their own choice,
-and no running tallies are shown before an outcome.
+A tiny, highly selective set of locations can be voted "public" by the users who have them pinned.
+Public locations are suggested to every account (opt-out), which gives new users a populated map without exposing anything vulnerable.
 """
 
 from __future__ import annotations
@@ -80,9 +72,7 @@ class PublicPinCandidate(abstract.DashboardModel):
 
 class PublicPinVote(abstract.DashboardModel):
     """A single profile's yes/no vote on making a location public.
-
-    Withdrawing a vote deletes the row (mirroring WikiStatVote), so tallies
-    never include "no opinion" entries.
+    Withdrawing a vote deletes the row (mirroring WikiStatVote), so tallies never include "no opinion" entries.
 
     Attributes:
         candidate: The vote this ballot belongs to.

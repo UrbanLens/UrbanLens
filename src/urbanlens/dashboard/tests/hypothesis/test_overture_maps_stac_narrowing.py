@@ -1,19 +1,4 @@
-"""Regression guard for OvertureMapsGateway querying the whole planet per lookup.
-
-``overturemaps.geodataframe()`` defaults to ``stac=False``, which skips the
-STAC-geoparquet index that narrows a bbox query down to the handful of S3
-files that actually intersect it. Without ``stac=True``, every building/
-address/place lookup - however small the bbox - opens a pyarrow dataset over
-the *entire* global theme (hundreds of multi-gigabyte partition files) and
-relies on filter pushdown alone to prune it while scanning.
-
-Verified against the live 2026-08-19.0 release: a ~111m bbox resolves to 1
-intersecting file via STAC vs. 512 total files in the unfiltered dataset.
-Workers calling this repeatedly (``auto_nest_building_pins``,
-``classify_detail_marker``, boundary generation) drove Celery worker RSS to
-several gigabytes each and triggered the kernel OOM killer - see
-docs/PROBLEMS.md.
-"""
+"""Regression guard for OvertureMapsGateway querying the whole planet per lookup."""
 
 from __future__ import annotations
 
@@ -27,10 +12,7 @@ class OvertureMapsGatewayStacNarrowingTests(SimpleTestCase):
     def test_fetch_passes_stac_true_to_narrow_the_file_list(self) -> None:
         gateway = OvertureMapsGateway()
         with (
-            # The gateway now resolves the file list itself before reading, and
-            # refuses when the index cannot answer (P110) - so a test that mocks
-            # only the read reaches a real network call and is refused. Mocking
-            # the lookup keeps this test about what it has always been about.
+            # Mocking the lookup keeps this test about what it has always been about.
             patch("overturemaps.core._get_files_from_stac", return_value=["bucket/one.parquet"]),
             patch(
                 "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._overture_geodataframe"

@@ -1,12 +1,4 @@
-/**
- * Vault > Photos: the windowed grid, off-screen pruning, sort, and upload.
- *
- * Ad hoc verification for the Vault feature's Batch 2 (performance/sort),
- * written against a real browser rather than trusted from the TS unit suite
- * alone - the windowing/pruning/sort-aware-upload logic only really exists
- * once IntersectionObserver, real scrolling, and a real fetch loop are in
- * play, none of which the unit tests exercise.
- */
+/** Vault > Photos: the windowed grid, off-screen pruning, sort, and upload. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { AppShell } from "../../lib/pages/app-shell.js";
@@ -17,13 +9,7 @@ const TINY_JPEG_BASE = Buffer.from(
     "base64",
 );
 
-/**
- * A fresh JPEG for each call, so a re-run of this spec against an account
- * that already has the previous run's upload doesn't get silently treated as
- * a duplicate by the server's per-profile checksum dedup - trailing bytes
- * after the JPEG's EOI marker are ignored by every decoder that matters here
- * but change the file's hash.
- */
+/** A fresh JPEG per call, so re-runs are not deduped against prior uploads by checksum. */
 function uniqueTinyJpeg(): Buffer {
     return Buffer.concat([TINY_JPEG_BASE, Buffer.from(`${Date.now()}-${Math.random()}`)]);
 }
@@ -112,22 +98,7 @@ test.describe("vault photos grid", () => {
         const grid = page.locator("#photo-grid");
         await expect(grid).toBeVisible();
 
-        // Read the first page under each sort and compare. Two earlier attempts
-        // at this test got it wrong in instructive ways, so what it must *not*
-        // depend on is worth stating:
-        //
-        // - Not on the seed's captions. The original asserted the first tile
-        //   changed, which is a bet that no photo happens to lead both orders.
-        // - Not on a filename. "name" orders by `Lower(Coalesce(caption, ''))`,
-        //   and an upload from this page sets no caption at all.
-        // - Not on where an uploaded photo lands. The grid pages at 24 and
-        //   loads more only on scroll, while "name" puts the *oldest*
-        //   uncaptioned rows first (ties break on ascending pk) - so a fresh
-        //   upload is at the far end of that order, off the first page.
-        //
-        // What is left is the property the test is named for: the two orders
-        // are near-reverses of each other, so the first page cannot be the same
-        // list. That needs no uploads, and leaves nothing behind on the account.
+        // Compare first pages across sorts without depending on captions, filenames, or upload position (all order-dependent).
         const idsUnder = async (sort: string): Promise<(string | undefined)[]> => {
             await page.locator("#vault-photos-sort").selectOption(sort);
             // The sort handler clears the grid and re-fetches from scratch.

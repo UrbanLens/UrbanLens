@@ -12,13 +12,7 @@ if TYPE_CHECKING:
 
 
 class EmailOrUsernameModelBackend(ModelBackend):
-    """Same as Django's ModelBackend, but resolves an email-shaped username first.
-
-    If the submitted "username" looks like an email address, it's resolved to
-    the matching account's real username (via primary or verified secondary
-    email, normalized) before delegating to the standard username/password
-    check. Plain usernames are handled exactly as ModelBackend would.
-    """
+    """Same as Django's ModelBackend, but resolves an email-shaped username first."""
 
     def authenticate(
         self,

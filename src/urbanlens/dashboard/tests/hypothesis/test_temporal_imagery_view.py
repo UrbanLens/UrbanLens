@@ -1,26 +1,4 @@
-"""Tests for TemporalImageryFeaturesView (GET .../temporal/<year>/).
-
-The on-demand fetch behind the beta time slider: given a year, return that
-year's OpenHistoricalMap GeoJSON for a pin's or wiki's location. Three things
-have to hold for this to be safe to expose:
-
-1. **Beta-gated at the endpoint, not just the UI.** The slider partial is
-   server-side omitted for non-beta viewers (see
-   ``test_temporal_imagery_context.py``), but that's a presentation choice -
-   this endpoint is a plain URL, and must refuse the same way a gated panel
-   does (``test_panel_feature_gate.py``'s own precedent): 404, not 403 or 200
-   with an empty body, so a probe can't distinguish "no coverage here" from
-   "you're not allowed to ask".
-2. **Ownership/visibility resolution matches every other pin-vs-wiki-scoped
-   overlay endpoint** (``map_overlays._resolve_owner``) - a pin_slug only
-   resolves for its own owner, a location_slug only through
-   ``resolve_visible_wiki``.
-3. **Per-year caching actually caches.** ``services.locations.temporal_imagery
-   .get_temporal_features`` is keyed per-year (``f"ohm_features_{year}"`` -
-   see that module's docstring for why a single fixed source string would
-   silently collide across years); a second request for the same year must be
-   served from that cache rather than re-hitting OHM.
-"""
+"""Tests for TemporalImageryFeaturesView (GET .../temporal/<year>/)."""
 
 from __future__ import annotations
 

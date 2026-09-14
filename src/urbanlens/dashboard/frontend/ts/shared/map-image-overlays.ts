@@ -1,19 +1,5 @@
 /**
  * Georeferenced image overlays on a pin's or wiki's map.
- *
- * A user drops a historical map image - a Sanborn fire-insurance sheet, a site
- * plan, an old survey - onto the live map and drags its four corners until the
- * old streets sit on the real ones. Leaflet's own `L.ImageOverlay` only takes
- * axis-aligned bounds, which can't express a scan that is rotated, sheared, or
- * (as most flatbed scans of century-old paper are) slightly trapezoidal.
- *
- * So the image is drawn in a plain `<img>` positioned by a CSS `matrix3d`
- * computed from the four corner points: a full projective transform, i.e. the
- * homography mapping the image's own unit rectangle onto the four corners'
- * current pixel positions. Recomputed on every map move/zoom, since the pixel
- * positions change but the stored WGS-84 corners do not. This is the same
- * technique leaflet-distortableimage uses; it is ~70 lines of linear algebra
- * here rather than a dependency, and keeps the corner semantics ours.
  */
 
 import type * as L from "leaflet";
@@ -24,11 +10,8 @@ export interface MapOverlayEntry {
     name: string;
     url: string;
     /**
-     * XYZ tile template (`.../{z}/{x}/{y}.png`) instead of an image, for
-     * already-georeferenced historical maps served as warped tile pyramids.
-     * A tile overlay is pre-placed by its georeference: no corner dragging,
-     * and `corners` only records its bounds.
-     */
+ * XYZ tile template (`.../{z}/{x}/{y}.png`) instead of an image, for already-georeferenced historical maps served as warped tile.
+ */
     tile_url_template: string;
     /** `[[lat, lng], ...]` for NW, NE, SE, SW - clockwise from the image's top-left. */
     corners: [number, number][];
@@ -50,19 +33,12 @@ export interface MapOverlayOptions {
     onError?: (message: string) => void;
 }
 
-/** Solve an 8x8 linear system by Gaussian elimination with partial pivoting.
- *
- * Returns null for a singular system, which happens when the user drags
- * corners into a degenerate shape (three of them collinear, or two coincident)
- * - the caller then leaves the previous transform in place rather than
- * applying a matrix full of NaN, which would make the overlay vanish with no
- * way to drag it back.
+/**
+ * Solve an 8x8 linear system by Gaussian elimination with partial pivoting.
  */
 function solve8(matrix: number[][], rhs: number[]): number[] | null {
     const size = 8;
-    // Flat row-major storage of the augmented matrix: 8 unknowns plus the
-    // constant column. A flat array keeps every access a plain number under
-    // the project's strict index checks, rather than an array-of-maybe-arrays.
+    // Flat row-major storage of the augmented matrix: 8 unknowns plus the constant column.
     const width = size + 1;
     const cells = new Float64Array(size * width);
     for (let row = 0; row < size; row++) {
@@ -102,11 +78,6 @@ function solve8(matrix: number[][], rhs: number[]): number[] | null {
 
 /**
  * The CSS `matrix3d(...)` mapping the unit square (0,0)-(1,1) onto four points.
- *
- * `points` are the destination pixel positions of the image's NW, NE, SE, SW
- * corners, relative to the element's own origin. Standard 8-unknown homography
- * solve: with the source corners fixed at the unit square, each destination
- * corner contributes two rows.
  */
 export function matrix3dForCorners(points: { x: number; y: number }[], width: number, height: number): string | null {
     const src = [
@@ -146,23 +117,13 @@ interface LiveOverlay {
     visible: boolean;
 }
 
-// Idle z-index matches Leaflet's default `overlayPane` (the pane this used to
-// share) so ordinary stacking is unchanged. Raised only while an overlay is
-// being aligned - see startAlign/stopAlign below - to clear
-// map-annotations.ts's boundaryPane (540, 560 while a boundary is itself being
-// edited) and markupPane (550): cross-pane stacking is decided purely by each
-// pane's own z-index, never DOM order or a child's own z-index (the
-// `.ul-map-overlay-handle` z-index in _map_overlays.scss is inert for exactly
-// this reason), so an overlay parked inside a boundary polygon was otherwise
-// permanently stuck beneath it - undraggable and unclickable while aligning.
+// Idle z-index matches Leaflet's default `overlayPane` (the pane this used to share) so ordinary stacking is unchanged.
 export const OVERLAY_PANE_IDLE_ZINDEX = "400";
 export const OVERLAY_PANE_ALIGNING_ZINDEX = "700";
 
 /**
  * Attach the image-overlay renderer to a map.
- *
  * @param leaflet The Leaflet namespace (passed in rather than imported so this
- *   shares the single instance the host entry already created).
  * @param map The Leaflet map to draw on.
  * @param options Endpoints and callbacks - see {@link MapOverlayOptions}.
  */
@@ -173,12 +134,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
     pane.style.zIndex = OVERLAY_PANE_IDLE_ZINDEX;
     const live = new Map<string, LiveOverlay>();
     const container = document.createElement("div");
-    // leaflet-zoom-hide makes Leaflet hide the whole container for the duration
-    // of a zoom animation. Without it the overlay is positioned in layer-point
-    // space while the pane is simultaneously being CSS-transformed by the
-    // animation, so it visibly drifts away from the map and snaps back at the
-    // end. Hiding through the animation and redrawing on zoomend is what
-    // Leaflet's own vector renderer does short of implementing _animateZoom.
+    // leaflet-zoom-hide makes Leaflet hide the whole container for the duration of a zoom animation.
     container.className = "ul-map-overlay-container leaflet-zoom-hide";
     pane.appendChild(container);
 
@@ -193,10 +149,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         if (!img) return;
         if (!img.naturalWidth || !img.naturalHeight) return;
         const points = entry.corners.map(pixelFor);
-        // Everything is positioned in layer-point space, the same coordinates
-        // Leaflet's own overlay pane uses - so the element's origin is the map
-        // origin and there's no per-element offset bookkeeping. (This holds
-        // only between zoom animations; see leaflet-zoom-hide above.)
+        // Everything is positioned in layer-point space, the same coordinates Leaflet's own overlay pane uses.
         const matrix = matrix3dForCorners(points, img.naturalWidth, img.naturalHeight);
         if (!matrix) return;
         img.style.transform = matrix;
@@ -248,13 +201,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
                 item.entry.corners[index] = [latLng.lat, latLng.lng];
                 redraw(item);
             };
-            // `pointercancel`/`lostpointercapture` as well as `pointerup`: a touch
-            // drag interrupted by the browser (an incoming call, a scroll gesture
-            // the OS claims, the pointer capture being lost) fires no `pointerup`
-            // at all. With only that listener the map stayed `dragging.disable()`d
-            // and the whole map was unpannable until the page was reloaded.
-            // `up` is written to be safe to run more than once, since a cancel is
-            // sometimes followed by a capture-loss event for the same gesture.
+            // `pointercancel`/`lostpointercapture` as well as `pointerup`.
             let released = false;
             const up = () => {
                 if (released) return;
@@ -279,15 +226,8 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
     }
 
     /**
-     * An overlay URL that is safe to hand to the DOM, or "" if it is not.
-     *
-     * Overlay URLs are supplied by whoever created the overlay, and on a wiki
-     * that is not necessarily the person viewing it. The server already
-     * validates them, but this is the sink, so it decides on its own terms
-     * rather than trusting that: anything that is not an http(s) URL or a
-     * same-origin path - `javascript:`, `data:`, a protocol-relative `//host`
-     * - is dropped rather than assigned.
-     */
+ * An overlay URL that is safe to hand to the DOM, or "" if it is not.
+ */
     function safeOverlayUrl(raw: string): string {
         if (!raw) return "";
         try {
@@ -301,9 +241,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
 
     function add(entry: MapOverlayEntry): void {
         if (entry.tile_url_template) {
-            // Pre-georeferenced tile pyramid: Leaflet's own tile layer does
-            // the drawing, and `bounds` stops it requesting tiles outside
-            // the sheet's footprint (the proxy would 404 them anyway).
+            // Pre-georeferenced tile pyramid: Leaflet's own tile layer does the drawing, and `bounds` stops it requesting tiles outside the sheet's.
             if (!safeOverlayUrl(entry.tile_url_template.replace(/\{[zxys]\}/g, "0"))) return;
             const tileLayer = leaflet.tileLayer(entry.tile_url_template, {
                 opacity: entry.opacity / 100,
@@ -360,9 +298,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         });
     }
 
-    // `zoom` deliberately not included: it fires continuously *during* the
-    // animation, when layer points are momentarily inconsistent with the pane's
-    // own transform (see leaflet-zoom-hide above).
+    // `zoom` deliberately not included: it fires continuously *during* the animation, when layer points are momentarily inconsistent.
     map.on("move moveend viewreset zoomend", redrawAll);
 
     return {
@@ -376,9 +312,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
                     add(entry);
                     return;
                 }
-                // An overlay changing representation (image <-> tiles) or
-                // tile template is rebuilt outright - rare, and simpler than
-                // teaching every code path both shapes at once.
+                // An overlay changing representation (image <-> tiles) or tile template is rebuilt outright.
                 if (!!existing.tileLayer !== !!entry.tile_url_template || (existing.tileLayer && existing.entry.tile_url_template !== entry.tile_url_template)) {
                     const wasShown = existing.visible;
                     remove(entry.uuid);
@@ -465,11 +399,6 @@ export interface ManageOverlaysDialogOptions {
 
 /**
  * Wire the manage-overlays dialog's window-level hooks.
- *
- * The dialog is server-rendered HTML that HTMX swaps in and out wholesale on
- * every add/edit/delete, so it cannot import this module - it calls these by
- * name instead (see `_map_overlays_list.html`). Shared by the pin/wiki map
- * entry and the floorplan editor so both get the same behavior.
  */
 export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): void {
     const { map, control, onAlignStart } = options;
@@ -546,9 +475,7 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         if (urlInput) urlInput.value = "";
     }
 
-    // Re-derives the Add-overlay button's disabled state from the form's
-    // current fields - called on every input/drop/pick so it never stays
-    // clickable with nothing chosen, and turns on the instant something is.
+    // Re-derives the Add-overlay button's disabled state from the form's current fields.
     window.ulMapOverlaySyncSubmitState = () => {
         const form = document.getElementById("map-overlay-add-form") as HTMLFormElement | null;
         const submit = document.getElementById("map-overlay-add-submit") as HTMLButtonElement | null;
@@ -659,9 +586,7 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
             .catch(() => setMessage("Couldn't load this page's photos."));
     };
 
-    // Keyboard submit (Enter in the name field) skips the button's onclick,
-    // which used to leave the corners field empty. Seed them on every HTMX
-    // serialize of this form instead.
+    // Keyboard submit (Enter in the name field) skips the button's onclick, which used to leave the corners field empty.
     document.body.addEventListener("htmx:configRequest", (event: Event) => {
         const detail = (event as CustomEvent).detail as { elt?: Element; parameters?: Record<string, string> } | undefined;
         const elt = detail?.elt;

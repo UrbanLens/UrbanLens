@@ -1,16 +1,4 @@
-{% comment %}
-Reference maps attached to a safety check-in beyond the primary route map
-(checkin.markup_map, drawn inline via _safety_map_script.html). Reuses the shared
-"comment map" preview/expand JS (see themes/base.html, _initThumbs/_expandCommentMap)
-keyed by "mm-<uuid>" - the same convention Memories > Maps uses for its own cards.
-
-Expects: checkin, attached_maps (queryset/list of MarkupMap), and optionally
-viewer_is_partner (hides the attach/detach/new-map controls - a partner is
-read-only here, matching detail.html's other owner-only edit controls).
-
-Swapped in whole (hx-swap="outerHTML") by the attach/detach views, so its own
-id must stay stable across re-renders.
-{% endcomment %}
+{% comment %}Reference maps attached to a safety check-in beyond the primary route map.{% endcomment %}
 <div class="safety-attached-maps" id="safety-attached-maps">
     {% for map in attached_maps %}
     {% with uuid_str=map.uuid|stringformat:"s" %}

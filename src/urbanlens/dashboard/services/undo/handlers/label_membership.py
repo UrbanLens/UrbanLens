@@ -70,7 +70,7 @@ def _delete_if_orphaned(label: Label) -> None:
 
 @register
 class LabelMembershipUndoHandler(MutationUndoHandler):
-    """Undo/redo adding or removing a label on a pin, wiki, or photo."""
+    """Undo/redo label add/remove on a pin, wiki, or photo."""
 
     model_label = MODEL_LABEL
 

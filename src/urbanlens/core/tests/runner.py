@@ -19,10 +19,7 @@ from urbanlens.core.tests.result import MessageResult
 
 
 class BufferingLogHandler(logging.Handler):
-    """
-    A logging handler that buffers log records and only outputs them
-    under certain conditions, such as when a test fails.
-    """
+    """Buffer records; flush only on failure."""
 
     def __init__(self):
         super().__init__()
@@ -32,9 +29,7 @@ class BufferingLogHandler(logging.Handler):
         self.buffer.append(record)
 
     def flush_logs(self, condition: bool):
-        """
-        Output buffered log records if condition is True.
-        """
+        """Replay buffered records when condition is True."""
         if condition:
             for record in self.buffer:
                 logging.getLogger(record.name).handle(record)
@@ -42,58 +37,40 @@ class BufferingLogHandler(logging.Handler):
 
 
 class QuietTestRunner(unittest.TextTestRunner):
-    """
-    A test runner that suppresses log output when tests pass.
-    """
+    """Suppress log output for passing tests."""
 
     def run(self, test):
-        """
-        Wrap the super().run(test) call with log suppression logic.
-        """
-        # Remove all existing handlers. `logging.root.handlers` must be copied here (not just
-        # sliced in the loop below) - removeHandler() mutates that same list object in place,
-        # so without the copy `default_handlers` would end up empty too and the restoration
-        # loop further down would silently do nothing, leaving the root logger with zero
-        # handlers for the rest of the process after the suite finishes.
+        """Run with logs buffered."""
+        # Copy: removeHandler mutates the same list in place.
         default_handlers = list(logging.root.handlers)
         for handler in default_handlers:
             logging.root.removeHandler(handler)
 
-        # Before running the test, add the custom log handler to root logger.
         log_handler = BufferingLogHandler()
         logging.root.addHandler(log_handler)
 
         result = super().run(test)
 
-        # Add the handlers back
         for handler in default_handlers:
             logging.root.addHandler(handler)
         logging.root.removeHandler(log_handler)
 
-        # Determine if the test(s) passed and conditionally flush the log buffer.
-        test_passed = result.wasSuccessful()
-        log_handler.flush_logs(not test_passed)
+        log_handler.flush_logs(not result.wasSuccessful())
 
         return result
 
 
 class TestRunner(DiscoverRunner):
     def setup_test_environment(self, **kwargs: Any) -> None:
-        # Set env var first - checked by signals before settings are fully loaded.
         os.environ["DJANGO_TESTING"] = "1"
 
         super().setup_test_environment(**kwargs)
 
-        # Mark settings as test mode for any code that checks settings.TESTING.
         conf.settings.TESTING = True
-        # The test client uses HTTP; HTTPS enforcement is validated separately.
         conf.settings.UNSAFE_ALLOW_HTTP = True
         conf.settings.SECURE_SSL_REDIRECT = False
 
-        # Patch the AI gateway so no test ever makes a real external API call.
-        # The chokepoint list lives in core/tests/ai_guard.py because conftest.py
-        # needs the same one: this hook runs under `manage.py test` and never
-        # under pytest, so a list kept here protects only the runner nobody uses.
+        # Same chokepoint list as conftest.py; this hook covers `manage.py test`.
         self._ai_guard = patched_ai_gateway()
         self._ai_guard.__enter__()
 
@@ -116,7 +93,6 @@ class TestRunner(DiscoverRunner):
         super().teardown_test_environment(**kwargs)
 
     def run_suite(self, suite, **kwargs):
-        # Run the test suite
         return QuietTestRunner(
             verbosity=self.verbosity,
             failfast=self.failfast,
@@ -125,9 +101,7 @@ class TestRunner(DiscoverRunner):
         ).run(suite)
 
     def teardown_databases(self, old_config, **kwargs):
-        # Explicitly close the database connections
         for alias in connections:
             connections[alias].close()
 
-        # Teardown the databases
         super().teardown_databases(old_config, **kwargs)

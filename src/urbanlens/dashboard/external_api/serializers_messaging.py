@@ -1,28 +1,14 @@
 """Serializers and response builders for the external API's messaging surface.
 
-Split from ``serializers.py`` because messaging carries a constraint the rest
-of the external API does not: **the server must never widen what it can see
-about a conversation.**
+Split from ``serializers.py`` because messaging carries a constraint the rest of the external API
+does not: **the server must never widen what it can see about a conversation.** The builder
+functions below exist to enforce (2) structurally: views call a builder, never a serializer, so
+there is no route to a response that skipped the masking step.
 
-Two rules follow, and they are not negotiable:
-
-1. No field here is ever derived from decrypted plaintext. ``body`` is only
-   ever the plaintext a user *chose* to send unencrypted; an encrypted message
-   yields ``ciphertext``/``nonce``/``key_version`` and nothing more. There is
-   deliberately no "decrypt this for me" endpoint - the server has no key
-   material and adding one would mean introducing some, which would end
-   end-to-end encryption outright.
-2. Every payload naming a person is built through the existing
-   ``serialize_direct_message`` / ``resolve_visible_identity`` path rather than
-   reading ``profile.username`` directly. Those functions implement per-viewer
-   identity masking (the 2026-07-23 fix): a sender whose ``profile_visibility``
-   hides them from this viewer must appear as a placeholder here exactly as
-   they do in the web thread. Bypassing them re-leaks masked names over the
-   mobile API, where nobody would notice for a long time.
-
-The builder functions below exist to enforce (2) structurally: views call a
-builder, never a serializer, so there is no route to a response that skipped
-the masking step.
+- No field here is ever derived from decrypted plaintext. ``body`` is only ever the plaintext a user
+  *chose* to send unencrypted; an encrypted message yields `...
+- Every payload naming a person is built through the existing ``serialize_direct_message`` /
+  ``resolve_visible_identity`` path rather than reading ``profile.us...
 """
 
 from __future__ import annotations
@@ -56,10 +42,9 @@ MAX_MEMBER_SLUGS = 50
 class MessageBodySerializer(serializers.Serializer):
     """The plaintext-or-ciphertext half of any message payload.
 
-    Exactly one side is ever populated: a plaintext message reports
-    ``ciphertext``/``nonce`` as ``""`` and ``key_version`` as ``0``; an
-    encrypted one reports ``body`` as ``""``. ``is_encrypted`` saves clients
-    from having to infer that from empty strings.
+    Exactly one side is ever populated: a plaintext message reports ``ciphertext``/``nonce`` as ``""``
+    and ``key_version`` as ``0``; an encrypted one reports ``body`` as ``""``.
+    ``is_encrypted`` saves clients from having to infer that from empty strings.
     """
 
     body = serializers.CharField(read_only=True, allow_blank=True, help_text='Plaintext body, or "" when the message is encrypted.')
@@ -72,10 +57,9 @@ class MessageBodySerializer(serializers.Serializer):
 class DirectMessageShareSerializer(serializers.Serializer):
     """The `@pin` / `@trip` / `@friend` offer attached to a message, if any.
 
-    Identifiers only - resolving them is a separate, separately-authorized
-    request. In particular a pin share exposes the ``PinShare`` id rather than
-    the pin's coordinates, so receiving a share does not by itself hand the
-    recipient the location before they accept it.
+    Identifiers only - resolving them is a separate, separately-authorized request.
+    In particular a pin share exposes the ``PinShare`` id rather than the pin's coordinates, so
+    receiving a share does not by itself hand the recipient the location before they accept it.
     """
 
     kind = serializers.ChoiceField(read_only=True, choices=["pin", "trip", "friend"])
@@ -88,12 +72,11 @@ class DirectMessageShareSerializer(serializers.Serializer):
 class DirectMessageSerializer(MessageBodySerializer):
     """One message as seen *by one particular viewer*.
 
-    Viewer-dependent by construction, not incidentally: ``tombstone`` reflects
-    the sender's retention setting applied to this viewer (the sender keeps
-    seeing their own message forever; the recipient stops), and the sender's
-    displayed identity is resolved through this viewer's visibility. The same
-    row therefore serializes differently for the two participants, which is
-    correct and must not be "optimized" into a shared cached payload.
+    Viewer-dependent by construction, not incidentally: ``tombstone`` reflects the sender's retention
+    setting applied to this viewer (the sender keeps seeing their own message forever; the recipient
+    stops), and the sender's displayed identity is resolved through this viewer's visibility.
+    The same row therefore serializes differently for the two participants, which is correct and must
+    not be "optimized" into a shared cached payload.
     """
 
     id = serializers.IntegerField(read_only=True)
@@ -129,10 +112,9 @@ class DirectMessageSerializer(MessageBodySerializer):
 class ConversationSerializer(serializers.Serializer):
     """One row of the unified inbox - a one-to-one thread or a group chat.
 
-    One shape for both kinds so a client renders a single merged, recency-
-    ordered list (which is what ``all_conversations_for`` returns). ``kind``
-    discriminates; the fields that only make sense for one kind are null for
-    the other.
+    One shape for both kinds so a client renders a single merged, recency- ordered list (which is what
+    ``all_conversations_for`` returns).
+    ``kind`` discriminates; the fields that only make sense for one kind are null for the other.
     """
 
     kind = serializers.ChoiceField(read_only=True, choices=["dm", "group"])
@@ -176,10 +158,9 @@ class GroupMemberSerializer(serializers.Serializer):
 class MessageSendSerializer(serializers.Serializer):
     """Validates an untrusted "send a message" payload.
 
-    Mirrors the invariants ``create_direct_message`` enforces server-side
-    rather than replacing them - this is the first line of defense on
-    untrusted input, and the service remains the authority regardless of
-    caller.
+    Mirrors the invariants ``create_direct_message`` enforces server-side rather than replacing them -
+    this is the first line of defense on untrusted input, and the service remains the authority
+    regardless of caller.
     """
 
     body = serializers.CharField(required=False, allow_blank=True, default="", max_length=MAX_DIRECT_MESSAGE_LENGTH)
@@ -189,13 +170,11 @@ class MessageSendSerializer(serializers.Serializer):
     reply_to_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     markup_map_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     image_ids = serializers.ListField(required=False, child=serializers.IntegerField(), max_length=MAX_ATTACHED_IMAGES, default=list)
-    #: Preferred over ``image_ids`` for new clients - addresses the sender's
-    #: own not-yet-attached images by uuid instead of integer pk. Additive:
-    #: ``image_ids`` keeps working unchanged, and a request may combine both.
+    #: Preferred over ``image_ids`` for new clients - addresses the sender's own not-yet-attached images by uuid
+    #: instead of integer pk. Additive: ``image_ids`` keeps working unchanged, and a request may combine both.
     image_uuids = serializers.ListField(required=False, child=serializers.UUIDField(), max_length=MAX_ATTACHED_IMAGES, default=list)
-    #: A pin *slug* despite the ``_id`` suffix, matching the naming this
-    #: application already uses for pin references on the wire (the same
-    #: `slug_or_uuid` lookup accepts either). Renaming it here would be more
+    #: A pin *slug* despite the ``_id`` suffix, matching the naming this application already uses for pin
+    #: references on the wire (the same `slug_or_uuid` lookup accepts either). Renaming it here would be more
     #: accurate and less consistent; consistency wins for a public contract.
     shared_pin_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None, max_length=255)
     shared_trip_slug = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None, max_length=255)
@@ -214,10 +193,8 @@ class MessageSendSerializer(serializers.Serializer):
             The validated payload.
 
         Raises:
-            rest_framework.serializers.ValidationError: Content is both
-                plaintext and encrypted, is empty with nothing attached, is
-                encrypted without a usable nonce/key version, or names more
-                than one share.
+            rest_framework.serializers.ValidationError: Content is both plaintext and encrypted, is empty
+            with nothing attached, is encrypted without a usable nonce/key version, or names more...
         """
         body = (attrs.get("body") or "").strip()
         ciphertext = attrs.get("ciphertext") or ""
@@ -231,9 +208,8 @@ class MessageSendSerializer(serializers.Serializer):
             raise serializers.ValidationError("A message is either plaintext or encrypted, never both.")
 
         if ciphertext:
-            # key_version identifies which conversation/group key opens this
-            # ciphertext; version 0 means plaintext, so an encrypted message
-            # claiming it could never be decrypted by anyone.
+            # key_version identifies which conversation/group key opens this ciphertext; version 0 means
+            # plaintext, so an encrypted message claiming it could never be decrypted by anyone.
             if not (attrs.get("nonce") or "").strip():
                 raise serializers.ValidationError("An encrypted message requires a nonce.")
             if (attrs.get("key_version") or 0) < 1:
@@ -250,24 +226,10 @@ class MessageSendSerializer(serializers.Serializer):
 class GroupMessageSendSerializer(MessageSendSerializer):
     """Validates a "send a message into a group" payload.
 
-    Identical to :class:`MessageSendSerializer` except that it **refuses** the
-    fields the group path cannot honor, rather than accepting and dropping
-    them. ``create_group_message`` forwards only body/ciphertext/nonce/
-    key_version/client_uuid - it has no attachment, reply, markup-map or share
-    handling - so validating a group send with the one-to-one serializer
-    answered 201 to a message carrying an image or a reply and then delivered
-    neither. Silent data loss on a 201 is worse than a 400: the client has been
-    told the send succeeded and has no reason to retry.
-
-    An attachment-only group send was worse still - it passed the "not empty"
-    check on the strength of ``image_ids``, then reached the service with no
-    content at all and failed there as an empty message, so the same payload
-    produced a confusing 400 from a completely different layer.
-
-    These stay *rejected* rather than quietly supported because implementing
-    them is a real feature (per-member attachment visibility, group reply
-    threading), not a plumbing change. When that lands, drop the field from
-    :attr:`unsupported_fields` and forward it.
+    Identical to :class:`MessageSendSerializer` except that it **refuses** the fields the group path
+    cannot honor, rather than accepting and dropping them.
+    These stay *rejected* rather than quietly supported because implementing them is a real feature
+    (per-member attachment visibility, group reply threading), not a plumbing change.
     """
 
     #: Fields ``MessageSendSerializer`` accepts that the group send path cannot
@@ -284,13 +246,11 @@ class GroupMessageSendSerializer(MessageSendSerializer):
             The validated payload, once every unsupported field is absent.
 
         Raises:
-            rest_framework.serializers.ValidationError: The payload names a
-                field this endpoint cannot honor, or fails one of the inherited
-                content invariants.
+            rest_framework.serializers.ValidationError: The payload names a field this endpoint cannot
+            honor, or fails one of the inherited content invariants.
         """
-        # Before super(): the inherited "cannot be empty" check counts
-        # image_ids and markup_map_id as content, so an attachment-only payload
-        # would otherwise pass validation here and fail deeper in the service.
+        # Before super(): the inherited "cannot be empty" check counts image_ids and markup_map_id as content,
+        # so an attachment-only payload would otherwise pass validation here and fail deeper in the service.
         supplied = [name for name in self.unsupported_fields if attrs.get(name)]
         if supplied:
             raise serializers.ValidationError(f"Group messages do not support: {', '.join(sorted(supplied))}. Send them in a one-to-one message instead.")
@@ -319,26 +279,21 @@ class GroupMembersSerializer(serializers.Serializer):
 class ReactionSerializer(serializers.Serializer):
     """Validates a reaction toggle.
 
-    Length-capped here; ``services.messaging.direct_messages.is_safe_reaction_emoji``
-    remains the authority on whether the glyph is render-safe, since reactions
-    are relayed verbatim into other participants' clients.
+    Length-capped here; ``services.messaging.direct_messages.is_safe_reaction_emoji`` remains the
+    authority on whether the glyph is render-safe, since reactions are relayed verbatim into other
+    participants' clients.
     """
 
-    #: Read from the column, not a literal. ``is_safe_reaction_emoji`` documents
-    #: that its input is "already length-capped by the caller", and the internal
-    #: HTML path caps at exactly this width - this one declared 32 against a
-    #: 10-wide column, so an ordinary long ZWJ sequence (a family with skin-tone
-    #: modifiers is eleven code points) validated and then failed at the insert.
+    #: Read from the column, not a literal.
     emoji = serializers.CharField(max_length=column_max_length(Reaction, "emoji"))
 
 
 class ReactionResultSerializer(serializers.Serializer):
     """What a reaction toggle did, plus the target's resulting summary.
 
-    ``action`` reports the transition rather than the state, matching the
-    1:1 reaction endpoint it mirrors; ``reactions`` is the authoritative
-    post-write summary, so a client that ignores ``action`` still renders the
-    right thing.
+    ``action`` reports the transition rather than the state, matching the 1:1 reaction endpoint it
+    mirrors; ``reactions`` is the authoritative post-write summary, so a client that ignores ``action``
+    still renders the right thing.
     """
 
     action = serializers.ChoiceField(read_only=True, choices=["added", "removed"])
@@ -348,14 +303,11 @@ class ReactionResultSerializer(serializers.Serializer):
 class MuteStateSerializer(serializers.Serializer):
     """One conversation's notification-mute state.
 
-    The response body for the mute endpoints, which are PUT/DELETE rather than
-    a toggling POST: a retried request over a flaky link must land on the state
-    the caller asked for, not the opposite of it. The body therefore reports
-    the persisted state rather than "ok", so a client that lost the first
+    The response body for the mute endpoints, which are PUT/DELETE rather than a toggling POST: a
+    retried request over a flaky link must land on the state the caller asked for, not the opposite of
+    it.
+    The body therefore reports the persisted state rather than "ok", so a client that lost the first
     response can reconcile without a second round trip.
-
-    Muting suppresses notifications only. The conversation stays in the
-    conversation list, keeps its unread count, and keeps receiving messages.
     """
 
     is_muted = serializers.BooleanField(read_only=True)
@@ -370,11 +322,10 @@ class RetentionSettingsSerializer(serializers.Serializer):
 class PageSerializer(serializers.Serializer):
     """The list envelope shared by this surface's paginated endpoints.
 
-    ``next``/``previous``/``count`` are nullable because the message-thread
-    endpoint is cursor-paginated rather than page-numbered: it can offer a
-    "further back" link but has no page count and no notion of a previous
-    page. See ``views_messaging`` for why that thread must not use page
-    numbers.
+    ``next``/``previous``/``count`` are nullable because the message-thread endpoint is cursor-paginated
+    rather than page-numbered: it can offer a "further back" link but has no page count and no notion of
+    a previous page.
+    See ``views_messaging`` for why that thread must not use page numbers.
     """
 
     results = serializers.ListField(child=serializers.DictField())
@@ -409,15 +360,13 @@ def _share_payload(message: DirectMessage) -> dict[str, Any] | None:
 def build_direct_message_payload(message: DirectMessage, viewer: Profile) -> dict[str, Any]:
     """Render one direct message for one viewer.
 
-    Starts from ``services.messaging.direct_messages.serialize_direct_message`` rather
-    than reading the model directly, so the identity masking that function
-    applies (the sender's name resolved through *this viewer's* visibility)
-    cannot be skipped here. The API-specific fields are layered on top.
+    Starts from ``services.messaging.direct_messages.serialize_direct_message`` rather than reading the
+    model directly, so the identity masking that function applies (the sender's name resolved through
+    *this viewer's* visibility) cannot be skipped here.
 
     Args:
         message: The message to render.
-        viewer: The profile the payload is for. Drives both identity masking
-            and the tombstone/expiry decision.
+        viewer: The profile the payload is for.
 
     Returns:
         A ``DirectMessageSerializer``-shaped dict.
@@ -451,11 +400,8 @@ def build_direct_message_payload(message: DirectMessage, viewer: Profile) -> dic
     }
 
     if tombstone is not None:
-        # The viewer may no longer see this content (sender deleted it for
-        # everyone, or the sender's retention window elapsed). Blank the
-        # payload rather than relying on the client to honor `tombstone` -
-        # a client that ignored it would otherwise still receive, and could
-        # still display, content the sender has already revoked.
+        # The viewer may no longer see this content (sender deleted it for everyone, or the sender's retention
+        # window elapsed).
         payload["body"] = ""
         payload["ciphertext"] = ""
         payload["nonce"] = ""
@@ -469,36 +415,20 @@ def build_direct_message_payload(message: DirectMessage, viewer: Profile) -> dic
 def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[str, Any]:
     """Render one group message into the same envelope as a direct message.
 
-    One message shape across both conversation kinds keeps clients from
-    needing two renderers for what a user experiences as the same thing. The
-    fields a group message has no analogue for are reported as the empty/None
-    value rather than omitted, so the shape stays stable: ``recipient_slug``
-    (a group message has no single recipient), ``read_at``/``reply_to_id``/
-    ``sender_delete_after``/``markup_map_uuid`` (group messages carry none of
-    these today).
+    The fields a group message has no analogue for are reported as the empty/None value rather than
+    omitted, so the shape stays stable: ``recipient_slug`` (a group message has no single recipient),
+    ``read_at``/``reply_to_id``/ ``sender_delete_after``/``markup_map_uuid`` (group messages carry none
+    of these today).
 
-    Two fields that *are* populated, and were not when this function was
-    written:
-
-    - ``reactions`` - group messages became reactable when ``Reaction`` grew
-      its ``group_message`` foreign key, and the summary is the identical
-      shape a direct message reports, from the identical function.
-    - ``pin_share_id`` - a pin shared into a group creates one ``PinShare`` per
-      recipient (see ``services.messaging.group_chats.share_pin_in_group_message``), so
-      unlike a direct message there is no single share object to nest under
-      ``share``; the viewer's *own* row is resolved here. Without it a group
-      recipient can see the share card but has no id to POST to
-      ``/pin-shares/{share_id}/respond/``, which is to say the share is
-      undismissable and unacceptable from a mobile client.
-
-    ``share`` itself stays null: its ``kind``/``revoked`` fields describe a
-    ``DirectMessageShare``, which a group message does not have, and inventing
-    plausible-looking values for them would be worse than reporting nothing.
+    - ``reactions`` - group messages became reactable when ``Reaction`` grew its ``group_message``
+      foreign key, and the summary is the identical shape a direct mes...
+    - ``pin_share_id`` - a pin shared into a group creates one ``PinShare`` per recipient (see
+      ``services.messaging.group_chats.share_pin_in_group_message``), so u...
 
     Args:
         message: The group message to render.
-        viewer: The member the payload is for; drives identity masking, the
-            tombstone decision, and which recipient's share row is reported.
+        viewer: The member the payload is for; drives identity masking, the tombstone decision, and
+        which recipient's share row is reported.
 
     Returns:
         A ``DirectMessageSerializer``-shaped dict.
@@ -549,9 +479,7 @@ def build_conversation_payload(conversation: dict[str, Any], viewer: Profile) ->
 
     Args:
         conversation: A row from ``services.messaging.direct_messages.conversations_for``
-            (``kind="dm"``) or
-            ``services.messaging.group_chats.group_conversations_for`` (``kind="group"``).
-            Their shapes differ; this is where that difference stops.
+        (``kind="dm"``) or...
         viewer: The profile whose inbox this is.
 
     Returns:
@@ -566,9 +494,8 @@ def build_conversation_payload(conversation: dict[str, Any], viewer: Profile) ->
             "kind": "group",
             "peer_slug": None,
             "group_uuid": str(group.uuid),
-            # Null both when this is a DM and when the creator deleted their
-            # account (the FK is SET_NULL) - a group outliving its creator has
-            # nobody who can manage its membership, which clients must be able
+            # Null both when this is a DM and when the creator deleted their account (the FK is SET_NULL) - a
+            # group outliving its creator has nobody who can manage its membership, which clients must be able
             # to represent rather than crash on.
             "creator_slug": (creator.slug or None) if creator is not None else None,
             "display_name": group.name,

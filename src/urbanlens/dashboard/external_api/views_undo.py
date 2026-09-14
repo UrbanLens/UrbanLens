@@ -26,16 +26,9 @@ if TYPE_CHECKING:
 
     from rest_framework.request import Request
 
-#: Which additional domain scope each undoable ``model_label`` requires,
-#: beyond ``undo:read``/``undo:write`` themselves. A credential scoped only
-#: for pins should not see - or restore - a safety-checkin deletion it was
+#: Which additional domain scope each undoable ``model_label`` requires, beyond ``undo:read``/``undo:write``
+#: themselves. A credential scoped only for pins should not see - or restore - a safety-checkin deletion it was
 #: never granted visibility into.
-#: Must name every ``services.undo.handlers`` model label. A label missing here
-#: is omitted from the listing (harmless) *and* falls through the restore view's
-#: ``.get()`` to no domain scope at all (not harmless) - see
-#: ``UndoRestoreView.post``. ``markup_map`` maps onto the pin scopes because a
-#: markup map is an annotation layer on a pin's own map and the API has no
-#: separate markup scope.
 _DOMAIN_READ_SCOPES_BY_MODEL_LABEL: dict[str, ApiKeyScope] = {
     "pin": ApiKeyScope.PINS_READ,
     "wiki": ApiKeyScope.WIKI_READ,
@@ -70,12 +63,9 @@ _DOMAIN_WRITE_SCOPES_BY_MODEL_LABEL: dict[str, ApiKeyScope] = {
 class UndoListView(ExternalApiView):
     """GET: the caller's recent delete history available to undo.
 
-    Aggregates across every undoable model in one feed. A credential without
-    the paired domain-read scope for a given entry's ``model_label`` has that
-    entry omitted rather than causing a 403 - ``omitted`` names the dropped
-    model_labels so a client can prompt the user to re-authorize rather than
-    silently rendering an incomplete list forever. See
-    ``external_api.permissions.filter_sources_by_grants``.
+    A credential without the paired domain-read scope for a given entry's ``model_label`` has that entry
+    omitted rather than causing a 403 - ``omitted`` names the dropped model_labels so a client can
+    prompt the user to re-authorize rather than silently rendering an incomplete list forever.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -111,9 +101,9 @@ class UndoRestoreView(ExternalApiView):
         """Restore one of the caller's undo entries.
 
         Looked up without the ``active()`` filter ``get_undo_history`` applies
-        - an already-expired entry must still resolve here so it can answer
-        410 rather than 404, distinguishing "this existed and lapsed" from
-        "never yours to begin with".
+
+        - an already-expired entry must still resolve here so it can answer 410 rather than 404,
+          distinguishing "this existed and lapsed" from "never yours to begin wi...
         """
         entry = UndoAction.objects.for_profile(request.user.profile).filter(uuid=undo_uuid).first()
         if entry is None:

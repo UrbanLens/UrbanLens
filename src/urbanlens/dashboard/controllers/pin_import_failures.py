@@ -1,11 +1,10 @@
 """Memories → Locations page: review queue for PinImportFailure rows.
 
 Failures are raised by ``tasks.resolve_deferred_pin_locations`` (via
-``services.pins.pin_import_failures.record_pin_import_failure``) when a pin's Google Maps
-CID can't be resolved to a location - Google has no data for the place, or the live
-lookup itself stalled or errored out. This controller only lets the owner act on what
-was already recorded: supply an address or coordinates to place the pin themselves, or
-dismiss the entry. It never records a failure itself.
+``services.pins.pin_import_failures.record_pin_import_failure``) when a pin's Google Maps CID can't
+be resolved to a location - Google has no data for the place, or the live lookup itself stalled or
+errored out.
+It never records a failure itself.
 """
 
 from __future__ import annotations
@@ -56,16 +55,15 @@ def _toast(message: str, level: str = "success", *, status: int = 200, refresh_q
     Mirrors ``controllers.pin_merge_suggestions._toast``.
 
     Args:
-        message: Toast body text (HTML-escaped by the caller if it embeds
-            any dynamic value).
+        message: Toast body text (HTML-escaped by the caller if it embeds any dynamic value).
         level: toastr level ("success", "info", "warning", "error").
         status: HTTP status code for the (otherwise empty) response.
         refresh_queue: Whether to also fire the ``refreshQueue`` htmx event.
         view_pin_url: If set, appends a "View pin" link to the toast.
 
     Returns:
-        An empty 200 (or ``status``) response carrying the toast/refresh
-        triggers in its ``HX-Trigger`` header.
+        An empty 200 (or ``status``) response carrying the toast/refresh triggers in its ``HX-Trigger``
+        header.
     """
     if view_pin_url:
         message += f' <a href="{view_pin_url}" class="toast-undo-btn">View pin</a>'
@@ -118,17 +116,8 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
 
     GET /memories/locations/import-failures/queue/
 
-    Paginated at the same 12 as ``PinSuggestionQueueView``. It was unpaginated
-    on the stated grounds that these are "rare (one per cid Google genuinely
-    couldn't place)" - which ``PinImportFailureGuessView``'s docstring, in this
-    same file, contradicts: "a single import can leave hundreds of failures."
-    The second is the one borne out by how imports actually work, and each card
-    fetches its own geocoder guess on reveal, so an unpaginated queue of
-    hundreds is also hundreds of pending lookups (P69).
-
-    Its page parameter is its own. This partial also renders inside the full
-    ``memories.locations`` page beside the suggestions queue, and a shared
-    ``?page=`` would page both sections with one click.
+    This partial also renders inside the full ``memories.locations`` page beside the suggestions queue,
+    and a shared ``?page=`` would page both sections with one click.
     """
 
     #: Matches the sibling queues on the same page.
@@ -160,14 +149,10 @@ class PinImportFailureGuessView(LoginRequiredMixin, View):
 
     GET /memories/locations/import-failures/<failure_id>/guess/
 
-    Fetched per card on reveal rather than computed while rendering the queue:
-    a single import can leave hundreds of failures, and each guess costs a
-    geocoder call. Building them all up front would make the page wait on
-    hundreds of sequential lookups, and would spend that quota on cards the user
-    never scrolls to.
-
-    Answers with an empty body when there is no confident guess, which is the
-    normal case for a vague name - the card then shows nothing extra.
+    Fetched per card on reveal rather than computed while rendering the queue: a single import can leave
+    hundreds of failures, and each guess costs a geocoder call.
+    Building them all up front would make the page wait on hundreds of sequential lookups, and would
+    spend that quota on cards the user never scrolls to.
     """
 
     def get(self, request: HttpRequest, failure_id: int) -> HttpResponse:
@@ -198,24 +183,22 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
 
     POST /memories/locations/import-failures/<failure_id>/resolve/
 
-    Body: ``address`` (free text, geocoded) or ``latitude``/``longitude``
-    (marker coordinates). Invalid coordinates or a ``PinCreationError`` from
-    the underlying placement re-render the card in place with an error toast,
-    rather than failing with a 500.
+    Body: ``address`` (free text, geocoded) or ``latitude``/``longitude`` (marker coordinates).
+    Invalid coordinates or a ``PinCreationError`` from the underlying placement re-render the card in
+    place with an error toast, rather than failing with a 500.
     """
 
     def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
         """Place a pin for this failure from the submitted address or coordinates.
 
         Args:
-            request: The incoming POST request, carrying ``address`` and/or
-                ``latitude``/``longitude`` form fields.
+            request: The incoming POST request, carrying ``address`` and/or ``latitude``/``longitude`` form
+            fields.
             failure_id: Primary key of the ``PinImportFailure`` being resolved.
 
         Returns:
-            An empty toast response on success (or an already-handled
-            no-op), or a re-rendered card with an error toast when the
-            input or placement was invalid.
+            An empty toast response on success (or an already-handled no-op), or a re-rendered card with an
+            error toast when the input or placement...
         """
         failure, profile = _get_failure(request, failure_id)
         if not failure.is_actionable:

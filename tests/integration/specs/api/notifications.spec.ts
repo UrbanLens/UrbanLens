@@ -1,16 +1,6 @@
 /**
- * The notification API a native client polls.
- *
- * Distinct from `ui/notifications.spec.ts`, which asks whether a notification
- * reaches a *browser*. This asks whether the same thing reaches a client with
- * no browser at all - the mobile app - and the two go wrong independently: the
- * shell's HTMX fragment and this endpoint read the same rows through different
- * code.
- *
- * The unread count is the part worth being careful about. It is displayed as a
- * badge, so an off-by-one is visible on every screen, and it is derived rather
- * than stored - which means "mark this read" and "how many are unread" can
- * disagree without either being obviously broken on its own.
+ * The notification API a native client polls. Distinct from `ui/notifications.spec.ts`, which asks
+ * whether a notification reaches a *browser*.
  */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";

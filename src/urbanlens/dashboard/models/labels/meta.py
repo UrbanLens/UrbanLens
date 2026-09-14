@@ -1428,9 +1428,6 @@ ICON_CATEGORIES = {
 
 # Extra search keywords for emoji icons, keyed by the emoji character.
 # Each value is a space-separated string of lowercase synonym/alias terms.
-# These supplement the display label so that searches for common urbex
-# concepts (e.g. "derelict", "industrial", "fire") surface relevant icons
-# even when the display label alone wouldn't match.
 ICON_KEYWORDS: dict[str, str] = {
     # -- Places ---------------------------------------------------------------
     "🏠": "residential home dwelling",

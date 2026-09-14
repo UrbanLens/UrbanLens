@@ -10,12 +10,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.reactions.model import Reaction
 
-#: The nullable foreign keys a ``Reaction`` may point at - the full set of
-#: "reactable" hosts. Kept here rather than inline in :meth:`existing` so that
-#: adding a host is a one-line change in one place: the model's per-host unique
-#: constraint, this tuple, and the ``_ReactionMixin.reaction_target_field``
-#: values in ``external_api.mixins`` are the three things that must agree, and
-#: the only one that used to be implicit was this one.
+#: The nullable foreign keys a ``Reaction`` may point at - the full set of "reactable" hosts.
 REACTION_HOST_FIELDS: tuple[str, ...] = ("comment", "trip_comment", "direct_message", "group_message")
 
 
@@ -24,23 +19,7 @@ class ReactionQuerySet(abstract.DashboardQuerySet["Reaction"]):
 
     def existing(self, profile: Profile, emoji: str, **target: Any) -> Reaction | None:
         """Find this profile's existing reaction with this emoji on one target, if any.
-
-        A Reaction's target is polymorphic - exactly one of ``comment``,
-        ``trip_comment``, ``direct_message`` or ``group_message`` is ever set
-        (see the model's own docstring and its per-target unique constraints) -
-        so every caller toggling a reaction (comment/trip-comment/DM/group-message
-        reaction views) needs the exact same "does this profile+emoji+target
-        combo already exist" lookup, differing only in which target kwarg they
-        pass.
-
-        The single-host requirement is enforced rather than assumed. Passing
-        two hosts would silently AND them into a filter that can never match
-        (no row has two hosts set), so the lookup would answer "no existing
-        reaction" and the caller would happily insert a duplicate that the
-        database then rejects with an opaque IntegrityError - or, on the
-        toggle-off path, silently no-op. Passing none would match *any* of the
-        profile's reactions with that emoji, anywhere on the site, and toggle
-        off an unrelated one.
+        A Reaction's target is polymorphic - exactly one of ``comment``, ``trip_comment``, ``direct_message`` or ``group_message`` is ever set (see the model's own docstring and its per-target unique constraints) - so every caller toggling a reaction (comment/trip-comment/DM/group-message reaction views) needs the exact same "does this profile+emoji+target combo already exist" lookup, differing only in which target kwarg they pass.
 
         Args:
             profile: The reacting profile.

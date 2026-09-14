@@ -1,13 +1,4 @@
-"""Tests for optional passkey (WebAuthn) 2FA.
-
-The actual FIDO2/WebAuthn cryptographic ceremony can't be produced without a
-real (or software) authenticator, so tests that exercise
-``verify_registration_response``/``verify_authentication_response`` mock
-those two py_webauthn entry points - everything around them (challenge
-storage/consumption, credential lookup, sign-count/last-used bookkeeping,
-the login gate, and ownership checks on the settings endpoints) runs for
-real against the database.
-"""
+"""Tests for optional passkey (WebAuthn) 2FA."""
 
 from __future__ import annotations
 
@@ -427,10 +418,8 @@ class PasskeyOwnershipTests(TestCase):
 class PasskeyRegistrationEndpointTests(TestCase):
     """The JSON endpoints driving the browser registration ceremony.
 
-    The service functions behind them are covered above; these lock in the
-    HTTP contract (status codes, error shape, auth requirement) that
-    webauthn-client.ts depends on.
-    """
+    The service functions behind them are covered above; these lock in the HTTP contract (status codes, error
+    shape, auth requirement) that webauthn-client.ts depends on."""
 
     def setUp(self) -> None:
         self.user: User = baker.make(User, is_active=True)

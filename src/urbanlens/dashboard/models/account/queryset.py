@@ -1,6 +1,4 @@
-"""Account-model querysets and managers: email verification, client-side KDF
-enrollment, and the three second-factor models (passkeys, TOTP, backup codes).
-"""
+"""Account-model querysets and managers."""
 
 from __future__ import annotations
 
@@ -95,7 +93,7 @@ class BackupCodeQuerySet(abstract.DashboardQuerySet):
     """QuerySet for BackupCode rows."""
 
     def for_user(self, user: User) -> BackupCodeQuerySet:
-        """All of this user's backup codes, used or not.
+        """All of this user's backup codes.
 
         Args:
             user: The account to look up.
@@ -125,7 +123,7 @@ class ApiKeyQuerySet(abstract.DashboardQuerySet):
     """QuerySet for ApiKey rows."""
 
     def for_user(self, user: User) -> ApiKeyQuerySet:
-        """All of this user's API keys, revoked or not.
+        """All of this user's API keys.
 
         Args:
             user: The account to look up.
@@ -136,7 +134,7 @@ class ApiKeyQuerySet(abstract.DashboardQuerySet):
         return self.filter(user=user)
 
     def active(self) -> ApiKeyQuerySet:
-        """Keys that have not been revoked - the only ones a request may authenticate with."""
+        """Keys that have not been revoked."""
         return self.filter(revoked_at__isnull=True)
 
 
@@ -148,7 +146,7 @@ class ApiKeyUsageLogQuerySet(abstract.DashboardQuerySet):
     """QuerySet for ApiKeyUsageLog rows."""
 
     def for_api_key(self, api_key: ApiKey) -> ApiKeyUsageLogQuerySet:
-        """This key's logged activity, newest first (see model ``Meta.ordering``).
+        """This key's logged activity, newest first.
 
         Args:
             api_key: The key whose activity to look up.

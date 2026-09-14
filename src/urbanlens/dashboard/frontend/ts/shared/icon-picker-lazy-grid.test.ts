@@ -1,20 +1,5 @@
 /**
  * The picker fetches its catalogue on first open, and must survive that going wrong.
- *
- * Rendering 1,249 icons into every picker is what made the achievement admin
- * cost tens of megabytes a page (P68), so the grid now arrives over the network.
- * That trades a size problem for a state problem, and these cover the three
- * states a lazily-filled widget gets wrong:
- *
- * - **fetched once.** Several pickers share a page and a user opens more than
- *   one of them; each fills its own grid from a single request.
- * - **retried after a failure.** This is the specific trap the htmx route was
- *   rejected over: `hx-trigger="click once"` spends its `once` when the event
- *   fires rather than when the request succeeds, so one failed fetch leaves the
- *   picker reading "Loading icons..." until a full page reload. A cached
- *   rejected promise would reproduce it exactly.
- * - **not duplicated.** Two opens before the response arrives must not append
- *   two copies of the catalogue.
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
@@ -65,9 +50,7 @@ async function settle(): Promise<void> {
 
 describe("lazily fetched icon grid", () => {
     beforeEach(() => {
-        // One request is shared by every picker on the page, so the module holds
-        // it across calls - and would hold it across tests too, leaving the
-        // second test in this file measuring the first one's fetch.
+        // One request is shared by every picker on the page, so the module holds it across calls.
         resetIconGridForTests();
     });
 
@@ -166,8 +149,7 @@ describe("lazily fetched icon grid", () => {
     });
 
     test("the current value is marked selected once the grid arrives", async () => {
-        // The server used to render `selected` into the matching button. One
-        // shared response cannot, so the picker has to reapply it.
+        // The server used to render `selected` into the matching button.
         globalThis.fetch = mock(async () => okOnce()) as unknown as typeof fetch;
         buildPage("a");
         (document.getElementById("icon-value-a") as HTMLInputElement).value = "camera";

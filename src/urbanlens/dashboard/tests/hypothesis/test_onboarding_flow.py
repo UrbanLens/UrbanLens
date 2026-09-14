@@ -1,11 +1,4 @@
-"""Tests for the signup-race fix and the /welcome/ onboarding redirect chain.
-
-Regression coverage for the bug where profile_setup_complete never flipped to
-False for normal email signups: the User post_save signal (signals.py) now
-sets it explicitly in defaults=, instead of VerifyEmailView relying on a
-Profile.objects.get_or_create(...).created check that always came back False
-because the signal had already created the row.
-"""
+"""Tests for the signup-race fix and the /welcome/ onboarding redirect chain."""
 
 from __future__ import annotations
 

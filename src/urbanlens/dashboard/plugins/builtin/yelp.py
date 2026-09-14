@@ -1,20 +1,5 @@
 """Yelp plugin: business details panel and Media-gallery photos for a pin's location.
-
-Both contributions share one fetch (see :class:`YelpPanelSource`), keyed by
-coordinates only - never by the pin or wiki's user-given name (see
-``services.apis.locations.redata_points_of_interest_gateway`` for why).
-
-Backed by REData's shared points-of-interest lookup (``provider="yelp"``)
-rather than calling the Yelp Fusion API directly - REData's own generic
-``PointOfInterest`` envelope only promotes rating, review count, price band
-and phone into structured fields (see ``../REData/docs/api-reference.md``,
-"Points of interest"), so this plugin's "most recent review" text and photo
-gallery - both genuine Yelp Fusion fields with no equivalent in that generic
-envelope - come back empty now. :func:`_business_from_poi` maps what REData
-does provide onto the same Yelp-Fusion-shaped dict this plugin's cached-data
-consumers (``pin_yelp.html``, ``PinController.yelp_info``) already expect, so
-neither needed to change for this migration.
-"""
+Both contributions share one fetch (see :class:`YelpPanelSource`), keyed by coordinates only - never by the pin or wiki's user-given name (see ``services.apis.locations.redata_points_of_interest_gateway`` for why)."""
 
 from __future__ import annotations
 
@@ -34,23 +19,11 @@ if TYPE_CHECKING:
 def _business_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
     """Map a REData ``yelp`` points-of-interest row onto a Yelp-Fusion-shaped business dict.
 
-    Only ``rating``, ``review_count``, ``price`` and ``phone`` are documented
-    as living in REData's ``attributes`` for this provider - assumed
-    snake_case here, matching REData's own convention elsewhere, pending
-    REData's ``yelp`` provider module actually landing to confirm exact key
-    spelling. ``photos``/``is_closed`` are read defensively in case REData
-    ever adds them to ``attributes``, but are not documented today and will
-    typically be absent.
-
     Args:
         poi: One ``PointOfInterestSerializer``-shaped row with ``provider="yelp"``.
 
     Returns:
-        A dict shaped like Yelp Fusion's own business object (``name``,
-        ``url``, ``rating``, ``review_count``, ``price``, ``display_phone``,
-        ``is_closed``, ``categories``, ``photos``, ``image_url``) - the shape
-        ``pin_yelp.html`` and :meth:`YelpPanelSource.media_items` already read.
-    """
+        A dict shaped like Yelp Fusion's own business object (``name``, ``url``, ``rating``, ``review_count``, ``price``, ``display_phone``, ``is_closed``, ``categories``, ``photos``, ``image_url``) - the shape ``pin_yelp.html`` and :meth:`YelpPanelSource.media_items` already read."""
     attributes = poi.get("attributes") or {}
     category = poi.get("category") or ""
     photos = attributes.get("photos") or []
@@ -76,21 +49,14 @@ class YelpPanelSource(GalleryMediaSource):
     section_id = "yelp-section"
     icon = "storefront"
     title = "Yelp"
-    # Deliberately not exposed on the external API: the Yelp Fusion API's
-    # terms restrict redistributing its data beyond direct display to the
-    # user who triggered the lookup - serving it through our own bearer-key
-    # API is a redistribution question that hasn't been reviewed against
-    # those terms, and that question doesn't change just because the data now
-    # arrives by way of REData rather than a direct Yelp Fusion call.
+    # Deliberately not exposed on the external API: the Yelp Fusion API's terms restrict
+    # redistributing its data beyond direct display to the user who triggered the lookup - serving
+    # it through our own bearer-key API is a redistribution question that hasn't been reviewed
+    # against those terms, and that question doesn't change just because the data now arrives by way
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     def gate(self, pin: Pin) -> bool:
-        """Requires REData to be configured and coordinates to search on.
-
-        REData's points-of-interest lookup takes only ``lat``/``lng`` - unlike
-        the direct Yelp Fusion API this replaced, there is no free-text
-        address fallback for a pin with no coordinates yet.
-        """
+        """Requires REData to be configured and coordinates to search on."""
         if not redata_configured():
             return False
         lat, lng = pin.effective_latitude, pin.effective_longitude
@@ -130,11 +96,7 @@ class YelpPlugin(UrbanLensPlugin):
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for REData's shared points-of-interest lookup.
-
-        Shared with the EPA ECHO plugin (same REData endpoint, different
-        ``provider=`` value) - see ``RedataPointsOfInterestGateway``.
-        """
+        """Rate-limit defaults for REData's shared points-of-interest lookup."""
         return {
             "redata_points_of_interest": ServiceDefaults(
                 display_name="REData (points of interest)",

@@ -1,26 +1,4 @@
-"""What the weather actually was, on the visit surfaces.
-
-REData's ``GET /weather/history/`` reached UrbanLens on the trip weather panel
-first; the visit surfaces the design doc named before it stayed empty. A visit
-row is where it belongs most - a photograph of a flooded basement means
-something different once the row above it says three inches of rain fell that
-day.
-
-Two things here are not obvious and are what these tests hold.
-
-**Sparse days are not a range.** ``recorded_range`` fetches ``min..max`` in one
-request, which is right for a trip's activities and wrong for a page of visits
-to the same ruin: those can span decades, and the range form would fetch and
-cache every day in between to display ten. ``recorded_days`` clusters instead.
-
-**The panel never makes the call itself.** It renders a page of visits inline,
-and a page render must not block on an outbound request - behind a spinner or
-not, a slow REData would hold up the whole visit list for a decorative line of
-text. It reads the cache and queues the gap, which is the same
-fetch-behind/render-from-cache split every pin-detail panel already uses. Two
-unrelated tests found this the hard way, by tripping the suite's
-localhost-only network guard the moment the panel started fetching inline.
-"""
+"""What the weather actually was, on the visit surfaces."""
 
 from __future__ import annotations
 
@@ -309,11 +287,9 @@ class VisitHistoryPanelTests(TestCase):
     def test_a_visit_has_a_place_by_construction(self) -> None:
         """Documents why `_visit_weather` carries no missing-location guard.
 
-        `PinVisit.pin`, `Pin.location` and `Location.latitude`/`longitude` are
-        all non-null, so "a visit with nowhere to ask about" is not a state the
-        database can hold - and a guard for it would be code no test could
-        reach.
-        """
+        `PinVisit.pin`, `Pin.location` and `Location.latitude`/`longitude` are all non-null, so "a visit with
+        nowhere to ask about" is not a state the database can hold - and a guard for it would be code no test
+        could reach."""
         for model, field in ((PinVisit, "pin"), (Pin, "location"), (Location, "latitude"), (Location, "longitude")):
             with self.subTest(field=f"{model.__name__}.{field}"):
                 self.assertFalse(model._meta.get_field(field).null)

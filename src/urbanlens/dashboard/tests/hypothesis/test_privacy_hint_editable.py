@@ -1,9 +1,4 @@
-"""Tests for the editable privacy-hint icon (_privacy_hint.html).
-
-Covers the icon lock/eye swap and the hidden `data-other-fields` snapshot
-that lets a single-field change still pass PrivacySettingsForm's validation
-(which requires all 8 of its fields, not just the one being edited here).
-"""
+"""Tests for the editable privacy-hint icon (_privacy_hint.html)."""
 
 from __future__ import annotations
 

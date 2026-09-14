@@ -1,10 +1,4 @@
-"""MapPinPayloadService.serialize()'s cover_photo_url: explicit cover photo,
-else the pin's earliest own photo that this profile hasn't voted irrelevant.
-
-See models.images.model.Image:246 (Pin.cover_photo) and
-services.media.media_relevance.effective_relevance's docs on why a plain
-personal upload (no media_item_key) is trusted by default.
-"""
+"""MapPinPayloadService.serialize()'s cover_photo_url: explicit cover photo, else the pin's earliest own photo that this profile hasn't voted irrelevant."""
 
 from __future__ import annotations
 

@@ -1,20 +1,4 @@
-"""A pin whose map appearance changed has to say so, whatever changed it.
-
-The client polls `map.pins.meta`, which reports a fingerprint over the profile's
-root pins, and refetches only when that moves. So every write that changes what a
-pin *draws* has to move `Pin.updated` - including the writes that never touch the
-pin row.
-
-Label `order` decides which of a pin's labels supplies its icon and colour
-(`_winning_display_label` sorts by `-order`), so a reorder changes what a pin
-draws without touching the pin at all. Four paths reorder labels in bulk. All
-four dropped the server cache; none moved `Pin.updated`, so the browser kept
-drawing the old icon until its own cache expired (P106).
-
-The four are tested through their real entry points rather than through the
-shared helper they call, because "every one of them calls the helper" is the
-thing that was already true while the bug was live.
-"""
+"""A pin whose map appearance changed has to say so, whatever changed it."""
 
 from __future__ import annotations
 
@@ -243,16 +227,9 @@ class TouchingOnlyReachesTheRightPinsTests(TestCase):
 class DeletingALabelTellsTheClientTests(TestCase):
     """A deleted label leaves a chip on the map until something says otherwise.
 
-    Deleting a `Label` cascades its through rows in SQL, which fires no
-    `m2m_changed` and writes no `auto_now` column - so the pins that carried it
-    look untouched, the fingerprint the client polls does not move, and the
-    browser goes on drawing a chip for a label that no longer exists. The same
-    hole as P106's seven, found while normalising labels out of the payload.
-
-    `pre_delete` rather than `post_delete`: by the time the row is gone so are
-    the through rows, and there is no longer any way to ask which pins carried
-    it.
-    """
+    Deleting a `Label` cascades its through rows in SQL, which fires no `m2m_changed` and writes no `auto_now`
+    column - so the pins that carried it look untouched, the fingerprint the client polls does not move, and the
+    browser goes on drawing a chip for a label that no longer exists."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -273,8 +250,7 @@ class DeletingALabelTellsTheClientTests(TestCase):
             pin: Whose stamp to read.
 
         Returns:
-            The timestamp the client's poll is derived from.
-        """
+            The timestamp the client's poll is derived from."""
         return Pin.objects.filter(pk=pin.pk).values_list("updated", flat=True).first()
 
     def test_deleting_a_label_moves_it(self) -> None:
@@ -326,15 +302,8 @@ class DeletingALabelTellsTheClientTests(TestCase):
 class WritingTheLabelSideOfTheRelationTellsTheClientTests(TestCase):
     """`label.pins.add(pin)` is the same write as `pin.labels.add(label)`.
 
-    In the reverse direction `m2m_changed` hands the receiver the *Label* as
-    `instance` and the *pin* ids in `pk_set`. A receiver that reads
-    `instance.pk` as a pin therefore touches whichever pin happens to share that
-    number, and never touches the pins that actually changed.
-
-    Two live callers write this way: `services.labels.merge` moving a source
-    label's pins onto the target, and the undo handler restoring a deleted
-    label's assignments.
-    """
+    In the reverse direction `m2m_changed` hands the receiver the *Label* as `instance` and the *pin* ids in
+    `pk_set`."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -349,8 +318,7 @@ class WritingTheLabelSideOfTheRelationTellsTheClientTests(TestCase):
             pin: Whose stamp to read.
 
         Returns:
-            The timestamp the client's poll is derived from.
-        """
+            The timestamp the client's poll is derived from."""
         return Pin.objects.filter(pk=pin.pk).values_list("updated", flat=True).first()
 
     def test_adding_pins_from_the_label_side_moves_them(self) -> None:
@@ -399,10 +367,7 @@ class WritingTheLabelSideOfTheRelationTellsTheClientTests(TestCase):
 class TheOtherWritesThatChangeAPinsAppearanceTests(TestCase):
     """The same obligation, for the triggers that are not label edits.
 
-    A pin's payload carries its labels and its rating. Both can change without
-    the pin row being written - `pin.labels.add()` writes the through table, and
-    a `Review` is its own row.
-    """
+    A pin's payload carries its labels and its rating."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -1,19 +1,4 @@
-"""A downscale must not silently rotate a photo ninety degrees.
-
-The pipeline now strips the whole EXIF block from every stored file, so tag 274
-cannot be what keeps a photo upright any more. ``ImageOps.exif_transpose`` runs
-first and spends the orientation on the pixels instead - which is what TIFF
-always did, since Pillow rotates it on load.
-
-So the expected outcome is the same for every format: the stored image arrives
-already in its display orientation, and carries no tag. A landscape source with
-a rotate-90 tag comes back portrait. These tests assert "displays correctly"
-rather than any one mechanism, which is why they survived the change of
-mechanism - only the docstring and the removed ``strip_gps`` argument moved.
-
-The companion file is ``test_exif_is_stripped_from_the_file``, which covers the
-removal itself; this one guards the thing removal could plausibly break.
-"""
+"""A downscale must not silently rotate a photo ninety degrees."""
 
 from __future__ import annotations
 

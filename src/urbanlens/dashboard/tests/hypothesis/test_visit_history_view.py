@@ -1,12 +1,4 @@
-"""Regression tests for the pin-detail visit history panel (VisitHistoryView/VisitEditView).
-
-Both views render `_visit_form.html`, whose date input uses
-`{{ visit.visited_at|date:'Y-m-d'|default:default_date }}`. Django resolves filter
-arguments unconditionally and does not fall back to an empty string for missing
-variables the way it does for the primary value, so a context missing
-`default_date` raises `VariableDoesNotExist` and 500s - regardless of whether the
-`default` filter would actually use it.
-"""
+"""Regression tests for the pin-detail visit history panel (VisitHistoryView/VisitEditView)."""
 
 from __future__ import annotations
 
@@ -41,11 +33,7 @@ class VisitHistoryViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_visit_list_carries_adaptive_pagination_markup(self):
-        """Regression coverage: pagination used to be a fixed 6-per-page count
-        regardless of each visit's actual rendered height (photos/notes/maps
-        make some visits much taller than others) - it now hands the client
-        the same height-based adaptive-pagination system Web Search uses, via
-        data-adaptive-pagination-list/-item and adaptive_pagination context."""
+        """Regression coverage: pagination used to be a fixed 6-per-page count regardless of each visit's actual rendered height (photos/notes/maps make some visits much taller than others) - it now hands the client the same height-based adaptive-pagination system Web Search uses, via data-adaptive-pagination-list/-item and adaptive_pagination context."""
         baker.make(PinVisit, pin=self.pin, notes="First visit")
 
         response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
@@ -54,10 +42,7 @@ class VisitHistoryViewTests(TestCase):
         self.assertContains(response, "data-adaptive-pagination-item")
 
     def test_pagination_controls_appear_once_there_is_more_than_one_page(self):
-        """The pagination-bar itself (data-adaptive-pagination-controls) only
-        renders when page_obj.paginator.num_pages > 1 (_pagination_controls.html)
-        - a single-page visit list has nothing to paginate. Needs more than
-        _VISITS_PAGE_SIZE visits to actually exercise that markup."""
+        """The pagination-bar itself (data-adaptive-pagination-controls) only renders when page_obj.paginator.num_pages > 1 (_pagination_controls.html) - a single-page visit list has nothing to paginate. Needs more than _VISITS_PAGE_SIZE visits to actually exercise that markup."""
         from urbanlens.dashboard.controllers.visits import _VISITS_PAGE_SIZE
 
         for _ in range(_VISITS_PAGE_SIZE + 1):
@@ -107,15 +92,10 @@ class VisitHistoryViewTests(TestCase):
         date_label_start = content.index('for="visited_date_')
         time_label_start = content.index('for="visited_time_')
         self.assertIn("required", content[date_label_start:time_label_start])
-        # Every other field used to say "<small>(optional)</small>" next to its
-        # label - the JS-built external-participant row's "Email (optional)"
-        # placeholder is a distinct, legitimate use of the phrase and stays.
         self.assertNotIn("<small>(optional)</small>", content)
 
     def test_friend_checkbox_shows_avatar_and_defaults_to_inviting(self):
-        """The friend picker used to have a separate opt-in bell-icon checkbox
-        for "also invite this person" - tagging a friend now invites them by
-        default, with no separate toggle to opt into."""
+        """The friend picker used to have a separate opt-in bell-icon checkbox for "also invite this person" - tagging a friend now invites them by default, with no separate toggle to opt into."""
         friend = baker.make("auth.User").profile
         Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
 
@@ -136,10 +116,7 @@ class VisitHistoryViewTests(TestCase):
         self.assertNotContains(response, "suggest_participant_ids")
 
     def test_notes_field_uses_the_article_wysiwyg_editor(self):
-        """The notes field must mount the same TipTap/Markdown editor as the
-        pin/wiki article (frontend/ts/entries/article-wysiwyg.ts) - it mounts
-        on any element matching this data attribute contract, so no new JS is
-        needed, only this markup."""
+        """The notes field must mount the same TipTap/Markdown editor as the pin/wiki article (frontend/ts/entries/article-wysiwyg.ts) - it mounts on any element matching this data attribute contract, so no new JS is needed, only this markup."""
         response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
 
         self.assertContains(response, "data-article-editor")
@@ -148,12 +125,7 @@ class VisitHistoryViewTests(TestCase):
         self.assertContains(response, 'name="notes"')
 
     def test_add_and_edit_dialogs_do_not_share_a_notes_textarea_id(self):
-        """Regression guard: the notes textarea id used to be keyed only by
-        pin.slug, so the add-dialog and edit-dialog copies of _visit_form.html
-        (both present in the DOM at once) rendered a duplicate id - the
-        edit dialog's autogrow script would then find and resize the wrong
-        (add-dialog's) textarea via getElementById. Keying by dialog_id instead
-        keeps them unique."""
+        """Keying by dialog_id instead keeps them unique."""
         visit = baker.make(PinVisit, pin=self.pin)
 
         response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
@@ -198,12 +170,7 @@ class VisitCreatePostTests(TestCase):
         self.client.force_login(self.user)
 
     def test_a_future_date_is_rejected_with_a_clean_400(self):
-        """VisitInFutureError must not reach the client as an unhandled 500.
-
-        `create_manual_visit` raises it when the given date is more than
-        `MAX_VISIT_CLOCK_SKEW` (5 minutes) ahead of now - this view's POST
-        handler had no except clause for it at all.
-        """
+        """VisitInFutureError must not reach the client as an unhandled 500."""
         from datetime import timedelta
 
         from django.utils import timezone

@@ -1,7 +1,4 @@
-{% comment %}
-Export progress fragment - returned by ExportStartView and polled by ExportStatusView.
-Includes hx-get polling while status is pending/running; removes itself when done/error.
-{% endcomment %}
+{% comment %}Export progress fragment - returned by ExportStartView and polled by ExportStatusView.{% endcomment %}
 
 {% if status == "done" %}
 <div class="export-progress-wrap" id="export-status-poll">

@@ -128,9 +128,7 @@ class PinOwnershipPanelViewTests(OwnershipPanelViewTestsBase):
         self.assertFalse(PinOwner.objects.filter(pk=owner.pk).exists())
 
     def test_add_owner_form_is_hidden_until_the_header_button_is_clicked(self) -> None:
-        """Regression guard: the owner-add form used to render un-hidden by
-        default; it must stay collapsed to plain text/summary content until
-        the section header's Add button reveals it."""
+        """Regression guard: the owner-add form used to render un-hidden by default; it must stay collapsed to plain text/summary content until the section header's Add button reveals it."""
         response = self.client.get(reverse("pin.ownership", args=[self.pin.slug]))
         content = response.content.decode()
         self.assertIn('<form class="po-add-form" hidden', content)

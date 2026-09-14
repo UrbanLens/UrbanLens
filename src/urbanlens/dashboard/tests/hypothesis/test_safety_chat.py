@@ -1,12 +1,4 @@
-"""Tests for SafetyCheckinChatConsumer - real-time chat for safety check-ins.
-
-Uses TransactionTestCase (not the project's default TestCase) because Channels
-consumers touch the database from a background thread via
-``database_sync_to_async`` - Channels' own testing docs call out
-TransactionTestCase as the safe choice for exactly this reason. CHANNEL_LAYERS
-is overridden to the in-memory backend so these tests don't need a real
-Valkey/Redis connection.
-"""
+"""Tests for SafetyCheckinChatConsumer - real-time chat for safety check-ins."""
 
 from __future__ import annotations
 
@@ -26,12 +18,9 @@ from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 def _run(coro):
     """Run *coro* via async_to_sync, not a bare asyncio.run().
 
-    database_sync_to_async's thread-sensitive mode needs the
-    CurrentThreadExecutor that only async_to_sync's sync->async->sync bridge
-    sets up; a coroutine driven by plain asyncio.run() has nothing pumping
-    that queue, so any consumer DB access (e.g. SafetyCheckinChatConsumer's
-    _resolve()/_create_message()) hangs forever instead of completing.
-    """
+    database_sync_to_async's thread-sensitive mode needs the CurrentThreadExecutor that only async_to_sync's
+    sync->async->sync bridge sets up; a coroutine driven by plain asyncio.run() has nothing pumping that queue,
+    so any consumer DB access (e.g."""
 
     async def _wrap():
         return await coro

@@ -48,9 +48,7 @@ def tracked_templates(root: pathlib.Path) -> list[pathlib.Path]:
         root: Repository root.
 
     Returns:
-        Paths to the template files git knows about, so an untracked scratch
-        copy cannot fail the build.
-    """
+        Paths to the template files git knows about, so an untracked scratch copy cannot fail the build."""
     listed = subprocess.run(
         ["git", "ls-files", "-z", *_TEMPLATE_GLOBS],
         cwd=root,
@@ -69,8 +67,7 @@ def offenders(paths: list[pathlib.Path], root: pathlib.Path) -> list[str]:
         root: Repository root, for reporting relative paths.
 
     Returns:
-        ``file:line: text`` for each offending line, in file order.
-    """
+        ``file:line: text`` for each offending line, in file order."""
     found: list[str] = []
     for path in paths:
         for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):

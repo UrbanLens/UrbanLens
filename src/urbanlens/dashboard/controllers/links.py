@@ -148,11 +148,8 @@ class LocationLinksView(LoginRequiredMixin, View):
             return cleaned
         name, url = cleaned
         try:
-            # A wiki is edited by many people at once, so two of them adding the
-            # same url is ordinary rather than exceptional. The unique constraint
-            # decides; a duplicate is reported as a 400, and notably writes no
-            # WikiEdit - recording an edit that changed nothing would put a
-            # phantom entry in the wiki's revision history.
+            # A wiki is edited by many people at once, so two of them adding the same url is ordinary rather
+            # than exceptional.
             with transaction.atomic():
                 WikiLink.objects.create(wiki=wiki, name=name, url=url, created_by=profile)
         except IntegrityError:

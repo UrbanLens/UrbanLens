@@ -1,13 +1,4 @@
-"""Search results must not name people the rest of the app masks.
-
-Every surface that displays someone else's name resolves it first: the messages page
-and the DM export through ``display_identity_for``, trip comments and pin/wiki
-comments through ``resolve_visible_identities`` (whose ``is_masked``/``display_name``
-the comment template branches on).
-
-Global search built its titles and subtitles from ``.username`` directly, so a search
-box returned names the page rendering the very same rows would have masked.
-"""
+"""Search results must not name people the rest of the app masks."""
 
 from __future__ import annotations
 

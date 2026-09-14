@@ -1,20 +1,4 @@
-"""Averaging POINT evidence must survive the antimeridian.
-
-``_aggregate_point`` averaged longitude arithmetically. Longitude wraps, so two
-observations of one place either side of the date line - 179.99 and -179.99 -
-averaged to 0.0: a centroid in the Atlantic, some 20,000km from either
-observation, which ``recompute`` then stored as the fact's value.
-
-Confidence collapsed to 0 in that case (both observations are nowhere near the
-bogus centroid), which limited the damage but did not prevent the wrong point
-being written. Worse, two observers who genuinely *agreed* were scored as
-disagreeing, so a fact near the date line could never be confirmed at all.
-
-The fix averages the unit vectors and takes the angle back, which returns the
-same answer as the arithmetic mean everywhere else on Earth - the ordinary case
-is asserted here too, because a "fix" that shifted every other centroid would be
-a far bigger bug than the one it corrected.
-"""
+"""Averaging POINT evidence must survive the antimeridian."""
 
 from __future__ import annotations
 
@@ -62,11 +46,7 @@ class FactCentroidAntimeridianTests(SimpleTestCase):
     def test_antipodal_observations_do_not_invent_a_midpoint(self) -> None:
         """Exactly opposite longitudes cancel, so there is no meaningful middle.
 
-        The fallback returns one of the *observed* longitudes rather than a
-        made-up one. That observation then legitimately agrees with the centroid,
-        so confidence is low rather than zero - which is the honest reading of
-        "half the evidence supports this point", not a bug.
-        """
+        The fallback returns one of the *observed* longitudes rather than a made-up one."""
         centroid, confidence = _aggregate_point([_at(0.0, 0.0), _at(180.0, 0.0)])
 
         self.assertIn(centroid.x, (0.0, 180.0, -180.0), "the fallback invented a longitude nobody observed")

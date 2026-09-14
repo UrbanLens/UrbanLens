@@ -1,11 +1,4 @@
-"""Regression test: REData rejecting the API key must not retry forever.
-
-Before this fix, resolve_deferred_pin_locations treated a 401/403 from REData
-the same as a transient outage - the whole batch came back "pending" and the
-task retried with max_retries=None, looping indefinitely against a permission
-error that retrying can never clear (see cid_resolution.CidResolutionResult's
-auth_failed field and this task's own auth_failed branch).
-"""
+"""Regression test: REData rejecting the API key must not retry forever."""
 
 from __future__ import annotations
 

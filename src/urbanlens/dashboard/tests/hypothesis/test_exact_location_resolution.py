@@ -1,20 +1,4 @@
-"""Tests for exact-coordinate Location resolution.
-
-``Location`` stores coordinates as fixed-precision decimals but builds its
-PostGIS ``point`` from the raw unrounded float, so two submissions that differ
-only below the stored precision round to the *same* (latitude, longitude) while
-their points sit centimetres apart. ``get_nearby_or_create(threshold_meters=0)``
-could not see that: its zero-distance probe missed the existing row, the insert
-then tripped the ``(latitude, longitude)`` unique constraint, and the retry ran
-the same failing probe again and re-raised - a 500.
-
-``get_exact_or_create`` matches on the stored coordinates instead, which is what
-actually decides identity, so the miss-then-collide sequence can't happen.
-
-Also covers the two callers that were reaching that path: a child wiki placed on
-coordinates another wiki already occupies (which additionally tried to insert a
-duplicate Location outright), and a pin move.
-"""
+"""Tests for exact-coordinate Location resolution."""
 
 from __future__ import annotations
 
@@ -84,15 +68,10 @@ class GetExactOrCreateTests(TestCase):
     )
     @_db_settings
     def test_resolution_agrees_exactly_with_stored_coordinates(self, lat: float, lon: float, nudge: float) -> None:
-        """The real invariant: two submissions share a row precisely when they
-        round to the same stored pair.
+        """The real invariant: two submissions share a row precisely when they round to the same stored pair.
 
-        Not "any tiny nudge lands on the same row" - a coordinate sitting on a
-        rounding boundary (hypothesis finds e.g. -1.3203125) legitimately
-        rounds to a different stored value under the smallest possible nudge.
-        What must hold is that row identity tracks the stored coordinates,
-        because those are what the unique constraint is on.
-        """
+        Not "any tiny nudge lands on the same row" - a coordinate sitting on a rounding boundary (hypothesis
+        finds e.g."""
         nudged_lat, nudged_lon = lat + nudge, lon + nudge
         same_point = quantize_coordinate(lat, "latitude") == quantize_coordinate(
             nudged_lat, "latitude"
@@ -111,10 +90,8 @@ class GetExactOrCreateTests(TestCase):
 class ChildWikiCoordinateCollisionTests(TestCase):
     """Placing a child wiki where a wiki already sits is refused, not a 500.
 
-    ``Wiki.location`` is one-to-one, so the old code tried to sidestep the
-    collision by inserting a *second* Location at the same coordinates - which
-    the (latitude, longitude) unique constraint forbids outright.
-    """
+    ``Wiki.location`` is one-to-one, so the old code tried to sidestep the collision by inserting a *second*
+    Location at the same coordinates - which the (latitude, longitude) unique constraint forbids outright."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -1,4 +1,4 @@
-"""Reversible wiki changes: child-wiki moves and aliases."""
+"""Reversible wiki changes: child-pin moves and aliases."""
 
 from __future__ import annotations
 

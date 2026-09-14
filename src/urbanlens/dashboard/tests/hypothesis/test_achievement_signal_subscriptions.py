@@ -1,23 +1,4 @@
-"""Every achievement subscription must get its own live receiver.
-
-``connect()`` registers one ``post_save`` handler per entry in
-``_SUBSCRIPTIONS``, and Django dedupes receivers by ``(dispatch_uid, sender)``.
-The uid used to be built from the sender model alone, so two subscriptions
-naming the same model would collapse to one - the second connect silently
-replacing the first, with one set of triggers and its streak bucket simply
-never firing again. Nothing raises, nothing logs, and the achievements it fed
-just stop being awarded.
-
-No two subscriptions name the same model today, so this was latent rather than
-live. It stays latent only while nobody adds a second trigger for a model
-already in the list, which is an ordinary thing to want: ``Pin`` already feeds
-one, and a second pin-derived achievement would be the obvious way to add
-another.
-
-The uid now includes the subscription's index. These tests assert the property
-rather than the format, so a future keying scheme is free to change as long as
-distinct subscriptions stay distinct.
-"""
+"""Every achievement subscription must get its own live receiver."""
 
 from __future__ import annotations
 
@@ -83,14 +64,8 @@ class AchievementSubscriptionUidTests(SimpleTestCase):
     def test_a_second_subscription_naming_an_already_subscribed_model_still_gets_a_receiver(self) -> None:
         """Directly reproduces the defect the module docstring describes.
 
-        Every model in the real ``_SUBSCRIPTIONS`` is distinct today, so the
-        two tests above hold no matter how the dispatch_uid is built - nothing
-        in the *current* list can collide. This fabricates the collision the
-        old model-only uid was vulnerable to: two subscriptions naming the
-        same model (here, whichever model subscription 0 already covers), and
-        asserts the second still ends up with its own live receiver rather
-        than being silently dropped because its key matched the first's.
-        """
+        Every model in the real ``_SUBSCRIPTIONS`` is distinct today, so the two tests above hold no matter how
+        the dispatch_uid is built - nothing in the *current* list can collide."""
         duplicate = achievement_signals._SUBSCRIPTIONS[0]
         model = achievement_signals._resolve(duplicate.model_path)
 

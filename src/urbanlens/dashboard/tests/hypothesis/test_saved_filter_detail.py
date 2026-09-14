@@ -88,9 +88,7 @@ class SavedFilterDetailViewTests(TestCase):
         self.assertContains(response, reverse("saved_filters.edit", args=[self.saved_filter.uuid]))
 
     def test_icon_picker_script_is_loaded(self) -> None:
-        """The Icon field's trigger button calls window.IconPicker - previously
-        nothing on this page ever defined it (silent ReferenceError, dead
-        button). saved-filter-detail.js installs the global picker."""
+        """The Icon field's trigger button calls window.IconPicker - previously nothing on this page ever defined it (silent ReferenceError, dead button). saved-filter-detail.js installs the global picker."""
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
         self.assertContains(response, "dashboard/js/saved-filter-detail.js")
 

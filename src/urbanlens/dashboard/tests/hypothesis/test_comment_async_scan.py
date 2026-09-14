@@ -1,12 +1,4 @@
-"""Tests for the async comment-image malware scan.
-
-A newly-uploaded comment/reply/trip-comment photo no longer blocks the POST
-on a clamd round-trip: the comment saves immediately with `pending_scan=True`
-(visible only to its own author) and a background task clears that flag once
-the scan confirms the image is clean, or removes the comment and notifies its
-author (with their original text) if the image is rejected or the scanner
-stays unavailable through every retry.
-"""
+"""Tests for the async comment-image malware scan."""
 
 from __future__ import annotations
 
@@ -208,11 +200,9 @@ class ScanTripCommentImageTaskTests(TestCase):
 class CommentVisibilityWhilePendingScanTests(TestCase):
     """controllers.comments._build_context - a pending-scan comment is visible only to its author.
 
-    Pin comments are always self-authored (the pin owner is the only
-    possible viewer), so this only matters in practice for wiki (and trip)
-    comments - covered here via the wiki panel, which any pin-having viewer
-    of the location can see.
-    """
+    Pin comments are always self-authored (the pin owner is the only possible viewer), so this only matters in
+    practice for wiki (and trip) comments - covered here via the wiki panel, which any pin-having viewer of the
+    location can see."""
 
     def setUp(self) -> None:
         self.author = baker.make("auth.User").profile

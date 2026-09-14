@@ -1,19 +1,5 @@
 /**
  * Frontend JS build wrapper for the `build`/`deploy` npm scripts.
- *
- * package.json used to shell out directly to `bun build src/.../entries/*.ts
- * --outdir ...` (and the same for entries-classic/). That relies on the shell
- * expanding the `*.ts` glob before `bun build` ever runs - and unlike bash
- * (which falls back to passing the literal, unmatched pattern through when
- * nullglob is off), Bun Shell throws a hard "no matches found" error and
- * aborts the whole script the moment any of those directories has zero
- * matching files. Since this build runs on every container start
- * (src/bin/init.py's `bun run build`/`bun run deploy`), that failure mode
- * takes the whole app down, not just the JS bundle.
- *
- * Enumerating entry files in code instead of a shell glob sidesteps this
- * entirely: an empty directory is just "nothing to build here", not a fatal
- * error.
  */
 
 import { readdirSync, rmSync } from "node:fs";
@@ -43,10 +29,7 @@ function tsFiles(dir: string): string[] {
 /** Runs `bun build` over `files` with `extraArgs`, or does nothing if `files` is empty. */
 async function buildGroup(files: string[], extraArgs: string[]): Promise<void> {
     if (!files.length) return;
-    // Bun's default --entry-naming ("[dir]/[name].[ext]") mirrors each entry's
-    // source directory under --outdir on some Bun versions, instead of the flat
-    // `dashboard/js/<name>.js` layout every page's <script src> expects - pin it
-    // explicitly so the output layout doesn't depend on the Bun version building it.
+    // Bun's default --entry-naming ("[dir]/[name].[ext]") mirrors each entry's source directory under --outdir on some Bun versions.
     const proc = Bun.spawn([process.execPath, "build", ...files, "--outdir", OUT_DIR, "--entry-naming=[name].[ext]", ...extraArgs], {
         stdout: "inherit",
         stderr: "inherit",

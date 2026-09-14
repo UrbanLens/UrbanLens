@@ -1,20 +1,4 @@
-"""`TripCommentDeleteView` and `trip_comments.delete_comment` had zero coverage.
-
-P57: neither the basic delete, the author-or-creator permission gate, nor the
-image cleanup was exercised anywhere in the suite - even though `delete_comment`
-is the third call site of the shared `_discard_comment_image` helper, alongside
-`PinCommentDeleteView` and `WikiCommentDeleteView`, which both have tests.
-
-Two details of this model make the gate more interesting than "the author can
-delete their own":
-
-- `TripComment.author` is `SET_NULL`, so a comment outlives the account that
-  wrote it. `can_delete_comment` compares `viewer.id in {comment.author_id,
-  trip.creator_id}` - with a null author that set is `{None, creator}`, so an
-  orphaned comment is deletable by the trip creator and nobody else. Worth
-  pinning: a bug that let `None` match would hand every such comment to anyone.
-- A comment can carry a `MarkupMap`, which `delete_comment` removes alongside it.
-"""
+"""`TripCommentDeleteView` and `trip_comments.delete_comment` had zero coverage."""
 
 from __future__ import annotations
 

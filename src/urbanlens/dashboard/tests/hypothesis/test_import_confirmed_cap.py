@@ -147,15 +147,8 @@ class ImportConfirmedDoesTheWorkOffTheRequestTests(TestCase):
     def test_an_accepted_import_creates_no_pins_inside_the_request(self) -> None:
         """The request should hand the work to a task and return.
 
-        Asserted on the row count rather than on which function was called, so
-        it stays true whichever task ends up doing the work - the claim is about
-        where the CPU is spent.
-
-        `safely_enqueue_task` is stubbed because this suite runs Celery eager
-        (`dashboard/tests/CLAUDE.md`): with eager dispatch an enqueued task runs
-        inline, so the pins would appear inside the request and this would fail
-        against a *correct* fix. Stubbing it keeps the assertion about the view.
-        """
+        Asserted on the row count rather than on which function was called, so it stays true whichever task ends
+        up doing the work - the claim is about where the CPU is spent."""
         with (
             mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", TEST_CAP),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=mock.Mock()),

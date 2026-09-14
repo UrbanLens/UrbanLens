@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 #: Anything the cache can raise when it cannot answer.
 _CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
 
-#: Largest proxied body worth storing. A thumbnail is tens of kilobytes; this is
 #: generous enough that a normal one always caches and a surprise never does.
 MAX_CACHED_BODY_BYTES = 512 * 1024
 

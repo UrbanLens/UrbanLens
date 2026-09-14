@@ -18,17 +18,8 @@ if TYPE_CHECKING:
 
 class DirectMessage(abstract.DashboardModel):
     """One private message from one profile to another.
-
-    A "conversation" is not its own model - it is simply the set of messages
-    between two profiles in either direction (see
-    ``DirectMessageQuerySet.between`` / ``conversation_rows``). ``read_at``
-    doubles as the unread flag: null means the recipient hasn't opened the
-    conversation since this message arrived.
-
-    Whether a profile may message another is governed by the recipient's
-    ``Profile.direct_message_visibility`` privacy setting, evaluated in
-    ``services.messaging.direct_messages.can_direct_message`` - never bypass that check
-    when creating rows outside of ``create_direct_message``.
+    A "conversation" is not its own model - it is simply the set of messages between two profiles in either direction (see ``DirectMessageQuerySet.between`` / ``conversation_rows``).
+    Whether a profile may message another is governed by the recipient's ``Profile.direct_message_visibility`` privacy setting, evaluated in ``services.messaging.direct_messages.can_direct_message`` - never bypass that check when creating rows outside of ``create_direct_message``.
     """
 
     body = TextField(max_length=MAX_DIRECT_MESSAGE_LENGTH, blank=True, default="")
@@ -95,15 +86,10 @@ class DirectMessage(abstract.DashboardModel):
     # silently losing all trace that one was ever here.
     map_removed = BooleanField(default=False)
 
-    # Caller-generated idempotency key, mirroring the pin-create flow's
-    # client_uuid (see services.pins.pin_creation.create_pin_for_profile). A mobile
-    # client stamps a message at compose time and retries the same send until
-    # it is acknowledged; without this, a reply sent over a flaky connection
-    # gets delivered two or three times, which is far worse in a conversation
-    # than a duplicate pin is on a map. Nullable because every message sent
-    # from the web composer and every message predating this field has none,
-    # and uniqueness is scoped per sender rather than globally so two clients
-    # can never collide by both generating the same uuid (see Meta below).
+    # Caller-generated idempotency key, mirroring the pin-create flow's client_uuid (see
+    # services.pins.pin_creation.create_pin_for_profile).
+    # A mobile client stamps a message at compose time and retries the same send until it is
+    # acknowledged; without this, a reply sent over a flaky connection gets delivered two or three
     client_uuid = UUIDField(null=True, blank=True, editable=False)
 
     if TYPE_CHECKING:
@@ -131,13 +117,8 @@ class DirectMessage(abstract.DashboardModel):
     @property
     def is_expired_for_recipient(self) -> bool:
         """True once this message's disappearing-message timer has elapsed.
-
-        Gates the recipient's *display* of this message - the row itself is
-        physically removed shortly after by the periodic
-        ``tasks.hard_delete_expired_direct_messages`` sweep (see
-        ``DirectMessageQuerySet.due_for_hard_delete``, same threshold), which
-        deletes it for both parties. Unread messages never expire (the timer
-        starts at `read_at`), regardless of how long they've sat unread.
+        Gates the recipient's *display* of this message - the row itself is physically removed shortly after by the periodic ``tasks.hard_delete_expired_direct_messages`` sweep (see ``DirectMessageQuerySet.due_for_hard_delete``, same threshold), which deletes it for both parties.
+        Unread messages never expire (the timer starts at `read_at`), regardless of how long they've sat unread.
 
         Returns:
             True when the recipient's view of this message should show a
@@ -154,10 +135,7 @@ class DirectMessage(abstract.DashboardModel):
 
     def tombstone_text_for(self, viewer_id: int) -> str | None:
         """Return placeholder text to show `viewer_id` instead of this message's content.
-
-        The sender always sees their own original message in full, regardless
-        of any delete/expiry state - callers must never hide a message from
-        its own sender (see the module docstring's consent policy).
+        The sender always sees their own original message in full, regardless of any delete/expiry state - callers must never hide a message from its own sender (see the module docstring's consent policy).
 
         Args:
             viewer_id: Primary key of the profile viewing this message.
@@ -215,13 +193,10 @@ class DirectMessage(abstract.DashboardModel):
                 condition=Q(body="") | Q(ciphertext=""),
                 name="db_dm_body_xor_ciphertext",
             ),
-            # Idempotency is per sender, not global: two clients generating the
-            # same uuid must not collide, and a sender replaying their own send
-            # must resolve to their own earlier message. Conditional so the
-            # many rows with no client_uuid (web composer, pre-existing
-            # history) are exempt - in Postgres a plain unique index would
-            # already allow repeated NULLs, but stating the condition keeps the
-            # intent explicit and portable.
+            # Idempotency is per sender, not global: two clients generating the same uuid must not
+            # collide, and a sender replaying their own send must resolve to their own earlier
+            # message.
+            # Conditional so the many rows with no client_uuid (web composer, pre-existing history)
             UniqueConstraint(
                 fields=["sender", "client_uuid"],
                 condition=Q(client_uuid__isnull=False),

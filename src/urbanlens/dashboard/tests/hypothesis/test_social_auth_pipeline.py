@@ -1,11 +1,4 @@
-"""Tests for the custom python-social-auth pipeline steps.
-
-The 2FA detour step already has its own file (test_social_auth_sso_2fa.py);
-these cover the remaining steps, which the coverage report showed almost
-entirely unexercised despite being privacy-relevant: last-name suppression
-for new SSO accounts, the avatar fetch's never-overwrite guarantee, Discord
-handle sync, and SSO username generation (including its sanitization edges).
-"""
+"""Tests for the custom python-social-auth pipeline steps."""
 
 from __future__ import annotations
 

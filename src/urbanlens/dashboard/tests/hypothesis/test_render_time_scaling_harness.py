@@ -1,15 +1,4 @@
-"""The render-time harness must fail the page it exists to fail.
-
-`QueryScalingMixin` has a harness test for the same reason: an instrument nobody
-has watched move is worth as little as its readings. These check the three ways
-`RenderTimeScalingMixin` earns its place - it passes a page whose rows are cheap,
-fails one whose rows are not, and refuses a seed that does not change what the
-page renders.
-
-The last one matters most, and is inherited rather than reimplemented: it is the
-same guard that caught a 2026-08-17 survey reporting the conversation list "flat"
-while seeding pins it never listed.
-"""
+"""The render-time harness must fail the page it exists to fail."""
 
 from __future__ import annotations
 
@@ -76,10 +65,8 @@ class ExpensiveRowsFailTests(_AchievementSeedMixin, RenderTimeScalingMixin, Test
 class QueryCountCannotSeeItTests(_AchievementSeedMixin, QueryScalingMixin, TestCase):
     """The argument for this mixin existing at all, in executable form.
 
-    The expensive page reads its rows in one query however many there are, so it
-    is flat by every measure the query mixin has - and it is the page the render
-    mixin above refuses.
-    """
+    The expensive page reads its rows in one query however many there are, so it is flat by every measure the
+    query mixin has - and it is the page the render mixin above refuses."""
 
     def test_the_expensive_page_is_perfectly_flat_in_queries(self) -> None:
         self.assert_flat("/expensive/")
@@ -89,22 +76,8 @@ class QueryCountCannotSeeItTests(_AchievementSeedMixin, QueryScalingMixin, TestC
 class PreSeededBaselineTests(_AchievementSeedMixin, RenderTimeScalingMixin, TestCase):
     """Seeding in `setUp` silently disarms this measurement, and cannot be caught.
 
-    The baseline is the denominator, so rows already on the page inflate it. The
-    icon-grid page measures 4.1-5.8 baselines per row from empty and 0.070-0.083
-    with a dozen rows already rendered - a collapse of roughly sixty-fold, and
-    the difference between failing by 40x and passing.
-
-    It is pinned rather than fixed because it is not detectable from the outside:
-    a baseline taken at `n0` rows yields `k` and `C + k*n0`, and nothing separates
-    `C` from `n0`. So the rule is a rule about how to write the subclass, and this
-    is what keeps it honest.
-
-    The budget here is explicit rather than the default 10%, deliberately. The
-    pre-seeded reading sits only 17-30% under that default, which is close enough
-    to it that host load could tip this test red and send someone hunting a
-    regression that is really this documented limitation flickering. What the test
-    is for is the collapse, not the last few percent of it.
-    """
+    The icon-grid page measures 4.1-5.8 baselines per row from empty and 0.070-0.083 with a dozen rows already
+    rendered - a collapse of roughly sixty-fold, and the difference between failing by 40x and passing."""
 
     def setUp(self) -> None:
         super().setUp()

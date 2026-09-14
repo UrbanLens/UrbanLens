@@ -1,12 +1,4 @@
-"""Cloudflare Workers AI provider adapter.
-
-No tool-use translation: ``policy.validate_request`` refuses any request
-that pairs ``provider="cloudflare"`` with a non-empty ``tools`` list before
-this adapter is ever reached - Workers AI's tool-calling support is
-model-dependent and unreliable enough that the assistant is pinned to
-Anthropic (see ``dashboard.services.ai.assistant``); Cloudflare is the
-low-cost text-only provider for everything else.
-"""
+"""Cloudflare Workers AI provider adapter."""
 
 from __future__ import annotations
 

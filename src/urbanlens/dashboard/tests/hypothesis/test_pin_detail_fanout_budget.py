@@ -1,32 +1,4 @@
-"""How many requests the Private Pin page fires the moment it opens.
-
-The integration suite found this page exhausting the database connection pool:
-it loads its enrichment panels with `hx-trigger="load"`, so opening it issues
-roughly thirty requests at once, each of which is a Django request taking its own
-connection (`CONN_MAX_AGE` is 0). Against a Postgres with the default
-`max_connections`, a few simultaneous readers is enough to start answering 500s
-from whichever panel arrives when the pool is full.
-
-**This test cannot reproduce that**, and it is worth being clear about the
-limits rather than implying otherwise. Exhaustion needs concurrency against a
-real pool, which does not exist in a suite that issues one request at a time -
-see `docs/audits/TEST_COVERAGE_GAPS.md`, where the pool itself is listed as
-integration-only. What a unit test *can* hold is the shape of the page.
-
-Two things are held here, and the second is now the load-bearing one.
-
-The **count** is a ratchet: it stops the number of load-triggered elements
-growing. It was the only guard while the fix was undecided, and it is no longer
-the whole story, because the count is no longer the concurrency - the enrichment
-panels queue against shared `hx-sync` lanes now, so twelve of them in one lane
-are one request at a time rather than twelve at once.
-
-The **lanes** are the invariant that replaced it. Every enrichment panel on that
-page must name a lane; a new one added without `hx-sync` re-opens the problem
-while leaving the count assertion green, which is exactly the regression a
-ceiling test cannot see. Measured in a browser against the dev stack: the page
-went from 58 simultaneous requests to 27, reaching the same settled state.
-"""
+"""How many requests the Private Pin page fires the moment it opens."""
 
 from __future__ import annotations
 
@@ -118,10 +90,8 @@ class PinDetailFanoutBudgetTests(TestCase):
     def test_the_counter_actually_finds_them(self) -> None:
         """Guards the test itself.
 
-        A regex that silently matched nothing would make the budget above pass
-        forever, which is the failure mode a ceiling test is most prone to - it
-        looks green either way.
-        """
+        A regex that silently matched nothing would make the budget above pass forever, which is the failure
+        mode a ceiling test is most prone to - it looks green either way."""
         html = self._rendered()
 
         self.assertGreater(
@@ -134,14 +104,9 @@ class PinDetailFanoutBudgetTests(TestCase):
     def test_every_enrichment_panel_queues_against_a_lane(self) -> None:
         """The invariant the count assertion cannot see.
 
-        A panel added without `hx-sync` fires alongside every other one and puts
-        the page back where it was, while the ceiling above stays green because
-        the ceiling counts elements rather than simultaneous requests. This is
-        what actually holds the concurrency down.
-
-        Matched per opening tag rather than over the whole document, so a lane on
-        one panel is never credited to the panel below it.
-        """
+        A panel added without `hx-sync` fires alongside every other one and puts the page back where it was,
+        while the ceiling above stays green because the ceiling counts elements rather than simultaneous
+        requests."""
         html = self._rendered()
 
         unlaned = [

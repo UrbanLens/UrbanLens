@@ -51,14 +51,9 @@ class HttpsRedirectMiddlewareTests(TestCase):
 class TrustedProxyHeaderTests(SimpleTestCase):
     """Nginx terminates TLS and forwards the real scheme (config/nginx/django.conf).
 
-    Every test above forces ``SECURE_PROXY_SSL_HEADER=None``, which is not the
-    deployed value - ``settings/base.py`` sets it to
-    ``("HTTP_X_FORWARDED_PROTO", "https")`` so Django trusts Nginx's forwarded
-    scheme instead of always seeing the plain-HTTP connection between the two.
-    Nothing else in the suite sends that header, so a typo'd header name or
-    trusted value here would silently make every request behind the real proxy
-    redirect-loop in production while every test above kept passing.
-    """
+    Every test above forces ``SECURE_PROXY_SSL_HEADER=None``, which is not the deployed value -
+    ``settings/base.py`` sets it to ``("HTTP_X_FORWARDED_PROTO", "https")`` so Django trusts Nginx's forwarded
+    scheme instead of always seeing the plain-HTTP connection between the two."""
 
     @override_settings(SECURE_SSL_REDIRECT=True)
     def test_the_deployed_forwarded_proto_header_is_trusted_as_secure(self) -> None:

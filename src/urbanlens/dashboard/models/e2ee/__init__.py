@@ -1,9 +1,4 @@
-"""End-to-end encryption key storage for direct messages.
-
-The server only ever stores opaque, client-encrypted blobs here - see
-``docs/designs/e2ee.md`` for the full scheme and threat model. Nothing in this
-package can decrypt a message on its own.
-"""
+"""End-to-end encryption key storage for direct messages (server holds only opaque blobs; see docs/designs/e2ee.md)."""
 
 from urbanlens.dashboard.models.e2ee.conversation_key import ConversationKey
 from urbanlens.dashboard.models.e2ee.group_key import GroupKey, GroupKeyEnvelope

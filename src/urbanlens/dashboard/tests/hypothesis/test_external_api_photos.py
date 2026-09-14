@@ -1,24 +1,4 @@
-"""Guards on the external API's photo, suggestion, journal and media-file surface.
-
-The invariants here are the ones that fail silently and expensively:
-
-1. **No silent grant expansion.** The photo scopes were added to
-   ``ApiKeyScope`` *after* keys were already in the wild, and
-   ``_default_api_key_scopes()`` was deliberately not widened to include them.
-   A key issued before this feature must therefore be refused by every
-   endpoint added with it - if someone ever "helpfully" backfills the new
-   scopes onto existing rows, these tests are what notices.
-2. **Writes are owner-scoped, not visibility-scoped.** ``visible_to`` includes
-   friends' and community photos the caller may look at but must never delete,
-   relabel, re-file or vote through. Every write endpoint resolves its photo by
-   ``profile__user`` instead, and answers 404 (never 403) for someone else's.
-3. **The media gate honors credentials without weakening authorization.** A
-   credential holding ``media:read`` resolves to a profile and then walks the
-   identical policy a session walks; one without the scope gets nothing.
-4. **The journal contract can't silently lose a field.** ``JournalEntry`` is a
-   dataclass and ``JournalEntrySerializer`` mirrors it by hand, so a new
-   dataclass field would otherwise just stop reaching clients.
-"""
+"""Guards on the external API's photo, suggestion, journal and media-file surface."""
 
 from __future__ import annotations
 
@@ -55,8 +35,6 @@ _PNG_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
 
-#: Everything this change added, as (method, url-name) - used to assert that a
-#: key without the new scopes reaches none of it.
 _NEW_ENDPOINTS: tuple[tuple[str, str], ...] = (
     ("get", "external_api:photos"),
     ("post", "external_api:photos"),
@@ -198,13 +176,7 @@ class PhotoDeleteTests(_PhotoApiTestCase):
 
 
 class PhotoDeleteDualOwnershipTests(_PhotoApiTestCase):
-    """A photo that's also linked to a wiki (``wiki_creation._seed_photos`` and
-    ``PinGalleryBulkView``'s "send to wiki" repoint the row rather than copying
-    it) must not be destroyed just because the mobile client deleted it from
-    the caller's own photo library - the web `PinImageView`/`WikiImageView`
-    guard the same case (see test_pin_wiki_image_dual_ownership.py); this API
-    is a second, independent surface hitting the identical unconditional
-    `image.delete()` bug."""
+    """A photo that's also linked to a wiki (``wiki_creation._seed_photos`` and ``PinGalleryBulkView``'s "send to wiki" repoint the row rather than copying it) must not be destroyed just because the mobile client deleted it from the caller's own photo library - the web `PinImageView`/`WikiImageView` guard the same case (see test_pin_wiki_image_dual_ownership.py); this API is a second, independent surface hitting the identical unconditional `image.delete()` bug."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -239,11 +211,8 @@ class PhotoDeleteDualOwnershipTests(_PhotoApiTestCase):
 class PhotoDeleteAndTheWikiTests(_PhotoApiTestCase):
     """Deleting over the API withdraws a wiki contribution only if asked.
 
-    The same rule the pin gallery follows: contributing a photo to a community
-    wiki is a deliberate act, so undoing it is another one, and a caller that
-    says nothing gets the answer that needs no action. A client has what it needs
-    to ask first - ``wiki_slug`` and ``source`` are both on the photo payload.
-    """
+    The same rule the pin gallery follows: contributing a photo to a community wiki is a deliberate act, so
+    undoing it is another one, and a caller that says nothing gets the answer that needs no action."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -344,11 +313,9 @@ class JournalContractTests(SimpleTestCase):
 class JournalResponseShapeTests(TestCase):
     """The journal answers with the external API's standard paginated envelope.
 
-    Regression coverage for the bare ``{entries,total,omitted_sources}`` shape this
-    endpoint used to answer with - it could never gain a field later without
-    breaking clients, so it was normalized onto ``{count,next,previous,results}``
-    (see ``docs/notes/mobile_app_notes.md`` Part 7).
-    """
+    Regression coverage for the bare ``{entries,total,omitted_sources}`` shape this endpoint used to answer with
+    - it could never gain a field later without breaking clients, so it was normalized onto
+    ``{count,next,previous,results}`` (see ``docs/notes/mobile_app_notes.md`` Part 7)."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

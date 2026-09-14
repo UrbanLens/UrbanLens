@@ -1,12 +1,4 @@
-"""Tests for services.trivia.classifier - the shared content-moderation classifier.
-
-The gateway is mocked throughout (no live AI call) - these tests verify the
-mechanical contract only (prompt construction, response parsing, fail-closed
-defaulting on every failure mode), NOT real model judgment quality. See
-docs/PROBLEMS.md / the session's own notes for why a live eval against the
-spec's adversarial examples wasn't possible in this environment (no AI
-provider key configured).
-"""
+"""Tests for services.trivia.classifier - the shared content-moderation classifier."""
 
 from __future__ import annotations
 
@@ -118,12 +110,9 @@ class ClassifyTriviaQuestionTests(TestCase):
 class ClassifyTriviaQuestionProfileGateTests(TestCase):
     """The real ``get_gateway`` (unmocked) requires the submitter to hold ``SiteFeature.AI``.
 
-    A submission from a profile without the feature fails closed exactly like
-    a site-wide AI outage does (``ai_unavailable``) - per
-    ``SiteSettings.ai_trivia_moderation_enabled``'s own help text, that holds
-    the question in pending review rather than rejecting it; it does not
-    require moderation to bypass the gate.
-    """
+    A submission from a profile without the feature fails closed exactly like a site-wide AI outage does
+    (``ai_unavailable``) - per ``SiteSettings.ai_trivia_moderation_enabled``'s own help text, that holds the
+    question in pending review rather than rejecting it; it does not require moderation to bypass the gate."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin

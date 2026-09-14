@@ -1,12 +1,4 @@
-"""Tests for the six REData location-context panels added 2026-08-15.
-
-Underground structures, permits & violations, reported incidents, hydrology,
-site conditions (land cover + walkability + soil), and air quality. Each
-panel's render_context encodes a contract point from REData's endpoint docs
-(traffic exclusion, capped-result flagging, enterable-first ordering,
-null-distance preservation, no cross-source averaging) - these tests pin
-those behaviours, not the cosmetics.
-"""
+"""Tests for the six REData location-context panels added 2026-08-15."""
 
 from __future__ import annotations
 

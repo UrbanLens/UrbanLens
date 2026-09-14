@@ -1,9 +1,4 @@
-"""Wire schema shared between an inference caller and the inference service.
-
-Deliberately Django-free, like every other module in this package - see
-``urbanlens_ai/__init__.py`` for why. ``dashboard.services.ai.inference_client``
-is the only place under ``urbanlens`` that imports these types.
-"""
+"""Wire schema shared between an inference caller and the inference service."""
 
 from __future__ import annotations
 
@@ -26,19 +21,9 @@ class TextPart(BaseModel):
 class ImagePart(BaseModel):
     """An image inside a multi-part message, as base64-encoded bytes.
 
-    Base64 rather than a URL on purpose: a URL would be something the
-    inference service has to *fetch*, which is exactly the capability this
-    tier is built to not have (see ``docs/AI_PIPELINE.md`` - the egress
-    allowlist carries provider hosts and nothing else). The caller reads the
-    image itself and sends the bytes inline.
-
-    Callers must send an already-downscaled image - in this app, the copy
-    the sandbox tier wrote at upload time and
-    ``services.photos.photo_keywords.analysis_jpeg_bytes`` reads back (512px
-    longest edge), never a full-resolution upload.
-    :data:`~urbanlens_ai.policy.MAX_IMAGE_BYTES` is the backstop for when
-    they don't.
-    """
+    Base64 rather than a URL on purpose: a URL would be something the inference service has to *fetch*, which is
+    exactly the capability this tier is built to not have (see ``docs/AI_PIPELINE.md`` - the egress allowlist
+    carries provider hosts and nothing else)."""
 
     type: Literal["image"] = "image"
     media_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"] = "image/jpeg"
@@ -52,17 +37,8 @@ MessagePart = Annotated[TextPart | ImagePart, Field(discriminator="type")]
 class Message(BaseModel):
     """One user/assistant turn in the conversation.
 
-    The system prompt is never a message here - it is
-    :attr:`InferenceRequest.system`, a separate top-level field, matching
-    Anthropic's own API shape. Every provider adapter reconstructs whatever
-    its own SDK needs from that (OpenAI folds it back into a leading
-    ``system``-role message; Cloudflare does the same).
-
-    ``content`` is a bare string for the ordinary text case and a list of
-    parts when the turn carries an image. Both shapes reach every adapter,
-    which is what lets vision be an ordinary message rather than a second
-    endpoint with its own auth, policy and adapter machinery.
-    """
+    The system prompt is never a message here - it is :attr:`InferenceRequest.system`, a separate top-level
+    field, matching Anthropic's own API shape."""
 
     role: Role
     content: str | list[MessagePart]
@@ -86,12 +62,9 @@ class Message(BaseModel):
 class ToolSpec(BaseModel):
     """A tool the model may call, in JSON-Schema form.
 
-    Maps 1:1 onto each provider SDK's own tool-declaration shape (Anthropic's
-    ``tools=[{name, description, input_schema}]``, OpenAI's function-calling
-    schema) and, not coincidentally, onto MCP's ``Tool`` type - see the
-    plan's MCP decision for why that made a dedicated MCP server unnecessary
-    for this pass.
-    """
+    Maps 1:1 onto each provider SDK's own tool-declaration shape (Anthropic's ``tools=[{name, description,
+    input_schema}]``, OpenAI's function-calling schema) and, not coincidentally, onto MCP's ``Tool`` type - see
+    the plan's MCP decision for why that made a dedicated MCP server unnecessary for this pass."""
 
     name: str
     description: str
@@ -116,10 +89,8 @@ ContentBlock = Annotated[TextBlock | ToolUseBlock, Field(discriminator="type")]
 class Usage(BaseModel):
     """Token accounting, provider-reported when available.
 
-    Fields are ``None`` when the provider's response didn't include usage
-    (not every Cloudflare Workers AI model does) - the caller falls back to
-    its own token estimate rather than treating a missing count as zero cost.
-    """
+    Fields are ``None`` when the provider's response didn't include usage (not every Cloudflare Workers AI model
+    does) - the caller falls back to its own token estimate rather than treating a missing count as zero cost."""
 
     input_tokens: int | None = None
     output_tokens: int | None = None
@@ -160,13 +131,7 @@ class ClassificationLabel(BaseModel):
 class ClassifyRequest(BaseModel):
     """An image-classification call - image in, scored labels out.
 
-    Deliberately *not* an :class:`InferenceRequest`. A classifier takes no
-    prompt, holds no conversation, spends no tokens and returns labels rather
-    than text; folding it into the chat schema would mean a request type
-    where half the fields are meaningless. Vision *with* a prompt is a chat
-    completion and goes through :class:`InferenceRequest` as an
-    :class:`ImagePart` - see that class.
-    """
+    Deliberately *not* an :class:`InferenceRequest`."""
 
     provider: Provider
     model: str

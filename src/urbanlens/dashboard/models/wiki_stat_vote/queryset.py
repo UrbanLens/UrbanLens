@@ -16,11 +16,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatVote
 
-# Ordinal position of each of the four community stat fields (mirrors
-# WikiStatField in wiki_stat_vote/model.py, duplicated as plain strings here
-# rather than imported, since model.py imports this module at load time and
-# importing the enum back would be circular). Used only to build a synthetic
-# per-field cache id for the fuzz-count reuse in composite() below.
+# Ordinal position of each of the four community stat fields (mirrors WikiStatField in
+# wiki_stat_vote/model.py, duplicated as plain strings here rather than imported, since model.py
+# imports this module at load time and importing the enum back would be circular).
+# Used only to build a synthetic per-field cache id for the fuzz-count reuse in composite() below.
 _STAT_FIELD_ORDINALS = {"danger": 0, "vulnerability": 1, "priority": 2, "rating": 3}
 
 
@@ -73,21 +72,8 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
             for a wiki's pinned-user count, reused here unchanged.
         """
         if viewer_conceals:
-            # Aggregate over the viewer's own ballot only, and never reach
-            # approximate_pin_count. Two reasons, and the second is the subtle
-            # one.
-            #
-            # The fuzz caches its value for a day keyed only on the id passed
-            # in, with no viewer in the key, so a concealed viewer arriving
-            # after an ordinary one would be handed the number that viewer
-            # populated.
-            #
-            # And returning a flatly empty composite is its own tell: the page
-            # still renders "Your vote" from my_vote, so a viewer who votes
-            # would see their own stars filled beside a Community row that
-            # stays empty forever. An unconcealed fresh wiki does not behave
-            # that way - the sole voter's value *is* the composite there - so
-            # one vote would be a reliable discriminator.
+            # Aggregate over the viewer's own ballot only, and never reach approximate_pin_count.
+            # Two reasons, and the second is the subtle one.
             own = self.for_wiki(wiki).for_field(field).filter(profile=viewer).first() if viewer is not None else None
             if own is None:
                 return WikiStatComposite(rounded=None, exact=None, count=0)
@@ -104,12 +90,10 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
         # half-to-even instead (2.5 -> 2), which reads as a display bug here.
         rounded = int(Decimal(str(avg)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
-        # Reuse approximate_pin_count's fuzz-and-cache logic wholesale rather than
-        # reimplementing it. It keys its cache purely off the id we pass in, so a
-        # synthetic, guaranteed-negative id (real Wiki pks are always positive)
-        # keeps this fuzz-cache entry from colliding with the wiki's own
-        # pinned-user-count fuzz entry, or with another stat field's, for the
-        # same wiki.
+        # Reuse approximate_pin_count's fuzz-and-cache logic wholesale rather than reimplementing
+        # it.
+        # It keys its cache purely off the id we pass in, so a synthetic, guaranteed-negative id
+        # (real Wiki pks are always positive) keeps this fuzz-cache entry from colliding with the
         field_ordinal = _STAT_FIELD_ORDINALS.get(field, len(_STAT_FIELD_ORDINALS))
         fuzz_id = -((wiki.pk * 100) + field_ordinal) - 1
         fuzzed = approximate_pin_count(fuzz_id, count)
@@ -130,9 +114,7 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
 
     def cast(self, wiki: Wiki, profile: Profile, field: str, value: int) -> WikiStatVote:
         """Record ``profile``'s vote of ``value`` on ``field`` for ``wiki``.
-
-        One vote per ``(wiki, profile, field)``: re-voting replaces the
-        previous value rather than adding a second ballot.
+        One vote per ``(wiki, profile, field)``: re-voting replaces the previous value rather than adding a second ballot.
 
         Args:
             wiki: The wiki being voted on.

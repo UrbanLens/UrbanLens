@@ -1,21 +1,4 @@
-"""Merging labels must move every relation that carries content.
-
-``merge_labels`` consumes the source labels and deletes them, so any relation
-FK'd to Label that it does not move is cascade-deleted - the same shape as the
-pin merge, which was silently destroying albums and map overlays.
-
-Label survives that check, with one relation deliberately not moved:
-
-``LabelCustomization`` holds a profile's display overrides (name/icon/colour)
-*for the label being deleted*. It carries no content of its own, and moving it
-onto the target would be actively wrong: the target would silently adopt styling
-the user chose for a different label, and would overwrite any customization the
-target already had. Letting it cascade is the correct outcome, so it is listed
-here as an exemption rather than "handled".
-
-The rest of the check is the same completeness arm the pin merge grew: naming the
-relations that exist today would not catch the next one added.
-"""
+"""Merging labels must move every relation that carries content."""
 
 from __future__ import annotations
 

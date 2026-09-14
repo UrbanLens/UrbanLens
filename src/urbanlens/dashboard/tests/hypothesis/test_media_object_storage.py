@@ -1,16 +1,4 @@
-"""Media can move to an object store without moving out from behind the gate.
-
-`UL_MEDIA_STORAGE_BACKEND=s3` points `STORAGES["default"]` at an S3-compatible
-store. The dangerous half of that switch is not reading or writing objects, it
-is `FileField.url`: every template, serializer and API response renders it, and
-`S3Storage.url` returns a presigned bucket URL - a bearer token for one object,
-valid until it expires, that anyone the link reaches can read with no session,
-no authorization walk and no way to revoke it.
-
-So the property under test is that the two backends are indistinguishable from
-outside: identical URLs, identical traversal refusals, and no signed URL
-anywhere a client can see one.
-"""
+"""Media can move to an object store without moving out from behind the gate."""
 
 from __future__ import annotations
 
@@ -56,8 +44,7 @@ def _object_storage_settings(**overrides: object) -> dict[str, object]:
         **overrides: Extra settings to apply alongside.
 
     Returns:
-        Keyword arguments for ``override_settings``.
-    """
+        Keyword arguments for ``override_settings``."""
     return {
         "UL_MEDIA_STORAGE_BACKEND": "s3",
         "STORAGES": {
@@ -71,10 +58,8 @@ def _object_storage_settings(**overrides: object) -> dict[str, object]:
 class FakeObjectStorage(Storage):
     """An in-memory stand-in for a remote store, so no test opens a socket.
 
-    Deliberately *not* a ``FileSystemStorage`` subclass: the gate picks its byte
-    source by asking whether the default storage is one, so a fake that inherits
-    from it would take the filesystem branch and test nothing.
-    """
+    Deliberately *not* a ``FileSystemStorage`` subclass: the gate picks its byte source by asking whether the
+    default storage is one, so a fake that inherits from it would take the filesystem branch and test nothing."""
 
     def __init__(self, contents: dict[str, bytes] | None = None, *, signer: bool = True) -> None:
         self.contents = dict(contents or {})
@@ -217,12 +202,7 @@ class LocalByteDeliveryTests(SimpleTestCase):
     """The filesystem branch's half of the same contract."""
 
     def test_a_file_that_vanished_after_resolution_is_a_404_not_a_500(self) -> None:
-        """The resolver checks existence; delivery opens the file. Async processing
-        replaces a just-uploaded photo's file between the two, and the row - which is
-        what authorizes the request - still names the old one until the task ends.
-        The object branch already answers this with a 404 (see the test of the same
-        name below); the local branch raised FileNotFoundError out of the view.
-        """
+        """The resolver checks existence; delivery opens the file. Async processing replaces a just-uploaded photo's file between the two, and the row - which is what authorizes the request - still names the old one until the task ends."""
         from urbanlens.dashboard.controllers.media import LocalMediaSource
 
         with tempfile.TemporaryDirectory() as media_root:
@@ -300,10 +280,8 @@ class ObjectByteDeliveryTests(SimpleTestCase):
     def test_the_accel_target_names_no_host_of_its_own(self) -> None:
         """nginx pins its upstream; this header must not be able to move it.
 
-        An absolute URL here would turn any bug that can influence a stored path
-        into server-side request forgery performed by the one process that sits
-        inside the cluster.
-        """
+        An absolute URL here would turn any bug that can influence a stored path into server-side request
+        forgery performed by the one process that sits inside the cluster."""
         storage, source = self._source(FakeObjectStorage({_REAL_KEY: b"jpeg-bytes"}))
         with (
             override_settings(MEDIA_X_ACCEL_OBJECT_PREFIX="/_object_media/"),
@@ -381,10 +359,8 @@ class ObjectStorageCheckTests(SimpleTestCase):
     def test_the_settings_it_reads_actually_exist(self) -> None:
         """An override that invents a setting proves nothing about production.
 
-        Every name the check consults is read off the real settings module here,
-        so a rename cannot leave the check passing against a setting no
-        deployment has.
-        """
+        Every name the check consults is read off the real settings module here, so a rename cannot leave the
+        check passing against a setting no deployment has."""
         from django.conf import settings as django_settings
 
         for name in (
@@ -407,8 +383,7 @@ def _object_settings_with(
         options: Replacement storage options.
 
     Returns:
-        Keyword arguments for ``override_settings``.
-    """
+        Keyword arguments for ``override_settings``."""
     return {
         "UL_MEDIA_STORAGE_BACKEND": "s3",
         "STORAGES": {

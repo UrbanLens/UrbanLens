@@ -1,11 +1,5 @@
 /**
- * isSimpleGroups() decides whether a parsed label formula can be shown as the
- * interactive 2-column Include/Exclude UI (createFilterPicker's rebuild(),
- * label-picker.ts) or must fall back to the read-only formula pill display.
- * It must say "simple" only when the 2-column rendering is *exactly*
- * equivalent to what `apply_label_groups` (dashboard/models/pin/queryset.py)
- * applies server-side - any group shape it can't represent has to route to
- * the pill display instead of silently showing a misleading simplification.
+ * isSimpleGroups() decides whether a parsed label formula can be shown as the interactive 2-column Include/Exclude UI.
  */
 import { describe, expect, test } from "bun:test";
 import { emitsNoFollowUpClick, isSimpleGroups, matchesLabelFilter, type LabelGroup } from "./label-picker"
@@ -79,10 +73,7 @@ describe("isSimpleGroups", () => {
 });
 
 /**
- * matchesLabelFilter() is the combined kind-tab + search-text predicate shared
- * by createFilterPicker's availability list and createChipPicker's suggestion
- * list - every label picker's "All/Tags/Categories/Statuses" tabs plus a
- * search box reduce to this one pure function.
+ * matchesLabelFilter() is the combined kind-tab + search-text predicate shared by createFilterPicker's availability list.
  */
 describe("matchesLabelFilter", () => {
     test("empty kind ('All') and empty query matches everything", () => {
@@ -121,10 +112,7 @@ describe("matchesLabelFilter", () => {
 });
 
 describe("safeColor", () => {
-    // Label colours reach this module through `dataset`, which returns the *decoded*
-    // attribute value - so Django's escaping of the attribute does not survive the
-    // round trip, and a stored colour with a quote in it arrives intact and would
-    // break out of the `style="…"` the chip/pill builders construct.
+    // Label colours reach this module through `dataset`, which returns the *decoded* attribute value.
     test("passes through the hex colours the server actually stores", () => {
         expect(safeColor("#2196F3")).toBe("#2196F3");
         expect(safeColor("#abc")).toBe("#abc");
@@ -150,12 +138,8 @@ describe("safeColor", () => {
 
 describe("emitsNoFollowUpClick", () => {
     /**
-     * The suppression this arms exists for one case only: a *touch* long-press,
-     * which fires `contextmenu` and then a click that must not be acted on
-     * twice. Arming it for anything else leaves the guard set until some
-     * unrelated later click eats it - and the click it eats is whatever the
-     * user does next, which for a keyboard user is their Enter or Space.
-     */
+ * The suppression this arms exists for one case only.
+ */
     const event = (init: MouseEventInit & { pointerType?: string }): MouseEvent => {
         const created = new MouseEvent("contextmenu", init) as MouseEvent & { pointerType?: string };
         if (init.pointerType !== undefined) Object.defineProperty(created, "pointerType", { value: init.pointerType });

@@ -1,27 +1,4 @@
-"""Every "friend request accepted" notification must name who accepted.
-
-Three separate code paths raise `FRIEND_ACCEPTED`, and one of them omitted
-`source_profile`. The external API's `NotificationSerializer` exposes that field,
-so a client rendering the notification had no actor to link back to - while the
-message text and the url in the very same row both referred to that profile.
-
-Two paths raise it today, and why both exist:
-
-- `services.social.friendship.request_or_accept_friendship` - the combined
-  "befriend" entry point, which accepts an existing inbound request rather than
-  creating a second one.
-- `services.social.friendship.accept_friend_request` - the explicit accept.
-  **This was the path missing it**, ported verbatim from the old controller
-  during an extraction that was kept behaviour-preserving.
-
-There was a third: `controllers.friendship.FriendController.friend_request_respond`
-built its own notification until 2026-08-29 (`1899a8e64`), and now calls
-`accept_friend_request`. The HTMX path still raises the notification; it just no
-longer has its own copy of the code that can be wrong.
-
-The completeness test at the bottom is the point: a new path would otherwise
-reintroduce the same gap silently.
-"""
+"""Every "friend request accepted" notification must name who accepted."""
 
 from __future__ import annotations
 
@@ -131,25 +108,18 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
         """Guard against the check above passing because it matched nothing.
 
         Counts what the AST walk actually found rather than a separate string
-        search. The two disagreed, and both were wrong in different ways:
+        search, rather than trusting it just because nothing failed above:
+        a rename from ``.create(`` to ``.notify(`` once made the walk match
+        zero sites while a separate string count still found some, which
+        left ``test_no_site_omits_it`` asserting that an empty list is empty.
+        Deriving the guard from the same walk keeps the two in sync, so a
+        change in how these calls are made fails here instead of passing
+        silently there.
 
-        - The string count expected 3 and read 2. The third site was
-          ``FriendController.friend_request_respond``, which stopped building its
-          own notification on 2026-08-29 (``1899a8e64``) and now calls
-          ``accept_friend_request``. One fewer place to get wrong, not a lost
-          notification - the HTMX path still raises it, through the service.
-        - The AST walk read **0**, because it matched ``.create(`` and every site
-          had moved to ``.notify(``. ``test_no_site_omits_it`` was therefore
-          asserting that an empty list is empty, and had been since the move.
-
-        Deriving the guard from the walk itself is what makes them agree: a scan
-        that stops matching now fails here instead of passing silently there.
-
-        One site, not two: ``1899a8e64`` moved the controller's own raise into
-        ``accept_friend_request``, so the service is the only place left that
-        raises it. The guard is still what stops ``test_no_site_omits_it``
-        asserting that an empty list is empty - which is the failure it exists
-        for, and which one site catches as well as two.
+        Only one raise site remains today - ``1899a8e64`` moved
+        ``FriendController.friend_request_respond``'s own raise into
+        ``accept_friend_request`` - but the guard holds for one site as well
+        as two.
         """
         self.assertGreaterEqual(
             len(self._accepted_sites()),

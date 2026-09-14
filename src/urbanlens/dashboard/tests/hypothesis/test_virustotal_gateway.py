@@ -1,9 +1,4 @@
-"""Tests for VirusTotalGateway - the raw HTTP transport, no verdict policy.
-
-Verdict interpretation (clean/malicious/no-verdict) lives in
-virustotal_scan.py and is tested there; this file only covers the HTTP
-request/response mechanics, mocking session.get directly (no real network).
-"""
+"""Tests for VirusTotalGateway - the raw HTTP transport, no verdict policy."""
 
 from __future__ import annotations
 
@@ -18,10 +13,8 @@ _SHA256 = "a" * 64
 def _gateway(*, api_key: str = "test-key") -> VirusTotalGateway:
     """A gateway with a mocked session, bypassing the real rate-limited one.
 
-    Gateway.__post_init__ only swaps in the DB-writing _RateLimitedSession
-    when `session` is still the default plain requests.Session instance -
-    passing a Mock() here skips that entirely.
-    """
+    Gateway.__post_init__ only swaps in the DB-writing _RateLimitedSession when `session` is still the default
+    plain requests.Session instance - passing a Mock() here skips that entirely."""
     return VirusTotalGateway(session=Mock(), api_key=api_key)
 
 

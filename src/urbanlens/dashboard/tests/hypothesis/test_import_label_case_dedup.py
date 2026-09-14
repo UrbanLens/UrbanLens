@@ -1,17 +1,4 @@
-"""Importing a label whose name differs only by case must skip, not fail.
-
-`_import_labels` deduplicates against what the profile already has. It matched on
-`name=` exactly, which was harmless while `Label` had no uniqueness: a differently
--cased duplicate just became a second row.
-
-Since migration 0043 that is a constraint violation, so the exact-match lookup
-misses "Abandoned" while importing "abandoned", falls through to
-`Label.objects.create`, and raises `IntegrityError` - failing the **entire
-import**, not just that row. A user re-importing their own export after renaming
-a label's capitalisation would lose the whole restore.
-
-The lookups are `name__iexact` now, matching the constraint they have to respect.
-"""
+"""Importing a label whose name differs only by case must skip, not fail."""
 
 from __future__ import annotations
 
@@ -37,11 +24,9 @@ class ImportLabelCaseDedupTests(TestCase):
     def _run_import(self, rows: list[dict]) -> ImportResult:
         """Write the labels.json the importer reads, and import it.
 
-        JSON, not CSV: ``_import_labels`` calls ``_read_json(data_dir,
-        "labels.json")`` and returns immediately when that is empty - a CSV named
-        labels.csv is simply not seen, so every assertion silently passes on an
-        import that never ran.
-        """
+        JSON, not CSV: ``_import_labels`` calls ``_read_json(data_dir, "labels.json")`` and returns immediately
+        when that is empty - a CSV named labels.csv is simply not seen, so every assertion silently passes on an
+        import that never ran."""
         result = ImportResult()
         with tempfile.TemporaryDirectory() as data_dir:
             (pathlib.Path(data_dir) / "labels.json").write_text(json.dumps(rows), encoding="utf-8")

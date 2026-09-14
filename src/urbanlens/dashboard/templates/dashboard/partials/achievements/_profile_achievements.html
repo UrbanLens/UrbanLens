@@ -1,14 +1,4 @@
-{% comment %}
-Achievements section of a profile page, loaded over HTMX.
-
-Only earned awards are shown here - the locked catalogue lives on the "See all"
-page, so a profile does not turn into a list of everything someone has not done.
-Renders nothing at all once there's nothing earned yet, rather than a section
-that only ever says "No achievements yet" - the owner already gets an
-Achievements tab in the profile subnav to reach the (empty) catalogue.
-
-Context: subject, is_owner, earned, earned_total, remaining, streaks
-{% endcomment %}
+{% comment %}Achievements section of a profile page, loaded over HTMX.{% endcomment %}
 {% if earned %}
 <div id="profile_achievements" class="profile-section ul-section">
     <div class="profile-section-header">

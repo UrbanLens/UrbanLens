@@ -1,24 +1,15 @@
 """One-off backfill: rename already-stored Image files to opaque names.
 
-TEMPORARY - delete this command once it has been run against production.
-
-Uploads stop leaking their filename into the served URL from the commit that
-added ``Image.original_filename``/``anonymized_media_stem`` (new uploads are
-named ``<year>-<random token>.<ext>``, never the uploader's own filename), but
-every file already in storage still has its original name as the last segment
-of an otherwise-unguessable path - and that segment is exactly what shows in
-the URL of a photo shared to a wiki or DM, and what a browser's "save image
-as" suggests. This walks every distinct stored name once, renames it in place
-(same random directory, new opaque leaf name - the directory was already
-unguessable), and backfills ``original_filename``/``filename_taken_at`` from
-the name being replaced, since it is the only surviving record of it once this
-runs.
-
+Uploads stop leaking their filename into the served URL from the commit that added
+``Image.original_filename``/``anonymized_media_stem`` (new uploads are named ``<year>-<random
+token>.<ext>``, never the uploader's own filename), but every file already in storage still has its
+original name as the last segment of an otherwise-unguessable path - and that segment is exactly
+what shows in the URL of a photo shared to a wiki or DM, and what a browser's "save image as"
+suggests.
 Grouped by distinct stored name, not by row: sharing a pin's photos
-(``services.sharing.pin_sharing``) and deduplicated re-uploads
-(``services.photos.uploads``) both point several ``Image`` rows at one stored
-file, and renaming it once per row would find the source already moved on the
-second attempt.
+(``services.sharing.pin_sharing``) and deduplicated re-uploads (``services.photos.uploads``) both
+point several ``Image`` rows at one stored file, and renaming it once per row would find the source
+already moved on the second attempt.
 """
 
 from __future__ import annotations
@@ -41,10 +32,9 @@ if TYPE_CHECKING:
 def _move_stored_file(storage: Storage, old_name: str, new_name: str) -> None:
     """Move one stored file to *new_name* within the same storage backend.
 
-    Uses a real filesystem move when the backend exposes local paths (true for
-    this project's ``FileSystemStorage``), falling back to a streamed
-    copy-then-delete for any backend that doesn't - a generic ``Storage`` has
-    no rename primitive of its own.
+    Uses a real filesystem move when the backend exposes local paths (true for this project's
+    ``FileSystemStorage``), falling back to a streamed copy-then-delete for any backend that doesn't - a
+    generic ``Storage`` has no rename primitive of its own.
 
     Args:
         storage: The field's storage backend.
@@ -88,10 +78,9 @@ class Command(BaseCommand):
     def _rename_originals(self, *, dry_run: bool, limit: int | None) -> int:
         """Anonymize every distinct, not-yet-processed ``Image.image`` name.
 
-        ``original_filename=""`` is the idempotency gate: every row starts
-        there (the field is new), and this is the only writer of it, so a
-        second run of this command only touches whatever a first run missed
-        or failed on.
+        ``original_filename=""`` is the idempotency gate: every row starts there (the field is new), and
+        this is the only writer of it, so a second run of this command only touches whatever a first run
+        missed or failed on.
         """
         names = list(Image.objects.exclude(image="").exclude(image__isnull=True).filter(original_filename="").order_by("pk").values_list("image", flat=True).distinct())
         if limit is not None:
@@ -132,11 +121,8 @@ class Command(BaseCommand):
     def _rename_derived(self, field_name: str, suffix: str, *, dry_run: bool, limit: int | None) -> int:
         """Anonymize every distinct derived-file name (currently just ``thumbnail``).
 
-        Paired to its owning row's own (already-anonymized) stem plus
-        *suffix* - the same pairing :func:`write_image_thumbnail` gives a new
-        upload's thumbnail. Requires :meth:`_rename_originals` to have run
-        first: a row whose ``image`` is still unanonymized is skipped rather
-        than paired to a name this command is about to replace anyway.
+        Requires :meth:`_rename_originals` to have run first: a row whose ``image`` is still unanonymized is
+        skipped rather than paired to a name this command is about to replace anyway.
 
         Args:
             field_name: The derived ``ImageField`` to anonymize (e.g. ``"thumbnail"``).

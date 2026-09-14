@@ -1,19 +1,4 @@
-"""Undo handler for Label.
-
-Deleting a label is more destructive than it looks: besides the label row, the
-delete cascades away its position in the hierarchy (both directions of the
-``parents`` self-M2M) and its assignment to every pin that carried it. The pins
-survive, but silently lose the tag - and with it the icon/colour it may have been
-supplying on the map.
-
-REData taxonomy needs no special handling here. Deleting queues a retirement
-(``retire_redata_taxonomy_on_delete``), and recreating fires ``post_save``, whose
-``sync_redata_taxonomy_on_save`` upserts a fresh definition - the signal pair is
-self-healing, which is what makes this handler tractable at all. The parent
-relinks below likewise re-trigger definition syncs via the m2m signal, and the
-pin re-assignments refresh the server-side map pin cache the same way any label
-add does.
-"""
+"""Undo handler for Label."""
 
 from __future__ import annotations
 
@@ -29,27 +14,14 @@ if TYPE_CHECKING:
 #: its storage name (the file itself is not deleted with the label).
 _RESTORABLE_FIELDS = ("name", "description", "color", "icon", "kind", "order", "is_protected", "allow_auto_tag", "keywords")
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.label import MODEL_LABEL``) instead
-#: of hand-typing ``"label"`` - a typo in a hand-typed string only fails at
-#: runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "label"
 
 
 @register
 class LabelUndoHandler(UndoHandler):
     """Restores a label's fields, hierarchy links, and pin assignments.
-
-    ``Label`` carries no unique constraints, so - unlike every other handler -
-    a restore cannot collide with anything created since. If an identically
-    named label now exists the user simply ends up with two, which the organize
-    page's merge tool already handles; refusing the restore over it would be
-    stricter than the app itself is.
-
-    Everything relational restores leniently: parents, children and pins that
-    were deleted since are skipped, because they were never part of this
-    deletion and a partial hierarchy beats none.
-    """
+    Everything relational restores leniently: parents, children and pins that were deleted since are skipped, because they were never part of this deletion and a partial hierarchy beats none."""
 
     model_label = MODEL_LABEL
     model = Label
@@ -84,18 +56,7 @@ class LabelUndoHandler(UndoHandler):
         """Recreate the labels, then relink hierarchy and pin assignments.
 
         Raises:
-            UndoExpiredError: If the owning profile was deleted during the
-                retention window, or if the label's name has been taken since the
-                delete. Every relational piece still restores leniently - a
-                parent or pin that vanished meanwhile is skipped rather than
-                failing the whole restore.
-
-        The name check exists because ``Label`` gained a uniqueness constraint
-        (migration 0042). Before it, restoring onto a reused name simply produced
-        a duplicate; now it would raise `IntegrityError` from the database, which
-        reaches the user as a 500 with no explanation. Refusing with a message is
-        the graceful form of the same answer.
-        """
+            UndoExpiredError: If the owning profile was deleted during the retention window, or if the label's name has been taken since the delete."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.models.pin.model import Pin

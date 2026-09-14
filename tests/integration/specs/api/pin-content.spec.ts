@@ -1,13 +1,7 @@
 /**
- * The things that hang off a pin: links, notes, comments.
- *
- * Three small collections that share one shape - a child row addressed under
- * its parent's slug - and that is exactly why they are worth testing together.
- * The interesting question is not whether a note can be created; it is whether
- * each of these consistently refuses a *parent* the caller does not own, since
- * each one re-implements that check. A single endpoint that resolves the pin
- * without scoping it to the caller hands somebody else's pin its contents, and
- * the only way to notice is to ask all of them the same question.
+ * The things that hang off a pin: links, notes, comments. Three small collections that share one
+ * shape - a child row addressed under its parent's slug - and that is exactly why they are worth
+ * testing together.
  */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";

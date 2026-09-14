@@ -1,15 +1,4 @@
-"""Tests for external visit participants and deferred email invites.
-
-Covers:
-- sync_external_participants - parsing the indexed form fields, hashed email
-  storage, removal, and the invite/no-invite choice
-- immediate delivery when the email already belongs to a member (friend
-  request + visit suggestion)
-- join-invite email for unknown addresses (send log, dedup, rate caps)
-- process_pending_visit_invites - deferred delivery once the address is
-  verified on an account
-- the per-participant "send suggestion" toggle in the visit-create view
-"""
+"""Tests for external visit participants and deferred email invites."""
 
 from __future__ import annotations
 
@@ -191,10 +180,7 @@ class UnknownEmailInviteTests(_VisitInviteTestCase):
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_reinviting_a_gmail_variant_replaces_the_pending_invitation(self, mock_send):
-        """Same dedup guarantee as the friend-invite-by-email flow (see
-        test_friend_invite_privacy.py) - this is a separate code path into
-        the same FriendInvitation table, and must not let a Gmail dot/+
-        variant leave two open rows behind."""
+        """Same dedup guarantee as the friend-invite-by-email flow (see test_friend_invite_privacy.py) - this is a separate code path into the same FriendInvitation table, and must not let a Gmail dot/+ variant leave two open rows behind."""
         from urbanlens.dashboard.services.visits.visit_invites import _send_visit_invite_email
 
         request = self._post_request({})

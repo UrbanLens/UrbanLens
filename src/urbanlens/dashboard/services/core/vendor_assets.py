@@ -1,24 +1,5 @@
 """One table of every third-party asset the site loads, and where to load it from.
-
-Third-party scripts and stylesheets were written inline in each template that
-wanted them, which is how the same library came to be requested from two
-different CDNs, one library came to be pinned in most places and unpinned in one,
-and Leaflet's marker images came to be served from a different release of Leaflet
-than the library itself. A table makes a version a property of the asset rather
-than of each of the twenty-seven templates that mention it.
-
-It also decides *where* an asset comes from, once, at render time. An instance
-that mirrors these files sets ``UL_VENDOR_ASSET_BASE_URL`` and every tag points
-there; an instance that sets nothing keeps loading from the public CDNs exactly
-as before. The choice is made when the page is built, so nothing branches at call
-time and nothing waits for a request to fail before trying somewhere else - a
-failover would mean the page has already paid for the timeout.
-
-The mirrored files deliberately do not live in this repository: they are other
-projects' releases, with their own licences, and vendoring them into an
-open-source application is a redistribution decision this project has not made.
-``UL_VENDOR_ASSET_BASE_URL`` points at wherever an operator has put them.
-"""
+A table makes a version a property of the asset rather than of each of the twenty-seven templates that mention it."""
 
 from __future__ import annotations
 
@@ -37,18 +18,10 @@ class VendorAsset:
     """A third-party file the site loads.
 
     Attributes:
-        kind: What tag renders it. ``image`` assets have no tag; they are
-            referenced by URL from script and CSS.
+        kind: What tag renders it.
         path: Where the file sits under the mirror root, when one is configured.
-            Also the identity of the version: change it and both sources move
-            together.
         fallback: The public URL used when no mirror is configured.
-        integrity: Subresource-integrity hash for ``fallback`` only. A mirror
-            serving a re-compressed or differently-minified copy would fail an
-            SRI check against the CDN's bytes, so this is not emitted for a
-            mirrored asset - which is same-origin and covered by the operator
-            controlling it.
-    """
+        integrity: Subresource-integrity hash for ``fallback`` only."""
 
     kind: Literal["script", "style", "image"]
     path: str
@@ -127,12 +100,8 @@ VENDOR_ASSETS: dict[str, VendorAsset] = {
         "https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js",
         "sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR",
     ),
-    # Computed from the bytes unpkg actually serves for this version (which
-    # redirects to dist/htmx.min.js, 48036 bytes), not guessed - see
-    # docs/PROBLEMS.md, "HTMX is loaded from a CDN with no subresource
-    # integrity". HTMX drives essentially every interaction in this
-    # application, so this is worth the recompute-on-upgrade cost the other
-    # entries above don't pay.
+    # HTMX drives essentially every interaction in this application, so this is worth the
+    # recompute-on-upgrade cost the other entries above don't pay.
     "htmx_js": VendorAsset(
         "script",
         "htmx/1.9.11/htmx.min.js",
@@ -184,10 +153,7 @@ def vendor_asset_url(key: str) -> str:
         The mirror URL when one is configured, else the public fallback.
 
     Raises:
-        KeyError: If the key is not in the table. Raised rather than returning ""
-            so a typo in a template is a failed render rather than a silently
-            missing script - which reads as a broken page with no explanation.
-    """
+        KeyError: If the key is not in the table."""
     asset = VENDOR_ASSETS[key]
     root = _mirror_root()
     if not root:
@@ -202,13 +168,11 @@ def vendor_asset_tag(key: str) -> SafeString:
         key: A key of :data:`VENDOR_ASSETS`.
 
     Returns:
-        The tag, with integrity and crossorigin only when loading from the
-        public fallback.
+        The tag, with integrity and crossorigin only when loading from the public fallback.
 
     Raises:
         KeyError: If the key is not in the table.
-        ValueError: If the asset is an image, which has no tag of its own.
-    """
+        ValueError: If the asset is an image, which has no tag of its own."""
     asset = VENDOR_ASSETS[key]
     if asset.kind == "image":
         raise ValueError(f"{key} is an image; use vendor_asset_url")

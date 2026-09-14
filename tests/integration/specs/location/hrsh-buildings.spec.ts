@@ -1,38 +1,6 @@
 /**
- * Buildings on the campus: discovered, turned into child pins, and traceable.
- *
- * ## What is actually automatic
- *
- * There is no "suggested building" row anywhere - no model, no review queue. The
- * building list is a `LocationCache` row with `source="parcel_buildings"`,
- * written by `plugins.builtin.parcel_buildings` from REData (county footprint
- * layer plus NY SHPO's CRIS inventory), and everything downstream is computed
- * from it on the fly.
- *
- * Child pins *are* created without being asked, by `services.pins.auto_nest`,
- * under conditions worth knowing because each one is a way for this to
- * legitimately produce nothing:
- *
- * - `Profile.auto_create_building_pins` must be on (it defaults to True).
- * - The pin must be a root pin that has never been swept
- *   (`Pin.buildings_auto_nested_at` is one-shot and never cleared).
- * - The pin must have no children already - an existing hierarchy is the user's
- *   own arrangement and is not overwritten.
- * - There must be at least `MULTI_BUILDING_THRESHOLD` (2) *confident* buildings,
- *   where confident means on the property and carrying no `overlap_refs`.
- *   Ambiguous records deliberately wait for approval in the dialog.
- *
- * `auto_nest` swallows its own exceptions with a log line, so an HTTP 200 from
- * anything here proves nothing about whether pins were made. These tests assert
- * on the child pins themselves.
- *
- * ## The floorplan half
- *
- * `_building_outline` uses **only** a BUILDING boundary and deliberately refuses
- * to fall back to the property line - on a campus that would seed a room shaped
- * like the entire grounds, which is "both wrong and confidently wrong". So the
- * floorplan assertions belong on a *building* pin, and the campus pin correctly
- * having no outline is not a defect.
+ * Buildings on the campus: discovered, turned into child pins, and traceable. There is no
+ * "suggested building" row anywhere - no model, no review queue.
  */
 
 import { allPins, expect, locationDataTest as test, skipUnlessLocationDataEnabled, type CampusFixture } from "./fixtures.js";

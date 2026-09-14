@@ -245,11 +245,7 @@ dialog.tag-create-card.ul-dialog {
 }
 
 // -- Pins / Children / Total / Color table columns ------------------------------
-// Mobile-first: on narrow screens this data lives in the .tag-card-meta-cols
-// badges above (inline with the name). From $breakpoint-sm up, plain list/tree
-// rows switch to these fixed-width aligned columns instead - the header labels
-// live in .organize-label-columns-header, sharing the same column widths so
-// values line up underneath their captions.
+// Mobile-first: on narrow screens this data lives in the .tag-card-meta-cols badges above (inline with the name).
 $org-stat-col-pins-w: 3rem;
 $org-stat-col-children-w: 4.25rem;
 $org-stat-col-total-w: 3rem;
@@ -406,12 +402,7 @@ $org-stat-col-color-w: 2.75rem;
     }
 }
 
-// Desktop / mouse, plain (list/tree) rows only - gallery cards keep their
-// actions in-flow and centered, per the gallery-view overrides below. Here,
-// action buttons start tucked out of sight below the row and slide up into a
-// second row on hover, growing the card downward. Because only the bottom
-// padding grows, the icon/name/stat-column content stays pinned to the top
-// edge - visually it gets "pushed up" as the row gains height beneath it.
+// Desktop / mouse, plain (list/tree) rows only.
 @media (hover: hover) and (pointer: fine) {
     .organize-label-rows.tag-view--list .tag-card-view,
     .organize-label-rows.tag-view--tree .tag-card-view {
@@ -430,10 +421,7 @@ $org-stat-col-color-w: 2.75rem;
             transition: opacity 0.14s ease, transform 0.14s ease;
         }
 
-        // Hover-intent: growing the row and sliding the actions in both
-        // carry a short delay, so a cursor merely passing over a row
-        // mid-scroll never triggers the animation - only a pointer that
-        // actually lingers does.
+        // Hover-intent: growing the row and sliding the actions in both carry a short delay, so a cursor merely passing over a row mid-scroll.
         &:hover,
         &:focus-within {
             padding-bottom: 3.1rem;
@@ -786,9 +774,7 @@ $org-stat-col-color-w: 2.75rem;
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color, #6366f1) 40%, transparent);
     }
 
-    // Already selected as a parent/child elsewhere in the picker - permanently excluded
-    // from the suggestion pool (as opposed to the transient tab/search filtering below,
-    // which toggles inline `display` and must not be able to override this).
+    // Already selected as a parent/child elsewhere in the picker.
     &.label-rel-suggestion--hidden {
         display: none;
     }
@@ -844,9 +830,7 @@ $org-stat-col-color-w: 2.75rem;
 .tag-merge-form {
     padding: 1.25rem;
 
-    // .tag-dialog-list (via @include tag-dialog-list on .tag-edit-dialog) assumes
-    // a bounded flex ancestor to scroll within, which this plain form doesn't have -
-    // give it its own bordered, capped-height box instead.
+    // .tag-dialog-list (via @include tag-dialog-list on.tag-edit-dialog) assumes a bounded flex ancestor to scroll within, which this plain.
     .tag-dialog-list {
         max-height: 220px;
         border: 1px solid var(--ul-surface-raised-border);
@@ -918,20 +902,14 @@ $org-stat-col-color-w: 2.75rem;
     overflow: hidden;
 }
 
-// Nested inside the Private Pin page's combined "Organization" card (see
-// .organization-card) instead of standing alone - drop the card-in-a-card
-// chrome entirely and render just the label chips, no header of its own.
+// Nested inside the Private Pin page's combined "Organization" card instead of standing alone.
 .tag-panel--embedded {
     background: none;
     border: none;
     border-radius: 0;
 }
 
-// Rendered into a bare slot div that should hold nothing but the (invisible
-// until opened) add-label dialog - e.g. the photo gallery's label icon (see
-// _photo_gallery.html's #photo-label-panel-slot). Without this, .tag-panel's
-// own surface background/border left a visibly empty box sitting in the
-// gallery's layout with no content inside it.
+// Rendered into a bare slot div that should hold nothing but the (invisible until opened) add-label dialog.
 .tag-panel--dialog-only {
     background: none;
     border: none;
@@ -1776,15 +1754,10 @@ $org-stat-col-color-w: 2.75rem;
 }
 
 // -- Labels container (Organize > Labels tab) --------------------------------
-// A visually distinct "island" for the Tags/Categories/Statuses/People/Display
-// Order sub-tabs - deliberately different from the flat underline
-// `.ul-subnav-tabs` used by the page's own Labels|Lists|Filters subnav above
-// it (see _page_hero.scss). Two identical-looking tab rows stacked would read
-// as duplicated navigation, so this is a raised, rounded card with a
-// gradient-pill segmented control instead - reads as "a tool", not "another menu".
+// A visually distinct "island" for the Tags/Categories/Statuses/People/Display Order sub-tabs.
 .organize-labels-container {
     --ul-surface: var(--ul-grey-0a);
-    
+
     background: var(--ul-surface);
     border: 1px solid var(--ul-surface-border);
     border-radius: $radius-md;
@@ -1894,9 +1867,7 @@ $org-stat-col-color-w: 2.75rem;
     &[hidden] { display: none; }
 }
 
-// Placeholder shown in the Lists/Filters sections while their content is
-// being lazy-loaded via HTMX the first time either tab is opened (see
-// organize/index.html and PinListsIndexView.get).
+// Placeholder shown in the Lists/Filters sections while their content is being lazy-loaded via HTMX the first time either tab is opened.
 .organize-section-loading {
     display: flex;
     align-items: center;
@@ -1956,11 +1927,7 @@ $org-stat-col-color-w: 2.75rem;
     gap: .5rem;
 }
 
-// BEM sub-elements for dashboard/partials/ui/_priority_list.html (settings-page
-// "Name source priority" and any other reorderable ranked-list use of that
-// partial) - unscoped so every page gets the same styling, not just whichever
-// page happened to add it first (this used to only exist nested under
-// .site-admin-form in _admin.scss, so it never rendered outside site-admin).
+// BEM sub-elements for dashboard/partials/ui/_priority_list.html.
 .priority-list__item {
     display: flex;
     align-items: center;
@@ -2973,11 +2940,7 @@ $org-stat-col-color-w: 2.75rem;
     }
 }
 
-// Organize rows expose destructive/edit actions only while the row is being
-// used - but only on hover-capable, fine-pointer devices (mouse/trackpad).
-// Touch devices have no reliable persistent hover, so the mobile-first
-// baseline is "visible"; hiding-until-hover is an enhancement layered on
-// top for devices that can actually hover.
+// Organize rows expose destructive/edit actions only while the row is being used.
 @media (hover: hover) and (pointer: fine) {
     .organize-page {
         .tag-card-actions,
@@ -2990,11 +2953,7 @@ $org-stat-col-color-w: 2.75rem;
             transition: opacity 0.12s ease;
         }
 
-        // Hover-intent: the reveal transition carries a short delay so a
-        // cursor passing over a row mid-scroll (hover flickering on/off in
-        // well under 150ms as the page scrolls under a stationary pointer)
-        // never triggers it. Leaving hover reverts instantly via the
-        // un-delayed transition above.
+        // Hover-intent: the reveal transition carries a short delay so a cursor passing over a row mid-scroll.
         .tag-card:hover .tag-card-actions,
         .tag-card:focus-within .tag-card-actions,
         .tag-row:hover .tag-row-actions,

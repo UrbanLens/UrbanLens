@@ -1,17 +1,4 @@
-"""One failing contributor must not take down an aggregate it belongs to.
-
-Three user-facing aggregates fan out to independently-registered contributors:
-the Memories feed (covered in ``test_memories_source_isolation``), the Journal,
-and the Private Pin page's panel readiness map. Each is an advertised
-extensibility seam - "add one function/plugin and nothing else changes" - which
-is exactly what makes unguarded fan-out expensive: a bug in one contributor takes
-out every other contributor's output along with the page.
-
-The panel one matters most. ``panel_readiness`` builds the Private Pin page's tab
-strip, and panels are the plugin surface, so a single plugin raising in
-``is_ready()`` returned a 500 for the app's busiest page rather than affecting its
-own tab.
-"""
+"""One failing contributor must not take down an aggregate it belongs to."""
 
 from __future__ import annotations
 
@@ -58,9 +45,8 @@ class JournalSourceIsolationTests(TestCase):
         incrementally, so a failure partway through a source must not discard the
         entries that source had already produced, nor the other sources' entries."""
 
-        # Sources take (profile, limit) since the journal started paging;
-        # a stub with the old signature would raise TypeError inside the same
-        # `except` this test is about, and look like the failure it is staging.
+        # Sources take (profile, limit) since the journal started paging; a stub with the old signature would
+        # raise TypeError inside the same `except` this test is about, and look like the failure it is staging.
         def half_boom(profile, limit=None):
             yield JournalEntry(
                 kind="comment",

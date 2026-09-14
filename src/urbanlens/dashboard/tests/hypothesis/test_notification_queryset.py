@@ -1,10 +1,4 @@
-"""Tests for NotificationLog QuerySet and Manager.
-
-Covers:
-- unread()       - lines 12-13
-- for_profile()  - line 17
-- mark_read()    - lines 21-22
-"""
+"""Tests for NotificationLog QuerySet and Manager."""
 
 from __future__ import annotations
 

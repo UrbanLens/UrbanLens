@@ -1,14 +1,4 @@
-/**
- * Who the external API lets in, and what it lets them do.
- *
- * These are the assertions that cannot be made from inside the process. A unit
- * test proves `HasApiKeyScope` returns False for a key without the scope; only
- * a request to a running deployment proves the authenticator is actually wired
- * into the view, that the middleware ahead of it did not already answer, and
- * that no proxy is stripping the `Authorization` header on its way through -
- * which is a real and silent failure mode, because a stripped header presents
- * as "the key is invalid".
- */
+/** Who the external API lets in, and what it lets them do. These are the assertions that cannot be made from inside the process. */
 
 import { ApiClient } from "../../lib/api-client.js";
 import { expect, test } from "../../lib/fixtures.js";

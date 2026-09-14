@@ -1,12 +1,4 @@
-/**
- * Information the deployment must not volunteer.
- *
- * Stack traces, source files, git metadata, environment files, credential
- * material in HTML, and debug toolbars are reconnaissance that a later
- * change can re-enable with one setting. Each probe has a control: a
- * well-known public path still answers, so a 404 here is "this file is not
- * served" rather than "the host is down".
- */
+/** Information the deployment must not volunteer. Stack traces, source files, git metadata, environment files, credential material in HTML, and debug toolbars are reconnaissance that a later change can re-enable with one setting. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { appRoutes, contentRoutes, publicRoutes, staffRoutes } from "../../lib/routes.js";

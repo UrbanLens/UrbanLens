@@ -1,10 +1,4 @@
-"""Viewport-scoped rail and waterway features for the main map.
-
-The overlay is built from OpenStreetMap data through UrbanLens' existing
-Overpass gateway.  In addition to active railways and waterways, the query
-includes OSM lifecycle tags used for rail trails, abandoned rights-of-way,
-and disused or derelict canals.
-"""
+"""Viewport-scoped rail and waterway features for the main map."""
 
 from __future__ import annotations
 
@@ -48,11 +42,7 @@ class InfrastructureBounds:
 
 
 def parse_infrastructure_bbox(raw_bbox: str | None) -> InfrastructureBounds:
-    """Parse Leaflet's ``west,south,east,north`` bbox string.
-
-    The layer intentionally serves local viewports only.  This keeps a user
-    from accidentally asking Overpass for a country-sized geometry response.
-    """
+    """Parse Leaflet's ``west,south,east,north`` bbox string."""
     try:
         values = [float(value) for value in (raw_bbox or "").split(",")]
     except ValueError as exc:

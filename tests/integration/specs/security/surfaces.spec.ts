@@ -1,13 +1,4 @@
-/**
- * Surfaces that are easy to grow by accident: the internal REST API, media,
- * webhooks, OAuth, API-key placement, and the export downloader.
- *
- * The published external API is in `specs/api/`. This file is the *other*
- * doors: session-authenticated `/dashboard/rest/`, `/media/`, `/oauth/`,
- * Stripe's CSRF-exempt webhook, and credentials presented somewhere other
- * than `Authorization: Bearer`. Each one has a working control so a 401 is
- * not "the endpoint is gone".
- */
+/** Surfaces that are easy to grow by accident: the internal REST API, media, webhooks, OAuth, API-key placement, and the export downloader. The published external API is in `specs/api/`. */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { apiUrl, env, resourceName } from "../../lib/env.js";

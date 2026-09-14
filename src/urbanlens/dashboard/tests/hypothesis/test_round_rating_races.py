@@ -1,26 +1,4 @@
-"""Two rounds rating the same question at once must both count.
-
-``apply_round_ratings`` reads the shared rating row (``TriviaQuestionRating``,
-and its ``LocationModeRating`` mirror in spotguessr), captures it as
-``question_before``, computes a Glicko-2 update from it, and saves. Two sessions
-asking the same question concurrently is ordinary rather than exotic - a popular
-question or location is exactly the one that gets played twice at once - and
-unserialised, both rounds compute from the same starting rating and the second
-save discards the first round's update entirely, ``games_played`` included.
-
-The function's docstring already forbids calling it twice for *one* round
-("calling it twice would double-count the round as two rating periods"), and
-``_finish_round`` enforces that. Two *different* rounds sharing a question is the
-case neither covers.
-
-``services.consensus.tentative`` solved the identical shape by locking the parent
-wiki for the duration - the same fix, one subsystem over.
-
-Uses ``TransactionTestCase`` and real threads, like
-``test_consensus_tentative_races``: the threads must see each other's committed
-rows, which a single wrapping transaction would hide, and a lock is not
-observable single-threaded.
-"""
+"""Two rounds rating the same question at once must both count."""
 
 from __future__ import annotations
 
@@ -79,12 +57,7 @@ class RoundRatingRaceTests(TransactionTestCase):
         return round_, answer
 
     def test_two_rounds_on_one_question_both_count(self) -> None:
-        # The rating row must already exist. With a brand-new question both
-        # threads take get_or_create's *insert* path, where the unique index
-        # blocks the second until the first commits - which serialises them by
-        # accident and hides the defect entirely. The ordinary case, and the
-        # damaging one, is a question that has been played before: both threads
-        # merely SELECT the row and neither blocks.
+        # The rating row must already exist.
         seeded_round, seeded_answer = self._round_and_answer()
         apply_round_ratings(seeded_round, [seeded_answer])
         self.assertEqual(TriviaQuestionRating.objects.get(question=self.question).games_played, 1)

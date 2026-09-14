@@ -1,12 +1,4 @@
-"""Tests for the external API's safety check-in live-location endpoint.
-
-Live location is deliberately its own surface, excluded from the ordinary
-check-in read/write endpoints - see ``views_safety_location``'s module
-docstring. The properties that matter here are the same ones the WebSocket
-chat consumer already enforces: a declined or removed partner must lose read
-access exactly like they lose the chat group, and no one but the owner may
-ever write a position, even someone who can otherwise fully read the check-in.
-"""
+"""Tests for the external API's safety check-in live-location endpoint."""
 
 from __future__ import annotations
 
@@ -37,8 +29,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Extra kwargs for ``self.client``.
-    """
+        Extra kwargs for ``self.client``."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -78,12 +69,10 @@ class _SafetyLocationTestCase(TestCase):
         """Issue an API key for *user*.
 
         Args:
-            user: The key's owner.
-            scopes: Scope values to grant, defaulting to safety read + write.
+            user: The key's owner. scopes: Scope values to grant, defaulting to safety read + write.
 
         Returns:
-            The plaintext key.
-        """
+            The plaintext key."""
         key, raw = generate_api_key(user, "Test")
         ApiKey.objects.filter(pk=key.pk).update(
             scopes=scopes or [ApiKeyScope.SAFETY_READ.value, ApiKeyScope.SAFETY_WRITE.value]

@@ -1,20 +1,5 @@
 """Place lineage - attaching places to each other and keeping domains correct.
-
-Every write that changes a ``Place``'s parent or relation goes through
-:func:`set_parent`, because two derived columns have to move with it:
-
-``domain_root``
-    The denormalised root of the access domain (see
-    :class:`~urbanlens.dashboard.models.place.model.PlaceRelation`). Access
-    checks are an indexed equality test on this column instead of a recursive
-    walk, which is only sound while it is exact - and it is exact only if every
-    re-parent repropagates it down the whole ``PART_OF`` subtree.
-
-``is_aggregate``
-    Whether a place has ``MEMBER_OF`` children, which excludes it from point
-    resolution. Maintained on both endpoints of an edge, so a place stops being
-    an aggregate again the moment its last member detaches.
-"""
+Every write that changes a ``Place``'s parent or relation goes through :func:`set_parent`, because two derived columns have to move with it:"""
 
 from __future__ import annotations
 
@@ -31,10 +16,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Hard ceiling on how far lineage walks follow parents. Real lineage is two or
-#: three deep (site -> parcel -> building); this only exists so a cycle
-#: introduced by a bad migration degrades into a logged error rather than a
-#: hung request.
+#: Hard ceiling on how far lineage walks follow parents.
+#: Real lineage is two or three deep (site -> parcel -> building); this only exists so a cycle
+#: introduced by a bad migration degrades into a logged error rather than a hung request.
 MAX_LINEAGE_DEPTH = 32
 
 
@@ -49,9 +33,7 @@ def ancestors_of(place: Place) -> list[Place]:
         place: The place whose ancestry to walk.
 
     Returns:
-        The ancestor chain, empty for a root place. Stops at
-        :data:`MAX_LINEAGE_DEPTH` so a pre-existing cycle can't hang a caller.
-    """
+        The ancestor chain, empty for a root place."""
     chain: list[Place] = []
     seen: set[int] = {place.pk} if place.pk else set()
     current = place.parent if place.parent_id else None
@@ -87,17 +69,15 @@ def set_parent(place: Place, parent: Place | None, relation: str = PlaceRelation
     """Attach a place to a parent (or detach it) and repair the derived columns.
 
     Args:
-        place: The place to re-parent. Must be saved.
+        place: The place to re-parent.
         parent: The new parent, or None to make ``place`` a domain root.
-        relation: How it attaches - ``PART_OF`` keeps both in one access
-            domain, ``MEMBER_OF`` makes the parent an earned aggregate.
+        relation: How it attaches - ``PART_OF`` keeps both in one access domain, ``MEMBER_OF`` makes the parent an earned aggregate.
 
     Returns:
         The updated place.
 
     Raises:
-        PlaceLineageError: If the edge would create a cycle.
-    """
+        PlaceLineageError: If the edge would create a cycle."""
     if place.pk is None:
         raise PlaceLineageError("Cannot re-parent an unsaved place.")
     if would_create_cycle(place, parent):
@@ -117,16 +97,11 @@ def set_parent(place: Place, parent: Place | None, relation: str = PlaceRelation
 def propagate_domain_root(place: Place) -> int:
     """Push a place's domain root down through its ``PART_OF`` subtree.
 
-    ``MEMBER_OF`` children are left alone by design: each roots its own domain,
-    and that boundary is exactly what the recursion must stop at.
-
     Args:
-        place: The place whose subtree to repair. Its own ``domain_root`` is
-            taken as already correct.
+        place: The place whose subtree to repair.
 
     Returns:
-        How many descendant rows were updated.
-    """
+        How many descendant rows were updated."""
     updated = 0
     roots: dict[int, int | None] = {place.pk: place.domain_root_id}
     depth = 0
@@ -153,15 +128,8 @@ def propagate_domain_root(place: Place) -> int:
 def refresh_derived_flags(place_ids: Iterable[int | None]) -> None:
     """Recompute the cached child summaries on the given places.
 
-    ``is_aggregate`` (has ``MEMBER_OF`` children, therefore earned rather than
-    resolved onto) and ``building_child_count`` (how many buildings stand on
-    it, therefore whether markers here have to commit to parcel-or-building
-    scope) are both read on hot paths, so they are maintained on every edge
-    change rather than counted per request.
-
     Args:
-        place_ids: Place primary keys; None entries and duplicates are ignored.
-    """
+        place_ids: Place primary keys; None entries and duplicates are ignored."""
     from urbanlens.dashboard.models.place.model import PlaceKind
 
     unique_ids = {pk for pk in place_ids if pk is not None}

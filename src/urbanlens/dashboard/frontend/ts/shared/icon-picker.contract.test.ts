@@ -1,26 +1,5 @@
 /**
  * Guards the contract between `IconPicker.search` and the partials it reads.
- *
- * `search()` lowercases the query and then compares it against `data-label`
- * exactly - `label.includes(q)`. That is only case-insensitive because the
- * markup writes `data-label="{{ label|lower }}"`. Drop the `|lower` and
- * searching "cam" stops matching an icon labelled "Camera": no error, no
- * empty-state, just a grid that quietly hides everything the user typed a
- * capital letter into.
- *
- * The catalogue moved out of `_icon_picker.html` into
- * `_icon_picker_grid_items.html`, which is fetched once and shared by every
- * picker (P68). Both are read here: checking only the first would leave this
- * test passing against the one remaining literal `data-label` on the "None"
- * button while the 1,249 that matter went unwatched.
- *
- * This is the same shape as `pin-cache.contract.test.ts` - two sides of one
- * agreement, written in different languages, held together by nothing but
- * convention - and that one already drifted once in this codebase.
- *
- * The Python half is covered elsewhere: `test_icon_metadata` asserts every
- * `ICON_KEYWORDS` value is lowercase. It is the template's `|lower` that had
- * nothing watching it.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -52,9 +31,7 @@ describe("icon picker search contract with _icon_picker.html", () => {
     });
 
     test("the catalogue lives in the shared grid partial, not in the per-picker one", () => {
-        // The inner loop, over `cat_data.1`, is the 1,249 icons. The per-picker
-        // partial still loops the categories themselves for its tab strip, which
-        // is a handful of buttons and was never the cost.
+        // The inner loop, over `cat_data.1`, is the 1,249 icons.
         expect(template).not.toContain("cat_data.1");
         expect(gridTemplate).toContain("cat_data.1");
     });
@@ -142,8 +119,7 @@ describe("the map page's inline copy of the lazy grid fetch", () => {
     });
 
     test("it marks the current value selected once the grid arrives", () => {
-        // The server used to render `selected` into the matching button; one
-        // shared response cannot, so both copies have to reapply it.
+        // The server used to render `selected` into the matching button; one shared response cannot, so both copies have to reapply it.
         expect(mapPage).toContain("item.classList.toggle('selected', item.dataset.icon === current);");
     });
 

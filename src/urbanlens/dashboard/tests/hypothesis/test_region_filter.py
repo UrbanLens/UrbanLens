@@ -1,11 +1,4 @@
-"""Tests for geographic include/exclude region filtering.
-
-Covers three layers:
-
-- ``services.geo.geo.dissolve_polygons`` - the merge-overlapping-polygons helper.
-- ``Pin.objects.filter_by_criteria``'s ``include_regions``/``exclude_regions`` handling.
-- ``services.search.filter_criteria``'s (de)serialization round-trip for regions.
-"""
+"""Tests for geographic include/exclude region filtering."""
 
 from __future__ import annotations
 
@@ -177,10 +170,8 @@ class FilterCriteriaRegionSerializationTests(TestCase):
 class FiltersTabViewRenderingTests(TestCase):
     """Smoke tests that the new Filters tab and region-search views actually render.
 
-    Template-syntax checks alone (get_template) don't catch context bugs like
-    a bad attribute lookup or a missing context var - these hit the real
-    views end-to-end with a logged-in client.
-    """
+    Template-syntax checks alone (get_template) don't catch context bugs like a bad attribute lookup or a
+    missing context var - these hit the real views end-to-end with a logged-in client."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -237,12 +228,7 @@ class FiltersTabViewRenderingTests(TestCase):
 
 
 class SavedFilterLabelPickerTests(TestCase):
-    """The Filters-tab include/exclude label pickers are a search-driven chip
-    picker (see _saved_filter_label_picker.html + initSavedFilterLabelPickers in
-    _saved_filter_dialog_scripts.html), reusing the same .apdlg-* markup/CSS as
-    the main map's add-pin/bulk-edit label pickers. The server only renders a
-    hidden data-id/data-selected catalog for the client-side JS to build chips
-    and hidden checkboxes from - confirm that catalog carries the right state."""
+    """The Filters-tab include/exclude label pickers are a search-driven chip picker (see _saved_filter_label_picker.html + initSavedFilterLabelPickers in _saved_filter_dialog_scripts.html), reusing the same .apdlg-* markup/CSS as the main map's add-pin/bulk-edit label pickers. The server only renders a hidden data-id/data-selected catalog for the client-side JS to build chips and hidden checkboxes from - confirm that catalog carries the right state."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

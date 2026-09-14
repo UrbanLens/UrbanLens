@@ -1,12 +1,4 @@
-"""Controllers for sharing a standalone MarkupMap with one friend.
-
-Modeled directly on ``controllers.pin_sharing`` - the standalone-dialog half
-of that module, not the simpler ``services.sharing.pin_sharing`` core - since this is
-likewise reached as its own action (from Memories > Maps) rather than folded
-into another flow. Unlike PinShare there is no accept/reject step: the
-recipient's only action is viewing the map and optionally cloning it via
-"Add to my maps" (see ``controllers.markup.MarkupMapCloneView``).
-"""
+"""Controllers for sharing a standalone MarkupMap with one friend."""
 
 from __future__ import annotations
 
@@ -36,7 +28,7 @@ class MarkupMapShareDialogView(LoginRequiredMixin, View):
     """GET /markup-maps/<uuid:map_uuid>/share/ - friend-picker dialog."""
 
     def get(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Render the friend-picker dialog for sharing one of the caller's own maps.
+        """Render the friend-picker dialog.
 
         Args:
             request: HttpRequest.

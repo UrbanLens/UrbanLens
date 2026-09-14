@@ -1,21 +1,12 @@
 /**
  * Tests for the projective transform behind georeferenced map image overlays.
- *
- * The homography is the whole feature: it is what lets a user skew a scanned
- * Sanborn sheet onto real streets rather than only scaling an axis-aligned
- * box. These check it against cases whose answer is known independently -
- * identity, translation, scale - and then verify the general four-corner case
- * by pushing the source corners back through the matrix and confirming they
- * land on the destinations the user dragged them to.
  */
 
 import { describe, expect, it } from "bun:test";
 
 import { matrix3dForCorners, OVERLAY_PANE_ALIGNING_ZINDEX, OVERLAY_PANE_IDLE_ZINDEX, overlaySubmitEnabled } from "./map-image-overlays";
 
-// map-annotations.ts's boundaryPane/markupPane z-indexes this must clear while
-// an overlay is being aligned - kept as literals (not imported) so this fails
-// loudly if either side drifts, rather than silently staying in sync.
+// map-annotations.ts's boundaryPane/markupPane z-indexes this must clear while an overlay is being aligned.
 const BOUNDARY_PANE_EDITING_ZINDEX = 560;
 const MARKUP_PANE_ZINDEX = 550;
 
@@ -74,9 +65,7 @@ describe("matrix3dForCorners", () => {
     });
 
     it("places every corner where it was dragged, for an arbitrary quadrilateral", () => {
-        // Deliberately not a parallelogram: a scanned sheet dragged onto real
-        // streets is trapezoidal, which is exactly what an affine-only
-        // transform cannot represent.
+        // Deliberately not a parallelogram: a scanned sheet dragged onto real streets is trapezoidal, which is exactly what an affine-only.
         const targets = [
             { x: 10, y: 20 },
             { x: 240, y: 5 },
@@ -101,9 +90,7 @@ describe("matrix3dForCorners", () => {
     });
 
     it("returns null for a degenerate shape instead of a NaN matrix", () => {
-        // Three corners collapsed onto one point: dragging into this state
-        // must leave the previous transform alone rather than making the
-        // overlay vanish with no handle left to drag back.
+        // Three corners collapsed onto one point: dragging into this state must leave the previous transform alone rather than making.
         const css = matrix3dForCorners(
             [
                 { x: 0, y: 0 },
@@ -163,10 +150,7 @@ describe("overlay pane z-index", () => {
     });
 
     it("clears every boundary/markup pane z-index while an overlay is aligning", () => {
-        // Regression guard for the reported bug: an overlay's handles were
-        // unclickable while dragging because a boundary polygon's pane sat above
-        // the (shared, default) overlay pane. If either sibling pane's z-index is
-        // ever raised past this, this constant must move too.
+        // Regression guard for the reported bug: an overlay's handles were unclickable while dragging because a boundary polygon's pane sat.
         const raised = Number(OVERLAY_PANE_ALIGNING_ZINDEX);
         expect(raised).toBeGreaterThan(BOUNDARY_PANE_EDITING_ZINDEX);
         expect(raised).toBeGreaterThan(MARKUP_PANE_ZINDEX);

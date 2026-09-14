@@ -1,17 +1,4 @@
-{% comment %}
-A single pending PinMergeSuggestion card. Unlike a plain PinSuggestion card,
-this compares two of the profile's own EXISTING pins and asks which should
-survive - accept/reject post to memories.locations.merge.action and target
-this card by id, swapping outerHTML: a success response is empty (the card
-vanishes and a toast fires with a "View pin" link to the merged result), an
-error response (an unresolved conflict, or something going wrong) re-renders
-this same card with its form state intact plus an error toast.
-
-Context:
-  suggestion - the pending PinMergeSuggestion
-  conflicts  - list of MergeFieldConflict for this suggestion's two pins,
-               computed fresh at render time (services.pin_merge.plan_merge_conflicts)
-{% endcomment %}
+{% comment %}A single pending PinMergeSuggestion card.{% endcomment %}
 <article class="pin-merge-suggestion-card" id="pin-merge-suggestion-card-{{ suggestion.pk }}">
     <p class="pin-merge-suggestion-card-reason">{{ suggestion.reason }}</p>
 

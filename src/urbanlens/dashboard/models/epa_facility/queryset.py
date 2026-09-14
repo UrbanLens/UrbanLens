@@ -6,7 +6,7 @@ from urbanlens.dashboard.models import abstract
 
 
 class EpaFacilityQuerySet(abstract.DashboardQuerySet):
-    """Query helpers for persisted EPA ECHO facility records."""
+    """Query helpers for EPA ECHO facility records."""
 
 
 class EpaFacilityManager(abstract.DashboardManager.from_queryset(EpaFacilityQuerySet)):

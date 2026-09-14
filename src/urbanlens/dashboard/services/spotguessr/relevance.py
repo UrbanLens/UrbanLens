@@ -1,11 +1,5 @@
 """Recording SpotGuessr's photo-quality signal (``GamePhotoFeedback``).
-
-Photos-mode rounds are the only source of this signal (Named Place/Street
-View rounds have no ``round.image``). See ``services.media.media_relevance`` for
-how these events are weighted into a photo's overall effective relevance,
-and ``docs/designs/drafts/spotguessr.md`` ("Photo relevance feedback") for the
-full design.
-"""
+Photos-mode rounds are the only source of this signal (Named Place/Street View rounds have no ``round.image``)."""
 
 from __future__ import annotations
 
@@ -28,20 +22,10 @@ EXPLICIT_KINDS = (GamePhotoFeedbackKind.THUMBS_UP, GamePhotoFeedbackKind.THUMBS_
 def record_feedback(round_: GameRound, profile: Profile, kind: str) -> GamePhotoFeedback | None:
     """Record (or change) ``profile``'s explicit reaction to ``round_``'s photo.
 
-    Always overwrites whatever was previously recorded for this
-    ``(round, profile)`` pair - including a prior ``NO_REACTION`` backfill,
-    or an earlier change of mind (thumbs up -> report, say). A no-op,
-    returning None, for a round with no visual content to react to (Named
-    Place) - callers should treat that as "nothing to record", not an
-    error. Street View feedback is recorded like Photos feedback, but has
-    no effect on ``services.media.media_relevance`` (that scoring path is keyed
-    off ``Image``, and Street View rounds have none).
-
     Args:
         round_: The round whose photo is being reacted to.
         profile: The reacting participant.
-        kind: One of ``EXPLICIT_KINDS``.
-    """
+        kind: One of ``EXPLICIT_KINDS``."""
     if not modes.shows_imagery(round_.session.mode):
         return None
     feedback, _ = GamePhotoFeedback.objects.update_or_create(round=round_, profile=profile, defaults={"kind": kind})
@@ -49,14 +33,7 @@ def record_feedback(round_: GameRound, profile: Profile, kind: str) -> GamePhoto
 
 
 def backfill_no_reaction(round_: GameRound, profiles: Iterable[Profile]) -> None:
-    """Record a weak default-positive signal for every guesser who never explicitly reacted.
-
-    Called once a round is fully revealed (see ``services.spotguessr.session.submit_guess``).
-    Uses ``get_or_create`` (not ``update_or_create``) specifically so this
-    can never clobber an explicit reaction a fast player already submitted
-    before the round finished for everyone else - only fills the gap for
-    profiles with no feedback row at all yet.
-    """
+    """Record a weak default-positive signal for every guesser who never explicitly reacted."""
     if not modes.shows_imagery(round_.session.mode):
         return
     for profile in profiles:

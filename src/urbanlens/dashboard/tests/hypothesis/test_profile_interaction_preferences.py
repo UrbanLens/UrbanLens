@@ -1,15 +1,4 @@
-"""Tests for the consent-style interaction-preference fields on Profile.
-
-Covers:
-- Profile.preference_display / Profile.interaction_preferences (model logic:
-  unset vs. answered, and the "other" free-text fallback).
-- ProfileForm accepts/rejects preference choices and enforces the "other"/
-  additional_preferences length caps.
-- ProfileFieldUpdateView's autosave path for each preference field and its
-  "_other" companion.
-- Profile page rendering: the section is omitted entirely when nothing has
-  been answered, and shown (with the right text) when it has.
-"""
+"""Tests for the consent-style interaction-preference fields on Profile."""
 
 from __future__ import annotations
 

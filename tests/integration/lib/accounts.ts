@@ -1,20 +1,6 @@
 /**
- * The credentials half of the run configuration.
- *
- * Accounts come from one of two places, checked in this order:
- *
- * 1. A manifest written by `manage.py provision_integration_env --format json`
- *    on the target deployment, pointed at by `UL_E2E_ACCOUNTS_FILE`. This is
- *    the intended path: it provisions every role at once, marks each account
- *    verified and active (sign-up alone leaves an account inactive pending an
- *    emailed link, which a test runner cannot click), and mints API keys with
- *    the scopes the API specs need.
- * 2. Plain environment variables, for a one-off run against an account that
- *    already exists.
- *
- * Roles are resolved lazily. A spec that only needs `primary` runs fine on a
- * deployment where no `secondary` account was provisioned; the specs that do
- * need one skip themselves rather than failing.
+ * The credentials half of the run configuration. Accounts come from one of two places, checked in
+ * this order:
  */
 
 import { existsSync, readFileSync } from "node:fs";

@@ -1,26 +1,4 @@
-"""Merging a pin must not destroy its albums, overlays, or custom layers.
-
-``merge_pins`` reassigns the loser's relations and then deletes it, and its
-module docstring states that "every relation FK'd to Pin falls into one of three
-buckets". Three CASCADE relations were in none of them - ``Album.parent_pin``,
-``MapImageOverlay.parent_pin`` and ``CustomLayer.parent_pin`` - so the delete
-took them with it. Measured before the fix: an album and an overlay on the loser
-both returned ``exists() == False`` afterwards.
-
-This is drift rather than a decision. ``pin_merge`` was added 2026-08-02; Album
-landed 2026-08-05 and MapImageOverlay 2026-08-06, so the module's completeness
-claim quietly stopped being true.
-
-The album case is not a plain reassign: ``uq_album_pin_slug`` is unique on
-``(parent_pin, slug)``, and two pins each having a "Photos" album is ordinary.
-Both hold real images, so neither may be dropped - the loser's album is
-re-slugged instead.
-
-The final test is the important one: rather than listing the three models it
-knows about, it asserts that *no* CASCADE relation to Pin is left unhandled, so
-the next model to grow a ``parent_pin`` fails here instead of silently deleting
-user data.
-"""
+"""Merging a pin must not destroy its albums, overlays, or custom layers."""
 
 from __future__ import annotations
 
@@ -117,9 +95,7 @@ class PinMergePreservesAttachmentsTests(TestCase):
         self.assertEqual(ImageAttachment.objects.filter(pin=self.survivor, image=image).count(), 1)
 
     def test_a_floorplan_markers_twin_is_unlinked_not_deleted(self) -> None:
-        """Repointing the twin onto survivor would let a later floorplan save silently
-        overwrite survivor's name/location, so the marker is unlinked instead - its own
-        position/kind/floor data survives, and the editor mints a fresh twin next save."""
+        """Repointing the twin onto survivor would let a later floorplan save silently overwrite survivor's name/location, so the marker is unlinked instead - its own position/kind/floor data survives, and the editor mints a fresh twin next save."""
         floor = baker.make(FloorplanFloor, floorplan=baker.make(Floorplan, profile=self.profile))
         marker = baker.make(FloorplanMarker, floor=floor, linked_pin=self.loser)
 
@@ -145,10 +121,7 @@ class PinMergePreservesAttachmentsTests(TestCase):
     def test_no_cascade_relation_to_pin_is_left_unhandled(self) -> None:
         """The completeness arm: the next model with a parent_pin fails here.
 
-        A relation that CASCADEs from Pin and is never mentioned in the merge is
-        deleted along with the loser. Listing the three models found today would
-        not catch the fourth.
-        """
+        A relation that CASCADEs from Pin and is never mentioned in the merge is deleted along with the loser."""
         source = inspect.getsource(pin_merge)
         unhandled = sorted(
             rel.related_model.__name__

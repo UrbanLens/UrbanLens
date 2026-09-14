@@ -1,15 +1,4 @@
-"""Tests for the geocode_address settings view.
-
-The view accepts GET ?address=<text> and returns JSON {lat, lng}.
-
-Invariants verified:
-  - Empty or missing address returns HTTP 400.
-  - A "lat, lng" string within valid geographic bounds is parsed without any
-    external API call and returned exactly.
-  - Out-of-range values fall through to the Google Geocoding gateway.
-  - A successful Google Geocoding response is relayed as {lat, lng}.
-  - A failed or empty Google Geocoding response returns HTTP 404.
-"""
+"""Tests for the geocode_address settings view."""
 
 from __future__ import annotations
 

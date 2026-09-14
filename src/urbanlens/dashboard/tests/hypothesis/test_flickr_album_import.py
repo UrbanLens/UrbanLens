@@ -1,19 +1,4 @@
-"""Tests for the public "Import a Flickr Album" feature (pin + wiki Media).
-
-Distinct from test_flickr.py, which covers the per-user OAuth "Import from
-Flickr" picker (one user's own connected library). This covers the
-URL-based, unauthenticated public-album import instead:
-
-- parse_album_url - accepts current/legacy album URL shapes, rejects others.
-- FlickrPublicGateway.get_album/download_photo - unsigned public API calls,
-  NSID vs. path-alias resolution, error mapping.
-- PinFlickrAlbumLookupView/ImportView and their Wiki counterparts.
-- import_flickr_album_photos task - pin and wiki targets, checksum dedupe,
-  quota enforcement, no log_visit_on_pin call (these are someone else's
-  photos, not the profile's own visit evidence).
-
-All HTTP calls are mocked; no real network access occurs.
-"""
+"""Tests for the public "Import a Flickr Album" feature (pin + wiki Media)."""
 
 from __future__ import annotations
 
@@ -446,9 +431,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
     def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
+        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(

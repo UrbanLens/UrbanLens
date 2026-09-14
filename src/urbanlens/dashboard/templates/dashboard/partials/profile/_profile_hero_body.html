@@ -1,29 +1,4 @@
-{% comment %}
-Hero body for profile/index.html and profile/edit.html - rendered inside
-.ul-page-hero--profile (see _page_hero.scss), so both pages share one fixed
-hero height and the Profile | Edit subnav never jumps when switching tabs.
-
-Expects:
-  profile           - the Profile being shown (required)
-  edit_mode         - when True, swaps the "Edit Profile" CTA for "View
-                       Profile" (used by profile/edit.html; omit/False on
-                       profile/index.html)
-  friendship_status, friendship, friends_since - only used when viewing
-                       another user's profile (see userprofile.py).
-  viewer_muted      - whether the *viewer* muted this relationship. A separate
-                       flag from friendship_status, deliberately: muting must
-                       never change the relationship, so there is no 'muted'
-                       status to branch on and the Mute/Unmute toggle lives
-                       inside the 'accepted' branch instead. Resolved in the
-                       view because mute is stored per side of a shared row.
-  viewer_placed_block - True only when the viewer is the one who placed the
-                       block. Both parties see the 'blocked' branch (the
-                       relationship row is matched in either direction), but
-                       only the blocker may lift it, so the Unblock button is
-                       gated on this rather than on friendship_status.
-  preview_modes     - "View as" options; only rendered when present
-  can_view_contact  - gates the email meta item
-{% endcomment %}
+{% comment %}Hero body for profile/index.html and profile/edit.html.{% endcomment %}
 <div class="profile-avatar-col">
     <div class="profile-avatar-wrap">
         {% if profile.avatar %}

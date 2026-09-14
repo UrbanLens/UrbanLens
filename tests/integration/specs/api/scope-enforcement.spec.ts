@@ -1,23 +1,7 @@
 /**
- * A key is only allowed to do what its scopes say.
- *
- * Every other spec checks scope enforcement for the one domain it covers, which
- * means each check is written by whoever was thinking about that domain. This
- * one asks the same question of the whole write surface at once, because the
- * failure worth catching is not "labels forgot its scope" - it is that *one*
- * endpoint out of forty is different, and nothing that walks a single domain
- * will find it.
- *
- * Driven with the restricted key the provisioning command mints alongside the
- * full one: it carries `profile:read` and nothing else. A valid credential that
- * is insufficient is the only way to tell enforcement from absence - an
- * unauthenticated request is refused by authentication, and proves nothing
- * about scopes at all.
- *
- * Two endpoints are deliberately absent. Messaging has its own file, because it
- * is closed to API keys entirely rather than by scope. And nothing here writes
- * with the *full* key: the point is the refusal, and a sweep that created forty
- * rows to prove the other half would cost more than it tells you.
+ * A key is only allowed to do what its scopes say. Every other spec checks scope enforcement for
+ * the one domain it covers, which means each check is written by whoever was thinking about that
+ * domain.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

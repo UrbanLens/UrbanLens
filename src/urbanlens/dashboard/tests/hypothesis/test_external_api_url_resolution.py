@@ -1,28 +1,4 @@
-"""Regression tests for external-API URL routing.
-
-The external API's routes are now contributed by fourteen separate modules
-(``external_api/urls.py`` plus thirteen ``urls_*.py`` domain modules) that are
-concatenated into one flat list. Django resolves a request by walking that list
-and taking the first pattern that matches, which makes the assembled urlconf
-unsafe by construction: a generic route contributed by one module can swallow a
-literal route contributed by another, and neither author is in a position to
-notice.
-
-The failure is silent and actively misleading. ``pins/deleted/`` sitting behind
-``pins/<str:pin_slug>/`` does not answer "no such route" - it dispatches to the
-pin-detail view, which looks for a pin slugged "deleted", finds none, and
-returns 404. From outside, that is indistinguishable from a genuinely missing
-pin, so the endpoint simply appears not to work and no amount of staring at the
-view explains why.
-
-``urls.order_by_specificity`` is the structural fix: it recomputes the ordering
-from the routes themselves rather than trusting declaration order. These tests
-are what keeps that fix honest. The central one reverses every registered route
-and resolves the resulting URL back, asserting it lands on the route it came
-from - which is precisely the assertion a shadowed pattern fails. It reads the
-route table out of the live urlconf, so endpoints added later are covered
-without anybody remembering to extend this file.
-"""
+"""Regression tests for external-API URL routing."""
 
 from __future__ import annotations
 
@@ -51,15 +27,9 @@ _ORDERING_RULE: Final = (
     "ambiguous and no ordering can save them."
 )
 
-#: One concrete value per path converter, used both to reverse every registered
-#: route and to build the concrete URL that is then resolved back.
-#:
-#: These are chosen as *witnesses* that separate the converters, which is what
-#: makes the round-trip meaningful. The str sample contains dots so it is not
-#: also a valid slug; the slug sample contains letters and hyphens so it is
-#: neither an int nor a uuid; the int sample is digits only. If they overlapped,
-#: a mis-ordered pair of converters would still round-trip and the test would
-#: pass through a real bug.
+#: One concrete value per path converter, used both to reverse every registered route and to build the concrete
+#: URL that is then resolved back.
+#: These are chosen as *witnesses* that separate the converters, which is what makes the round-trip meaningful.
 _SAMPLE_ARGUMENTS: Final[dict[str, str | int]] = {
     "int": 424242,
     "uuid": "00000000-0000-4000-8000-0000000c0ffe",
@@ -69,11 +39,7 @@ _SAMPLE_ARGUMENTS: Final[dict[str, str | int]] = {
 }
 
 #: Parses ``<converter:name>`` (and bare ``<name>``) captures out of a route.
-#:
-#: Deliberately a second copy of the grammar ``urls._ROUTE_PARAMETER_RE`` uses,
-#: rather than an import of it. This test exists to catch the sorter getting the
-#: ordering wrong; if it borrowed the sorter's own parser, a parsing bug in the
-#: sorter would produce matching wrong answers on both sides and hide itself.
+#: Deliberately a second copy of the grammar ``urls._ROUTE_PARAMETER_RE`` uses, rather than an import of it.
 _PARAMETER_RE: Final = re.compile(r"<(?:([^>:]+):)?([^>]+)>")
 
 
@@ -84,8 +50,7 @@ def _view(request: HttpRequest) -> HttpResponse:
         request: Unused - present only to satisfy the view signature.
 
     Returns:
-        An empty response, never actually produced by these tests.
-    """
+        An empty response, never actually produced by these tests."""
     return HttpResponse()
 
 
@@ -94,28 +59,22 @@ def _route_parameters(route: str) -> list[tuple[str, str]]:
 
     Args:
         route: A route string as passed to ``path()``, e.g.
-            ``"pins/<str:pin_slug>/notes/<int:note_id>/"``.
 
     Returns:
-        One pair per capture, in path order. A capture written without an
-        explicit converter (``<pk>``) reports ``"str"``, matching Django's own
-        default.
-    """
+        One pair per capture, in path order."""
     return [(converter or "str", name) for converter, name in _PARAMETER_RE.findall(route)]
 
 
 def _registered_routes() -> list[tuple[str, str, dict[str, str | int]]]:
     """Read every external-API route straight out of the live urlconf.
 
-    Reading the urlconf instead of hard-coding a list is what makes these tests
-    cover routes that do not exist yet: the fifteen agents adding endpoints to
-    the ``urls_*.py`` domain modules get the shadowing check for free, without
-    having to know this file exists.
+    Reading the urlconf instead of hard-coding a list is what makes these tests cover routes that do not exist
+    yet: the fifteen agents adding endpoints to the ``urls_*.py`` domain modules get the shadowing check for
+    free, without having to know this file exists.
 
     Returns:
         ``(url_name, route, reverse_kwargs)`` for each registered pattern, with
-        the kwargs populated from :data:`_SAMPLE_ARGUMENTS`.
-    """
+        the kwargs populated from: data:`_SAMPLE_ARGUMENTS`."""
     routes: list[tuple[str, str, dict[str, str | int]]] = []
     for entry in external_api_urls.urlpatterns:
         route = str(entry.pattern)
@@ -150,12 +109,8 @@ class ExternalApiRouteTableTests(SimpleTestCase):
     def test_route_names_are_unique(self) -> None:
         """Two routes sharing a name make reverse() silently pick one of them.
 
-        Names are global across the flat ``external_api:`` namespace, so two
-        domain modules can collide without either author seeing the other's
-        file. Django does not complain - ``reverse()`` just starts returning the
-        other module's URL, and the endpoint that "stopped working" is the one
-        that never changed.
-        """
+        Names are global across the flat ``external_api:`` namespace, so two domain modules can collide without
+        either author seeing the other's file."""
         names = [name for name, _route, _kwargs in _registered_routes()]
         duplicates = sorted({name for name in names if names.count(name) > 1})
         self.assertEqual(
@@ -167,11 +122,9 @@ class ExternalApiRouteTableTests(SimpleTestCase):
     def test_every_converter_in_use_has_a_sample_value(self) -> None:
         """A converter with no witness value would silently weaken the shadowing check.
 
-        ``_registered_routes`` falls back to the ``str`` sample for unknown
-        converters so the suite still runs, but that fallback can produce a
-        value the converter rejects - which turns a real ordering failure into
-        an unexplained Resolver404, or worse, hides one.
-        """
+        ``_registered_routes`` falls back to the ``str`` sample for unknown converters so the suite still runs,
+        but that fallback can produce a value the converter rejects - which turns a real ordering failure into
+        an unexplained Resolver404, or worse, hides one."""
         used = {
             converter
             for _name, route, _kwargs in _registered_routes()
@@ -187,11 +140,9 @@ class ExternalApiRouteTableTests(SimpleTestCase):
     def test_urlpatterns_are_ordered_by_specificity(self) -> None:
         """The published list must be the sorted one, not a hand-ordered list that happens to work.
 
-        If someone assigns ``urlpatterns`` without running it through
-        ``order_by_specificity`` the table may still resolve correctly today,
-        purely by luck of declaration order, and then break the first time a
-        domain module adds a literal. This asserts the guarantee is mechanical.
-        """
+        If someone assigns ``urlpatterns`` without running it through ``order_by_specificity`` the table may
+        still resolve correctly today, purely by luck of declaration order, and then break the first time a
+        domain module adds a literal."""
         patterns = list(external_api_urls.urlpatterns)
         self.assertEqual(
             [str(entry.pattern) for entry in order_by_specificity(patterns)],
@@ -202,11 +153,9 @@ class ExternalApiRouteTableTests(SimpleTestCase):
     def test_every_entry_is_a_flat_path_route(self) -> None:
         """``include()`` here would break the flat namespace the whole API depends on.
 
-        ``reverse("external_api:pins.detail")`` is used throughout the codebase
-        and ``schema.preprocess_external_api_only`` selects endpoints by URL
-        prefix; an included sub-namespace breaks the first outright and quietly
-        reshapes the second.
-        """
+        ``reverse("external_api:pins.detail")`` is used throughout the codebase and
+        ``schema.preprocess_external_api_only`` selects endpoints by URL prefix; an included sub-namespace
+        breaks the first outright and quietly reshapes the second."""
         resolvers = [str(entry.pattern) for entry in external_api_urls.urlpatterns if isinstance(entry, URLResolver)]
         self.assertEqual(
             resolvers,
@@ -221,11 +170,9 @@ class ExternalApiUrlResolutionTests(SimpleTestCase):
     def test_every_route_reverses(self) -> None:
         """A registered route that cannot be reversed is unreachable from client code.
 
-        In practice this fails when a route is declared with capture names its
-        callers cannot supply, or when the flat namespace has been broken by an
-        ``include()`` - both of which turn ``reverse()`` into a NoReverseMatch
-        naming a route that visibly exists in the urlconf.
-        """
+        In practice this fails when a route is declared with capture names its callers cannot supply, or when
+        the flat namespace has been broken by an ``include()`` - both of which turn ``reverse()`` into a
+        NoReverseMatch naming a route that visibly exists in the urlconf."""
         for name, route, kwargs in _registered_routes():
             with self.subTest(name=name, route=route):
                 try:
@@ -287,8 +234,7 @@ class SpecificityOrderingTests(SimpleTestCase):
             patterns: Patterns to resolve against, in the order given.
 
         Returns:
-            A resolver that accepts absolute paths, like the project's root one.
-        """
+            A resolver that accepts absolute paths, like the project's root one."""
         return URLResolver(RegexPattern(r"^/"), patterns)
 
     def test_declaration_order_alone_really_does_shadow_a_literal(self) -> None:
@@ -334,10 +280,8 @@ class SpecificityOrderingTests(SimpleTestCase):
     def test_ordering_is_stable_for_equally_specific_routes(self) -> None:
         """Identically shaped routes keep their declared order rather than being reshuffled.
 
-        The sort must not invent a winner between two genuinely ambiguous
-        routes; that is a conflict for the author to resolve, and silently
-        picking one would make it harder to see.
-        """
+        The sort must not invent a winner between two genuinely ambiguous routes; that is a conflict for the
+        author to resolve, and silently picking one would make it harder to see."""
         declared = [
             path("a/<str:first>/", _view, name="first"),
             path("a/<str:second>/", _view, name="second"),
@@ -364,13 +308,10 @@ def _render_route(shape: list[tuple[str, str]]) -> str:
     """Turn a generated shape into a ``path()`` route string.
 
     Args:
-        shape: ``(kind, value)`` segments, where kind is ``"literal"`` or
-            ``"converter"``.
+        shape: ``(kind, value)`` segments, where kind is ``"literal"`` or ``"converter"``.
 
     Returns:
-        A route with a trailing slash, capture names derived from position so
-        they are unique within the route.
-    """
+        A route with a trailing slash, capture names derived from position so they are unique within the route."""
     return (
         "/".join(
             value if kind == "literal" else f"<{value}:p{position}>" for position, (kind, value) in enumerate(shape)
@@ -382,28 +323,22 @@ def _render_route(shape: list[tuple[str, str]]) -> str:
 def _render_sample_path(shape: list[tuple[str, str]]) -> str:
     """Build the concrete URL a shape's own route should claim.
 
-    Because every converter's sample value is rejected by every other converter
-    (and by every literal in the alphabet), two different shapes can never
-    produce the same sample path - so a mismatch below is always an ordering
-    failure and never an unavoidable collision.
+    Because every converter's sample value is rejected by every other converter (and by every literal in the
+    alphabet), two different shapes can never produce the same sample path - so a mismatch below is always an
+    ordering failure and never an unavoidable collision.
 
     Args:
         shape: The same ``(kind, value)`` segments passed to :func:`_render_route`.
 
     Returns:
-        An absolute path with a trailing slash.
-    """
+        An absolute path with a trailing slash."""
     return "/" + "/".join(value if kind == "literal" else str(_SAMPLE_ARGUMENTS[value]) for kind, value in shape) + "/"
 
 
 class SpecificityOrderingPropertyTests(SimpleTestCase):
     """Property: for any set of routes, sorting makes each one claim its own URLs.
 
-    The hand-written cases above cover the collisions we already know about.
-    This covers the ones the domain modules have not invented yet - which is the
-    whole risk being managed, since thirteen modules are about to add routes
-    nobody has reviewed together.
-    """
+    The hand-written cases above cover the collisions we already know about."""
 
     @hyp_settings(max_examples=100, deadline=None)
     @given(_SHAPES)
@@ -411,10 +346,7 @@ class SpecificityOrderingPropertyTests(SimpleTestCase):
         """Sort an arbitrary route set, then round-trip every route through it.
 
         Args:
-            shapes: Generated route shapes; duplicates are dropped because two
-                identical routes are ambiguous by definition and no ordering
-                can decide between them.
-        """
+            shapes: Generated route shapes; duplicates are dropped because two identical routes are ambiguous by definition and no ordering can..."""
         unique = list(dict.fromkeys(tuple(shape) for shape in shapes))
         patterns = [path(_render_route(list(shape)), _view, name=f"route{index}") for index, shape in enumerate(unique)]
         resolver = URLResolver(RegexPattern(r"^/"), order_by_specificity(patterns))

@@ -1,9 +1,4 @@
 {# The filter panel's result set, as one document rather than a script per pin. #}
-{# Rendering a JS object literal per pin cost 2.62s and 11.45MB of HTML for a #}
-{# 10,000-pin account - a {% url %} reverse and ~20 escapejs filters each - to #}
-{# deliver data that serializes in 0.13s. json_script escapes it safely, and #}
-{# the payload is the same shape map.pins returns, so _buildMarker reads it #}
-{# without a second code path. #}
 <div id="map-body">
 {{ map_pins|json_script:"map-filter-pins" }}
 {{ map_labels|json_script:"map-filter-labels" }}

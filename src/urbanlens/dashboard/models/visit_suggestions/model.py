@@ -21,23 +21,8 @@ class VisitSuggestionStatus(abstract.TextChoices):
 
 class VisitSuggestion(abstract.DashboardModel):
     """A proposed PinVisit sent to a user for confirmation.
-
-    Created when a user tags a connection as a co-visitor in the visit-add dialog
-    (``origin_visit`` set), when a trip activity is marked completed and another
-    RSVP'd-yes member needs to confirm they were there (``trip_activity`` set),
-    when a safety check-in concludes and the checked-in user needs to confirm they
-    actually made it to the planned destination (``safety_checkin`` set), when
-    a user uploads a geotagged, timestamped photo to one of their pins and is
-    asked to confirm the visit it implies (``origin_image`` set), or when a
-    Google Takeout "My Activity" (Maps) import finds a "Directions to X" entry
-    that doesn't match any existing pin (``from_my_activity`` set). Unlike the
-    other four origins, a My Activity entry has no persisted row to link to - it's
-    transient data parsed out of an uploaded file - so it's a boolean marker
-    rather than a foreign key. Exactly one of those five origins is set per row.
-
-    Only ``location``/``latitude``/``longitude``/``visited_at`` are used to identify
-    the place and time to the recipient - the origin pin's private custom name and
-    visit notes are never referenced here or in the notification built from this row.
+    Created when a user tags a connection as a co-visitor in the visit-add dialog (``origin_visit`` set), when a trip activity is marked completed and another RSVP'd-yes member needs to confirm they were there (``trip_activity`` set), when a safety check-in concludes and the checked-in user needs to confirm they actually made it to the planned destination (``safety_checkin`` set), when a user uploads a geotagged, timestamped photo to one of their pins and is asked to confirm the visit it implies (``origin_image`` set), or when a Google Takeout "My Activity" (Maps) import finds a "Directions to X" entry that doesn't match any existing pin (``from_my_activity`` set).
+    Unlike the other four origins, a My Activity entry has no persisted row to link to - it's transient data parsed out of an uploaded file - so it's a boolean marker rather than a foreign key.
 
     Attributes:
         location: Shared Location identifying the place, if one exists.
@@ -93,11 +78,10 @@ class VisitSuggestion(abstract.DashboardModel):
     )
     origin_visit = models.ForeignKey(
         "dashboard.PinVisit",
-        # CASCADE, not SET_NULL: the exactly-one-origin constraint below means
-        # nulling this out without also nulling every other origin would leave
-        # the row satisfying zero of the five branches and fail the check
-        # constraint. A suggestion with no surviving origin has nothing left to
-        # confirm, so it should be deleted along with its origin.
+        # CASCADE, not SET_NULL: the exactly-one-origin constraint below means nulling this out
+        # without also nulling every other origin would leave the row satisfying zero of the five
+        # branches and fail the check constraint.
+        # A suggestion with no surviving origin has nothing left to confirm, so it should be deleted
         on_delete=models.CASCADE,
         null=True,
         blank=True,

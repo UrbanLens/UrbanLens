@@ -1,27 +1,6 @@
 /**
- * The community wiki: reading it, editing it, and losing an edit race.
- *
- * The concurrency check is the reason this file exists. `PUT article/` requires
- * a `base_revision_id`, which is the whole mechanism protecting a shared
- * document from two people saving over each other - and a mechanism that is
- * *declared* in a serializer but never enforced end to end looks identical to
- * one that works, right up until somebody's edit disappears. Sending a
- * deliberately stale revision id is the only way to find out which it is, and
- * it needs a real revision history to be stale against.
- *
- * **Why most of this skips on a fresh deployment.** A wiki is not created by
- * pinning a location. One is auto-created as an invisible draft and only
- * becomes visible when a user promotes it through the web UI's "Create Wiki"
- * action - and the *published API has no endpoint that does that* (`wikis/` is
- * GET and PATCH only; there is no POST). So a client holding an API key can
- * read and edit a wiki that already exists and can never start one, and a
- * suite that only talks to the API cannot manufacture the precondition. That
- * gap is recorded in docs/PROBLEMS.md, 2026-08-24.
- *
- * Rather than assert against a wiki that is not there - which would fail on a
- * correct deployment and teach everyone to ignore this file - each test that
- * needs one resolves it first and skips with the reason when it is absent. The
- * assertions are real and start running the moment a wiki exists.
+ * The community wiki: reading it, editing it, and losing an edit race. The concurrency check is the
+ * reason this file exists.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

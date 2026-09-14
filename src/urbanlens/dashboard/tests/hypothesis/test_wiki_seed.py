@@ -1,13 +1,4 @@
-"""Tests for seeding a wiki's article from a confidently-matched Wikipedia article.
-
-Covers:
-- The pure HTML-extract-to-Markdown conversion (services.wiki.wiki_seed).
-- seed_wiki_article_from_wikipedia's guards: no wiki, no cache, empty cache,
-  existing article (never overwritten).
-- The two trigger points: models.cache.signals firing on a "wikipedia"
-  LocationCache write, and WikiShareService.share_from_pin seeding
-  immediately when a match is already cached at wiki-creation time.
-"""
+"""Tests for seeding a wiki's article from a confidently-matched Wikipedia article."""
 
 from __future__ import annotations
 
@@ -115,9 +106,7 @@ def test_infobox_markdown_collapses_internal_whitespace() -> None:
 
 
 def test_infobox_markdown_never_produces_an_empty_table_header() -> None:
-    """Regression guard: the previous GFM-table rendering's mandatory blank
-    header row used to render as an empty <tr> once parsed into the article
-    editor -. A bullet list has no header row."""
+    """A bullet list has no header row."""
     md = _infobox_markdown([["Established", "1900"]])
     assert "| | |" not in md  # nosec B101
 
@@ -226,8 +215,7 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
         self.assertIn("wikipedia.org/wiki/Eighteenth_District_School", article.content)
 
     def test_matched_article_with_no_infobox_key_omits_the_facts_list(self) -> None:
-        """A location cached before this field existed (or a genuinely
-        infobox-less article) must still seed normally, with no facts list."""
+        """A location cached before this field existed (or a genuinely infobox-less article) must still seed normally, with no facts list."""
         location = _location()
         baker.make(Wiki, location=location)
         LocationCache.objects.create(location=location, source="wikipedia", data=_ARTICLE_DATA)
@@ -461,13 +449,10 @@ class WikipediaCacheSignalTriggersSeedingTests(TestCase):
 
 
 class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
-    """``tasks.ensure_wiki_for_location``: seed the article on wiki creation when a
-    Wikipedia match was already cached for the location beforehand.
+    """``tasks.ensure_wiki_for_location``: seed the article on wiki creation when a Wikipedia match was already cached for the location beforehand.
 
-    This used to hang off the "Create wiki" click, because that was the moment
-    the page appeared. Pages appear on the first pin now, so the seeding moved
-    with the creation rather than being lost with the button.
-    """
+    Pages appear on the first pin now, so the seeding moved with the creation rather than being lost with the
+    button."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -476,11 +461,8 @@ class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
     def _create_wiki(self, location) -> Wiki:
         """Run the creation task directly.
 
-        Not via ``baker.make(Pin, ...)``: that fires the pin post_save chain,
-        which under eager Celery runs the real enrichment task inline and
-        reaches for external services. What is under test here is what wiki
-        creation itself seeds.
-        """
+        Not via ``baker.make(Pin, ...)``: that fires the pin post_save chain, which under eager Celery runs the
+        real enrichment task inline and reaches for external services."""
         from urbanlens.dashboard.tasks import ensure_wiki_for_location
 
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):

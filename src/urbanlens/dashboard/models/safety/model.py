@@ -45,16 +45,16 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_GRACE_PERIOD = timedelta(hours=1)
 
-# How long before a check-in escalates to emergency contacts that the owner gets one
-# last "check in now" warning. Matches the polling cadence of the Celery beat tasks
-# that drive this feature, so it can't realistically be tightened further without
-# also tightening send_due_checkin_reminders/escalate_overdue_checkins.
+# How long before a check-in escalates to emergency contacts that the owner gets one last "check in
+# now" warning.
+# Matches the polling cadence of the Celery beat tasks that drive this feature, so it can't
+# realistically be tightened further without also tightening
 FINAL_WARNING_LEAD_TIME = timedelta(minutes=5)
 
 # How often the owner editing the trip plan, destination, or route markup after contacts have
 # already been notified is allowed to trigger another "plan updated" notification - keeps rapid,
-# incremental edits (e.g. drawing several map annotations in a row) from spamming contacts with
-# one email per change.
+# incremental edits (e.g. drawing several map annotations in a row) from spamming contacts with one
+# email per change.
 PLAN_UPDATE_NOTIFICATION_COOLDOWN = timedelta(minutes=15)
 
 DEFAULT_CONTACT_MESSAGE = (
@@ -87,11 +87,7 @@ def humanize_hours_minutes(delta: timedelta) -> str:
 
 class EmergencyContactDefault(abstract.DashboardModel):
     """A reusable emergency contact saved to a profile's safety defaults.
-
-    Copied onto each new SafetyCheckin as a SafetyCheckinContact snapshot at
-    creation time - editing a default here does not retroactively change any
-    check-in that already copied it. Exactly one of contact_profile/email
-    identifies the contact.
+    Copied onto each new SafetyCheckin as a SafetyCheckinContact snapshot at creation time - editing a default here does not retroactively change any check-in that already copied it.
     """
 
     owner = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_contact_defaults")
@@ -100,10 +96,10 @@ class EmergencyContactDefault(abstract.DashboardModel):
     # check-in creation time (see services.visits.safety.save_contact_defaults) and
     # never itself matched by value - only the copies are (against SafetyContactOptOut).
     email = EncryptedTextField(null=True, blank=True, validators=[validate_email], fail_soft=True)
-    # Encrypted for the same reason as `email` above: it names a third party who
-    # never consented to being in this database, it persists indefinitely (a
-    # default is a template, not a resolved check-in), and it is only ever read
-    # as an attribute - never filtered, ordered, or matched by value.
+    # Encrypted for the same reason as `email` above: it names a third party who never consented to
+    # being in this database, it persists indefinitely (a default is a template, not a resolved
+    # check-in), and it is only ever read as an attribute - never filtered, ordered, or matched by
+    # value.
     label = EncryptedTextField(max_length=150, blank=True, default="", validators=[MaxLengthValidator(150)], fail_soft=True)
     order = IntegerField(default=0)
 
@@ -210,17 +206,8 @@ class SafetyCheckinStatus(abstract.TextChoices):
 
 class SafetyCheckin(abstract.PublicDashboardModel):
     """A planned trip with an expected check-in time and emergency contacts.
-
-    If the profile doesn't check in by ``checkin_by`` + ``grace_period``, the
-    linked ``SafetyCheckinContact`` rows are notified. Concluding the check-in
-    (self check-in, or a contact marking the profile safe) raises a
-    VisitSuggestion for the destination via ``services.visits.safety._conclude_checkin``,
-    reusing the same confirm/reject flow as any other tentative visit.
-
-    ``slug`` (from ``PublicDashboardModel``) is scoped per-profile - only the owner-facing
-    detail/check-in pages use it for a human-readable URL; the contact portal
-    keeps using its unguessable ``token``, since that's a security credential,
-    not just an identifier.
+    If the profile doesn't check in by ``checkin_by`` + ``grace_period``, the linked ``SafetyCheckinContact`` rows are notified.
+    ``slug`` (from ``PublicDashboardModel``) is scoped per-profile - only the owner-facing detail/check-in pages use it for a human-readable URL; the contact portal keeps using its unguessable ``token``, since that's a security credential, not just an identifier.
 
     Attributes:
         profile: The profile who created and owns this check-in.
@@ -290,12 +277,10 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     notify_community_wiki = BooleanField(default=False)
     wiki_notified_at = DateTimeField(null=True, blank=True)
 
-    # Opt-in, owner-controlled live position feed - visible only to accepted
-    # partners (see consumers.SafetyCheckinChatConsumer), never to emergency
-    # contacts. Default off: continuous GPS is a real battery/privacy cost the
-    # owner must actively choose, not something a check-in should assume.
-    # Current point only, overwritten on each update - no history/breadcrumb
-    # trail (deliberately out of scope; see docs/designs' safety-partner plan).
+    # Opt-in, owner-controlled live position feed - visible only to accepted partners (see
+    # consumers.SafetyCheckinChatConsumer), never to emergency contacts.
+    # Default off: continuous GPS is a real battery/privacy cost the owner must actively choose, not
+    # something a check-in should assume.
     live_location_sharing_enabled = BooleanField(default=False)
     live_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     live_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -334,10 +319,9 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         blank=True,
         related_name="safety_checkins",
     )
-    # Additional, previously-drawn maps attached for reference alongside the primary
-    # markup_map (the interactively-drawn route). Reference-only for the owner - unlike
-    # markup_map, these are not surfaced to emergency contacts in emails or the contact
-    # portal. See controllers.safety's SafetyCheckinMap*View.
+    # Reference-only for the owner - unlike markup_map, these are not surfaced to emergency contacts
+    # in emails or the contact portal.
+    # See controllers.safety's SafetyCheckinMap*View.
     markup_maps = ManyToManyField("dashboard.MarkupMap", blank=True, related_name="attached_safety_checkins")
 
     if TYPE_CHECKING:
@@ -427,12 +411,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
 class SafetyCheckinContact(abstract.DashboardModel):
     """A single emergency contact attached to one specific check-in.
-
-    A snapshot, not a live link back to ``EmergencyContactDefault`` - editing
-    or deleting a default afterward does not affect check-ins already created
-    from it. ``token`` is the magic-link credential for the public contact
-    portal, since a contact identified only by email has no account to log
-    into.
+    A snapshot, not a live link back to ``EmergencyContactDefault`` - editing or deleting a default afterward does not affect check-ins already created from it.
+    ``token`` is the magic-link credential for the public contact portal, since a contact identified only by email has no account to log into.
     """
 
     email = EmailField(null=True, blank=True)
@@ -494,12 +474,7 @@ class SafetyContactOptOutScope(abstract.TextChoices):
 
 class SafetyContactOptOut(abstract.DashboardModel):
     """Records that a contact (by profile or email) no longer wants safety check-in notifications.
-
-    Identity is resolved the same way as ``SafetyCheckinContact`` - exactly one of
-    ``contact_profile``/``email``. Which of ``owner``/``checkin`` is set (if either) depends on
-    ``scope``: a ``CHECKIN``-scoped row silences one specific check-in, an ``OWNER``-scoped row
-    silences every future check-in created by that one owner, and a ``GLOBAL``-scoped row silences
-    every safety check-in notification from the site, regardless of who created the check-in.
+    Identity is resolved the same way as ``SafetyCheckinContact`` - exactly one of ``contact_profile``/``email``.
     """
 
     email = EmailField(null=True, blank=True)
@@ -543,11 +518,9 @@ class SafetyContactOptOut(abstract.DashboardModel):
                 name="db_safety_contact_optout_scope_fields_match",
             ),
             # nulls_distinct=False so two opt-outs for the same target that both leave
-            # email/owner/checkin null (as every row does on at least one of those,
-            # per the two constraints above) are still caught - same reasoning as
-            # Label's uq_label_profile_name_kind_ci. Without it, a double-submitted
-            # opt-out link (or an email client prefetching the confirm GET) races
-            # record_contact_opt_out's get_or_create into two identical rows.
+            # email/owner/checkin null (as every row does on at least one of those, per the two
+            # constraints above) are still caught - same reasoning as Label's
+            # uq_label_profile_name_kind_ci.
             UniqueConstraint(
                 "contact_profile",
                 "email",
@@ -568,21 +541,8 @@ class SafetyCheckinPartnerStatus(abstract.TextChoices):
 
 
 class SafetyCheckinPartner(abstract.DashboardModel):
-    """A trusted account granted early, full visibility into one check-in, plus the
-    ability to conclude it.
-
-    Unlike a ``SafetyCheckinContact`` (notified without opting in, only once
-    overdue/escalated), a partner sees the full check-in - plan, contacts, chat,
-    and any shared live location - from the moment they accept, well before
-    anything goes wrong. Access requires ``status == ACCEPTED``: this is a real
-    safety responsibility, not a passive share, so an invite must be actively
-    accepted before any view/act access is granted (see
-    ``services.visits.safety.is_owner_or_accepted_partner``).
-
-    Only the check-in's owner may invite a partner - unlike Trip's
-    ``allow_add_members`` permission matrix, a check-in has exactly one
-    accountable owner, so a delegated invite-permission matrix would only
-    diffuse accountability for a safety-critical role.
+    """A trusted account granted early, full visibility into one check-in, plus the ability to conclude it.
+    Unlike a ``SafetyCheckinContact`` (notified without opting in, only once overdue/escalated), a partner sees the full check-in - plan, contacts, chat, and any shared live location - from the moment they accept, well before anything goes wrong.
     """
 
     status = CharField(max_length=10, choices=SafetyCheckinPartnerStatus.choices, default=SafetyCheckinPartnerStatus.INVITED)
@@ -618,21 +578,7 @@ class SafetyCheckinPartner(abstract.DashboardModel):
 
 class SafetyCheckinArchive(abstract.DashboardModel):
     """The encrypted, owner-only remnant of a concluded check-in.
-
-    Created by ``services.visits.safety.archive_checkin`` once a resolved check-in's
-    grace window elapses: the check-in's PII (plan, contacts, chat, resolution
-    details) is serialized to JSON, encrypted with a fresh random key
-    (``crypto_secretbox``), and that key is sealed (``crypto_box_seal``) to
-    only the owner's ``MessagingKeyBundle.public_key`` - after which the
-    plaintext columns on ``SafetyCheckin``/``SafetyCheckinContact``/
-    ``SafetyCheckinMessage`` are scrubbed. Sealing needs only the owner's
-    *public* key, so this can happen entirely server-side, with the owner
-    offline, exactly like ``ConversationKey``/``GroupKeyEnvelope`` already do
-    for direct messages - the server can never decrypt this row itself.
-
-    ``hasattr(checkin, "archive")`` is the sole "has this check-in been
-    archived" signal - no separate boolean flag exists on ``SafetyCheckin`` to
-    risk drifting from it.
+    Created by ``services.visits.safety.archive_checkin`` once a resolved check-in's grace window elapses: the check-in's PII (plan, contacts, chat, resolution details) is serialized to JSON, encrypted with a fresh random key (``crypto_secretbox``), and that key is sealed (``crypto_box_seal``) to only the owner's ``MessagingKeyBundle.public_key`` - after which the plaintext columns on ``SafetyCheckin``/``SafetyCheckinContact``/ ``SafetyCheckinMessage`` are scrubbed.
     """
 
     checkin = OneToOneField(SafetyCheckin, on_delete=CASCADE, related_name="archive")
@@ -659,11 +605,7 @@ class SafetyCheckinArchive(abstract.DashboardModel):
 
 class SafetyCheckinMessage(abstract.DashboardModel):
     """A chat message on a check-in, from either the owner or an emergency contact.
-
-    Exactly one of ``sender_profile``/``sender_contact`` is set at the
-    application layer: the owner and any contact who is also a site user post
-    as ``sender_profile``; a contact with no account posts as
-    ``sender_contact`` so their display name still resolves without a login.
+    Exactly one of ``sender_profile``/``sender_contact`` is set at the application layer: the owner and any contact who is also a site user post as ``sender_profile``; a contact with no account posts as ``sender_contact`` so their display name still resolves without a login.
     """
 
     body = TextField()

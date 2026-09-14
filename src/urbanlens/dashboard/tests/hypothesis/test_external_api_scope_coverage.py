@@ -1,22 +1,4 @@
-"""Every external API endpoint must enforce a scope, or be a named exception.
-
-``HasApiKeyScope`` fails closed per method, so an endpoint that gains a new HTTP
-method without declaring its scope becomes a dead 403 rather than an open door.
-That covers the common mistake. It does not cover the dangerous one: dropping the
-permission entirely, or inheriting ``UnscopedExternalApiView``, which
-authenticates the credential and then checks nothing. Its own docstring warns
-about this - "Do not use this as a shortcut for an endpoint that touches user
-data - such an endpoint needs a scope, and inheriting from here would silently
-grant it to every credential" - and nothing was enforcing it.
-
-An unscoped endpoint is reachable by *any* valid credential, including a key
-created with a single narrow scope, so the failure is invisible: the endpoint
-works, for everyone, forever.
-
-``_EXPECTED_UNSCOPED`` is the whole exemption list. Adding to it is the point:
-it makes granting a credential-wide endpoint a deliberate, reviewed edit rather
-than a base class someone picked because it was shorter.
-"""
+"""Every external API endpoint must enforce a scope, or be a named exception."""
 
 from __future__ import annotations
 

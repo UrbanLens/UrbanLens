@@ -4,19 +4,14 @@
 
 $article-serif: Georgia, 'Times New Roman', Times, serif;
 
-// Deliberately not a boxed dashboard container - reads as a plain page of
-// content (like about/index.html), not an editing tool bolted onto a card.
-// .card's own background/border/box-shadow (_layout.scss) are stripped here
-// rather than overridden piecemeal at each declaration.
+// Deliberately not a boxed dashboard container.
 .article-card {
     background: transparent;
     border: none;
     box-shadow: none;
 }
 
-// Article/Wikipedia sub-tabs (index.html) - the generic .card-tabs/.card-tab
-// strip, lightened to match this page's deliberately-not-boxed look (see
-// .article-card above) instead of its usual opaque card-header background.
+// Article/Wikipedia sub-tabs (index.html) - the generic.card-tabs/.card-tab strip, lightened to match this page's.
 .article-subtabs {
     background: transparent;
     padding: 0 0 0 .1rem;
@@ -34,9 +29,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
         padding: .5rem 1rem 1rem;
     }
 
-    // Room for the fixed-bottom save bar once it's actually showing (see
-    // .article-editor-footer below) so it never overlaps the article's own
-    // last line/the Cancel button never sits over real content.
+    // Room for the fixed-bottom save bar once it's actually showing so it never overlaps the article's own last line/the Cancel button never.
     &:has([data-article-editor][data-dirty="1"]) {
         padding-bottom: 6rem;
     }
@@ -142,21 +135,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 
         &:hover { text-decoration: underline; }
 
-        // Chromium/WebKit force an I-beam cursor - and report it back via
-        // getComputedStyle, not just render it - for anything inside a
-        // contenteditable region (the always-editable WYSIWYG canvas -
-        // _article_panel.html has no separate read-only mode), regardless of
-        // any author `cursor` CSS, even `!important` (confirmed live: no
-        // amount of CSS specificity changes the computed value). The actual
-        // fix is in article-wysiwyg.ts, which briefly flips a hovered link to
-        // contenteditable="false" - the one thing that genuinely changes
-        // Chromium's editability determination for cursor purposes - and
-        // undoes it again before mousedown, so click-to-position-cursor and
-        // the Ctrl/Cmd+click-to-open handler both still see a normal editable
-        // link. This rule is just the cursor value the browser then honors
-        // once that attribute is off; harmless outside the editor too
-        // (comments/diffs/previews aren't contenteditable, so this never
-        // fires there and the fallback default `<a>` cursor already applies).
+        // Chromium/WebKit force an I-beam cursor - and report it back via getComputedStyle, not just render it.
         cursor: pointer;
     }
 
@@ -254,10 +233,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 
 // -- Empty state ------------------------------------------------------------
 
-// Compact intro shown above the (always-editable) canvas when nothing has
-// been written yet - not a standalone empty-state screen, since the canvas
-// itself is right there ready to type into (no "Edit"/"Start the article"
-// button to click - see article-panel's data-article-editor contract).
+// Compact intro shown above the (always-editable) canvas when nothing has been written yet.
 .article-editor-wysiwyg-hint,
 .article-empty-hint-block {
     display: flex;
@@ -305,23 +281,12 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     background: var(--ul-grey-0);
 }
 
-// The whole toolbar (format buttons + preview toggle) is Source-mode-only
-// content - the WYSIWYG canvas gets its formatting from the bubble/slash
-// menus instead (see article-wysiwyg.ts). Previously only its *children*
-// were hidden here, leaving an empty bordered strip behind that read like a
-// dashboard card header sitting above the content - hide the whole bar.
+// The whole toolbar (format buttons + preview toggle) is Source-mode-only content.
 [data-editor-mode="wysiwyg"] .article-editor-toolbar {
     display: none;
 }
 
-// Floating toolbar docked to the bottom-right of the viewport - Source/Visual
-// switch + Clear, with room for more tools later. Always visible in both
-// editor modes (deliberately outside .article-editor-toolbar, which is
-// Source-mode-only). bottom: 4rem clears the site's own sticky .page-footer
-// (_nav.scss - ~3.25rem tall, z-index 9999, stuck to the viewport bottom on
-// every page) so that bar never sits on top of - and eats clicks meant for -
-// this toolbar. Pushed up further still once the save/cancel footer is also
-// showing (data-dirty), so the two floating bars never overlap each other.
+// Floating toolbar docked to the bottom-right of the viewport - Source/Visual switch + Clear, with room for more tools later.
 .article-floating-toolbar {
     position: fixed;
     right: 10.25rem;
@@ -358,10 +323,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     flex-wrap: wrap;
 }
 
-// WYSIWYG mode gets its formatting from the selection bubble menu and "/"
-// block menu instead (see article-wysiwyg.ts) - the Markdown cheat sheet is
-// Source-mode-only (the toolbar itself - format buttons and live-preview
-// toggle - is already hidden as a whole above).
+// WYSIWYG mode gets its formatting from the selection bubble menu and "/" block menu instead.
 [data-editor-mode="wysiwyg"] .article-editor-help {
     display: none;
 }
@@ -437,13 +399,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 }
 
 // -- WYSIWYG canvas (see frontend/ts/entries/article-wysiwyg.ts) -------------
-// TipTap mounts its own contenteditable `.ProseMirror` element as a child of
-// `[data-article-canvas]` - box-matches .article-editor-textarea above so
-// swapping between Source and visual mode doesn't shift layout. The
-// contenteditable itself gets the shared `.article-body` class (editorProps
-// in the TS entry), so headings/lists/tables/quotes/code all render with the
-// exact same typography as read mode and the preview pane - no separate
-// typography rules needed here, only editor chrome.
+// TipTap mounts its own contenteditable `.ProseMirror` element as a child of `[data-article-canvas]`.
 .article-editor-canvas {
     min-height: 24rem;
     overflow-y: auto;
@@ -573,10 +529,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 }
 
 // -- Bubble menu (format-on-selection) and slash command menu (block insert)
-// TipTap's BubbleMenu/FloatingMenu extensions position and show/hide these
-// elements automatically; only their own chrome is styled here. Always a
-// dark floating surface regardless of site theme, same convention as the
-// tooltip system (--ul-tooltip-*), for contrast against any page content.
+// TipTap's BubbleMenu/FloatingMenu extensions position and show/hide these elements automatically; only their own chrome is styled here.
 .article-bubble-menu {
     display: flex;
     align-items: center;
@@ -683,13 +636,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     }
 }
 
-// Hidden until the user has actually changed something (root's
-// [data-dirty="1"], set by article-editor.js's textarea `input` listener -
-// already reset for free on every save/cancel/restore, since those all swap
-// in a fresh #article-panel with no data-dirty attribute at all) - then
-// appears as a save bar fixed to the bottom of the viewport instead of
-// permanently occupying in-page space below an article that's just being
-// read. Same floating-surface treatment as .ul-bulk-bar (_gallery.scss).
+// Hidden until the user has actually changed something.
 .article-editor-footer {
     display: none;
 }

@@ -1,16 +1,5 @@
 /**
  * Guards the contract between `window.ulSectionCollapsed` and the templates that call it.
- *
- * Lazy sections defer their fetch with `hx-trigger="load[...]"`, and the filter
- * calls a global that `core.js` installs. htmx evaluates `load` filters as soon
- * as it processes the node, which is not ordered against `core.js` executing -
- * a Playwright run against the dev environment logged 28 identical
- * `ulSectionCollapsed is not a function` errors on one Private Pin page load,
- * and every section that threw silently never loaded its content.
- *
- * So each call site has to tolerate the global being absent, and has to default
- * to *loading* when it is: a section that fetches while collapsed is invisible
- * and correct, while one that never fetches is a blank panel with no error.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -52,10 +41,7 @@ describe("hx-trigger call sites for ulSectionCollapsed", () => {
     });
 
     test("every guard defaults to loading rather than to skipping", () => {
-        // `window.ulSectionCollapsed && !window.ulSectionCollapsed(...)` is the
-        // tempting shape and the wrong one: it evaluates falsy when the global
-        // is missing, which turns a thrown error into a section that silently
-        // never loads.
+        // `window.ulSectionCollapsed && !window.ulSectionCollapsed(..)` is the tempting shape and the wrong one.
         for (const { path, source } of callSites) {
             expect({ path, inverted: /window\.ulSectionCollapsed\s*&&\s*!/.test(source) }).toEqual({ path, inverted: false });
         }

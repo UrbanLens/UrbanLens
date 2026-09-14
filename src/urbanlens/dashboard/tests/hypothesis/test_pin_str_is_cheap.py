@@ -1,14 +1,4 @@
-"""`Pin.__str__` must not query, and must stay on one line.
-
-It previously ran `self.labels.filter(kind="status")` and read `effective_name`, which
-falls through to `self.location.display_name` - so rendering a pin cost up to two
-queries. `__str__` runs on every repr: an admin list of 100 pins paid 100+ times, as did
-every log line and error page mentioning a pin. `CLAUDE.md` already forbids `save()`
-inside `__str__`; a query is the same class of problem and much easier to miss.
-
-It also returned a five-line string, which renders as a paragraph inside admin select
-dropdowns and breaks line-oriented log grepping.
-"""
+"""`Pin.__str__` must not query, and must stay on one line."""
 
 from __future__ import annotations
 

@@ -1,19 +1,7 @@
 /**
- * The map's single-document fetch, against a real deployment.
- *
- * In the `ui` project rather than `api` because `map.document` is a
- * session-authenticated dashboard endpoint, and the `api` project deliberately
- * carries no session - it exists for the Bearer-token surface.
- *
- * Two things only an integration run can answer. Whether the copy Valkey hands
- * back is the same bytes the database produced - the unit tests compare a fake
- * cache, and a fake cannot get the encoding wrong the way a real client can.
- * And whether an account large enough to matter answers in a sane time, which
- * needs a real account, a real database and a real network between them.
- *
- * The size specs need a seeded account and skip without one:
- *
- *     manage.py provision_integration_env --roles primary,secondary,heavy --heavy-pins 30000
+ * The map's single-document fetch, against a real deployment. In the `ui` project rather than `api`
+ * because `map.document` is a session-authenticated dashboard endpoint, and the `api` project
+ * deliberately carries no session - it exists for the Bearer-token surface.
  */
 
 import { env, expect, ifHeavyAccount, test } from "../../lib/fixtures.js";

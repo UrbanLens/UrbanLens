@@ -1,26 +1,11 @@
 """External API endpoints for direct messages and group chats.
 
-Every view here is credential-only (``ExternalApiView``), and every one
-requires a ``messages:read``/``messages:write`` scope - which
-``permissions.OAUTH2_ONLY_SCOPES`` restricts to user-consented OAuth2 tokens,
-so a PAT-style ``ApiKey`` can never reach any of this even if its ``scopes``
-list somehow names them. A bearer key that ends up in a CI config or a
-screenshot must not be a way into someone's conversations.
-
-Two design points worth stating up front, because both are easy to "simplify"
-into a bug:
-
-**Nothing here decrypts anything.** Encrypted messages are relayed as
-``ciphertext``/``nonce``/``key_version`` exactly as stored. The server holds no
-key material (see ``controllers.e2ee``), and no endpoint here should ever
-acquire any.
-
-**Nothing here constructs a share row directly.** Sends that carry a pin go
-through ``services.messaging.direct_message_shares.send_message_with_share``, which
-routes to the same ``create_pin_share`` the web composer uses and therefore
-keeps the ``LocationExposure`` provenance chain intact. Building a ``PinShare``
-or ``DirectMessageShare`` inline would appear to work while silently recording
-no exposure.
+Every view here is credential-only (``ExternalApiView``), and every one requires a
+``messages:read``/``messages:write`` scope - which ``permissions.OAUTH2_ONLY_SCOPES`` restricts to
+user-consented OAuth2 tokens, so a PAT-style ``ApiKey`` can never reach any of this even if its
+``scopes`` list somehow names them.
+A bearer key that ends up in a CI config or a screenshot must not be a way into someone's
+conversations.
 """
 
 from __future__ import annotations
@@ -138,13 +123,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Literal first path segments under ``messages/`` that can never be a peer
-#: slug. Django resolves urlpatterns in order and the literal routes are
-#: registered first, so this is a second line of defense rather than the
-#: primary one - but a peer lookup that silently matched a profile actually
-#: named "settings" would be a confusing, hard-to-trace bug, so the peer
-#: resolver refuses these outright instead of depending on route ordering
-#: staying correct forever.
+#: Literal first path segments under ``messages/`` that can never be a peer slug.
 RESERVED_PEER_SLUGS = frozenset({"conversations", "settings", "groups"})
 
 #: Upper bound a client may request for one page of a message thread.
@@ -160,11 +139,9 @@ def _paginate_built(
 ) -> Response:
     """Page a list of raw rows, then build payloads for *only* that page.
 
-    ``PaginatedListMixin`` serializes the page directly, which assumes the row
-    shape already matches the serializer. These lists don't: conversation rows
-    need normalizing (and that normalization issues per-row identity-masking
-    queries), so paging first and building second keeps the cost proportional
-    to the page rather than to the whole inbox.
+    These lists don't: conversation rows need normalizing (and that normalization issues per-row
+    identity-masking queries), so paging first and building second keeps the cost proportional to the
+    page rather than to the whole inbox.
 
     Args:
         request: The request whose ``page``/``page_size`` drive pagination.
@@ -199,18 +176,10 @@ def _resolve_peer(peer_slug: str) -> Profile | None:
 def _thread_visible(profile: Profile, partner: Profile) -> bool:
     """Whether ``profile`` may see a conversation thread with ``partner`` at all.
 
-    The external mirror of the check in
-    ``controllers.direct_messages.ConversationView``, and it must stay identical
-    to it: resolving a peer by slug is not the same as being allowed to know
-    that peer exists. A profile whose DM settings reject this caller and who has
-    never exchanged a message with them is hidden, so asking for the thread must
-    read as "no such conversation" rather than returning an empty page - an
-    empty 200 against a 404 for an invented slug is a working existence oracle
-    for precisely the accounts that opted out of being reachable.
-
-    Prior history wins over current settings deliberately: someone who has
-    already talked to you does not vanish from your inbox when they later
-    tighten their DM privacy.
+    A profile whose DM settings reject this caller and who has never exchanged a message with them is
+    hidden, so asking for the thread must read as "no such conversation" rather than returning an empty
+    page - an empty 200 against a 404 for an invented slug is a working existence oracle for precisely
+    the accounts that opted out of being reachable.
 
     Args:
         profile: The requesting profile.
@@ -225,19 +194,17 @@ def _thread_visible(profile: Profile, partner: Profile) -> bool:
 def _resolve_membership(request: Request, group_uuid: UUID) -> tuple[Profile, GroupChat, GroupChatMembership] | None:
     """Resolve the caller, the group, and the caller's active membership in it.
 
-    Collapses "no such group", "left the group" and "never was in the group"
-    into one indistinguishable None, which every caller answers with a 404.
-    Group uuids are unguessable, but a distinguishable answer would still turn
-    a leaked uuid into a membership oracle - and a *removed* member must not be
-    able to confirm the group still exists either.
+    Group uuids are unguessable, but a distinguishable answer would still turn a leaked uuid into a
+    membership oracle - and a *removed* member must not be able to confirm the group still exists
+    either.
 
     Args:
         request: The authenticated request.
         group_uuid: The group's uuid from the URL.
 
     Returns:
-        ``(profile, group, membership)``, or None when the caller has no active
-        membership in a group with that uuid.
+        ``(profile, group, membership)``, or None when the caller has no active membership in a group
+        with that uuid.
     """
     profile = request.user.profile
     group = GroupChat.objects.filter(uuid=group_uuid).first()
@@ -252,13 +219,8 @@ def _resolve_membership(request: Request, group_uuid: UUID) -> tuple[Profile, Gr
 def _thread_response(request: Request, messages: list[Any], has_more_older: bool, builder: Callable[[Any], dict[str, Any]]) -> Response:
     """Build the cursor-paginated envelope for one page of a message thread.
 
-    Deliberately *not* page-number pagination, unlike the browse lists in this
-    package. A thread appends at one end continuously: with numbered pages,
-    every message that arrives while a user scrolls back shifts the window, so
-    page 2 re-serves rows the client already rendered from page 1 and can also
-    skip rows entirely. Keying off ``before=<id>`` - the same ``before_id``
-    cursor ``thread_page`` already takes - makes each request name an absolute
-    position in the thread that new arrivals cannot move.
+    Keying off ``before=<id>`` - the same ``before_id`` cursor ``thread_page`` already takes - makes
+    each request name an absolute position in the thread that new arrivals cannot move.
 
     Args:
         request: The current request, used to build the ``next`` URL.
@@ -267,8 +229,8 @@ def _thread_response(request: Request, messages: list[Any], has_more_older: bool
         builder: Renders one message for the viewer.
 
     Returns:
-        ``{results, next, previous, count}`` with ``previous``/``count`` null -
-        a cursor walk has no page count and only goes one direction.
+        ``{results, next, previous, count}`` with ``previous``/``count`` null - a cursor walk has no
+        page count and only goes one direction.
     """
     results = [builder(message) for message in messages]
     next_url = None
@@ -286,7 +248,7 @@ def _thread_limit(request: Request, default: int) -> int:
         default: The page size to use when none was requested.
 
     Returns:
-        A limit between 1 and :data:`MAX_THREAD_LIMIT`.
+        A limit between 1 and: data:`MAX_THREAD_LIMIT`.
     """
     try:
         limit = int(request.query_params.get("limit") or default)
@@ -349,13 +311,8 @@ class MessageThreadView(ExternalApiView):
         """Return one page of the caller's conversation with ``peer_slug``."""
         profile = request.user.profile
         partner = _resolve_peer(peer_slug)
-        # The same gate controllers.direct_messages.ConversationView applies:
-        # a thread exists for this caller only if they have history with the
-        # partner or are currently permitted to message them. Without it a
-        # profile that rejects the caller's messages answered 200-with-nothing
-        # while an invented slug answered 404, which made this endpoint a
-        # profile-existence oracle for exactly the accounts whose DM settings
-        # were meant to hide them.
+        # The same gate controllers.direct_messages.ConversationView applies: a thread exists for this caller
+        # only if they have history with the partner or are currently permitted to message them.
         if partner is None or not _thread_visible(profile, partner):
             return Response({"error": "No such conversation."}, status=404)
 
@@ -455,9 +412,8 @@ class MessageThreadView(ExternalApiView):
             logger.info("external API message-send rejected: %s", exc)
             return Response({"error": "Message cannot be empty."}, status=400)
         except DirectMessageValidationError as exc:
-            # send_message_with_share also propagates create_direct_message's
-            # own ValueError, not just its own validation - this is a fallback
-            # for a subclass not enumerated above.
+            # send_message_with_share also propagates create_direct_message's own ValueError, not just its own
+            # validation - this is a fallback for a subclass not enumerated above.
             logger.info("external API message-send rejected: %s", exc)
             return Response({"error": "That message couldn't be sent."}, status=400)
 
@@ -480,9 +436,8 @@ class MessageThreadReadView(ExternalApiView):
             return Response({"error": "No such conversation."}, status=404)
 
         updated = DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
-        # Ends the current unread streak so a later message can alert again -
-        # without this, reading on mobile would leave the streak "already
-        # emailed" and suppress the next notification.
+        # Ends the current unread streak so a later message can alert again - without this, reading on mobile
+        # would leave the streak "already emailed" and suppress the next notification.
         clear_email_debounce(partner.pk, profile.pk)
         return Response({"marked_read": updated})
 
@@ -694,8 +649,6 @@ class GroupDetailView(ExternalApiView):
         """Return one page of this group's messages, oldest first."""
         profile = request.user.profile
         group = GroupChat.objects.filter(uuid=group_uuid).first()
-        # A non-member gets the same answer as a nonexistent group, so this
-        # can't be used to probe which group uuids exist.
         membership = group.membership_for(profile) if group is not None else None
         if membership is None:
             return Response({"error": "No such group."}, status=404)
@@ -847,8 +800,7 @@ class GroupMembersView(ExternalApiView):
             group_uuid: The group's uuid.
 
         Returns:
-            ``(profile, group)``, or None when the group is unknown or the
-            caller isn't an active member.
+            ``(profile, group)``, or None when the group is unknown or the caller isn't an active member.
         """
         profile = request.user.profile
         group = GroupChat.objects.filter(uuid=group_uuid).first()
@@ -879,9 +831,8 @@ class GroupMembersView(ExternalApiView):
                 identity = resolve_visible_identity(profile, member, visible_pks=visible_pks)
             members.append(
                 {
-                    # Blanked when masked: handing back the real slug would let
-                    # the caller look up a member whose name is masked exactly
-                    # to prevent that.
+                    # Blanked when masked: handing back the real slug would let the caller look up a member
+                    # whose name is masked exactly to prevent that.
                     "slug": "" if identity["is_masked"] else (member.slug or ""),
                     "display_name": identity["display_name"],
                     "is_anonymized": identity["is_masked"],
@@ -902,12 +853,7 @@ class GroupMembersView(ExternalApiView):
         serializer.is_valid(raise_exception=True)
         slugs = serializer.validated_data["member_slugs"]
 
-        # Permission before resolution. Resolving first made this endpoint a
-        # profile-slug oracle for any active member: an unknown slug came back
-        # 400 naming it, a real one got far enough to be refused 403 by
-        # add_group_members, and the difference between those two answers is a
-        # yes/no existence check anyone in the group could run at will. A
-        # non-manager must not be able to tell the two apart, so they are
+        # Permission before resolution. A non-manager must not be able to tell the two apart, so they are
         # refused before a single submitted slug is looked at.
         if not group.is_manager(profile):
             return Response({"error": "Only the group's creator can add members."}, status=403)
@@ -958,17 +904,8 @@ class GroupMembersView(ExternalApiView):
         if missing:
             return Response({"error": f"Unknown profile slug(s): {', '.join(sorted(missing))}."}, status=400)
 
-        # Validate the whole batch before removing anybody. Removing as we go
-        # meant a batch that failed on its second target had already removed
-        # the first - and notified them, and pushed the membership change to
-        # every connected client - while answering 400/403 to a caller who now
-        # reasonably believes nothing happened. Those side effects are not
-        # transactional (a rollback cannot unsend a notification or a WebSocket
-        # frame), so the fix has to be to refuse before the first mutation
-        # rather than to wrap the loop.
-        #
-        # Both rules are re-checked by remove_group_member itself; this only
-        # moves the *decision* ahead of the first side effect.
+        # Validate the whole batch before removing anybody. Both rules are re-checked by remove_group_member
+        # itself; this only moves the *decision* ahead of the first side effect.
         for target in targets:
             if group.membership_for(target) is None:
                 return Response({"error": "They aren't a member of this group."}, status=400)
@@ -998,10 +935,9 @@ class GroupMembersView(ExternalApiView):
 class GroupPinShareView(ExternalApiView):
     """POST: share one of the caller's pins into a group chat.
 
-    Fans out one ``PinShare`` (and therefore one ``LocationExposure``) per
-    connected member through ``share_pin_in_group_message`` - the same path the
-    web group composer uses. Without this endpoint the mobile group composer
-    would silently be unable to share pins at all.
+    Fans out one ``PinShare`` (and therefore one ``LocationExposure``) per connected member through
+    ``share_pin_in_group_message`` - the same path the web group composer uses.
+    Without this endpoint the mobile group composer would silently be unable to share pins at all.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1090,9 +1026,8 @@ class GroupMessageReactionView(ExternalApiView):
             message_id: The message being reacted to.
 
         Returns:
-            200 with ``{"action", "reactions"}``; 400 for an unusable emoji;
-            404 when the group, the caller's membership, or the message id
-            doesn't resolve.
+            200 with ``{"action", "reactions"}``; 400 for an unusable emoji; 404 when the group, the
+            caller's membership, or the message id doesn't...
         """
         resolved = _resolve_membership(request, group_uuid)
         if resolved is None:
@@ -1102,16 +1037,14 @@ class GroupMessageReactionView(ExternalApiView):
         serializer = ReactionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         emoji = serializer.validated_data["emoji"]
-        # Checked before the message is looked up, so an unusable emoji answers
-        # 400 for every id - otherwise the pair of statuses (400 for a real id,
-        # 404 for a fake one) would turn a junk emoji into a probe for which
-        # message ids exist in this group.
+        # Checked before the message is looked up, so an unusable emoji answers 400 for every id - otherwise the
+        # pair of statuses (400 for a real id, 404 for a fake one) would turn a junk emoji into a probe for
+        # which message ids exist in this group.
         if not is_safe_reaction_emoji(emoji):
             return Response({"error": "That isn't a usable reaction."}, status=400)
 
-        # group= in the lookup, not a follow-up check: message ids are
-        # sequential across every group in the table, so pk-only would let a
-        # member of any one group react into every other group's messages.
+        # group= in the lookup, not a follow-up check: message ids are sequential across every group in the
+        # table, so pk-only would let a member of any one group react into every other group's messages.
         message = GroupMessage.objects.filter(group=group, pk=message_id).first()
         if message is None:
             return Response({"error": "No such message."}, status=404)
@@ -1145,9 +1078,8 @@ class GroupMessageDetailView(ExternalApiView):
             message_id: The message being deleted.
 
         Returns:
-            204 on success and on a repeat; 403 when the caller isn't the
-            sender; 404 when the group, the caller's membership, or the message
-            id doesn't resolve.
+            204 on success and on a repeat; 403 when the caller isn't the sender; 404 when the group, the
+            caller's membership, or the message id...
         """
         resolved = _resolve_membership(request, group_uuid)
         if resolved is None:
@@ -1163,14 +1095,7 @@ class GroupMessageDetailView(ExternalApiView):
         try:
             delete_group_message(message, profile)
         except NotMessageSenderError as exc:
-            # A deliberate 403 where the rest of this package answers 404. The
-            # 404-everywhere rule exists to stop a caller learning whether a
-            # row exists; here they were provably already shown it - the lookup
-            # above proved they are an active member of the group it is in, and
-            # the thread endpoint serves them its full content - so the status
-            # leaks nothing they don't have. Answering 404 instead would tell a
-            # client "that message is gone" for a message still sitting in
-            # their thread, which reads as a sync bug.
+            # A deliberate 403 where the rest of this package answers 404.
             logger.info("external API group message delete rejected: %s", exc)
             return Response({"error": "Only the sender can delete this message."}, status=403)
         except GroupChatPermissionError as exc:
@@ -1196,30 +1121,17 @@ class GroupLeaveView(ExternalApiView):
     def post(self, request: Request, group_uuid: UUID) -> Response:
         """Leave this group.
 
-        POST rather than DELETE, matching the existing ``trips/<slug>/leave/``
-        route: "leave" is an action on a membership the caller cannot address
-        by URL, not the deletion of the group named in the path. A DELETE here
-        would read as "delete this group", which no member can do.
-
-        The membership gate is deliberately *ever* a member rather than
-        *currently* an active member, and this is the one place in this module
-        where those differ. Both properties are required at once: a caller who
-        was never in the group must not be able to confirm it exists (404, like
-        every other group route), while a caller retrying a leave whose first
-        response was lost must get the same answer as the first attempt. Gating
-        on active membership alone would answer the retry with 404 - which a
-        client cannot distinguish from "that group never existed" - and gating
-        on nothing would let a leaked uuid be probed for existence. An ended
-        membership row proves the caller was shown the group, so answering them
-        204 leaks nothing.
+        Gating on active membership alone would answer the retry with 404 - which a client cannot
+        distinguish from "that group never existed" - and gating on nothing would let a leaked uuid be
+        probed for existence.
 
         Args:
             request: The authenticated request.
             group_uuid: The group to leave.
 
         Returns:
-            204 on success and on a repeat; 404 when the group is unknown or
-            the caller has never been a member.
+            204 on success and on a repeat; 404 when the group is unknown or the caller has never been a
+            member.
         """
         from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
 
@@ -1231,10 +1143,8 @@ class GroupLeaveView(ExternalApiView):
         try:
             remove_group_member(group, profile, profile)
         except ValueError:
-            # "They aren't a member of this group" - the stint was already over
-            # (a repeat, or a concurrent removal between the check above and
-            # this call). The caller's desired end state holds either way, so
-            # this is a 204, not an error.
+            # "They aren't a member of this group" - the stint was already over (a repeat, or a concurrent
+            # removal between the check above and this call).
             return Response(status=204)
         return Response(status=204)
 
@@ -1257,8 +1167,7 @@ class ConversationMuteView(ExternalApiView):
             peer_slug: The conversation partner's slug.
 
         Returns:
-            200 with ``{"is_muted": bool}``, or 404 for an unknown or reserved
-            slug.
+            200 with ``{"is_muted": bool}``, or 404 for an unknown or reserved slug.
         """
         profile = request.user.profile
         partner = _resolve_peer(peer_slug)
@@ -1285,8 +1194,7 @@ class ConversationMuteView(ExternalApiView):
             peer_slug: The conversation partner's slug.
 
         Returns:
-            200 with ``{"is_muted": true}``, or 404 for an unknown or reserved
-            slug.
+            200 with ``{"is_muted": true}``, or 404 for an unknown or reserved slug.
         """
         return self._set(request, peer_slug, muted=True)
 
@@ -1299,8 +1207,7 @@ class ConversationMuteView(ExternalApiView):
             peer_slug: The conversation partner's slug.
 
         Returns:
-            200 with ``{"is_muted": false}``, or 404 for an unknown or reserved
-            slug.
+            200 with ``{"is_muted": false}``, or 404 for an unknown or reserved slug.
         """
         return self._set(request, peer_slug, muted=False)
 
@@ -1313,8 +1220,7 @@ class ConversationMuteView(ExternalApiView):
             muted: The desired end state.
 
         Returns:
-            200 with the persisted state, or 404 for an unknown or reserved
-            slug.
+            200 with the persisted state, or 404 for an unknown or reserved slug.
         """
         profile = request.user.profile
         partner = _resolve_peer(peer_slug)
@@ -1341,8 +1247,8 @@ class GroupMuteView(ExternalApiView):
             group_uuid: The group's uuid.
 
         Returns:
-            200 with ``{"is_muted": bool}``, or 404 when the group is unknown
-            or the caller is not an active member.
+            200 with ``{"is_muted": bool}``, or 404 when the group is unknown or the caller is not an active
+            member.
         """
         resolved = _resolve_membership(request, group_uuid)
         if resolved is None:
@@ -1367,8 +1273,8 @@ class GroupMuteView(ExternalApiView):
             group_uuid: The group's uuid.
 
         Returns:
-            200 with ``{"is_muted": true}``, or 404 when the group is unknown
-            or the caller is not an active member.
+            200 with ``{"is_muted": true}``, or 404 when the group is unknown or the caller is not an active
+            member.
         """
         return self._set(request, group_uuid, muted=True)
 
@@ -1381,8 +1287,8 @@ class GroupMuteView(ExternalApiView):
             group_uuid: The group's uuid.
 
         Returns:
-            200 with ``{"is_muted": false}``, or 404 when the group is unknown
-            or the caller is not an active member.
+            200 with ``{"is_muted": false}``, or 404 when the group is unknown or the caller is not an
+            active member.
         """
         return self._set(request, group_uuid, muted=False)
 
@@ -1395,8 +1301,8 @@ class GroupMuteView(ExternalApiView):
             muted: The desired end state.
 
         Returns:
-            200 with the persisted state, or 404 when the group is unknown or
-            the caller is not an active member.
+            200 with the persisted state, or 404 when the group is unknown or the caller is not an active
+            member.
         """
         resolved = _resolve_membership(request, group_uuid)
         if resolved is None:

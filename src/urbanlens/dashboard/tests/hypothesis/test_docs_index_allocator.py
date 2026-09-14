@@ -1,16 +1,4 @@
-"""The index allocates ids, so archiving one must not hand it out again.
-
-`docs/INDEX.md` lists only live records - a resolved problem is removed from it
-and moved to `docs/archive/PROBLEMS-ARCHIVE.md`. `bin/check_docs_index.py`
-derives "next free id" from the highest id it can see, so if the archive does
-not record what it holds, finishing the highest-numbered problem *lowers* the
-next free id and the check then demands that the next writer reuse it. That is
-the collision the index exists to prevent, arriving through the checker.
-
-These tests pin the archive's `id:` metadata line as load-bearing rather than
-decorative, and cover the two half-moves it makes detectable: an entry copied to
-the archive without being removed from the live file, and an id archived twice.
-"""
+"""The index allocates ids, so archiving one must not hand it out again."""
 
 from __future__ import annotations
 

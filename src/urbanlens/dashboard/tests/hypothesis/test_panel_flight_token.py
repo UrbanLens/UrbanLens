@@ -1,19 +1,4 @@
-"""A slow panel fetch must not clear the next one's single-flight marker.
-
-``schedule_panel_fetch`` sets a marker so one pin's panel is fetched once, and
-``run_panel_fetch`` clears it in a ``finally``. The marker is added at *enqueue*
-time, so its ``FLIGHT_TTL_SECONDS`` covers queue wait as well as execution - on a
-backed-up ``panel_fetch`` queue it can lapse before the task even starts.
-
-Once it lapses the next poll schedules a second fetch, and the first worker's
-``finally`` then deletes *that* fetch's marker, so the poll after it dispatches a
-third. Each duplicate is a real, paid upstream call.
-
-The marker is now released by token, so a fetch that outlived its own marker
-releases nothing. ``flight_token=None`` keeps the old unconditional delete for
-tasks enqueued before the token existed - those would otherwise leak their marker
-for the full TTL after a deploy.
-"""
+"""A slow panel fetch must not clear the next one's single-flight marker."""
 
 from __future__ import annotations
 

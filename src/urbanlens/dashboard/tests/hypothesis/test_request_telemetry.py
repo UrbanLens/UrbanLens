@@ -1,16 +1,4 @@
-"""The slow-request log must fire on a slow request and stay quiet on a fast one.
-
-A diagnostic nobody has watched fire is worth as little as one that never does,
-and this one is easy to get subtly wrong in a direction that reads as working:
-a threshold comparison the wrong way round logs everything, and a log emitted
-only on the success path goes silent exactly when a slow request crashes.
-
-The numbers matter as much as the trigger. R27's diagnosis turned on the split
-between CPU and SQL — 88% of the map payload was Python and 6% was Postgres,
-which is what ruled out the index work everyone assumed was needed — so a line
-carrying a total and nothing else would not have helped. Each field is asserted
-to be present and to be *right*, against a view whose costs are known.
-"""
+"""The slow-request log must fire on a slow request and stay quiet on a fast one."""
 
 from __future__ import annotations
 
@@ -87,9 +75,7 @@ def _field(line: str, name: str) -> str:
         The field's value.
 
     Raises:
-        AssertionError: The field is absent, which every assertion here depends
-            on and none of them would otherwise notice.
-    """
+        AssertionError: The field is absent, which every assertion here depends on and none of them would otherwise notice."""
     match = re.search(rf"\b{re.escape(name)}=(\S+)", line)
     if match is None:
         raise AssertionError(f"no {name}= field in {line!r}")
@@ -132,12 +118,7 @@ class TheNumbersAreRightTests(TestCase):
     def test_cpu_time_separates_waiting_from_working(self) -> None:
         """The field R27 turned on, and the reason a total alone is not enough.
 
-        `/slow/` sleeps, so its wall time is large and its CPU time is nearly
-        nothing. A middleware reporting only a total would call this identical to
-        a view that burned a quarter second of Python - which needs a completely
-        different fix, and which under gevent takes every co-resident request
-        down with it.
-        """
+        `/slow/` sleeps, so its wall time is large and its CPU time is nearly nothing."""
         with self.assertLogs("urbanlens.dashboard.middleware", level="WARNING") as logged:
             self.client.get("/slow/")
 
@@ -185,18 +166,9 @@ class TheNumbersAreRightTests(TestCase):
 class ASlowRequestThatFailsIsStillReportedTests(TestCase):
     """A slow request that then failed is the one most worth having a line for.
 
-    Measured rather than assumed, and the first draft of this asserted the wrong
-    thing: Django wraps **every** middleware in `convert_exception_to_response`,
-    so a view's exception has already become a 500 by the time it reaches this
-    middleware on the way out. The test client re-raises it afterwards, which is
-    what makes it look from a test as though the exception passed through.
-
-    So the integration case here is a 500, not an exception, and the `raised`
-    rendering is exercised directly below. The report still lives in a `finally`
-    rather than after the `try`, because that costs nothing and is the difference
-    between a line and silence if anything ever does escape - an exception in the
-    `finally` of a middleware below, say, or a handler Django is not wrapping.
-    """
+    Measured rather than assumed, and the first draft of this asserted the wrong thing: Django wraps **every**
+    middleware in `convert_exception_to_response`, so a view's exception has already become a 500 by the time it
+    reaches this middleware on the way out."""
 
     def test_a_slow_request_that_five_hundreds_is_logged(self) -> None:
         with (
@@ -212,10 +184,7 @@ class ASlowRequestThatFailsIsStillReportedTests(TestCase):
     def test_a_request_with_no_response_reports_raised(self) -> None:
         """The `finally`'s other branch, exercised where it can be reached.
 
-        `response=None` is what the middleware holds when the call it wrapped did
-        not return one. Rendering that as a status it never had would be worse
-        than saying so.
-        """
+        `response=None` is what the middleware holds when the call it wrapped did not return one."""
         from urbanlens.dashboard.middleware import RequestTelemetryMiddleware, _SqlStats
 
         request = self.client.request().wsgi_request

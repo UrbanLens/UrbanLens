@@ -1,19 +1,4 @@
-"""Taking a photo off your pin is not consent to withdraw it from the wiki.
-
-Deleting from the pin gallery used to drop the ``Image`` row outright, which
-removed the photo from the community wiki too - silently, from a screen that
-never mentioned the wiki. Contributing something to a wiki is a deliberate act,
-and undoing it should be one as well.
-
-So the pin gallery detaches, and the wiki keeps the photo unless the owner says
-otherwise. Silence means no. Two cases differ:
-
-- **Uploaded** photos may be withdrawn from the wiki, if the owner explicitly
-  asks (``?from_wiki=1``) - it is their photo.
-- **External** photos, fetched from a URL, stay. They were already public
-  resources online before the app ever saw them, so there is no consent to
-  withdraw; removing one is something you do on the wiki itself.
-"""
+"""Taking a photo off your pin is not consent to withdraw it from the wiki."""
 
 from __future__ import annotations
 

@@ -1,20 +1,4 @@
-"""Per-viewer media responses must forbid shared caches from storing them.
-
-Every one of these endpoints authorizes its bytes *per viewer*: the same URL
-legitimately returns an image for one profile and a 404 for another. Django
-emits ``Vary: Cookie`` on them, which is right but not sufficient - shared
-caches commonly honour only ``Vary: Accept-Encoding`` and otherwise key on the
-URL alone, and these URLs end in real image extensions, which is exactly what
-extension-based CDN cache rules match. With no ``Cache-Control`` at all (the
-state before ``mark_private_media`` existed) such a cache applies its own
-default TTL to one user's private photo.
-
-The interesting test here is the last one: it asserts that every view in the
-package that serves raw bytes actually routes through the helper. A per-view
-test can only cover the views someone remembered to write a test for, and the
-failure mode is silent - the response is correct in every visible way except
-the missing header.
-"""
+"""Per-viewer media responses must forbid shared caches from storing them."""
 
 from __future__ import annotations
 
@@ -114,10 +98,8 @@ class MediaGateCacheDirectiveTests(TestCase):
 class EveryByteServingViewIsMarkedTests(SimpleTestCase):
     """Static check: no byte-serving return escapes ``mark_private_media``.
 
-    Matches on the response *construction* rather than the returned name, so a
-    view that builds its response and returns it a few lines later is still
-    covered.
-    """
+    Matches on the response *construction* rather than the returned name, so a view that builds its response and
+    returns it a few lines later is still covered."""
 
     def _image_body_returns(self, module: str) -> list[int]:
         """Line numbers of ``return HttpResponse(<bytes>, content_type=...)`` not wrapped."""

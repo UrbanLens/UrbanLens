@@ -1,28 +1,4 @@
-"""Tests for gaming-proof share-chain provenance (services.sharing.share_provenance).
-
-Covers the exposure model end to end:
-- receiving a share records a LocationExposure for the recipient
-- a pin created *after* the exposure (never accepted through the share) still
-  chains its onward shares back to the original share
-- the two gaming vectors from the spec are closed:
-  * move the pin away, drop a fresh pin at the original spot, share that one
-  * move the pin to a new location and share it from there
-- pin delete / re-create cycles don't reset the chain
-- a recipient who already had the place pinned gets no exposure (the share
-  wasn't their initial information)
-- the sender's chain only grows by the recipient's *shares*, never by their
-  pin add/delete churn
-- two further gaming vectors, closed for reasons distinct from the above:
-  * delete the infected pin, drop a new one nearby but not at the exact same
-    coordinates (a genuinely different Location row within the exposure
-    radius still resolves to the same exposure)
-  * create a pin far away with no history, then move it into an exposed
-    radius and share from there (resolution always reads the pin's *current*
-    location, never its creation history)
-- the radius is a hard boundary (just outside it never chains), exposure is
-  strictly per-profile (another profile's exposure never leaks), and a pin's
-  own lineage always wins over an environmental exposure match
-"""
+"""Tests for gaming-proof share-chain provenance (services.sharing.share_provenance)."""
 
 from __future__ import annotations
 
@@ -106,12 +82,7 @@ class ExposureRecordingTests(_ProvenanceTestCase):
 
 
 class ExposureRecordingFailureIsolationTests(_ProvenanceTestCase):
-    """A DatabaseError recording the exposure is swallowed inside its own nested
-    atomic() savepoint (docs/PROBLEMS.md - naively wrapping the whole share-creation
-    view in atomic() would otherwise convert this tolerated bookkeeping gap into a
-    hard 500 for the entire share; nesting just this write keeps it genuinely
-    all-or-nothing without risking that).
-    """
+    """A DatabaseError recording the exposure is swallowed inside its own nested atomic() savepoint (docs/PROBLEMS.md - naively wrapping the whole share-creation view in atomic() would otherwise convert this tolerated bookkeeping gap into a hard 500 for the entire share; nesting just this write keeps it genuinely all-or-nothing without risking that)."""
 
     def _pending_share(self) -> PinShare:
         return PinShare.objects.create(
@@ -135,19 +106,11 @@ class ExposureRecordingFailureIsolationTests(_ProvenanceTestCase):
         self.assertFalse(LocationExposure.objects.filter(share=share).exists())
 
     def test_the_swallowed_failure_does_not_poison_an_outer_transaction(self):
-        """The precise scenario the nested atomic() protects against: a caller that
-        wraps its own multi-write sequence in atomic() must still be able to write
-        after record_share_exposure swallows a DatabaseError, rather than hit
-        TransactionManagementError from an outer transaction Django marked broken.
+        """The precise scenario the nested atomic() protects against: a caller that wraps its own multi-write sequence in atomic() must still be able to write after record_share_exposure swallows a DatabaseError, rather than hit TransactionManagementError from an outer transaction Django marked broken.
 
-        Needs a *real* DB-level failure, not a synthetic ``side_effect`` exception -
-        Postgres only aborts the transaction/savepoint for an error it actually
-        raised, so a bare mocked exception that never touches the DB wouldn't
-        exercise the thing being protected against. A duplicate (profile, location,
-        share) triple gets there via a genuine IntegrityError against
-        ``db_locexp_one_per_pfl_loc_share`` - unlike a bogus FK target, a unique
-        constraint is never deferrable, so it is guaranteed to raise immediately.
-        """
+        Needs a *real* DB-level failure, not a synthetic ``side_effect`` exception - Postgres only aborts the
+        transaction/savepoint for an error it actually raised, so a bare mocked exception that never touches the
+        DB wouldn't exercise the thing being protected against."""
         share = self._pending_share()
         location = share.shared_location
         LocationExposure.objects.create(
@@ -270,23 +233,10 @@ class ExposureResolutionTests(_ProvenanceTestCase):
 class AdditionalGamingScenarioTests(_ProvenanceTestCase):
     """The two follow-up gaming vectors, plus the boundary conditions around them.
 
-    Two follow-up scenarios (delete + drop nearby; create far away + drag
-    in) work because resolution never consults a pin's creation history,
-    only its *current* location, re-queried live at share time - so it
-    doesn't matter whether that location was arrived at by accepting a
-    share, dropping a pin nearby, or dragging an unrelated pin into the zone.
-
-    A third question - "a pin in the affected area, then moved away, then
-    shared" - splits into two genuinely different cases depending on whether
-    the pin carries its own lineage (``source_share``/``inferred_source_share``):
-    if it does, it chains at *any* distance, forever (lineage is checked
-    before any distance computation); if it doesn't, it's resolved live by
-    proximity and a move beyond the radius genuinely severs it - *unless* an
-    earlier move already carried a nearby (non-exact) exposure onto the
-    pin's current spot, which is the bug this test class also catches: the
-    move-propagation step used to only match the *exact* old Location row,
-    silently dropping a merely-nearby exposure on a second move.
-    """
+    Two follow-up scenarios (delete + drop nearby; create far away + drag in) work because resolution never
+    consults a pin's creation history, only its *current* location, re-queried live at share time - so it
+    doesn't matter whether that location was arrived at by accepting a share, dropping a pin nearby, or dragging
+    an unrelated pin into the zone."""
 
     def test_delete_infected_pin_then_new_pin_on_different_location_row_within_radius(self):
         # John accepts, deletes the resulting pin entirely, then drops a
@@ -330,14 +280,6 @@ class AdditionalGamingScenarioTests(_ProvenanceTestCase):
         self.assertIsNone(unrelated_pin.inferred_source_share_id)
 
     def test_pin_that_never_entered_exposed_radius_does_not_chain(self):
-        # This pin never carries lineage of its own (never accepted a share,
-        # never stamped by an earlier share event) and never sat within the
-        # exposed radius at any point - only landing ~200 m away, just
-        # outside the 150 m cutoff. Contrast with
-        # test_lineage_carrying_pin_moved_far_away_still_chains below: a pin
-        # WITH its own lineage chains at any distance; this one has none to
-        # fall back on, so the live proximity check is all it has, and it
-        # legitimately fails that check.
         share = self._share(self.sarah_pin, "sarah", "john")
         beyond_radius = baker.make(Location, latitude="42.101800", longitude="-73.900000")
         unrelated_pin = Pin.objects.create(profile=self.profiles["john"], location=self.far_location)
@@ -350,12 +292,8 @@ class AdditionalGamingScenarioTests(_ProvenanceTestCase):
         self.assertNotEqual(share.parent_share_id, onward.pk)
 
     def test_lineage_carrying_pin_moved_far_away_still_chains(self):
-        # The mirror image of the test above, using the identical ~200 m
-        # distance: this pin IS the one accepted from Sarah's share, so it
-        # carries source_share_id directly. Moving it beyond the exposure
-        # radius (even arbitrarily far - distance is irrelevant here) must
-        # not lose the chain, because resolution checks the pin's own
-        # lineage field before it ever computes a distance.
+        # The mirror image of the test above, using the identical ~200 m distance: this pin IS the one accepted
+        # from Sarah's share, so it carries source_share_id directly.
         share = self._share(self.sarah_pin, "sarah", "john")
         john_pin = _create_pin_from_share(share)
         beyond_radius = baker.make(Location, latitude="42.101800", longitude="-73.900000")
@@ -457,11 +395,7 @@ class ShareViewIntegrationTests(_ProvenanceTestCase):
 
 
 class LocationExposureQuerySetTests(_ProvenanceTestCase):
-    """Direct coverage of LocationExposureQuerySet.near() / LocationExposureManager.record()
-    - previously a private module-level helper (_exposures_near) and three
-    near-identical get_or_create calls duplicated across share_provenance.py,
-    now a proper queryset/manager pair matching the rest of the codebase's
-    convention."""
+    """Direct coverage of LocationExposureQuerySet.near() / LocationExposureManager.record() - previously a private module-level helper (_exposures_near) and three near-identical get_or_create calls duplicated across share_provenance.py, now a proper queryset/manager pair matching the rest of the codebase's convention."""
 
     def test_near_finds_an_exposure_within_radius(self) -> None:
         share = self._share(self.sarah_pin, "sarah", "john")
@@ -516,10 +450,7 @@ class LocationExposureQuerySetTests(_ProvenanceTestCase):
 
 
 class PinShareQuerySetTests(_ProvenanceTestCase):
-    """Direct coverage of PinShareQuerySet's new methods - previously the same
-    dup-share existence check was independently re-written (pin-keyed and
-    location-keyed variants) across services/trip_share_tracking.py,
-    services/map_sharing.py, and services/dm_location_detection.py."""
+    """Direct coverage of PinShareQuerySet's new methods - previously the same dup-share existence check was independently re-written (pin-keyed and location-keyed variants) across services/trip_share_tracking.py, services/map_sharing.py, and services/dm_location_detection.py."""
 
     def test_already_shared_with_true_for_a_pin_keyed_match(self) -> None:
         self._share(self.sarah_pin, "sarah", "john")
@@ -611,20 +542,11 @@ class PinShareQuerySetTests(_ProvenanceTestCase):
 
 
 class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
-    """Property-based generalization of the fixed 2-3-hop chains exercised
-    throughout this module: the provenance invariant - every share, however
-    deep the reshare chain, must be traceable back to a single true origin
-    share (``parent_share`` eventually ``None``), with no cycle and no lost
-    link - must hold for an arbitrary generated chain length/branching factor,
-    not just the hand-picked examples above.
+    """Property-based generalization of the fixed 2-3-hop chains exercised throughout this module: the provenance invariant - every share, however deep the reshare chain, must be traceable back to a single true origin share (``parent_share`` eventually ``None``), with no cycle and no lost link - must hold for an arbitrary generated chain length/branching factor, not just the hand-picked examples above.
 
-    Each accepted pin in the chain carries its own ``source_share`` lineage
-    (set directly by ``_create_pin_from_share``), so ``parent_share`` forms a
-    genuine linked chain back to the origin one hop at a time - not a single
-    jump straight to the origin past the first hop. ``PinShare.chain_share_count``
-    (see ``test_repin_churn_does_not_grow_sharers_chain`` above) already relies
-    on exactly this structure.
-    """
+    Each accepted pin in the chain carries its own ``source_share`` lineage (set directly by
+    ``_create_pin_from_share``), so ``parent_share`` forms a genuine linked chain back to the origin one hop at
+    a time - not a single jump straight to the origin past the first hop."""
 
     @given(chain_length=st.integers(min_value=2, max_value=6))
     @_db_settings

@@ -1,16 +1,4 @@
-"""Tests for the "this move ends your wiki access" confirmation.
-
-Wiki visibility is derived, not stored: a profile sees a place's community wiki
-because one of their pins sits at (or inside the official boundary of) that
-place. Dragging such a pin away therefore revokes their own access silently -
-the wiki page simply starts 404ing, indistinguishable from one that never
-existed. Rather than let that happen invisibly, a move that would cost the
-owner access is refused once with 409 and a list of what's at stake, and goes
-through when re-sent with ``confirm_wiki_loss``.
-
-The check is advisory: it previews ``location_visible_to`` rather than gating
-on it, so a wrong answer can only mis-warn, never grant access.
-"""
+"""Tests for the "this move ends your wiki access" confirmation."""
 
 from __future__ import annotations
 

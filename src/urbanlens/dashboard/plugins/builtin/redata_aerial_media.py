@@ -1,11 +1,5 @@
 """Aerial & drone footage plugin: a Media-gallery source for overhead views of a pin, via REData.
-
-REData's ``/media/lookup/?is_aerial=true`` filters its pooled media index
-down to drone and aerial footage, recognised from each item's own title and
-description. An aerial view of a roofless mill or a fenced-off complex shows
-what no street-level photo can, which makes this its own gallery tab rather
-than rows mixed into the general media results.
-"""
+An aerial view of a roofless mill or a fenced-off complex shows what no street-level photo can, which makes this its own gallery tab rather than rows mixed into the general media results."""
 
 from __future__ import annotations
 
@@ -44,15 +38,7 @@ class AerialMediaSource(GalleryMediaSource):
         LocationCache.set(pin.location, self.cache_source, {"items": items}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn cached REData media rows into gallery tiles.
-
-        ``url`` is the publisher's permalink *page*, not an image - REData
-        publishes the bytes it mirrored as ``cached_url`` (absolute, and stable
-        where a provider's own thumbnail link expires). Using ``url`` as the
-        tile's image source, as this did until 2026-08-19, renders an HTML page
-        into an ``<img>``; ``page_url`` is not a field REData emits at all, so
-        the "open the original" link fell back to the same value.
-        """
+        """Turn cached REData media rows into gallery tiles."""
         items = []
         for row in (data or {}).get("items") or []:
             page_url = row.get("url") or ""

@@ -1,42 +1,26 @@
 class AppError(Exception):
-    """
-    A base exception that all our custom app exceptions extend from.
-    """
+    """Base app exception."""
 
 
 class FileEmptyError(AppError):
-    """
-    Raised when a file is empty that is required to have content (i.e. our settings file)
-    """
+    """File required to have content is empty."""
 
 
 class DbError(AppError):
-    """
-    Raised when there is a problem with the DB.
-
-    This is inherited by several subclasses.
-    """
+    """Database problem (base for subclasses)."""
 
 
 class DbConnectionError(DbError, ConnectionError):
-    """
-    Raised when the database cannot be contacted, but it appears to be running.
-    """
+    """Database unreachable but apparently running."""
 
 
 class DbStartError(DbError, ConnectionError):
-    """
-    Raised when the database cannot be started.
-    """
+    """Database cannot be started."""
 
 
 class UnsupportedCommandError(AppError):
-    """
-    Raised when a command is passed to our app that isn't valid.
-    """
+    """Invalid command passed to the app."""
 
 
 class UnrecoverableError(AppError):
-    """
-    Raised when an error occurs that is unrecoverable.
-    """
+    """Unrecoverable error."""

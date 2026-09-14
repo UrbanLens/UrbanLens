@@ -36,16 +36,13 @@ if TYPE_CHECKING:
 class DeviceScanUploadView(ExternalApiView):
     """POST: upload one batch of wireless device-scan data.
 
-    Authentication is always required, but whether this upload is attributed
-    to the caller's account depends entirely on their own
-    ``Profile.track_device_scans`` preference - an anonymous upload is still
-    fully processed (classification and community wiki markers don't need an
-    owner), it just isn't linked to anyone.
-
-    Nothing in the response describes what the scan found: classification,
-    wiki matching, and marker clustering all happen in the background (see
-    ``dashboard.tasks.process_device_scan_upload``) - a client that wants to
-    know what's nearby calls ``device-scans/nearby/`` instead.
+    Authentication is always required, but whether this upload is attributed to the caller's account
+    depends entirely on their own ``Profile.track_device_scans`` preference - an anonymous upload is
+    still fully processed (classification and community wiki markers don't need an owner), it just isn't
+    linked to anyone.
+    Nothing in the response describes what the scan found: classification, wiki matching, and marker
+    clustering all happen in the background (see ``dashboard.tasks.process_device_scan_upload``) - a
+    client that wants to know what's nearby calls ``device-scans/nearby/`` instead.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -80,11 +77,10 @@ class DeviceScanUploadView(ExternalApiView):
 class NearbyDeviceMarkersView(ExternalApiView):
     """GET: wireless device markers already known near a point.
 
-    Lets the app decide when to turn scanning on (entering a region with
-    known markers) and enrich what it shows the user when it detects a
-    matching MAC address. Scoped to wikis the caller can actually see - a
-    device marker is wiki-scoped content, and this API's whole security model
-    is that an undiscovered wiki is invisible, enforced identically here via
+    Lets the app decide when to turn scanning on (entering a region with known markers) and enrich what
+    it shows the user when it detects a matching MAC address.
+    Scoped to wikis the caller can actually see - a device marker is wiki-scoped content, and this API's
+    whole security model is that an undiscovered wiki is invisible, enforced identically here via
     ``services.wiki.wiki_access.visible_wiki_location_ids``.
     """
 

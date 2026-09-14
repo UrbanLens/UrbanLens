@@ -1,25 +1,4 @@
-"""An undecryptable SiteSettings field must not take the whole site down.
-
-``EncryptedTextField``'s docstring splits its fields in two: credentials fail
-loud, because "their callers already catch ``InvalidToken`` and drop the row so
-the user simply reconnects", while user-authored content sets ``fail_soft=True``
-because ``Profile`` "loads on nearly every authenticated request, so one bad row
-would take the whole site down for that user rather than degrading one field".
-
-``SiteSettings.notify_gotify_token`` sat in neither camp: shaped like a
-credential, but with no caller anywhere that catches ``InvalidToken`` and drops
-it - and ``SiteSettings`` is a *singleton* three context processors load on every
-render, for every user including anonymous ones. So a key change without
-``rotate_field_encryption`` (exactly what that command exists to prevent) made
-every page 500 **and** stopped the styled 500 page itself from rendering, since
-it runs the same context processors.
-
-Degrading to the field's own default is strictly better here: the token is
-unusable either way, so Gotify pushes stop regardless - the only question is
-whether the site stays up while an admin re-enters it. The failure is still
-recorded loudly (``EncryptedTextField`` logs the model, field, and the setting to
-check).
-"""
+"""An undecryptable SiteSettings field must not take the whole site down."""
 
 from __future__ import annotations
 

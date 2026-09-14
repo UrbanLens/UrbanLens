@@ -1,13 +1,4 @@
-"""Tests for the shared media-gallery plumbing and each gateway's relevance flags.
-
-Covers MediaPanelSource.search_terms(), MediaProvider.get_media()'s cache
-lookup, and the per-provider flags that keep archive searches on-topic - the
-fix for LOC/Smithsonian/Internet Archive returning irrelevant nationwide
-results for a pin with no real landmark name (just its street address as a
-fallback "name"). See
-services.apis.locations.redata_reference_documents_gateway.LibraryOfCongressMediaProvider
-and services.locations.naming.is_address_derived_name.
-"""
+"""Tests for the shared media-gallery plumbing and each gateway's relevance flags."""
 
 from __future__ import annotations
 
@@ -34,10 +25,8 @@ if TYPE_CHECKING:
 class _BareGateway(MediaProvider):
     """A MediaProvider with every flag left at its base default.
 
-    search_terms() (the only thing exercised here) never makes an HTTP call,
-    so the auto-assigned service_key's rate-limiter session wrapper (see
-    Gateway.__post_init__) is harmless - it's constructed but never used.
-    """
+    search_terms() (the only thing exercised here) never makes an HTTP call, so the auto-assigned service_key's
+    rate-limiter session wrapper (see Gateway.__post_init__) is harmless - it's constructed but never used."""
 
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem, Any, None]:
         yield from ()
@@ -143,11 +132,9 @@ class _CountingGateway(_BareGateway):
 class MediaProviderCacheKeyTests(SimpleTestCase):
     """get_media() only reuses a cache row written for the *same* query.
 
-    LocationCache.get_fresh judges freshness by age alone, so without this a
-    provider whose query construction was tightened for relevance would keep
-    serving results fetched by the old, noisy query for the rest of the 7-day
-    TTL and the fix would look like it had done nothing.
-    """
+    LocationCache.get_fresh judges freshness by age alone, so without this a provider whose query construction
+    was tightened for relevance would keep serving results fetched by the old, noisy query for the rest of the
+    7-day TTL and the fix would look like it had done nothing."""
 
     class _Row:
         def __init__(self, query_key: str, data: dict) -> None:
@@ -214,13 +201,10 @@ class LibraryOfCongressMediaProviderRelevanceFlagsTests(SimpleTestCase):
 
 
 class InternetArchiveMediaProviderRelevanceFlagsTests(SimpleTestCase):
-    """Regression guard: Internet Archive has the same word-independent-OR
-    relevance ranking symptom as LOC (a generic street-type word like "Road"
-    coincidentally matches unrelated nationwide items), fixed the same way.
+    """Regression guard: Internet Archive has the same word-independent-OR relevance ranking symptom as LOC (a generic street-type word like "Road" coincidentally matches unrelated nationwide items), fixed the same way.
 
-    Unlike the deleted direct gateway, REData now builds the actual upstream
-    query (including any phrase-quoting archive.org's parser needs) - this
-    provider just passes a clean, unquoted name + locality as ``q``."""
+    Unlike the deleted direct gateway, REData now builds the actual upstream query (including any phrase-quoting
+    archive.org's parser needs) - this provider just passes a clean, unquoted name + locality as ``q``."""
 
     def test_include_address_is_disabled(self) -> None:
         self.assertFalse(InternetArchiveMediaProvider.include_address)
@@ -253,10 +237,7 @@ class InternetArchiveMediaProviderRelevanceFlagsTests(SimpleTestCase):
 
 
 class SmithsonianMediaProviderRelevanceFlagsTests(SimpleTestCase):
-    """Regression guard: Smithsonian returned irrelevant nationwide results
-    for the same word-independent-OR relevance ranking reason as LOC/Internet
-    Archive, compounded by an unquoted "United States" contributing noise as
-    its own free-standing term across a ~19M-object US federal collection."""
+    """Regression guard: Smithsonian returned irrelevant nationwide results for the same word-independent-OR relevance ranking reason as LOC/Internet Archive, compounded by an unquoted "United States" contributing noise as its own free-standing term across a ~19M-object US federal collection."""
 
     def test_reject_address_derived_names_is_enabled(self) -> None:
         self.assertTrue(SmithsonianMediaProvider.reject_address_derived_names)

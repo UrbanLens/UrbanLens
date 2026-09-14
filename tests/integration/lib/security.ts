@@ -1,16 +1,7 @@
 /**
- * Shared assertions for the security project.
- *
- * These tests exist to fail when a future change opens a door: a private row
- * becoming visible, a credential appearing in HTML, a markup string being
- * interpreted as a DOM node. Every interesting check has a *control* sitting
- * next to it - the owner can still read their own row, the deployment still
- * answers, the restricted key is still valid - so a green run cannot be
- * explained by "everything 404s" or "the suite pointed at a dead host".
- *
- * The suite talks to the deployment the same way a client does. It does not
- * ship scanners, payload packs, or exploit tooling: a refusal, an identical
- * 404 pair, and a missing DOM node are the evidence.
+ * Shared assertions for the security project. These tests exist to fail when a future change opens
+ * a door: a private row becoming visible, a credential appearing in HTML, a markup string being
+ * interpreted as a DOM node.
  */
 
 import * as net from "node:net";

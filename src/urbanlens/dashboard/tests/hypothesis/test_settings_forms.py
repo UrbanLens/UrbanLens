@@ -1,14 +1,4 @@
-"""Tests for MapCenterForm, StyleSettingsForm, and MapDisplayForm.
-
-Invariants verified:
-  - MapCenterForm.clean_map_default_zoom returns 13 when the field is omitted,
-    and passes through any valid value in [1, 19] unchanged.
-  - StyleSettingsForm accepts all three ThemeChoice values and persists to the Profile.
-    (Extended property-based coverage lives in test_theme_mode.py.)
-  - MapDisplayForm.use_pin_cache is optional: omitting it (unchecked) is valid
-    and produces False; submitting it produces True.
-  - MapDisplayForm saves use_pin_cache correctly to the Profile.
-"""
+"""Tests for MapCenterForm, StyleSettingsForm, and MapDisplayForm."""
 
 from __future__ import annotations
 

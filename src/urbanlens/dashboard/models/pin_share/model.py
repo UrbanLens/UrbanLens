@@ -20,20 +20,8 @@ if TYPE_CHECKING:
 
 class PinShare(abstract.DashboardModel):
     """A one-to-one share of a single place from one profile to another.
-
-    Shares form a tree: when the shared pin itself arrived via an earlier
-    share (the sharer accepted someone else's share and is now passing the
-    place along), ``parent_share`` points at that earlier share. Walking the
-    ``reshares`` relation transitively yields every downstream share of the
-    same place, which powers the Memories → Sharing chain counts.
-
-    A share always tracks *both* halves of the place model: ``pin`` (the
-    sharer's mutable personal record, when they have one) and ``location``
-    (the immutable shared place, snapshotted at share time). Tracking both
-    keeps chains honest when pins are later moved, deleted, or re-created -
-    see ``models.pin_share.exposure`` for the full rationale. ``pin`` is None
-    for location-only shares, e.g. raw coordinates or a street address
-    detected in a direct message when the sender never pinned the place.
+    Shares form a tree: when the shared pin itself arrived via an earlier share (the sharer accepted someone else's share and is now passing the place along), ``parent_share`` points at that earlier share.
+    ``pin`` is None for location-only shares, e.g. raw coordinates or a street address detected in a direct message when the sender never pinned the place.
     """
 
     status = models.CharField(max_length=20, choices=PinShareStatus.choices, default=PinShareStatus.PENDING)
@@ -50,10 +38,8 @@ class PinShare(abstract.DashboardModel):
         null=True,
         blank=True,
     )
-    # An optional map the sharer chose to attach when explicitly sharing this
-    # pin (mirrors DirectMessage.markup_map). Distinct from `detected_via_map`
-    # above, which records the map that triggered auto-detection rather than
-    # one deliberately attached to this share.
+    # An optional map the sharer chose to attach when explicitly sharing this pin (mirrors
+    # DirectMessage.markup_map).
     markup_map = models.ForeignKey(
         "dashboard.MarkupMap",
         on_delete=models.SET_NULL,
@@ -76,9 +62,8 @@ class PinShare(abstract.DashboardModel):
     # (e.g. coordinates detected in a DM the sender never pinned).
     pin = models.ForeignKey("dashboard.Pin", on_delete=models.CASCADE, related_name="shares", null=True, blank=True)
     # The immutable Location of the shared place, snapshotted at share time.
-    # Always set for new shares (from pin.location when a pin is present) so
-    # the share survives the pin later being moved or deleted. SET_NULL keeps
-    # the row (and its chain counts) even if the Location itself ever goes.
+    # Always set for new shares (from pin.location when a pin is present) so the share survives the
+    # pin later being moved or deleted.
     location = models.ForeignKey(
         "dashboard.Location",
         on_delete=models.SET_NULL,
@@ -97,11 +82,10 @@ class PinShare(abstract.DashboardModel):
         null=True,
         blank=True,
     )
-    # The root share of a "pin + its child pins" bundle. When a sharer opts to
-    # include a pin's child pins, each child pin gets its own PinShare row
-    # (it counts as a share of that pin) pointing here; the recipient accepts
-    # or rejects the whole bundle through the root share, and accepting
-    # recreates the parent/child hierarchy on their side.
+    # The root share of a "pin + its child pins" bundle.
+    # When a sharer opts to include a pin's child pins, each child pin gets its own PinShare row (it
+    # counts as a share of that pin) pointing here; the recipient accepts or rejects the whole
+    # bundle through the root share, and accepting recreates the parent/child hierarchy on their
     bundled_with = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -123,10 +107,10 @@ class PinShare(abstract.DashboardModel):
         max_length=MAX_PIN_SHARE_MESSAGE_LENGTH,
         validators=[MaxLengthValidator(MAX_PIN_SHARE_MESSAGE_LENGTH)],
     )
-    # Name to present for the shared pin, chosen by the sharer at share time -
-    # one of the pin's existing aliases, or a brand-new name (which also gets
-    # added to the sharer's own PinAlias list). Blank means "use the pin's
-    # current effective name" at both share and accept time.
+    # Name to present for the shared pin, chosen by the sharer at share time - one of the pin's
+    # existing aliases, or a brand-new name (which also gets added to the sharer's own PinAlias
+    # list).
+    # Blank means "use the pin's current effective name" at both share and accept time.
     shared_name = models.CharField(max_length=255, null=True, blank=True)
     # Photos the sharer opted to include - a subset of pin.images. Kept as a
     # reference to the sharer's own Image rows; accepting the share copies
@@ -154,10 +138,7 @@ class PinShare(abstract.DashboardModel):
     @property
     def shared_location_id(self) -> int | None:
         """PK of the shared place's Location - the snapshot, else the pin's current one.
-
-        Prefers the ``location`` snapshot taken at share time: the sharer may
-        have moved their pin somewhere else since, and this share is about
-        where the pin was when it was shared.
+        Prefers the ``location`` snapshot taken at share time: the sharer may have moved their pin somewhere else since, and this share is about where the pin was when it was shared.
 
         Returns:
             The Location pk, or None for legacy rows whose pin is gone.
@@ -193,16 +174,8 @@ class PinShare(abstract.DashboardModel):
     @property
     def reveals_live_pin(self) -> bool:
         """Whether the recipient ever agreed to see the sender's actual pin.
-
-        ``DETECTED`` shares are auto-recorded when a place was revealed
-        indirectly - a shared map's geometry, a DM's text, a trip activity (see
-        :class:`~urbanlens.dashboard.models.pin_share.meta.PinShareStatus`).
-        Nobody offered the pin and nobody accepted it, so reading through to
-        ``self.pin`` for one shows the recipient a live row they were never
-        given: its current name, and whatever the sender renames it to next.
-
-        Every explicit share is the opposite - previewing the pin is the point,
-        since the recipient is being asked to accept or reject it.
+        ``DETECTED`` shares are auto-recorded when a place was revealed indirectly - a shared map's geometry, a DM's text, a trip activity (see :class:`~urbanlens.dashboard.models.pin_share.meta.PinShareStatus`).
+        Nobody offered the pin and nobody accepted it, so reading through to ``self.pin`` for one shows the recipient a live row they were never given: its current name, and whatever the sender renames it to next.
 
         Returns:
             True when this share's own pin may be shown to its recipient.
@@ -239,21 +212,17 @@ class PinShare(abstract.DashboardModel):
     @property
     def resulting_pin(self) -> Pin | None:
         """The recipient-side Pin this share produced, once accepted.
-
-        Covers both accept paths: a brand-new Pin (``source_share`` points
-        back here) and the "recipient already had this place pinned" dedup
-        case (no `source_share` link, so it's found by location instead).
+        Covers both accept paths: a brand-new Pin (``source_share`` points back here) and the "recipient already had this place pinned" dedup case (no `source_share` link, so it's found by location instead).
 
         Returns:
             The recipient's Pin, or None if this share isn't accepted (yet).
         """
         if self.status != PinShareStatus.ACCEPTED:
             return None
-        # ``.all()`` rather than ``.first()``: a share card is rendered per message,
-        # and .first() appends ORDER BY + LIMIT so it always queries, even when the
-        # caller prefetched. .all() reads the prefetch cache when there is one and
-        # costs the same single query when there isn't - same reasoning as
-        # ``PinList.pin_count`` and ``Pin.rating``.
+        # ``.all()`` rather than ``.first()``: a share card is rendered per message, and .first()
+        # appends ORDER BY + LIMIT so it always queries, even when the caller prefetched. .all()
+        # reads the prefetch cache when there is one and costs the same single query when there
+        # isn't - same reasoning as ``PinList.pin_count`` and ``Pin.rating``.
         created = next(iter(self.pins_created.all()), None)
         if created is not None:
             return created
@@ -270,10 +239,7 @@ class PinShare(abstract.DashboardModel):
     @classmethod
     def chain_share_count(cls, root_share_ids: list[int]) -> int:
         """Total number of shares in the trees rooted at the given shares.
-
-        Counts the roots themselves plus every transitive reshare below them
-        (breadth-first over ``parent_share``), so "A shared with B, B shared
-        with C and D, D shared with E and F" counts 5 for A's share.
+        Counts the roots themselves plus every transitive reshare below them (breadth-first over ``parent_share``), so "A shared with B, B shared with C and D, D shared with E and F" counts 5 for A's share.
 
         Args:
             root_share_ids: Primary keys of the shares to start from.

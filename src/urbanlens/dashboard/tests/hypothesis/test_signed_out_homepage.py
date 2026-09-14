@@ -1,16 +1,4 @@
-"""The signed-out landing page must actually be styled.
-
-Reported as "missing a container div (or some other similar problem causing it
-to be unstyled)". The container was there - every page has one. What was
-missing is the *body class*: `_homepage.scss` scopes all of its rules under
-`body.page-home`, `base.html` sets that class from `page_name`, and the
-anonymous index view never put `page_name` in its context. So the page
-rendered its markup with none of its own CSS applying.
-
-This is a whole class of bug - a stylesheet keyed on a body class a view
-forgets to set fails silently and looks like broken markup - so the test
-asserts the contract rather than the symptom.
-"""
+"""The signed-out landing page must actually be styled."""
 
 from __future__ import annotations
 

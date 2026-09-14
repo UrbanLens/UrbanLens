@@ -1,13 +1,4 @@
-"""Tests for the "overlapping pins" map filter.
-
-A pin's footprint is its effective property boundary: a drawn/generated
-polygon when one exists, else a default circle around its coordinates (see
-``BoundaryManager.effective_polygon_for_pin``). ``PinQuerySet.overlapping()``
-returns every pin whose footprint intersects another pin's footprint (from the
-same queryset), which - since every pin resolves to *some* footprint - also
-catches pins accidentally left stacked on identical/near-identical
-coordinates (e.g. by the merge/child-pin coordinate bugs).
-"""
+"""Tests for the "overlapping pins" map filter."""
 
 from __future__ import annotations
 

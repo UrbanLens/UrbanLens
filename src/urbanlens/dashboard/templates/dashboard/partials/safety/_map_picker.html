@@ -1,11 +1,4 @@
-{% comment %}
-Results fragment for the "Attach existing map" dialog on the safety check-in detail
-page - rendered by SafetyCheckinMapPickerView, targeted by both the dialog's opening
-hx-get and its search input's live-filter hx-get (see _map_picker_dialog.html).
-
-Expects: checkin, candidates (queryset of MarkupMap, already excludes the primary
-map and anything already attached), query (str, the current search term).
-{% endcomment %}
+{% comment %}Results fragment for the "Attach existing map" dialog on the safety check-in detail page.{% endcomment %}
 {% if candidates %}
 <ul class="safety-map-picker-list">
     {% for candidate in candidates %}

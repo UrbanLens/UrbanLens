@@ -11,13 +11,9 @@ That was harmless while every citation carried a `docs/` prefix. Matching bare
 capitalised filenames - which is what lets a root `TODO.md` citation be seen at
 all - makes basenames that recur in several directories the normal case.
 
-The second class covers the other spelling the checker promises to handle: a
-path into a sibling checkout. Its docstring says such a path "counts as resolved
-when that checkout is absent ... failing on it would make the check depend on how
-a developer laid out their workspace" - and that is exactly what it did. CI, which
-checks out this repository alone, failed on five `../REData/docs/...` citations and
-one `../infrastructure/docs/...` that every developer with the siblings beside them
-saw pass.
+The second class covers a path into a sibling checkout: such a path counts as
+resolved only when that checkout is present, since CI checks out this
+repository alone while a developer's workspace has siblings beside it.
 
 These run the checker against throwaway repositories rather than this one, so a
 regression fails here instead of waiting for a filename to collide in the tree.

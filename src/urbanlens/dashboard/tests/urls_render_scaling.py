@@ -1,16 +1,4 @@
-"""Two views whose per-row cost is known, for exercising the render-time mixin.
-
-An instrument that has never been shown to move is worth as little as its
-readings, and the only honest way to show this one moves is to point it at a
-page that really is too expensive per row. That page lives here rather than in
-the app: mutating production code or a production template to make a test fail
-proves nothing about production, and leaves a trap for whoever reverts it.
-
-The fixed chrome is the point of the shape. The mixin measures a row's cost as a
-fraction of the page's own zero-row render, so a page with no chrome has a
-near-zero denominator and every row looks catastrophic. Both views here carry the
-same substantial fixed body, and differ only in what one row adds to it.
-"""
+"""Two views whose per-row cost is known, for exercising the render-time mixin."""
 
 from __future__ import annotations
 
@@ -51,12 +39,10 @@ def _render(template: Template, **extra: object) -> HttpResponse:
     """Render one of the two templates over every achievement.
 
     Args:
-        template: The template to render.
-        **extra: Extra context, i.e. the expensive view's icon list.
+        template: The template to render. **extra: Extra context, i.e. the expensive view's icon list.
 
     Returns:
-        The rendered page.
-    """
+        The rendered page."""
     rows = list(Achievement.objects.order_by("pk"))
     return HttpResponse(template.render(Context({"chrome": _CHROME, "rows": rows, **extra})))
 
@@ -68,8 +54,7 @@ def cheap(request: HttpRequest) -> HttpResponse:
         request: The HTTP request.
 
     Returns:
-        The rendered page.
-    """
+        The rendered page."""
     return _render(_CHEAP)
 
 
@@ -80,8 +65,7 @@ def expensive(request: HttpRequest) -> HttpResponse:
         request: The HTTP request.
 
     Returns:
-        The rendered page.
-    """
+        The rendered page."""
     return _render(_EXPENSIVE, icons=[f"icon_{index}" for index in range(ICONS_PER_ROW)])
 
 

@@ -58,13 +58,10 @@ def visible_external_tags(place) -> list:
 def label_map_url(label_id: int) -> str:
     """Return the main map URL, pre-filtered to pins carrying this one label.
 
-    Used by the Organize > Labels page's "View on map" button - the main
-    map's ``_restoreFiltersFromUrl()`` (map/index.html) reads the
-    ``label_groups`` query param on load and applies it as a filter, using
-    the same JSON shape the filter panel itself builds
-    (``[{"op": "or", "ids": [...]}]``, see ``SearchForm.parse_label_groups``).
-
-    Usage: {{ label.id|label_map_url }}
+    Used by the Organize > Labels page's "View on map" button - the main map's
+    ``_restoreFiltersFromUrl()`` (map/index.html) reads the ``label_groups`` query param on load and
+    applies it as a filter, using the same JSON shape the filter panel itself builds (``[{"op": "or",
+    "ids": [...]}]``, see ``SearchForm.parse_label_groups``).
     """
     from django.urls import reverse
     from django.utils.http import urlencode
@@ -77,10 +74,8 @@ def label_map_url(label_id: int) -> str:
 def reaction_summary(message: Any) -> list[dict[str, Any]]:
     """Group a DirectMessage's reactions by emoji for template rendering.
 
-    Usage: {{ message|reaction_summary }}
-
-    Relies on the caller having `prefetch_related("reactions__profile")` on
-    the message queryset to avoid N+1 queries across a thread.
+    Relies on the caller having `prefetch_related("reactions__profile")` on the message queryset to
+    avoid N+1 queries across a thread.
     """
     from urbanlens.dashboard.services.messaging.direct_messages import reaction_summary as _reaction_summary
 
@@ -100,10 +95,8 @@ def tombstone_text(message: Any, viewer_id: int) -> str | None:
 def group_share_for(message: Any, viewer_id: int) -> Any:
     """Return the viewer's own GroupMessageShare on a group message, or None.
 
-    Usage: {{ message|group_share_for:viewer_id }}
-
-    Relies on the caller having prefetched ``shares`` on the message queryset
-    to avoid N+1 queries across a thread.
+    Relies on the caller having prefetched ``shares`` on the message queryset to avoid N+1 queries
+    across a thread.
     """
     return message.share_for(viewer_id)
 
@@ -112,14 +105,9 @@ def group_share_for(message: Any, viewer_id: int) -> Any:
 def message_preview(message: Any, viewer_id: int) -> str:
     """Short preview text for a DirectMessage or GroupMessage, honoring its tombstone state.
 
-    Used for reply-quote boxes and conversation-list row previews, so a
-    message that's been deleted or has expired for the viewer shows the same
-    placeholder its own bubble would, rather than leaking its content through
-    a quote box or the sidebar's last-message line. GroupMessage doesn't
-    (yet) support image/map attachments, so those checks are skipped for it
-    via `getattr` rather than raising.
-
-    Usage: {{ message|message_preview:viewer_id }}
+    Used for reply-quote boxes and conversation-list row previews, so a message that's been deleted or
+    has expired for the viewer shows the same placeholder its own bubble would, rather than leaking its
+    content through a quote box or the sidebar's last-message line.
     """
     tombstone = message.tombstone_text_for(viewer_id)
     if tombstone:
@@ -149,10 +137,6 @@ def read_receipt_visible_to(message: Any, viewer_id: int) -> bool:
     """True if `viewer_id` (as this message's sender) may see that it's been read.
 
     Usage: {{ message|read_receipt_visible_to:viewer_id }}
-
-    Gated on the *recipient's* `read_receipt_visibility` setting toward the
-    sender - the underlying `read_at` timestamp is always recorded (needed for
-    disappearing-message timing) regardless of whether it's ever shown.
     """
     if message.sender_id != viewer_id or message.read_at is None:
         return False
@@ -189,9 +173,6 @@ def tag_total_pins(tag: Label) -> int:
     """Return this label's pin count plus every descendant's pin count (full subtree).
 
     Usage: {{ label|tag_total_pins }}
-
-    Thin template wrapper over ``Label.total_pin_count`` - see there for how the
-    ``with_pin_counts()`` annotation is reused and the result memoized.
     """
     return tag.total_pin_count()
 
@@ -199,13 +180,6 @@ def tag_total_pins(tag: Label) -> int:
 @register.filter
 def to_json(value: Any) -> str:
     """Serialize ``value`` to a compact JSON string for embedding in an attribute.
-
-    Django auto-escapes the returned string, so quotes become ``&quot;`` and the
-    blob remains a well-formed HTML attribute value. When JavaScript later reads
-    the attribute (e.g. ``input.value``) the browser decodes the entities back to
-    valid JSON, so ``JSON.parse`` round-trips cleanly.
-
-    Usage: ``<input value="{{ obj.map_data|to_json }}">``
 
     Args:
         value: Any JSON-serializable value (typically a dict from a JSONField).
@@ -229,16 +203,7 @@ def get_attr(obj: Any, attr: str) -> Any:
 
 @register.filter
 def filter_criteria_summary(criteria: dict[str, Any] | None) -> str:
-    """Return a short, human-readable summary of a SavedFilter's criteria dict.
-
-    Usage: {{ saved_filter.criteria|filter_criteria_summary }}
-
-    Walks the well-known criteria keys (the same ones SearchForm/filter_criteria
-    produce) and joins whichever are present into a compact "·"-separated
-    string for a Filters-tab card, e.g. "name contains 'diner' · 4★+ · 2 tags".
-    Region keys are summarized separately by the card (see the region label),
-    not included here.
-    """
+    """Return a short, human-readable summary of a SavedFilter's criteria dict."""
     if not criteria:
         return "No conditions set"
     parts: list[str] = []
@@ -302,19 +267,16 @@ def dict_get(mapping: dict[Any, Any] | None, key: Any) -> Any:
 def distance(distance_km: Any, units: str = "km") -> str:
     """Format a kilometre distance in the viewer's preferred unit.
 
-    Distances are stored/computed internally in kilometres; this renders them in
-    the unit from ``distance_units`` (exposed globally by the
-    ``add_distance_units`` context processor), converting to miles when asked.
-
-    Usage: {{ route.distance_km|distance:distance_units }}
+    Distances are stored/computed internally in kilometres; this renders them in the unit from
+    ``distance_units`` (exposed globally by the ``add_distance_units`` context processor), converting to
+    miles when asked.
 
     Args:
         distance_km: A numeric distance in kilometres (``None``/invalid -> "").
         units: A ``DistanceUnit`` value ("km" or "mi"); defaults to kilometres.
 
     Returns:
-        A formatted string like ``"12.3 km"`` or ``"7.6 mi"``, or "" if the
-        input is not a number.
+        A formatted string like ``"12.3 km"`` or ``"7.6 mi"``, or "" if the input is not a number.
     """
     from urbanlens.dashboard.services.core.units import format_distance
 
@@ -330,8 +292,6 @@ def human_timesince(value: datetime.datetime | datetime.date) -> str:
     """Return a human-friendly relative time string.
 
     Returns 'just now' for times less than 1 minute ago instead of '0 minutes ago'.
-
-    Usage: {{ comment.created|human_timesince }}
     """
     from django.utils.timesince import timesince
 
@@ -346,11 +306,8 @@ def human_timesince(value: datetime.datetime | datetime.date) -> str:
 def is_material_icon(value: str | None) -> bool:
     """Return True if value is a Material Icons name (ASCII letters/digits/underscores only).
 
-    Returns False for emoji or other Unicode characters, which are rendered as-is.
-    Digits are allowed because several Material Symbols names include them
-    (e.g. ``filter_1``, ``3d_rotation``, ``9mp``).
-
-    Usage: {% if tag.icon|is_material_icon %}
+    Digits are allowed because several Material Symbols names include them (e.g. ``filter_1``,
+    ``3d_rotation``, ``9mp``).
     """
     return bool(value and re.match(r"^[a-z0-9_]+$", str(value)))
 
@@ -358,9 +315,6 @@ def is_material_icon(value: str | None) -> bool:
 @register.filter
 def hex_to_rgba(hex_value: str | None, opacity_pct: int | str = 100) -> str:
     """Convert a ``#RRGGBB`` hex color plus a 0-100 opacity into a CSS ``rgba(...)`` string.
-
-    Used to tint a swatch/thumbnail background from a user-chosen accent color at a
-    given opacity, e.g. saved filter buttons and custom layer thumbnails.
 
     Usage: style="background:{{ filter.color|hex_to_rgba:filter.opacity }}"
 
@@ -381,11 +335,9 @@ def hex_to_rgba(hex_value: str | None, opacity_pct: int | str = 100) -> str:
 def is_icon_url(value: str | None) -> bool:
     """Return True if value is a URL pointing at an uploaded custom icon image.
 
-    Mirrors the client-side classification in the map marker builder: a custom
-    icon's ``effective_icon`` resolves to its file URL (absolute or media-relative),
-    which must be rendered as an ``<img>`` rather than a Material Icons glyph or emoji.
-
-    Usage: {% if pin.effective_icon|is_icon_url %}
+    Mirrors the client-side classification in the map marker builder: a custom icon's ``effective_icon``
+    resolves to its file URL (absolute or media-relative), which must be rendered as an ``<img>`` rather
+    than a Material Icons glyph or emoji.
     """
     return bool(value and re.match(r"^(https?://|/)", str(value)))
 
@@ -394,10 +346,8 @@ def is_icon_url(value: str | None) -> bool:
 def icon_keywords(value: str | None) -> str:
     """Return space-separated search keywords for an emoji icon character.
 
-    Looks up ``value`` in ``ICON_KEYWORDS`` and returns the associated string,
-    or an empty string when no keywords are registered for this emoji.
-
-    Usage: data-keywords="{{ tag.icon|icon_keywords }}"
+    Looks up ``value`` in ``ICON_KEYWORDS`` and returns the associated string, or an empty string when
+    no keywords are registered for this emoji.
     """
     from urbanlens.dashboard.models.labels.meta import ICON_KEYWORDS
 
@@ -406,15 +356,7 @@ def icon_keywords(value: str | None) -> str:
 
 @register.simple_tag
 def icon_picker_grid_url() -> str:
-    """Return the versioned URL of the shared icon-picker grid.
-
-    The ``?v=`` is a content hash of the catalogue, so the URL changes exactly
-    when the icons do - which is what lets the response be cached immutably
-    without a deploy serving the previous catalogue. See
-    ``services.core.icon_grid``.
-
-    Usage: data-grid-url="{% icon_picker_grid_url %}"
-    """
+    """Return the versioned URL of the shared icon-picker grid."""
     from django.urls import reverse
 
     from urbanlens.dashboard.services.core.icon_grid import icon_grid_version
@@ -450,8 +392,6 @@ def tooltip_attrs(
     """Return HTML attributes for a ``data-tooltip`` trigger.
 
     Usage::
-
-        <button type="button" {% tooltip_attrs "Save your changes." pos="below" %}>
 
     Args:
         text: Tooltip copy shown on hover, focus, or tap.
@@ -512,19 +452,8 @@ def tooltip_label(
 def assistant_enabled_flag(user) -> bool:
     """Whether the AI assistant's global surface (hotkey, floating button) should be wired up.
 
-    A template tag rather than a context processor: base.html is the only
-    template that needs this, the same way it's the only one that needs
-    ``tooltip_attrs``/``subscription_role_choices`` above.
-
-    Usage: {% assistant_enabled_flag request.user as assistant_enabled %}
-
-    ``getattr``, not ``user.is_authenticated``. This is called from
-    ``themes/base.html:4``, so it runs for every page - including a
-    ``render_to_string`` with no ``request`` in the context, where Django
-    resolves ``request.user`` to ``string_if_invalid`` (``""``) rather than
-    raising, and ``"".is_authenticated`` is an ``AttributeError`` that surfaces
-    as a 500 on the whole page. Rendering a page template without a request is a
-    legitimate thing to do; answering False for it is the honest result.
+    A template tag rather than a context processor: base.html is the only template that needs this, the
+    same way it's the only one that needs ``tooltip_attrs``/``subscription_role_choices`` above.
 
     Args:
         user: The viewer, or whatever the template resolved in its place.
@@ -556,12 +485,10 @@ def subscription_role_choices():
 def trip_name_ideas(count: int = 12) -> list[str]:
     """Return generated trip names for the create-trip dialog's placeholder rotation.
 
-    Usage: ``{% trip_name_ideas as trip_name_ideas %}``
-
-    A tag rather than view context because the dialog is included from two pages
-    (the trips list and the overview), and the names come from the same generator
-    that fills in a blank submission server-side - a second, hand-maintained list
-    in the template would drift away from what the server actually names trips.
+    A tag rather than view context because the dialog is included from two pages (the trips list and the
+    overview), and the names come from the same generator that fills in a blank submission server-side -
+    a second, hand-maintained list in the template would drift away from what the server actually names
+    trips.
     """
     from urbanlens.dashboard.services.trips.trip_names import trip_name_suggestions
 
@@ -572,9 +499,8 @@ def trip_name_ideas(count: int = 12) -> list[str]:
 def pin_type_icon(pin_type: str) -> str:
     """The Material Symbols glyph for a ``PinType`` value.
 
-    Usage: ``{{ pin.pin_type|pin_type_icon }}``. Backed by the single mapping
-    on the enum itself, so the detail-pin list, the child-wiki list, and the
-    scope badge on both detail pages can't drift apart.
+    Backed by the single mapping on the enum itself, so the detail-pin list, the child-wiki list, and
+    the scope badge on both detail pages can't drift apart.
     """
     from urbanlens.dashboard.models.pin.model import PIN_TYPE_ICONS
 

@@ -1,21 +1,4 @@
-"""A HEIC upload gets its GPS removed like any other format.
-
-Filed 2026-08-12: heic/heif were accepted uploads that Pillow could not open at
-all, so a GPS strip a user had asked for raised, was logged as a warning, and
-the file was stored with its full GPS IFD - the app promised a scrub and kept
-the coordinates, for exactly the people who had opted out. HEIC is the iPhone
-default, so this was not an edge case.
-
-`pillow-heif` is now a dependency and its opener is registered in
-`dashboard.apps.ready`, which makes HEIC an ordinary format everywhere: the
-strip, thumbnailing and EXIF extraction all just work, and there is nothing for
-a user to do differently.
-
-These tests build a real HEIC carrying a real GPS IFD rather than asserting on
-constants, because the failure being guarded against was precisely that the
-file could not be opened - a test that never decodes one could not have caught
-it.
-"""
+"""A HEIC upload gets its GPS removed like any other format."""
 
 from __future__ import annotations
 
@@ -109,14 +92,7 @@ class HeicGpsStripTests(TestCase):
 class HeicIsStoredInARenderableFormatTests(TestCase):
     """Accepting the upload is only half of "HEIC just works".
 
-    Commit 550b2cb8 removed the 415 that told the user to convert to JPEG
-    first. But the WebP conversion is gated on the downscale policy, and HEIF is
-    deliberately not a format the downscaler re-encodes - so a subscriber with
-    downscaling off (the default) had their .heic stored verbatim and served
-    through a plain `<img src>`, which every browser but Safari renders as a
-    broken image. That is a worse outcome than the refusal it replaced: the
-    refusal was actionable.
-    """
+    Commit 550b2cb8 removed the 415 that told the user to convert to JPEG first."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -85,24 +85,7 @@ CATEGORY_HIERARCHY: list[tuple[str, str]] = [
 
 def create_default_tags(sender: type[Profile], instance: Profile, created: bool, **kwargs) -> None:
     """Create default personal status and category labels for every new profile.
-
-    Status labels:
-        "Visited" is protected - it cannot be deleted or renamed.
-        "Active", "Abandoned", and "Demolished" are also protected.
-
-    Category labels:
-        One label per entry in DEFAULT_CATEGORIES, pre-populated with an icon,
-        colour, and display order. Parent-child relationships from CATEGORY_HIERARCHY
-        are wired up via the ``parents`` M2M after all labels exist. Users may delete
-        or rename any category label after creation.
-
-    Tag labels:
-        A small starter set of ordinary, user-owned tag labels. Users may edit or
-        delete these exactly like tags they create themselves.
-
-    Media labels:
-        A small starter set of media labels, applied to photos/videos/documents
-        (not pins) to help the user find them via the main site search.
+    Status labels: "Visited" is protected - it cannot be deleted or renamed.
     """
     if not created:
         return
@@ -192,14 +175,7 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
 
 def create_default_saved_filters(profile: Profile) -> int:
     """Seed the two saved filters a new profile starts with.
-
-    The main map's filter bar is otherwise an empty shelf that a user has to
-    learn the label formula syntax to fill, and these two are what almost
-    everyone builds first: what I have seen, and what I still want to see.
-
-    Built from the profile's own status labels, so they are ordinary saved
-    filters - editable and deletable like any other. The labels they name are
-    protected, so the filters cannot silently start matching the wrong thing.
+    The main map's filter bar is otherwise an empty shelf that a user has to learn the label formula syntax to fill, and these two are what almost everyone builds first: what I have seen, and what I still want to see.
 
     Args:
         profile: The profile whose labels were just seeded.
@@ -240,19 +216,16 @@ def create_default_saved_filters(profile: Profile) -> int:
     return created
 
 
-# -- REData label-suggestion taxonomy sync --------------------------------
-# Tag/category labels are created/edited/reparented/deleted from a couple
-# dozen call sites (organize CRUD, bulk edit/convert/merge, the external API,
-# default-label seeding above). Signals are the one choke point that sees
-# all of them - see services.labels.redata_suggestions' module docstring.
+# -- REData label-suggestion taxonomy sync -------------------------------- Tag/category labels are
+# created/edited/reparented/deleted from a couple dozen call sites (organize CRUD, bulk
+# edit/convert/merge, the external API, default-label seeding above).
+# Signals are the one choke point that sees all of them - see services.labels.redata_suggestions'
 
 
 @receiver(pre_save, sender=Label, dispatch_uid="label_remember_prior_kind_for_redata")
 def remember_prior_kind_for_redata(sender: type[Label], instance: Label, **kwargs) -> None:
     """Stash the label's previously-saved kind so post_save can detect a kind change.
-
-    Only a tag/category<->status transition (via LabelEditView/LabelBulkConvertView's
-    kind conversion) needs this - see sync_redata_taxonomy_on_save.
+    Only a tag/category<->status transition (via LabelEditView/LabelBulkConvertView's kind conversion) needs this - see sync_redata_taxonomy_on_save.
     """
     instance.redata_prior_kind = Label.objects.filter(pk=instance.pk).values_list("kind", flat=True).first() if instance.pk else None
 
@@ -281,13 +254,7 @@ def retire_redata_taxonomy_on_delete(sender: type[Label], instance: Label, **kwa
 @receiver(m2m_changed, sender=Label.parents.through, dispatch_uid="label_parents_sync_redata_taxonomy")
 def sync_redata_taxonomy_on_reparent(sender, instance: Label, action: str, reverse: bool, pk_set: set[int] | None, **kwargs) -> None:
     """Resync a label's REData definition after its parent set changes (parent_ids is part of it).
-
-    ``Label.parents`` is symmetrical=False self-M2M, so both directions are
-    real: ``child.parents.add(parent)`` (forward, instance is the child whose
-    own parent_ids changed) and ``parent.children.add(child)`` /
-    ``child.parents.add(parent)`` called from the parent side (reverse,
-    instance is the parent, pk_set holds the affected children's ids - it is
-    each child's definition that changed, not the parent's).
+    ``Label.parents`` is symmetrical=False self-M2M, so both directions are real: ``child.parents.add(parent)`` (forward, instance is the child whose own parent_ids changed) and ``parent.children.add(child)`` / ``child.parents.add(parent)`` called from the parent side (reverse, instance is the parent, pk_set holds the affected children's ids - it is each child's definition that changed, not the parent's).
     """
     if action not in {"post_add", "post_remove", "post_clear"}:
         return

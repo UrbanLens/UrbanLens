@@ -1,9 +1,4 @@
-"""Tests for the Yelp plugin's REData-backed panel source.
-
-``YelpPanelSource`` now calls ``RedataPointsOfInterestGateway`` (``provider="yelp"``)
-instead of the direct Yelp Fusion API - these tests mock that gateway and check
-the LocationCache row / MediaItem list it produces, rather than any HTTP call.
-"""
+"""Tests for the Yelp plugin's REData-backed panel source."""
 
 from __future__ import annotations
 
@@ -76,9 +71,7 @@ class YelpPanelSourceGateTests(TestCase):
             self.assertFalse(self.source.gate(pin))
 
     def test_requires_coordinates(self) -> None:
-        """``Location.latitude``/``longitude`` are NOT NULL - (0.0, 0.0) ("null island") is
-        how a pin with no real coordinates yet reads through ``effective_latitude``/
-        ``effective_longitude``, which is what the ``bool(lat and lng)`` check catches."""
+        """``Location.latitude``/``longitude`` are NOT NULL - (0.0, 0.0) ("null island") is how a pin with no real coordinates yet reads through ``effective_latitude``/ ``effective_longitude``, which is what the ``bool(lat and lng)`` check catches."""
         pin = self._pin(latitude=0.0, longitude=0.0)
         with mock.patch(_CONFIGURED_PATH, return_value=True):
             self.assertFalse(self.source.gate(pin))

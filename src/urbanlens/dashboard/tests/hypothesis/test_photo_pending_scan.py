@@ -1,20 +1,4 @@
-"""``Image.pending_scan``: the window between an accepted upload and the task.
-
-``prepare_photo_upload`` used to decode a photo with Pillow and byte-walk-strip
-its metadata inside the request - both closed windows the sandbox tier (see
-``services.sandbox.guard``) exists to keep out of that process. It now stores
-the raw upload untouched and marks the row ``pending_scan``; the read/strip
-work moves entirely into ``tasks.process_image_upload``, which already runs on
-the sandbox queue. Three things have to hold for that trade to be safe rather
-than a regression of the leak ``metadata_strip.py`` was written to close:
-
-- a fresh photo upload never decodes anything in the request (verified via the
-  sandbox guard's own enforcement, not by inspecting call sites);
-- a pending row is invisible to everyone but its uploader, both for a direct
-  media-URL fetch and in gallery listings;
-- the task, not the request, is what clears it - on success, and (so a genuine
-  processing failure doesn't hide a row forever) on giving up too.
-"""
+"""``Image.pending_scan``: the window between an accepted upload and the task."""
 
 from __future__ import annotations
 
@@ -146,12 +130,6 @@ class PendingScanUploadFlowTests(TestCase):
         self.assertIsNotNone(image.latitude)
 
     def test_once_cleared_a_viewer_with_the_right_visibility_can_fetch_it(self) -> None:
-        # visible_to() gates a pin-only photo to its uploader alone, full stop -
-        # see its docstring - so demonstrating "pending_scan was the remaining
-        # blocker" needs a photo actually reachable by someone else once cleared:
-        # on a wiki, viewed by a friend who has pinned that wiki's location. Same
-        # combination test_media_gate.py's test_a_friend_can_fetch_a_photo_that_was_shared
-        # uses to open both of visible_to()'s gates.
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
         from urbanlens.dashboard.models.friendship.model import Friendship
         from urbanlens.dashboard.models.wiki.model import Wiki
@@ -184,12 +162,6 @@ class PendingScanUploadFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_a_transient_open_failure_retries_before_giving_up(self) -> None:
-        # _process_photo_upload swallows OSError/ValueError internally and
-        # returns None rather than raising, so process_image_upload's own
-        # autoretry_for=(OSError,) never sees this failure - the retry has to
-        # be explicit. .apply() (not calling the task function directly) is
-        # what actually drives Celery's retry loop; countdown values are not
-        # really slept during eager/direct execution.
         from urbanlens.dashboard.tasks import process_image_upload
 
         image = self._upload()
@@ -262,12 +234,6 @@ class PendingScanUploadFlowTests(TestCase):
         self.assertIsNotNone(notification)
 
     def test_permanent_failure_on_a_legacy_already_cleared_row_does_not_delete_it(self) -> None:
-        # A backfill/manual re-enqueue of an old row (pending_scan already
-        # False - never part of the raw-upload window) hitting the same
-        # "cannot open the file" failure is a different problem entirely
-        # (the file went missing well after the row was already safe to
-        # serve). Deleting it would be a new, unrelated regression - the
-        # pre-pending_scan degrade (log and leave it alone) still applies.
         from urbanlens.dashboard.tasks import process_image_upload
 
         image = self._upload()
@@ -302,17 +268,8 @@ class PendingScanUploadFlowTests(TestCase):
 class DedupedCopyInheritsPendingScanTests(TestCase):
     """A dedup sibling must not be a side door around its original's pending_scan.
 
-    ``attach_deduped_copy`` points a new row at the *same stored file* as an
-    earlier upload by the same profile, without going through
-    ``process_image_upload`` itself. If that original is still ``pending_scan``
-    - its stored file is still the uploader's raw bytes, not yet stripped - a
-    sibling created into a *different* pin/wiki must not be immediately visible
-    there while pointing at those same raw bytes; that would let a second
-    upload of identical bytes bypass the very gate the first upload is subject
-    to. Nothing but ``tasks._sync_deduped_siblings`` (run when the *original*
-    finishes processing) ever revisits a dedup sibling, so that has to be what
-    clears it too.
-    """
+    ``attach_deduped_copy`` points a new row at the *same stored file* as an earlier upload by the same profile,
+    without going through ``process_image_upload`` itself."""
 
     def test_a_copy_of_an_already_processed_original_is_not_pending(self) -> None:
         from urbanlens.dashboard.services.photos.uploads import attach_deduped_copy
@@ -358,15 +315,8 @@ class LegacyRowsDefaultToNotPendingTests(DjangoTestCase):
 class SafetyContactPortalRespectsPendingScanTests(TestCase):
     """The one Image-serving surface that does not go through ``authorize_image``.
 
-    ``SafetyContactPhotoView`` authenticates an emergency contact by magic-link
-    token - they usually have no account - and streams the file directly. Before
-    this session's change that was harmless: the request-time strip meant the
-    stored file was already scrubbed. Now the stored file is the raw upload until
-    the sandboxed task runs, so serving a pending row here hands a contact the
-    uploader's precise GPS - including for an uploader whose visit-tracking
-    opt-out means those coordinates were never meant to be recorded at all
-    (``strip_location`` is only applied inside that task).
-    """
+    ``SafetyContactPhotoView`` authenticates an emergency contact by magic-link token - they usually have no
+    account - and streams the file directly."""
 
     def setUp(self) -> None:
         from pathlib import Path

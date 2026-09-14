@@ -1,17 +1,4 @@
-"""What a brand-new profile starts with, and what it may not lose.
-
-Three things, all reported together:
-
-- A new profile gets two saved filters, so the main map's filter bar is not
-  an empty shelf someone has to learn the formula syntax to fill.
-- "Want to Go" was the one default status label without `is_protected`, while
-  its four siblings had it - so the label the second filter is built on could
-  be deleted out from under it.
-- Merging a label *deletes* the source, so every guard that protects a label
-  from deletion has to hold on the merge paths too. The single-merge view
-  checks both `profile is None` (a global label) and `is_protected`; the bulk
-  path checked ownership for every kind but `is_protected` for statuses only.
-"""
+"""What a brand-new profile starts with, and what it may not lose."""
 
 from __future__ import annotations
 

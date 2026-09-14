@@ -1,9 +1,4 @@
-{% comment %}
-Shared top-right map toolbar (tools only). Identical markup on every map on
-the site - see map_components.py's map_toolbar()/MAP_TOOL_REGISTRY. The
-collapse toggle and the screenshot tool are both wired by delegated global
-handlers in themes/base.html, so this partial needs no page-specific script.
-{% endcomment %}
+{% comment %}Shared top-right map toolbar (tools only).{% endcomment %}
 <div class="map-buttons" id="{{ panel_id }}">
     <button type="button" class="map-toolbar-collapse" aria-label="Toggle map controls"
             data-tooltip="Collapse toolbar" data-tooltip-float="true" data-tooltip-pos="below">

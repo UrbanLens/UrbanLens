@@ -1,18 +1,6 @@
 /**
- * Celery: is there a worker, and is it consuming this deployment's queue?
- *
- * Nothing on the site says so. A deployment whose worker container is down, or
- * is pointed at a different broker, or is running an image without the task
- * registered, looks completely healthy: pages render, the queue accepts work,
- * and the work simply never happens. Users notice days later, as "my import
- * never finished".
- *
- * The data export is the probe because it is the one Celery job that is
- * user-initiated, self-contained, and honest about its outcome: it touches only
- * this account's own rows, calls no external provider, reports progress through
- * an endpoint of its own, and finishes in a state the page states plainly. It
- * therefore exercises the whole path - enqueue, broker, worker, task code,
- * status write, download - rather than only proving the queue accepted a job.
+ * Celery: is there a worker, and is it consuming this deployment's queue? Nothing on the site says
+ * so.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

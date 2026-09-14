@@ -1,21 +1,4 @@
-"""A pin-detail panel gets card chrome exactly when it renders standalone.
-
-Reported from staging: "Water & Hydrology is not styled the same as the other
-cards". It was not alone - eight standalone panels had the same defect, and it
-only stood out on that pin because the other seven had no data there and were
-removed by their own 204.
-
-The mechanism: a standalone panel's placeholder is a `card card--secondary` div
-that the loaded panel replaces via `hx-swap="outerHTML"`, so the loaded markup
-has to bring its own card. `_simple_info_panel.html` adds that class only when
-`nested` is falsy - and panels were declaring `nested` themselves inside
-`render_context`, where they cannot possibly know the answer. Whether a panel
-ends up inside a tab strip (which supplies the chrome) or standalone is decided
-by `_TABBED_PANEL_KEYS` in the controller, so the controller now sets it.
-
-The invariant is the interesting part rather than the eight instances: chrome
-follows placement, and placement is one dict away from changing.
-"""
+"""A pin-detail panel gets card chrome exactly when it renders standalone."""
 
 from __future__ import annotations
 
@@ -33,10 +16,8 @@ class PanelChromeInvariantTests(SimpleTestCase):
     def test_no_panel_decides_its_own_chrome(self) -> None:
         """``render_context`` must not be the thing that sets ``nested``.
 
-        Left in place, a panel moved into or out of a tab strip keeps whatever
-        chrome its own module happened to declare, which is how eight standalone
-        panels ended up with no card.
-        """
+        Left in place, a panel moved into or out of a tab strip keeps whatever chrome its own module happened to
+        declare, which is how eight standalone panels ended up with no card."""
         import inspect
 
         offenders = []

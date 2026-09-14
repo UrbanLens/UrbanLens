@@ -1,33 +1,5 @@
 #!/usr/bin/env python3
-"""Run CodeQL locally, thoroughly, and optionally as a pre-push gate.
-
-GitHub already analyses pull requests (``.github/workflows/security.yml``) with
-the default ``code-scanning`` suites. That is after the branch exists. This
-script is the same analysis on this machine, so a finding shows up before a PR
-does, and the default manual invocation is *broader* than CI: the
-``security-and-quality`` suites, plus the ``local`` threat model (file, env,
-CLI - not just HTTP) so management commands and parsers are in scope too.
-
-Database creation plus analysis is minutes, not seconds, which is why the
-pre-commit hook is a **pre-push** hook rather than a per-commit one. ``--gate``
-reuses a previous database when the analysed tree has not changed, and uses
-the same suites CI uses so a push fails on what the GitHub job would report.
-
-Install the official bundle (CLI + precompiled queries) with ``--install``.
-The GitHub CodeQL Action bundle is required - the standalone CLI zip does not
-ship query packs, and analysis would then have nothing to run. JavaScript,
-TypeScript, and GitHub Actions extraction also need ``node`` on PATH (bun is
-not a substitute); without it, ``--languages python`` still works.
-
-Usage:
-    python bin/run_codeql.py              # exhaustive local scan
-    python bin/run_codeql.py --install    # download the CLI bundle
-    python bin/run_codeql.py --languages python
-    python bin/run_codeql.py --gate       # pre-push: CI suites, reuse DB
-    python bin/run_codeql.py --fast       # reuse the existing database
-    python bin/run_codeql.py --verbose    # print note-level findings too
-    python bin/run_codeql.py --all-queries
-"""
+"""Run CodeQL locally, thoroughly, and optionally as a pre-push gate."""
 
 from __future__ import annotations
 
@@ -107,8 +79,7 @@ def _require_https(url: str) -> str:
         The same URL.
 
     Raises:
-        ValueError: If the scheme is not https.
-    """
+        ValueError: If the scheme is not https."""
     if not url.startswith("https://"):
         raise ValueError(f"Refusing non-https URL: {url}")
     return url
@@ -177,14 +148,12 @@ def _run(codeql: Path, *args: str, check: bool = True, extra_env: dict[str, str]
     """Run a CodeQL command with the repo as cwd.
 
     Args:
-        codeql: Path to the CLI executable.
-        *args: Arguments following the executable.
+        codeql: Path to the CLI executable. *args: Arguments following the executable.
         check: Raise if the process exits non-zero.
         extra_env: Additional environment variables for this process.
 
     Returns:
-        The completed process.
-    """
+        The completed process."""
     env = os.environ.copy()
     if extra_env:
         env.update(extra_env)
@@ -213,15 +182,14 @@ def _platform_bundle_name() -> str:
 def _latest_bundle_asset() -> tuple[str, str]:
     """Return ``(tag, download_url)`` for the current CodeQL-action bundle.
 
-    Prefers ``gh`` so an authenticated GitHub CLI session is used; urllib is
-    the fallback when ``gh`` is not installed.
+    Prefers ``gh`` so an authenticated GitHub CLI session is used; urllib is the fallback when ``gh`` is not
+    installed.
 
     Returns:
         Release tag and the platform-specific ``.tar.gz`` asset URL.
 
     Raises:
-        RuntimeError: If the GitHub API response has no matching asset.
-    """
+        RuntimeError: If the GitHub API response has no matching asset."""
     gh = shutil.which("gh")
     if gh:
         listing = subprocess.run(
@@ -290,8 +258,7 @@ def _extract_bundle(archive: Path, dest: Path) -> Path:
         dest: Directory to extract into (created if needed).
 
     Returns:
-        Directory that contains the ``codeql`` / ``codeql.exe`` executable.
-    """
+        Directory that contains the ``codeql`` / ``codeql.exe`` executable."""
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:gz") as tar:
         tar.extractall(dest, filter="data")
@@ -339,8 +306,7 @@ def install_codeql(*, force: bool = False) -> Path:
         force: Re-download and replace an existing install.
 
     Returns:
-        Path to the installed executable.
-    """
+        Path to the installed executable."""
     existing = find_codeql()
     if existing is not None and not force:
         print(f"CodeQL already installed at {existing}")
@@ -384,8 +350,7 @@ def _source_stamp(languages: tuple[str, ...], mode: str, extra: str) -> str:
         extra: Extra distinguisher (query selection, threat model, ...).
 
     Returns:
-        Hex digest. Changes when tracked files, languages, or mode change.
-    """
+        Hex digest."""
     listing = subprocess.run(["git", "ls-files", "-s"], cwd=REPO_ROOT, capture_output=True, text=True, check=True)
     payload = "\n".join(
         (
@@ -421,16 +386,13 @@ def _write_stamp(stamp: str, mode: str, languages: tuple[str, ...]) -> None:
 def _yaml_finalised(text: str) -> bool:
     """Return True if CodeQL YAML records a finished extract.
 
-    A failed JavaScript/Actions extract still writes ``codeql-database.yml``
-    with ``finalised: false``. Reusing that directory makes ``database analyze``
-    fail with "needs to be finalized".
+    A failed JavaScript/Actions extract still writes ``codeql-database.yml`` with ``finalised: false``.
 
     Args:
         text: Contents of ``codeql-database.yml``.
 
     Returns:
-        True only when the top-level ``finalised`` key is ``true``.
-    """
+        True only when the top-level ``finalised`` key is ``true``."""
     match = _FINALISED_RE.search(text)
     return match is not None and match.group(1) == "true"
 
@@ -445,8 +407,7 @@ def _result_level(result: dict, rules: dict) -> str:
 def _print_sarif(path: Path, *, verbose: bool = False, quiet: bool = False) -> int:
     """Print findings from a SARIF file and return how many were error/warning.
 
-    Default output is a per-rule count plus each error/warning. Notes are
-    counted in the summary and omitted from the line dump unless ``verbose``.
+    Default output is a per-rule count plus each error/warning.
 
     Args:
         path: SARIF document produced by ``database analyze``.
@@ -454,10 +415,7 @@ def _print_sarif(path: Path, *, verbose: bool = False, quiet: bool = False) -> i
         quiet: Print only the summary, not individual findings.
 
     Returns:
-        Count of results whose level is ``error`` or ``warning``. A missing
-        result level uses the rule's ``defaultConfiguration.level``, then
-        SARIF's default of ``warning``.
-    """
+        Count of results whose level is ``error`` or ``warning``."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     counts: Counter[tuple[str, str]] = Counter()
     lines: list[tuple[str, str]] = []
@@ -508,8 +466,7 @@ def _suite_args(language: str, mode: str, all_queries: bool) -> list[str]:
         all_queries: If true, run every query in the language's query pack.
 
     Returns:
-        Arguments inserted after ``database analyze <db>``.
-    """
+        Arguments inserted after ``database analyze <db>``."""
     if all_queries:
         pack = {
             "python": "codeql/python-queries",
@@ -542,8 +499,7 @@ def _analyze_language(
         quiet: Print only the per-rule summary from SARIF.
 
     Returns:
-        Count of error/warning findings. ``-1`` if the database is missing.
-    """
+        Count of error/warning findings."""
     db = DB_CLUSTER / language
     if not _database_ready(language):
         yml = db / "codeql-database.yml"
@@ -592,10 +548,7 @@ def _database_ready(language: str) -> bool:
 def _node_bindir() -> Path | None:
     """Return the directory containing a Node.js executable, if any.
 
-    The JavaScript/TypeScript extractor (also used for GitHub Actions) requires
-    ``node`` on PATH. This checkout's frontend tooling is bun, which does not
-    provide that binary.
-    """
+    The JavaScript/TypeScript extractor (also used for GitHub Actions) requires ``node`` on PATH."""
     which = shutil.which("node")
     if which:
         return Path(which).parent
@@ -625,16 +578,14 @@ def _extractor_env() -> dict[str, str]:
 def create_databases(codeql: Path, languages: tuple[str, ...], config: Path, *, rebuild: bool = False) -> None:
     """(Re)build per-language databases under ``.codeql/db``.
 
-    Databases are created one language at a time so an extractor crash in
-    JavaScript (which the Actions extractor also uses) does not discard a
-    finished Python database.
+    Databases are created one language at a time so an extractor crash in JavaScript (which the Actions
+    extractor also uses) does not discard a finished Python database.
 
     Args:
         codeql: CLI executable.
         languages: Languages to extract.
         config: Code scanning config (paths / paths-ignore).
-        rebuild: Recreate databases that already exist.
-    """
+        rebuild: Recreate databases that already exist."""
     DB_CLUSTER.mkdir(parents=True, exist_ok=True)
     failed: list[str] = []
     extra_env = _extractor_env()
@@ -681,11 +632,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments.
 
     Args:
-        argv: Argument list without the program name. ``None`` uses ``sys.argv``.
+        argv: Argument list without the program name.
 
     Returns:
-        Parsed arguments.
-    """
+        Parsed arguments."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--install", action="store_true", help="Download the official CodeQL bundle and exit")
     parser.add_argument("--force", action="store_true", help="With --install, replace an existing CodeQL install")
@@ -727,8 +677,7 @@ def main(argv: list[str] | None = None) -> int:
         argv: Argument list without the program name.
 
     Returns:
-        Process exit code.
-    """
+        Process exit code."""
     args = parse_args(argv)
     if os.environ.get(SKIP_ENV):
         print(f"{SKIP_ENV} is set; skipping CodeQL.")
@@ -760,13 +709,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     config = CI_CONFIG if mode == "gate" else LOCAL_CONFIG
-    # A database is a snapshot of the tree it was extracted from, so reusing one
-    # after an edit analyses the old code and reports on it as though it were
-    # current - a scan that cannot fail on anything you just wrote. Reaching
-    # this line at all means the stamp did not match, i.e. the tree moved;
-    # `_database_ready` only asks whether an extract *finished*, never what it
-    # finished on, so it cannot make this call itself. --fast is the explicit
-    # opt-in to analysing a stale database.
+    # A database snapshots the tree at extraction; stale reuse can't fail on new edits.
     reuse_is_safe = tree_matches_last_scan or args.fast
     if args.fast and not tree_matches_last_scan:
         print("Reusing finalised databases (--fast): findings reflect the tree they were extracted from, not the current one.")

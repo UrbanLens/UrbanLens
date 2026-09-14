@@ -1,24 +1,4 @@
-"""WhatsApp/SMS toggles must actually reach the code that reads them.
-
-Two independent defects met here, and either alone was enough to make a toggle
-a lie:
-
-1. `_enabled_channels` derived the preference column from the
-   notification's *type value*. That works for 31 of 32 types, but
-   `SAFETY_CHECKIN_PARTNER_INVITE` has the value `safety_ci_partner_invite`
-   while its columns are `safety_checkin_partner_invite*`. `getattr`'s `False`
-   default then reported "user does not want text alerts" - indistinguishable
-   from a real opt-out. It now resolves by enum *member name*, which every other
-   consumer of these preferences already uses.
-2. `TEXT_ALERTABLE_TYPES` omitted that type entirely, so the lookup was never
-   even reached. Its own docstring defines membership as "types that have a
-   toggle pair", with MESSAGE as the single deliberate exclusion - and the
-   partner invite has a full pair, persisted and settable through the external
-   API. The omission was an oversight, not a decision.
-
-Together those meant a user could enable WhatsApp/SMS for safety check-in
-partner invites and never receive one, with nothing logged anywhere.
-"""
+"""WhatsApp/SMS toggles must actually reach the code that reads them."""
 
 from __future__ import annotations
 

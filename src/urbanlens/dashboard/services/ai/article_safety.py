@@ -1,13 +1,5 @@
 """Fail-closed safety classifier for AI-drafted article text.
-
-Every paragraph produced by the link-extraction writing assistant must pass
-through this judge before it is appended to a pin or wiki article. Unavailable
-gateways, empty responses, and unrecognized tokens are all treated as REJECT —
-moderation is never bypassed by turning the feature off (the caller skips
-expansion entirely when this feature's SiteSettings toggle is disabled).
-
-Follows ``services.trivia.classifier``'s allowlisted-``<ANSWER>`` token pattern.
-"""
+Unavailable gateways, empty responses, and unrecognized tokens are all treated as REJECT — moderation is never bypassed by turning the feature off (the caller skips expansion entirely when this feature's SiteSettings toggle is disabled)."""
 
 from __future__ import annotations
 
@@ -62,10 +54,7 @@ class ArticleSafetyVerdict:
 
     Attributes:
         approved: True only when the model returned the APPROVE token.
-        reason: None on approval; otherwise a short machine reason
-            (``safety``, ``inappropriate``, ``off_topic``, ``ai_unavailable``,
-            or ``unparseable``).
-    """
+        reason: None on approval; otherwise a short machine reason (``safety``, ``inappropriate``, ``off_topic``, ``ai_unavailable``, or ``unparseable``)."""
 
     approved: bool
     reason: str | None = None
@@ -80,8 +69,7 @@ def classify_article_text(text: str, *, place_name: str, profile: Profile | None
         profile: The requesting profile, used only for the AI-availability gate.
 
     Returns:
-        APPROVE, or REJECT with a reason. Fail-closed on every error path.
-    """
+        APPROVE, or REJECT with a reason."""
     from urbanlens.dashboard.services.ai.factory import get_gateway
 
     gateway = get_gateway("article_safety", profile=profile, instructions=_INSTRUCTIONS)

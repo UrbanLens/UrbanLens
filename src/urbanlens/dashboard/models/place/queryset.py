@@ -38,31 +38,14 @@ class PlaceQuerySet(abstract.DashboardQuerySet):
 
     def resolvable(self) -> Self:
         """Places a coordinate is allowed to resolve onto.
-
-        Three exclusions, each load-bearing:
-
-        - **Superseded** places keep their geometry for display and history,
-          but a historical campus boundary still geometrically contains every
-          post-split pin, so containment against it must never resolve.
-        - **Aggregates** (anything with ``MEMBER_OF`` children) exist to be
-          *earned* by holding every member, never to be pinned into directly -
-          see ``services.wiki.wiki_access``. Their geometry is the union of
-          their members, so excluding them here is what makes the strict rule
-          unbypassable rather than merely unlikely.
-        - **Geometry-less** places (a building nobody has a footprint for)
-          have nothing to test containment against; they stay reachable
-          through their parent's domain instead.
+        Three exclusions, each load-bearing: - **Superseded** places keep their geometry for display and history, but a historical campus boundary still geometrically contains every post-split pin, so containment against it must never resolve. - **Aggregates** (anything with ``MEMBER_OF`` children) exist to be *earned* by holding every member, never to be pinned into directly - see ``services.wiki.wiki_access``.
         """
         return self.current().filter(is_aggregate=False, geometry__isnull=False)
 
     def containing_point(self, point: Point) -> Self:
         """Resolvable places whose official geometry contains a coordinate.
-
-        Ordered most-specific first: smallest area wins. A building footprint
-        is always smaller than the parcel enclosing it, so area ordering
-        subsumes "deepest in the containment tree" without needing to walk it,
-        and it stays deterministic for two unrelated parcels that overlap
-        through bad county geometry.
+        Ordered most-specific first: smallest area wins.
+        A building footprint is always smaller than the parcel enclosing it, so area ordering subsumes "deepest in the containment tree" without needing to walk it, and it stays deterministic for two unrelated parcels that overlap through bad county geometry.
         """
         return self.resolvable().filter(geometry__contains=point).order_by("area_sqm", "pk")
 
@@ -93,13 +76,8 @@ class PlaceManager(abstract.DashboardManager.from_queryset(PlaceQuerySet)):
 
     def competing_for_point(self, latitude: Coordinate, longitude: Coordinate, *, resolved: Place | None) -> PlaceQuerySet:
         """Places that genuinely compete with ``resolved`` for a coordinate.
-
-        A competitor is a resolvable place containing the same point that is
-        in a *different access domain*. Everything inside one property -
-        buildings under their parcel - shares a domain and is therefore never
-        a competitor, which is what stops a 124-building campus from telling
-        every visitor that 124 other places cover their pin. What survives is
-        the real case: two unrelated parcels whose county geometry overlaps.
+        A competitor is a resolvable place containing the same point that is in a *different access domain*.
+        Everything inside one property - buildings under their parcel - shares a domain and is therefore never a competitor, which is what stops a 124-building campus from telling every visitor that 124 other places cover their pin.
 
         Args:
             latitude: WGS-84 latitude; None is tolerated.
@@ -143,11 +121,7 @@ class PlaceAccessGrantQuerySet(abstract.DashboardQuerySet):
 
 class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAccessGrantQuerySet)):
     """Manager for PlaceAccessGrant.
-
-    Deliberately offers no general-purpose "grant access" helper - the two
-    methods below are narrow and named for the one structural event each
-    covers. Every other caller must go through the computed predicate in
-    ``services.wiki.wiki_access``.
+    Every other caller must go through the computed predicate in ``services.wiki.wiki_access``.
     """
 
     def granted_domain_ids(self, profile) -> set[int]:
@@ -165,12 +139,7 @@ class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAcces
 
     def snapshot_family(self, profile_ids: Iterable[int], aggregate: Place, *, reason: str | None = None) -> None:
         """Permanently grant a split-derived aggregate and all its current members.
-
-        Used both at the moment a parcel is split (for everyone who held the
-        undivided parcel) and, later, for anyone who independently earns the
-        same aggregate by pinning every one of its current successors - both
-        are "proved full knowledge of this split family", just at different
-        times, and both deserve the identical permanent record.
+        Used both at the moment a parcel is split (for everyone who held the undivided parcel) and, later, for anyone who independently earns the same aggregate by pinning every one of its current successors - both are "proved full knowledge of this split family", just at different times, and both deserve the identical permanent record.
 
         Args:
             profile_ids: Profiles to grant. A no-op for an empty iterable.
@@ -193,11 +162,7 @@ class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAcces
 
     def record_engagement(self, profile, place: Place | None) -> None:
         """Permanently grant *profile* the domain *place* sits in, for engaging with it.
-
-        A profile who views a wiki or shares content to it while they hold
-        access keeps that access even after every qualifying pin is later
-        moved or deleted - see :class:`GrantReason.GRANDFATHERED_ENGAGEMENT`.
-        Idempotent: a repeat view is a cheap no-op once the grant exists.
+        A profile who views a wiki or shares content to it while they hold access keeps that access even after every qualifying pin is later moved or deleted - see :class:`GrantReason.GRANDFATHERED_ENGAGEMENT`.
 
         Args:
             profile: The profile engaging with the wiki. A no-op for None or

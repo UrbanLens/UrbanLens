@@ -1,16 +1,4 @@
-"""Tests for the Flickr photo-import integration.
-
-Covers:
-- oauth.py - request-token/access-token exchange (OAuth1Session mocked).
-- FlickrGateway - per-request OAuth1 signing, geo search (no local distance
-  filtering needed - Flickr filters server-side), error mapping.
-- Settings connect/callback/disconnect views.
-- PinFlickrSearchView - radius passthrough, "during my visits"/"all photos"
-  mode branching, and already-imported flagging.
-- import_flickr_photos task - new-photo happy path and checksum dedupe.
-
-All HTTP/OAuth calls are mocked; no real network access occurs.
-"""
+"""Tests for the Flickr photo-import integration."""
 
 from __future__ import annotations
 
@@ -266,11 +254,7 @@ class FlickrSettingsViewTests(TestCase):
         self.assertEqual(account.flickr_user_id, "1@N00")
 
     def test_successful_connect_redirects_to_the_connections_tab(self) -> None:
-        """Regression guard: the success path used to redirect to the bare
-        settings URL (no #hash), unlike every error branch in the same view -
-        settings/index.html's tab-switch JS only activates a non-default tab
-        when the URL carries a fragment, so this silently landed the user on
-        the default Privacy tab instead of Connections."""
+        """Regression guard: the success path used to redirect to the bare settings URL (no #hash), unlike every error branch in the same view - settings/index.html's tab-switch JS only activates a non-default tab when the URL carries a fragment, so this silently landed the user on the default Privacy tab instead of Connections."""
         cache.set("ul_flickr_request_token_req-token", {"secret": "req-secret", "pid": self.user.profile.id}, 600)
         with mock.patch(
             "urbanlens.dashboard.controllers.flickr.finish_authorization",
@@ -399,9 +383,7 @@ class ImportFlickrPhotosTaskTests(TestCase):
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
     def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
+        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
         with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
             self._run(["42"], {"42": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
         acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
@@ -410,11 +392,9 @@ class ImportFlickrPhotosTaskTests(TestCase):
 class GetFlickrAccountTests(TestCase):
     """FlickrAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
 
-    Unlike the equivalent Immich/GoogleCalendar/GooglePhotos lookups, nothing
-    here ever caught InvalidToken before this - every page or task touching a
-    Flickr connection after a field_encryption_key rotation would 500 outright
-    instead of treating it as "never connected" and offering reconnection.
-    """
+    Unlike the equivalent Immich/GoogleCalendar/GooglePhotos lookups, nothing here ever caught InvalidToken
+    before this - every page or task touching a Flickr connection after a field_encryption_key rotation would
+    500 outright instead of treating it as "never connected" and offering reconnection."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

@@ -1,17 +1,4 @@
-"""Tests for the LoopNet photo / CRIS attachment / place-CID media download proxy views.
-
-Each streams a REData media file's bytes server-side so REData's API key
-never reaches the browser (same reasoning as the Immich thumbnail proxy).
-Unlike that one, none requires login: this data is public (LoopNet marketing
-photos, CRIS government historic-preservation records, Google Maps listing
-media), and services.media.media_materialize.materialize_media_item
-re-downloads this same URL server-side with no session of its own - a login
-requirement would break it.
-
-django.core.cache.cache is mocked directly rather than exercised for real,
-so these tests don't depend on (or get blocked by) the test environment's
-cache backend.
-"""
+"""Tests for the LoopNet photo / CRIS attachment / place-CID media download proxy views."""
 
 from __future__ import annotations
 
@@ -71,13 +58,10 @@ class PinLoopnetPhotoViewTests(SimpleTestCase):
     def test_unconfigured_gateway_returns_404_not_500(self) -> None:
         """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
 
-        The unconfigured state is forced rather than assumed: this previously
-        relied on the machine running the tests having no REData credentials,
-        so on a dev box that does have them the gateway constructed happily,
-        went on to make a real call, and died on a DB write from a
-        SimpleTestCase - a 500, which is precisely what this test exists to
-        rule out.
-        """
+        The unconfigured state is forced rather than assumed: this previously relied on the machine running the
+        tests having no REData credentials, so on a dev box that does have them the gateway constructed happily,
+        went on to make a real call, and died on a DB write from a SimpleTestCase - a 500, which is precisely
+        what this test exists to rule out."""
         with (
             patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
             patch.object(RedataGateway, "__post_init__", side_effect=ValueError("REData is not configured")),
@@ -131,11 +115,9 @@ class PinCrisAttachmentViewTests(SimpleTestCase):
 class CrisAttachmentPreviewModeTests(SimpleTestCase):
     """``?preview=1`` means "give me something an <img> can render".
 
-    CRIS attachments are routinely scanned PDFs and TIFFs, which no browser
-    displays - the Media gallery pointed an ``<img>`` at them and got a broken
-    tile (or, for documents, an anonymous grey icon) even though the file is a
-    photograph of the building.
-    """
+    CRIS attachments are routinely scanned PDFs and TIFFs, which no browser displays - the Media gallery pointed
+    an ``<img>`` at them and got a broken tile (or, for documents, an anonymous grey icon) even though the file
+    is a photograph of the building."""
 
     def setUp(self) -> None:
         super().setUp()

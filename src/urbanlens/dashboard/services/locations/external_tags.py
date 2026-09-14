@@ -1,11 +1,4 @@
-"""Extraction of classification tags from already-fetched provider payloads.
-
-Turns the Nominatim/Overture response shapes this app already fetches (for
-their own info panels) into ``PlaceExternalTag.sync_for_source``-ready
-:class:`~urbanlens.dashboard.models.place.external_tag.ExtractedTag` rows.
-Makes no API calls of its own - every function here reads a dict some other
-gateway already produced.
-"""
+"""Extraction of classification tags from already-fetched provider payloads."""
 
 from __future__ import annotations
 
@@ -33,21 +26,13 @@ _BOOLISH_VALUE_LABELS: dict[str, str] = {
 
 def humanize_tag_value(value: str) -> str:
     """Turn a raw provider tag value into a display-friendly string.
-
-    Relocated from ``services.apis.locations.nominatim``'s private
-    ``_humanize_osm_value`` (formerly used only for that panel's
-    ``extra_details`` list) so it can also format values for the external-tag
-    chips this module feeds. Storage always keeps the raw value; this is for
-    display only.
+    Relocated from ``services.apis.locations.nominatim``'s private ``_humanize_osm_value`` (formerly used only for that panel's ``extra_details`` list) so it can also format values for the external-tag chips this module feeds.
 
     Args:
         value: Raw tag value, e.g. "limited" or "single_family_residential".
 
     Returns:
-        A humanized value: known boolean-ish tokens map to a friendly label;
-        anything else has underscores/semicolons turned into a
-        comma-separated, space-joined string.
-    """
+        A humanized value: known boolean-ish tokens map to a friendly label; anything else has underscores/semicolons turned into a comma-separated, space-joined string."""
     cleaned = value.strip()
     mapped = _BOOLISH_VALUE_LABELS.get(cleaned.lower())
     if mapped:
@@ -58,24 +43,11 @@ def humanize_tag_value(value: str) -> str:
 def extract_nominatim_tags(place_data: dict) -> list[ExtractedTag]:
     """The classification tags in a Nominatim ``reverse_geocode()`` result.
 
-    Operates on the already-normalised dict shape
-    ``NominatimGateway._normalise()`` returns (the same shape cached in
-    ``LocationCache(source="nominatim").data``), not the raw API response, so
-    this works identically whether called right after a fresh fetch or on a
-    cache row read back later.
-
     Args:
         place_data: A normalised Nominatim result (or ``{}``/a partial dict).
 
     Returns:
-        The primary ``category``/``type`` pair (OSM's own most-specific tag
-        for this coordinate) marked primary, plus any of
-        ``building``/``amenity``/``tourism``/``historic`` that are non-empty
-        and not already identical to the primary pair - those fields usually
-        just repeat the primary tag, so only genuinely additional
-        information (e.g. ``tourism=museum`` alongside ``historic=yes``) is
-        kept.
-    """
+        The primary ``category``/``type`` pair (OSM's own most-specific tag for this coordinate) marked primary, plus any of ``building``/``amenity``/``tourism``/``historic`` that are non-empty and not already identical to the primary pair - those fields..."""
     tags: list[ExtractedTag] = []
     primary_key = place_data.get("category") or ""
     primary_value = place_data.get("type") or ""
@@ -92,23 +64,13 @@ def extract_nominatim_tags(place_data: dict) -> list[ExtractedTag]:
 
 def extract_overture_tags(attributes: dict) -> list[ExtractedTag]:
     """The classification tags in an Overture ``get_building_attributes()`` result.
-
-    Never call this with the ``nearby_places``-merged dict
-    ``OvertureBuildingAttributesPanelSource.fetch()`` builds for its cache
-    row - ``nearby_places`` describes *other* points of interest near the
-    coordinate, not this building, and has no place here.
+    Never call this with the ``nearby_places``-merged dict ``OvertureBuildingAttributesPanelSource.fetch()`` builds for its cache row - ``nearby_places`` describes *other* points of interest near the coordinate, not this building, and has no place here.
 
     Args:
-        attributes: The raw ``get_building_attributes()`` return dict (or
-            ``{}``/a partial dict).
+        attributes: The raw ``get_building_attributes()`` return dict (or ``{}``/a partial dict).
 
     Returns:
-        ``subtype`` (the more specific of the two) marked primary when
-        present, plus ``class_`` when present and distinct from ``subtype``
-        - promoted to primary itself if ``subtype`` was missing, so a
-        building with only a class still gets one primary tag rather than
-        none.
-    """
+        ``subtype`` (the more specific of the two) marked primary when present, plus ``class_`` when present and distinct from ``subtype`` - promoted to primary itself if ``subtype`` was missing, so a building with only a class still gets one primary tag rather than none."""
     tags: list[ExtractedTag] = []
     subtype = attributes.get("subtype") or ""
     building_class = attributes.get("class_") or ""

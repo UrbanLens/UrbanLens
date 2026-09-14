@@ -1,12 +1,6 @@
 """WikiStatVote - one profile's vote on a community stat field for a Wiki.
-
-Danger, vulnerability, priority, and rating are personal star ratings on a
-Pin. A Wiki has no single owner, so the equivalent fields there are a
-composite (average) of every contributing profile's vote rather than a
-single stored value - this model holds those individual votes.
-
-Deleting a profile's vote (rather than storing a zero) is how a vote is
-cleared, so the composite average is never skewed by "no opinion" rows.
+Danger, vulnerability, priority, and rating are personal star ratings on a Pin.
+A Wiki has no single owner, so the equivalent fields there are a composite (average) of every contributing profile's vote rather than a single stored value - this model holds those individual votes.
 """
 
 from __future__ import annotations

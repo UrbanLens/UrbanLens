@@ -1,13 +1,4 @@
-/**
- * Trips, and the activities hanging off them.
- *
- * The largest domain the suite did not touch. Its shape is what makes it worth
- * a deployed test: a trip owns activities, activities can point at a pin, and
- * the trip's map endpoint reads back across both. Each join is a place where a
- * missing `select_related` or a serializer that assumes a pin is present turns
- * into a 500 for one particular arrangement of data - and the arrangement is
- * the part a fixture picks for you.
- */
+/** Trips, and the activities hanging off them. The largest domain the suite did not touch. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";

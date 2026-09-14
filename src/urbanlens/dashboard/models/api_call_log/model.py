@@ -9,13 +9,7 @@ from urbanlens.dashboard.models.api_call_log.queryset import ApiCallLogManager
 
 
 class ApiCallLog(abstract.DashboardModel):
-    """Log entry for one external API call.
-
-    The ``created`` timestamp (from the base model) is the call time.
-    Rows are trimmed daily by ``tasks.prune_api_call_logs``; its retention is
-    set by the *costs page's* 12-month spend chart, not by the 30-day
-    rate-limit windows - see that task before shortening it.
-    """
+    """Log entry for one external API call. The ``created`` timestamp (from the base model) is the call time."""
 
     service = CharField(
         max_length=50,

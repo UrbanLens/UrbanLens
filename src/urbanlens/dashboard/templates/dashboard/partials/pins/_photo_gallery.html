@@ -1,32 +1,15 @@
 {% load static %}
-{% comment %}
-Photo gallery panel - used on pin detail, location wiki, and safety check-in pages.
-
-Context:
-  images       - filtered Image queryset visible to the current viewer
-  profile      - current viewer's Profile
-  context_type - "pin", "wiki", or "safety"
-  pin          - Pin instance (when context_type == "pin")
-  location     - Location instance (when context_type == "wiki")
-  checkin      - SafetyCheckin instance (when context_type == "safety")
-{% endcomment %}
+{% comment %}Photo gallery panel - used on pin detail, location wiki, and safety check-in pages.{% endcomment %}
 <div class="photo-gallery card" id="photo-gallery"
      data-collapse-scope="{{ context_type }}" data-collapse-section="gallery"
-     {% comment %}
-     Both urls, and the same one twice: the pin endpoint answers delete and
-     send-to-wiki alike, so splitting them costs nothing here - but the reader
-     (photo-context-menu.ts) gates send-to-wiki on the wiki url now, because a
-     Vault album has a bulk delete and no wiki to send to.
-     {% endcomment %}
+     {% comment %}Both urls, and the same one twice: the pin endpoint answers delete and send-to-wiki alike, so splitting them costs nothing here.{% endcomment %}
      {% if context_type == "pin" %}data-gallery-bulk-url="{% url 'pin.gallery.bulk' pin.slug %}" data-gallery-wiki-url="{% url 'pin.gallery.bulk' pin.slug %}" hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
   <div class="card-header">
     <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>
     {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
     {% if context_type == "pin" %}
-    {# .card-header-actions is the shared multi-action wrapper (see panel-header-grid #}
-    {# mixin) - without it, these buttons have no grid-area of their own and fall to #}
-    {# CSS Grid auto-placement, landing on an implicit second row below the title. #}
+    {# .card-header-actions is the shared multi-action wrapper. #}
     <div class="card-header-actions">
       {% if profile.external_apis_enabled %}
       <button type="button" class="gallery-import-photos-btn" title="Import Photos"
@@ -160,21 +143,13 @@ Context:
 {# The pin hero has no display preference gating it - it's always live-updatable. #}
 {% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url pin_media_relevance_url=pin_media_relevance_url current_cover_image_id=pin.cover_photo_id cover_hero_key="pin" cover_hero_enabled=True show_floorplan_overlay_action=True floorplan_overlay_url=floorplan_overlay_url %}
 {% elif context_type == "wiki" %}
-{# No lightbox include here on purpose: this partial's own gallery panel #}
-{# (#wiki-gallery-panel) is lazy-loaded only once "Manage" is opened, but #}
-{# the Media section's tiles need to open a lightbox before that ever    #}
-{# happens - see docs/PROBLEMS.md, 2026-09-01. wiki.html itself includes #}
-{# _photo_lightbox.html eagerly instead, with the same parameters this   #}
-{# branch used to pass, so exactly one instance exists either way        #}
-{# ("Include once per page" - _photo_lightbox.html's own docstring).     #}
+{# No lightbox include here on purpose: this partial's own gallery panel (#wiki-gallery-panel) is lazy-loaded only once "Manage" is. #}
 {% else %}
 {% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=False %}
 {% endif %}
 
 {% if context_type == "wiki" %}
-{# -- Import a public Flickr album by URL - the Private Pin page's own copy  #}
-{# of this dialog lives in location/index.html instead, alongside its      #}
-{# "Import Photos" button at the Media-section level. #}
+{# Import a public Flickr album by URL - the Private Pin page's own copy of this dialog lives in location/index.html instead, alongside. #}
 <dialog id="flickr-album-dialog" class="ul-dialog" aria-label="Flickr album"></dialog>
 {% endif %}
 

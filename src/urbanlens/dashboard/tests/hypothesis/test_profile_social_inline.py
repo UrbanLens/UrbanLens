@@ -1,11 +1,4 @@
-"""Tests for the profile view page's social-links display.
-
-The Social section on profile/index.html renders the same read-only chip
-list for the owner and other viewers alike - hidden entirely when there are
-no links. Adding/removing links is the Edit Profile page's job (it embeds
-the CRUD partial these tests' sibling class, ProfileSocialInlineActionTests,
-posts to directly); the view page never did and does not now.
-"""
+"""Tests for the profile view page's social-links display."""
 
 from __future__ import annotations
 

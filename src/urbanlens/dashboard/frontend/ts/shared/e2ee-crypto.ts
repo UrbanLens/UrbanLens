@@ -1,22 +1,5 @@
 /**
  * Pure crypto primitives for direct-message end-to-end encryption.
- *
- * Every operation here happens in the browser; the server only ever stores
- * the base64 blobs these functions emit. The scheme (see docs/designs/e2ee.md):
- *
- * - X25519 identity keypair per user (crypto_box).
- * - Private key stored server-side only wrapped: under an Argon2id key
- *   derived from the login password (password accounts), and under a random
- *   32-byte recovery key (all accounts).
- * - The login credential itself is a *separately salted* Argon2id derivation
- *   of the same password ("authKey"), so the server never sees the raw
- *   password and cannot derive the wrapping key from what it does see.
- * - Per-conversation random symmetric key, sealed to each participant's
- *   public key (crypto_box_seal); message bodies encrypted with
- *   crypto_secretbox (XSalsa20-Poly1305) under it.
- *
- * All base64 uses the standard alphabet with padding, matching Python's
- * base64.b64decode(validate=True) on the server and PyNaCl in the tests.
  */
 import sodium from "libsodium-wrappers-sumo";
 
@@ -46,14 +29,6 @@ export const PRF_WRAP_HKDF_INFO = "urbanlens-e2ee-passkey-wrap-v1";
 
 /**
  * Derive the 32-byte passkey wrap key from a WebAuthn prf extension output.
- *
- * HKDF-SHA256 via WebCrypto rather than a libsodium KDF: the PRF output is
- * already full-entropy authenticator-held key material (no stretching needed,
- * only domain separation), and SubtleCrypto's HKDF is native, standard, and
- * spares the bundle another primitive. Salt is empty per RFC 5869 (extract
- * with an all-zero key) - the per-wrap uniqueness lives in the PRF *input*,
- * which produces an unrelated PRF output per wrap.
- *
  * @param prfOutput - The 32-byte `prf.results.first` from the authenticator.
  * @returns The wrap key for `wrapSecretKey`/`unwrapSecretKey`.
  */
@@ -79,7 +54,6 @@ export function randomSalt(): string {
 
 /**
  * Derive one 32-byte key from a password with Argon2id.
- *
  * @param password - The raw password (never transmitted).
  * @param saltB64 - Base64 16-byte salt.
  * @param opslimit - Argon2id operations limit (server-pinned per bundle).
@@ -100,10 +74,6 @@ export interface LoginKeys {
 
 /**
  * Derive the login credential and the key-wrapping key from one password.
- *
- * The two salts MUST be independent - that is the domain separation keeping
- * the server (which learns authKey) unable to compute wrapKey.
- *
  * @param password - The raw password.
  * @param authSaltB64 - Salt for the login credential (from AccountKdf).
  * @param wrapSaltB64 - Salt for the wrapping key (from the key bundle).
@@ -132,7 +102,6 @@ export function generateIdentity(): Identity {
 
 /**
  * Encrypt the private key under a wrapping key (password-derived or recovery).
- *
  * @param privateKey - The identity private key.
  * @param wrapKey - 32-byte symmetric wrapping key.
  * @returns One base64 blob: nonce || secretbox ciphertext.
@@ -148,7 +117,6 @@ export function wrapSecretKey(privateKey: Uint8Array, wrapKey: Uint8Array): stri
 
 /**
  * Decrypt a wrapped private-key blob.
- *
  * @param blobB64 - Base64 nonce || secretbox blob from wrapSecretKey.
  * @param wrapKey - The 32-byte wrapping key.
  * @returns The private key, or null when the key is wrong / blob corrupt.
@@ -221,9 +189,7 @@ function formatRecoveryDisplay(encoded: string): string {
 }
 
 /**
- * Parse a user-typed recovery key back to bytes (forgiving about case,
- * spaces, and dashes).
- *
+ * Parse a user-typed recovery key back to bytes (forgiving about case, spaces, and dashes).
  * @param display - Whatever the user typed or pasted.
  * @returns The 32-byte key, or null when it doesn't parse.
  */
@@ -235,7 +201,6 @@ export function parseRecoveryKey(display: string): Uint8Array | null {
 
 /**
  * Seal bytes to a public key (anonymous sender - crypto_box_seal).
- *
  * @param data - The bytes to seal (a conversation key).
  * @param publicKeyB64 - The recipient's identity public key.
  * @returns Base64 sealed blob only the matching private key can open.
@@ -246,7 +211,6 @@ export function sealToPublicKey(data: Uint8Array, publicKeyB64: string): string 
 
 /**
  * Open a sealed blob with our identity keypair.
- *
  * @param blobB64 - Base64 crypto_box_seal output.
  * @param publicKeyB64 - Our identity public key.
  * @param privateKey - Our identity private key.
@@ -273,7 +237,6 @@ export interface EncryptedMessage {
 
 /**
  * Encrypt one message body under a conversation key.
- *
  * @param plaintext - The message text.
  * @param conversationKey - The 32-byte conversation key.
  * @returns Base64 ciphertext and nonce, stored separately server-side.
@@ -286,7 +249,6 @@ export function encryptMessage(plaintext: string, conversationKey: Uint8Array): 
 
 /**
  * Decrypt one message body.
- *
  * @param ciphertextB64 - Base64 secretbox ciphertext.
  * @param nonceB64 - Base64 nonce stored with the message.
  * @param conversationKey - The 32-byte conversation key.

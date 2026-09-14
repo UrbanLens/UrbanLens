@@ -1,10 +1,4 @@
-"""Tests for AI-assisted pin extraction from uploaded .txt/.docx documents.
-
-Covers the deterministic pieces (extension detection, text extraction, CSV-answer
-parsing) with hypothesis, and the AI-gating/prompt-injection-guard behavior of
-``extract_pins_from_document`` with mocks, following the pattern established in
-``test_label_style_suggestions.py``.
-"""
+"""Tests for AI-assisted pin extraction from uploaded .txt/.docx documents."""
 
 from __future__ import annotations
 
@@ -78,17 +72,7 @@ class ExtractTextTests(TestCase):
 class DocxDecompressionCeilingTests(TestCase):
     """The byte cap bounds what was uploaded; a .docx is the one compressed format.
 
-    `MAX_DOCUMENT_BYTES` and the 20,000-character text limit are both real, but
-    they measure different things and neither measures the middle: a 2 MB .docx
-    is a ZIP whose `document.xml` can decompress to gigabytes, and python-docx
-    materialises the whole part before there is any text to measure. The
-    character check therefore ran after the memory had already been spent.
-
-    Checked against the sizes the ZIP directory declares, which chunk 531
-    established is a sound upper bound - CPython's zipfile truncates a read at
-    the declared size and then fails the CRC, so understating it cannot smuggle
-    bytes past this.
-    """
+    The character check therefore ran after the memory had already been spent."""
 
     def _docx_with_payload(self, payload: bytes) -> bytes:
         """A structurally valid .docx carrying an oversized extra part."""
@@ -460,9 +444,7 @@ def test_extract_pins_drops_ungeocodable_rows_and_warns(monkeypatch: pytest.Monk
 
 @pytest.mark.django_db
 def test_extract_pins_warns_on_partial_geocode_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When some (but not all) extracted locations fail to geocode, the successful
-    pins must still come through, alongside a warning naming how many were dropped -
-    previously these were dropped with zero visibility to the user."""
+    """When some (but not all) extracted locations fail to geocode, the successful pins must still come through, alongside a warning naming how many were dropped - previously these were dropped with zero visibility to the user."""
     profile = _make_profile(ai_enabled=True)
     monkeypatch.setattr(
         "urbanlens.dashboard.services.ai.document_import.user_has_feature",

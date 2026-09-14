@@ -1,13 +1,4 @@
-{% comment %}
-Public-pin vote block, shown under the Community Ratings grid on a wiki page.
-Renders nothing unless services.public_pins decided this viewer should see it
-(public_vote context is None otherwise) - ineligibility is never explained.
-Ballots are anonymous: only the viewer's own choice is ever displayed, never
-a tally.
-
-Usage:
-  {% include "dashboard/partials/pins/_public_pin_vote_block.html" with location=location public_vote=public_vote %}
-{% endcomment %}
+{% comment %}Public-pin vote block, shown under the Community Ratings grid on a wiki page.{% endcomment %}
 <div class="public-pin-vote" id="public-pin-vote-block">
 {% if public_vote %}
     {% if public_vote.is_public %}

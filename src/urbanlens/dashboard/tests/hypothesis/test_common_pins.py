@@ -1,11 +1,4 @@
-"""Tests for the mutual "Places in Common" privacy setting, service, and page.
-
-Covers:
-- common_pin_location_ids/common_pin_locations: N-way intersection service
-- Profile.can_view_common_pins_with: mutual gating (both sides must permit)
-- CommonPinsView: 404 unless mutually permitted, and only ever renders the
-  viewer's own Pin data for a shared location - never the other profile's
-"""
+"""Tests for the mutual "Places in Common" privacy setting, service, and page."""
 
 from __future__ import annotations
 
@@ -192,10 +185,9 @@ class ProfileViewCommonPinsContextTests(TestCase):
 class CommonPinsJsonXssTests(TestCase):
     """CommonPinsView embeds `common_pins_json` inline via `|safe` (common_pins.html:25).
 
-    A pin description reaching that `<script type="application/json">` block unescaped could
-    contain a literal `</script>` and break out of it, injecting arbitrary markup/script -
-    the same class of bug covered for map pages in test_map_xss.py.
-    """
+    A pin description reaching that `<script type="application/json">` block unescaped could contain a literal
+    `</script>` and break out of it, injecting arbitrary markup/script - the same class of bug covered for map
+    pages in test_map_xss.py."""
 
     _SCRIPT_BREAKOUT_PAYLOAD = "</script><script>alert(document.domain)</script>"
 

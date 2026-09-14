@@ -1,14 +1,11 @@
 """Extensible aggregation of a profile's "memories" - routes, trips, visits, photos.
 
-Adding a future memory type is one new ``_x_for_range`` function listed in
-``_event_sources`` below - nothing else needs to change. Each source function
-does its own date/bbox filtering on its own model's already-indexed fields, and
-contributes independently: one source failing omits its own events, never the feed.
+Each source function does its own date/bbox filtering on its own model's already-indexed
+fields, and contributes independently: one source failing omits its own events, never the feed.
 
-A source's signature is ``(profile, start, end, bbox, before=None)`` and it must
-yield **newest first**. Both halves are load-bearing: the feed is capped, and it
-takes the first N of each source, so an unordered source would contribute an
-arbitrary N rather than its newest N. ``before`` is the exclusive page cursor -
+A source's signature is ``(profile, start, end, bbox, before=None)`` and it must yield
+**newest first**: the feed takes each source's first N, so an unordered source would
+contribute an arbitrary N rather than its newest N. ``before`` is the exclusive page cursor -
 a source that ignores it will repeat its newest events on every page.
 """
 
@@ -60,8 +57,7 @@ class MemoryEvent:
         thumbnail_url: A representative photo URL, if any.
         icon: Material icon name for the map marker/card.
         color: Hex color for the map marker/card accent.
-        extra: Type-specific extra data the frontend may want.
-    """
+        extra: Type-specific extra data the frontend may want."""
 
     type: str
     occurred_at: datetime
@@ -121,11 +117,7 @@ def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
 
 
 def _trip_representative_point(trip: Trip) -> tuple[float, float] | None:
-    """Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity.
-
-    Mirrors the override priority used for trip map markers elsewhere
-    (lat_override/lng_override -> pin's effective coords -> location coords).
-    """
+    """Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity."""
     # trip.activities.all() rather than a fresh .select_related().order_by() chain, so the
     # caller's Prefetch is actually used - re-filtering the manager would re-query per trip.
     for activity in trip.activities.all():
@@ -142,14 +134,10 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
     """Yield a MemoryEvent for each Trip whose effective date range overlaps the given range."""
     from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 
-    # Mirrors Trip.effective_start_date/effective_end_date: explicit start_date/end_date
-    # win, else fall back to the earliest/latest scheduled activity. A trip with no
-    # end_date and no later activity is treated as ending on its effective start date,
-    # same as Trip.duration_days/timeline_status do. The last-activity date takes
-    # scheduled_end into account as well as scheduled_at, because the property does -
-    # without it a trip whose final activity runs past the last start time is filtered
-    # against one definition of "ends" and then displayed with another. Postgres's
-    # GREATEST ignores NULLs, so an activity with no scheduled_end doesn't erase the max.
+    # Mirrors Trip.effective_start_date/effective_end_date: explicit start_date/end_date win, else
+    # fall back to the earliest/latest scheduled activity.
+    # A trip with no end_date and no later activity is treated as ending on its effective start
+    # date, same as Trip.duration_days/timeline_status do.
     trips = (
         Trip.objects.filter(profiles=profile)
         .annotate(
@@ -308,15 +296,6 @@ def _event_sources() -> tuple[Callable[..., Iterator[MemoryEvent]], ...]:
 
 def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | None = None, limit: int | None = None, before: datetime | None = None) -> list[MemoryEvent]:
     """Merge every registered event source over [start, end], sorted newest-first.
-
-    Each source contributes independently. This is the page's extensibility seam -
-    adding a memory type is one new function in ``_event_sources`` - so an unguarded
-    fan-out means any single source raising (a corrupt row, a missing relation, a bug
-    in a newly added source) discards the other three and 500s the whole feed. A
-    Memories page missing one kind of memory is worth far more than no page at all.
-
-    Sources are generators, so they are drained one at a time: whatever a source
-    yielded before failing is kept rather than thrown away with it.
 
     Args:
         profile: The profile whose memories to fetch.

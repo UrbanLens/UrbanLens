@@ -286,9 +286,6 @@
 }
 
 // Muted inline chip used as <span class="badge badge--muted"> in templates.
-// The base span.badge (_reset.scss) is a right-floated count badge; this
-// modifier resets those properties to render as an inline pill instead.
-// The doubled class keeps specificity above span.badge.
 .badge.badge--muted {
 	display: inline-block;
 	float: none;
@@ -560,7 +557,7 @@
     input[type="radio"] {
         display: none;
     }
-	
+
 	.material-symbols-outlined,
     .material-icons {
         font-size: 1.6rem;
@@ -681,12 +678,7 @@
 			outline: none !important;
 		}
 
-		// The overlapped-input trick means the thumbs are the ONLY hittable
-		// part of this control (track and input are both pointer-events:none so
-		// the two ranges don't block each other), and these drive every
-		// score/count filter. An 18px thumb is well under a finger, so grow it
-		// on touch - the hit area of a native range thumb tracks its rendered
-		// size, and no ::before can be attached to reach it.
+		// The overlapped-input trick means the thumbs are the ONLY hittable part of this control.
 		@media (pointer: coarse) {
 			&::-webkit-slider-thumb {
 				width: 28px;
@@ -736,9 +728,7 @@
 .pagination-btn {
 	@include icon-btn(28px);
 
-	// `--disabled` as well as `:disabled`: the plain-link variant of the bar
-	// (a full-page view, where an hx-get would swap a whole document into one
-	// div) renders its dead end as a <span>, which cannot be disabled.
+	// `--disabled` as well as `:disabled`: the plain-link variant of the bar.
 	&:disabled,
 	&--disabled {
 		opacity: .35;

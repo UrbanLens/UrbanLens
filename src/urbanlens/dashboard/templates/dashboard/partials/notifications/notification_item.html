@@ -30,8 +30,6 @@
 </li>
 {% elif n.notification_type == 'friend_request' %}
 {# Friend requests get inline Accept/Decline buttons instead of click-to-navigate. #}
-{# Buttons are gated on is_friend_request_pending (the underlying request), not on #}
-{# is_unread - clicking the row still marks it read, but that must not hide the buttons. #}
 <li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %} notif-item--friend-req"
     id="notif-{{ n.id }}"
     role="menuitem"

@@ -1,10 +1,4 @@
-"""Tests for services.labels.redata_suggestions - syncing tag/category labels to REData.
-
-Covers the definition/assignment payload builders, the profile-fanout for
-global vs owned labels, the queue_* helpers' REData-not-configured no-ops,
-sync_label_definitions/sync_pin_assignment/backfill_profile, and
-get_suggestions. Every REData HTTP call is mocked - never hits the network.
-"""
+"""Tests for services.labels.redata_suggestions - syncing tag/category labels to REData."""
 
 from __future__ import annotations
 

@@ -1,29 +1,4 @@
-"""Muting a friend must not un-friend them.
-
-Mute used to be implemented as a ``FriendshipStatus`` value, which meant the
-single ``status`` column had to encode two genuinely independent facts: *what
-kind of relationship is this* and *do I want notifications from it*. Writing
-``Muted`` into that column destroyed the first fact to record the second, and
-the consequences were not cosmetic:
-
-- ``Profile.are_friends`` matches ``status == ACCEPTED`` only, so the moment
-  you muted a friend the pair stopped being friends for **every** downstream
-  visibility gate - profile fields, pin visibility, direct-message permission,
-  friend-request evaluation, common-pin/common-trip queries. Muting someone
-  silently revoked their access to you and yours to them.
-- ``FriendshipStatus.can_request`` excludes ``Muted``, so the profile page's
-  own "Unmute" button (which posted to ``friend.request``) could never
-  succeed - ``Friendship.request`` refused, the controller answered 400, and
-  the relationship was stuck at ``Muted`` with no way back short of a DB edit.
-- The prior status was not recorded anywhere, so even a hand-written unmute
-  had nothing to restore.
-
-The fix is a mute flag stored separately from ``status``, one column per side
-of the relationship. These tests pin the resulting invariant: **mute and unmute
-change one person's flag and nothing else**, for every status a relationship
-can be in. What the flag then *suppresses* is pinned in
-``test_friendship_mute_suppression.py``.
-"""
+"""Muting a friend must not un-friend them."""
 
 from __future__ import annotations
 
@@ -66,8 +41,7 @@ def _profile(**kwargs) -> Profile:
         **kwargs: Passed through to the ``auth.User`` baker call.
 
     Returns:
-        The new profile.
-    """
+        The new profile."""
     return baker.make("auth.User", **kwargs).profile
 
 
@@ -80,8 +54,7 @@ def _friendship(from_profile: Profile, to_profile: Profile, status: str = Friend
         status: The status to store.
 
     Returns:
-        The new Friendship.
-    """
+        The new Friendship."""
     return Friendship.objects.create(
         from_profile=from_profile,
         to_profile=to_profile,
@@ -151,10 +124,8 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
     def test_muting_is_not_mutual(self) -> None:
         """The bug that made wiring mute into delivery unsafe until now.
 
-        One row joins the pair, so a single shared boolean meant A muting B
-        also read as muted from B's side - and B, who asked for nothing, would
-        have been the one silenced.
-        """
+        One row joins the pair, so a single shared boolean meant A muting B also read as muted from B's side -
+        and B, who asked for nothing, would have been the one silenced."""
         mute_profile(self.actor, self.other_profile)
 
         self.friendship.refresh_from_db()
@@ -265,20 +236,8 @@ class MuteQuerySetTests(TestCase):
 class LegacyMutedRowRepairWiringTests(SimpleTestCase):
     """``0010_v0_6_0``'s legacy ``status='Muted'`` repair, checked structurally.
 
-    These used to run the migration's two ``(apps, schema_editor)`` callables
-    against the *live* app registry, which was legitimate only while the
-    historical ``Friendship`` at 0010 was field-identical to the current one.
-    Migration ``0057`` split ``muted`` into one column per side, so the
-    callables now reference a column the live schema no longer has and can only
-    be executed against a real historical state.
-
-    What is still worth holding, and does not need a database, is that the
-    migration wires both directions to the real functions. The forward pass is
-    what un-breaks rows whose relationship state was destroyed by the old
-    encoding; a reverse quietly swapped for ``noop`` would leave a rollback
-    with ``Accepted`` rows the pre-0010 code reads as un-muted - see
-    ``test_migration_noop_reverse_guard``.
-    """
+    Migration ``0057`` split ``muted`` into one column per side, so the callables now reference a column the
+    live schema no longer has and can only be executed against a real historical state."""
 
     #: Imported by path: the module name starts with a digit.
     migration = importlib.import_module("urbanlens.dashboard.migrations.0010_v0_6_0")
@@ -297,10 +256,9 @@ class LegacyMutedRowRepairWiringTests(SimpleTestCase):
 class MuteWebsiteButtonTests(TestCase):
     """The profile page's Mute/Unmute buttons must both work.
 
-    ``friend.unmute`` did not exist before this change - the template's Unmute
-    button posted to ``friend.request``, which ``FriendshipStatus.can_request``
-    refuses for ``Muted``, so the button answered 400 every single time.
-    """
+    ``friend.unmute`` did not exist before this change - the template's Unmute button posted to
+    ``friend.request``, which ``FriendshipStatus.can_request`` refuses for ``Muted``, so the button answered 400
+    every single time."""
 
     def setUp(self) -> None:
         """Log in as the actor and give them one accepted friend."""

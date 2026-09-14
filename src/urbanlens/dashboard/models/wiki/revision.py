@@ -1,11 +1,4 @@
-"""Field-level revision history for Wiki.
-
-One row per field written. See ``models/abstract/versioned.py`` for the shape
-and ``docs/designs/versioned-content.md`` for why it exists - the short version
-is that a concealed viewer must be shown automatic writes plus their own plus
-their friends', which is a different subset for every viewer and therefore
-cannot be a materialised projection.
-"""
+"""Field-level revision history for Wiki. One row per field written."""
 
 from __future__ import annotations
 

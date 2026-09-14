@@ -1,10 +1,4 @@
-{% comment %}
-The swappable half of the building-import dialog - everything but the header.
-
-Context: see _building_import_dialog.html plus:
-    nestable_rows: list of {pin} - see controllers.pin_restructure._nestable_rows.
-        Buildings-only dialogs (restructure=False) never set this.
-{% endcomment %}
+{% comment %}The swappable half of the building-import dialog - everything but the header.{% endcomment %}
 {% load map_components %}
 <div id="building-import-dialog-body">
 <form class="building-import-form"
@@ -17,11 +11,7 @@ Context: see _building_import_dialog.html plus:
     {% csrf_token %}
     <input type="hidden" name="building_selection" value="1">
     {% if nestable_rows %}
-    {# Independent of building_selection: a legacy/no-body POST (e.g. an #}
-    {# older cached page) must still nest every candidate as before, so #}
-    {# "explicitly chose per pin" needs its own marker rather than reusing #}
-    {# the buildings one - an all-unchecked *pins* selection is a real state #}
-    {# (exclude every candidate from nesting), not "absent". #}
+    {# Independent of building_selection: a legacy/no-body POST (e.g. an older cached page) must still nest every candidate as before, so. #}
     <input type="hidden" name="nest_selection" value="1">
     {% endif %}
 

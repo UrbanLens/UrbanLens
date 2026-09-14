@@ -1,11 +1,4 @@
-"""Tests for Label model properties and LabelQuerySet filter methods.
-
-get_label_and_descendants is already thoroughly covered in test_label.py.
-This file covers the customization-aware display properties and queryset filters.
-
-Property tests use unsaved Label instances with _user_customizations injected
-directly - no DB access required.  Queryset tests use baker.
-"""
+"""Tests for Label model properties and LabelQuerySet filter methods."""
 
 from __future__ import annotations
 

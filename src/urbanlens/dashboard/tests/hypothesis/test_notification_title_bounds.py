@@ -1,27 +1,4 @@
-"""A notification title built from user text must fit the column it is stored in.
-
-``NotificationLog.title`` is ``CharField(max_length=255)``, and most titles wrap
-a user-controlled name in fixed text. Where that name's own column is *also*
-255, the wrapper text is pure overflow: Postgres rejects the row with
-``DataError``, Django does not truncate on the way in, and the write is not the
-caller's own so nothing local suggests it can fail.
-
-The instance that motivated this:
-
-    title=f"Safety check-in posted to {wiki.name}"      # 26 + Wiki.name(255)
-
-``post_checkin_to_community_wiki`` runs at the *top* of ``escalate_checkin``,
-before the loop that reaches the emergency contacts. So a check-in whose
-destination wiki has a long name did not merely lose its community post - the
-``DataError`` aborted the escalation before a single emergency contact was told
-the person was overdue. Child wiki names come straight from a request body
-(``detail_pins`` child-wiki creation), so the 255 is reachable, not theoretical.
-
-The fix truncates at the model, not at that one call site: ``title`` is written
-from 20-odd places and a title is display text, where a clipped string beats a
-failed write every time. The last test is the completeness arm - it holds the
-property for every current call site instead of the one that was found.
-"""
+"""A notification title built from user text must fit the column it is stored in."""
 
 from __future__ import annotations
 
@@ -98,10 +75,7 @@ class EscalationSurvivesLongWikiNameTests(TestCase):
     def test_every_name_a_title_wraps_still_leaves_room_or_is_truncated(self) -> None:
         """The property, held against the models rather than against today's call sites.
 
-        Each pair is (wrapper text length, the column feeding it). Any pair
-        whose sum exceeds the title column relies on truncation; this asserts
-        the model provides it, so a new title with the same shape is safe.
-        """
+        Each pair is (wrapper text length, the column feeding it)."""
         wrapped = {
             "safety wiki post": (len("Safety check-in posted to "), Wiki._meta.get_field("name").max_length),
             "achievement": (len("Achievement unlocked: "), Achievement._meta.get_field("name").max_length),

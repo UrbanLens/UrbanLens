@@ -1,20 +1,6 @@
 /**
- * The `test` object every spec imports.
- *
- * Specs should not construct clients, attach listeners, or remember to clean
- * up. Everything a spec needs arrives as a fixture, and everything a spec
- * creates is torn down whether it passed, failed, or timed out. That is what
- * makes it cheap to add the hundredth test rather than only the tenth.
- *
- * ```ts
- * import { expect, test } from "../../lib/fixtures.js";
- *
- * test("a pin the API created is visible on the map", async ({ page, api }) => {
- *     const pin = await api.createPin();          // deleted automatically
- *     await page.goto("/dashboard/map/");         // already signed in
- *     await expect(page.getByText(pin.name)).toBeVisible();
- * });                                             // console errors asserted here
- * ```
+ * The `test` object every spec imports. Specs should not construct clients, attach listeners, or
+ * remember to clean up.
  */
 
 import { test as base, expect, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";

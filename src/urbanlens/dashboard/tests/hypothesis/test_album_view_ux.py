@@ -1,14 +1,4 @@
-"""The Photos tab's behaviour: album date ranges, deep-linking, and uploading.
-
-These cover the parts of the album UI that are decided server-side, so the
-client can stay thin:
-
-* an album's date range comes from its photos' capture times, not upload times;
-* an opened album is addressable as ``?album=<slug>``, which is what makes the
-  browser's Back button work and what a pasted link has to resolve;
-* uploading into an album goes through the same gates the pin/wiki galleries
-  use, and files the new photo in one step.
-"""
+"""The Photos tab's behaviour: album date ranges, deep-linking, and uploading."""
 
 from __future__ import annotations
 
@@ -253,10 +243,8 @@ class AlbumUploadViewTests(TestCase):
     def test_a_rejected_file_creates_nothing(self) -> None:
         """The album upload goes through the same gate as the galleries.
 
-        Patched rather than fed a bad file so this asserts the wiring - that a
-        refusal from the shared check reaches the client and leaves no row -
-        rather than re-testing the sniffing rules themselves.
-        """
+        Patched rather than fed a bad file so this asserts the wiring - that a refusal from the shared check
+        reaches the client and leaves no row - rather than re-testing the sniffing rules themselves."""
         response = self._upload()
 
         self.assertEqual(response.status_code, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
@@ -278,10 +266,8 @@ class AlbumUploadViewTests(TestCase):
 class AlbumMapPayloadTests(TestCase):
     """The album map only offers a drag the server would actually accept.
 
-    Exercised at the payload level: whether a photo is *visible* to a viewer is
-    already settled by ``album_images``, and mixing that in here would test the
-    visibility gate rather than the map's own rules.
-    """
+    Exercised at the payload level: whether a photo is *visible* to a viewer is already settled by
+    ``album_images``, and mixing that in here would test the visibility gate rather than the map's own rules."""
 
     def setUp(self) -> None:
         super().setUp()

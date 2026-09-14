@@ -1,17 +1,4 @@
-"""A provider that could not ask must not have its silence cached.
-
-`get_satellite_slides`/`get_street_view_slides` cache what a provider yields.
-That is right for "this place has no imagery" and wrong for "we could not
-reach the source": the second is transient, but a cached empty list outlives it
-and nothing retries, so the carousel stays empty long after the outage ends.
-This is the same defect class as caching a failed panel fetch, which
-bin/check_outage_not_cached.py exists to prevent - that check only inspects
-functions named `fetch`, which is why this one went unnoticed.
-
-Providers signal the difference by letting their gateway error propagate out of
-the generator instead of swallowing it. Slides yielded before the failure are
-kept: a partial answer is worth showing, it just is not worth remembering.
-"""
+"""A provider that could not ask must not have its silence cached."""
 
 from __future__ import annotations
 
@@ -104,13 +91,7 @@ class SlideOutageCachingTests(TestCase):
 class DegradationReachesTheCallerTests(TestCase):
     """The provider-level cache skip was only half the rule.
 
-    `_collect_slides` correctly refused to cache a partial answer, but
-    `get_satellite_slides` then returned `(slides, False)` and dropped the
-    `degraded` flag - so `collect_satellite_slides` recorded `ok=True`, the
-    panel saw `complete=True`, and stored its readiness marker for twelve hours
-    instead of five minutes. A two-minute outage emptied the carousel for the
-    rest of the day.
-    """
+    A two-minute outage emptied the carousel for the rest of the day."""
 
     def setUp(self) -> None:
         super().setUp()

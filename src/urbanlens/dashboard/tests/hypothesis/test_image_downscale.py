@@ -148,12 +148,9 @@ class DownscaleStoredImageTests(TestCase):
     def test_a_file_another_row_shares_is_not_deleted_when_replaced(self):
         """Pin sharing points two rows at one storage key; re-encoding one must not blank the other.
 
-        ``services.sharing.pin_sharing`` copies a shared pin's photos by reusing
-        the same ``image`` name rather than duplicating bytes, and the
-        ``strip_exif_from_stored_photos`` command re-encodes every stored photo
-        in turn. Deleting the old name unconditionally destroyed the other
-        profile's copy, with only a broken image to show for it.
-        """
+        ``services.sharing.pin_sharing`` copies a shared pin's photos by reusing the same ``image`` name rather
+        than duplicating bytes, and the ``strip_exif_from_stored_photos`` command re-encodes every stored photo
+        in turn."""
         row = _make_image_row(_jpeg_bytes(1600, 1200))
         shared_name = row.image.name
         storage = row.image.storage
@@ -224,11 +221,8 @@ class DownscaleStoredImageTests(TestCase):
 class GpsIsStrippedWithoutBeingAskedTests(TestCase):
     """GPS removal is unconditional, not a setting the uploader has to find.
 
-    This class used to exercise a ``strip_gps`` flag. The flag is gone: a stored
-    file is served to everyone who can reach the container it was contributed to,
-    so the whole EXIF block comes off every time, and there is no opt-out to get
-    wrong. What survives is on the ``Image`` row, behind the app's visibility rules.
-    """
+    The flag is gone: a stored file is served to everyone who can reach the container it was contributed to, so
+    the whole EXIF block comes off every time, and there is no opt-out to get wrong."""
 
     def test_gps_is_removed_even_when_no_resize_is_needed(self):
         row = _make_image_row(_jpeg_bytes(400, 300, with_gps=True))
@@ -271,11 +265,9 @@ class GpsIsStrippedWithoutBeingAskedTests(TestCase):
 class MultiPictureJpegTests(TestCase):
     """A multi-picture JPEG must not skip the strip by being an unlisted format.
 
-    MPO is a JPEG container holding several images; Pillow reports it as its
-    own format, which was in none of this module's format sets, so
-    downscale_stored_image returned before doing anything and the file was kept
-    byte-for-byte - GPS block intact - however the uploader's settings were set.
-    """
+    MPO is a JPEG container holding several images; Pillow reports it as its own format, which was in none of
+    this module's format sets, so downscale_stored_image returned before doing anything and the file was kept
+    byte-for-byte - GPS block intact - however the uploader's settings were set."""
 
     def test_the_source_fixture_really_is_a_multi_picture_jpeg(self):
         """Guards the test itself: two concatenated JPEGs would read as JPEG."""

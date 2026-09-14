@@ -284,15 +284,7 @@ function initKindChangedListener(): void {
 }
 
 /**
- * Label edits (icon, color, name, kind, merges, bulk actions) change how pins
- * render on the map without touching any Pin row, so the map's own staleness
- * check (Max(Pin.updated)) can never detect them on its own. Flag the shared
- * cross-page `ul_pins_dirty` marker so the map forces a refresh on its next
- * poll or load, same as the bulk pin importer already does. Same mutations
- * also feed the Display Order tab's priority list, which is otherwise only
- * ever built once at initial page load - tell it to refetch too. (The
- * priority list's own reorder save uses a plain fetch(), not htmx, so this
- * doesn't loop back on itself.)
+ * Label edits (icon, color, name, kind, merges, bulk actions) change how pins render on the map without touching any Pin row, so.
  */
 function initPinCacheInvalidation(): void {
     document.body.addEventListener("htmx:afterRequest", (e) => {

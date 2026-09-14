@@ -46,20 +46,15 @@ admin.autodiscover()
 
 
 def _render_404_page(request: HttpRequest) -> HttpResponse:
-    """Render the styled 404 page with a genuine 404 status code."""
+    """Render the styled 404 page."""
     return render(request, "dashboard/pages/errors/404.html", status=404)
 
 
 urlpatterns = [
     path("admin/", admin.site.urls, name="admin"),
-    # Custom login/logout/password-reset views. We deliberately enumerate only the
-    # django.contrib.auth views this app actually uses (with app-branded templates)
-    # instead of `include("django.contrib.auth.urls")`, which also wires up
-    # password_change/password_change_done - views this app has no UI for and no
-    # templates for. Anything not listed here falls through to the 404 catch-all.
+    # Only the auth views this app uses; unlisted URLs fall through to the 404 catch-all.
     path("accounts/login/", CustomLoginView.as_view(), name="login"),
-    # Optional passkey (WebAuthn) second factor - reached only via CustomLoginView
-    # stashing a pending user id in the session after password verification.
+    # Passkey second factor, reached via pending user id in session.
     path("accounts/login/2fa/", LoginTwoFactorView.as_view(), name="login.2fa"),
     path("accounts/login/2fa/options/", LoginTwoFactorOptionsView.as_view(), name="login.2fa.options"),
     path("accounts/login/2fa/verify/", LoginTwoFactorVerifyView.as_view(), name="login.2fa.verify"),
@@ -97,84 +92,43 @@ urlpatterns = [
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),
     path("resend-verification/", throttled("resend_verification", ANONYMOUS_EXPENSIVE)(ResendVerificationView.as_view()), name="resend_verification"),
     path("dashboard/", include(dashboard_urls), name="dashboard"),
-    # OAuth2 provider (django-oauth-toolkit). Native clients (the mobile app)
-    # register a *public* application here and authenticate with PKCE
-    # (PKCE_REQUIRED is on globally); the tokens are honored only by the external
-    # API (see external_api.views).
-    #
-    # This mounts django-oauth-toolkit's *whole* URL set, which is wider than the
-    # authorize/token/revoke + application-management it is reached for: it also
-    # exposes token introspection, the RFC 8628 device-code endpoints,
-    # and the OpenID discovery documents. Neither of the first two is reachable
-    # in practice today - no application is registered with the device grant, and
-    # `introspect` is not among OAUTH2_PROVIDER["SCOPES"], so no token can carry
-    # it - but they are mounted, so narrow this include if that stops being true.
+    # OAuth2 provider for native clients; see external_api.views.
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
-    # Split probes for orchestrators and load balancers. /health/ above stays
-    # as-is because the compose healthchecks depend on its exact behaviour.
+    # Split probes; /health/ stays for compose healthchecks.
     path("health/live", HealthController.as_view({"get": "live"}), name="health-live"),
     path("health/ready", HealthController.as_view({"get": "ready"}), name="health-ready"),
     path("health/primary", HealthController.as_view({"get": "primary"}), name="health-primary"),
     path("", IndexController.as_view(), name="index"),
-    # Authenticated media gate - replaces the old unconditional
-    # `*static(MEDIA_URL, ...)` entry (which only ever served files when
-    # DEBUG=True, leaving production /media/ to an unauthenticated nginx
-    # alias). Every /media/... request, dev and production alike, now goes
-    # through MediaGateView, which authenticates + authorizes and then either
-    # streams the file (dev) or X-Accel-Redirects to nginx (production).
-    # Must stay ahead of the 404 catch-all below.
+    # Authenticated media gate; must stay ahead of the 404 catch-all.
     path("media/<path:path>", MediaGateView.as_view(), name="media"),
 ]
 
-# The demo login exists only on a demo instance. Registered conditionally rather
-# than guarded inside the view, so an instance holding real data has no such URL
-# to reach at all - a guard is a line somebody can move, an absent route is not.
-# It must be appended before the catch-all below, which swallows everything.
+# Demo login exists only on a demo instance; appended before the catch-all.
 if app_settings.demo_mode:
     from urbanlens.dashboard.controllers.demo import DemoLoginView
 
     urlpatterns += [path("demo/start/", throttled("demo_start", ANONYMOUS_EXPENSIVE)(DemoLoginView.as_view()), name="demo.start")]
 
-# Prometheus scrape endpoint, registered for the same reason the demo route is:
-# an instance that has not opted in has no such URL, rather than a view that
-# decides to refuse. What it serves is a map of the application - every view
-# name that has served a request, with its rate, error rate and latency - so it
-# is guarded by token and/or network allowlist on top of this (see
-# controllers/metrics.py), and nginx blocks the path on the public vhost.
-# No trailing slash: that is the conventional path, and it is what Prometheus's
-# own default metrics_path expects.
+# Metrics endpoint; absent entirely when disabled. See controllers/metrics.py.
 if app_settings.metrics_enabled:
     from urbanlens.dashboard.controllers.metrics import MetricsController
 
     urlpatterns += [path("metrics", MetricsController.as_view(), name="metrics")]
 
 urlpatterns += [
-    # 404 catch-all - must be last. Anything not explicitly routed above (including
-    # Django/library default URLs we haven't deliberately wired up) lands here.
+    # 404 catch-all - must be last.
     re_path(".*", _render_404_page, name="404"),
 ]
 
 
 def handler404(request: HttpRequest, exception: Exception) -> HttpResponse:
-    """Render the styled 404 page for explicitly-raised Http404s (e.g. missing profile/pin lookups).
-
-    Django's built-in fallback only looks for a template literally named ``404.html`` at the
-    root of a template loader path, which doesn't exist here - it lives under
-    ``dashboard/pages/errors/``. Without this handler, Http404s raised inside views (as opposed
-    to genuinely unmatched URLs, which fall through to the catch-all route above) render Django's
-    plain-text fallback instead of the site's styled error page.
-    """
+    """Render the styled 404 page for explicitly-raised Http404s."""
     return _render_404_page(request)
 
 
 def handler500(request: HttpRequest) -> HttpResponse:
-    """Render the styled 500 page for uncaught server errors.
-
-    Falls back to a bare response if rendering the styled page itself fails
-    (e.g. a context processor hitting a database that's the reason we're
-    here in the first place), so a second failure never masks the first.
-    """
+    """Render the styled 500 page, with bare fallback."""
     try:
         return render(request, "dashboard/pages/errors/500.html", status=500)
     except Exception:

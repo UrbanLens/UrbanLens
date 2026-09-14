@@ -24,20 +24,13 @@ _RESTORABLE_FIELDS = (
 
 _MEMBERSHIP_FIELDS = ("rsvp", "is_organizer")
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.trip import MODEL_LABEL``) instead
-#: of hand-typing ``"trip"`` - a typo in a hand-typed string only fails at
-#: runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "trip"
 
 
 @register
 class TripUndoHandler(UndoHandler):
-    """Restores a trip's own fields and its membership/RSVP roster.
-
-    Activities and comments cascade-delete with the trip before this handler
-    gets a chance to capture them, and are not restored.
-    """
+    """Restores a trip's own fields and its membership/RSVP roster."""
 
     model_label = MODEL_LABEL
     model = Trip
@@ -70,15 +63,7 @@ class TripUndoHandler(UndoHandler):
         """Recreate trips and their membership rosters.
 
         Raises:
-            UndoExpiredError: If the creator, or any roster member's profile,
-                was independently deleted during the retention window, since
-                recreating the row would otherwise fail with an uncaught
-                ``IntegrityError`` - both FKs are non-nullable-in-practice
-                here (``creator_id`` is only ``SET_NULL`` for a *live* trip
-                whose creator later deletes their account, never written as
-                ``None`` by this handler) or genuinely non-nullable
-                (``TripMembership.profile``).
-        """
+            UndoExpiredError: If the creator, or any roster member's profile, was independently deleted during the retention window, since recreating the row would otherwise fail with an uncaught ``IntegrityError`` - both FKs are non-nullable-in-practice..."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.services.undo.service import UndoExpiredError

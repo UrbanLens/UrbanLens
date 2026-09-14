@@ -1,17 +1,4 @@
-{% comment %}
-Manage Image Overlays dialog body - HTMX-swapped by every add/edit/delete
-action (see controllers/map_overlays.py's _render_overlay_list). Rendered
-inside #map-overlays-dialog-body (see _map_annotations_panels.html).
-
-Every action re-targets the whole #map-overlays-dialog-body rather than an
-inner element, for the same reason _custom_layers_list.html does: the response
-is this entire template (list + add form), so swapping a fragment would splice
-duplicate forms in alongside the existing ones.
-
-Corner dragging is not handled here - it happens on the map itself
-(map-image-overlays.ts) and POSTs to the per-overlay corners endpoint. This
-dialog only owns the presentation settings.
-{% endcomment %}
+{% comment %}Manage Image Overlays dialog body - HTMX-swapped by every add/edit/delete action.{% endcomment %}
 <ul id="map-overlay-manage-list" class="map-overlay-manage-list">
     {% for row in rows %}
     <li class="map-overlay-manage-row" id="map-overlay-row-{{ row.overlay.uuid }}" data-overlay-uuid="{{ row.overlay.uuid }}">
@@ -131,18 +118,10 @@ dialog only owns the presentation settings.
         <p class="map-overlay-picked-media" id="map-overlay-picked-media" hidden></p>
     </div>
 
-    {% comment %}
-    Filled in by map-image-overlays.ts from the map's current viewport just
-    before submit - a new overlay lands covering roughly what the user is
-    looking at, which is the only placement that makes dragging the corners a
-    small adjustment rather than a hunt. The server also seeds a fallback from
-    the pin's coordinates if this stays empty (keyboard submit, missed hook).
-    {% endcomment %}
+    {% comment %}Filled in by map-image-overlays.ts from the map's current viewport just before submit.{% endcomment %}
     <input type="hidden" name="corners" id="map-overlay-initial-corners">
 
-    {# Starts disabled - nothing is picked yet on a freshly (re)rendered form. #}
-    {# window.ulMapOverlaySyncSubmitState re-derives this from the fields     #}
-    {# above on every change, so it never stays clickable with nothing to add. #}
+    {# Starts disabled - nothing is picked yet on a freshly (re)rendered form. window.ulMapOverlaySyncSubmitState re-derives this. #}
     <button type="submit" class="btn btn--primary btn--submit" id="map-overlay-add-submit" disabled
             onclick="window.ulMapOverlaySeedCorners && window.ulMapOverlaySeedCorners()">
         <i class="material-symbols-outlined">add_photo_alternate</i> Add overlay

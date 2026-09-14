@@ -1,29 +1,4 @@
-"""Memories > Maps renders a card per map without querying per card.
-
-From P68's survey, where it had no `QueryScalingMixin` subclass and no
-`django_perf_rec` record - which is how it stayed that way.
-
-The view selected `shared_by__user` and prefetched `items`, and nothing else,
-while `MarkupMap.attachments` walks six more reverse relations
-(`safety_checkins`, `attached_safety_checkins`, `comments`, `trip_comments`,
-`visits`, `direct_messages`). Adding those prefetches alone changed nothing: the
-properties called `.first()` and `.select_related(...)` on each manager, and both
-build a *new* queryset, so they query straight past a prefetch. Reading
-`_prefetched_objects_cache` first is what makes the prefetch count.
-
-Three rounds of measurement, each naming the next relation, ending flat:
-58/112 queries at 2/8 cards, then 44/56 once the properties honoured the
-prefetch, then 42/48 with `pin__location`, then flat with
-`pin__location__wiki` - `Location.display_name` reads its own wiki, and says so
-in its docstring.
-
-**The site-admin user directory, the other half of this survey, is not here.**
-Resolving `active_subscription_roles` once per row instead of twice took it from
-190 queries to 150 at 8 rows, but it still costs about 15 per row: the viewer's
-`can_view_contact_info`/`can_view_profile` are resolved per listed profile, and
-batching those is a change to how visibility is computed, not a prefetch. A test
-asserting flatness there would ship red, so the measurement is in P68 instead.
-"""
+"""Memories > Maps renders a card per map without querying per card."""
 
 from __future__ import annotations
 

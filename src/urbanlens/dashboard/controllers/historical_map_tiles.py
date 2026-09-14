@@ -1,22 +1,15 @@
 """Proxy for REData's warped historical-map overlay tiles.
 
-REData's tile pyramid (``/api/v1/maps/georeferences/{uuid}/tiles/{z}/{x}/{y}.png``)
-requires its API key, which must never reach the browser - so Leaflet points
-at this view instead and the fetch happens server-side.
+REData's tile pyramid (``/api/v1/maps/georeferences/{uuid}/tiles/{z}/{x}/{y}.png``) requires its API
+key, which must never reach the browser - so Leaflet points at this view instead and the fetch
+happens server-side.
+Caching follows REData's own status contract rather than treating every response alike:
 
-Caching follows REData's own status contract rather than treating every
-response alike:
-
-- ``200`` tiles are cached: the warp is deterministic for a given
-  georeference.
-- ``404`` is **definitive** ("no_coverage" outside the mapped area, or
-  "not_georeferenced") and explicitly documented as cacheable - most of a
-  sheet's bounding pyramid is outside its mask, so caching the misses matters
-  as much as caching the hits.
-- ``503`` ("source_unavailable" - the institution's Image API could not be
-  read) is never cached. REData deliberately serves an error rather than a
-  blank tile so that an outage can't be memorised as "no map here"; caching
-  it here would defeat exactly that.
+- ``200`` tiles are cached: the warp is deterministic for a given georeference.
+- ``404`` is **definitive** ("no_coverage" outside the mapped area, or "not_georeferenced") and
+  explicitly documented as cacheable - most of a sheet's bounding...
+- ``503`` ("source_unavailable" - the institution's Image API could not be read) is never cached.
+  REData deliberately serves an error rather than a blank tile ...
 """
 
 from __future__ import annotations
@@ -52,8 +45,8 @@ class HistoricalMapTileView(LoginRequiredMixin, View):
             y: Tile row.
 
         Returns:
-            The PNG tile, a definitive 404 outside the mapped area, or a 503
-            (uncached) when the source institution is unreachable.
+            The PNG tile, a definitive 404 outside the mapped area, or a 503 (uncached) when the source
+            institution is unreachable.
         """
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
         from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway

@@ -1,39 +1,4 @@
-/*
- * WYSIWYG canvas for the pin/wiki article editor - a rich, click-to-format
- * editing surface (TipTap/ProseMirror) that mirrors into the existing
- * Markdown <textarea> on every change, so all of article-editor.js's
- * existing machinery (dirty tracking, char count, debounced live preview,
- * beforeunload guard, HTMX save/cancel) keeps working completely unchanged -
- * this module only owns the WYSIWYG canvas and toolbar routing.
- *
- * UX model (Notion-style, not a Markdown editor with a preview bolted on):
- *   - No fixed row of format buttons. Formatting a selection shows a
- *     floating bubble menu right above it (bold/italic/link/headings/...).
- *   - Inserting a block (heading, list, table, image, ...) is done by
- *     typing "/" at the start of a line, which opens a filterable slash
- *     command menu - or by clicking the "+" that appears on an empty line.
- *   - The old fixed toolbar, the live-preview pane, and the Markdown cheat
- *     sheet still exist for Source mode (raw Markdown editing is still
- *     supported and always available via the mode toggle), but are hidden
- *     while the WYSIWYG canvas is active - see the
- *     `[data-editor-mode="wysiwyg"]` rules in _article.scss.
- *
- * Markup contract (see partials/articles/_article_editor.html):
- *   [data-article-editor]        editor root (also carries data-editor-mode,
- *                                 set to "wysiwyg" once mounted, or "source"
- *                                 while the raw textarea is shown)
- *   [data-article-canvas]        empty container TipTap mounts into
- *   [data-article-textarea]      the Markdown textarea (article-editor.js's
- *                                 source of truth; this module keeps it synced)
- *   [data-article-mode-toggle]   Source/Visual switch button
- *   [data-article-clear]         Clears the article's content (after confirming)
- *
- * Progressive enhancement: the textarea is server-rendered and fully
- * functional on its own (article-editor.js's raw-Markdown toolbar). If this
- * script fails to load, the editor root's data-editor-mode is simply never
- * set to "wysiwyg", so the raw textarea + old toolbar keep working exactly
- * as before - nothing here is load-bearing for basic editing.
- */
+/* * WYSIWYG canvas for the pin/wiki article editor. */
 
 import { Editor, Extension, type Range } from "@tiptap/core";
 import { BubbleMenu } from "@tiptap/extension-bubble-menu";
@@ -55,10 +20,7 @@ interface MarkdownStorage {
     getMarkdown(): string;
 }
 
-// tiptap-markdown ships its own MarkdownStorage type (see its index.d.ts)
-// but doesn't augment @tiptap/core's Storage interface itself - do that here
-// so `editor.storage.markdown` type-checks instead of needing a cast at
-// every call site.
+// tiptap-markdown ships its own MarkdownStorage type but doesn't augment @tiptap/core's Storage interface itself.
 declare module "@tiptap/core" {
     interface Storage {
         markdown: MarkdownStorage;
@@ -75,10 +37,7 @@ function editorRoot(el: Element | null): HTMLElement | null {
     return el?.closest<HTMLElement>("[data-article-editor]") ?? null;
 }
 
-// The Source/Clear buttons live in the pin-detail actions menu (see
-// _hierarchy_actions_fab.html), outside the editor's own DOM subtree, so
-// ancestry lookup finds nothing for them - fall back to the page's one
-// mounted editor. There is never more than one article editor on a page.
+// The Source/Clear buttons live in the pin-detail actions menu, outside the editor's own DOM subtree, so ancestry lookup finds nothing.
 function editorRootForControl(el: Element | null): HTMLElement | null {
     return editorRoot(el) ?? document.querySelector<HTMLElement>("[data-article-editor]");
 }
@@ -136,10 +95,7 @@ function setMode(root: HTMLElement, mode: EditorMode): void {
 }
 
 /**
- * Blanks the article (e.g. to discard a Wikipedia-seeded starting point and
- * write from scratch) after confirming - this only clears the in-progress
- * edit, it doesn't save; Cancel still discards the whole thing (including the
- * clear) if the user changes their mind, same safety net as any other edit.
+ * Blanks the article (e.g. to discard a Wikipedia-seeded starting point and write from scratch) after confirming.
  */
 async function handleClearClick(root: HTMLElement): Promise<void> {
     const confirmed = await confirmAction({
@@ -152,9 +108,7 @@ async function handleClearClick(root: HTMLElement): Promise<void> {
 
     const editor = editors.get(root);
     if (editor && root.dataset.editorMode === "wysiwyg") {
-        // emitUpdate: true fires onUpdate -> syncTextareaFromEditor, which
-        // mirrors the empty content into the textarea and marks the editor
-        // dirty - the same path every other WYSIWYG edit already goes through.
+        // emitUpdate: true fires onUpdate -> syncTextareaFromEditor, which mirrors the empty content into the textarea and marks the editor.
         editor.commands.clearContent(true);
         return;
     }
@@ -166,11 +120,7 @@ async function handleClearClick(root: HTMLElement): Promise<void> {
 }
 
 /**
- * Footnotes have no WYSIWYG representation (TipTap has no footnote node) -
- * insert the reference marker in the doc as plain text, then switch to
- * Source mode so the user can see and fill in the definition at the bottom
- * of the article, mirroring article-editor.js's own insertReference() for
- * the raw textarea.
+ * Footnotes have no WYSIWYG representation (TipTap has no footnote node).
  */
 function insertReference(root: HTMLElement, editor: Editor): void {
     const n = nextReferenceNumber(markdownOf(editor));
@@ -190,11 +140,7 @@ interface UploadResponse {
 }
 
 /**
- * Upload a picked file to the article's image endpoint (see
- * ArticleImageUploadView/`data-image-upload-url`) and insert it into the
- * document at the current cursor once stored - the same size/content-type/
- * malware-scan/quota checks as every other gallery upload run server-side
- * before this ever resolves.
+ * Upload a picked file to the article's image endpoint and insert it into the document at the current cursor once stored.
  */
 async function uploadAndInsertImage(root: HTMLElement, editor: Editor, file: File): Promise<void> {
     const uploadUrl = root.dataset.imageUploadUrl;
@@ -239,9 +185,7 @@ function pickAndUploadImage(root: HTMLElement, editor: Editor): void {
 
 type EditorAction = (editor: Editor, root: HTMLElement) => void;
 
-// Shared command implementations - reused by the (hidden-in-WYSIWYG-mode)
-// legacy fixed toolbar, the selection bubble menu, and the "/" slash-command
-// menu, so every entry point stays behaviorally identical.
+// Shared command implementations - reused by the (hidden-in-WYSIWYG-mode) legacy fixed toolbar, the selection bubble menu, and the "/".
 const TOOLBAR_ACTIONS: Record<string, EditorAction> = {
     bold: (editor) => editor.chain().focus().toggleBold().run(),
     italic: (editor) => editor.chain().focus().toggleItalic().run(),
@@ -298,12 +242,7 @@ const BUBBLE_BUTTONS: BubbleButtonDef[] = [
 ];
 
 /**
- * Holds the Editor instance once constructed. BubbleMenu/FloatingMenu
- * elements must be built and handed to their extensions' `.configure()`
- * before `new Editor(...)` returns, but their button handlers need the
- * editor itself - closing over this mutable box (instead of the editor
- * directly) lets the elements be built first and wired to the real instance
- * right after construction finishes, before anything can click them.
+ * Holds the Editor instance once constructed.
  */
 interface EditorBox {
     current: Editor | null;
@@ -396,10 +335,7 @@ function renderSlashItems(listEl: HTMLElement, items: SlashItem[], selectedIndex
 }
 
 /**
- * Custom Extension wrapping @tiptap/suggestion to implement Notion-style
- * "/" block insertion. Triggering on "/" opens a filterable popup (positioned
- * by Suggestion's managed floating-ui mount); picking an item deletes the
- * typed "/query" text and runs the matching block-insert command.
+ * Custom Extension wrapping @tiptap/suggestion to implement Notion-style "/" block insertion.
  */
 const SlashCommand = Extension.create<{ root: HTMLElement | null }>({
     name: "slashCommand",
@@ -499,11 +435,7 @@ function buildFloatingPlusElement(box: EditorBox): HTMLElement {
 }
 
 /**
- * Gives every heading in the canvas the same `id` the server assigned it in
- * `article.toc` (see `_anchor_slug` in services/articles.py) - the TOC nav
- * (`_article_panel.html`) links to those anchors, but TipTap renders headings
- * from raw Markdown with no id of its own, so without this the TOC links had
- * nothing to scroll to.
+ * Gives every heading in the canvas the same `id` the server assigned it in `article.toc`.
  */
 const HeadingAnchors = Extension.create({
     name: "headingAnchors",
@@ -557,21 +489,9 @@ function mountEditor(root: HTMLElement): void {
         ],
         content: textarea.value,
         editorProps: {
-            // Shares the read-mode/preview typography (_article.scss) - only
-            // the editor's own chrome is styled separately, via
-            // .article-editor-canvas .ProseMirror.
+            // Shares the read-mode/preview typography (_article.scss).
             attributes: { class: "article-body" },
-            // Link's own openOnClick is off (a plain click always positions
-            // the cursor for editing, never navigates away mid-edit) - a
-            // Ctrl/Cmd+click is the one exception, the same convention most
-            // rich-text editors use for "this is still a real link". Pairs
-            // with the hover-driven contenteditable toggle below, which is
-            // what actually lets the hovered cursor show as a pointer -
-            // Chromium/WebKit force an I-beam cursor for anything inside a
-            // contenteditable region regardless of its own CSS `cursor`
-            // value, so the pointer only shows once a link is genuinely
-            // carved out of the editable region, not just styled to look
-            // like it is.
+            // Link's own openOnClick is off (a plain click always positions the cursor for editing, never navigates away mid-edit).
             handleClick: (_view, _pos, event) => {
                 if (!(event.metaKey || event.ctrlKey)) return false;
                 const link = (event.target as HTMLElement | null)?.closest("a[href]");
@@ -587,18 +507,7 @@ function mountEditor(root: HTMLElement): void {
     editor.on("transaction", bubbleMenu.refresh);
     editor.on("selectionUpdate", bubbleMenu.refresh);
 
-    // Chromium/WebKit force an I-beam cursor - not just render it, but report
-    // it back via getComputedStyle - for anything inside a contenteditable
-    // region, no matter what CSS says (confirmed live: not even
-    // `cursor: pointer !important` changes the computed value). Briefly
-    // marking a hovered link contenteditable="false" is the one thing that
-    // genuinely changes Chromium's editability determination for cursor
-    // purposes, so the browser's own normal link-hover cursor takes over.
-    // Undone again on mousedown (before the click/selection logic runs) and
-    // on mouseleave, so this is purely a hover-only visual cue - actual
-    // clicks always see a normal, still-editable link, whether that's
-    // ProseMirror's own click-to-position-cursor or the Ctrl/Cmd+click
-    // handler above.
+    // Chromium/WebKit force an I-beam cursor - not just render it, but report it back via getComputedStyle.
     canvas.addEventListener("mouseover", (event) => {
         const link = (event.target as HTMLElement | null)?.closest("a[href]");
         if (link) link.setAttribute("contenteditable", "false");
@@ -623,9 +532,7 @@ function destroyEditor(root: HTMLElement): void {
 
 const EDITOR_SELECTOR = "[data-article-editor]";
 
-// container may itself be the swapped-in editor root, and querySelectorAll
-// only matches descendants - never the container itself - so that case has
-// to be checked separately or the editor never mounts.
+// container may itself be the swapped-in editor root, and querySelectorAll only matches descendants - never the container itself.
 function allMatching(container: ParentNode): HTMLElement[] {
     const matches = Array.from(container.querySelectorAll<HTMLElement>(EDITOR_SELECTOR));
     if (container instanceof HTMLElement && container.matches(EDITOR_SELECTOR)) matches.push(container);
@@ -636,13 +543,7 @@ function initAll(container: ParentNode): void {
     allMatching(container).forEach(mountEditor);
 }
 
-// Capture phase, so this always runs before article-editor.js's own
-// bubble-phase delegated click handler - when in WYSIWYG mode we handle the
-// toolbar click ourselves and stop it from also mutating the (hidden)
-// textarea directly via the old raw-Markdown action map. The fixed toolbar
-// buttons themselves are hidden while WYSIWYG is active (see
-// [data-editor-mode="wysiwyg"] in _article.scss - formatting now happens via
-// the bubble/slash menus instead) but this still backs Source mode's toolbar.
+// Capture phase, so this always runs before article-editor.js's own bubble-phase delegated click handler.
 document.addEventListener(
     "click",
     (event) => {
@@ -665,9 +566,7 @@ document.addEventListener(
             const root = editorRootForControl(modeToggle);
             if (!root) return;
             event.preventDefault();
-            // A no-op unless the button lives outside the Article tab's own
-            // panel (the actions-menu case) - page-tabs.js only acts when
-            // "article" isn't already the active tab.
+            // A no-op unless the button lives outside the Article tab's own panel (the actions-menu case).
             window.ulActivatePageTab?.("article");
             setMode(root, root.dataset.editorMode === "source" ? "wysiwyg" : "source");
             return;
@@ -684,15 +583,7 @@ document.addEventListener(
     true,
 );
 
-// htmx:afterSwap's event.detail.target is NOT reliable for scoping here: for
-// `outerHTML` swaps (which the editor's own save/cancel/mode-toggle all use)
-// it's htmx's reference to the *old*, already-detached element being replaced
-// - not the new one that took its place - so a mounted editor's canvas would
-// never be found by searching within it. Rescanning the whole document is
-// what actually works; mountEditor() is idempotent (the `editors` Map guard)
-// so this is cheap and safe on every swap anywhere on the page. Cleanup uses
-// the same rescan: any previously-tracked root no longer connected to the
-// document (because it - or an ancestor - just got swapped out) is disposed.
+// htmx:afterSwap's event.detail.target is NOT reliable for scoping here.
 document.body.addEventListener("htmx:afterSwap", () => {
     for (const root of editors.keys()) {
         if (!root.isConnected) destroyEditor(root);

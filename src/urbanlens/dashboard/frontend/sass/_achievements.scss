@@ -1,18 +1,13 @@
 // Achievements: the profile-page grid, the full catalogue page, and the
 // site-admin award editor.
 //
-// Each award carries its own accent through the --achievement-color custom
-// property, set inline from the colour the admin picked, so one rule set styles
-// every award without a class per colour.
+// Each award carries its own accent through the --achievement-color custom property, set inline from the colour the admin picked, so one.
 
 @use 'variables' as *;
 
 // -- Page layout ----------------------------------------------------------------
 
-// The full catalogue page stacks a stat summary, streaks, and the award grid as
-// separate `.profile-section` cards - give them the same rhythm `.profile-page`
-// uses between its own stacked sections, instead of the bare block margins
-// `.page-content` alone would produce.
+// The full catalogue page stacks a stat summary, streaks, and the award grid as separate `.profile-section` cards.
 .achievements-page {
   display: flex;
   flex-direction: column;
@@ -255,9 +250,7 @@
 }
 
 // -- Shared site-admin CRUD form fields ----------------------------------------
-// `.ul-field`/`.ul-input`/`.ul-checkbox` back every site-admin create/edit form
-// built on the `.admin-achievement-grid` card pattern (achievements, cost
-// components) - defined here since achievements was the first page to use it.
+// `.ul-field`/`.ul-input`/`.ul-checkbox` back every site-admin create/edit form built on the `.admin-achievement-grid` card pattern.
 
 .ul-field {
   display: flex;
@@ -302,9 +295,7 @@
   margin-bottom: .75rem;
 }
 
-// The medal doubles as the icon picker's trigger button, so picking an icon
-// (or a colour - see the swatch onclick in _achievement_rows.html) previews
-// live with no bespoke JS beyond the shared IconPicker/pickColor globals.
+// The medal doubles as the icon picker's trigger button, so picking an icon.
 .admin-achievement-medal {
   --achievement-color: var(--ul-color-accent);
   flex: 0 0 auto;

@@ -1,17 +1,4 @@
-"""The single-document fetch, and its agreement with the paged endpoint.
-
-The map page used to make twenty sequential requests of 500 pins to draw a
-10,000-pin account. `map.document` is the same data in one response. `map.pins`
-is deliberately unchanged and still serves pages - it is what a client that wants
-them uses, and what this endpoint tells an over-ceiling account to fall back to.
-
-Two properties matter more than the format:
-
-- the two endpoints return **the same payloads**, or the fallback is a downgrade
-  in correctness rather than in speed;
-- the server holds one batch at a time, not the account, or the response size
-  becomes worker memory.
-"""
+"""The single-document fetch, and its agreement with the paged endpoint."""
 
 from __future__ import annotations
 
@@ -39,8 +26,7 @@ def _lines(response) -> list[dict]:
         response: The test client's response.
 
     Returns:
-        One decoded object per line.
-    """
+        One decoded object per line."""
     body = b"".join(response.streaming_content) if response.streaming else response.content
     if response.headers.get("Content-Encoding") == "gzip":
         body = gzip.decompress(body)
@@ -153,13 +139,9 @@ class TheDocumentAgreesWithThePagedEndpointTests(TestCase):
 class TheLabelsTravelOncePerResponseTests(TestCase):
     """A pin names its labels by id, so the response has to carry the dictionary.
 
-    The alternative - each pin carrying its labels' names, colours and icons -
-    is what made one label edit rewrite every payload that carried it, and what
-    made a shared vocabulary the largest thing in the document (D12).
-
-    The property both endpoints owe: no pin may name a label the same response
-    does not define, or its chips silently vanish.
-    """
+    The alternative - each pin carrying its labels' names, colours and icons - is what made one label edit
+    rewrite every payload that carried it, and what made a shared vocabulary the largest thing in the document
+    (D12)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -282,10 +264,8 @@ class TheDocumentDoesNotHoldTheAccountTests(TestCase):
     def test_the_whole_document_is_not_built_before_the_first_chunk(self) -> None:
         """A generator that had already run would make the streaming claim false.
 
-        `CHUNK_BYTES` down to 1 so a chunk is as small as the format allows; at
-        its real value one chunk carries the whole of a test-sized account and
-        there is nothing left to observe.
-        """
+        `CHUNK_BYTES` down to 1 so a chunk is as small as the format allows; at its real value one chunk carries
+        the whole of a test-sized account and there is nothing left to observe."""
         with mock.patch.object(map_document, "BATCH_SIZE", 2), mock.patch.object(map_document, "CHUNK_BYTES", 1):
             response = self.client.get(reverse("map.document"))
             iterator = iter(response.streaming_content)
@@ -438,11 +418,9 @@ class TheCacheIsAnAcceleratorTests(TestCase):
     def test_a_new_version_within_the_window_does_not_claim_again(self) -> None:
         """The claim bounds worker time per account, not per version.
 
-        Keyed on the version, one person editing their own map enqueued a build
-        per edit - each of them a multi-second rebuild of the whole document on a
-        large account, and each one discarded if another edit landed while it
-        ran. Whoever claims next builds whatever version is current by then.
-        """
+        Keyed on the version, one person editing their own map enqueued a build per edit - each of them a
+        multi-second rebuild of the whole document on a large account, and each one discarded if another edit
+        landed while it ran."""
         with mock.patch.object(map_document, "make_binary_client", return_value=self.redis):
             cache = map_document.MapDocumentCache(self.profile.pk)
 

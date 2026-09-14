@@ -1,12 +1,5 @@
 /**
- * E2EE flows: enrollment, login-time key derivation, unlock, and the
- * messages-page encrypt/decrypt API.
- *
- * This module owns every fetch to the /dashboard/e2ee/ endpoints and every
- * interaction with the IndexedDB key cache; templates only wire DOM events
- * to the functions exposed on window.UrbanLensE2EE (see
- * entries-classic/e2ee.ts). Nothing here ever sends a raw password, a
- * private key, or plaintext key material to the server.
+ * E2EE flows: enrollment, login-time key derivation, unlock, and the messages-page encrypt/decrypt API.
  */
 import {
     KDF_MEMLIMIT,
@@ -188,11 +181,8 @@ interface EnrollResult {
 
 /**
  * Generate a fresh identity + recovery key and store the bundle server-side.
- *
  * @param options - Password/rotation behavior; omit password for OAuth-only
- *   accounts (recovery key becomes their only cold-device unwrap path).
  * @returns The recovery key display string (shown once) and profile slug, or
- *   null when the server rejected enrollment (e.g. bundle already exists).
  */
 export async function enroll(options: EnrollOptions): Promise<EnrollResult | null> {
     await cryptoReady();
@@ -242,23 +232,13 @@ function bytesToB64(bytes: Uint8Array): string {
 
 /**
  * Wire the password login form for derived-credential authentication.
- *
- * On submit: fetch login-params for the typed identifier, derive the login
- * credential when the account is enrolled (the raw password never leaves the
- * browser), POST the login via fetch, then unlock/enroll the key bundle
- * before following the redirect. Login failures re-render the server's
- * response so Django's error display (rate limiting, unverified-account
- * hints) is preserved without double-submitting.
- *
  * @param form - The login <form>.
  */
 export function wireLoginForm(form: HTMLFormElement): void {
     form.addEventListener("submit", (event) => {
         event.preventDefault();
         void runLoginFlow(form).catch((error) => {
-            // Never leave the user stranded: fall back to a native submit with
-            // the raw password (legacy path) if anything in the E2EE flow blew
-            // up before the credentials were sent.
+            // Never leave the user stranded: fall back to a native submit with the raw password (legacy path) if anything in the E2EE flow blew up.
             console.error("E2EE login flow failed; falling back to plain submit", error);
             form.submit();
         });
@@ -269,13 +249,7 @@ async function runLoginFlow(form: HTMLFormElement): Promise<void> {
     const identifier = (form.elements.namedItem("username") as HTMLInputElement).value;
     const passwordInput = form.elements.namedItem("password") as HTMLInputElement;
     const password = passwordInput.value;
-    // Reuses the shared .btn.is-loading spinner rather than a bespoke class:
-    // "e2ee-busy" had no CSS rule anywhere, so the ~1s synchronous Argon2id
-    // derivation below showed no feedback at all - the page just looked
-    // frozen after clicking Sign in. Never explicitly cleared: every path
-    // out of this function either navigates away or replaces the whole
-    // document with the server's re-rendered form (see below), so there is
-    // no "still loading" DOM left behind to reset.
+    // Reuses the shared.btn.is-loading spinner rather than a bespoke class.
     form.querySelector<HTMLButtonElement>('button[type="submit"]')?.classList.add("is-loading");
 
     const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
@@ -359,24 +333,10 @@ async function unlockAfterDerivedLogin(password: string, currentPasswordProof: s
     if (cached !== null && cached.version === bundle.version && cached.publicKey === bundle.public_key) {
         const wrapSalt = randomSalt();
         await postJson(cfg().urls.rewrap, {
-            // Locally pinned KDF constants, NOT bundle.kdf_* - this derives a key
-            // that is about to be *stored*, and the whole guarantee of
-            // password_wrapped_secret is that whoever holds it (this server
-            // included) cannot open it. Taking the cost parameters from the
-            // server's own response would let a compromised server answer with
-            // password_wrap_stale=true plus near-zero Argon2id parameters and
-            // have this branch hand back a wrapped private key cheap enough to
-            // brute-force offline. The read paths below legitimately use
-            // bundle.kdf_* because they must match whatever an existing blob was
-            // created with; a fresh wrap has no such constraint. The server
-            // enforces the same floor at enroll (controllers/e2ee.py).
+            // Locally pinned KDF constants, NOT bundle.kdf_*.
             password_wrapped_secret: wrapSecretKey(cached.privateKey, deriveKey(password, wrapSalt, KDF_OPSLIMIT, KDF_MEMLIMIT)),
             password_wrap_salt: wrapSalt,
-            // Sent, not left implied. The server stores these against the blob,
-            // and a bundle enrolled with stronger-than-default parameters used
-            // to keep advertising them after this re-wrap replaced the blob with
-            // one made from the constants above - after which every password
-            // unlock derived the wrong key and failed permanently.
+            // Sent, not left implied.
             kdf_opslimit: KDF_OPSLIMIT,
             kdf_memlimit: KDF_MEMLIMIT,
             current_password: currentPasswordProof,
@@ -387,31 +347,19 @@ async function unlockAfterDerivedLogin(password: string, currentPasswordProof: s
 }
 
 // ---------------------------------------------------------------------------
-// Signup / password-reset form wiring
-// ---------------------------------------------------------------------------
+// Signup / password-reset form wiring ---------------------------------------------------------------------------
 
-/** The configured MinimumLengthValidator floor (settings/base.py), enforced
- * client-side because the server only ever sees the derived credential (which
- * always "looks strong"). The full validator chain (complexity,
- * common-password, HIBP breach check) additionally runs server-side via the
- * validate-password endpoint - see serverPolicyErrors(). */
+/**
+ * The configured MinimumLengthValidator floor (settings/base.py), enforced client-side because the server only ever sees the derived.
+ */
 const MIN_PASSWORD_LENGTH = 12;
 
 /**
  * Run the raw password through the server's configured validator chain.
- *
- * The one deliberate raw-password transmission in the derived-auth design:
- * without it, none of AUTH_PASSWORD_VALIDATORS ever sees the real password
- * (the derived credential always "looks strong"). Sent once over HTTPS,
- * validated in memory server-side, never stored or logged.
- *
  * @param password - The candidate raw password.
  * @param username - The username typed into the form ("" when unknown), for
- *   the similarity validator.
  * @param email - The email typed into the form ("" when unknown).
  * @returns Policy-violation messages; empty when the password passes, when
- *   the endpoint isn't wired on this page, or when the check can't be
- *   reached (fail open - the MIN_PASSWORD_LENGTH floor still applies).
  */
 async function serverPolicyErrors(password: string, username: string, email: string): Promise<string[]> {
     const url = cfg().urls.validatePassword;
@@ -441,29 +389,11 @@ function reportPolicyErrors(input: HTMLInputElement, errors: string[]): void {
 }
 
 /**
- * Wire the signup form: derive the login credential before submit so the raw
- * password never reaches the server, even once.
- *
+ * Wire the signup form: derive the login credential before submit so the raw password never reaches the server, even once.
  * @param form - The signup <form> with password1/password2 fields.
  */
 /**
  * Discard this profile's cached keys when the sign-out form is submitted.
- *
- * The decrypted identity key and every unsealed conversation and group key live
- * in IndexedDB so day-to-day use never prompts. Until 2026-09-05 nothing
- * removed them, so signing out on a shared or borrowed machine left every
- * message readable by the next person to sign in as anyone - same-origin
- * storage is the trust boundary, and the rows are keyed by profile slug, which
- * stops an *accidental* read and not a deliberate one.
- *
- * The cost is deliberate and one-sided: signing back in on your own machine now
- * needs a password or recovery key again. See P48 in
- * `docs/archive/PROBLEMS-ARCHIVE.md` (resolved 2026-09-05).
- *
- * Sign-out is never blocked by this. A storage error, a browser with IndexedDB
- * disabled, or a slow delete all fall through to submitting the form - being
- * unable to leave is a worse failure than keys outliving the session.
- *
  * @param form The sign-out form.
  */
 export function wireSignOutForm(form: HTMLFormElement): void {
@@ -477,9 +407,7 @@ export function wireSignOutForm(form: HTMLFormElement): void {
             form.dataset.ulKeysCleared = "1";
             form.submit();
         };
-        // A 1.5s ceiling, so a wedged IndexedDB cannot strand someone on the
-        // page. Whichever settles first wins; the delete keeps running either
-        // way, and the next sign-in clears what is left.
+        // A 1.5s ceiling, so a wedged IndexedDB cannot strand someone on the page.
         void Promise.race([
             clearProfileKeys(selfSlug).catch(() => undefined),
             new Promise((resolve) => setTimeout(resolve, 1500)),
@@ -542,12 +470,6 @@ async function prepareSignupSubmit(form: HTMLFormElement): Promise<void> {
 
 /**
  * Wire the password-reset-confirm form for derived accounts.
- *
- * Generates a fresh auth salt, derives the new credential from the new
- * password, and submits both - the server rotates AccountKdf and marks the
- * password-wrapped key copy stale (the old password is gone). Legacy accounts
- * are left untouched (pass mode "legacy").
- *
  * @param form - The reset-confirm <form>.
  * @param mode - "derived" when the account has an AccountKdf row.
  */
@@ -607,17 +529,10 @@ async function prepareResetSubmit(form: HTMLFormElement): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// OAuth (passwordless) enrollment
-// ---------------------------------------------------------------------------
+// OAuth (passwordless) enrollment ---------------------------------------------------------------------------
 
 /**
  * Silently enroll a passwordless (OAuth) account from any authenticated page.
- *
- * Generates the keypair, uploads the recovery-wrapped copy, caches the
- * private key on this device, and shows a low-key prompt pointing at the
- * recovery key (which stays viewable in Settings while this device holds the
- * key - nothing is lost if the prompt is dismissed).
- *
  * @returns True when enrollment happened.
  */
 export async function enrollOauthIfNeeded(): Promise<boolean> {
@@ -641,9 +556,7 @@ export type UnlockState = "unlocked" | "locked" | "not-enrolled";
 
 /**
  * Report whether this device can decrypt the signed-in user's messages.
- *
  * @returns "unlocked" (cached key matches the server bundle), "locked"
- *   (enrolled, but this device has no usable cached key), or "not-enrolled".
  */
 export async function getUnlockState(): Promise<UnlockState> {
     const selfSlug = cfg().selfSlug;
@@ -667,7 +580,6 @@ export async function getUnlockState(): Promise<UnlockState> {
 
 /**
  * Unlock this device with a typed/pasted recovery key.
- *
  * @param display - The recovery key as the user entered it.
  * @returns True on success (identity cached; device unlocked).
  */
@@ -695,10 +607,7 @@ export async function unlockWithRecovery(display: string): Promise<boolean> {
 
 /**
  * Report which unlock paths this account's bundle offers on a cold device.
- *
  * @returns Whether the account is enrolled at all, whether a password-wrapped
- *   copy exists (and is not stale), and whether passkey unlock is available
- *   (a usable wrap exists and this browser can run WebAuthn).
  */
 export async function getUnlockOptions(): Promise<{ enrolled: boolean; password: boolean; passkey: boolean }> {
     const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
@@ -718,12 +627,6 @@ export async function getUnlockOptions(): Promise<{ enrolled: boolean; password:
 
 /**
  * Unlock this device with the account password.
- *
- * Derives the wrap key from the password + the bundle's wrap salt and opens
- * the password-wrapped private-key copy. Only possible when such a copy
- * exists (password accounts, and OAuth accounts that have set a password
- * while a device held the key).
- *
  * @param password - The raw account password (never transmitted).
  * @returns True on success (identity cached; device unlocked).
  */
@@ -748,7 +651,6 @@ export async function unlockWithPassword(password: string): Promise<boolean> {
 
 /**
  * Unwrap and cache the identity from one passkey wrap plus its PRF output.
- *
  * @param bundle - The current server-side bundle.
  * @param wrap - The wrap matching the credential that produced ``prf``.
  * @param prf - The authenticator's PRF output for ``wrap.prf_input``.
@@ -766,12 +668,6 @@ async function unlockFromWrap(bundle: KeyBundlePayload, wrap: PasskeyWrapPayload
 
 /**
  * Unlock this device with a passkey (one tap - no password, no recovery key).
- *
- * Runs a client-challenged assertion over every wrap-bearing credential; the
- * authenticator's PRF output for whichever the user picks derives the wrap
- * key. Nothing is sent to the server - the assertion authenticates nothing,
- * the PRF output is the entire point.
- *
  * @returns True on success (identity cached; device unlocked).
  */
 export async function unlockWithPasskey(): Promise<boolean> {
@@ -798,12 +694,6 @@ export async function unlockWithPasskey(): Promise<boolean> {
 
 /**
  * After a 2FA passkey login, harvest the assertion's PRF output and unlock.
- *
- * The login options may carry PRF inputs for wrap-bearing credentials (see
- * services/auth/webauthn.py), so the same tap that completed 2FA can also
- * unlock the user's messages on a cold device - zero extra prompts. Called by
- * the login page via runLogin's beforeRedirect hook, once the session exists.
- *
  * @param credential - The credential runLogin's assertion produced.
  * @returns True when the device ended up unlocked (or already was).
  */
@@ -833,10 +723,6 @@ export async function unlockFromLoginAssertion(credential: PublicKeyCredential):
 
 /**
  * Remove a just-registered passkey that turned out unusable.
- *
- * Best-effort: a failure here leaves a stray credential the user can delete in
- * Settings, which is strictly better than failing the enrollment twice over.
- *
  * @param credentialPk - Database id from the registration response.
  */
 async function discardPasskey(credentialPk: number | undefined): Promise<void> {
@@ -866,16 +752,7 @@ export interface PasskeyEnrollResult {
 
 /**
  * Give this account a passkey unlock path (device must be unlocked).
- *
- * When the account already has passkeys without wraps, one assertion lets the
- * user pick which gains the wrap - an existing 2FA passkey then unlocks
- * messages during login itself. Otherwise a new unlock-only passkey is
- * registered (is_login_factor=False server-side: it never conscripts the
- * account into a 2FA prompt).
- *
  * @param password - The account password, required as proof on
- *   password-backed accounts (the server refuses a bearer token alone for
- *   adding an unlock path); omit for OAuth-only accounts.
  * @returns The enrollment outcome.
  */
 export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnrollResult> {
@@ -923,11 +800,7 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
         prf = assertion.prf;
         prfInput = inputs[credentialId]!;
     } else {
-        // Either the account has no unwrapped passkey, or the one it has cannot
-        // do PRF and so can never unlock anything. Both land on registering a
-        // key that can - telling the user to "create a new passkey" while
-        // returning them to the same dead end would not be an option they could
-        // reach without first deleting the passkey they sign in with.
+        // Either the account has no unwrapped passkey, or the one it has cannot do PRF and so can never unlock anything.
         prfInput = randomPrfInput();
         const registration = await registerPasskey({
             optionsUrl: urls.passkeyRegisterOptions,
@@ -949,9 +822,7 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
             prf = followUp.status === "ok" ? followUp.prf : null;
         }
         if (prf === null) {
-            // Registered for unlock, so it is not a login factor, and without
-            // PRF it will never hold a wrap either - a credential that does
-            // nothing but make the account look provisioned. Take it back out.
+            // Registered for unlock, so it is not a login factor, and without PRF it will never hold a wrap either.
             await discardPasskey(registration.credentialPk);
             return { ok: false, error: "That passkey doesn't support unlocking messages, so it wasn't kept. Try a different authenticator, or set an account password instead." };
         }
@@ -977,13 +848,9 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
 }
 
 /**
- * Show a dialog that enrolls a passkey unlock, collecting the account
- * password first when one exists (the server demands it as proof - a bearer
- * token or bare session must not be enough to add an unlock path).
- *
+ * Show a dialog that enrolls a passkey unlock, collecting the account password first when one exists.
  * @param hasPassword - Whether to collect the account password.
  * @returns The enrollment outcome; ``{ok: false}`` with no error when the
- *   user cancelled.
  */
 export function showPasskeyEnrollDialog(hasPassword: boolean): Promise<PasskeyEnrollResult> {
     return new Promise((resolve) => {
@@ -1042,9 +909,7 @@ export function showPasskeyEnrollDialog(hasPassword: boolean): Promise<PasskeyEn
 }
 
 /**
- * Show a dialog offering every available unlock path (passkey, password,
- * and/or recovery key) and attempt the unlock the user chooses.
- *
+ * Show a dialog offering every available unlock path (passkey, password, and/or recovery key) and attempt the unlock the user chooses.
  * @returns True once the device is unlocked; false when the user cancelled.
  */
 export function showUnlockDialog(): Promise<boolean> {
@@ -1052,10 +917,7 @@ export function showUnlockDialog(): Promise<boolean> {
         void getUnlockOptions().then((options) => {
             const overlay = document.createElement("div");
             overlay.className = "e2ee-recovery-overlay";
-            // Ladder order (docs/designs/e2ee-passkey-unlock.md): passkey
-            // first (one tap), then password, then recovery key - which may
-            // appear in flows but must never be the only visible exit when a
-            // cheaper path exists.
+            // Ladder order (docs/designs/e2ee-passkey-unlock.md): passkey first (one tap), then password, then recovery key.
             const passkeyBlock = options.passkey
                 ? `<button type="button" class="btn btn--primary e2ee-unlock-passkey">Unlock with your passkey</button>
                    <div class="e2ee-unlock-divider">or</div>`
@@ -1143,8 +1005,7 @@ export function showUnlockDialog(): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Password change / set (settings page and the SSO set-password prompt)
-// ---------------------------------------------------------------------------
+// Password change / set (settings page and the SSO set-password prompt).
 
 export interface ChangePasswordResult {
     ok: boolean;
@@ -1153,20 +1014,9 @@ export interface ChangePasswordResult {
 
 /**
  * Change (or, for OAuth accounts, set) the login password.
- *
- * Everything password-shaped stays in the browser: the current password is
- * converted to whatever credential the server actually stores (the raw
- * password for legacy accounts, the Argon2id-derived authKey for derived
- * accounts), and the new password becomes a freshly salted derived
- * credential. When this device holds the decrypted private key, it is
- * re-wrapped under the new password so password-unlock keeps working on
- * other devices.
- *
  * @param currentPassword - The current password ("" for OAuth accounts
- *   setting their first password).
  * @param newPassword - The new password.
  * @param identifier - The account's username (used to look up the current
- *   auth mode/salt via the anonymous login-params endpoint).
  * @returns ``{ok}`` or ``{ok: false, error}`` with a user-facing message.
  */
 export async function changePassword(currentPassword: string, newPassword: string, identifier: string): Promise<ChangePasswordResult> {
@@ -1273,13 +1123,6 @@ export interface ResetResult {
 
 /**
  * What to tell the user after a key reset, given what survived it.
- *
- * Pure and exported so the wording is testable without sodium, IndexedDB or a
- * live endpoint. The previous inline version told the truth in one of four
- * cases: it claimed "everything stays readable" whenever *any* row had been
- * re-encrypted, even when most had not, and said nothing at all when the old
- * key was held but nothing came back re-encrypted.
- *
  * @param result - The outcome returned by {@link resetKeys}.
  * @returns The toast level and message describing what is still readable.
  */
@@ -1308,11 +1151,6 @@ interface RewrapAllPayload {
 
 /**
  * Recover the CURRENT (pre-reset) private key if at all possible.
- *
- * Tries the cached identity first (device unlocked), then - when a password
- * was typed into the reset dialog - unwrapping the bundle's password-wrapped
- * copy with it, exactly like the unlock dialog would.
- *
  * @param bundle - The current server-side bundle.
  * @param password - The password typed into the reset dialog, if any.
  * @returns The old private key, or null when it is genuinely unavailable.
@@ -1330,15 +1168,8 @@ async function recoverOldPrivateKey(bundle: KeyBundlePayload, password?: string)
 }
 
 /**
- * Replace the keypair. When the old private key is still available (cached on
- * this device, or unlockable with the supplied password), every conversation
- * key and group envelope is unsealed and re-sealed to the new public key in
- * the same request, so the account's message history stays readable. Only
- * when the old key is genuinely gone does the reset become destructive.
- *
+ * Replace the keypair.
  * @param password - The account password when one exists (re-creates the
- *   password-wrapped copy, and doubles as an unlock path for the old key);
- *   omit for OAuth accounts.
  * @returns The reset outcome, or null on failure.
  */
 export async function resetKeys(password?: string): Promise<ResetResult | null> {
@@ -1377,12 +1208,7 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
     if (oldPrivateKey !== null && cfg().urls.rewrapAll) {
         const rewrapResponse = await fetch(cfg().urls.rewrapAll as string, { credentials: "same-origin" });
         if (!rewrapResponse.ok) {
-            // Holding the old private key means every thread *could* have been
-            // preserved. Resetting without the inventory would seal the account
-            // to a new key while leaving all of that history unopenable - the
-            // one outcome this branch exists to prevent, caused by a transient
-            // failure rather than by the user's choice. Abort; the caller
-            // surfaces it as "please try again", and a retry costs nothing.
+            // Holding the old private key means every thread *could* have been preserved.
             return null;
         }
         const payload = (await rewrapResponse.json()) as RewrapAllPayload;
@@ -1396,10 +1222,7 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
             }
             return out;
         };
-        // Entries that fail to unseal (corrupt, or sealed to an even older
-        // keypair) are skipped - they were already unreadable, so leaving them
-        // behind loses nothing. That is per-entry reasoning, and deliberately
-        // does not extend to an inventory that never arrived.
+        // Entries that fail to unseal (corrupt, or sealed to an even older keypair) are skipped.
         body.rewrapped_conversation_keys = rewrapEntries(payload.conversation_keys);
         body.rewrapped_group_envelopes = rewrapEntries(payload.group_envelopes);
     }
@@ -1419,25 +1242,13 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
     };
 }
 
-//: Accepted spellings of the reset confirmation word - case-insensitive,
-//: surrounding whitespace stripped, matching how every other confirmation
-//: input on the site behaves (nothing else on the site demands exact-case).
+// : Accepted spellings of the reset confirmation word - case-insensitive,.
 const RESET_CONFIRMATION_WORD = "reset";
 
 /**
- * Show one dialog collecting both the typed confirmation and (when the
- * account has a password) the account password, then perform the reset.
- *
- * The description is honest about the actual consequence: when this device
- * still holds the current private key (or the typed password can unlock it),
- * the reset RE-ENCRYPTS the message history under the new keypair and
- * nothing becomes unreadable - the old "permanently unreadable" warning only
- * appears when destruction is genuinely the outcome.
- *
+ * Show one dialog collecting both the typed confirmation and (when the account has a password) the account password, then perform.
  * @param hasPassword - Whether to also collect and require the account
- *   password (omit the field entirely for OAuth accounts with none).
  * @returns The new recovery key display string, or null when the user
- *   cancelled or the reset failed.
  */
 export function showResetDialog(hasPassword: boolean): Promise<string | null> {
     return new Promise((resolve) => {
@@ -1555,18 +1366,10 @@ async function requireIdentity(): Promise<CachedIdentity | null> {
 }
 
 // ---------------------------------------------------------------------------
-// Conversation keys & message crypto (messages page)
-// ---------------------------------------------------------------------------
+// Conversation keys & message crypto (messages page) ---------------------------------------------------------------------------
 
 /**
  * Why a conversation or group has no usable key.
- *
- * The two cases must stay distinguishable. ``unencryptable`` is an expected,
- * correct state - nobody to encrypt to, or this device is locked - and a caller
- * may legitimately answer it by sending plaintext. ``error`` means a key we
- * should have been able to get did not arrive. Collapsing them (both were once
- * a bare ``null``) turns one failed request into a plaintext message in a
- * conversation both participants believe is encrypted.
  */
 export type KeyUnavailable = { status: "unencryptable"; reason: string } | { status: "error"; reason: string };
 
@@ -1579,13 +1382,7 @@ function describeError(error: unknown): string {
 }
 
 /**
- * Fetch, unseal, and cache the conversation key shared with one partner,
- * creating the first version when none exists and both parties are enrolled.
- *
- * Network failures propagate as exceptions rather than a status, so a caller
- * that must not fall back to plaintext has to handle them deliberately (see
- * ``encryptForPartner``).
- *
+ * Fetch, unseal, and cache the conversation key shared with one partner, creating the first version when none exists and both parties.
  * @param partnerSlug - The conversation partner's profile slug.
  * @returns The latest usable key and its version, or why there is none.
  */
@@ -1643,10 +1440,7 @@ async function createConversationKeyVersion(
 ): Promise<KeyResult> {
     const partnerResponse = await fetch(`${cfg().urls.partnerKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
     if (partnerResponse.status === 404) {
-        // The endpoint answers 404 both for "no key bundle" and "no DM
-        // relationship" - either way there is nobody to encrypt to, so the
-        // conversation stays plaintext. Any other failure status is a failure,
-        // not an answer, and must not be read as "they aren't enrolled".
+        // The endpoint answers 404 both for "no key bundle" and "no DM relationship".
         return { status: "unencryptable", reason: "This person isn't set up for encrypted messages." };
     }
     if (!partnerResponse.ok) {
@@ -1677,18 +1471,15 @@ async function createConversationKeyVersion(
 }
 
 // ---------------------------------------------------------------------------
-// Group keys & message crypto (group chats)
-// ---------------------------------------------------------------------------
+// Group keys & message crypto (group chats) ---------------------------------------------------------------------------
 
 interface GroupKeysPayload {
     keys: { version: number; wrapped_key: string }[];
     latest: number;
     needs_rotation: boolean;
-    /** One entry per active member when all are enrolled, else null. `id` is
-     * an opaque per-(group, member) rotation token - deliberately not a slug,
-     * which would reveal masked members' identities (see the server's
-     * group_member_token). It is round-tripped verbatim as the `wrapped` key
-     * when posting a new version. */
+    /**
+ * One entry per active member when all are enrolled, else null.
+ */
     members: { id: string; public_key: string }[] | null;
 }
 
@@ -1701,14 +1492,7 @@ function groupKeyUrl(groupUuid: string): string {
 }
 
 /**
- * Fetch, unseal, and cache the usable group key for one group chat, rotating
- * to a new version whenever the latest one no longer covers the group's
- * current membership (member added/removed) or none exists yet.
- *
- * Rotation is what enforces membership boundaries cryptographically: a new
- * member only ever receives envelopes for versions minted after they joined,
- * and a removed member is excluded from every later version.
- *
+ * Fetch, unseal, and cache the usable group key for one group chat, rotating to a new version whenever the latest one no longer covers.
  * @param groupUuid - The group chat's UUID.
  * @returns The latest usable key and its version, or why there is none.
  */
@@ -1794,13 +1578,9 @@ async function createGroupKeyVersion(
 
 /**
  * Encrypt one outgoing message body for a group chat.
- *
  * @param groupUuid - The group chat's UUID.
  * @param text - The plaintext body.
  * @returns ``encrypted`` with the fields to send; ``unencryptable`` when the
- *   group legitimately has no encryption to do (a member unenrolled, this
- *   device locked), which a caller may answer with plaintext; or ``error``,
- *   which it may not - see KeyUnavailable.
  */
 export async function encryptForGroup(groupUuid: string, text: string): Promise<EncryptionOutcome> {
     try {
@@ -1817,13 +1597,11 @@ export async function encryptForGroup(groupUuid: string, text: string): Promise<
 
 /**
  * Decrypt one received/stored group message body.
- *
  * @param groupUuid - The group chat's UUID.
  * @param ciphertext - Base64 ciphertext from the server.
  * @param nonce - Base64 nonce stored with the message.
  * @param version - The group-key version that encrypted it.
  * @returns The plaintext, or null when this device can't decrypt it (locked,
- *   or the message predates the viewer's membership so they hold no envelope).
  */
 export async function decryptFromGroup(groupUuid: string, ciphertext: string, nonce: string, version: number): Promise<string | null> {
     await cryptoReady();
@@ -1862,13 +1640,9 @@ export type EncryptionOutcome = { status: "encrypted"; payload: OutgoingEncrypti
 
 /**
  * Encrypt one outgoing message body for a partner.
- *
  * @param partnerSlug - The conversation partner's profile slug.
  * @param text - The plaintext body.
  * @returns ``encrypted`` with the fields to send; ``unencryptable`` when the
- *   conversation legitimately has no encryption to do (partner unenrolled,
- *   this device locked), which a caller may answer with plaintext; or
- *   ``error``, which it may not - see KeyUnavailable.
  */
 export async function encryptForPartner(partnerSlug: string, text: string): Promise<EncryptionOutcome> {
     try {
@@ -1888,7 +1662,6 @@ export async function encryptForPartner(partnerSlug: string, text: string): Prom
 
 /**
  * Decrypt one received/stored message body.
- *
  * @param partnerSlug - The conversation partner's profile slug.
  * @param ciphertext - Base64 ciphertext from the server.
  * @param nonce - Base64 nonce stored with the message.
@@ -1919,19 +1692,10 @@ export async function decryptFromPartner(partnerSlug: string, ciphertext: string
 
 /**
  * Decrypt a safety check-in's archived record (services.safety.archive_checkin).
- *
- * Unlike a conversation key, the per-checkin symmetric key was sealed once,
- * server-side, to only the owner's own public key - there is no partner/group
- * to resolve, so this just unseals it with the caller's own identity, then
- * opens the payload with the two primitives every other decrypt path here
- * already uses. Prompts to unlock the device first if the identity isn't
- * cached yet - the archive may be opened long after the check-in itself.
- *
  * @param sealedKeyB64 - The archive's sealed per-checkin key (SafetyCheckinArchive.sealed_key).
  * @param ciphertextB64 - The encrypted JSON payload (SafetyCheckinArchive.ciphertext).
  * @param nonceB64 - The nonce for `ciphertextB64` (SafetyCheckinArchive.nonce).
  * @returns The decrypted payload (title, plan_details, resolved_by_label, etc.), or
- *   null if this device can't unlock or the blobs don't match this identity.
  */
 export async function decryptSafetyArchive(sealedKeyB64: string, ciphertextB64: string, nonceB64: string): Promise<Record<string, unknown> | null> {
     await cryptoReady();
@@ -1963,12 +1727,6 @@ export async function decryptSafetyArchive(sealedKeyB64: string, ciphertextB64: 
 
 /**
  * Decrypt every pending [data-e2ee-ct] element under a root, in place.
- *
- * Elements carry data-e2ee-ct / data-e2ee-nonce / data-e2ee-kv and either
- * data-e2ee-group (group-chat messages), data-e2ee-partner, or inherit the
- * partnerSlug argument. Decrypted text replaces the element's textContent;
- * failures show a lock placeholder.
- *
  * @param root - The DOM subtree to scan.
  * @param partnerSlug - Default partner slug for elements without their own.
  */
@@ -1995,12 +1753,7 @@ export async function decryptDom(root: ParentNode, partnerSlug?: string): Promis
         } else {
             node.textContent = "Unable to decrypt on this device";
             node.classList.add("e2ee-failed");
-            // Reacting requires knowing what the message said - the emoji
-            // picker stayed available on a bubble whose body we can't even
-            // show, which read as offering to respond to content the user
-            // never saw. Only the main bubble body (not reply-quote
-            // snippets or conversation-list previews, which share this same
-            // decrypt loop but have no reaction button of their own) needs this.
+            // Reacting requires knowing what the message said.
             if (node.classList.contains("dm-bubble__body")) {
                 const addReactionBtn = node.closest(".dm-bubble")?.querySelector<HTMLElement>(".dm-reaction-add-btn");
                 if (addReactionBtn) addReactionBtn.hidden = true;
@@ -2010,13 +1763,10 @@ export async function decryptDom(root: ParentNode, partnerSlug?: string): Promis
 }
 
 // ---------------------------------------------------------------------------
-// Recovery-key dialog (login-flow only; Settings has its own UI)
-// ---------------------------------------------------------------------------
+// Recovery-key dialog (login-flow only; Settings has its own UI).
 
 /**
- * Show a blocking overlay presenting a freshly generated recovery key with
- * copy/download actions. Resolves when the user confirms (or defers).
- *
+ * Show a blocking overlay presenting a freshly generated recovery key with copy/download actions.
  * @param display - The recovery key display string.
  */
 export function showRecoveryDialog(display: string): Promise<void> {

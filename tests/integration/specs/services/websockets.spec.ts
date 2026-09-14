@@ -1,15 +1,7 @@
 /**
- * The Channels half of the deployment.
- *
- * WebSockets are the part of the stack no page-load assertion reaches: a
- * different container (Daphne, not gunicorn), a different path through the
- * proxy (which has to be configured to upgrade), and a different backing
- * service (the channel layer in Valkey). Every one of those can be broken while
- * the site looks entirely healthy, and the visible symptom - notifications
- * quietly stop arriving - is one nobody reports for weeks.
- *
- * The idle-hold test is opt-in because it is slow by nature: proving a
- * keep-alive works means being idle for longer than the proxy tolerates.
+ * The Channels half of the deployment. WebSockets are the part of the stack no page-load assertion
+ * reaches: a different container (Daphne, not gunicorn), a different path through the proxy (which
+ * has to be configured to upgrade), and a different backing service (the channel layer in Valkey).
  */
 
 import { expect, test } from "../../lib/fixtures.js";

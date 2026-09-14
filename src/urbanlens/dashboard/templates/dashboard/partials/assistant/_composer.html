@@ -1,20 +1,4 @@
-{% comment %}
-The message-entry form - shared by the full /assistant/ page and the global
-overlay dialog (see themes/base.html, assistant-overlay.ts). Needs
-`max_message_chars` in context.
-
-hx-vals sends window.location.pathname with every message - whichever page
-the user was actually looking at when they asked, the overlay included, so
-the overlay's own /assistant/ URL never overrides the real page underneath
-it. Server-side resolution (services.ai.page_context) re-derives everything
-else from that path under this profile's own access rules - see that
-module's docstring for why the path itself is the only thing trusted here.
-
-It also sends the client's own dismissal ring (window.ulDismissalRing, see
-shared/dismissal-ring.ts) as a JSON string - what the user has recently
-closed on their own page, re-verified/re-capped server-side
-(services.ai.dismissals) before it ever reaches a prompt.
-{% endcomment %}
+{% comment %}The message-entry form - shared by the full /assistant/ page and the global overlay dialog.{% endcomment %}
 <form class="assistant-input-row"
       hx-post="{% url 'assistant.message' %}"
       hx-vals='js:{page_path: window.location.pathname, dismissals: JSON.stringify(window.ulDismissalRing?.list() || [])}'

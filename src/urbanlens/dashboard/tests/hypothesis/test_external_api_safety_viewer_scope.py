@@ -1,23 +1,4 @@
-"""Guards on ``SafetyCheckinViewerScopedView``, the watcher-side lookup base.
-
-A safety check-in reveals where a person physically is, right now. The upcoming
-partner-facing endpoints - acknowledge, escalate, read the shared live position
-- have to resolve a check-in for someone who is *not* its owner, and the rule
-they resolve it with is the single riskiest predicate in the API:
-
-* it must admit the owner, and a partner whose invitation is **ACCEPTED**;
-* it must refuse a merely ``INVITED`` partner, and anyone whose partner row was
-  deleted when they declined or were removed;
-* it must be indistinguishable from "no such check-in" in every refusal, since
-  a 403 on a slug confirms that a specific person is out somewhere.
-
-The tempting shortcut - ``checkin.partners.filter(profile=...).exists()`` -
-passes a happy-path test and quietly admits an invitee who never accepted, so
-these tests exercise the INVITED case directly rather than trusting that the
-base "uses the service". There is also a test asserting the base and the
-owner-scoped sibling answer with byte-identical error bodies, because a client
-that could tell the two apart would learn which of them rejected it.
-"""
+"""Guards on ``SafetyCheckinViewerScopedView``, the watcher-side lookup base."""
 
 from __future__ import annotations
 
@@ -62,16 +43,14 @@ class SafetyCheckinViewerScopeTests(TestCase):
     def _request(self, profile: Profile):
         """A bare request attributed to *profile*'s user.
 
-        The view base reads only ``request.user``; building the request
-        directly keeps these tests on the resolution rule itself rather than on
-        whichever URL a later batch wires it to.
+        The view base reads only ``request.user``; building the request directly keeps these tests on the
+        resolution rule itself rather than on whichever URL a later batch wires it to.
 
         Args:
             profile: The profile the request should appear to come from.
 
         Returns:
-            A ``WSGIRequest`` with ``user`` set.
-        """
+            A ``WSGIRequest`` with ``user`` set."""
         request = self.factory.get("/")
         request.user = profile.user
         return request
@@ -80,12 +59,10 @@ class SafetyCheckinViewerScopeTests(TestCase):
         """Attach *profile* to the fixture check-in with the given status.
 
         Args:
-            profile: The profile being named as a partner.
-            status: One of ``SafetyCheckinPartnerStatus``.
+            profile: The profile being named as a partner. status: One of ``SafetyCheckinPartnerStatus``.
 
         Returns:
-            The created partner row.
-        """
+            The created partner row."""
         return SafetyCheckinPartner.objects.create(
             checkin=self.checkin, profile=profile, invited_by=self.owner, status=status
         )
@@ -106,11 +83,9 @@ class SafetyCheckinViewerScopeTests(TestCase):
     def test_merely_invited_partner_is_refused(self) -> None:
         """An unaccepted invite must not open a live location feed.
 
-        This is the case a bare ``partners.filter(profile=...)`` would let
-        through: the invite row exists from the moment it is sent, so a
-        membership test that ignores ``status`` admits someone who has not
-        taken on the responsibility - and may never have seen the invite.
-        """
+        This is the case a bare ``partners.filter(profile=...)`` would let through: the invite row exists from
+        the moment it is sent, so a membership test that ignores ``status`` admits someone who has not taken on
+        the responsibility - and may never have seen the invite."""
         self._partner(self.invited, SafetyCheckinPartnerStatus.INVITED)
         self.assertIsNone(self.view.get_viewable_checkin(self._request(self.invited), self.checkin.slug))
 
@@ -163,20 +138,16 @@ class SafetyCheckinViewerScopeTests(TestCase):
     def test_non_uuid_garbage_does_not_raise(self) -> None:
         """A malformed identifier is a miss, not a 500.
 
-        Comparing a non-uuid string against a ``UUIDField`` raises rather than
-        simply not matching, so the uuid fallback has to catch it - otherwise
-        any client typo becomes a server error.
-        """
+        Comparing a non-uuid string against a ``UUIDField`` raises rather than simply not matching, so the uuid
+        fallback has to catch it - otherwise any client typo becomes a server error."""
         self.assertIsNone(self.view.get_viewable_checkin(self._request(self.owner), "not-a-uuid-@@@"))
 
     def test_viewer_profile_is_created_on_first_use(self) -> None:
         """A credential holder with no profile row yet still resolves to one.
 
-        Profiles are created lazily, so refusing a user without one would make
-        the API's behaviour depend on whether they had ever visited the site -
-        an account created purely through OAuth2 would be locked out of a
-        feature it is otherwise entitled to.
-        """
+        Profiles are created lazily, so refusing a user without one would make the API's behaviour depend on
+        whether they had ever visited the site - an account created purely through OAuth2 would be locked out of
+        a feature it is otherwise entitled to."""
         fresh_user = baker.make(User, username="never-logged-in")
         Profile.objects.filter(user=fresh_user).delete()
         self.assertFalse(Profile.objects.filter(user=fresh_user).exists())
@@ -191,10 +162,8 @@ class SafetyCheckinViewerScopeTests(TestCase):
     def test_not_found_body_matches_the_owner_scoped_base(self) -> None:
         """Both safety surfaces refuse with the identical envelope.
 
-        If the watcher-scoped and owner-scoped bases answered differently, a
-        client probing both would learn which one rejected it - which is itself
-        information about the check-in.
-        """
+        If the watcher-scoped and owner-scoped bases answered differently, a client probing both would learn
+        which one rejected it - which is itself information about the check-in."""
         watcher_response = self.view.not_found()
         owner_response = SafetyCheckinScopedView()._not_found()
         self.assertEqual(watcher_response.status_code, 404)
@@ -203,11 +172,7 @@ class SafetyCheckinViewerScopeTests(TestCase):
     def test_owner_scoped_base_still_refuses_accepted_partners(self) -> None:
         """The new base must not have widened the owner-only write surface.
 
-        Every endpoint on ``SafetyCheckinScopedView`` is an owner action (edit,
-        cancel, delete, invite). If admitting partners had been implemented by
-        relaxing *that* base instead of adding this one, every one of those
-        writes would silently become available to any accepted partner.
-        """
+        Every endpoint on ``SafetyCheckinScopedView`` is an owner action (edit, cancel, delete, invite)."""
         self._partner(self.accepted, SafetyCheckinPartnerStatus.ACCEPTED)
         owner_scoped = SafetyCheckinScopedView()
         self.assertIsNone(owner_scoped._get_checkin(self._request(self.accepted), self.checkin.slug))

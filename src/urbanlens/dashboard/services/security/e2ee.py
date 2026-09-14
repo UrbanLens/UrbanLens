@@ -1,10 +1,5 @@
 """Server-side helpers for direct-message end-to-end encryption.
-
-The server's entire role in the E2EE scheme is storing opaque blobs and
-answering "which mode does this account authenticate in" - all cryptography
-happens in the browser (see ``frontend/ts/shared/e2ee-crypto.ts`` and
-``docs/designs/e2ee.md``). Everything here is bookkeeping around that storage.
-"""
+The server's entire role in the E2EE scheme is storing opaque blobs and answering "which mode does this account authenticate in" - all cryptography happens in the browser (see ``frontend/ts/shared/e2ee-crypto.ts`` and ``docs/designs/e2ee.md``)."""
 
 from __future__ import annotations
 
@@ -70,8 +65,7 @@ def valid_blob(value: Any, max_length: int, *, required: bool = True) -> bool:
         required: When False, empty/missing values pass.
 
     Returns:
-        True when the value is acceptable to store.
-    """
+        True when the value is acceptable to store."""
     if not value:
         return not required
     return isinstance(value, str) and len(value) <= max_length and is_base64(value)
@@ -80,16 +74,11 @@ def valid_blob(value: Any, max_length: int, *, required: bool = True) -> bool:
 def fake_auth_salt(identifier: str) -> str:
     """Deterministic decoy salt for identifiers with no derived-auth account.
 
-    Real salts are 16 random bytes; this derives 16 bytes from the site secret
-    and the identifier so unknown accounts are indistinguishable from enrolled
-    ones (same shape, stable across requests) without maintaining any state.
-
     Args:
         identifier: The username or email being probed.
 
     Returns:
-        A base64-encoded 16-byte pseudo-salt.
-    """
+        A base64-encoded 16-byte pseudo-salt."""
     digest = hmac.new(
         settings.SECRET_KEY.encode(),
         f"e2ee-login-salt:{identifier.strip().lower()}".encode(),
@@ -101,22 +90,12 @@ def fake_auth_salt(identifier: str) -> str:
 def group_member_token(group_uuid: Any, profile_id: int) -> str:
     """Opaque per-(group, member) identifier for the key-rotation API.
 
-    The rotation payload used to be keyed by profile slugs, which handed every
-    group member the real slug of members whose ``profile_visibility`` masks
-    them elsewhere (the PR #111 finding; decision 2026-07-23: "Opaque
-    identifiers" in docs/NOTES.md). This token is deterministic (the client round-trips
-    it between GET and POST, and the server just recomputes the mapping -
-    nothing is decoded), scoped to one group by the uuid in the HMAC input (so
-    tokens can't correlate a member across groups), and reveals nothing about
-    the member.
-
     Args:
         group_uuid: The group chat's UUID.
         profile_id: The member profile's pk.
 
     Returns:
-        A hex token stable for this (group, member) pair.
-    """
+        A hex token stable for this (group, member) pair."""
     return hmac.new(
         settings.SECRET_KEY.encode(),
         f"e2ee-group-member:{group_uuid}:{profile_id}".encode(),
@@ -126,16 +105,13 @@ def group_member_token(group_uuid: Any, profile_id: int) -> str:
 
 def resolve_login_user(identifier: str) -> User | None:
     """Find the account an identifier would log in as (username or email).
-
-    Mirrors ``EmailOrUsernameModelBackend``'s resolution order so login-params
-    answers for the same account the login POST will hit.
+    Mirrors ``EmailOrUsernameModelBackend``'s resolution order so login-params answers for the same account the login POST will hit.
 
     Args:
         identifier: The username or email from the login form.
 
     Returns:
-        The matching active User, or None.
-    """
+        The matching active User, or None."""
     from django.contrib.auth.models import User
 
     identifier = identifier.strip()
@@ -156,9 +132,7 @@ def login_params_for_identifier(identifier: str) -> dict[str, str]:
         identifier: The username or email from the login form.
 
     Returns:
-        Dict with ``mode`` (``legacy``/``derived``) and ``auth_salt`` (real for
-        enrolled accounts, deterministic decoy otherwise).
-    """
+        Dict with ``mode`` (``legacy``/``derived``) and ``auth_salt`` (real for enrolled accounts, deterministic decoy otherwise)."""
     user = resolve_login_user(identifier)
     if user is not None:
         kdf = AccountKdf.objects.for_user(user).first()

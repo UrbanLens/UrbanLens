@@ -32,7 +32,7 @@ class VisitQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(source=VisitSource.MANUAL)
 
     def from_takeout(self) -> Self:
-        """Filter to visits imported from the user's location history (e.g. Google Takeout).
+        """Filter to visits from the user's location history.
 
         Returns:
             Filtered queryset.

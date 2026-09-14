@@ -1,20 +1,4 @@
-"""The map payload's projection path must answer exactly what the model path does.
-
-`MapPinPayloadService` builds the same dict two ways - `serialize` from a model
-instance, for the sync and detail APIs that hold one anyway, and `page`/`all`
-from a flat projection, for the map, which serializes a whole account at once
-and cannot afford the object graph. Two implementations of one decision drift
-silently, because each is self-consistent; here the drift would be a pin whose
-name, icon, colour or chips render differently depending on which endpoint the
-client asked, and nothing would fail.
-
-So the pins are generated across the axes the payload actually branches on
-rather than chosen: a name or a fallback to the wiki, the official name, or the
-"Unnamed Location in {area}" placeholder; an icon of the pin's own, an inherited
-one, or a label's uploaded image; a customization overriding a label's icon to
-empty (which is how a user *clears* an inherited icon, and is the case an
-``or``-based fallback gets wrong); a cover photo, a fallback photo, or neither.
-"""
+"""The map payload's projection path must answer exactly what the model path does."""
 
 from __future__ import annotations
 

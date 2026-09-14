@@ -15,14 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class AliasType(TextChoices):
-    """
-    The type of alias.
-    * NICKNAME: A user-defined nickname for the pin or wiki.
-                Created by checking the "nickname" checkbox when adding an alias.
-    * OFFICIAL: An official name for the pin or location.
-                Created by the system when the pin or location is created, or queried from an external API source.
-    * ALTERNATE: An alternate name for the pin or location.
-                Created by the user when adding an alias. (without the "nickname" checkbox)
+    """The type of alias. * NICKNAME: A user-defined nickname for the pin or wiki.
+    Created by checking the "nickname" checkbox when adding an alias. * OFFICIAL: An official name for the pin or location.
     """
 
     NICKNAME = "nickname", "Nickname"
@@ -32,14 +26,7 @@ class AliasType(TextChoices):
 
 class AliasSource:
     """Well-known alias ``source`` values.
-
-    ``source`` is a free-text slug so plugin name providers can attribute
-    aliases to themselves (e.g. ``"google_places"``, ``"wikipedia"``) without
-    the model enumerating every provider. These constants cover the two
-    non-plugin origins.
-
-    * USER: A user-defined alias for the pin or location.
-    * OTHER: An alias whose external origin is unknown (e.g. backfilled data).
+    ``source`` is a free-text slug so plugin name providers can attribute aliases to themselves (e.g.
     """
 
     USER = "user"
@@ -59,12 +46,7 @@ class _AliasBase(abstract.DashboardModel):
         ordering = ["name"]
 
     def save(self, *args, **kwargs) -> None:
-        """Sanitize ``name`` to a strict character set before persisting it.
-
-        Single enforcement point for every alias creation path: the manual
-        add-alias controller, ``Pin``/``Wiki.save()``'s own alias sync, and
-        external name-provider syncs.
-        """
+        """Sanitize ``name`` to a strict character set before persisting it."""
         from urbanlens.dashboard.services.locations.naming import sanitize_name
 
         update_fields = kwargs.get("update_fields")

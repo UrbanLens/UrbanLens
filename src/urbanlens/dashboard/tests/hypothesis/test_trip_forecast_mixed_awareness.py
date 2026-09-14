@@ -1,20 +1,4 @@
-"""Trip activity/forecast matching across the providers' timezone shapes.
-
-`ForecastSlot.date` is the provider's own wall clock with no timezone
-contract (Open-Meteo's is local to the pin, OpenWeatherMap's is UTC, REData's
-is whatever its API emits), so two distinct behaviors are covered here:
-
-- **The crash guard** (`MixedAwarenessForecastTests`): a slot whose `date`
-  carries an offset must not raise
-  `TypeError: can't subtract offset-naive and offset-aware datetimes`
-  and 500 the trip page - both sides of the fallback wall-clock comparison
-  are forced naive.
-- **Offset-correct matching** (`UtcAnchoredSlotMatchingTests`): slots
-  carrying the aware-UTC `date_utc` (Open-Meteo anchors its local wall
-  clocks with the response's `utc_offset_seconds`) are compared against the
-  aware `scheduled_at` directly, so the chosen slot matches the activity's
-  UTC instant rather than being offset by the location's UTC offset.
-"""
+"""Trip activity/forecast matching across the providers' timezone shapes."""
 
 from __future__ import annotations
 
@@ -102,15 +86,9 @@ class UtcAnchoredSlotMatchingTests(TestCase):
             return _build_activity_forecasts([activity])
 
     def test_open_meteo_payload_matches_the_activitys_utc_instant(self) -> None:
-        """End-to-end through the Open-Meteo converter: `timezone=auto` gives
-        local wall clocks, and the response's non-zero `utc_offset_seconds`
-        (UTC-4 here, a US-Eastern summer offset) anchors them.
+        """End-to-end through the Open-Meteo converter: `timezone=auto` gives local wall clocks, and the response's non-zero `utc_offset_seconds` (UTC-4 here, a US-Eastern summer offset) anchors them.
 
-        The activity is at 15:00 UTC = 11:00 local. In UTC the 09:00-local
-        slot (13:00 UTC) is 2h away and the 18:00-local slot (22:00 UTC) is
-        7h away; by raw wall clock the gaps invert (6h vs 3h), so the
-        pre-`date_utc` comparison picked the wrong slot.
-        """
+        The activity is at 15:00 UTC = 11:00 local."""
         payload = {
             "utc_offset_seconds": -14400,
             "hourly": {

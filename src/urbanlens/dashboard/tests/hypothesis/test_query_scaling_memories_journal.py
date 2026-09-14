@@ -1,15 +1,4 @@
-"""The Journal page must not query per entry, or per page of them.
-
-From P69's survey. The page merged four unsliced querysets, and each rendered
-entry then cost two more queries: its title is ``Pin.effective_name``, which
-falls through to ``Location.display_name``, which reads the linked ``Wiki`` -
-and the sources selected only the pin. Thirty entries cost 65 queries.
-
-Two separate properties, so a regression in either is named:
-
-- the page renders one page whatever the account holds, and
-- the queries behind that page do not grow with it.
-"""
+"""The Journal page must not query per entry, or per page of them."""
 
 from __future__ import annotations
 

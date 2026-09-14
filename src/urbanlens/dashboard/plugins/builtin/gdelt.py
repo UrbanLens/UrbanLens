@@ -1,13 +1,5 @@
 """GDELT plugin: geocoded global news panel for pinned locations, via REData.
-
-REData's ``/search/news/`` already wraps GDELT's DOC 2.0 API (see
-``../REData/docs/api-reference.md``, "GET /search/news/ - news-article
-search") - there is no local fallback, so this panel is REData-only. One
-casualty of the move: REData's endpoint answers only the article list, not
-GDELT's separate ``tonechart`` sentiment histogram this panel used to show as
-a "coverage leans negative/positive" fact - that mode isn't part of REData's
-public contract, so the tone fact is dropped rather than reimplemented here.
-"""
+REData's ``/search/news/`` already wraps GDELT's DOC 2.0 API (see ``../REData/docs/api-reference.md``, "GET /search/news/ - news-article search") - there is no local fallback, so this panel is REData-only."""
 
 from __future__ import annotations
 
@@ -25,17 +17,11 @@ if TYPE_CHECKING:
 def _format_gdelt_date(raw: str | None) -> str:
     """Format GDELT's compact ``YYYYMMDDTHHMMSSZ`` ``seendate`` as ``YYYY-MM-DD``.
 
-    REData's normalized news-search results pass this field through
-    unparsed (see ``RedataSearchGateway.search_news``); UrbanLens's own,
-    now-retired GDELT gateway used to do this same reformatting locally.
-
     Args:
         raw: The raw ``date`` field from a REData news-search result.
 
     Returns:
-        A ``YYYY-MM-DD`` string, or ``"Undated"`` when ``raw`` is too short
-        to contain a date.
-    """
+        A ``YYYY-MM-DD`` string, or ``"Undated"`` when ``raw`` is too short to contain a date."""
     if not raw or len(raw) < 8:
         return "Undated"
     return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]}"
@@ -69,11 +55,8 @@ class GdeltPanelSource(InfoPanelSource):
         if not articles:
             return None
 
-        # ai_extract: news articles are real content pages about the place, so
-        # they offer the AI field-extraction button (see _simple_info_panel.html).
-        # GDELT has no real snippet, so REData puts the source domain there
-        # instead (see RedataSearchGateway.search_news) - used here as the
-        # title fallback, same as the old local gateway's "domain" field.
+        # ai_extract: news articles are real content pages about the place, so they offer the AI
+        # field-extraction button (see _simple_info_panel.html).
         meta = [{"label": _format_gdelt_date(article.get("date")), "value": article.get("title") or article.get("snippet") or "", "href": article.get("link") or "", "ai_extract": True} for article in articles[:8]]
         return {"meta": meta}
 

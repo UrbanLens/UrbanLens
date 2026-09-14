@@ -37,14 +37,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# The server still paginates in fixed-size batches, but the client slices each
-# batch further by actual rendered height (see the adaptive-pagination system
-# in pages/location/index.html, also used by the Web Search panel) - a batch
-# needs to be comfortably bigger than a typical visible page so the
-# height-measurer has real rows to count against, not just whatever the
-# server happened to hand back. Visit rows vary a lot in height (photos, a
-# map snapshot, a long note), more so than a search result, hence the wider
-# multiplier than Web Search's.
+# The server still paginates in fixed-size batches, but the client slices each batch further by actual rendered
+# height (see the adaptive-pagination system in pages/location/index.html, also used by the Web Search panel) -
+# a batch needs to be comfortably bigger than a typical visible page so the height-measurer has real rows to
+# count against, not just whatever the server happened to hand back.
 _VISITS_CLIENT_PAGE_SIZE = 6
 _VISITS_BATCH_MULTIPLIER = 3
 _VISITS_PAGE_SIZE = _VISITS_CLIENT_PAGE_SIZE * _VISITS_BATCH_MULTIPLIER
@@ -55,22 +51,20 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
 
     Args:
         pin: Pin the dialog operates on.
-        visit: The visit being edited, if any - its own photos stay in the
-            picker; photos attached to *other* visits are always excluded.
+        visit: The visit being edited, if any - its own photos stay in the picker; photos attached to
+        *other* visits are always excluded.
 
     Returns:
-        Context dict with ``pin``, the owner's ``pin_images`` (offered in the
-        existing-photo picker), and taggable ``connections``.
+        Context dict with ``pin``, the owner's ``pin_images`` (offered in the existing-photo picker),
+        and taggable ``connections``.
     """
-    # The pin owner's own photos already on this pin, offered in the visit
-    # dialog so they can attach existing gallery photos to the visit. Photos
-    # already documenting a different visit are not offered.
+    # The pin owner's own photos already on this pin, offered in the visit dialog so they can attach existing
+    # gallery photos to the visit. Photos already documenting a different visit are not offered.
     pin_images = Image.objects.filter(pin=pin, profile=pin.profile)
     pin_images = pin_images.filter(Q(visit__isnull=True) | Q(visit=visit)) if visit else pin_images.filter(visit__isnull=True)
     connections = get_connections(pin.profile)
-    # The participant picker shows each friend's avatar - a distinct fallback
-    # color per person (see assign_avatar_colors) keeps them visually
-    # distinguishable when several in a row have no uploaded photo.
+    # The participant picker shows each friend's avatar - a distinct fallback color per person (see
+    # assign_avatar_colors) keeps them visually distinguishable when several in a row have no uploaded photo.
     assign_avatar_colors(connections, identity=lambda p: p.slug or str(p.pk))
     return {
         "pin": pin,
@@ -82,33 +76,17 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
 def _visit_weather(visits: list[PinVisit]) -> dict[int, RecordedDay]:
     """What the weather actually was on the day of each visit, from cache.
 
-    **Reads only; never fetches.** This runs inside a page render, and a page
-    render must not block on an outbound call - a slow REData would hold up the
-    whole visit list for a decorative line of text, behind a spinner or not.
-    Missing days are queued instead (``tasks.fetch_recorded_weather``) and
-    appear on the next view, which is the same fetch-behind/render-from-cache
-    split every pin-detail panel already uses.
-
-    Grouped by ``Location``, because ``?children=1`` lists visits across a pin's
-    whole subtree and those are different places. Days are handed over as a
-    *set*, not a range: a page of visits to one ruin can span decades, and the
-    range form would fetch and cache every day in between to display ten (see
-    ``visit_weather.recorded_days``).
-
-    No guard for a missing location or date: ``PinVisit.visited_at``,
-    ``PinVisit.pin`` and ``Pin.location`` are all non-null, and
-    ``Location.latitude``/``longitude`` are too - a Location with no
-    coordinates cannot be stored, and an existing one's coordinates are frozen
-    by a database trigger. Writing the check anyway would read as a real
-    possibility to the next person and could never be exercised by a test.
+    **Reads only; never fetches.** This runs inside a page render, and a page render must not block on
+    an outbound call - a slow REData would hold up the whole visit list for a decorative line of text,
+    behind a spinner or not.
 
     Args:
         visits: The page's visits, each with ``pin__location`` selected.
 
     Returns:
         ``{visit.pk: RecordedDay}`` for the days already cached, omitting the
-        rest. A day inside ERA5's publication lag is never queued: it is not
-        missing, it is unanswerable until it is published.
+        rest. A day inside ERA5's publication lag is never queued: it is not missing, it is unanswerable
+        until it is published.
     """
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.locations.visit_weather import missing_days, recorded_days
@@ -135,13 +113,11 @@ def _visit_weather(visits: list[PinVisit]) -> dict[int, RecordedDay]:
 def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     """Render the visit history panel for a pin, paginated newest-first.
 
-    With ``?children=1`` (the pin page's "show child pin details" toggle) the
-    panel also lists visits logged on the pin's child pins (any depth), each
-    labelled with the child pin it belongs to.
+    With ``?children=1`` (the pin page's "show child pin details" toggle) the panel also lists visits
+    logged on the pin's child pins (any depth), each labelled with the child pin it belongs to.
 
     Args:
-        request: Incoming HTTP request (read for optional ``page`` and
-            ``children`` params).
+        request: Incoming HTTP request (read for optional ``page`` and ``children`` params).
         pin: Pin whose visit history should be rendered.
 
     Returns:
@@ -187,16 +163,12 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
 
     Handles both the create and edit flows:
 
-    - New files (POST ``photos``) are created as ``Image`` rows tied to the pin,
-      its location, the owner, and this visit, then queued for EXIF processing.
-      A file the owner already uploaded to this pin (same checksum) is not
-      duplicated - the existing photo is attached to this visit instead.
-    - Selected existing photos (POST ``existing_photo_ids``) - already in the pin
-      gallery - have their ``visit`` FK pointed at this visit. Photos already
-      documenting a different visit are never reassigned.
-    - Any gallery photo previously attached to this visit but no longer selected
-      is detached (its ``visit`` FK is cleared). Freshly uploaded photos are
-      never detached. Only the owner's own photos are ever touched.
+    - New files (POST ``photos``) are created as ``Image`` rows tied to the pin, its location, the
+      owner, and this visit, then queued for EXIF processing. A file t...
+    - Selected existing photos (POST ``existing_photo_ids``) - already in the pin gallery - have their
+      ``visit`` FK pointed at this visit. Photos already documenti...
+    - Any gallery photo previously attached to this visit but no longer selected is detached (its
+      ``visit`` FK is cleared). Freshly uploaded photos are never detac...
 
     Args:
         request: Incoming request carrying the files and selected ids.
@@ -204,8 +176,7 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
         visit: The visit to reconcile photos for.
 
     Returns:
-        True if any brand-new file was uploaded (so callers can refresh the
-        gallery), False otherwise.
+        True if any brand-new file was uploaded (so callers can refresh the gallery), False otherwise.
     """
     from django.contrib import messages
 
@@ -219,18 +190,17 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
 
     uploaded_pks: list[int] = []
     reattached_pks: list[int] = []
-    # One lock for the whole multi-file batch: quota is rechecked per file below (each
-    # upload counts against the running total), and the lock also protects against a
-    # concurrent upload elsewhere (another tab, the gallery page) racing this same profile.
+    # One lock for the whole multi-file batch: quota is rechecked per file below (each upload counts against the
+    # running total), and the lock also protects against a concurrent upload elsewhere (another tab, the gallery
+    # page) racing this same profile.
     with per_profile_upload_lock(pin.profile):
         for image_file in request.FILES.getlist("photos"):
             # Scanned asynchronously instead: prepare_photo_upload below marks the row
             # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
             upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
             if upload_error:
-                # Same "skip this file, keep processing the rest" treatment as the
-                # quota-exceeded case below - one bad file in a multi-file visit
-                # upload shouldn't block the others.
+                # Same "skip this file, keep processing the rest" treatment as the quota-exceeded case below -
+                # one bad file in a multi-file visit upload shouldn't block the others.
                 message, _status = upload_error
                 messages.warning(request, message)
                 continue
@@ -278,8 +248,7 @@ def _parse_visited_at(request: HttpRequest) -> datetime | None:
     """Build a timezone-aware ``visited_at`` from the POST date/time fields.
 
     Args:
-        request: Request carrying ``visited_date`` (required) and optional
-            ``visited_time``.
+        request: Request carrying ``visited_date`` (required) and optional ``visited_time``.
 
     Returns:
         The parsed datetime, or None if the date is missing or malformed.
@@ -334,11 +303,7 @@ class VisitHistoryView(LoginRequiredMixin, View):
         """Create a new manual visit entry and return the updated panel.
 
         Args:
-            request: Incoming HTTP request. POST body must include
-                ``visited_date`` and optionally ``visited_time``, ``notes``,
-                ``participant_ids``, ``map_data`` (a Leaflet snapshot),
-                ``photos`` (newly uploaded files), and ``existing_photo_ids``
-                (ids of gallery photos to link to this visit).
+            request: Incoming HTTP request.
             pin_slug: Primary key of the target pin.
 
         Returns:
@@ -355,9 +320,8 @@ class VisitHistoryView(LoginRequiredMixin, View):
 
         notes = request.POST.get("notes", "").strip() or None
         map_data = parse_map_data(request)
-        # The tracking gate is re-checked inside create_manual_visit; the
-        # explicit check above stays so a disabled-logging request is refused
-        # before the date is even parsed (403 rather than a confusing 400).
+        # The tracking gate is re-checked inside create_manual_visit; the explicit check above stays so a
+        # disabled-logging request is refused before the date is even parsed (403 rather than a confusing 400).
         try:
             visit = create_manual_visit(
                 pin,
@@ -437,9 +401,9 @@ class VisitEditView(LoginRequiredMixin, View):
                 **_visit_dialog_context(pin, visit=visit),
                 "visit": visit,
                 "dialog_id": f"visit-edit-dialog-{pin.slug}",
-                # Unused when editing (the date field is prefilled from visit.visited_at
-                # instead) but the template's default filter resolves this argument
-                # unconditionally, so it must always be present in context.
+                # Unused when editing (the date field is prefilled from visit.visited_at instead) but the
+                # template's default filter resolves this argument unconditionally, so it must always be present
+                # in context.
                 "default_date": "",
             },
         )
@@ -448,9 +412,8 @@ class VisitEditView(LoginRequiredMixin, View):
         """Apply edits to an existing visit and return the updated panel.
 
         Args:
-            request: Incoming HTTP request carrying the same fields as the add
-                form (``visited_date``, ``visited_time``, ``notes``, ``map_data``,
-                ``photos``, ``existing_photo_ids``, ``participant_ids``).
+            request: Incoming HTTP request carrying the same fields as the add form (``visited_date``,
+            ``visited_time``, ``notes``, ``map_data``, ``photos``,...
             pin_slug: Slug of the pin the visit belongs to.
             visit_id: Primary key of the visit to edit.
 
@@ -467,9 +430,9 @@ class VisitEditView(LoginRequiredMixin, View):
         visit.visited_at = visited_at
         visit.notes = request.POST.get("notes", "").strip() or None
         visit.markup_map = materialize_markup_map(pin.profile, parse_map_data(request), existing_map=visit.markup_map, context=pin)
-        # `update_fields`, not a bare save: `PinVisit` is written by twelve
-        # modules, one of which re-points `pin` wholesale during a pin merge
-        # (`pin_merge`), and a whole-row write from this instance would undo it.
+        # `update_fields`, not a bare save: `PinVisit` is written by twelve modules, one of which re-points
+        # `pin` wholesale during a pin merge (`pin_merge`), and a whole-row write from this instance would undo
+        # it.
         visit.save(update_fields=["visited_at", "notes", "markup_map", "updated"])
         sync_last_visited(pin)
 

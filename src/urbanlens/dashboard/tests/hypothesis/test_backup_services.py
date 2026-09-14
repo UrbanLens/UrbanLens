@@ -28,12 +28,6 @@ def _touch(path: Path, when: datetime, size: int = 1) -> None:
     os.utime(path, (timestamp, timestamp))
 
 
-# ``backup_files`` counts only files matching DatabaseBackup's own
-# ``backup_<YYYYMMDD>_<HHMMSS>.sql`` scheme, so a stray file can never inflate
-# admin-facing stats or be mistaken for a completed backup (see
-# core.controllers.backups.db.BACKUP_FILENAME_RE). Fixtures must therefore use
-# real backup names - these tests previously used "old.sql"/"a.sql" and so
-# asserted against a directory the helper correctly saw as empty.
 def _backup_name(when: datetime) -> str:
     """A filename in DatabaseBackup's own naming scheme for ``when``."""
     return f"backup_{when:%Y%m%d_%H%M%S}.sql"
@@ -209,13 +203,9 @@ class CollectBackupStatsTests(SimpleTestCase):
 class DefaultSiteSettingsTests(TestCase):
     """Both helpers resolve the live ``SiteSettings`` singleton when none is passed in.
 
-    Every production caller (the site-admin view, the scheduled-backup Celery task, and
-    ``DatabaseBackup`` itself - see ``core.controllers.backups.db`` and ``dashboard.tasks``)
-    omits the ``site_settings`` argument entirely. The tests above only ever exercise the
-    explicit-argument branch via ``_SiteSettings``; nothing else in the suite calls either
-    helper with zero arguments, so the ``site_settings is None`` -> ``SiteSettings.get_current()``
-    branch itself - and a real toggle of the row it reads - needs its own coverage here.
-    """
+    Every production caller (the site-admin view, the scheduled-backup Celery task, and ``DatabaseBackup``
+    itself - see ``core.controllers.backups.db`` and ``dashboard.tasks``) omits the ``site_settings`` argument
+    entirely."""
 
     def setUp(self) -> None:
         super().setUp()

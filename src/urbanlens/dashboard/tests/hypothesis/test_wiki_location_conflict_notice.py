@@ -1,16 +1,4 @@
-"""The wiki page's "other property" conflict notice.
-
-This notice used to list every Location whose boundary covered the viewer's
-pin - which, on a property with imported buildings, meant every building on it,
-none of which was a competing answer. Since resolution onto a single ``Place``,
-the list holds only genuinely competing properties (two unrelated parcels whose
-county geometry overlaps), and ``services.places.ambiguity`` filters those to
-domains the viewer can already reach.
-
-That filter is what makes linking the candidates safe. Before it, a name here
-had to render as inert text: a wiki page 404s for anyone without access, and
-the whole premise of the notice was that the viewer wasn't there yet.
-"""
+"""The wiki page's "other property" conflict notice."""
 
 from __future__ import annotations
 
@@ -41,13 +29,6 @@ class WikiLocationConflictNoticeTests(SimpleTestCase):
                 "other_locations": other_locations,
                 "user_pin": user_pin,
                 "location": location,
-                # wiki.html's add-link dialog and About card both reference
-                # `wiki.location.slug` unconditionally (outside any {% if %}
-                # guard) to build a reverse-url argument, which raises
-                # NoReverseMatch if `wiki` is missing from context - unlike a
-                # bare undefined variable, which Django resolves to "" and
-                # renders silently. The real view always supplies a genuine
-                # Wiki here (you can't view a wiki page without one existing).
                 "wiki": types.SimpleNamespace(location=location),
             },
         )

@@ -57,12 +57,10 @@ def _resolve_next_view_name(name: str | None) -> str:
 def _next_url(next_name: str) -> str:
     """The actual redirect target for an already-resolved next-view name.
 
-    ``settings.view`` specifically returns to its Connections tab (matching
-    every other integration's connect/callback flow - see flickr.py,
-    google_photos.py) rather than the bare settings URL, which would
-    silently leave the default Privacy tab active: settings/index.html's
-    ``activateFromHash()`` only switches tabs when the URL carries a
-    ``#...`` fragment.
+    ``settings.view`` specifically returns to its Connections tab (matching every other integration's
+    connect/callback flow - see flickr.py, google_photos.py) rather than the bare settings URL, which
+    would silently leave the default Privacy tab active: settings/index.html's ``activateFromHash()``
+    only switches tabs when the URL carries a ``#...`` fragment.
     """
     if next_name == "settings.view":
         return f"{reverse('settings.view')}#google-calendar-settings-section"
@@ -89,8 +87,7 @@ def calendar_context(profile: Profile, trip=None) -> dict:
         trip: Optional trip, to include that trip's export link for this user.
 
     Returns:
-        Dict with ``calendar_account`` and (when a trip is given)
-        ``calendar_link`` keys.
+        Dict with ``calendar_account`` and (when a trip is given) ``calendar_link`` keys.
     """
     account = GoogleCalendarAccount.objects.get_for_profile(profile)
     context: dict = {"calendar_account": account}
@@ -101,23 +98,17 @@ def calendar_context(profile: Profile, trip=None) -> dict:
 
 _RECONNECT_MESSAGE = "Your Google Calendar connection has expired. Please reconnect below to keep importing and exporting."
 
-#: GatewayRequestError is shared across every gateway integration
-#: (Calendar, Flickr, Immich, REData, ...); some of them build its message
-#: from an upstream response's own error text, which is not safe to return
-#: verbatim to a caller. Never surface it - log it and answer with this
-#: fixed message instead.
+#: GatewayRequestError is shared across every gateway integration (Calendar, Flickr, Immich, REData, ...); some
+#: of them build its message from an upstream response's own error text, which is not safe to return verbatim to
+#: a caller. Never surface it - log it and answer with this fixed message instead.
 _GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try again shortly."
 
 
 def _drop_expired_account(account: GoogleCalendarAccount) -> None:
     """Delete a connection Google has already rejected.
 
-    Called when a gateway call raises ``GoogleAuthExpiredError`` - the stored
-    tokens are dead, so keeping the row around would just repeat the same
-    failure on every next attempt. No revoke call is made: an already-invalid
-    token has nothing left to revoke. Deleting it also makes every template
-    that branches on ``calendar_account``/``account`` fall back to its
-    existing "not connected" state, which already offers a reconnect link.
+    Called when a gateway call raises ``GoogleAuthExpiredError`` - the stored tokens are dead, so
+    keeping the row around would just repeat the same failure on every next attempt.
 
     Args:
         account: The connection to discard.
@@ -227,10 +218,9 @@ class GoogleCalendarSettingsSectionView(LoginRequiredMixin, View):
 class GoogleCalendarSettingsDisconnectView(LoginRequiredMixin, View):
     """POST /settings/google-calendar/disconnect/ - disconnect and re-render the settings subsection.
 
-    Separate from ``GoogleCalendarDisconnectView`` because that view always
-    issues an ``HX-Redirect`` to the trips list (matching where its only other
-    caller - the calendar import dialog - lives); redirecting away would be a
-    jarring way to leave the Settings page after clicking "Disconnect" here.
+    Separate from ``GoogleCalendarDisconnectView`` because that view always issues an ``HX-Redirect`` to
+    the trips list (matching where its only other caller - the calendar import dialog - lives);
+    redirecting away would be a jarring way to leave the Settings page after clicking "Disconnect" here.
     """
 
     def post(self, request):
@@ -330,9 +320,10 @@ class CalendarImportView(LoginRequiredMixin, View):
 class CalendarImportPreviewView(LoginRequiredMixin, View):
     """Second page of the import dialog: review trips, activities, and invitations.
 
-    POST /trips/calendar/import/preview/  → render the review step for the
-    events selected on page one. Nothing is created here - the user can still
-    uncheck activities and participants before confirming.
+    POST /trips/calendar/import/preview/ → render the review step for the
+
+    events selected on page one.
+    Nothing is created here - the user can still uncheck activities and participants before confirming.
     """
 
     def post(self, request):
@@ -370,8 +361,9 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
 class TripCalendarExportView(LoginRequiredMixin, View):
     """Export a trip to (or remove it from) the user's own Google Calendar.
 
-    POST   /trips/<slug>/calendar/export/  → create/update the event
-    DELETE /trips/<slug>/calendar/export/  → delete the event
+    POST /trips/<slug>/calendar/export/ → create/update the event
+    DELETE /trips/<slug>/calendar/export/ → delete the event
+
     Both re-render the trip's calendar-button partial.
     """
 
@@ -455,9 +447,9 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 class TripCalendarAutoSyncView(LoginRequiredMixin, View):
     """Toggle whether an already-exported trip keeps pushing future edits to its calendar event.
 
-    POST /trips/<slug>/calendar/auto-sync/  → flip TripCalendarLink.auto_sync for the
-    viewing profile's export link. Does not touch the calendar itself - it only
-    changes whether *later* saves trigger a push. Re-renders the calendar button.
+    POST /trips/<slug>/calendar/auto-sync/ → flip TripCalendarLink.auto_sync for the
+
+    Does not touch the calendar itself - it only changes whether *later* saves trigger a push.
     """
 
     def post(self, request, trip_slug):

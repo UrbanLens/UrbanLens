@@ -1,17 +1,4 @@
-"""Regression tests for the pin detail Media gallery's DRF-routed endpoints.
-
-Both bugs covered here only reproduce through the full URL-routing +
-CSRF-enforcement stack, not through calling the view function directly:
-
-- ``set_media_sort``/``media_relevance`` used ``json.loads(request.body)``.
-  ``SessionAuthentication.enforce_csrf`` reads ``request.POST`` (via DRF's
-  ``Request`` wrapper) before the view runs, which consumes the underlying
-  WSGI stream without caching ``request.body``, so the manual re-read raised
-  ``RawPostDataException`` -> 500 (see pin.py).
-- ``media/relevance/`` and ``media/send-to-wiki/`` were declared *after* the
-  catch-all ``<slug:pin_slug>/media/<str:source>/`` route in urls.py, so
-  Django matched the catch-all first and POST to those URLs 405'd.
-"""
+"""Regression tests for the pin detail Media gallery's DRF-routed endpoints."""
 
 from __future__ import annotations
 

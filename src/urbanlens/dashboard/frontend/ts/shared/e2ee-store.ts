@@ -1,12 +1,5 @@
 /**
  * IndexedDB cache for decrypted E2EE key material.
- *
- * After a successful unlock (login-derived wrap key, or recovery key), the
- * decrypted identity private key and any unsealed conversation keys are
- * cached here so day-to-day use never prompts for anything. Entries are keyed
- * by profile slug so two accounts sharing a browser can't read each other's
- * cache rows by accident (same-origin storage is the trust boundary either
- * way - this is bookkeeping, not isolation).
  */
 
 const DB_NAME = "urbanlens-e2ee";
@@ -98,14 +91,6 @@ function conversationKeyKey(selfSlug: string, partnerSlug: string, version: numb
 
 /**
  * Ask the browser to exempt this origin's storage from automatic eviction.
- *
- * Best-effort and deliberately un-awaited by callers' critical paths: browsers
- * either grant it silently (Chromium/Firefox weigh engagement and installed
- * state) or ignore it entirely (Safari, which evicts on its own 7-day
- * inactivity schedule regardless). It matters most for OAuth-only accounts,
- * whose cached identity is the ONLY unlock path that costs the user nothing -
- * eviction there means falling back to a recovery key they may not have kept,
- * since an SSO signin has no password from which to re-derive the wrap key.
  */
 async function requestPersistentStorage(): Promise<void> {
     try {
@@ -168,25 +153,9 @@ export async function getGroupKey(selfSlug: string, groupUuid: string, version: 
 
 /**
  * Wipe every cached key for a profile.
- *
- * Called from two places: the key-reset flow, and `wireSignOutForm` (see
- * `e2ee-client.ts`), which races it against a 1.5s timeout before letting an
- * explicit sign-out submit. P48 (`docs/archive/PROBLEMS-ARCHIVE.md`,
- * resolved 2026-09-05) is the reason sign-out clears keys at all - answered
- * "yes, an explicit sign-out should discard decrypted keys": a shared or
- * borrowed machine expects it, and re-entering a recovery key on your own
- * laptop is the smaller cost. This function does not decide that policy, it
- * just performs the wipe either caller asks for.
- *
- * This used to say "logout-everywhere / key reset". There is no
- * logout-everywhere feature anywhere in this codebase, which made the sentence
- * read as though logout already cleared these.
  */
 export async function clearProfileKeys(selfSlug: string): Promise<void> {
-    // Deleted by exact key, not by prefix: "identity:jess" is a prefix of
-    // "identity:jess2", so resetting one account would evict a second account
-    // that shares the browser and silently lock it. The conv:/group: prefixes
-    // are safe because the slug there is followed by a ":" terminator.
+    // Deleted by exact key, not by prefix: "identity:jess" is a prefix of "identity:jess2", so resetting one account would evict a second.
     await remove(identityKey(selfSlug));
     await removeByPrefix(`conv:${selfSlug}:`);
     await removeByPrefix(`group:${selfSlug}:`);

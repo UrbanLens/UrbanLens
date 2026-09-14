@@ -1,15 +1,5 @@
 """Access-scoped resolution of custom-field reference targets.
-
-Reference-type custom fields (``CustomFieldType.REFERENCE``) point at one of the
-user's own or visible objects: a pin, wiki, markup map, trip, uploaded photo,
-pin list, or another user's profile. Everything here enforces the access rules
-from the feature request - a user can only reference what they can already see:
-
-- pins, photos, markup maps, and lists: only their own
-- wikis: only wikis on locations they have pinned
-- trips: only trips they are a member of
-- profiles: only profiles whose identity they may view (picker offers friends)
-"""
+Everything here enforces the access rules from the feature request - a user can only reference what they can already see:"""
 
 from __future__ import annotations
 
@@ -52,8 +42,7 @@ def referenceable_queryset(kind: str, profile: Profile) -> QuerySet:
         An access-scoped queryset of candidate targets.
 
     Raises:
-        ValueError: For an unknown kind.
-    """
+        ValueError: For an unknown kind."""
     from urbanlens.dashboard.models.friendship.model import Friendship
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -67,12 +56,10 @@ def referenceable_queryset(kind: str, profile: Profile) -> QuerySet:
     if kind == "pin":
         return Pin.objects.filter(profile=profile).select_related("location")
     if kind == "wiki":
-        # location__pins__profile=profile alone missed boundary-mate wikis -
-        # a pin can sit on the same real-world place as an existing wiki but
-        # at a different Location row (nearly-identical coordinates can
-        # resolve to distinct rows) - see visible_wiki_location_ids, the same
-        # boundary-matching wiki_access.location_visible_to already uses for
-        # whether a wiki page itself is reachable at all.
+        # location__pins__profile=profile alone missed boundary-mate wikis - a pin can sit on the
+        # same real-world place as an existing wiki but at a different Location row
+        # (nearly-identical coordinates can resolve to distinct rows) - see
+        # visible_wiki_location_ids, the same boundary-matching wiki_access.location_visible_to
         return Wiki.objects.filter(location_id__in=visible_wiki_location_ids(profile)).select_related("location")
     if kind == "markup_map":
         return MarkupMap.objects.filter(profile=profile)
@@ -98,9 +85,7 @@ def resolve_reference(kind: str, pk: Any, profile: Profile) -> Any | None:
         profile: The referencing user.
 
     Returns:
-        The target instance, or None when it doesn't exist, isn't an int pk,
-        or the profile may not reference it.
-    """
+        The target instance, or None when it doesn't exist, isn't an int pk, or the profile may not reference it."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
     try:
@@ -173,13 +158,10 @@ def reference_choices(kind: str, profile: Profile, *, include_pk: int | None = N
     Args:
         kind: A :data:`REFERENCE_KINDS` value.
         profile: The referencing user.
-        include_pk: A pk to force into the list (the currently stored value)
-            even when it falls outside the cap.
+        include_pk: A pk to force into the list (the currently stored value) even when it falls outside the cap.
 
     Returns:
-        Up to :data:`MAX_REFERENCE_CHOICES` (pk, label) tuples sorted by label,
-        or an empty list for an unknown kind.
-    """
+        Up to :data:`MAX_REFERENCE_CHOICES` (pk, label) tuples sorted by label, or an empty list for an unknown kind."""
     try:
         candidates = referenceable_queryset(kind, profile)[: MAX_REFERENCE_CHOICES + 1]
     except ValueError:

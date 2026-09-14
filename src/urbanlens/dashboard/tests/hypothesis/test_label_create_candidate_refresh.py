@@ -1,13 +1,4 @@
-"""Regression coverage for the Organize page's "create label" dialog.
-
-Creating a label used to leave the still-open dialog's parent/child picker
-showing only the candidates that existed at page load - a second label
-created in the same session never appeared as a pickable parent/child until
-the page was refreshed. ``LabelCreateView`` now appends OOB suggestion
-buttons for the freshly-created label into that dialog's picker, keyed to
-its ``new-<ns>`` instance id (see ``organize.py``'s ``_KindConfig.select_data_name``
-and ``dashboard/partials/ui/_label_rel_new_candidate_oob.html``).
-"""
+"""Regression coverage for the Organize page's "create label" dialog."""
 
 from __future__ import annotations
 

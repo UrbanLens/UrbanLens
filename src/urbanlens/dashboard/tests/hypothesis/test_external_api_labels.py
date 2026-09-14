@@ -1,15 +1,4 @@
-"""Tests for the external API's label surface.
-
-Beyond the usual scope/isolation/pagination checks, two rules here are the
-whole point of the endpoint's design and are asserted explicitly:
-
-- a global label can be *read* and *customized* by anyone, but never edited,
-  deleted, or consumed by a merge - it is shared by every user on the site;
-- the labels list must be built with ``.with_customizations_for(profile)``, or
-  the ``effective_*`` fields silently serialize the wrong values rather than
-  failing (``Label._get_customization`` falls back to "no customization" when
-  the prefetch is absent).
-"""
+"""Tests for the external API's label surface."""
 
 from __future__ import annotations
 
@@ -29,12 +18,7 @@ from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 _BASE = "/dashboard/api/external/v1/labels/"
 
-#: Distinctive token embedded in every fixture label's name. The database ships
-#: with a couple of dozen seeded *global* labels ("Asylum", "Demolished",
-#: "Visited", ...), which are legitimately visible to every user and would
-#: otherwise both pollute these assertions and fill the first page. Collection
-#: tests therefore filter with ``?q=<token>`` and assert against that slice,
-#: rather than pretending the label table starts empty.
+#: Distinctive token embedded in every fixture label's name.
 _TOKEN = "Zqafixture"
 
 

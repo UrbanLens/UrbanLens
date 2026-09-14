@@ -1,9 +1,5 @@
 """Bulk-copy a PinList's pins into a Trip's activities.
-
-Used by both "Create a trip" (new trip) and "Add to trip" (existing trip).
-This is always a one-time copy - a list's smart-filter membership changes
-never propagate to a trip after the copy runs.
-"""
+This is always a one-time copy - a list's smart-filter membership changes never propagate to a trip after the copy runs."""
 
 from __future__ import annotations
 
@@ -20,13 +16,11 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
 
     Args:
         pin_list: Source list, copied in its current display order.
-        trip: Destination trip; new activities are appended after whatever
-            activities it already has.
+        trip: Destination trip; new activities are appended after whatever activities it already has.
         added_by: Profile recorded as the activities' creator.
 
     Returns:
-        Number of activities created.
-    """
+        Number of activities created."""
     from urbanlens.dashboard.models.trips.model import TripActivity
     from urbanlens.dashboard.models.trips.signals import queue_calendar_push
     from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares
@@ -52,10 +46,9 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
     for activity in activities:
         record_trip_activity_shares(activity)
 
-    # bulk_create fires no post_save, so sync_trip_on_activity_save never runs and
-    # a list copied into an auto-synced trip never reached the user's calendar.
-    # Queued once for the trip rather than per activity - the push sends the whole
-    # trip anyway.
+    # bulk_create fires no post_save, so sync_trip_on_activity_save never runs and a list copied
+    # into an auto-synced trip never reached the user's calendar.
+    # Queued once for the trip rather than per activity - the push sends the whole trip anyway.
     if activities:
         queue_calendar_push(trip.pk)
     return len(items)

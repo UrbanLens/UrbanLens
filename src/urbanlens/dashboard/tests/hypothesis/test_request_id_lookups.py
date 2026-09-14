@@ -1,18 +1,4 @@
-"""A row id taken from a request must not reach `filter(pk=...)` unparsed.
-
-`Model.objects.filter(pk="abc")` raises `ValueError: Field 'id' expected a number
-but got 'abc'`, and `pk=""` raises the same - only `pk=None` degrades to a
-zero-row `IS NULL` lookup. Every site below already had an "it did not resolve"
-branch on the next line, so a malformed id was meant to be a no-op; instead it
-was a 500.
-
-Found via P85: mypy reports these as `Incompatible type for lookup 'pk'`, and
-`[tool.mypy]`'s `disable_error_code = ['misc']` was switching that off. It only
-sees the ones reached through a typed path at all, which is why the two
-`userprofile` sites here - reached through a related manager - are not in its
-list despite carrying the same defect in a worse form: their `.get(..., "")`
-default makes the crash the *default* behaviour of an omitted field.
-"""
+"""A row id taken from a request must not reach `filter(pk=...)` unparsed."""
 
 from __future__ import annotations
 
@@ -23,12 +9,9 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 
-#: Values a form field can carry that `int()` refuses. "" is what
-#: `request.POST.get(name, "")` yields for a field the client omitted, so it is
-#: not a hostile input so much as the ordinary one. Note what is *not* here:
-#: `int("\u0663")` is 3 and `int(" 5 ")` is 5 - Python accepts any Unicode
-#: decimal digit and surrounding space, so neither is a malformed id, and using
-#: one as a fixture would silently address whichever row holds that pk.
+#: Values a form field can carry that `int()` refuses.
+#: "" is what `request.POST.get(name, "")` yields for a field the client omitted, so it is not a hostile input
+#: so much as the ordinary one.
 MALFORMED_IDS = ["", "abc", "12abc", "1;2", "5.0", "0x3"]
 
 

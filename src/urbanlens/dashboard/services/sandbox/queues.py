@@ -79,16 +79,9 @@ class Queue(StrEnum):
             container: these are rare, and a third container would cost
             connections and memory without buying an invariant.
         PANEL_FETCH: External-data panel fetches for the Private Pin page.
-        SANDBOX: Interactive parsing of untrusted user-supplied bytes - image
-            decode, video transcode, document conversion. Drained by
-            ``media-worker``, which has no route to the internet.
-        SANDBOX_BATCH: Long-running untrusted-parse batch jobs - archive walks,
-            data imports. Same isolation as :attr:`SANDBOX`, its own worker, so
-            an hour-long import never queues in front of a photo upload.
-        AI: The assistant's tool loop, drained by ``ai-worker``. No REData,
-            OAuth or provider credentials in that container - model calls go
-            out over HTTP to ``ai-inference``. See ``ai_queue()``.
-    """
+        SANDBOX: Interactive parsing of untrusted user-supplied bytes - image decode, video transcode, document conversion.
+        SANDBOX_BATCH: Long-running untrusted-parse batch jobs - archive walks, data imports.
+        AI: The assistant's tool loop, drained by ``ai-worker``."""
 
     DEFAULT = "celery"
     INTERACTIVE = "interactive"
@@ -102,21 +95,13 @@ class Queue(StrEnum):
 
 def sandbox_queue(*, batch: bool = False) -> str:
     """The queue untrusted-parse tasks should be routed to.
-
-    Read once per task definition, at import time, so it appears in the task's
-    own exec options rather than at each call site.
+    Read once per task definition, at import time, so it appears in the task's own exec options rather than at each call site.
 
     Args:
-        batch: True for a task that runs for minutes rather than for a moment -
-            it goes to :attr:`Queue.SANDBOX_BATCH` so it cannot occupy the
-            interactive pool. Same isolation either way.
+        batch: True for a task that runs for minutes rather than for a moment - it goes to :attr:`Queue.SANDBOX_BATCH` so it cannot occupy the interactive pool.
 
     Returns:
-        The matching sandbox queue when a sandbox worker is deployed, else
-        :attr:`Queue.DEFAULT` - an install with no ``media-worker`` container
-        keeps processing uploads on the ordinary worker instead of enqueuing
-        into a queue that nothing drains.
-    """
+        The matching sandbox queue when a sandbox worker is deployed, else :attr:`Queue.DEFAULT` - an install with no ``media-worker`` container keeps processing uploads on the ordinary worker instead of enqueuing into a queue that nothing drains."""
     from django.conf import settings
 
     if not getattr(settings, "UL_SANDBOX_ENABLED", False):
@@ -126,18 +111,8 @@ def sandbox_queue(*, batch: bool = False) -> str:
 
 def ai_queue() -> str:
     """The queue the assistant's tool-loop task should be routed to.
-
-    Read once per task definition, at import time, so it appears in the
-    task's own exec options rather than at each call site - matching
-    :func:`sandbox_queue`.
-
-    Unlike :func:`sandbox_queue`, this never falls back to
-    :attr:`Queue.DEFAULT`. Whether the assistant is reachable at all is
-    decided earlier, by ``services/ai/access.py:assistant_available()``
-    (which checks ``UL_AI_WORKER_ENABLED``) - a task should never be
-    enqueued in the first place if no worker drains :attr:`Queue.AI`.
+    Read once per task definition, at import time, so it appears in the task's own exec options rather than at each call site - matching :func:`sandbox_queue`.
 
     Returns:
-        :attr:`Queue.AI`, always.
-    """
+        :attr:`Queue.AI`, always."""
     return Queue.AI

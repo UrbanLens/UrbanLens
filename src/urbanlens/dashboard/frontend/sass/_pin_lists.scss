@@ -276,10 +276,7 @@
     min-width: 180px;
     @include surface($radius: 10px, $rung: null);
     box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
-    // Above the map's own controls/toolbar (z-index 1000, see .map-buttons /
-    // .map-layers-panel) - this menu sits earlier in the DOM than the map
-    // section but must still render on top of it when both occupy the same
-    // area of the page.
+    // Above the map's own controls/toolbar (z-index 1000, see.map-buttons /.map-layers-panel).
     z-index: 1200;
     padding: .35rem;
     display: flex;
@@ -537,12 +534,7 @@
 
 // -- Add pins / add to trip dialogs --------------------------------------
 
-// The location-search suggestions dropdown is absolutely positioned against
-// .addr-search-bar and can grow taller than the dialog's remaining content
-// height; .ul-dialog-body's overflow-y:auto (and the <dialog> root's own
-// overflow:hidden, for its rounded corners) would otherwise clip it. This
-// dialog's content is short and never needs to scroll, so it's safe to drop
-// both clips here.
+// The location-search suggestions dropdown is absolutely positioned against.addr-search-bar and can grow taller than the dialog's.
 #add-pins-dialog {
     &[open] { overflow: visible; }
 
@@ -645,9 +637,7 @@
     flex-direction: column;
     gap: 1rem;
 
-    // The gap above only spaces the warning banner and <form> apart - the form's
-    // own direct children (each .form-row, the score/date/label grids, etc.) need
-    // their own gap so sections don't render crammed against one another.
+    // The gap above only spaces the warning banner and <form> apart.
     > form {
         display: flex;
         flex-direction: column;
@@ -666,12 +656,7 @@
     }
 }
 
-// The rich label picker reuses the main map filter sidebar's fp-* components
-// (see _map.scss) wholesale, so include/exclude columns, chip dragging, the
-// AND/OR toggle, and the formula bar look and behave identically here. Only
-// the available-label list needs a height cap: the sidebar scrolls as a
-// whole, but inside the dialog/detail card a large label collection would
-// otherwise stretch the form.
+// The rich label picker reuses the main map filter sidebar's fp-* components wholesale, so include/exclude columns, chip dragging,.
 .sf-rich-label-picker {
     display: flex;
     flex-direction: column;
@@ -723,17 +708,7 @@
     }
 }
 
-// The form column can grow very tall (score/date grids, region map, label
-// lists, custom fields, visits...) - it used to be capped at `100vh` with its
-// own overflow-y: auto so its height wouldn't drive the whole page-content
-// grid's height. That gave it a second, independent scrollbar stacked on top
-// of the page's own scrollbar (and the 100vh cap didn't even account for the
-// header/hero/subnav space already consumed above it, so the page still
-// ended up taller than the viewport anyway) - removed in favor of just
-// letting this column flow naturally and scroll with the rest of the page,
-// same as every other page on the site. The map column beside it keeps its
-// own `position: sticky` (see .saved-filter-detail-map-col below), which
-// works the same regardless of whether this column has its own overflow.
+// The form column can grow very tall (score/date grids, region map, label lists, custom fields, visits...).
 .saved-filter-detail-form-col {
     @include up($breakpoint-lg) {
         padding-right: .25rem;

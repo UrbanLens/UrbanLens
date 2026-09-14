@@ -1,9 +1,4 @@
-"""Tests for AI article expansion from link extraction.
-
-Covers plain-text sanitization, the fail-closed safety classifier, append
-applies to pin and wiki articles, feature-flag skips, and the
-run_extraction integration hook. Gateways are always mocked.
-"""
+"""Tests for AI article expansion from link extraction."""
 
 from __future__ import annotations
 

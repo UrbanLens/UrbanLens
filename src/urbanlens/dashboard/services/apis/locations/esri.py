@@ -32,13 +32,7 @@ _WAYBACK_CACHE_TTL = 24 * 3600
 
 @dataclass(slots=True, kw_only=True)
 class EsriGateway(SatelliteViewProvider):
-    """Gateway for Esri ArcGIS REST imagery services.
-
-    Covers three sources:
-    - Esri World Imagery (current, high-resolution, global)
-    - USGS National Map Imagery (current, US coverage only)
-    - Esri Wayback historical imagery releases (high-resolution, global)
-    """
+    """Gateway for Esri ArcGIS REST imagery services."""
 
     service_key: ClassVar[str] = "esri"
     paid_service: ClassVar[bool] = False

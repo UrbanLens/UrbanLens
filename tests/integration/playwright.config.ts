@@ -1,17 +1,6 @@
 /**
- * Playwright configuration for the on-demand integration suite.
- *
- * This suite is never pointed at a server it started itself - there is no
- * `webServer` block, deliberately. It runs against a deployment that is already
- * up, with its real database, real Valkey, real Celery workers, real proxy and
- * real TLS, because the failures it exists to catch live in the wiring between
- * those and not in any one of them.
- *
- * Projects are the unit of selection. `--project=smoke` is the five-second
- * question "is this deployment alive"; `--project=ui` is the long one. The
- * cross-browser and visual projects are registered only when asked for, so the
- * default `playwright test` does the useful thing rather than the exhaustive
- * one.
+ * Playwright configuration for the on-demand integration suite. This suite is never pointed at a
+ * server it started itself - there is no `webServer` block, deliberately.
  */
 
 import { defineConfig, devices, type Project } from "@playwright/test";

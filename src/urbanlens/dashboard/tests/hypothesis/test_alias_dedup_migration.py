@@ -1,16 +1,11 @@
 """Tests for the alias-deduplication step carried by migration 0008.
 
-Production/staging databases can already have case-insensitive duplicate
-aliases (e.g. "Aloha Stadium" and "aloha stadium" on the same pin) predating
-the case-insensitive unique constraint that migration adds - without a
-cleanup step first, `AddConstraint` fails with a real IntegrityError
-("could not create unique index... is duplicated"). These tests exercise the
-exact SQL the migration runs (imported directly from the migration module)
-against manually-inserted duplicate rows, since the constraint the migration
-adds is already active by the time any Django TestCase runs (migrations
-apply once, at test-database creation) - the constraint is dropped and
-duplicates are inserted via raw SQL first, both automatically undone by
-TestCase's per-test transaction rollback.
+Existing databases can hold case-insensitive duplicate aliases predating the
+constraint the migration adds - without a cleanup step first, `AddConstraint`
+fails. These tests run the migration's exact SQL against manually-inserted
+duplicates: the constraint is already active by the time any TestCase runs, so
+it is dropped and duplicates inserted via raw SQL first, both undone by
+per-test rollback.
 """
 
 from __future__ import annotations

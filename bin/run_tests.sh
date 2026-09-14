@@ -2,23 +2,9 @@
 #
 # Run pytest inside the test container, with the sync this repo requires.
 #
-# Syncs all of src/, not just src/urbanlens: src/bin/init.py is the container's
-# entrypoint and is real, imported code. Syncing only the package meant a change
-# there was tested against the image's stale copy - which is exactly the failure
-# this script exists to prevent, and it had this bug until 2026-08-17.
+# Syncs all of src/ (init.py is real imported code, not just the package).
 #
-# The container's /app/src is baked into the image, not bind-mounted, so it
-# reflects whenever the image was last built. Every run therefore has to copy
-# the working tree in first - and `docker cp` preserves *source* ownership, so
-# the copy must be chowned back to the container's app user or Django's logging
-# config raises PermissionError and the process dies before binding anything.
-#
-# Getting that sequence wrong is not loud. A file restored on the host but not
-# re-copied leaves the container running the previous version, and the suite
-# reports on code that is not the code under test - which is how the one red
-# consolidation run of the 2026-08-17 audit happened. This script exists so the
-# sequence cannot be typed wrong, and verifies parity afterwards rather than
-# assuming the copy landed.
+# /app/src is baked into the image, so copy in and verify parity rather than assuming it.
 #
 # Usage:
 #   bin/run_tests.sh [pytest args...]           # sync, then run
@@ -32,49 +18,19 @@
 #   bin/run_tests.sh --shuffle [pytest args...] # randomise test order
 #   bin/run_tests.sh --no-venv-fix ...          # do not install missing dev deps
 #
-# --fast is worth knowing about. A unique database per run is what keeps
-# parallel sessions from colliding, but building one costs about three minutes,
-# which dwarfs the tests themselves: the consensus field-scope file takes 188
-# seconds cold and 3.5 seconds against a database that already exists. For a
-# tight edit-run loop, or anything that runs the same tests hundreds of times
-# (mutation testing), reuse the database and rebuild it when the schema moves.
+# --fast reuses a persistent DB (rebuild after migrations); set UL_TEST_DB_NAME per session on shared hosts.
 #
-# On a host where more than one session might run --fast, that convenience is
-# also a hazard: the default database name ('ul_fast') is shared, and
-# --fresh-db drops and recreates it. --fresh-db refuses to run against a
-# database with other active connections rather than silently killing them -
-# pass --force only if you are certain those connections are your own
-# abandoned session, not someone else's run. Safest fix is simply to always
-# set UL_TEST_DB_NAME to something session-specific before using --fast here.
+# --parallel gives each xdist worker its own DB; wins on large selections, loses on single files.
 #
-# --parallel is the other half of that arithmetic, and it cuts the opposite way:
-# pytest-django gives every xdist worker its own database (`..._gw0`, `_gw1`,
-# ...), so N workers means N database builds before any test runs. It pays off
-# on a large selection or against --fast, and loses badly on a single file.
-# Combined with --fast each worker reuses its own database, which is the
-# configuration worth having. Deliberately not the default: this multiplies
-# concurrent load on Postgres, which is exactly what has been observed to take
-# the local instance down (it shows up as mass "ERROR at setup" in files that
-# have nothing to do with each other).
-#
-# --shuffle turns on pytest-randomly, which is installed but disabled in
-# `addopts`. Shuffling found no order dependence when it was probed across three
-# seeds, but only over a subset - so it is opt-in until a full shuffled run has
-# been green, and a failure under it is worth reproducing with the seed pytest
-# prints before assuming the plugin is at fault.
+# --shuffle is opt-in; reproduce failures with the printed seed.
 #
 # Environment:
 #   UL_TEST_CONTAINER   test-runner container name (default urbanlens_development_main_test_runner)
 #   UL_TEST_DB_NAME     test database name. Without --fast/--fresh-db, a unique one is
-#                       generated when unset, because parallel runs collide otherwise -
-#                       and the test channel-layer prefix is derived from it, so websocket
-#                       tests in overlapping runs would consume each other's messages
-#                       without it. With --fast/--fresh-db the default is instead the
-#                       fixed name 'ul_fast', precisely so it is NOT unique and can be
-#                       reused - so on a host where more than one session might run
-#                       --fast, always set this explicitly, or --fresh-db can drop and
-#                       recreate a database another session's hours-long run is using
-#                       (see the --force guard below for what that looks like).
+#                       generated when unset (parallel runs collide otherwise, and the
+#                       channel-layer prefix derives from it). With --fast/--fresh-db the
+#                       default is the fixed name 'ul_fast' for reuse - so on a shared host
+#                       always set this explicitly.
 set -euo pipefail
 
 CONTAINER="${UL_TEST_CONTAINER:-urbanlens_development_main_test_runner}"
@@ -84,16 +40,12 @@ VERIFY_ONLY=0
 FAST=0
 FRESH_DB=0
 FORCE_DROP=0
-# Verifying a fix by breaking it means deliberately editing the container's copy
-# and expecting the tests to fail. That is drift on purpose, so it needs a way
-# past the guard - named so it cannot be reached by accident or by habit.
+# Deliberate container drift needs a way past the guard; named to avoid accidents.
 ALLOW_DRIFT=0
 PARALLEL=""
 SHUFFLE=0
 
-# The copy-into-a-container sequence, and the file list it is checked against,
-# are shared with bin/sync_app.sh - the app container needs exactly the same
-# three steps and broke on 2026-09-04 for missing one of them.
+# The copy-into-a-container sequence is shared with bin/sync_app.sh.
 # shellcheck source=bin/lib/container_sync.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/container_sync.sh"
 
@@ -134,13 +86,9 @@ sync_tree() { sync_tree_into "$CONTAINER"; }
 verify_parity() { verify_parity_with "$CONTAINER"; }
 
 verify_frontend_build() {
-    # The compiled bundles are not in git - 57a4a90af untracked them and
-    # .gitignore has excluded **/frontend/static/*/js/ since. The sync copies
-    # whatever this host last built, so a host that has never built, or built
-    # before the branch added an entry point, hands the container a bundle set
-    # that does not match the templates. test_compiled_js_references_resolve.py
-    # then fails naming three bundles, which on 2026-09-01 was written up as the
-    # container's assets going stale - it was the host's build that was behind.
+    # The compiled bundles are not in git, so a host that never built hands the
+    # container bundles that do not match the templates. Warn rather than fail
+    # mysteriously in test_compiled_js_references_resolve.py.
     local js_dir="src/urbanlens/dashboard/frontend/static/dashboard/js"
     local ts_dir="src/urbanlens/dashboard/frontend/ts"
     [ -d "$ts_dir" ] || return 0
@@ -153,9 +101,7 @@ verify_frontend_build() {
         return 0
     fi
 
-    # Test sources are excluded: they are not bundle inputs, so a newer one is
-    # not staleness. A warning that cries wolf gets read past, and this one has
-    # to survive being right only occasionally.
+    # Test sources aren't bundle inputs; a newer one is not staleness.
     if [ -n "$(find "$ts_dir" \( -name '*.ts' -o -name '*.tsx' \) -not -name '*.test.ts' -not -name '*.spec.ts' -newer "$newest" -print -quit 2>/dev/null)" ]; then
         echo "warning: TypeScript sources are newer than the compiled bundles being synced." >&2
         echo "    A template naming a new entry point fails as a missing bundle. Rebuild: bun run build" >&2
@@ -163,19 +109,9 @@ verify_frontend_build() {
 }
 
 verify_venv() {
-    # The sync only ever covers /app/src. /app/.venv is baked into the image, so
-    # a dependency added to pyproject.toml after the last build is simply absent
-    # - and the way that surfaces is a collection error naming a module, which
-    # reads as a broken import in the branch rather than as a stale container.
-    # django-perf-rec cost a whole pre-merge run that way on 2026-08-31.
-    #
-    # Checked by distribution name against everything `uv sync` installs -
-    # `project.dependencies` as well as the dev group. Reading only the dev
-    # group missed django-storages, added to the main list on 2026-09-05, and
-    # every object-storage test failed at collection for a fortnight instead.
-    # Cheap: one interpreter start, no imports of the packages themselves.
+    # Deps aren't synced, so a post-build addition surfaces as a collection error. Checked against uv's full install set.
     local missing
-    # -i, or the heredoc never reaches the interpreter and this reports nothing.
+    # -i, or the heredoc never reaches the interpreter.
     missing=$(docker exec -i "$CONTAINER" /app/.venv/bin/python - <<'PY' 2>/dev/null
 import re
 import tomllib
@@ -208,15 +144,9 @@ PY
         return 0
     fi
 
-    # Installing them beats warning about them. The rebuild this used to
-    # recommend is an operator action on a container other sessions may be
-    # using, so it kept not happening: django-perf-rec was still missing three
-    # days after it was first reported, and pytest-xdist and pytest-randomly
-    # back this script's own --parallel and --shuffle, which were therefore
-    # advertised and broken for as long as they had existed. What goes in is
-    # exactly what pyproject's dev group declares, constraints included, so this
-    # brings the container to its own stated dependencies rather than to
-    # whatever is newest. uv ships inside the venv, so no host tooling is needed.
+    # Installing them beats warning about them: a rebuild is an operator action
+    # on a container other sessions may share, so the warning kept not working.
+    # Installs exactly what pyproject declares, constraints included.
     echo "==> installing them from pyproject (--no-venv-fix to skip)" >&2
     local specs
     specs=$(docker exec -i "$CONTAINER" /app/.venv/bin/python - "$missing" <<'SPECS' 2>/dev/null
@@ -263,26 +193,8 @@ if [ "$FAST" -eq 1 ]; then
     if [ "$FRESH_DB" -eq 1 ]; then
         DB_FLAG="--create-db"
         echo "==> rebuilding the reusable database '$DB_NAME'"
-        # --create-db alone cannot recover a half-built database. Interrupt a
-        # run mid-migration and the schema change is applied but unrecorded, and
-        # the killed process leaves a session holding the database open - so the
-        # drop fails, the rebuild silently becomes a reuse, and every subsequent
-        # run dies in fixture setup with "column ... already exists" wearing a
-        # pytest internal assertion as its error. That was misfiled as a flaky
-        # transient once already. Terminate and drop first, so "fresh" is true.
-        # -i, or the heredoc never reaches python's stdin and it exits 0 having
-        # read nothing - a silent no-op that looks exactly like success.
-        #
-        # Checks for other live connections before terminating anything. This
-        # rebuild used to terminate-then-drop unconditionally, on the assumption
-        # that anything connected was a stale session from an interrupted prior
-        # run of *this same script*. On a host where more than one session can
-        # run --fast concurrently against the same default 'ul_fast' name, that
-        # assumption cost another session its entire test run mid-flight -
-        # terminated and dropped out from under it with no warning, corrupting
-        # roughly a sixth of an hour-plus run's results (see docs/PROBLEMS.md).
-        # --force restores the old unconditional behaviour for the case the
-        # comment above originally described: recovering your own abandoned run.
+        # Terminate and drop first so "fresh" is actually fresh; -i or the heredoc is a silent no-op.
+        # Refuses with live connections (likely another session); --force overrides for your own abandoned run.
         docker exec -i -e DJANGO_SETTINGS_MODULE=urbanlens.UrbanLens.settings.test "$CONTAINER" /app/.venv/bin/python - "$DB_NAME" "$FORCE_DROP" <<'DROP_DB'
 import sys
 
@@ -329,9 +241,8 @@ print(f"    dropped '{name}' if it existed", flush=True)
 DROP_DB
     else
         DB_FLAG="--reuse-db"
-        # --reuse-db does not apply new migrations to an existing database, so a
-        # schema change shows up as a confusing column error rather than as a
-        # missing migration. Rebuild with --fresh-db when models move.
+        # --reuse-db does not apply new migrations, so rebuild with --fresh-db
+        # when models move.
         echo "==> reusing database '$DB_NAME' (run --fresh-db after any migration)"
     fi
 else

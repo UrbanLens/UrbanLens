@@ -335,9 +335,7 @@ div.section {
             outline: none;
         }
 
-        // Toggle-style tools (e.g. the main map's "Select pins") add this class
-        // while active - a stronger, persistent version of the hover state so
-        // the tool doesn't look identical to every other idle toolbar icon.
+        // Toggle-style tools (e.g. the main map's "Select pins") add this class while active.
         &.active {
             opacity: 1;
             color: $color-blue-800;
@@ -372,11 +370,7 @@ div.section {
     }
 }
 
-// Bottom-right saved-filters toggle toolbar. Shares .map-buttons' background/
-// border/radius/shadow/hover for visual parity with the top-right toolbar,
-// but must stay bottom-right at every breakpoint (unlike .map-buttons, which
-// flips to top-right on desktop above) - hence the position override here
-// instead of relying on the base class alone.
+// Bottom-right saved-filters toggle toolbar.
 .map-saved-filters-toolbar {
     top: auto !important;
     bottom: 28px !important;
@@ -564,18 +558,9 @@ div.section {
 }
 
 // -- Mobile map bottom dock ---------------------------------------------------
-// Below $breakpoint-sm every bottom-anchored map overlay competes for the same
-// corner: .map-buttons flips to bottom-right (it is top-right from sm up),
-// .map-saved-filters-toolbar is bottom-right at every breakpoint, and
-// .map-layers-panel is bottom-left. Tools and saved filters resolved to
-// identical coordinates at the same z-index, so whichever came later in the
-// DOM (saved filters) swallowed every tap meant for the other - which included
-// the only mobile route to the filter panel.
+// Below $breakpoint-sm every bottom-anchored map overlay competes for the same corner.
 //
-// The saved-filters strip is always exactly one row tall, so it keeps the
-// baseline and the tool toolbar stacks above it. Stacking in that direction
-// lets the tool row wrap to as many rows as it needs (10-tool markup maps do)
-// without ever growing into the strip.
+// The saved-filters strip is always exactly one row tall, so it keeps the baseline and the tool toolbar stacks above it.
 
 @include down($breakpoint-sm) {
     // One .map-btn-icon plus .map-buttons' padding and borders - the height of
@@ -602,9 +587,7 @@ div.section {
             height: 44px;
         }
 
-        // Base sets overflow:hidden with no wrap, so a toolbar wider than the
-        // screen silently clipped its trailing tools off with no way to reach
-        // them (the 10-tool markup map lost Select child pins and Screenshot).
+        // Base sets overflow:hidden with no wrap, so a toolbar wider than the screen silently clipped its trailing tools off with no way.
         .map-buttons-content {
             flex-wrap: wrap;
             justify-content: flex-end;
@@ -617,9 +600,7 @@ div.section {
         max-width: min(58vw, 18rem);
     }
 
-    // Only lift the tools when a saved-filters strip is actually present. The
-    // class (unlike the id) exists only on the populated toolbar - the empty
-    // out-of-band placeholder keeps the id alone, so :has() must not match it.
+    // Only lift the tools when a saved-filters strip is actually present.
     #map:has(.map-saved-filters-toolbar) .map-buttons:not(.map-saved-filters-toolbar) {
         bottom: calc(28px + var(--map-dock-row-h) + 8px);
     }

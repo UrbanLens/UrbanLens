@@ -1,16 +1,5 @@
 /**
  * Warns before leaving a page that has unsaved or still-saving changes.
- *
- * Pages with auto-saving forms (settings, site admin, setup, profile edit, safety
- * check-ins) report their state through ``window.autosaveGuard``: ``markDirty`` when
- * an edit happens, ``saveStarted``/``saveFinished`` around each request. The guard
- * then intercepts the three ways off a page - closing the tab, an HTMX request, and
- * an ordinary link click.
- *
- * The in-flight counter matters as much as the dirty flag: an auto-save that has
- * fired but not returned looks clean to the form while its data is still in transit.
- *
- * Ported out of ``base.html``'s inline script unchanged.
  */
 
 import { type LeaveConfirmationHandle, installLeaveConfirmation } from "./leave-confirmation";
@@ -118,10 +107,7 @@ export function installGlobalAutosaveGuard(): void {
         onConfirmed: allowNavigation,
     });
 
-    // htmx:confirm is specific to this guard - the other two pages have no
-    // auto-saving requests to hold back. Bound on <body>, as it was inline, so it
-    // keeps running after any handler a page binds on body itself; this bundle
-    // loads from <head> where document.body is still null, hence the wait.
+    // htmx:confirm is specific to this guard - the other two pages have no auto-saving requests to hold back.
     const bindBody = (): void => document.body.addEventListener("htmx:confirm", onHtmxConfirm);
     if (document.body) bindBody();
     else document.addEventListener("DOMContentLoaded", bindBody);

@@ -1,23 +1,8 @@
 /**
- * Read-only access to the main map's localStorage pin cache
- * (`ul_pins_v5_${profileUuid}`, written by pages/map/index.html's own inline
- * script). Deliberately a small, standalone reader rather than a refactor of
- * that script - the map page's cache read/write/invalidate logic stays
- * exactly as-is, this only parses the same on-disk shape from elsewhere
- * (currently the Tools-page local folder scanner, to skip locations the user
- * already has a pin for).
- *
- * Best-effort only: a missing/stale/disabled cache just means nothing gets
- * filtered here, since the caller always re-checks authoritatively server-side.
+ * Read-only access to the main map's localStorage pin cache.
  */
 
-// Must match pages/map/index.html's own `_CACHE_KEY`/`v:` literals (that inline
-// script is the only writer of this localStorage entry). This constant drifted out
-// of sync with that page's cache-version bumps before (last matched v6), which
-// silently made every read here return [] since the real payload's `v` never
-// matched. Both are exported so pin-cache.contract.test.ts can read the template
-// and fail the build when the two sides disagree again, rather than the feature
-// just going quiet.
+// Must match pages/map/index.html's own `_CACHE_KEY`/`v:` literals (that inline script is the only writer of this localStorage entry).
 export const PIN_CACHE_VERSION = 11;
 
 /** The localStorage key holding one profile's cached pin store. */
@@ -82,10 +67,7 @@ export function readCachedPinLocations(profileUuid: string): CachedPinLocation[]
 }
 
 /**
- * Return name/location/tag fields for every cached pin, for building instant
- * (zero-latency) search suggestions while the authoritative server-side
- * autocomplete request is still in flight. Best-effort only - the caller's
- * network request always supersedes this once it resolves.
+ * Return name/location/tag fields for every cached pin, for building instant (zero-latency) search suggestions while the authoritative.
  */
 export function readCachedPinsForSearch(profileUuid: string): CachedSearchPin[] {
     const results: CachedSearchPin[] = [];
@@ -114,27 +96,11 @@ export function readCachedPinsForSearch(profileUuid: string): CachedSearchPin[] 
 
 /**
  * Every generation of the pin-cache key: `ul_pins_v<N>_<profile id>`.
- *
- * Deliberately not the bare `ul_pins_` prefix - `ul_pins_dirty`, the flag other
- * pages set to force the map to refetch, would match that and get swept away.
  */
 const PIN_CACHE_KEY_PATTERN = /^ul_pins_v\d+_/;
 
 /**
  * Delete every pin-cache blob except the one currently in use.
- *
- * The cache is per-profile and per-version, so a browser accumulates blobs that
- * nothing will ever read again: keys from retired versions (v4, and pre-v5 keys
- * built from the profile PK rather than its UUID), and other accounts' blobs
- * from a shared browser. Only the live key is ever read, so the reader's own
- * expiry can never reclaim them - a multi-megabyte orphan just sits in the ~5 MB
- * origin quota until the user manually clears site data, which is why clearing
- * the cache by hand "fixed" a QuotaExceededError that looked like a pin-count
- * limit.
- *
- * Matching on the shared prefix rather than a list of known-dead keys means the
- * next version bump needs no change here.
- *
  * @param currentKey The key to keep - the caller's live cache.
  * @returns How many orphaned entries were removed.
  */

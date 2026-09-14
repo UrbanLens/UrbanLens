@@ -46,15 +46,7 @@ class CandidateNameForLocationTests(TestCase):
         self.assertEqual(candidate_name_for_location(location, use_aliases=False), "Old Mill House")
 
     def test_use_aliases_true_prefers_a_meaningful_alias(self) -> None:
-        """Wiki.save() auto-ensures an alias matching its own (meaningful)
-        name (see models/wiki/model.py), so this wiki genuinely has two
-        meaningful aliases once "The Mill" is added - "Old Mill House" (auto)
-        and "The Mill" (this test's). random.choice's own selection between
-        two valid candidates isn't what this test is verifying; it's
-        verifying that use_aliases=True reaches the alias-selection branch
-        at all (returning whatever random.choice picked) rather than falling
-        straight through to the bare wiki name - so random.choice is pinned
-        here rather than left to flip a real coin every run."""
+        """Wiki.save() auto-ensures an alias matching its own (meaningful) name (see models/wiki/model.py), so this wiki genuinely has two meaningful aliases once "The Mill" is added - "Old Mill House" (auto) and "The Mill" (this test's). random.choice's own selection between two valid candidates isn't what this test is verifying; it's verifying that use_aliases=True reaches the alias-selection branch at all (returning whatever random.choice picked) rather than falling straight through to the bare wiki name - so random.choice is pinned here rather than left to flip a real coin every run."""
         location = _make_location()
         wiki = baker.make(Wiki, location=location, name="Old Mill House")
         baker.make(WikiAlias, wiki=wiki, name="The Mill", kind=AliasType.NICKNAME)

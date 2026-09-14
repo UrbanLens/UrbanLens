@@ -1,37 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when a wiki resolved for *reading* is then written.
-
-``services.wiki.wiki_access.resolve_visible_wiki`` is the single gate every
-wiki-scoped surface passes through - 99 call sites, including all 31 external
-API handlers. Since concealment moved to resolve time, what it hands back may
-be a *projection*: a real Wiki instance carrying only the field values this
-viewer is entitled to see.
-
-Reading one is the point. Saving one is a data-loss bug: it persists one
-viewer's redacted view over what the community actually wrote. The projection
-refuses ``save()`` for that reason, but a refusal is a 500 - and a 500 only
-gated accounts receive is precisely the tell the whole feature exists to avoid.
-Write paths call ``concealment.writable_wiki`` and act on what it returns.
-
-Nine such paths existed when this check was written, spread over four modules;
-all nine looked correct, because the projection is a Wiki and mutating one is
-ordinary Django. Nothing about the call site says which kind of row it holds.
-
-The heuristic: in any function that binds a name from ``resolve_visible_wiki``
-or ``self.resolve``, flag that name being saved, deleted, or passed to a known
-wiki-writing service.
-
-Known limits, so a pass is not read as more than it is:
-  - it follows names, not values, so re-binding through a helper hides the write;
-  - the writer set is seeded by hand and grown transitively by parameter name,
-    so a service that saves a wiki it received under some other name is invisible;
-  - it only sees writes in the same function as the resolve.
-A pass means "no *detected* write", not "no write".
-
-Mark a deliberate case with ``concealed-write-ok: <why>`` on or above the line.
-
-Exits non-zero listing each write.
-"""
+"""Fail when a wiki resolved for *reading* is then written."""
 
 from __future__ import annotations
 
@@ -42,24 +10,14 @@ import sys
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 SEARCH_ROOT = REPO_ROOT / "src" / "urbanlens"
 
-#: Services that mutate and save the wiki they are handed. Seeds a transitive
-#: closure computed at run time: a function that passes its own wiki parameter
-#: to one of these is itself a writer, and its callers are just as wrong. This
-#: check missed `promote_wiki_alias_to_name` on its first outing for exactly
-#: that reason - it reaches `apply_wiki_edit` one level down, and a same-
-#: function scan cannot see it.
+#: Services that mutate and save the wiki they are handed. Seeds a transitive closure: callers passing wiki on are writers too.
 WRITER_SEEDS = frozenset({"apply_wiki_edit", "revert_wiki_edit", "revert_edit_fields", "save_edited_fields", "purge_recorded_value"})
 
 #: Parameter names that hold a wiki. A function saving something it was handed
 #: under another name is not something this can see; that is in the limits.
 WIKI_PARAMS = frozenset({"wiki", "target"})
 
-#: Keyword parameters that receive a wiki deliberately *because* it may be a
-#: projection - the viewer's own view, passed in to be read rather than written.
-#: `apply_wiki_edit(baseline=...)` compares against what the submitter saw;
-#: `save_article_checked(viewer=...)` asks the conflict check the question that
-#: viewer can answer. Flagging these trains a reader to add exemptions to
-#: correct code, which is worse than the miss it would prevent.
+#: Kwargs receiving a wiki to read (possibly a projection), not to write.
 READ_ONLY_KWARGS = frozenset({"baseline", "viewer"})
 
 #: The call that converts a possible projection into a row safe to write.
@@ -133,16 +91,14 @@ def _writes(fn: ast.FunctionDef, watched: set[str], writers: frozenset[str]) -> 
 def _transitive_writers(trees: dict[pathlib.Path, ast.Module]) -> frozenset[str]:
     """Grow :data:`WRITER_SEEDS` to a fixed point over the call graph.
 
-    A function counts as a writer when it hands a wiki-holding parameter of its
-    own to a function already known to be one. Repeated until nothing new is
-    found, so a chain of any depth is covered.
+    A function counts as a writer when it hands a wiki-holding parameter of its own to a function already known
+    to be one.
 
     Args:
         trees: Parsed modules to search.
 
     Returns:
-        Every function name that transitively writes a wiki it was given.
-    """
+        Every function name that transitively writes a wiki it was given."""
     writers = set(WRITER_SEEDS)
     changed = True
     while changed:

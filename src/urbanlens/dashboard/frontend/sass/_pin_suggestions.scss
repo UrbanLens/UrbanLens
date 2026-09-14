@@ -1,15 +1,9 @@
 // Memories > Locations - the batch-scan pin suggestion review queue.
-// Map + multi-select behavior/chrome is shared with Memories > Visits -
-// see static/js/pin-select-map.js and _pin_select_map.scss. Only
-// suggestion-card-specific styling (photo picker, prompts, etc.) lives here.
 
 @use 'variables' as *;
 
 // -- Actions bar & new-user onboarding ----------------------------------------
-// "Accept all suggestions" is reachable normally (this page) and via the
-// map's one-time new-user dialog (map/index.html), which links here with
-// ?onboarding=1 - the pulse + banner only render for that flow, see
-// controllers.pin_suggestions.PinSuggestionQueueView.
+// "Accept all suggestions" is reachable normally (this page) and via the map's one-time new-user dialog (map/index.html), which links.
 
 .pin-suggestions-actions {
     display: flex;

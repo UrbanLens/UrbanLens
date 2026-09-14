@@ -1,16 +1,4 @@
-"""Tests for the profile hero's click-to-edit-in-place area/started_exploring fields.
-
-Covers:
-- Own-profile view renders each hero meta field as a click-to-edit element
-  only once it actually has a value - an empty field is hidden entirely
-  rather than shown with an "Add ..." placeholder (adding a first value is
-  the Edit Profile page's job, which already has full form fields for these).
-  Other viewers, and the owner's own Edit Profile page, see plain text (or
-  nothing) instead of the inline editor either way.
-- ProfileFieldUpdateView's field="area"/field="started_exploring" POST paths,
-  previously untested despite already existing (used by the full Edit
-  Profile page) - now exercised more, via the profile view page's inline editor.
-"""
+"""Tests for the profile hero's click-to-edit-in-place area/started_exploring fields."""
 
 from __future__ import annotations
 
@@ -29,18 +17,15 @@ _SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.DOTALL | re.IGNORE
 def _rendered_markup(response) -> str:
     """The response body with ``<script>`` blocks removed.
 
-    The hero's click-to-edit wiring script names every class and placeholder it
-    manipulates - including building ``>Add when you started exploring...<`` as
-    a string literal - so it matches any "is this placeholder on the page"
-    check on every render, whatever the profile actually contains. Dropping the
-    scripts leaves the markup, which is what these tests are about.
+    The hero's click-to-edit wiring script names every class and placeholder it manipulates - including building
+    ``>Add when you started exploring...<`` as a string literal - so it matches any "is this placeholder on the
+    page" check on every render, whatever the profile actually contains.
 
     Args:
         response: A rendered test-client response.
 
     Returns:
-        The decoded body with script blocks stripped.
-    """
+        The decoded body with script blocks stripped."""
     return _SCRIPT_RE.sub("", response.content.decode())
 
 

@@ -1,15 +1,4 @@
-{% comment %}
-A single actionable photo card for the Vault "needs attention" queue.
-
-Every organize action posts to vault.photos.action and targets this card by id,
-swapping outerHTML - a success response is empty (the card vanishes and a toast
-fires), an error response re-renders the card unchanged with an error toast.
-
-Context:
-  image      - the Image
-  state      - "suggested" | "needs_pin" | "needs_location"
-  suggestion - the pending VisitSuggestion (only for state == "suggested")
-{% endcomment %}
+{% comment %}A single actionable photo card for the Vault "needs attention" queue.{% endcomment %}
 <article class="photo-card photo-card--{{ state }}" id="photo-card-{{ image.pk }}">
     <a class="photo-card-thumb" href="{{ image.display_url }}" target="_blank" rel="noopener">
         <img src="{{ image.thumb_url }}" alt="{{ image.display_caption|default:'Photo' }}" loading="lazy"

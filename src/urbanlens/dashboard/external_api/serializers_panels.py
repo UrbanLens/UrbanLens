@@ -1,10 +1,6 @@
 """Serializers for the external API's panel domain.
 
-A panel's detail body is its own ``PanelSource.api_payload()`` dict, passed
-through unserialized - its shape is declared per :class:`PanelApiKind`
-(``info``/``media``/``boundary``/``buildings``), not fixed, so no single
-serializer could describe it without either flattening that variance away or
-duplicating each panel's contract here.
+Detail body is the per-kind ``PanelSource.api_payload()`` dict, passed through unserialized.
 """
 
 from __future__ import annotations

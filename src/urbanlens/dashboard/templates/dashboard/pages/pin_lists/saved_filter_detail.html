@@ -73,10 +73,7 @@
 </div>
 
 {{ initial_pins|json_script:"saved-filter-initial-pins" }}
-{# Never opened as a modal on this page - just carries data-success-redirect so #}
-{# the shared save/delete handler (_sfAfterSaveOrDelete in the scripts include #}
-{# below) sends the user back to the Filters tab after either action, matching #}
-{# how the dialog's own Save/Delete already behave everywhere else on the site. #}
+{# Never opened as a modal on this page - just carries data-success-redirect so the shared save/delete handler. #}
 {% url 'organize.index' as organize_url %}
 <dialog id="saved-filter-form-dialog" hidden data-success-redirect="{{ organize_url }}?tab=filters" aria-label="Saved filter"></dialog>
 {% include "dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html" %}

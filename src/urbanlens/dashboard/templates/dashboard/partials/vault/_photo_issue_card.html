@@ -1,14 +1,4 @@
-{% comment %}
-One "Couldn't upload" card. Its own partial so a refused action can re-render
-exactly what the list rendered - see _render_failure_card.
-
-Two shapes, by failure.kind:
-
-- processing_failed with a surviving image: the bytes are on the server and its
-  task died, so the server can re-run it. Retry and Discard are hx-posts.
-- everything else: the upload never became a row, so "retry" means picking the
-  file again - a file input, which is what this card has always been.
-{% endcomment %}
+{% comment %}One "Couldn't upload" card.{% endcomment %}
 <li class="photos-issue-card" id="photo-failure-{{ failure.pk }}">
   <p class="photos-issue-title">{{ failure.filename }}</p>
   <p class="photos-issue-error">{{ failure.error }}</p>

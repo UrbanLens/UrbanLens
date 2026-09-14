@@ -1,10 +1,4 @@
-"""Tests for copying a wiki photo onto the copier's own pin, with durable provenance.
-
-Covers ``services.photos.wiki_copy.copy_wiki_photo_to_pin`` directly (the headline
-requirement - a copy must survive the original being deleted, and must not duplicate storage),
-``CopyWikiPhotoView`` (authorization must be scoped like every other wiki-photo lookup, never
-like ``PhotoActionView``'s owned-image-only lookup), and ``ImageQuerySet.copied_from_others``.
-"""
+"""Tests for copying a wiki photo onto the copier's own pin, with durable provenance."""
 
 from __future__ import annotations
 
@@ -154,8 +148,6 @@ class CopyWikiPhotoToPinTests(TestCase):
 class AttributionFallbackPropertyTests(TestCase):
     """Property: the copy's author is always either the original's own credit, or a derived one."""
 
-    # Real DB writes per example (Profile/Location/Wiki/Pin/Image) always exceed
-    # Hypothesis's default 200ms deadline - expected for a DB-backed property test.
     @settings(deadline=None)
     @given(existing_author=st.one_of(st.none(), st.text(min_size=1, max_size=100).filter(lambda s: "\x00" not in s)))
     def test_author_fallback_is_deterministic(self, existing_author: str | None) -> None:
@@ -299,17 +291,6 @@ class CopyWikiPhotoViewTests(TestCase):
         self.assertFalse(Image.objects.filter(copied_from=self.image).exists())
 
     def test_refuses_when_the_viewer_has_no_pin_here(self) -> None:
-        # self.pin can't simply be deleted to test this: it's also what earns
-        # this profile wiki access and image visibility in the first place (a
-        # pin inside the place's boundary - see wiki_access/visible_to), so
-        # removing it would 404 at the image lookup, before this view's own
-        # "no target pin" check ever runs. The real case this branch exists
-        # for is domain-widened access - wiki access earned via a pin on a
-        # *different* building on the same parcel, with no pin at this exact
-        # location - isolated here by mocking only the `location` resolve_
-        # visible_wiki hands back (image lookup keys off `wiki`, not
-        # `location`, so self.pin still legitimately makes the image visible;
-        # only the target-pin lookup, which does use `location`, sees no pin).
         mock_location = mock.MagicMock()
         mock_location.pins.filter.return_value.first.return_value = None
         with mock.patch(

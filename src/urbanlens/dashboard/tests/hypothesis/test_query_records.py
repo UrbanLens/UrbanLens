@@ -1,28 +1,4 @@
-"""Pin the *shape* of what an endpoint asks the database, not just how much.
-
-Complementary to ``test_query_scaling.py`` rather than a replacement for it, and
-the split is worth understanding before adding to either.
-
-The scaling harness measures a *slope*: render the same endpoint at two data
-sizes and fail if the query count grows with the rows. That is the right test
-for a list, and it is deliberately blind to the intercept, so an endpoint that
-has always cost thirty queries keeps passing.
-
-This measures a *fingerprint*: the exact sequence of statements, normalised,
-written to a ``.perf.yml`` beside this file. It catches what a slope cannot -
-a detail view that gains one query per related object it renders (three rows
-today, so no visible slope), a ``select_related`` dropped in a refactor, a
-cache read that quietly became a database read. The cost is that any legitimate
-change to a query pattern shows up as a diff somebody has to approve.
-
-**Reading a failure.** django-perf-rec prints the statements that differ. An
-added ``SELECT`` repeated per row is an N+1; a single added statement is usually
-a new field or a new permission check, and the fix is to re-record with
-``PERF_REC={"MODE": "overwrite"}`` after confirming it is intended.
-
-Records are per test *method*, so renaming a test orphans its record. Delete the
-stale entry when you do that; a leftover is harmless but misleading.
-"""
+"""Pin the *shape* of what an endpoint asks the database, not just how much."""
 
 from __future__ import annotations
 
@@ -85,10 +61,8 @@ class ExternalApiQueryRecordTests(TestCase):
     def test_whoami_query_fingerprint(self) -> None:
         """The cheapest authenticated call there is - a useful floor.
 
-        If this record grows, the cost was added to *authentication* or to the
-        middleware chain, which means every other endpoint grew by the same
-        amount without any of their records explaining why.
-        """
+        If this record grows, the cost was added to *authentication* or to the middleware chain, which means
+        every other endpoint grew by the same amount without any of their records explaining why."""
         with django_perf_rec.record():
             response = self.client.get(reverse("external_api:whoami"), **self._auth)
         self.assertEqual(response.status_code, 200)

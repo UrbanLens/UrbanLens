@@ -1,17 +1,4 @@
-"""Creating a saved filter from the main map.
-
-Two reported defects, one cause each:
-
-- The map's Save Filter dialog offered only a name, though the create view has
-  always accepted an icon, colour and opacity. The full create/edit dialog
-  offered all of them; the map's copy had drifted, so the appearance fields
-  now live in one shared partial that both include.
-- A newly created filter did not appear until the page was reloaded. An
-  out-of-band swap needs an element with that id *already in the DOM*, and the
-  toolbar was rendered only `{% if saved_filters %}` - so a user with no
-  filters had no `#map-saved-filters-toolbar` for the response to swap into,
-  and htmx dropped the fragment.
-"""
+"""Creating a saved filter from the main map."""
 
 from __future__ import annotations
 

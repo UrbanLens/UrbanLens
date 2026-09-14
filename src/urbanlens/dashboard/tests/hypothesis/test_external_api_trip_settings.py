@@ -1,24 +1,4 @@
-"""Tests for the trip *settings* write path, service and endpoint.
-
-A trip's four permission levels decide who on a shared trip may add members,
-add or edit activities, and comment. Until now the only editor was the site's
-own ``POST /trips/<slug>/settings/`` form, which always submits all four radio
-groups at once - so ``services.trips.trip_crud.set_trip_permissions`` was written to
-read all four unconditionally and, for any it did not find, fall back to a
-*hardcoded default*.
-
-That is invisible while the only caller is a form that always sends
-everything, and catastrophic the moment a partial writer exists: a mobile
-client toggling one switch would silently rewrite the other three on a trip
-other people share. So the first class here pins the service's presence-keyed
-contract, and the rest cover the ``PATCH /trips/{slug}/settings/`` endpoint
-built on top of it.
-
-The endpoint's one deliberate departure from this API's 404-not-403 rule is
-asserted too: a *member* who is not an organizer gets 403, because they have
-already been shown the trip and the status therefore leaks nothing. A
-non-member still gets 404.
-"""
+"""Tests for the trip *settings* write path, service and endpoint."""
 
 from __future__ import annotations
 
@@ -48,8 +28,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The raw (unhashed) API key value.
 
     Returns:
-        Extra kwargs for Django's test client.
-    """
+        Extra kwargs for Django's test client."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -71,12 +50,10 @@ class _TripSettingsTestCase(TestCase):
         """Create a trip with its creator joined, as the create flow would.
 
         Args:
-            creator: The trip's creator; defaults to the key owner.
-            **kwargs: Extra ``Trip`` field values.
+            creator: The trip's creator; defaults to the key owner. **kwargs: Extra ``Trip`` field values.
 
         Returns:
-            The saved trip.
-        """
+            The saved trip."""
         creator = creator or self.profile
         trip = Trip.objects.create(creator=creator, name=kwargs.pop("name", "Settings trip"), **kwargs)
         TripMembership.objects.create(trip=trip, profile=creator, status=TripMembership.STATUS_JOINED, rsvp="yes")
@@ -86,13 +63,10 @@ class _TripSettingsTestCase(TestCase):
         """PATCH the settings endpoint for *trip* with *body*.
 
         Args:
-            trip: The trip whose settings to edit.
-            body: The JSON body to send.
-            raw_key: Optional alternative API key; defaults to the fixture's.
+            trip: The trip whose settings to edit. body: The JSON body to send. raw_key: Optional alternative API key; defaults to the fixture's.
 
         Returns:
-            The test client's response.
-        """
+            The test client's response."""
         return self.client.patch(
             reverse("external_api:trips.settings", args=[trip.slug]),
             body,
@@ -104,25 +78,18 @@ class _TripSettingsTestCase(TestCase):
 class SetTripPermissionsPresenceTests(_TripSettingsTestCase):
     """``set_trip_permissions`` touches only the fields actually submitted.
 
-    The regression guard for a real data-loss defect: the service used to walk
-    a hardcoded ``{field: default}`` table and ``setattr`` *every* entry, so
-    any field missing from ``changes`` was reset to that default rather than
-    left alone. A one-key partial update therefore rewrote three unrelated
-    permissions on a trip shared with other people, with nothing in the
-    response to reveal it had happened.
-    """
+    A one-key partial update therefore rewrote three unrelated permissions on a trip shared with other people,
+    with nothing in the response to reveal it had happened."""
 
     def _configure(self, trip: Trip) -> None:
         """Set all four permissions to values that differ from the old defaults.
 
-        The old implementation's defaults were ``none`` for
-        ``allow_add_members`` and ``everyone`` for the other three, so this
-        fixture inverts each one: any field the service silently rewrites is
-        then unambiguously visible.
+        The old implementation's defaults were ``none`` for ``allow_add_members`` and ``everyone`` for the other
+        three, so this fixture inverts each one: any field the service silently rewrites is then unambiguously
+        visible.
 
         Args:
-            trip: The trip to configure.
-        """
+            trip: The trip to configure."""
         trip.allow_add_members = Trip.PERM_EVERYONE
         trip.allow_add_activities = Trip.PERM_NONE
         trip.allow_edit_activities = Trip.PERM_ORGANIZERS
@@ -156,10 +123,8 @@ class SetTripPermissionsPresenceTests(_TripSettingsTestCase):
     def test_unknown_level_is_rejected_rather_than_defaulted(self) -> None:
         """A garbage level is a validation failure, not a silent reset.
 
-        Coercing it to the field's default is worse than refusing it: the
-        caller is told the write succeeded while the permission moved
-        somewhere they never asked for.
-        """
+        Coercing it to the field's default is worse than refusing it: the caller is told the write succeeded
+        while the permission moved somewhere they never asked for."""
         self._configure(self.trip)
 
         with self.assertRaises(TripValidationError):
@@ -183,16 +148,12 @@ class SetTripPermissionsPresenceTests(_TripSettingsTestCase):
     def test_only_submitted_fields_ever_move(self, submitted: dict[str, str], initial: list[str]) -> None:
         """For any subset of fields, exactly that subset changes.
 
-        The property the presence-keyed contract actually promises, stated over
-        every subset rather than the one the example tests happen to pick:
-        a field named in the submission ends up at the submitted level, and a
+        The property the presence-keyed contract actually promises, stated over every subset rather than the one
+        the example tests happen to pick: a field named in the submission ends up at the submitted level, and a
         field not named ends up exactly where it started.
 
         Args:
-            submitted: An arbitrary subset of the permission fields with levels.
-            initial: A starting level for each of the four fields, in
-                ``TRIP_PERMISSION_FIELDS`` order.
-        """
+            submitted: An arbitrary subset of the permission fields with levels. initial: A starting level for each of the four fields, in..."""
         trip = self._make_trip(name="Property trip")
         starting = dict(zip(TRIP_PERMISSION_FIELDS, initial, strict=True))
         for field, level in starting.items():
@@ -224,10 +185,8 @@ class TripSettingsEndpointTests(_TripSettingsTestCase):
     def test_response_is_the_full_trip_with_recomputed_viewer_flags(self) -> None:
         """One round trip: the write answers with what the client renders from.
 
-        ``viewer.can_*`` is derived server-side from the levels *and* the
-        caller's role, so a client that only echoed back the submitted levels
-        would still need a second request to know what it may now show.
-        """
+        ``viewer.can_*`` is derived server-side from the levels *and* the caller's role, so a client that only
+        echoed back the submitted levels would still need a second request to know what it may now show."""
         response = self._patch(self.trip, {"allow_add_members": Trip.PERM_EVERYONE})
 
         self.assertEqual(response.status_code, 200)
@@ -254,13 +213,8 @@ class TripSettingsEndpointTests(_TripSettingsTestCase):
     def test_member_who_is_not_an_organizer_gets_403(self) -> None:
         """A deliberate 403: they have already been shown this trip.
 
-        The package's usual answer for an action a caller may not take is 404,
-        so that the status cannot confirm the resource exists. That reasoning
-        does not apply once the caller is a *member*: they can already read the
-        trip in full, so telling them their role is insufficient discloses
-        nothing new - and a 404 here would be actively misleading, suggesting
-        the trip had vanished.
-        """
+        The package's usual answer for an action a caller may not take is 404, so that the status cannot confirm
+        the resource exists."""
         trip = self._make_trip(creator=self.other_profile, name="Theirs")
         TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_JOINED)
 

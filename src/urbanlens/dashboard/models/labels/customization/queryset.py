@@ -10,9 +10,7 @@ class LabelCustomizationQuerySet(abstract.DashboardQuerySet):
 
     def bulk_create(self, objs, *args, **kwargs):
         """Create overrides in bulk, coercing each colour first.
-
-        ``bulk_create`` does not call ``save()``, so the model's coercion has to
-        be repeated here or a bulk path stores what a single write would reject.
+        ``bulk_create`` does not call ``save()``, so the model's coercion has to be repeated here or a bulk path stores what a single write would reject.
 
         Args:
             objs: The overrides to create.

@@ -51,8 +51,7 @@
 <div class="wiki-page page-content">
     <div id="wiki-onboarding" class="page-onboarding page-onboarding--wiki" aria-live="polite"></div>
 
-    {# -- Notice + suggest-edits/delete/back-to-pin actions now render inside #}
-    {# the hero itself (see _wiki_detail_hero_body.html) to save vertical space. #}
+    {# Notice + suggest-edits/delete/back-to-pin actions now render inside the hero itself to save vertical space #}
 
     {% if show_wiki_cover_photo %}
     {# -- Cover photo hero banner --------------------------------------------- #}
@@ -86,9 +85,7 @@
             <div class="wiki-lcn-list">
                 {% for other in other_locations %}
                 <span class="wiki-lcn-item">
-                    {# Every candidate here is one the viewer can already open - #}
-                    {# services.places.ambiguity filters to their accessible domains, #}
-                    {# so naming one can never disclose a place they haven't found. #}
+                    {# Every candidate here is one the viewer can already open services.places.ambiguity filters to their accessible domains, so naming one. #}
                     <a class="wiki-lcn-link" href="{% url 'location.wiki' location_slug=other.slug %}">{{ other.display_name }}</a>
                     {% if user_pin %}
                     <button type="button" class="wiki-lcn-switch-btn"
@@ -138,11 +135,7 @@
                 </div>
                 {% if first_pinned %}
                 <div class="wiki-stat">
-                    {% comment %}
-                    Already truncated to the 1st of the month, and suppressed
-                    entirely while the pin count is too low to display - see
-                    services.community_counts.wiki_community_summary.
-                    {% endcomment %}
+                    {% comment %}Already truncated to the 1st of the month, and suppressed entirely while the pin count is too low to display.{% endcomment %}
                     <span class="wiki-stat-value">{{ first_pinned|date:"M Y" }}</span>
                     <span class="wiki-stat-label">First pinned</span>
                 </div>
@@ -250,12 +243,7 @@
             </div>
 
             {# -- Media (external providers + shared photos) -------------------- #}
-            {# Combined Media section mirroring the Private Pin page: one grid    #}
-            {# with per-source tabs. External media (Wikimedia, Smithsonian, ... #}
-            {# ) appears automatically from the shared per-Location cache; only  #}
-            {# photos intentionally shared to the wiki show under "Photos".      #}
-            {# Thumbs are community votes - items sort highest net score first.  #}
-            {# See controllers/wiki_media.py and the wiki-media script below.    #}
+            {# Combined Media section mirroring the Private Pin page: one grid with per-source tabs. #}
             <div id="wiki-media-section" class="card wiki-media media-gallery" data-media-view="all"
                  data-collapse-scope="wiki" data-collapse-section="media">
                 <div class="card-header">
@@ -276,9 +264,7 @@
                 </div>
 
                 <div class="media-view-panel" data-media-view-panel="manage" hidden>
-                    {# The unchanged wiki photo gallery (upload / Flickr import / #}
-                    {# cover photo / delete), lazy-loaded when "Manage" is first  #}
-                    {# opened - the wiki equivalent of the pin page's "Mine" tab. #}
+                    {# The unchanged wiki photo gallery (upload / Flickr import / cover photo / delete), lazy-loaded when "Manage" is first opened. #}
                     <div id="wiki-gallery-panel"
                          hx-get="{% url 'location.wiki.gallery' location.slug %}{% if include_children %}?children=1{% endif %}"
                          hx-trigger="ul:load-manage"
@@ -288,15 +274,9 @@
                 </div>
             </div>
 
-            {# The shared lightbox, included here (eagerly) rather than by     #}
-            {# _photo_gallery.html's own "wiki" branch: that partial only      #}
-            {# arrives once "Manage" above is opened, but the Media section's  #}
-            {# tiles (just above) need a lightbox to open before that ever     #}
-            {# happens. Exactly one instance either way - see                  #}
-            {# _photo_lightbox.html's own "include once per page" docstring.   #}
+            {# The shared lightbox, included here (eagerly) rather than by _photo_gallery.html's own "wiki" branch. #}
             {% url "location.wiki.cover_photo" location.slug as cover_photo_url %}
-            {# Only offered when the viewer has a pin here to copy to - the    #}
-            {# same condition "Back to my pin" (above) is gated on.            #}
+            {# Only offered when the viewer has a pin here to copy to - the same condition "Back to my pin" (above) is gated on. #}
             {% if user_pin %}{% url "location.wiki.media.copy_to_pin" location.slug 0 as wiki_copy_url_template %}{% endif %}
             {% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url current_cover_image_id=wiki.cover_photo_id cover_hero_key="wiki" cover_hero_enabled=profile.show_wiki_cover_photos show_wiki_copy_action=True wiki_copy_url_template=wiki_copy_url_template %}
             {# Hidden per-provider loaders - append their results into #wiki-media-grid. #}
@@ -340,10 +320,10 @@
                 hx-get="{% url 'location.wiki.media' location.slug 'cris_building' %}"
                 hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
 
-        </div>{# end wiki-body-secondary #}
+        </div>
 
-    </div>{# end wiki-body #}
-    </section>{# end overview tab #}
+    </div>
+    </section>
 
     {# -- Article tab: the community's Wikipedia-style article --------------- #}
     <section class="page-tab-panel" data-tab-panel="article" hidden>
@@ -360,7 +340,7 @@
     </section>
 
     {# -- Comments tab -------------------------------------------------------- #}
-    {# -- Photos tab: community albums first, then wiki photos not in one ---- #}
+    {# Photos tab: community albums first, then wiki photos not in one #}
     <section class="page-tab-panel" data-tab-panel="photos" hidden>
         {# ?album= is carried through so a deep link (or a Back navigation) loads that album directly. #}
         <div id="albums-panel"
@@ -484,8 +464,7 @@
     {# -- Boundary-vote dialog (renders nothing without 2+ candidates) ------- #}
     {% include "dashboard/partials/wiki/_boundary_vote_dialog.html" with location=location boundary_vote=boundary_vote %}
 
-    {# Floating actions: child-pin-details toggle and jump-to-parent wiki.    #}
-    {# Hidden entirely when this wiki has no children and no visible parent.  #}
+    {# Floating actions: child-pin-details toggle and jump-to-parent wiki. #}
     {% if parent_wiki %}{% url 'location.wiki' parent_wiki.location.slug as wiki_parent_url %}{% endif %}
     {% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_wikis include_children=include_children parent_url=wiki_parent_url parent_name=parent_wiki.name parent_item_label="Open parent wiki" csrf_token=csrf_token request=request show_article_actions=True only %}
 

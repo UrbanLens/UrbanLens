@@ -1,29 +1,4 @@
-"""A settings form must write only the profile fields it owns.
-
-The settings page splits a profile's preferences across fifteen small
-``ModelForm``s, each posted independently. Every one of them ends in Django's
-default ``ModelForm.save()``, which calls ``instance.save()`` with no
-``update_fields`` - a whole-row write of every column from the instance the
-request loaded.
-
-``Profile`` is the most contested row in the app. Around twenty-five other
-writers scope their updates to the columns they own, among them:
-
-- the pin-create signal, which clears the cached map centre so it is recomputed;
-- the importer, which writes the privacy and contact blocks by targeted update
-  over a job that runs for minutes;
-- the home-widget layout, the map-suggestions intro flag, and the external API's
-  own settings patch (``profile.save(update_fields=[*touched, "updated"])``).
-
-A whole-row save from a form reverts whatever any of them committed while the
-settings page was open.
-
-The forms module already contains the realisation, applied once and locally:
-``MapCenterForm.save`` re-reads ``map_custom_latitude``/``longitude`` from the
-database because the hidden fields "must not overwrite the user's saved custom
-location". That is this bug, noticed for one pair of columns on one form, and
-fixed by hand there rather than at the shape that causes it.
-"""
+"""A settings form must write only the profile fields it owns."""
 
 from __future__ import annotations
 
@@ -93,11 +68,7 @@ class SettingsFormFieldScopeTests(TestCase):
     def test_every_profile_settings_form_declares_its_fields(self) -> None:
         """The completeness arm.
 
-        The scoped save derives its field list from ``Meta.fields``. A form
-        written with ``exclude`` instead would have ``_meta.fields`` of None and
-        silently go back to whole-row writes, so that shape has to fail here
-        rather than in production.
-        """
+        The scoped save derives its field list from ``Meta.fields``."""
         undeclared = sorted(form.__name__ for form in ProfileSettingsForm.__subclasses__() if not form._meta.fields)
 
         self.assertEqual(undeclared, [], "settings forms must list Meta.fields - see ProfileSettingsForm.save")

@@ -1,12 +1,4 @@
-"""Hostile-input tests for uploaded import archives (services/import_data.py).
-
-Covers the guards on `_extract_and_validate` (zip-slip path traversal -
-including the sibling-directory-prefix variant a bare startswith check would
-miss - and decompression-bomb ceilings) plus the trust boundaries inside the
-importers themselves: connections.json must never forge friendship state the
-importer couldn't create through the UI, and a foreign pin uuid in pins.json
-must never map the importer's data onto another user's pin.
-"""
+"""Hostile-input tests for uploaded import archives (services/import_data.py)."""
 
 from __future__ import annotations
 
@@ -113,10 +105,7 @@ class ExtractAndValidateSafetyTests(SimpleTestCase):
         self.assertTrue(self._run(_valid_entries()))
 
     def test_size_ceiling_tracks_the_storage_quota(self) -> None:
-        """Export archives bundle real photo files, so the ceiling must sit
-        ABOVE the user's storage quota (a 10 GB-quota user's legitimate
-        archive would be refused by a fixed 2 GiB cap) while unlimited-quota
-        users still get a finite bomb guard."""
+        """Export archives bundle real photo files, so the ceiling must sit ABOVE the user's storage quota (a 10 GB-quota user's legitimate archive would be refused by a fixed 2 GiB cap) while unlimited-quota users still get a finite bomb guard."""
         with mock.patch("urbanlens.dashboard.services.media.storage.get_quota_bytes", return_value=10 * 1024**3):
             self.assertEqual(import_data._extraction_size_ceiling(object()), 20 * 1024**3)
         with mock.patch("urbanlens.dashboard.services.media.storage.get_quota_bytes", return_value=None):
@@ -138,13 +127,7 @@ class ExtractAndValidateSafetyTests(SimpleTestCase):
 
 
 class ExtractedFileScanningTests(SimpleTestCase):
-    """Every non-JSON file extracted from the archive is malware-scanned and
-    content-sniffed before any importer (present or future) ever opens it -
-    see _scan_extracted_files. clamav_enabled is forced False in the test
-    settings (no real clamd daemon available here), so malware_error_for_upload
-    is mocked directly to exercise the infected/unavailable branches; the
-    content-type mismatch checks below run for real, against actual magic
-    bytes, since that check needs no external service."""
+    """Every non-JSON file extracted from the archive is malware-scanned and content-sniffed before any importer (present or future) ever opens it - see _scan_extracted_files. clamav_enabled is forced False in the test settings (no real clamd daemon available here), so malware_error_for_upload is mocked directly to exercise the infected/unavailable branches; the content-type mismatch checks below run for real, against actual magic bytes, since that check needs no external service."""
 
     def _run(self, entries: dict[str, bytes]) -> str:
         with tempfile.TemporaryDirectory() as workdir:

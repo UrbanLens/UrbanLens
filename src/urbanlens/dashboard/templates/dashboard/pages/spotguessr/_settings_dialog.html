@@ -1,14 +1,4 @@
-{% comment %}
-Shared settings dialog for all 3 SpotGuessr modes - opened by a mode card's
-gear icon, or the in-game gear icon for solo play (spotguessr.ts's
-openSettingsDialog()), which sets #sg-settings-mode before showing it.
-Difficulty/rounds/toggles/area apply regardless of which mode opened it;
-[data-mode-only] fields are shown/hidden per mode by updateModeVisibility().
-The area map is always visible - "Restrict to a chosen area" only controls
-whether the drawn/searched region is actually sent as geo_bounds on start.
-Friends are always listed (fetched eagerly at page load); selecting any
-starts a multiplayer lobby instead of a solo game.
-{% endcomment %}
+{% comment %}Shared settings dialog for all 3 SpotGuessr modes.{% endcomment %}
 <dialog id="sg-settings-dialog" class="ul-dialog spotguessr-settings-dialog" aria-label="SpotGuessr settings">
     <div class="dialog-header">
         <span><i class="material-symbols-outlined">tune</i> Game settings</span>
@@ -108,12 +98,7 @@ starts a multiplayer lobby instead of a solo game.
             <div class="spotguessr-field">
                 <label>Invite friends (optional)</label>
             </div>
-            {% comment %}
-            The loading/error lines are siblings of #sg-friend-list, not children:
-            renderFriendCheckboxes() replaces that container's innerHTML, so
-            anything inside it is destroyed on the first successful load and the
-            retry path could never find its own button again.
-            {% endcomment %}
+            {% comment %}The loading/error lines are siblings of #sg-friend-list, not children.{% endcomment %}
             <div id="sg-invite-wrap" class="spotguessr-invite-wrap">
                 <p class="spotguessr-panel-hint" id="sg-friend-list-loading">Loading friends&hellip;</p>
                 <p class="spotguessr-panel-hint" id="sg-friend-list-error" hidden>

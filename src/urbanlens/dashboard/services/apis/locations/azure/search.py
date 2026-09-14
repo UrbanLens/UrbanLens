@@ -62,8 +62,7 @@ class AzureMapsSearchGateway(AzureMapsGateway):
             limit: Maximum number of results (1-100).
 
         Returns:
-            Normalized result dicts, most relevant first; empty when nothing
-            matched or the request failed.
+            Normalized result dicts, most relevant first; empty when nothing matched or the request failed.
 
         Raises:
             ValueError: When no subscription key is configured.
@@ -103,8 +102,7 @@ class AzureMapsSearchGateway(AzureMapsGateway):
             limit: Maximum number of results (1-100).
 
         Returns:
-            Normalized POI dicts ordered by distance; empty when nothing was
-            found nearby or the request failed.
+            Normalized POI dicts ordered by distance; empty when nothing was found nearby or the request failed.
 
         Raises:
             ValueError: When no subscription key is configured.
@@ -133,8 +131,7 @@ class AzureMapsSearchGateway(AzureMapsGateway):
                 unrelated place.
 
         Returns:
-            The nearest POI's normalized dict, or None when nothing is close
-            enough.
+            The nearest POI's normalized dict, or None when nothing is close enough.
 
         Raises:
             ValueError: When no subscription key is configured.

@@ -28,7 +28,7 @@ _GIT_EXECUTABLE: str = shutil.which("git") or "git"
 
 @dataclass(frozen=True, slots=True)
 class GitUpdateStatus:
-    """Comparison between the deployed git commit and the latest known repository state.
+    """Deployed commit compared against current repository state.
 
     Attributes:
         deployed_commit: Git commit hash recorded at deploy or process start.
@@ -50,7 +50,7 @@ class GitUpdateStatus:
 
 
 def get_app_version() -> str:
-    r"""Return the semantic application version from pyproject.toml or the installed package.
+    r"""Return the app version from pyproject.toml or installed metadata.
 
     Returns:
         Semantic version string such as ``0.8.0b0``.
@@ -70,7 +70,7 @@ def get_app_version() -> str:
 
 
 def _git_rev_parse(revision: str) -> str | None:
-    """Resolve a git revision to a full commit hash.
+    """Resolve a git revision to a commit hash, or None.
 
     Args:
         revision: Git revision such as ``HEAD`` or a commit hash.
@@ -96,10 +96,7 @@ def _git_rev_parse(revision: str) -> str | None:
 
 @lru_cache(maxsize=1)
 def get_git_commit_at_start() -> str | None:
-    """Return the git ``HEAD`` commit cached at process startup.
-
-    Used as the "running" commit baseline. Compared against a fresh ``HEAD`` read
-    on the admin stats page to detect commits pulled since the process started.
+    """Return ``HEAD`` at first call, cached for process lifetime.
 
     Returns:
         Full commit hash for ``HEAD`` at first call, or ``None`` when git is unavailable.
@@ -108,7 +105,7 @@ def get_git_commit_at_start() -> str | None:
 
 
 def get_current_git_commit() -> str | None:
-    """Return the current git ``HEAD`` commit hash.
+    """Return the current ``HEAD`` commit hash, or None.
 
     Returns:
         Full commit hash, or ``None`` when git is unavailable.
@@ -117,7 +114,7 @@ def get_current_git_commit() -> str | None:
 
 
 def get_current_git_branch() -> str | None:
-    """Return the name of the current git branch.
+    """Return the current branch name, or None.
 
     Returns:
         Branch name such as ``main``, or ``None`` when git is unavailable.
@@ -140,11 +137,7 @@ def get_current_git_branch() -> str | None:
 
 @lru_cache(maxsize=1)
 def _git_fetch() -> bool:
-    """Refresh remote-tracking refs from configured remotes.
-
-    The result is cached for the process lifetime so repeated admin stats
-    page loads do not re-run ``git fetch`` or spam logs when remotes are
-    unreachable (typical in Docker without credentials).
+    """Refresh remote-tracking refs; cached for process lifetime.
 
     Returns:
         ``True`` when ``git fetch`` completed successfully.
@@ -190,7 +183,7 @@ def _git_fetch() -> bool:
 
 
 def get_upstream_git_commit() -> str | None:
-    """Return the commit hash for the current branch's upstream tracking ref.
+    """Return the upstream tracking ref commit, or None.
 
     Returns:
         Full commit hash for ``@{u}``, or ``None`` when no upstream is configured.
@@ -199,7 +192,7 @@ def get_upstream_git_commit() -> str | None:
 
 
 def _count_commits_ahead(base_commit: str, head_commit: str) -> int | None:
-    """Count commits reachable from ``head_commit`` but not ``base_commit``.
+    """Count commits in head_commit not in base_commit, or None.
 
     Args:
         base_commit: Deployed commit hash.
@@ -230,7 +223,7 @@ def _count_commits_ahead(base_commit: str, head_commit: str) -> int | None:
 
 
 def apply_pending_migrations() -> tuple[bool, str]:
-    """Apply Django database migrations after a development code update.
+    """Apply pending migrations; return (ok, message).
 
     Returns:
         ``(True, message)`` when migrations completed; otherwise ``(False, message)``.
@@ -262,7 +255,7 @@ def apply_pending_migrations() -> tuple[bool, str]:
 
 
 def _parent_process_command() -> str:
-    """Return the parent process command line when readable.
+    """Return the parent process command line, or empty string.
 
     Returns:
         Parent ``cmdline`` on Linux, or an empty string when unavailable.
@@ -276,21 +269,10 @@ def _parent_process_command() -> str:
 
 
 def trigger_development_app_reload() -> tuple[bool, str]:
-    """Reload the running application server after a development code update.
-
-    Docker and ``init.py`` start **gunicorn**, not ``runserver``. Gunicorn does
-    not watch Python files, so touching ``manage.py`` has no effect there.
-    Instead, send ``SIGHUP`` to the gunicorn master so workers restart and
-    import newly pulled code.
-
-    When the parent process is Django's ``runserver`` autoreloader, touch this
-    module's file instead: the reloader tracks imported modules, not
-    ``manage.py`` itself.
-    """
+    """Reload the app server after a code update; return (ok, message)."""
     logger.info("Attempting to reload the server...")
     parent_cmd = _parent_process_command()
-    # signal.SIGHUP isn't defined on Windows, but gunicorn (and thus this
-    # branch) only ever runs on Linux, where SIGHUP is always signal 1.
+    # SIGHUP only exists on Linux, where gunicorn runs.
     sighup = getattr(signal, "SIGHUP", 1)
     if "gunicorn" in parent_cmd:
         try:
@@ -311,7 +293,7 @@ def trigger_development_app_reload() -> tuple[bool, str]:
 
 
 def pull_latest_git_code() -> tuple[bool, str]:
-    """Pull the current branch from its upstream using a fast-forward-only update.
+    """Pull current branch fast-forward-only; return (ok, message).
 
     Returns:
         ``(True, message)`` when git updated or was already current; otherwise
@@ -343,7 +325,7 @@ def pull_latest_git_code() -> tuple[bool, str]:
 
 
 def format_short_commit(commit: str | None, length: int = 7) -> str:
-    """Return a shortened commit hash for display.
+    """Return a shortened commit hash, or a dash when missing.
 
     Args:
         commit: Full commit hash.
@@ -362,7 +344,7 @@ def _latest_reference_commit(
     current_commit: str | None,
     upstream_commit: str | None,
 ) -> str | None:
-    """Pick the furthest known commit ahead of the deployed baseline.
+    """Pick the known commit furthest ahead of the deployed baseline.
 
     Args:
         deployed_commit: Commit hash recorded at deploy or process start.
@@ -396,10 +378,7 @@ def _latest_reference_commit(
 
 
 def get_git_update_status(deployed_commit: str | None) -> GitUpdateStatus:
-    """Compare the deployed commit against local and remote repository state.
-
-    Runs ``git fetch`` before reading upstream refs so GitHub commits not yet
-    pulled locally are included in the update check.
+    """Compare deployed commit against local and remote state.
 
     Args:
         deployed_commit: Commit hash recorded at deploy or process start.

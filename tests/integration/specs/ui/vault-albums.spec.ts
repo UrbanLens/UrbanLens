@@ -33,10 +33,7 @@ test.describe("vault albums", () => {
     });
 
     test("the pin-albums toggle lazily reveals albums from across the profile's pins", async ({ page, api }) => {
-        // This account's own pin + album, created fresh by this test rather
-        // than assumed to pre-exist - a previous version of this test relied
-        // on data left over from manual testing in one specific dev DB, which
-        // silently passed there and would time out on any fresh environment.
+        // Created fresh here, not assumed to pre-exist (a fixed fixture would only pass where it was made).
         const pinName = resourceName("E2E test place");
         const pinAlbumName = resourceName("E2E pin album");
         const pin = await api.createPin({ name: pinName });
@@ -128,12 +125,7 @@ test.describe("vault albums", () => {
         await expect(detail.locator("[data-album-back]")).toBeVisible();
     });
 
-    // Regression: `.album-target-dialog` carried a bare `display: flex`, which
-    // outranks the UA stylesheet's `dialog:not([open]) { display: none }` - the
-    // closed picker stayed laid out mid-page on every surface that includes it
-    // (Vault Photos, album detail, and the pin/wiki Photos tabs). Asserted on
-    // the computed style rather than Playwright visibility, because the stray
-    // box rendered behind other content and could still read as "hidden".
+    // A stray `display: flex` kept the closed picker laid out; assert computed style since it hid behind other content.
     test("the add-to-album picker stays collapsed until it is opened", async ({ page }) => {
         await page.goto(appRoutes.vaultPhotos);
 

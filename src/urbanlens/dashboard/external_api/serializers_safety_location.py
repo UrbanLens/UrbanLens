@@ -15,11 +15,9 @@ from rest_framework import serializers
 class SafetyCheckinLocationSerializer(serializers.Serializer):
     """The owner's current shared position on a check-in, as read by the owner or a watching partner.
 
-    ``latitude``/``longitude``/``accuracy`` are null whenever ``sharing_enabled``
-    is false - disabling sharing clears the last-known fix rather than leaving
-    a stale marker visible to partners (see
-    ``services.visits.safety.set_live_location_sharing``), so there is nothing extra
-    to scrub here.
+    ``latitude``/``longitude``/``accuracy`` are null whenever ``sharing_enabled`` is false - disabling
+    sharing clears the last-known fix rather than leaving a stale marker visible to partners (see
+    ``services.visits.safety.set_live_location_sharing``), so there is nothing extra to scrub here.
     """
 
     sharing_enabled = serializers.BooleanField(read_only=True, source="live_location_sharing_enabled")
@@ -32,10 +30,9 @@ class SafetyCheckinLocationSerializer(serializers.Serializer):
 class SafetyCheckinLocationUpdateSerializer(serializers.Serializer):
     """Validates a live-location PATCH. Owner-only; every field is optional and independent.
 
-    ``sharing_enabled`` is applied before a position, so a single PATCH may
-    both turn sharing on and report the first fix in one round trip.
-    ``latitude``/``longitude`` must be submitted together - a fix is a pair or
-    it is not a fix.
+    ``sharing_enabled`` is applied before a position, so a single PATCH may both turn sharing on and
+    report the first fix in one round trip.
+    ``latitude``/``longitude`` must be submitted together - a fix is a pair or it is not a fix.
     """
 
     sharing_enabled = serializers.BooleanField(required=False)
@@ -53,8 +50,7 @@ class SafetyCheckinLocationUpdateSerializer(serializers.Serializer):
             The unchanged, validated attributes.
 
         Raises:
-            serializers.ValidationError: If exactly one of latitude/longitude
-                was submitted.
+            serializers.ValidationError: If exactly one of latitude/longitude was submitted.
         """
         if ("latitude" in attrs) != ("longitude" in attrs):
             raise serializers.ValidationError("latitude and longitude must be submitted together.")

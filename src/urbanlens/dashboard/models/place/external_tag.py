@@ -1,12 +1,6 @@
 """PlaceExternalTag - raw classification data external providers attach to a Place.
-
-Strictly separate from the user-facing ``Label`` system (see
-``models.labels.model.Label``, whose ``kind=KIND_CATEGORY`` already covers a
-different, user-curated notion of "category"). This is provider vocabulary -
-OpenStreetMap tags, Overture Maps building attributes - captured so it can
-eventually inform label suggestions, icon selection, and search; none of that
-is built yet, this only captures and displays the raw data. See
-docs/FEATURES.md.
+Strictly separate from the user-facing ``Label`` system (see ``models.labels.model.Label``, whose ``kind=KIND_CATEGORY`` already covers a different, user-curated notion of "category").
+This is provider vocabulary - OpenStreetMap tags, Overture Maps building attributes - captured so it can eventually inform label suggestions, icon selection, and search; none of that is built yet, this only captures and displays the raw data.
 """
 
 from __future__ import annotations
@@ -48,9 +42,7 @@ class ExtractedTag(NamedTuple):
 
 class PlaceExternalTag(abstract.DashboardModel):
     """One classification tag an external provider attaches to a Place.
-
-    Raw provider vocabulary - OpenStreetMap tags, Overture Maps building
-    attributes - strictly separate from the user-facing ``Label`` system.
+    Raw provider vocabulary - OpenStreetMap tags, Overture Maps building attributes - strictly separate from the user-facing ``Label`` system.
 
     Attributes:
         place: The Place this tag describes.
@@ -94,14 +86,7 @@ class PlaceExternalTag(abstract.DashboardModel):
     @classmethod
     def is_fresh_for(cls, place: Place, source: str) -> bool:
         """Whether ``place`` already has a recent-enough tag set from ``source``.
-
-        Lets ingestion skip re-deriving and rewriting tags when a different
-        Location on the same Place already synced within the configured
-        window - a Place is coarse and stable (a building's classification
-        doesn't change hour to hour), so there is no need to redo this work
-        on every nearby fetch. Mirrors ``LocationCache.get_fresh``'s "check
-        before you have an instance" shape, and reuses the same staleness
-        window that cache uses.
+        Lets ingestion skip re-deriving and rewriting tags when a different Location on the same Place already synced within the configured window - a Place is coarse and stable (a building's classification doesn't change hour to hour), so there is no need to redo this work on every nearby fetch.
 
         Args:
             place: The place to check.
@@ -123,15 +108,7 @@ class PlaceExternalTag(abstract.DashboardModel):
     @classmethod
     def sync_for_source(cls, place: Place, source: str, tags: Sequence[ExtractedTag]) -> None:
         """Replace ``place``'s tags from one source with ``tags``, in one transaction.
-
-        A full replace rather than a per-row upsert, so a tag the provider no
-        longer reports on a later refetch doesn't linger - mirrors
-        ``LocationCache.set``'s "replace the whole payload for this source"
-        idiom. Because storage is keyed to Place rather than Location, a
-        Place shared by genuinely distinct points of interest (a
-        multi-tenant building) will have its tags overwritten by whichever
-        Location syncs most recently - accepted for this app's dominant
-        one-building-per-Place case, not solved here.
+        A full replace rather than a per-row upsert, so a tag the provider no longer reports on a later refetch doesn't linger - mirrors ``LocationCache.set``'s "replace the whole payload for this source" idiom.
 
         Args:
             place: The place to sync tags for.
@@ -152,9 +129,8 @@ class PlaceExternalTag(abstract.DashboardModel):
                 _, created = ExternalTagVocabularyEntry.objects.get_or_create(source=source, key=tag.key, value=tag.value)
                 registered_new = registered_new or created
         if registered_new:
-            # A newly-seen tag changes what matching_vocabulary() resolves,
-            # same as an admin's create_group/move_entry/set_preferred - see
-            # that module's cache. Skipped on a plain resync (the common
-            # case) so this doesn't invalidate on every re-sync of tags
-            # already known.
+            # A newly-seen tag changes what matching_vocabulary() resolves, same as an admin's
+            # create_group/move_entry/set_preferred - see that module's cache.
+            # Skipped on a plain resync (the common case) so this doesn't invalidate on every
+            # re-sync of tags already known.
             _invalidate_vocabulary_cache()

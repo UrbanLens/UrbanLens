@@ -1,20 +1,6 @@
 """Request-scoped memoisation for the ``SiteSettings`` singleton.
-
-``SiteSettings.get_current()`` is called ~80 places, and several of them run on
-every single page: three separate context processors each fetch it, then the
-controller fetches it again, then every ``user_has_feature()`` check fetches it
-once more. Each call was its own ``get_or_create(pk=1)`` round-trip for a row
-that cannot change mid-request, so an ordinary map render spent a handful of
-identical queries on one singleton.
-
-Caching is deliberately **opt-in per scope** rather than global. A process-wide
-or TTL cache would be stale in exactly the places that hurt: long-lived Celery
-workers would pin a settings row for the life of the worker, and the test suite
-mutates settings through ``queryset.update()`` (which bypasses ``save()`` and so
-cannot invalidate anything). Instead the memo is armed by ``request_started``
-and torn down by ``request_finished``; anywhere without a request - Celery
-tasks, management commands, shell - simply never arms it and keeps reading
-through to the database as before.
+``SiteSettings.get_current()`` is called ~80 places, and several of them run on every single page: three separate context processors each fetch it, then the controller fetches it again, then every ``user_has_feature()`` check fetches it once more.
+Each call was its own ``get_or_create(pk=1)`` round-trip for a row that cannot change mid-request, so an ordinary map render spent a handful of identical queries on one singleton.
 """
 
 from __future__ import annotations

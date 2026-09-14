@@ -148,12 +148,8 @@ class PinListOverviewMapCapTests(TestCase):
 class PinListItemOrderingTests(TestCase):
     """The list's ordering has to be total, now that two slices of it are taken.
 
-    `add_pins_to_list` numbers new items from the current row count, not from
-    `max(order) + 1`, so a duplicate `order` is reachable through ordinary use.
-    While `_paginated_items_context` materialized the list once and sliced in
-    Python that was harmless; taking the page and the map as two separate
-    queries makes it a source of disagreement.
-    """
+    `add_pins_to_list` numbers new items from the current row count, not from `max(order) + 1`, so a duplicate
+    `order` is reachable through ordinary use."""
 
     def setUp(self) -> None:
         super().setUp()

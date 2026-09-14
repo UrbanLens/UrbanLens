@@ -12,9 +12,9 @@ from rest_framework import serializers
 
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
 
-#: Field types creatable through the external API. REFERENCE is excluded: a
-#: reference value points at another one of the owner's objects (a pin, wiki,
-#: trip...) and needs its own resolution design this domain doesn't cover yet.
+#: Field types creatable through the external API. REFERENCE is excluded: a reference value points at another
+#: one of the owner's objects (a pin, wiki, trip...) and needs its own resolution design this domain doesn't
+#: cover yet.
 WRITABLE_FIELD_TYPES: tuple[str, ...] = (
     CustomFieldType.TEXT,
     CustomFieldType.NUMBER,
@@ -33,18 +33,16 @@ _MAX_SELECT_OPTIONS = 100
 def normalize_select_options(raw_options: list[str]) -> tuple[list[str], str | None]:
     """Dedupe and bound-check a select field's submitted options.
 
-    Shared between :class:`CustomFieldDefinitionWriteSerializer` (create,
-    where ``field_type`` is always present) and the PATCH view (where a
-    partial update omitting ``field_type`` never reaches ``validate()``'s
-    SELECT branch, since DRF skips absent fields - including their
-    defaults - entirely in partial mode).
+    Shared between :class:`CustomFieldDefinitionWriteSerializer` (create, where ``field_type`` is always
+    present) and the PATCH view (where a partial update omitting ``field_type`` never reaches
+    ``validate()``'s SELECT branch, since DRF skips absent fields - including their defaults - entirely
+    in partial mode).
 
     Args:
         raw_options: The submitted options, in request order.
 
     Returns:
-        Tuple of (deduplicated options, error message or None). The list is
-        empty when there's an error.
+        Tuple of (deduplicated options, error message or None).
     """
     deduped: list[str] = []
     for raw_option in raw_options:
@@ -76,9 +74,8 @@ class CustomFieldDefinitionSerializer(serializers.Serializer):
 class CustomFieldDefinitionWriteSerializer(serializers.Serializer):
     """A custom field definition submitted for create or partial update.
 
-    ``entity_type`` is accepted on create only - the view never applies it on
-    PATCH, since changing which object type a field applies to would orphan
-    every value already stored under it.
+    ``entity_type`` is accepted on create only - the view never applies it on PATCH, since changing
+    which object type a field applies to would orphan every value already stored under it.
     """
 
     entity_type = serializers.ChoiceField(choices=CustomFieldEntity.choices)
@@ -90,12 +87,9 @@ class CustomFieldDefinitionWriteSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         """Require and normalize choices when the field type is SELECT.
 
-        Only fires here when ``field_type`` itself is present in the
-        request - a partial update that submits ``options`` alone (the
-        common case) skips this branch entirely, since DRF never populates
-        omitted fields - not even with their declared default - in partial
-        mode. The view re-runs :func:`normalize_select_options` against the
-        *effective* field type (submitted or existing) to cover that case.
+        Only fires here when ``field_type`` itself is present in the request - a partial update that submits
+        ``options`` alone (the common case) skips this branch entirely, since DRF never populates omitted
+        fields - not even with their declared default - in partial mode.
         """
         if attrs.get("field_type") == CustomFieldType.SELECT:
             deduped, error = normalize_select_options(attrs.get("options") or [])
@@ -108,10 +102,10 @@ class CustomFieldDefinitionWriteSerializer(serializers.Serializer):
 class CustomFieldValueWriteSerializer(serializers.Serializer):
     """A value submitted for one custom field on a target object.
 
-    ``value`` is a string regardless of the field's type, matching
-    ``CustomFieldValue.set_value``'s own contract - the typed parsing (number,
-    date, time, checkbox, select-membership, url) happens there, one place,
-    shared with the web form. An absent or blank value clears the field.
+    ``value`` is a string regardless of the field's type, matching ``CustomFieldValue.set_value``'s own
+    contract - the typed parsing (number, date, time, checkbox, select-membership, url) happens there,
+    one place, shared with the web form.
+    An absent or blank value clears the field.
     """
 
     value = serializers.CharField(required=False, allow_blank=True, default="")

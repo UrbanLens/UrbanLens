@@ -21,7 +21,7 @@ _GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_SLUG}/contributors
 
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/UrbanLens/UrbanLens; hello@urbanlens.org) python-requests"
 _CACHE_KEY = make_cache_key("github_contributors", GITHUB_REPO_SLUG)
-_CACHE_TTL_SECONDS = 86_400  # 24 hours
+_CACHE_TTL_SECONDS = 86_400
 _PAGE_SIZE = 100
 
 
@@ -39,10 +39,7 @@ def get_github_contributors() -> list[GitHubContributor]:
     """Return cached GitHub contributors, refreshing from the API when stale.
 
     Returns:
-        Contributors sorted by contribution count (highest first). On API
-        failure, returns the last cached list when available, otherwise an
-        empty list.
-    """
+        Contributors sorted by contribution count (highest first)."""
     cached = cache.get(_CACHE_KEY)
     if cached is not None:
         return [_contributor_from_dict(item) for item in cached]

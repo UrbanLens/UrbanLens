@@ -1,20 +1,4 @@
-"""`RedataBasemapTilesGateway.list_sources` envelope parsing, at the unit level.
-
-`test_basemap_tile_proxy.py` mocks `list_sources`/`download_tile` at the
-controller boundary, so the gateway's own body-shape handling had no direct test
-anywhere: the bare-list case, the `{"sources": [...]}` and `{"results": [...]}`
-envelopes, their fallback order, and the `row.get("id")` filter. Every existing
-fixture uses the `sources` key with well-formed rows, so swapping the fallback
-order or dropping the filter would have broken nothing visible.
-
-Mocked at `get_json` rather than at `session`: `get_json` is the seam between
-"talk to REData" and "make sense of the answer", and it is only the second half
-that is untested. The transport half is exercised through the base gateway.
-
-Why this matters more than a normal parsing helper: reading the wrong key fails
-*silently* as "this deployment offers no layers", which is indistinguishable
-from a deployment that genuinely offers none. The gateway's own comment says so.
-"""
+"""`RedataBasemapTilesGateway.list_sources` envelope parsing, at the unit level."""
 
 from __future__ import annotations
 

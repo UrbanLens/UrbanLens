@@ -1,13 +1,4 @@
-"""Pressing an expensive button twice must not run the job twice.
-
-"Scan your library" and "Export my data" each enqueued a full sweep per press
-with no in-flight check, so four presses meant four concurrent jobs holding four
-of the only four default-queue worker slots. That is one account's impatience
-becoming every other account's queue depth.
-
-The endpoint assertions here matter more than the unit ones: a guard that exists
-in a helper nobody calls is the shape this repo has been caught by before.
-"""
+"""Pressing an expensive button twice must not run the job twice."""
 
 from __future__ import annotations
 

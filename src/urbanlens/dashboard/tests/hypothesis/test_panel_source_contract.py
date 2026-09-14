@@ -1,16 +1,4 @@
-"""The panel contract: what a plugin author must declare, enforced.
-
-Panels are the codebase's main extension seam, and the base class lets an author
-omit most of what a panel needs. ``section_id`` and ``title`` default to empty
-strings and ``cache_source`` is only meaningful by convention, so the three most
-likely mistakes all fail *quietly at render* - a section with no DOM id for HTMX
-to swap against, a panel with no heading, or a cache-backed panel that looks up
-the empty key forever and sits in its pending state.
-
-The important test here is the first one: every panel this repo actually ships
-must be well-formed. It turns a silent runtime absence into a loud CI failure, and
-it is the check that keeps working as panels are added.
-"""
+"""The panel contract: what a plugin author must declare, enforced."""
 
 from __future__ import annotations
 

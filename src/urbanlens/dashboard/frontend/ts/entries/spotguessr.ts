@@ -1,12 +1,5 @@
 /**
  * SpotGuessr (UL-391..UL-393) - gameplay, multiplayer lobby, and chat.
- *
- * Server-authoritative: this file never computes a score or reveals an
- * answer itself - it only collects a guess (map click or pin search),
- * posts it, and renders whatever `services.spotguessr.session` decided.
- * Multiplayer state sync (lobby updates, round advancement, chat) arrives
- * over a WebSocket (`consumers.GameSessionConsumer`); solo sessions never
- * open one at all.
  */
 import { getJson, postForm } from "../shared/session-request";
 import { confirmAction, toast } from "../shared/dialogs";
@@ -55,10 +48,7 @@ declare global {
     }
 }
 
-// Mirrors services.spotguessr.session.GameConfig.to_dict() - the profile's
-// last-used settings, restored on page load (applyLastConfig). total_rounds
-// isn't part of this - it's a GameSession field, never persisted to
-// SpotGuessrPreference, so the rounds slider always starts at the default.
+// Mirrors services.spotguessr.session.GameConfig.to_dict().
 interface LastConfig {
     difficulty: number;
     allow_arbitrary_external_photos: boolean;
@@ -80,20 +70,14 @@ interface RoundPayload {
     sequence_index: number;
     revealed: boolean;
     geo_bounds?: GeoBoundsBox | null;
-    // Server-computed (services.spotguessr.modes.shows_imagery) - which modes
-    // show real photographic content worth reacting to, so the frontend never
-    // hardcodes its own copy of that mode list.
+    // Server-computed (services.spotguessr.modes.shows_imagery).
     shows_imagery: boolean;
     // ISO timestamp the round's configured timer runs out, or null/absent for untimed play.
     expires_at?: string | null;
     image_url?: string;
     display_text?: string | null;
     street_view_image?: string | null;
-    // The panorama's own resolved coordinates - see street_view_lat's docstring
-    // on services.spotguessr.street_view.StreetViewPanorama for why this mode
-    // gets an explicit exception to "never reveal the answer before a guess":
-    // a real pan/zoom/walk-around panorama has to talk to Google directly, so
-    // the browser needs to know where to look.
+    // The panorama's own resolved coordinates - see street_view_lat's docstring on services.spotguessr.street_view.StreetViewPanorama.
     street_view_lat?: number | null;
     street_view_lng?: number | null;
 }
@@ -190,9 +174,7 @@ interface ChatMessagePayload {
 }
 
 const urls = window.SPOTGUESSR_URLS;
-// A true world view - both the area-restriction map and the guess map
-// should start zoomed all the way out when nothing more specific applies,
-// not centered on any one region.
+// A true world view - both the area-restriction map and the guess map should start zoomed all the way out when nothing more specific.
 const DEFAULT_CENTER: L.LatLngExpression = [20, 0];
 const DEFAULT_ZOOM = 2;
 
@@ -202,12 +184,7 @@ const regionSearchUrl = pageEl?.dataset.regionSearchUrl ?? "";
 const googleMapsApiKey = pageEl?.dataset.googleMapsApiKey ?? "";
 
 // ---------------------------------------------------------------------------
-// Session/UI state - every mutable cross-function value lives on this one
-// object rather than as ~24 independent module-level `let`s. One source of
-// truth that's trivial to inspect as a whole (e.g. `console.log(state)`) and
-// impossible to half-reset by forgetting one of many scattered bindings -
-// see _resetSessionState() below, which used to have to enumerate them all.
-// ---------------------------------------------------------------------------
+// Session/UI state - every mutable cross-function value lives on this one object rather than as ~24 independent module-level `let`s.
 
 interface SpotGuessrState {
     sessionId: number | null;
@@ -216,10 +193,7 @@ interface SpotGuessrState {
     currentRoundShowsImagery: boolean;
     totalRounds: number;
     sessionScore: number;
-    // What #sg-score-status currently shows, mid-count-up or not - the
-    // animation target for the *next* count-up needs to start from here, not
-    // from `sessionScore` itself (which is already the new total by the time
-    // showReveal() updates it).
+    // What #sg-score-status currently shows, mid-count-up or not.
     displayedSessionScore: number;
     dateGuessingEnabled: boolean;
     isMultiplayer: boolean;
@@ -227,18 +201,14 @@ interface SpotGuessrState {
     lastRevealedRoundId: number | null;
     ws: LiveSocketHandle | null;
     guessMap: L.Map | null;
-    // Reused across rounds/sessions via setPano() rather than torn down and
-    // recreated - same singleton-container convention as guessMap/areaMap
-    // below.
+    // Reused across rounds/sessions via setPano() rather than torn down and recreated.
     streetViewPanorama: google.maps.StreetViewPanorama | null;
     guessMarker: L.Marker | null;
     actualMarker: L.Marker | null;
     resultLine: L.Polyline | null;
     areaMap: L.Map | null;
     areaDrawnItems: L.FeatureGroup | null;
-    // Set by applyLastConfig() when a saved geo_bounds exists - drawn once
-    // ensureAreaMap() actually builds the map (deferred until the dialog is
-    // visible, since a <dialog> without `open` has zero size before showModal()).
+    // Set by applyLastConfig() when a saved geo_bounds exists.
     restoredGeoBounds: GeoJSON.Geometry | null;
     pinOptions: PinOption[];
     friendOptions: FriendOption[];
@@ -280,11 +250,7 @@ const state: SpotGuessrState = {
 };
 
 // ---------------------------------------------------------------------------
-// Top-level panel state machine - showPanel() is the single chokepoint every
-// screen transition goes through, so no render path can forget to hide the
-// others (the old code toggled all 5 `.hidden` flags by hand in every
-// function that showed one of them).
-// ---------------------------------------------------------------------------
+// Top-level panel state machine - showPanel() is the single chokepoint every screen transition goes through, so no render path can.
 
 const PANEL_IDS: Record<PanelName, string> = {
     settings: "sg-settings-panel",
@@ -294,9 +260,7 @@ const PANEL_IDS: Record<PanelName, string> = {
     empty: "sg-empty-state-panel",
 };
 
-// Assigned once at the bottom of this module, before any user interaction can
-// trigger a panel change. Nullable only so the declaration can sit above the
-// functions that use it.
+// Assigned once at the bottom of this module, before any user interaction can trigger a panel change.
 let shell: GameShell | null = null;
 
 function showPanel(name: PanelName): void {
@@ -333,9 +297,7 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
 
 type Difficulty = "easy" | "medium" | "hard";
 
-// The backend accepts any float 0.0-1.0 (see docs/designs/drafts/spotguessr.md's
-// Gaussian-kernel difficulty mapping) - these 3 buttons just quantize the
-// player's choice down to one of 3 representative values.
+// The backend accepts any float 0.0-1.0 - these 3 buttons just quantize the player's choice down to one of 3 representative values.
 const DIFFICULTY_VALUES: Record<Difficulty, number> = { easy: 0.2, medium: 0.5, hard: 0.8 };
 
 function currentDifficulty(): number {
@@ -362,20 +324,14 @@ function updateModeVisibility(): void {
     });
 }
 
-// The dialog is shared across all 3 mode cards - a gear icon click scopes it
-// to that card's mode (updateModeVisibility shows/hides [data-mode-only]
-// fields accordingly); there's no in-dialog mode switcher.
+// The dialog is shared across all 3 mode cards.
 function openSettingsDialog(mode: string): void {
     el<HTMLInputElement>("sg-settings-mode").value = mode;
     updateModeVisibility();
     el<HTMLDialogElement>("sg-settings-dialog").showModal();
-    // The area map is always shown (not gated behind the "restrict to area"
-    // toggle) - build it the first time the dialog is opened, since a
-    // <dialog> without `open` has zero size before showModal() and Leaflet
-    // needs real size to lay out tiles correctly.
+    // The area map is always shown (not gated behind the "restrict to area" toggle).
     if (state.areaMap) {
-        // Already built while the dialog was previously closed (0-size) -
-        // nudge Leaflet now that it's actually visible.
+        // Already built while the dialog was previously closed (0-size) - nudge Leaflet now that it's actually visible.
         state.areaMap.invalidateSize();
     } else {
         ensureAreaMap();
@@ -433,13 +389,7 @@ function ensureAreaMap(): L.Map {
     return state.areaMap;
 }
 
-// Exactly one region is ever active - a new search selection or hand-drawn
-// polygon always replaces whatever was there before, matching the old
-// rectangle-only tool's single-shape behavior (no include/exclude sets).
-// Setting a region always turns "restrict to area" on - drawing/searching a
-// region is an unambiguous signal the player wants it applied; they can
-// still uncheck the toggle afterward to keep the shape but not apply it, or
-// use "Clear area" to drop it entirely.
+// Exactly one region is ever active - a new search selection or hand-drawn polygon always replaces whatever was there before, matching.
 function setAreaGeometry(geometry: GeoJSON.Geometry): void {
     const map = ensureAreaMap();
     state.areaDrawnItems?.clearLayers();
@@ -582,10 +532,7 @@ async function loadFriendOptions(): Promise<FriendOption[]> {
     return state.friendOptions;
 }
 
-// Fetched unconditionally at page load so the friend list is ready the
-// moment the settings dialog opens - there's no separate opt-in toggle to
-// gate it behind (any friend selected just starts a multiplayer lobby
-// instead of a solo game).
+// Fetched unconditionally at page load so the friend list is ready the moment the settings dialog opens.
 async function fetchFriendsEagerly(): Promise<void> {
     const loadingEl = el("sg-friend-list-loading");
     const errorEl = el("sg-friend-list-error");
@@ -607,12 +554,7 @@ function initFriendListRetry(): void {
     el("sg-friend-list-retry").addEventListener("click", () => void fetchFriendsEagerly());
 }
 
-// `targetSet` defaults to state.selectedInviteIds (the initial invite flow's
-// source of truth, read at game-start submit time) but can be swapped for a
-// scoped-local Set - see pickFriendsToInvite() below, which reuses this same
-// rendering logic for the "invite more" dialog without polluting
-// state.selectedInviteIds (that set must only ever reflect the pending
-// game-start invite list, not a completed, already-invited mid-game pick).
+// `targetSet` defaults to state.selectedInviteIds (the initial invite flow's source of truth, read at game-start submit time) but can be.
 function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>, targetSet: Set<number> = state.selectedInviteIds): void {
     container.innerHTML = "";
     const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
@@ -627,10 +569,7 @@ function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[],
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.value = String(friend.profile_id);
-        // Preserve prior selections across re-renders (e.g. toggling
-        // "play with friends" off then on) - targetSet is the source of
-        // truth read at submit time, so the checkboxes must reflect it
-        // rather than always starting unchecked.
+        // Preserve prior selections across re-renders (e.g. toggling "play with friends" off then on).
         checkbox.checked = targetSet.has(friend.profile_id);
         checkbox.addEventListener("change", () => {
             if (checkbox.checked) targetSet.add(friend.profile_id);
@@ -646,14 +585,7 @@ function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[],
     }
 }
 
-// Builds a small checkbox-picker dialog on the fly and resolves with the
-// chosen profile ids (empty if cancelled). There's no dedicated "invite
-// more" dialog markup in the template (unlike the initial invite flow's
-// sg-friend-list, which lives inside sg-settings-dialog) so this is
-// constructed in JS, but it reuses renderFriendCheckboxes - the exact same
-// checkbox rendering the initial invite flow uses - rather than duplicating
-// it. Replaces the old window.prompt() exact-username-match flow, which
-// silently no-op'd on any typo or case mismatch with zero feedback.
+// Builds a small checkbox-picker dialog on the fly and resolves with the chosen profile ids (empty if cancelled).
 function pickFriendsToInvite(available: FriendOption[]): Promise<Set<number>> {
     return new Promise((resolve) => {
         const chosen = new Set<number>();
@@ -755,9 +687,7 @@ function placeGuessMarker(latlng: L.LatLng): void {
     el<HTMLButtonElement>("sg-submit-guess-btn").disabled = false;
 }
 
-// When the session was configured with a geo_bounds restriction, the guess
-// map opens zoomed to that area instead of the default world view - see
-// docs/designs/drafts/spotguessr.md's eligibility rule 3.
+// When the session was configured with a geo_bounds restriction, the guess map opens zoomed to that area instead of the default world.
 function resetGuessMap(bounds?: GeoBoundsBox | null): void {
     const map = ensureGuessMap();
     if (state.guessMarker) {
@@ -781,10 +711,7 @@ function resetGuessMap(bounds?: GeoBoundsBox | null): void {
 }
 
 // ---------------------------------------------------------------------------
-// Round timer (GameConfig.round_time_limit_seconds) - a purely local countdown
-// display; the actual reveal is always server-authoritative (SpotGuessrRoundTimeoutView
-// / the stall-sweep Celery task), never decided client-side.
-// ---------------------------------------------------------------------------
+// Round timer (GameConfig.round_time_limit_seconds) - a purely local countdown display.
 
 function clearRoundTimer(): void {
     if (state.roundTimerHandle !== null) {
@@ -817,11 +744,7 @@ function updateRoundTimerDisplay(): void {
     }
 }
 
-// Tells the server this round's timer ran out - a fast path to the same
-// force-reveal the stall-sweep Celery task would eventually apply anyway
-// (see services.spotguessr.session.expire_round_timer). Multiplayer learns
-// the outcome via the usual round.revealed/round.started broadcast; solo has
-// no listener for those, so it re-fetches the (now-revealed) round directly.
+// Tells the server this round's timer ran out.
 async function reportRoundTimeout(): Promise<void> {
     if (state.sessionId === null || state.currentRoundId === null) return;
     await postForm(urlFor(urls.round_timeout, state.sessionId, state.currentRoundId), {});
@@ -878,13 +801,7 @@ async function refreshLobby(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Street View panorama - interactive pan/zoom/walk-around for street_view
-// mode rounds (google.maps.StreetViewPanorama), loaded lazily so players who
-// never touch this mode never pay for the script. See street_view_lat's
-// docstring on RoundPayload for why the pano's coordinates are safe to hand
-// the client here despite the round payload never revealing the answer
-// otherwise.
-// ---------------------------------------------------------------------------
+// Street View panorama - interactive pan/zoom/walk-around for street_view mode rounds (google.maps.StreetViewPanorama), loaded lazily so.
 
 // Memoized so a second street_view round doesn't inject the <script> tag
 // again - module load, not per-call, is the right lifetime for this promise.
@@ -903,9 +820,7 @@ function loadGoogleMapsScript(): Promise<void> {
     return googleMapsLoadPromise;
 }
 
-// One-way switch for the round: once a player falls back to the static
-// image there is nothing further to fall back to, so the button that got
-// them here goes away too.
+// One-way switch for the round: once a player falls back to the static image there is nothing further to fall back to, so the button.
 function showStreetViewFallback(): void {
     el("sg-street-view-pano").hidden = true;
     el<HTMLButtonElement>("sg-street-view-fallback-btn").hidden = true;
@@ -926,11 +841,7 @@ async function initStreetViewPanorama(lat: number, lng: number): Promise<void> {
 
     try {
         await loadGoogleMapsScript();
-        // Resolved server-side too (services.spotguessr.street_view), but that
-        // only confirms coverage existed when the round was built - re-resolving
-        // here also gets us the pano id StreetViewPanorama needs, and gives a
-        // definitive client-side OK/not-OK signal a bare `position:` option
-        // wouldn't (silent failures here fall back to the static image).
+        // Resolved server-side too (services.spotguessr.street_view), but that only confirms coverage existed when the round was built.
         const service = new google.maps.StreetViewService();
         const response = await service.getPanorama({ location: { lat, lng }, radius: 75 });
         const pano = response.data.location?.pano;
@@ -949,9 +860,7 @@ async function initStreetViewPanorama(lat: number, lng: number): Promise<void> {
                 showRoadLabels: false,
             });
         }
-        // The container was `hidden` (display:none) until just above, so the
-        // panorama needs a nudge to size itself correctly - same reason
-        // guessMap.invalidateSize() gets one at the end of renderRound().
+        // The container was `hidden` (display:none) until just above, so the panorama needs a nudge to size itself correctly.
         setTimeout(() => {
             if (state.streetViewPanorama) google.maps.event.trigger(state.streetViewPanorama, "resize");
         }, 0);
@@ -977,10 +886,7 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     // Baseline for the new round - not a "reward" moment, so no count-up here.
     state.displayedSessionScore = state.sessionScore;
     el("sg-score-status").textContent = state.isMultiplayer ? "" : `Score: ${state.sessionScore}`;
-    // Changing settings mid-game starts an entirely new session (see
-    // sg-game-settings-btn's click handler) - safe to abandon a solo game in
-    // progress, but would desync a shared multiplayer session's other
-    // participants, so this is solo-only.
+    // Changing settings mid-game starts an entirely new session.
     el<HTMLButtonElement>("sg-game-settings-btn").hidden = state.isMultiplayer;
     // Ending early only makes sense for the host of a shared game - solo play
     // has "reload"/"play again" for the same purpose already.
@@ -989,9 +895,7 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     const photo = el<HTMLImageElement>("sg-round-photo");
     const nameHeading = el("sg-round-name");
     const pinSearchWrap = el("sg-pin-search-wrap");
-    // The play panel stays mounted between rounds, so the clue and the photo
-    // only animate if the entrance is re-applied - otherwise round 2..N is a
-    // hard cut on the single most repeated moment in the game.
+    // The play panel stays mounted between rounds, so the clue and the photo only animate if the entrance is re-applied.
     const skipMotion = shell?.reducedMotion() ?? false;
 
     if (round.mode === "named_place") {
@@ -1009,9 +913,7 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
         // image_url is a Django ImageField storage path. Neither is user-typed.
         photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? ""; // lgtm[js/xss,js/client-side-unvalidated-url-redirection]
         if (round.mode === "street_view" && round.street_view_lat != null && round.street_view_lng != null) {
-            // initStreetViewPanorama sets container.hidden = false synchronously
-            // (before its first await), so the entrance animation below sees
-            // the un-hidden element even though the fetch it kicks off is async.
+            // initStreetViewPanorama sets container.hidden = false synchronously (before its first await), so the entrance animation below sees.
             void initStreetViewPanorama(round.street_view_lat, round.street_view_lng);
             playEntrance(el("sg-street-view-pano"), skipMotion);
         } else {
@@ -1036,20 +938,12 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// Animation helpers - thin requestAnimationFrame wrappers around the pure
-// easing/interpolation math in shared/spotguessr-format.ts (kept there, not
-// here, so that math is unit-testable without a DOM/rAF environment).
-// ---------------------------------------------------------------------------
+// Animation helpers - thin requestAnimationFrame wrappers around the pure easing/interpolation math in shared/spotguessr-format.ts.
 
-// Keyed per-element so re-triggering an animation on the same element (e.g.
-// a fast player who guesses again before the previous reveal's count-up
-// finished) cancels the stale one instead of both fighting over the text.
+// Keyed per-element so re-triggering an animation on the same element.
 const activeCountUps = new WeakMap<HTMLElement, number>();
 
-// Counts `el`'s text content from `from` to `to` over `durationMs`, easing
-// out. `formatter` renders the current (possibly fractional, mid-animation)
-// numeric value - defaults to a rounded integer, since points/ratings never
-// show fractional digits mid-flight.
+// Counts `el`'s text content from `from` to `to` over `durationMs`, easing out.
 function animateCountUp(el: HTMLElement, from: number, to: number, durationMs = 700, formatter: (value: number) => string = (value) => String(Math.round(value))): void {
     const pending = activeCountUps.get(el);
     if (pending !== undefined) cancelAnimationFrame(pending);
@@ -1075,11 +969,7 @@ function animateCountUp(el: HTMLElement, from: number, to: number, durationMs = 
     activeCountUps.set(el, requestAnimationFrame(tick));
 }
 
-// Draws `line` growing from `from` toward `to` over `durationMs`, rather
-// than snapping into place instantly - the reveal's "here's how far off you
-// were" line drawing itself in, GeoGuessr-style. Uses Leaflet's public
-// setLatLngs() API (not internal SVG path plumbing), so it doesn't depend on
-// Leaflet's rendering internals.
+// Draws `line` growing from `from` toward `to` over `durationMs`, rather than snapping into place instantly.
 function animateLineDrawIn(map: L.Map, from: L.LatLng, to: L.LatLng, durationMs = 600): L.Polyline {
     const line = L.polyline([from, from], { color: shell?.cssVar("bad") || "#e74c3c" }).addTo(map);
     if (shell?.reducedMotion()) {
@@ -1098,9 +988,7 @@ function animateLineDrawIn(map: L.Map, from: L.LatLng, to: L.LatLng, durationMs 
 }
 
 // ---------------------------------------------------------------------------
-// Score card - shared by the reveal results list, the live scoreboard, and
-// the summary panel (renderResultsList/renderScoreboard/showSummary below).
-// ---------------------------------------------------------------------------
+// Score card - shared by the reveal results list, the live scoreboard, and the summary panel.
 
 interface ScoreCardData {
     profileId: number;
@@ -1162,10 +1050,7 @@ function renderScoreCard(data: ScoreCardData, rank?: number, animatePoints = fal
     return card;
 }
 
-// Solo sessions show "Your score: X" instead of a username-labeled card -
-// there's only ever one participant, and naming them is just noise. Still
-// surfaces the same rating-delta/subtitle recap a multiplayer card would,
-// when the entry carries them (see showSummary()).
+// Solo sessions show "Your score: X" instead of a username-labeled card.
 function renderScoreCardList(container: HTMLElement, entries: ScoreCardData[], options: { solo: boolean; animatePoints?: boolean }): void {
     container.innerHTML = "";
     const sorted = [...entries].sort((a, b) => b.points - a.points);
@@ -1233,9 +1118,7 @@ function updateScoreboardFromResults(results: RoundRevealResult[]): void {
         entry.total_points += result.points + result.date_points + result.bonus_points;
     }
     renderScoreboard();
-    // Pulse whichever cards actually changed this round - renderScoreboard()
-    // rebuilds the whole list, so this has to run after, keyed off the
-    // profile_id dataset attribute renderScoreCard() stamps on each card.
+    // Pulse whichever cards actually changed this round.
     const list = el("sg-scoreboard");
     for (const result of results) {
         const card = list.querySelector<HTMLElement>(`[data-profile-id="${result.profile_id}"]`);
@@ -1260,11 +1143,7 @@ function renderScoreboard(): void {
 }
 
 function showPhotoFeedbackIfApplicable(): void {
-    // The photo itself (unlike the answer) has been visible since the round
-    // started, whether or not everyone's guessed yet - so feedback on it is
-    // always fair game once there's a reveal panel to put the buttons in.
-    // shows_imagery comes straight from the round payload (services.spotguessr.modes) -
-    // no separate hardcoded mode list to keep in sync here.
+    // The photo itself (unlike the answer) has been visible since the round started, whether or not everyone's guessed yet.
     el("sg-photo-feedback").hidden = !state.currentRoundShowsImagery;
     el("sg-photo-feedback-thanks").hidden = true;
 }
@@ -1273,9 +1152,7 @@ function dropInMarker(marker: L.Marker): void {
     marker.getElement()?.classList.add("spotguessr-marker-drop");
 }
 
-// Shared by showReveal() and showBroadcastReveal() - both draw the actual-
-// location marker, and (if a guess was placed) the line from that guess to
-// it, identically. Used to be ~15 duplicated lines in each function.
+// Shared by showReveal() and showBroadcastReveal().
 function drawRevealMarkers(actualLatLng: L.LatLng): void {
     const map = ensureGuessMap();
     state.actualMarker = L.marker(actualLatLng).addTo(map);
@@ -1307,9 +1184,7 @@ function updateRatingDeltaDisplay(delta: number | null | undefined): void {
     badge.className = `spotguessr-rating-delta spotguessr-rating-delta--${formatted.direction}`;
 }
 
-// Colours the reveal sheet's border and flashes the stage. Scoring anything at
-// all counts as "good" - a zero means the guess landed outside every scoring
-// band, or the round timed out with no guess placed.
+// Colours the reveal sheet's border and flashes the stage.
 function setRevealVerdict(scored: boolean): void {
     const panel = el("sg-reveal-panel");
     panel.classList.toggle("ul-game-reveal--good", scored);
@@ -1337,11 +1212,7 @@ function showReveal(reveal: RevealPayload): void {
 
     const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
     if (!reveal.revealed) {
-        // Multiplayer: not everyone has guessed yet - the answer is withheld
-        // so this player can't relay it via chat before their teammates
-        // guess too. showBroadcastReveal() completes this once round.revealed
-        // arrives (lastRevealedRoundId is left untouched so that handler
-        // knows it still needs to draw the actual marker/line itself).
+        // Multiplayer: not everyone has guessed yet.
         el("sg-reveal-panel").hidden = false;
         el("sg-reveal-title").textContent = "Guess submitted!";
         // The big animated counter above already shows the point total - this
@@ -1476,10 +1347,7 @@ async function startGame(mode: string): Promise<void> {
 async function submitGuess(): Promise<void> {
     if (!state.guessMarker || state.sessionId === null || state.currentRoundId === null) return;
     const submitBtn = el<HTMLButtonElement>("sg-submit-guess-btn");
-    // Closes the double-click window: nothing else disables this button
-    // between placing a marker and the reveal actually landing, so a second
-    // click before the first request resolves posted a second guess for the
-    // same round and double-counted the score.
+    // Closes the double-click window: nothing else disables this button between placing a marker and the reveal actually landing, so.
     if (submitBtn.disabled) return;
     submitBtn.disabled = true;
     const latlng = state.guessMarker.getLatLng();
@@ -1571,9 +1439,7 @@ function _resetSessionState(): void {
     }
 }
 
-// Host-only manual escape hatch for a stalled/AFK multiplayer game - see
-// controllers.spotguessr.SpotGuessrEndSessionView. Confirmed first since it's
-// irreversible for every other participant, not just the host.
+// Host-only manual escape hatch for a stalled/AFK multiplayer game - see controllers.spotguessr.SpotGuessrEndSessionView.
 async function endGameNow(): Promise<void> {
     if (state.sessionId === null) return;
     const confirmed = await confirmAction({
@@ -1596,10 +1462,7 @@ function resetToSettings(): void {
     showPanel("settings");
 }
 
-// Which currently-checked settings could plausibly be why nothing matched -
-// shown on the empty state so the player isn't left guessing (a restrictive
-// carried-over filter is a common, non-obvious cause - see
-// controllers.spotguessr.SpotGuessrStartView's docstring).
+// Which currently-checked settings could plausibly be why nothing matched.
 function activeFilterLabels(): string[] {
     const labels: string[] = [];
     if (el<HTMLInputElement>("sg-require-visited-all").checked) labels.push("Only places I've visited");
@@ -1615,9 +1478,7 @@ function clearActiveFilters(): void {
     clearAreaGeometry();
 }
 
-// Distinguishes "never got to play a single round because nothing eligible
-// matched this mode/settings combination" from a real completed game -
-// see controllers.spotguessr's error_code/no_eligible_locations shapes.
+// Distinguishes "never got to play a single round because nothing eligible matched this mode/settings combination" from a real completed.
 function showNoEligibleLocations(): void {
     const mode = state.currentMode;
     _resetSessionState();
@@ -1652,11 +1513,7 @@ function initEmptyState(): void {
     });
 }
 
-// Pre-fills the (still-closed) settings dialog from the profile's last-used
-// settings, saved on every previous game start (SpotGuessrStartView) but
-// never read back until now. Runs once at page load, before any dialog is
-// opened - geo_bounds is only staged (restoredGeoBounds) since actually
-// drawing it requires the dialog to be visible first (see openSettingsDialog).
+// Pre-fills the (still-closed) settings dialog from the profile's last-used settings, saved on every previous game start.
 function applyLastConfig(): void {
     const config = window.SPOTGUESSR_LAST_CONFIG;
     if (!config) return;
@@ -1677,19 +1534,12 @@ function applyLastConfig(): void {
     el<HTMLInputElement>("sg-use-aliases").checked = config.use_aliases;
     el<HTMLInputElement>("sg-require-visited-all").checked = config.require_visited_all;
     el<HTMLSelectElement>("sg-round-time-limit").value = config.round_time_limit_seconds ? String(config.round_time_limit_seconds) : "";
-    // A label the profile deleted (or that never existed - a stale/tampered snapshot)
-    // simply leaves no matching <option>, so the select silently falls back to "All spots"
-    // rather than erroring.
+    // A label the profile deleted.
     el<HTMLSelectElement>("sg-label-filter").value = config.label_id ? String(config.label_id) : "";
 
     if (config.geo_bounds_geojson) {
         el<HTMLInputElement>("sg-restrict-area").checked = true;
-        // Populate the hidden input immediately (just a value assignment,
-        // no map needed) so a "quick start" from a mode card - which never
-        // opens this dialog at all - still sends the geo_bounds that
-        // "restrict to area" implies. Drawing it onto the actual map is
-        // deferred to openSettingsDialog(), which needs the dialog visible
-        // first for Leaflet to lay out correctly.
+        // Populate the hidden input immediately (just a value assignment, no map needed) so a "quick start" from a mode card.
         el<HTMLInputElement>("sg-area-geo-bounds").value = JSON.stringify(config.geo_bounds_geojson);
         el<HTMLButtonElement>("sg-area-clear-btn").hidden = false;
         state.restoredGeoBounds = config.geo_bounds_geojson;
@@ -1697,8 +1547,7 @@ function applyLastConfig(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Real-time (multiplayer only)
-// ---------------------------------------------------------------------------
+// Real-time (multiplayer only) ---------------------------------------------------------------------------
 
 function connectSessionSocket(): void {
     if (state.ws || state.sessionId === null) return;
@@ -1707,13 +1556,9 @@ function connectSessionSocket(): void {
     state.ws = openLiveSocket({
         path: `/ws/spotguessr/session/${state.sessionId}/`,
         onMessage: handleSocketMessage,
-        // Every open, reconnects included: a dropped connection takes the
-        // acknowledgement with it, and an entry left in the composer's queue
-        // would retire the wrong message later (see shared/chat-composer.ts).
+        // Every open, reconnects included: a dropped connection takes the acknowledgement with it, and an entry left in the composer's queue.
         onOpen: () => chatComposer?.reset(),
-        // 4404 here means the host removed this player, or the entitlement went
-        // away - nothing more is coming, so drop the handle rather than leave a
-        // dead one blocking a later join.
+        // 4404 here means the host removed this player, or the entitlement went away.
         onPermanentClose: () => {
             state.ws = null;
         },
@@ -1743,10 +1588,7 @@ function handleSocketMessage(data: any): void {
             appendChatMessage(data.message as ChatMessagePayload);
             break;
         case "error":
-            // The consumer refuses a frame with an error rather than a close -
-            // an out-of-scope credential, a failed write, or a volume limit.
-            // Dropping these silently is what made a throttle unsafe to add
-            // (P31); reportRefusal also gives the composer's text back.
+            // The consumer refuses a frame with an error rather than a close - an out-of-scope credential, a failed write, or a volume limit.
             if (chatComposer) chatComposer.reportRefusal(data.detail);
             else toastRefusal(data.detail);
             break;
@@ -1795,8 +1637,7 @@ function initChat(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Deep link from an invite notification (?session=<id>)
-// ---------------------------------------------------------------------------
+// Deep link from an invite notification (?session=<id>) ---------------------------------------------------------------------------
 
 async function loadInitialSession(): Promise<void> {
     const raw = pageEl?.dataset.initialSessionId;

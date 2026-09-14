@@ -18,12 +18,7 @@ logger = logging.getLogger(__name__)
 
 class SavedFilter(abstract.FrontendDashboardModel):
     """A profile's saved main-map filter combination.
-
-    ``criteria`` stores a JSON-safe, normalized form of the fields
-    ``SearchForm.cleaned_data`` (plus parsed ``label_groups``/custom-field
-    criteria) would produce - see ``dashboard.services.search.filter_criteria`` for
-    the (de)serialization helpers that build and replay this shape against
-    ``Pin.objects.filter_by_criteria()``.
+    ``criteria`` stores a JSON-safe, normalized form of the fields ``SearchForm.cleaned_data`` (plus parsed ``label_groups``/custom-field criteria) would produce - see ``dashboard.services.search.filter_criteria`` for the (de)serialization helpers that build and replay this shape against ``Pin.objects.filter_by_criteria()``.
 
     Attributes:
         icon: Material Symbols icon name or emoji shown on the filter's button.
@@ -42,11 +37,7 @@ class SavedFilter(abstract.FrontendDashboardModel):
 
     def coerce_colors(self) -> None:
         """Drop `color` to its unset value unless it is a colour we can store.
-
-        The column declares `choices`, which Django enforces in a form and not
-        in the database - and the archive importer writes this straight from an
-        uploaded file. The value is tinted into an inline style on the filter's
-        button.
+        The column declares `choices`, which Django enforces in a form and not in the database - and the archive importer writes this straight from an uploaded file.
         """
         self.color = clean_color(self.color, default="")
 

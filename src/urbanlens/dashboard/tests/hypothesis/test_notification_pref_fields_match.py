@@ -1,22 +1,4 @@
-"""The settings UI's preference list must match the model's actual fields.
-
-``services.notifications.notification_center`` introspects
-``NotificationPreference`` to derive its stems, and its module docstring says why:
-"A hardcoded list here would silently omit it - which is exactly how the
-controller's ``_PREF_FIELDS`` and the model can drift apart."
-
-The controller still keeps that hardcoded list, because it carries display labels
-the model has no place for. So the drift the docstring warns about is possible,
-and nothing was checking for it. Both directions matter and both fail quietly:
-
-- a stem in the model but not in ``_PREF_FIELDS`` is a preference the user can
-  never change, though the API exposes it and delivery honours it;
-- a name in ``_PREF_FIELDS`` that is not a model field renders a control that
-  saves nothing.
-
-This does not require the two to be *generated* from one source - the labels are
-a good reason to keep the list - only that they agree.
-"""
+"""The settings UI's preference list must match the model's actual fields."""
 
 from __future__ import annotations
 

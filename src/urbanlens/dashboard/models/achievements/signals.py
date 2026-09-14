@@ -1,11 +1,5 @@
 """Signal wiring that keeps achievements up to date as users contribute.
-
-Every handler does the same two things - work out whose totals changed, and
-hand off to Celery - so they are generated from :data:`_SUBSCRIPTIONS` rather
-than written out one by one.
-
-Awards are never revoked, so there are deliberately no ``post_delete``
-handlers: deleting a pin lowers the metric but keeps whatever it earned.
+Every handler does the same two things - work out whose totals changed, and hand off to Celery - so they are generated from :data:`_SUBSCRIPTIONS` rather than written out one by one.
 """
 
 # Generic imports
@@ -71,11 +65,7 @@ def _attr_ids(*attrs: str) -> Callable[[Any], list[int]]:
 
 def _is_genuine_upload(instance: Any) -> bool:
     """True when an Image row is the user's own photo, not somebody else's.
-
-    Attaching a Yelp or Wikimedia photo creates an ``Image`` too, and that must
-    not extend a photo-upload streak. A photo picked out of the user's own
-    Immich server or Google Photos library is their own and does extend it,
-    which is why this asks ``is_own_contribution`` rather than ``source``.
+    Attaching a Yelp or Wikimedia photo creates an ``Image`` too, and that must not extend a photo-upload streak.
     """
     return instance.is_own_contribution
 
@@ -171,15 +161,7 @@ _SUBSCRIPTIONS: tuple[_Subscription, ...] = (
 
 def _record_streak_days(profile_ids: list[int], activity_kind: str) -> bool:
     """Record today's activity day for each profile, synchronously.
-
-    Deliberately not deferred to Celery. Streaks are the only metric with no
-    source of truth outside our own tables, so the day has to be written even
-    when no streak award exists yet - otherwise an award added next month would
-    have no history to reward. Writing it inside the caller's transaction also
-    means a rolled-back contribution rolls back its streak day with it.
-
-    The cost is bounded: one indexed ``get_or_create`` that hits at most once
-    per profile per kind per day.
+    Streaks are the only metric with no source of truth outside our own tables, so the day has to be written even when no streak award exists yet - otherwise an award added next month would have no history to reward.
 
     Args:
         profile_ids: Profiles that performed the action.
@@ -198,15 +180,7 @@ def _record_streak_days(profile_ids: list[int], activity_kind: str) -> bool:
 
 def _schedule(profile_ids: list[int], metric_keys: list[str], activity_kind: str | None) -> None:
     """Record any streak day, then queue evaluation if an award depends on it.
-
-    The enqueue is gated on :func:`active_metric_keys` so a site that has not
-    defined an award against a metric pays nothing when that metric changes -
-    no broker message, no worker time. The nightly sweep still backstops
-    everything.
-
-    The enqueue itself is deferred to ``on_commit``: firing it inline would
-    queue work against rows that may still roll back, and would run against
-    invisible data in eager mode.
+    The enqueue is gated on :func:`active_metric_keys` so a site that has not defined an award against a metric pays nothing when that metric changes - no broker message, no worker time.
     """
     from urbanlens.dashboard.services.achievements.evaluate import active_metric_keys
 
@@ -274,14 +248,7 @@ def on_user_logged_in(sender: object, user: Any, **kwargs: Any) -> None:
 
 def on_achievement_saved(sender: type[Model], instance: Any, created: bool, raw: bool = False, **kwargs: Any) -> None:
     """Backfill a newly defined, re-activated, or re-scoped award across every profile.
-
-    This is what lets an admin add an award at any time and have users who
-    already qualify receive it, rather than only rewarding future activity.
-
-    It fires only when the set of qualifying profiles can actually have changed
-    - creation, activation, or an edit to ``metric``/``threshold``. It used to
-    fire on *every* save of an active award, so renaming one or dragging it up
-    the list re-ran an evaluation across every profile on the site.
+    This is what lets an admin add an award at any time and have users who already qualify receive it, rather than only rewarding future activity.
     """
     if raw or not instance.is_active:
         return
@@ -310,13 +277,10 @@ def connect() -> None:
         post_save.connect(
             _make_handler(subscription),
             sender=model,
-            # Keyed on the subscription, not just its model. Django dedupes by
-            # (dispatch_uid, sender), so a model-only uid means a second
-            # subscription for a model already listed silently replaces the
-            # first instead of adding to it - one of the two sets of triggers
-            # would just stop firing, with nothing to notice it. The index still
-            # gives each subscription one stable uid, so reconnecting stays
-            # idempotent.
+            # Keyed on the subscription, not just its model.
+            # Django dedupes by (dispatch_uid, sender), so a model-only uid means a second
+            # subscription for a model already listed silently replaces the first instead of adding
+            # to it - one of the two sets of triggers would just stop firing, with nothing to notice
             dispatch_uid=f"achievement_subscription_{index}_{model._meta.label_lower}",  # noqa: SLF001
             weak=False,
         )

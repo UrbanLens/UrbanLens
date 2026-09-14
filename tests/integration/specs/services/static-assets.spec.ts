@@ -1,21 +1,7 @@
 /**
- * The static pipeline, which is invisible until it is completely broken.
- *
- * Deployed instances serve static files through
- * `CompressedManifestStaticFilesStorage`, which hashes every filename and
- * resolves `{% static %}` through a manifest built by `collectstatic`. Two
- * things follow, and both are failure modes a template test cannot see:
- *
- * - An image whose `collectstatic` did not run, or ran against a stale tree,
- *   serves a page whose scripts 404. The HTML is correct; the application is
- *   inert.
- * - A hashed URL is content-addressed and therefore safe to cache forever. If
- *   it is being served with a short or absent cache lifetime, every visitor
- *   re-downloads the whole bundle on every page.
- *
- * Assertions here are about *what the page actually asked for*, discovered from
- * the rendered document, rather than a hardcoded list of asset names that would
- * go stale the first time a bundle was renamed.
+ * The static pipeline, which is invisible until it is completely broken. Deployed instances serve
+ * static files through `CompressedManifestStaticFilesStorage`, which hashes every filename and
+ * resolves `{% static %}` through a manifest built by `collectstatic`.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

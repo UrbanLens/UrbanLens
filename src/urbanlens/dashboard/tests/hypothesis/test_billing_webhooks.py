@@ -138,9 +138,7 @@ class HandleCheckoutSessionCompletedTests(TestCase):
         self.assertFalse(RoleSubscription.objects.exists())
 
     def test_missing_client_reference_id_is_a_no_op(self) -> None:
-        """The other half of the ``not subscription_id or not user_id`` guard - only the
-        subscription_id side was previously exercised.
-        """
+        """The other half of the ``not subscription_id or not user_id`` guard - only the subscription_id side was previously exercised."""
         webhooks.handle_event(self._event(client_reference_id=None))
         self.assertFalse(RoleSubscription.objects.exists())
 
@@ -196,10 +194,7 @@ class HandleCheckoutSessionCompletedTests(TestCase):
         self.assertIsNone(subscription.usage_covered_until)
 
     def test_non_pwyw_role_does_not_carry_forward_a_prior_ledger(self) -> None:
-        """The carry-forward branch is gated on role.pay_what_you_want - a fixed-price
-        role must start fresh at zero even with a prior canceled row sitting around with
-        a nonzero ledger, since that ledger has no meaning for a non-PWYW role.
-        """
+        """The carry-forward branch is gated on role.pay_what_you_want - a fixed-price role must start fresh at zero even with a prior canceled row sitting around with a nonzero ledger, since that ledger has no meaning for a non-PWYW role."""
         baker.make(
             RoleSubscription,
             user=self.user,
@@ -273,17 +268,9 @@ class HandleSubscriptionUpdatedTests(TestCase):
     def test_a_late_update_cannot_resurrect_a_canceled_subscription(self) -> None:
         """Stripe guarantees neither ordering nor single delivery.
 
-        ``customer.subscription.updated`` and ``.deleted`` are emitted together
-        at cancellation, and Stripe retries a failed delivery with backoff for
-        days - so the ``updated`` carrying the pre-cancellation status can land
-        after the ``deleted``. Applying it verbatim hands the subscription back
-        its old status, and with it whatever access the role grants. The daily
-        reconciliation sweep would undo that, but not for up to 24 hours.
-
-        Cancellation is terminal at Stripe - a canceled subscription is never
-        reactivated, a new one is created instead - so a later payload claiming
-        otherwise is always the stale one.
-        """
+        ``customer.subscription.updated`` and ``.deleted`` are emitted together at cancellation, and Stripe
+        retries a failed delivery with backoff for days - so the ``updated`` carrying the pre-cancellation
+        status can land after the ``deleted``."""
         subscription = baker.make(
             RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.CANCELED
         )
@@ -421,15 +408,7 @@ class HandleInvoicePaymentSucceededTests(TestCase):
         webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {}}})  # must not raise
 
     def test_out_of_order_delivery_still_banks_the_payment(self) -> None:
-        """Regression: Stripe guarantees neither webhook ordering nor delivery order,
-        so invoice.payment_succeeded can arrive before checkout.session.completed has
-        created the RoleSubscription row. The old code just logged and returned in
-        that case - the payment was never banked, and nothing ever retries a webhook
-        Stripe already recorded as delivered, so the loss was permanent for a
-        pay-what-you-want role. The Subscription's own metadata (duplicated there at
-        checkout time specifically for this - see stripe_client.create_checkout_session)
-        must be used to create the row on the spot instead of giving up.
-        """
+        """Regression: Stripe guarantees neither webhook ordering nor delivery order, so invoice.payment_succeeded can arrive before checkout.session.completed has created the RoleSubscription row. The old code just logged and returned in that case - the payment was never banked, and nothing ever retries a webhook Stripe already recorded as delivered, so the loss was permanent for a pay-what-you-want role."""
         role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
         user = baker.make(User)
         self.assertFalse(RoleSubscription.objects.filter(stripe_subscription_id="sub_new").exists())
@@ -517,11 +496,9 @@ class HandleInvoicePaymentFailedTests(TestCase):
 def _refund_object(refund_id: str, amount: int) -> mock.MagicMock:
     """A stand-in for a live ``stripe.Refund`` instance from ``stripe.Refund.list(...)``.
 
-    Unlike the embedded ``charge.refunds.data`` entries (plain dicts straight
-    off the webhook JSON), a real Stripe SDK object only supports ``.to_dict()``/
-    attribute/``[]`` access - not ``.get()`` - so the handler must normalize each
-    one before treating it like the embedded dicts.
-    """
+    Unlike the embedded ``charge.refunds.data`` entries (plain dicts straight off the webhook JSON), a real
+    Stripe SDK object only supports ``.to_dict()``/ attribute/``[]`` access - not ``.get()`` - so the handler
+    must normalize each one before treating it like the embedded dicts."""
     obj = mock.MagicMock()
     obj.to_dict.return_value = {"id": refund_id, "amount": amount}
     return obj
@@ -624,13 +601,7 @@ class HandleChargeRefundedTests(TestCase):
         self.assertEqual(self.sub.total_paid_cents, 2000)
 
     def test_paginated_refund_list_fetches_and_applies_every_refund(self) -> None:
-        """Regression: ``has_more`` used to only log a warning and truncate to the
-        embedded page - Stripe caps ``charge.refunds.data`` at 10, so a charge with
-        more refunds than that silently never had the rest debited from the banked
-        balance. Since idempotency is keyed per refund id, a later redelivery of
-        this same (still-truncated) embedded page never caught them up either -
-        the loss was permanent. The full list must be fetched directly instead.
-        """
+        """Since idempotency is keyed per refund id, a later redelivery of this same (still-truncated) embedded page never caught them up either - the loss was permanent. The full list must be fetched directly instead."""
         self._mock_invoice()
         with mock.patch("stripe.Refund.list") as mock_list:
             mock_list.return_value.auto_paging_iter.return_value = [

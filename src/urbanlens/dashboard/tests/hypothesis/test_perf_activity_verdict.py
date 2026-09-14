@@ -1,20 +1,4 @@
-"""The neighbour run's second verdict: did one account exhaust the connection pool?
-
-`derive_budget.py` decides whether latency held up. Nothing decided whether the
-*pool* held up, which is the other half of the same question and the half P104's
-eleven-hour outage was made of - the web tier was starved of Postgres
-connections while every latency number still looked survivable.
-
-PL7 says the sampler and the `53300` grep are both hard failures. Neither was:
-`report_activity.py` returned zero whatever it found ("this reports, and k6
-decides"), `run_perf_tests.sh` called it with `|| true`, and nothing looked at
-the database log at all.
-
-The case that matters most here is the absent one. A sampler that never ran
-leaves no CSV, and reading that as "the pool was fine" turns a broken harness
-into a passing run - the failure mode every instrument in this repo has had at
-least once.
-"""
+"""The neighbour run's second verdict: did one account exhaust the connection pool?"""
 
 from __future__ import annotations
 

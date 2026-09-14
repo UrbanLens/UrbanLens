@@ -1,23 +1,4 @@
-"""Resolving one viewer's photo visibility repeatedly, without changing what it means.
-
-``visible_to`` is eager: it resolves the viewer's friends, pinned locations,
-trip memberships and reachable wikis before it can build its filter. Those four
-describe the *viewer*, not the queryset, so a page calling it several times for
-one viewer pays for all four each time - album detail does it four times, which
-measured at 60 queries for a 30-photo vault album.
-
-The saving is opt-in, and that is the point of this file. An earlier version
-cached on first read, which silently changed the answer for any caller that
-wrote something and then asked: ``test_gaining_a_pin_at_the_far_place_grants_the_photo``
-creates a pin and immediately re-checks, and got the answer from before the pin.
-So a caller has to say it is about to ask repeatedly, and the default stays a
-fresh read.
-
-Both halves are pinned here, because getting either wrong is silent: an
-unprimed read that goes stale is a photo shown to somebody who should not see
-it or hidden from somebody who should, and a primed read that does not save
-anything is just slower.
-"""
+"""Resolving one viewer's photo visibility repeatedly, without changing what it means."""
 
 from __future__ import annotations
 
@@ -55,17 +36,14 @@ class ViewerScopePrimingTests(TestCase):
     def _resolve(self, times: int, *, primed: bool) -> list[str]:
         """Measure the viewer-table queries of *times* calls on a fresh profile.
 
-        Reloading matters: a primed value hangs on the instance, so reusing one
-        across measurements would leave the second reading what the first
-        primed, and the comparison would be between different things.
+        Reloading matters: a primed value hangs on the instance, so reusing one across measurements would leave
+        the second reading what the first primed, and the comparison would be between different things.
 
         Args:
-            times: How many ``visible_to`` calls to make.
-            primed: Whether to prime the viewer first.
+            times: How many ``visible_to`` calls to make. primed: Whether to prime the viewer first.
 
         Returns:
-            The SQL of every query that touched a viewer-scoped table.
-        """
+            The SQL of every query that touched a viewer-scoped table."""
         viewer = Profile.objects.get(pk=self.viewer.pk)
         if primed:
             prime_viewer_scope(viewer)

@@ -1,4 +1,4 @@
-"""The assistant's "how do I…" lookup tool - grounded in services.ai.page_help.PAGE_HELP only."""
+"""The assistant's "how do I…" lookup tool - grounded in services.ai.page_help."""
 
 from __future__ import annotations
 

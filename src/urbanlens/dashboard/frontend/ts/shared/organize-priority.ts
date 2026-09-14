@@ -4,22 +4,7 @@ import { toast } from "./dialogs";
 import { ORG_NS_BY_LABEL_KIND } from "./organize-filter-engine";
 
 /**
- * Priority tab: plain drag-handle reordering (via Sortable) plus a manual
- * click-based multi-select (shift-range) that dispatches to whichever tab's
- * bulk-edit dialog matches the selected items' kind.
- *
- * The original template additionally tried to enable Sortable's MultiDrag
- * plugin (`Sortable.mount(new Sortable.MultiDrag())`, `opts.multiDrag = true`)
- * gated on `window.Sortable.MultiDrag` being truthy. That property was never
- * actually exposed by the sortablejs version in use (1.15.x's UMD bundle
- * auto-mounts the plugin internally without exposing the class), so the
- * guard was always false - multiDrag was never enabled, and worse,
- * `_setPrioritySelected` always took the `Sortable.utils.select/deselect`
- * branch (since `Sortable.utils` itself IS populated by the auto-mount) which
- * silently no-ops without `options.multiDrag`, so clicking a priority item
- * never visibly selected it. This port drops the dead MultiDrag branch
- * entirely and always toggles the selection class directly, which is the
- * only path that ever actually worked.
+ * Priority tab: plain drag-handle reordering (via Sortable) plus a manual click-based multi-select (shift-range) that dispatches.
  */
 export function initOrganizePriority(): void {
     let prioritySortable: Sortable | null = null;
@@ -240,9 +225,7 @@ export function initOrganizePriority(): void {
         window._orgBulk.del = () => {
             const picked = selectedPriorityItems();
             if (!picked.ids.length) return;
-            // Delete is per-kind for the same reason edit and merge are: each kind's
-            // rows live in a different panel, and the bulk-delete endpoint and the
-            // rows it re-renders are chosen by kind.
+            // Delete is per-kind for the same reason edit and merge are.
             if (picked.kinds.size > 1) {
                 toast.warning("Select only tags, only categories, or only statuses to delete them together.");
                 return;
@@ -279,10 +262,7 @@ export function initOrganizePriority(): void {
         const list = document.getElementById("priority-list");
         if (!list) return;
         prioritySortable?.destroy();
-        // Captured on drag start, not derived after the fact: two rapid
-        // drags can each fire a save while the earlier one is still in
-        // flight, and restoring a snapshot taken *before this specific
-        // drag* is what makes a failed save undo only its own change.
+        // Captured on drag start, not derived after the fact.
         let dragStartOrder: HTMLElement[] = [];
         prioritySortable = new Sortable(list, {
             animation: 150,
@@ -298,9 +278,7 @@ export function initOrganizePriority(): void {
         });
     }
 
-    // Delegated from #panel-priority, not #priority-list, for the same reason
-    // as the htmx:afterSwap binding below: #priority-list may not exist yet
-    // when a deferred Priority tab first attaches its listeners.
+    // Delegated from #panel-priority, not #priority-list, for the same reason as the htmx:afterSwap binding below.
     document.getElementById("panel-priority")?.addEventListener("click", (e) => {
         const target = e.target as HTMLElement;
         const badge = target.closest<HTMLElement>(".priority-order-chip");
@@ -346,16 +324,7 @@ export function initOrganizePriority(): void {
 
     window._initPrioritySortable = initPrioritySortable;
 
-    // Bound to #panel-priority (always present), not #priority-list itself:
-    // the Priority tab's own content loads lazily via `hx-trigger="revealed"`
-    // when it isn't the tab shown on page load (see build_organize_page_context's
-    // deferral of the other label tabs, applied here too), so #priority-list
-    // may not exist yet when this listener is attached. htmx:afterSwap bubbles,
-    // so this still fires for that first load, and for the list's own
-    // subsequent self-refresh (`_priority_list.html`'s
-    // hx-trigger="refreshPriority from:body") - either way #priority-list's
-    // children (and Sortable's references to them) don't survive an innerHTML
-    // swap, so it needs rebinding same as the tab-switch case in organize-header.ts.
+    // Bound to #panel-priority (always present), not #priority-list itself.
     document.getElementById("panel-priority")?.addEventListener("htmx:afterSwap", () => {
         clearPrioritySelection();
         initPrioritySortable();

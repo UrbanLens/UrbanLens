@@ -1,23 +1,4 @@
-"""The map payload must not build a model instance per pin it serializes.
-
-Measured in the app container against 10,000 pins: `MapPinPayloadService.all()`
-took 5.79s wall and 5.28s of user CPU - 88% CPU-bound, with Postgres accounting
-for 0.36s of it - while constructing 63,240 model objects to emit 10,000 flat
-dicts. The same payloads built as JSON straight from SQL took 0.36s, so roughly
-96% of that was the object graph rather than the data.
-
-`QueryScalingMixin` cannot see it. `.all()` iterates in chunks of 1,000, so
-below that size the query count is literally constant, and even at 10,000 the
-21 statements it does run are 6% of the wall time. `RenderTimeScalingMixin`
-reads a 6x-too-expensive row as a slow machine on a contended host. What does
-separate them is the object count, which is exact and does not move with load -
-see `core.tests.instantiation_scaling`.
-
-The pins seeded here carry a location, a wiki, a cover photo and three labels
-because that is what fans the count out: `select_related` builds a companion per
-row and the label prefetch rebuilds a Label per pin-label pair, so a shared
-vocabulary of three labels becomes three objects on every pin.
-"""
+"""The map payload must not build a model instance per pin it serializes."""
 
 from __future__ import annotations
 
@@ -85,11 +66,7 @@ class MapPayloadInstantiationScalingTests(InstantiationScalingMixin, TestCase):
     def test_the_payload_service_itself_does_not_build_objects_per_pin(self) -> None:
         """The service, measured directly - `all()` is the unbounded caller's path.
 
-        `map.pins` pages at 500, so the endpoint above can only ever show the
-        per-row cost. `all()` is what `map_data_context` (the filter POST and
-        `map.init`) and the document builder call with no limit at all, so it
-        is measured on its own rather than through a URL.
-        """
+        `map.pins` pages at 500, so the endpoint above can only ever show the per-row cost."""
         self.seed_rows(self.second_batch)
         query = Pin.objects.filter(profile=self.profile).root_pins()
         service = MapPinPayloadService(self.profile)

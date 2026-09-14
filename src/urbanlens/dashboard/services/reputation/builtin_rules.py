@@ -1,34 +1,5 @@
 """The rules shipped with the ledger.
-
-Deliberately a small set. These are the coarse, hard-to-forge signals that
-answer "is this a real participant, or an account minted ninety seconds ago" -
-which is all the gate this ledger exists to feed actually needs. The richer
-need/quality/amplification scoring the design doc describes improves how
-*fairly* contribution is rewarded, and is a later phase.
-
-Several traps here were found by reading the code these rules touch, and are
-the reason each rule looks more defensive than its one-line description:
-
-- ``Image.profile`` is **not** the photographer on materialised rows. External
-  media becomes an ``Image`` only when somebody up-votes it or sends it to a
-  wiki, and the profile on that row is the voter. Bulk imports attach other
-  people's photos under the importer. Every photo rule therefore gates on
-  ``Image.is_own_contribution`` rather than trusting ``profile``. That asks
-  ``media_source_key``, which only a materialised row carries - not ``source``,
-  which names a provider on a photo out of the uploader's own Immich, Google
-  Photos or Flickr account too.
-- **Never read ``effective_latitude``** to test for GPS: it falls back to the
-  Location's coordinates, so it is never null and proves nothing.
-- GPS and EXIF extraction are skipped entirely when the uploader has
-  ``track_pin_visits`` off, so metadata is scored as an **additive bonus for
-  presence, never a penalty for absence** - otherwise the system quietly pays
-  people less for having a privacy setting enabled.
-- One Suggest-Edits submit spanning six fields writes **one** ``WikiEdit`` with
-  six keys in ``changes``, so a wiki edit is scored by field count, not row
-  count.
-- ``Wiki.save()`` auto-creates an alias on every rename with
-  ``created_by=None``. Those are not contributions and are not scored.
-"""
+External media becomes an ``Image`` only when somebody up-votes it or sends it to a wiki, and the profile on that row is the voter."""
 
 from __future__ import annotations
 
@@ -46,18 +17,7 @@ if TYPE_CHECKING:
 
 
 def _photo_need(wiki: Wiki | None, image: Image) -> tuple[Decimal, str]:
-    """How badly the wiki needed this photo, and why.
-
-    The memo's worked example: nothing at all on the page is worth far more
-    than adding to a pile, with "external photos but nothing a user took"
-    sitting in between.
-
-    Deliberately counts only *persisted* rows. Establishing whether a wiki has
-    transient external photos means walking every gallery panel and hitting a
-    provider cache per source, which is the single most expensive input in the
-    whole model - and this rule runs for every upload. The cheap approximation
-    is to treat materialised external rows as the "has external" signal.
-    """
+    """How badly the wiki needed this photo, and why."""
     if wiki is None:
         return coefficients.NEED_ROUTINE, "no_wiki"
 
@@ -106,11 +66,10 @@ def _score_photo(image: Image | None) -> ScoreResult | None:
 
     from urbanlens.dashboard.models.images.model import MediaKind
 
-    # The profile on a materialised external row is whoever voted for it, not
-    # the photographer - so only a photo this profile actually contributed is a
-    # contribution. Asked of media_source_key rather than of source, because a
-    # photo out of the uploader's own Immich server or Google Photos library is
-    # their own picture despite carrying a provider's name in source.
+    # The profile on a materialised external row is whoever voted for it, not the photographer - so
+    # only a photo this profile actually contributed is a contribution.
+    # Asked of media_source_key rather than of source, because a photo out of the uploader's own
+    # Immich server or Google Photos library is their own picture despite carrying a provider's name
     if not image.is_own_contribution or image.media_type != MediaKind.PHOTO:
         return None
     if image.wiki_id is None:
@@ -133,10 +92,7 @@ def _score_wiki_edit(edit: Any | None) -> ScoreResult | None:
         return None
 
     changes = edit.changes if isinstance(edit.changes, dict) else {}
-    # Every key in `changes` is now something a person typed. There used to be
-    # an exclusion set here for housekeeping the edit machinery wrote for
-    # itself; `officially_created` was its only member, and the draft state it
-    # tracked no longer exists.
+    # Every key in `changes` is now something a person typed.
     fields = list(changes)
     if not fields:
         return None

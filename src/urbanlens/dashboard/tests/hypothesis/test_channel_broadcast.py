@@ -1,14 +1,4 @@
-"""Tests for the shared channel-layer dispatch boundary.
-
-Covers:
-- services.core.channel_broadcast.send_group_message() - no-ops without a channel
-  layer, otherwise enqueues tasks.broadcast_channel_group_message via Celery
-  rather than calling async_to_sync inline (see that module's docstring for
-  why: gunicorn's gevent worker class and asyncio event loops don't mix).
-- tasks.broadcast_channel_group_message() - the actual async_to_sync(
-  channel_layer.group_send) call, run on celery-worker instead of inline in a
-  request; tolerates a missing layer and a delivery failure without raising.
-"""
+"""Tests for the shared channel-layer dispatch boundary."""
 
 from __future__ import annotations
 

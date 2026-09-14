@@ -1,14 +1,5 @@
 {% load static dashboard_tags %}
-{% comment %}
-Shared map layers component - rendered by {% map_layers_panel %} (see
-dashboard/templatetags/map_components.py; do not include this file directly).
-The markup is the main map's layers panel, generalized: buttons carry
-data-map-layer/data-layer-kind attributes that window.MapLayers.create(...)
-binds to, so every map presents and behaves exactly like the main map.
-
-variant="panel": bottom-left Google-Maps-style flyout (thumbnails + labels).
-variant="strip": compact icon row for dialogs (comment map composer/viewer).
-{% endcomment %}
+{% comment %}Shared map layers component - rendered by {% map_layers_panel %}.{% endcomment %}
 {% if variant == "strip" %}
 <div class="map-layers-strip {{ extra_class }}" id="{{ panel_id }}" data-map-layers-panel role="group" aria-label="Map layers">
     {% for b in buttons %}
@@ -56,12 +47,7 @@ variant="strip": compact icon row for dialogs (comment map composer/viewer).
             <span>Manage Layers</span>
         </button>
         {% endif %}
-        {% comment %}
-        Image overlays sit beside Manage Layers rather than inside it: a
-        georeferenced sheet is a different kind of thing from a markup grouping,
-        and each overlay gets its own toggle button injected above by
-        map-annotations.ts (unless it was assigned to a custom layer).
-        {% endcomment %}
+        {% comment %}Image overlays sit beside Manage Layers rather than inside it.{% endcomment %}
         {% if manage_overlays_url %}
         <button type="button" class="map-layer-btn map-layers-manage-btn"
                 hx-get="{{ manage_overlays_url }}" hx-target="#map-overlays-dialog-body" hx-swap="innerHTML"
@@ -69,10 +55,7 @@ variant="strip": compact icon row for dialogs (comment map composer/viewer).
             <span class="map-layer-thumb map-layer-thumb--icon">
                 <i class="material-symbols-outlined">add_photo_alternate</i>
             </span>
-            {# Not "Image Overlays" - too long for this tile's width at this #}
-            {# font size, so it wrapped and threw off row alignment with the #}
-            {# other (single-line) layer buttons. The icon plus the dialog's #}
-            {# own "Image Overlays" title still make the meaning clear. #}
+            {# Not "Image Overlays" - too long for this tile's width at this font size, so it wrapped and threw off row alignment with the other. #}
             <span>Overlays</span>
         </button>
         {% endif %}

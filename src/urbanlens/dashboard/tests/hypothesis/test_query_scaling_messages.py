@@ -1,20 +1,4 @@
-"""A conversation must cost a constant number of queries however many shares it holds.
-
-Companion to ``test_query_scaling``, which covers the map pin panel, trips
-overview, trips calendar and the external photo list. Message threads were not
-covered, and they render the one model property that had no annotation or
-prefetch behind it.
-
-``PinShare.resulting_pin`` is read by ``_message_share_card.html`` and
-``_group_share_card.html`` for every accepted share in the thread. It queries
-twice: ``pins_created.first()``, and - only in the "recipient already had this
-place pinned" dedup case - a lookup by location. Both thread querysets already
-prefetch ``pin_share``, but neither reached ``pins_created``, so each accepted
-share card cost its own query.
-
-The dedup fallback is still per-card and cannot be prefetched away; it only runs
-for shares that produced no new pin, so it does not scale with the ordinary case.
-"""
+"""A conversation must cost a constant number of queries however many shares it holds."""
 
 from __future__ import annotations
 
@@ -99,11 +83,8 @@ class ConversationQueryScalingTests(TestCase):
 class ConversationListQueryScalingTests(TestCase):
     """The sidebar conversation list must not query per conversation.
 
-    Closes a gap left open by the listing survey: ``messages.list`` measured
-    "flat" there only because the seed grew pins and labels, not conversations,
-    so the list it rendered never changed size. A scaling assertion is only
-    worth anything when the seed grows the rows the endpoint lists.
-    """
+    Closes a gap left open by the listing survey: ``messages.list`` measured "flat" there only because the seed
+    grew pins and labels, not conversations, so the list it rendered never changed size."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -129,16 +110,9 @@ class ConversationListQueryScalingTests(TestCase):
     def test_conversation_list_does_not_scale_with_conversation_count(self) -> None:
         """Was about eleven queries per conversation - 45 for 2, 155 for 12.
 
-        Each row renders ``conv.display_name``/``display_avatar_url``, which call
-        ``display_identity_for`` -> ``resolve_visible_identity`` per partner, and
-        that re-evaluated the viewer's friendships, trip memberships,
-        pins-in-common and temporary DM access every single time.
-
-        ``conversations_for`` now resolves the whole list once through
-        ``Profile.visible_profile_pks``. That is a reimplementation of a privacy
-        decision, so it is held to the original's answers by
-        ``test_identity_visibility_batch`` rather than trusted.
-        """
+        Each row renders ``conv.display_name``/``display_avatar_url``, which call ``display_identity_for`` ->
+        ``resolve_visible_identity`` per partner, and that re-evaluated the viewer's friendships, trip
+        memberships, pins-in-common and temporary DM access every single time."""
         url = reverse("messages.list")
 
         self._seed_conversations(_FIRST_BATCH)
@@ -155,19 +129,12 @@ class ConversationListQueryScalingTests(TestCase):
 
 
 class ConversationLastMessageReactionPrefetchTests(TestCase):
-    """conversations_for/group_conversations_for must prefetch each row's
-    last_message reactions (and, for groups, shares).
+    """conversations_for/group_conversations_for must prefetch each row's last_message reactions (and, for groups, shares).
 
-    ``build_direct_message_payload``/``build_group_message_payload`` (the
-    external API's inbox serializers) call ``reaction_summary(message)``
-    (and, for groups, ``message.share_for(viewer)``) for every row's
-    ``last_message`` - both read ``.reactions.all()``/``.shares.all()``,
-    which must already be populated by the time they run or each conversation
-    costs its own extra query. Asserted directly against the service
-    functions (not the full external API round trip) so this stays scoped to
-    the prefetch fix itself, rather than folding in the unrelated per-message
-    identity/location-mention costs the view layer also pays.
-    """
+    ``build_direct_message_payload``/``build_group_message_payload`` (the external API's inbox serializers) call
+    ``reaction_summary(message)`` (and, for groups, ``message.share_for(viewer)``) for every row's
+    ``last_message`` - both read ``.reactions.all()``/``.shares.all()``, which must already be populated by the
+    time they run or each conversation costs its own extra query."""
 
     def setUp(self) -> None:
         super().setUp()

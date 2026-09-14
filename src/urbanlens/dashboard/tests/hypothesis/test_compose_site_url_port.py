@@ -1,24 +1,4 @@
-"""`UL_SITE_URL`'s default names a port nothing serves.
-
-`docker-compose.yml` defaults `UL_SITE_URL` to `http://localhost:21080` and
-publishes the app on `UL_APP_PORT`, whose default is `21800` - the same four
-digits, transposed. Any deployment that does not set `UL_SITE_URL` explicitly
-therefore tells the app it lives somewhere it does not.
-
-Three things break, and none of them look like a port typo:
-
-- Every unsafe request from a browser is rejected on CSRF origin checking.
-  `_derive_trusted_origins` mints origins from `ALLOWED_HOSTS`, which never
-  carries a port (Django strips it before matching), so `UL_SITE_URL` is the
-  only place the port can come from - and the header the browser actually
-  sends is `Origin: http://localhost:<the real port>`.
-- Every URL the app builds for itself points at the wrong port.
-- `MEDIA_FRAME_ANCESTORS` gets that origin too, so the Vault lightbox's
-  cross-origin iframe is refused by the media host.
-
-Found 2026-09-06 when a browser POST to a new endpoint came back 403 with
-"Origin checking failed" on the dev stack.
-"""
+"""`UL_SITE_URL`'s default names a port nothing serves."""
 
 from __future__ import annotations
 
@@ -80,9 +60,6 @@ class ComposeSiteUrlPortTests(SimpleTestCase):
                 )
 
     def test_every_service_that_builds_urls_agrees_on_the_default(self) -> None:
-        # A deployment where one of them disagrees builds different URLs
-        # depending on which process wrote them, which is the shape P23 records
-        # in production.
         self.assertEqual(len(_url_defaults("UL_SITE_URL")), 1, _url_defaults("UL_SITE_URL"))
 
     def test_the_media_host_fails_closed_rather_than_guessing_an_origin(self) -> None:
@@ -95,11 +72,8 @@ class ComposeSiteUrlPortTests(SimpleTestCase):
 class SettingsSiteUrlPortTests(SimpleTestCase):
     """Django's own fallback, which `docker-compose.yml` does not reach.
 
-    Fixing the compose default alone left `settings/base.py` restating the same
-    stale literal - and that one is what any process started without
-    `UL_SITE_URL` in its environment actually uses to build absolute links.
-    `docs/INTEGRATION_TESTS.md` records this happening on staging for real.
-    """
+    Fixing the compose default alone left `settings/base.py` restating the same stale literal - and that one is
+    what any process started without `UL_SITE_URL` in its environment actually uses to build absolute links."""
 
     def test_the_site_url_fallback_is_not_a_literal_port(self) -> None:
         source = _SETTINGS_PATH.read_text(encoding="utf-8")
@@ -109,12 +83,7 @@ class SettingsSiteUrlPortTests(SimpleTestCase):
         self.assertIn("_APP_PORT", fallback.group(1), "the fallback names a port independently of UL_APP_PORT")
 
     def test_no_cors_origin_is_minted_from_a_hardcoded_port(self) -> None:
-        # These lists feed CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS. A port
-        # literal in one is an origin this deployment trusts and does not serve,
-        # or - worse, and what happened - serves and does not trust.
-        #
-        # Scoped to the `domains` lists rather than the whole file: a port on a
-        # `redis://` URL is not an origin and has nothing to do with this.
+        # These lists feed CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS.
         source = _SETTINGS_PATH.read_text(encoding="utf-8")
         listed = re.findall(r"^\s*domains = \[(.+?)\]", source, re.MULTILINE | re.DOTALL)
 

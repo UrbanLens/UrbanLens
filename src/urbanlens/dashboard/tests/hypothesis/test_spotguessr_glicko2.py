@@ -1,11 +1,4 @@
-"""Tests for the Glicko-2 rating engine (services.spotguessr.glicko2).
-
-Verified against Glickman's own worked example in "Example of the Glicko-2
-system" (2012): a player rated 1500/RD 200/volatility 0.06 plays three games
-in one rating period against opponents rated (1400, RD 30), (1550, RD 100),
-(1700, RD 300) with results win/loss/loss, and should land at approximately
-rating 1464.06, RD 151.52, volatility 0.05999.
-"""
+"""Tests for the Glicko-2 rating engine (services.spotguessr.glicko2)."""
 
 from __future__ import annotations
 

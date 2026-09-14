@@ -1,19 +1,4 @@
-"""A slow upload must not release the next upload's quota lock.
-
-``per_profile_upload_lock`` serialises the read-usage-then-create-row sequence so
-two near-simultaneous uploads can't both pass a quota check before either commits.
-It released with a bare ``cache.delete`` guarded only by "did I acquire it",
-which is not the same as "do I still hold it": an upload slower than the 30s
-timeout has already lost the lock to the next one, and its release then drops
-*that* upload's lock, letting a third in alongside it.
-
-It now uses the shared token-checked release from ``services.core.locks``, so a
-release only happens while the lock is still ours.
-
-The lock is deliberately fail-open - a caller that cannot acquire it proceeds
-anyway rather than blocking an upload - so these tests assert the release
-behaviour, not mutual exclusion under contention.
-"""
+"""A slow upload must not release the next upload's quota lock."""
 
 from __future__ import annotations
 

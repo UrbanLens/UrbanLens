@@ -1,23 +1,4 @@
-"""External API: avatar writes and the private profile annotations.
-
-Two surfaces that existed only as HTML before this change, and one recurring
-rule they share: **404, never 403, and never a distinguishable one.**
-
-The avatar routes may only ever touch the caller's own profile, so every other
-slug answers exactly as an unknown slug does - a 403 would confirm that some
-other account owns that slug. They are gated on ``social:write`` rather than
-``photos:write`` on purpose: an avatar creates no ``Image`` row and consumes no
-photo quota, while ``photos:write`` would additionally authorize deleting the
-user's actual photographs.
-
-The annotation routes carry the sharper rule. ``ProfileNickname`` and
-``ProfileTrust`` are private *to their author*: the person being annotated must
-never be able to read what someone else recorded about them. The tests below
-assert that from the subject's side explicitly, because a queryset filtered on
-``subject`` alone rather than through ``for_pair(author=viewer, ...)`` would
-pass every author-side test in this file while handing the subject everyone's
-private opinion of them.
-"""
+"""External API: avatar writes and the private profile annotations."""
 
 from __future__ import annotations
 
@@ -48,9 +29,8 @@ _PNG_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
 
-#: A file whose magic bytes identify it as a PDF - used to prove the sniffing
-#: step runs. Junk bytes would not do: a format ``filetype`` cannot fingerprint
-#: is trusted rather than rejected, so only an identifiable *mismatch* fails.
+#: Junk bytes would not do: a format ``filetype`` cannot fingerprint is trusted rather than rejected, so only an
+#: identifiable *mismatch* fails.
 _PDF_BYTES = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
 
 
@@ -61,8 +41,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Kwargs to splat into a test-client call.
-    """
+        Kwargs to splat into a test-client call."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -74,8 +53,7 @@ def _key_with_scopes(user: User, *scopes: ApiKeyScope) -> str:
         scopes: The scopes to grant.
 
     Returns:
-        The plaintext key.
-    """
+        The plaintext key."""
     api_key, raw_key = generate_api_key(user, "Test")
     api_key.scopes = [scope.value for scope in scopes]
     api_key.save(update_fields=["scopes"])
@@ -114,8 +92,7 @@ class _SocialProfileTestCase(TestCase):
             profile: The profile to address.
 
         Returns:
-            Its slug, falling back to its uuid.
-        """
+            Its slug, falling back to its uuid."""
         return profile.slug or str(profile.uuid)
 
 
@@ -129,11 +106,9 @@ _MEDIA_ROOT = _MEDIA_TMP.name
 def _multipart_put(client, url: str, files: dict, headers: dict):
     """PUT a multipart body through Django's test client.
 
-    ``Client.put`` sends the body verbatim rather than encoding it the way
-    ``Client.post`` does, so a dict handed to it arrives as a stringified dict
-    and ``request.FILES`` comes back empty - which looks exactly like the
-    "no file provided" path and would quietly turn a real assertion into a
-    tautology.
+    ``Client.put`` sends the body verbatim rather than encoding it the way ``Client.post`` does, so a dict
+    handed to it arrives as a stringified dict and ``request.FILES`` comes back empty - which looks exactly like
+    the "no file provided" path and would quietly turn a real assertion into a tautology.
 
     Args:
         client: The Django test client.
@@ -142,8 +117,7 @@ def _multipart_put(client, url: str, files: dict, headers: dict):
         headers: Extra request kwargs (the bearer token).
 
     Returns:
-        The test-client response.
-    """
+        The test-client response."""
     return client.put(url, encode_multipart(BOUNDARY, files), content_type=MULTIPART_CONTENT, **headers)
 
 
@@ -158,20 +132,17 @@ class AvatarUploadTests(_SocialProfileTestCase):
             profile: The profile named in the path.
 
         Returns:
-            The reversed URL.
-        """
+            The reversed URL."""
         return reverse("external_api:profiles.avatar", kwargs={"profile_slug": self._slug(profile)})
 
     def _put_png(self, profile: Profile, raw_key: str | None = None):
         """PUT a valid PNG at a profile's avatar route.
 
         Args:
-            profile: The profile named in the path.
-            raw_key: Credential to use; defaults to the fixture owner's.
+            profile: The profile named in the path. raw_key: Credential to use; defaults to the fixture owner's.
 
         Returns:
-            The test-client response.
-        """
+            The test-client response."""
         return _multipart_put(
             self.client,
             self._url(profile),
@@ -213,12 +184,7 @@ class AvatarUploadTests(_SocialProfileTestCase):
     def test_content_that_is_not_an_image_is_refused_and_stores_nothing(self) -> None:
         """Magic-byte sniffing runs here exactly as it does on the web form.
 
-        The payload is a real PDF wearing a ``.png`` name and an ``image/png``
-        Content-Type. Unrecognizable junk would *not* be rejected - a format
-        ``filetype`` cannot fingerprint is deliberately trusted (see
-        ``services.security.content_sniffing``) - so a mismatch only exists when the
-        bytes are identifiable as something else.
-        """
+        The payload is a real PDF wearing a ``.png`` name and an ``image/png`` Content-Type."""
         response = _multipart_put(
             self.client,
             self._url(self.profile),
@@ -233,11 +199,8 @@ class AvatarUploadTests(_SocialProfileTestCase):
     def test_upload_refusals_keep_their_own_status_and_message(self) -> None:
         """Each status keeps its own hand-authored text, not ``image_upload_error``'s.
 
-        That message is log-only now (see ``services.profile.avatar``) - a
-        caller-supplied string must never reach the response. The 503 in
-        particular must stay distinguishable from a 413, because it is the
-        only one worth retrying.
-        """
+        That message is log-only now (see ``services.profile.avatar``) - a caller-supplied string must never
+        reach the response."""
         cases = (
             ("This file is too large.", 413, "That file is too large. Please upload a smaller image."),
             (
@@ -301,20 +264,17 @@ class AvatarEmojiTests(_SocialProfileTestCase):
             profile: The profile named in the path.
 
         Returns:
-            The reversed URL.
-        """
+            The reversed URL."""
         return reverse("external_api:profiles.avatar.emoji", kwargs={"profile_slug": self._slug(profile)})
 
     def _post(self, profile: Profile, payload: dict):
         """POST an emoji-avatar request.
 
         Args:
-            profile: The profile named in the path.
-            payload: The JSON body.
+            profile: The profile named in the path. payload: The JSON body.
 
         Returns:
-            The test-client response.
-        """
+            The test-client response."""
         return self.client.post(self._url(profile), payload, content_type="application/json", **_bearer(self.raw_key))
 
     def test_generates_and_stores_an_svg(self) -> None:
@@ -360,8 +320,7 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
             profile: The subject named in the path.
 
         Returns:
-            The reversed URL.
-        """
+            The reversed URL."""
         return reverse("external_api:profiles.annotations", kwargs={"profile_slug": self._slug(profile)})
 
     def _nickname_url(self, profile: Profile) -> str:
@@ -371,8 +330,7 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
             profile: The subject named in the path.
 
         Returns:
-            The reversed URL.
-        """
+            The reversed URL."""
         return reverse("external_api:profiles.nickname", kwargs={"profile_slug": self._slug(profile)})
 
     def _trust_url(self, profile: Profile) -> str:
@@ -382,8 +340,7 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
             profile: The subject named in the path.
 
         Returns:
-            The reversed URL.
-        """
+            The reversed URL."""
         return reverse("external_api:profiles.trust", kwargs={"profile_slug": self._slug(profile)})
 
     def test_empty_annotations_read_as_nulls(self) -> None:
@@ -538,10 +495,8 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
 class AnnotationsArePrivateToTheirAuthorTests(_SocialProfileTestCase):
     """The subject of an annotation must never be able to read it.
 
-    This is the failure a queryset filtered on ``subject`` alone would cause:
-    every author-side test above would still pass while the annotated person
-    could read everyone's private opinion of them in one request.
-    """
+    This is the failure a queryset filtered on ``subject`` alone would cause: every author-side test above would
+    still pass while the annotated person could read everyone's private opinion of them in one request."""
 
     def setUp(self) -> None:
         """Have the caller annotate the second account."""

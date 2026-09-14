@@ -1,13 +1,5 @@
 """Static "how do I…" help content for the assistant (plan §10, batch 4).
-
-This is the *only* source the assistant is allowed to answer a "how do I…"
-question from (see ``services.ai.assistant``'s system prompt) - hand-written
-and reviewed, never scraped or inferred from a page's own markup. Keyed by
-Django URL name so it lines up exactly with
-``services.ai.page_context.PageContext.url_name`` and with ``urls.py``
-itself, which the contract test in ``dashboard/tests/hypothesis/
-test_page_help.py`` walks to make sure every primary-nav page has an entry.
-"""
+This is the *only* source the assistant is allowed to answer a "how do I…" question from (see ``services.ai.assistant``'s system prompt) - hand-written and reviewed, never scraped or inferred from a page's own markup."""
 
 from __future__ import annotations
 
@@ -132,7 +124,5 @@ def get_page_help(url_name: str) -> PageHelp | None:
         url_name: A Django URL name, e.g. ``"map.view"``.
 
     Returns:
-        The page's :class:`PageHelp`, or ``None`` - never raises for an
-        unknown or malformed ``url_name``.
-    """
+        The page's :class:`PageHelp`, or ``None`` - never raises for an unknown or malformed ``url_name``."""
     return PAGE_HELP.get(url_name)

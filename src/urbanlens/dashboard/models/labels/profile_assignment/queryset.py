@@ -6,8 +6,8 @@ from urbanlens.dashboard.models import abstract
 
 
 class ProfileLabelAssignmentQuerySet(abstract.DashboardQuerySet):
-    """QuerySet for private user-label assignments on profiles."""
+    """QuerySet for private user-label assignments."""
 
 
 class ProfileLabelAssignmentManager(abstract.DashboardManager.from_queryset(ProfileLabelAssignmentQuerySet)):
-    """Manager for ProfileLabelAssignment records."""
+    """Manager for ProfileLabelAssignment."""

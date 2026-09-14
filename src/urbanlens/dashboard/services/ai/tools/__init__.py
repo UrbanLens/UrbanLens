@@ -1,10 +1,5 @@
 """The assistant's typed tool registry.
-
-Importing this package populates :data:`registry.REGISTRY` as a side effect:
-every tool module below calls ``register(...)`` at import time. A module not
-imported here is a tool that silently doesn't exist - there is no other
-discovery mechanism, so a new tool module belongs in this list.
-"""
+A module not imported here is a tool that silently doesn't exist - there is no other discovery mechanism, so a new tool module belongs in this list."""
 
 from __future__ import annotations
 

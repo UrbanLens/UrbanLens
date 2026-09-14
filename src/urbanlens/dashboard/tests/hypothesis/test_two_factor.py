@@ -1,9 +1,4 @@
-"""Tests for TOTP (authenticator app) and backup-code 2FA fallback.
-
-Unlike WebAuthn, TOTP is a deterministic algorithm (RFC 6238) - these tests
-generate real codes with pyotp and verify them for real against the service
-layer, no mocking needed anywhere in this file.
-"""
+"""Tests for TOTP (authenticator app) and backup-code 2FA fallback."""
 
 from __future__ import annotations
 
@@ -153,14 +148,12 @@ class VerifyTotpCodeTests(TestCase):
     def test_undecryptable_secret_fails_instead_of_raising(self) -> None:
         """Regression test: a field_encryption_key rotation must not crash login.
 
-        Before this fix, an ``InvalidToken`` raised while fetching the device
-        (see ``models.fields.EncryptedTextField``) propagated straight out of
-        this function uncaught - and since ``verify_login_code`` combines this
-        with the backup-code fallback via ``or``, an exception here skips that
-        fallback entirely (Python's ``or`` only short-circuits on a falsy
-        return, not an exception), so a user with a working backup code would
-        still have been locked out of login by their own broken TOTP device.
-        """
+        Before this fix, an ``InvalidToken`` raised while fetching the device (see
+        ``models.fields.EncryptedTextField``) propagated straight out of this function uncaught - and since
+        ``verify_login_code`` combines this with the backup-code fallback via ``or``, an exception here skips
+        that fallback entirely (Python's ``or`` only short-circuits on a falsy return, not an exception), so a
+        user with a working backup code would still have been locked out of login by their own broken TOTP
+        device."""
         from django.db import connection
 
         with connection.cursor() as cursor:
@@ -416,12 +409,8 @@ class LoginTwoFactorCodeViewTests(TestCase):
 class LoginIpThrottleTests(TestCase):
     """The per-IP failed-login throttle that backs the per-identifier lockout.
 
-    The identifier lockout alone lets a single address spray attempts across
-    many identifiers (and doubles as a targeted DoS on any one of them), so
-    ``CustomLoginView`` also counts failures per client IP. Each test uses
-    distinct TEST-NET addresses so counters cannot cross-talk with other
-    tests' requests (the test client defaults to 127.0.0.1).
-    """
+    The identifier lockout alone lets a single address spray attempts across many identifiers (and doubles as a
+    targeted DoS on any one of them), so ``CustomLoginView`` also counts failures per client IP."""
 
     PASSWORD = "correct horse battery staple"  # noqa: S105  # nosec B105 - test credential, not a real secret
     ATTACKER_IP = "203.0.113.7"
@@ -492,12 +481,8 @@ class LoginIpThrottleTests(TestCase):
     def test_a_forged_forwarded_for_prefix_cannot_mint_fresh_counters(self) -> None:
         """The throttle must key on what our proxy appended, not what the client sent.
 
-        config/nginx appends its real_ip-resolved client address to whatever
-        X-Forwarded-For arrived, so a client that sends its own header ends up
-        leftmost in the chain. Reading from that end gave an attacker a new
-        cache key per request - unlimited spraying through a throttle that
-        looked like it was working.
-        """
+        config/nginx appends its real_ip-resolved client address to whatever X-Forwarded-For arrived, so a
+        client that sends its own header ends up leftmost in the chain."""
         for i in range(3):
             self.client.post(
                 reverse("login"),
@@ -558,12 +543,7 @@ class LoginIpThrottleTests(TestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_hitting_a_locked_identifier_does_not_drain_the_ip_budget(self) -> None:
-        """A gate response is not a failed credential check, and must not count as one.
-
-        Retries against an already-locked identifier used to feed the IP
-        counter, so an attacker could lock one account and then burn any
-        address's budget on it.
-        """
+        """A gate response is not a failed credential check, and must not count as one."""
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
         site_settings = SiteSettings.get_current()
@@ -584,11 +564,8 @@ class LoginIpThrottleTests(TestCase):
     def test_a_throttled_ip_cannot_lock_someone_elses_account(self) -> None:
         """The reverse direction, which is the targeted half.
 
-        Once an address is throttled, every further attempt short-circuits at
-        the gate - before any credential is checked. Counting those as the
-        submitted account's failures let an attacker trip their own IP limit
-        and then lock any account they could name, with no password at all.
-        """
+        Once an address is throttled, every further attempt short-circuits at the gate - before any credential
+        is checked."""
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
         site_settings = SiteSettings.get_current()

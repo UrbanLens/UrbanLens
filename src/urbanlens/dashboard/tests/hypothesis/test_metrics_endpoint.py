@@ -1,27 +1,4 @@
-"""The Prometheus scrape endpoint: who may read it, and what it reports.
-
-Several separable claims, each of which fails differently and silently:
-
-1. The route does not exist unless ``UL_METRICS_ENABLED``
-   (:class:`MetricsRouteRegistrationTests`) - the outermost gate, and the one
-   that cannot be undone by a misconfigured guard.
-2. The token and network gates actually refuse
-   (:class:`MetricsTokenGateTests`, :class:`MetricsNetworkGateTests`). A
-   ``/metrics`` body is a map of the application, so "the guard is there" is
-   not the same claim as "the guard says no".
-3. The network gate resolves the client address through the trusted-proxy hop
-   count, so a forged ``X-Forwarded-For`` cannot spoof its way into the
-   allowlist (:class:`MetricsNetworkGateTests`) - the failure mode that makes
-   an IP allowlist worthless.
-4. The exporter aggregates across processes (:class:`MetricsRegistryTests`).
-   This is the one that would otherwise look fine forever: production runs
-   ``WEB_CONCURRENCY`` gunicorn workers, and serving the per-process default
-   registry answers every scrape with one worker's share of the traffic.
-5. The deployment actually wires 4 up (:class:`MetricsDeploymentWiringTests`) -
-   the gunicorn hooks, the entrypoint's directory handling, and nginx's refusal
-   to serve the path publicly. Python-level tests cannot reach any of these,
-   and each is load-bearing.
-"""
+"""The Prometheus scrape endpoint: who may read it, and what it reports."""
 
 from __future__ import annotations
 
@@ -53,12 +30,9 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 class MetricsSettingsExistTests(SimpleTestCase):
     """The settings the rest of this file overrides are real.
 
-    ``override_settings`` invents any name it is given, so a suite that only
-    ever overrides would pass identically against a settings module that never
-    defined these - which is exactly how a guard reading
-    ``settings.UL_METRICS_TOKEN`` ships reading ``""`` forever. Asserting they
-    exist unoverridden is what makes the rest of these tests mean anything.
-    """
+    ``override_settings`` invents any name it is given, so a suite that only ever overrides would pass
+    identically against a settings module that never defined these - which is exactly how a guard reading
+    ``settings.UL_METRICS_TOKEN`` ships reading ``""`` forever."""
 
     def test_settings_are_defined_without_an_override(self) -> None:
         for name in ("UL_METRICS_ENABLED", "UL_METRICS_TOKEN", "UL_METRICS_ALLOWED_CIDRS"):
@@ -101,11 +75,9 @@ class MetricsRouteRegistrationTests(SimpleTestCase):
 class MetricsDisabledPathTests(TestCase):
     """The disabled path really is unrouted, through the full request stack.
 
-    A ``TestCase`` rather than a ``SimpleTestCase`` because the 404 this must
-    fall through to renders the site's styled error page, which reads the
-    database - which is itself the proof that nothing intercepted the path
-    ahead of the catch-all.
-    """
+    A ``TestCase`` rather than a ``SimpleTestCase`` because the 404 this must fall through to renders the site's
+    styled error page, which reads the database - which is itself the proof that nothing intercepted the path
+    ahead of the catch-all."""
 
     def test_disabled_path_is_not_served(self) -> None:
         self.assertEqual(self.client.get("/metrics").status_code, 404)
@@ -324,12 +296,8 @@ class MetricsStartupCheckTests(SimpleTestCase):
 class MetricsInstrumentationGateTests(SimpleTestCase):
     """Who registers django-prometheus, and what happens when it is absent.
 
-    ``UL_METRICS_ENABLED`` is an operator switch flipped on running deployments,
-    independently of the image build that would carry the package. It reaches
-    every process sharing the ``.env``, so both halves matter: only scraped
-    processes should pay for the middleware, and a process that cannot import
-    the package should say which setting asked for it.
-    """
+    ``UL_METRICS_ENABLED`` is an operator switch flipped on running deployments, independently of the image
+    build that would carry the package."""
 
     def test_only_scraped_roles_are_instrumented(self) -> None:
         # Every role that appears in docker-compose.yml, so a new one added
@@ -404,14 +372,8 @@ class MetricsInstrumentationGateTests(SimpleTestCase):
 class MultiprocessModeDisabledTests(SimpleTestCase):
     """Leaving multiprocess mode has to survive the library being imported first.
 
-    ``prometheus_client.values`` resolves ``ValueClass`` once, at import, from
-    ``PROMETHEUS_MULTIPROC_DIR`` as it stood then. Popping the variable
-    afterwards does not unresolve it, so in a process that imported the library
-    while it was set - which ``UL_METRICS_ENABLED=true`` guarantees, via
-    ``base.py``'s ``django_prometheus`` import, before the test settings module
-    runs at all - every later registry joins its mmap path against ``None`` and
-    raises ``TypeError``.
-    """
+    ``prometheus_client.values`` resolves ``ValueClass`` once, at import, from ``PROMETHEUS_MULTIPROC_DIR`` as
+    it stood then."""
 
     def _restore_value_class(self) -> None:
         """Put back whatever the class was before a test forced it."""

@@ -1,9 +1,4 @@
-{% comment %}
-Shared visit dialog: log a visit or add details (photos, map, notes, people) to
-any visit memory. Opened via window.memoriesOpenVisitDialog(url) from the
-unlogged-visits band, the Visits subpage, and the timeline's per-card
-"Add details" button.
-{% endcomment %}
+{% comment %}Shared visit dialog: log a visit or add details (photos, map, notes, people) to any visit memory.{% endcomment %}
 <dialog id="memories-visit-dialog" class="visit-add-dialog ul-dialog" aria-labelledby="dialog-title-visit-details">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Visit details" %}
     <div id="memories-visit-dialog-body" class="visit-edit-body">

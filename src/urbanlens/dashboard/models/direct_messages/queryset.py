@@ -48,15 +48,7 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
 
     def visible_to(self, profile: Profile) -> Self:
         """Exclude messages `profile` has removed from their own view.
-
-        A message deleted "for everyone" by its sender stays visible here as
-        a tombstone (rendered as removed text, not excluded) - for BOTH
-        parties, including the sender: the sender always sees their own sent
-        messages in full regardless of delete/expiry state (see
-        ``DirectMessage.tombstone_text_for``), so ``deleted_by_sender_at``
-        never gates a sender's own row here. This only hides a message the
-        *viewing* profile chose to delete for themselves alone
-        (``deleted_by_recipient_at``, which only a recipient can set).
+        A message deleted "for everyone" by its sender stays visible here as a tombstone (rendered as removed text, not excluded) - for BOTH parties, including the sender: the sender always sees their own sent messages in full regardless of delete/expiry state (see ``DirectMessage.tombstone_text_for``), so ``deleted_by_sender_at`` never gates a sender's own row here.
 
         Args:
             profile: The viewing profile.
@@ -80,10 +72,7 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
 
     def unread_conversation_count(self, profile: Profile) -> int:
         """Count distinct conversations with at least one unread message.
-
-        The navbar label shows this (one label per conversation needing
-        attention), while each dropdown row still shows its own per-conversation
-        unread message count.
+        The navbar label shows this (one label per conversation needing attention), while each dropdown row still shows its own per-conversation unread message count.
 
         Args:
             profile: The recipient profile.
@@ -97,12 +86,7 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
 
     def due_for_hard_delete(self) -> Self:
         """Return messages whose disappearing-message timer has fully elapsed.
-
-        Mirrors ``DirectMessage.is_expired_for_recipient`` (same read_at + delta
-        threshold per ``sender_delete_after``), but as a queryset filter so a
-        sweep task can physically delete the rows rather than just hiding them
-        from the recipient's view. ``NEVER`` messages and unread messages are
-        never included - the timer only starts once the recipient reads it.
+        Mirrors ``DirectMessage.is_expired_for_recipient`` (same read_at + delta threshold per ``sender_delete_after``), but as a queryset filter so a sweep task can physically delete the rows rather than just hiding them from the recipient's view.
 
         Returns:
             Messages ready for permanent deletion.
@@ -159,9 +143,7 @@ class DirectMessageMuteQuerySet(abstract.DashboardQuerySet):
 
     def for_pair(self, viewer: Profile, sender: Profile) -> DirectMessageMuteQuerySet:
         """The mute row (at most one - unique on viewer+sender) for a pair.
-
-        Row existence IS the mute state; callers chain ``.exists()`` to check
-        it or ``.delete()`` to unmute.
+        Row existence IS the mute state; callers chain ``.exists()`` to check it or ``.delete()`` to unmute.
 
         Args:
             viewer: The profile who muted.

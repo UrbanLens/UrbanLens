@@ -1,19 +1,4 @@
-"""Confident buildings become child pins by default; ambiguous ones wait.
-
-A new pin on a multi-building property is a parcel pin, and its buildings are
-what describe it - so the parcel/building split should be the default outcome,
-not a reward for opening a dialog. The dividing line is confidence:
-``overlap_refs`` marks the one relationship REData's reconciliation refuses to
-resolve, so those records keep the existing approval flow (the "add buildings"
-dialog) while everything else is created unprompted.
-
-Control and cleanup are part of the design, not an afterthought:
-
-- a profile toggle turns it off wholesale;
-- the sweep is one-shot per pin, so deleting an auto-created child sticks;
-- a dismissed restructure offer is honoured as a standing "no";
-- an existing child hierarchy is the user's own arrangement and is left alone.
-"""
+"""Confident buildings become child pins by default; ambiguous ones wait."""
 
 from __future__ import annotations
 

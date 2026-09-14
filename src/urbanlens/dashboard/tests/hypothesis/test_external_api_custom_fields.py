@@ -1,11 +1,4 @@
-"""Tests for the external API's custom-field domain.
-
-Covers both halves the domain owns: field *definitions* (shared across every
-entity type) and PHOTO-entity *values*. The invariants mirrored from the rest
-of this API's test suite: a missing scope is refused (403), and another
-profile's photo or field is indistinguishable from one that doesn't exist
-(404, never 403).
-"""
+"""Tests for the external API's custom-field domain."""
 
 from __future__ import annotations
 

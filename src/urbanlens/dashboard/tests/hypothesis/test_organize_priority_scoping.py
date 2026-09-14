@@ -1,18 +1,4 @@
-"""Regression tests for the Display Order tab's cross-tenant write.
-
-``OrganizePrioritySaveView`` validated the submitted label ids against
-``Label.objects.visible_to(profile)`` - which deliberately spans a profile's own
-labels *plus* the site-wide global ones - and then wrote ``order`` back with an
-unscoped ``Label.objects.filter(id=item_id).update(...)``. Every user who
-dragged a row on the Display Order tab was therefore rewriting the ordering of
-shared global labels for everyone on the site, silently and with the last
-writer winning.
-
-The fix scopes the write to ``for_profile`` and reports the skipped ids rather
-than pretending the gesture applied. These tests pin both halves: a global's
-``order`` must survive another user's reorder, and the caller must be told which
-ids were refused so the UI can lock those rows instead of losing the drag.
-"""
+"""Regression tests for the Display Order tab's cross-tenant write."""
 
 from __future__ import annotations
 

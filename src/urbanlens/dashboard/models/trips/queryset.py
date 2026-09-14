@@ -32,10 +32,7 @@ TRIP_LIST_SORT_FIELDS: dict[str, str] = {
 
 def _member_profiles() -> Prefetch:
     """Prefetch each trip's memberships with their profile+user loaded.
-
-    The overview masks every listed trip's member identities
-    (``controllers.trip._apply_trip_list_identity_masking``), which walks
-    ``trip.memberships.all()``; without this that is two queries per trip.
+    The overview masks every listed trip's member identities (``controllers.trip._apply_trip_list_identity_masking``), which walks ``trip.memberships.all()``; without this that is two queries per trip.
 
     Returns:
         The ``memberships`` Prefetch to hand to ``prefetch_related``.
@@ -50,17 +47,7 @@ class TripQuerySet(abstract.DashboardQuerySet):
 
     def with_effective_dates(self) -> TripQuerySet:
         """Annotate ``_eff_start``/``_eff_end`` so the date properties don't query per row.
-
-        ``Trip.effective_start_date``/``effective_end_date`` fall back to querying the
-        trip's activities, and ``timeline_status``/``duration_days`` read both, so any
-        page rendering a list of trips pays two activity queries per trip without this.
-        Both properties prefer these annotations when present.
-
-        Uses the later of ``scheduled_at`` and ``scheduled_end`` for the end date so
-        this agrees with the Memories feed's trip source; Postgres's ``GREATEST``
-        ignores NULLs. ``Min``/``Max`` are unaffected by the row multiplication a
-        caller's own joins may introduce, unlike the ``Count`` annotations in
-        :meth:`for_list_page`.
+        ``Trip.effective_start_date``/``effective_end_date`` fall back to querying the trip's activities, and ``timeline_status``/``duration_days`` read both, so any page rendering a list of trips pays two activity queries per trip without this.
 
         Returns:
             The queryset with both annotations applied.
@@ -102,11 +89,10 @@ class TripQuerySet(abstract.DashboardQuerySet):
         else:
             order = F(field).asc() if ascending else F(field).desc()
 
-        # Filter to a pk subquery rather than `.filter(profiles=profile)` directly:
-        # the latter joins through the same `memberships` relation the
-        # `member_count` annotation below also joins through, and Django reuses
-        # that join - so the annotation's COUNT would silently inherit this
-        # filter's `profile_id = viewer` clause and always come out as 1.
+        # Filter to a pk subquery rather than `.filter(profiles=profile)` directly: the latter joins
+        # through the same `memberships` relation the `member_count` annotation below also joins
+        # through, and Django reuses that join - so the annotation's COUNT would silently inherit
+        # this filter's `profile_id = viewer` clause and always come out as 1.
         trip_ids = self.filter(profiles=profile).values_list("pk", flat=True)
         qs = (
             self.filter(pk__in=trip_ids)
@@ -139,11 +125,7 @@ class TripQuerySet(abstract.DashboardQuerySet):
     @staticmethod
     def _soonest_first(qs: TripQuerySet) -> list[Trip]:
         """Reorder a ``start_date``-sorted queryset so past trips sink to the bottom.
-
-        Upcoming/active trips sort soonest first, undated (planning) trips sort next,
-        and past trips sort most-recent first - rather than the plain chronological
-        ordering (which would otherwise interleave "soonest" with the most stale past
-        trips as equally "soon" once their dates have passed).
+        Upcoming/active trips sort soonest first, undated (planning) trips sort next, and past trips sort most-recent first - rather than the plain chronological ordering (which would otherwise interleave "soonest" with the most stale past trips as equally "soon" once their dates have passed).
 
         Args:
             qs: A queryset already ordered by ``start_date`` ascending (nulls last).
@@ -165,9 +147,7 @@ class TripQuerySet(abstract.DashboardQuerySet):
 
     def upcoming(self, profile: Profile) -> TripQuerySet:
         """Return the viewer's upcoming (or still-planning, undated) trips.
-
-        A trip counts as upcoming if it has a future/today start date, or has
-        no start date at all but at least one activity scheduled today or later.
+        A trip counts as upcoming if it has a future/today start date, or has no start date at all but at least one activity scheduled today or later.
 
         Args:
             profile: The viewer's profile; only their trips are included.

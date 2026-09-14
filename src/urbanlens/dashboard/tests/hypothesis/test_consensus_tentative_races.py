@@ -1,18 +1,4 @@
-"""Concurrency tests for cross-session tentative-answer accumulation.
-
-``record_tentative_answers`` is check-then-act: find a matching tentative answer,
-then either bump its ``support_count`` or create one. Two Consensus rounds
-resolving at once for the same wiki is ordinary - separate sessions play the same
-popular wiki concurrently - and unserialised, both reads miss and both write.
-
-The damage is quiet and it is the whole point of the feature: support for one
-value splits across two rows, so a value the community actually agreed on never
-reaches the promotion threshold.
-
-Uses ``TransactionTestCase`` (not the project's default ``TestCase``) because the
-threads need to see each other's committed rows, which a single wrapping
-transaction would hide.
-"""
+"""Concurrency tests for cross-session tentative-answer accumulation."""
 
 from __future__ import annotations
 

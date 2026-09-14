@@ -1,13 +1,5 @@
 """Historical features plugin: mapped buildings/roads/etc. that once stood near a pin, via REData.
-
-Retrospectively-traced built environment - mostly demolished, mostly never
-formally designated - covering what stood on or near a site before it looked
-the way it does today. Distinct from Historic Registers
-(``redata_historic_registers``, a body's own designation) and USGS Historical
-Topo Maps (a scanned page): this is per-feature data with its own validity
-interval, most useful for "what was here before" rather than "is this
-protected".
-"""
+Retrospectively-traced built environment - mostly demolished, mostly never formally designated - covering what stood on or near a site before it looked the way it does today."""
 
 from __future__ import annotations
 
@@ -44,11 +36,7 @@ class HistoricalFeaturesPanelSource(RedataInfoPanelSource):
         return RedataHistoricalFeaturesGateway().get_historical_features(latitude, longitude, limit=25)
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
-        """Drop each feature's geometry before caching.
-
-        The panel renders names/kinds/years only; a Polygon/LineString per
-        feature would bloat the cache row for nothing.
-        """
+        """Drop each feature's geometry before caching."""
         return [{key: value for key, value in feature.items() if key != "geometry"} for feature in rows]
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
@@ -105,11 +93,6 @@ class HistoricalFeaturesPlugin(UrbanLensPlugin):
         return {
             "redata_historical_features": ServiceDefaults(
                 display_name="REData Historical Features",
-                # Shares REData's single 1,000 req/hour "lookup" pool with
-                # geocode/weather/cultural-resources/etc. (see REData's own
-                # api-reference.md, "Rate limiting") - one call per pin-detail
-                # panel render, the same low-volume shape as the sibling
-                # redata_cultural_resources panel, so mirrored to match.
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes="Mapped historical buildings/roads/water/etc. via GET /historical-features/. See services.apis.locations.redata_historical_features_gateway.",

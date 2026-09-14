@@ -1,23 +1,6 @@
 """LocationExposure - a durable record that a profile learned about a place via a share.
-
-This is the "infection" half of share-chain tracking. A ``PinShare`` row alone
-is not enough to keep reshare chains honest, because a recipient's Pin is
-mutable while its Location is immutable:
-
-- Tracking only the *pin* breaks when the recipient moves their pin elsewhere,
-  then drops a brand-new pin at the original spot and shares that one.
-- Tracking only the *location* breaks when the recipient moves their pin to a
-  new location and shares it from there.
-
-So a share "infects" both. Every share received creates a LocationExposure for
-``(recipient, shared location)``, and moving a pin propagates its owner's
-exposures from the old location to the new one (see ``Pin.save`` /
-``services.sharing.share_provenance.propagate_exposures_for_pin_move``). Exposure rows
-are deliberately independent of any Pin, so deleting and re-creating pins never
-clears them: any future pin the recipient creates within
-``services.sharing.share_provenance.EXPOSURE_RADIUS_METERS`` of an exposed location -
-at any time - has its onward shares chained back to the originating share (see
-``services.sharing.share_provenance.resolve_origin_share``).
+This is the "infection" half of share-chain tracking.
+A ``PinShare`` row alone is not enough to keep reshare chains honest, because a recipient's Pin is mutable while its Location is immutable:
 """
 
 from __future__ import annotations
@@ -43,11 +26,7 @@ class ExposureSource(abstract.TextChoices):
 
 class LocationExposure(abstract.DashboardModel):
     """One profile's exposure to one Location through one share.
-
     Read as: "``profile`` first learned about ``location`` via ``share``".
-    Multiple exposures may exist for the same (profile, location) when the
-    place was shared with them repeatedly - resolution picks the earliest
-    (see ``services.sharing.share_provenance.resolve_origin_share``).
     """
 
     profile = models.ForeignKey("dashboard.Profile", on_delete=models.CASCADE, related_name="location_exposures")

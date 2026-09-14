@@ -18,13 +18,7 @@ if TYPE_CHECKING:
 
 class TargetKind(TextChoices):
     """What a ledger row is *about*.
-
-    Stored as a label plus an integer id rather than a real
-    ``GenericForeignKey``: the ledger is written on every contribution and read
-    in bulk by the aggregator, and a contenttypes join on both paths buys
-    nothing here - nothing dereferences the target generically, and the two
-    consumers that care (per-wiki caps, the admin breakdown) both filter on
-    :attr:`ReputationEvent.wiki` instead.
+    Stored as a label plus an integer id rather than a real ``GenericForeignKey``: the ledger is written on every contribution and read in bulk by the aggregator, and a contenttypes join on both paths buys nothing here - nothing dereferences the target generically, and the two consumers that care (per-wiki caps, the admin breakdown) both filter on :attr:`ReputationEvent.wiki` instead.
     """
 
     NONE = "none", "No target"
@@ -38,10 +32,10 @@ class TargetKind(TextChoices):
     PROFILE = "profile", "Profile"
 
 
-#: Periods are calendar months. The source memo said both "30 days later" and
-#: "in February" for the same mechanic; a calendar month is what makes a
-#: per-period cap explainable to whoever reads the admin dashboard, and it lets
-#: the cap be a plain indexed equality filter instead of a rolling window scan.
+#: Periods are calendar months.
+#: The source memo said both "30 days later" and "in February" for the same mechanic; a calendar
+#: month is what makes a per-period cap explainable to whoever reads the admin dashboard, and it
+#: lets the cap be a plain indexed equality filter instead of a rolling window scan.
 PERIOD_FORMAT = "%Y-%m"
 
 

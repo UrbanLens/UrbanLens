@@ -1,28 +1,5 @@
 {% load dashboard_tags %}
-{% comment %}
-Shared "Log a Visit" / "Edit Visit" form body.
-
-Context:
-  pin        - Pin the visit belongs to
-  pin_images - owner's gallery photos on this pin (existing-photo picker)
-  connections- profiles that can be tagged as participants (with
-               avatar_color_class already assigned - see assign_avatar_colors)
-  visit      - PinVisit being edited, or absent/None for the add form
-  dialog_id  - id of the enclosing <dialog>, closed on a successful save
-  form_action- override post URL (defaults to the pin-detail visit endpoints)
-  form_target- override hx-target (defaults to "#visit-history-panel")
-  form_swap  - override hx-swap (defaults to "outerHTML")
-  default_date- ISO date to prefill the add form's date field with (optional)
-
-The action URL, submit label, and pre-filled state are all derived from
-whether `visit` is present, so both dialogs can share this single template.
-The Memories page reuses it with its own action/target to log visits for
-pins that were marked visited but never had a dated record.
-
-Photos/Map/Participants are collapsed behind one button each - only Date is
-actually required, so only Date carries a `.required` star; everything else
-just doesn't say "(optional)" instead of saying so explicitly.
-{% endcomment %}
+{% comment %}Shared "Log a Visit" / "Edit Visit" form body.{% endcomment %}
 {% if not form_action %}
 {% if visit %}
 {% url 'pin.visit.edit' pin.slug visit.id as form_action %}
@@ -57,14 +34,7 @@ just doesn't say "(optional)" instead of saying so explicitly.
 
     <div class="form-row">
         <label for="visit_notes_{{ dialog_id }}">Notes</label>
-        {# Same TipTap/Markdown WYSIWYG editor as the pin/wiki article (see #}
-        {# frontend/ts/entries/article-wysiwyg.ts) - it mounts on any element  #}
-        {# matching this data-article-editor/-canvas/-textarea contract, no   #}
-        {# extra JS needed here. Scoped to .visit-notes-editor (see           #}
-        {# _pin-detail.scss) for a note-sized height instead of a full        #}
-        {# article's; the toolbar only offers the marks a short note needs -  #}
-        {# no headings/tables/images, which have their own attach buttons     #}
-        {# below - and there's no Source/Preview toggle, so it's WYSIWYG-only.#}
+        {# Same TipTap/Markdown WYSIWYG editor as the pin/wiki article. #}
         <div class="visit-notes-editor" data-article-editor>
             <div class="article-editor-toolbar" role="toolbar" aria-label="Note formatting">
                 <button type="button" class="article-tool" data-md-action="bold" title="Bold (Ctrl+B)"><i class="material-symbols-outlined">format_bold</i></button>

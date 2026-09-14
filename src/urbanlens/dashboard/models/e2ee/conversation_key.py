@@ -15,15 +15,7 @@ if TYPE_CHECKING:
 
 class ConversationKey(abstract.DashboardModel):
     """One version of a conversation's random symmetric key, wrapped for both parties.
-
-    The key itself is generated in the browser of whichever participant sends
-    first, then sealed (``crypto_box_seal``) once to each participant's public
-    key - the server stores only the two sealed blobs and can decrypt neither.
-
-    The pair is stored in canonical order (``profile_low.pk < profile_high.pk``)
-    so one row serves both directions. ``version`` increments when a "reset
-    keys" forces a fresh key; old versions are retained so the participant who
-    did NOT reset can still unseal their copy of the history on a new device.
+    The key itself is generated in the browser of whichever participant sends first, then sealed (``crypto_box_seal``) once to each participant's public key - the server stores only the two sealed blobs and can decrypt neither.
     """
 
     profile_low = ForeignKey(

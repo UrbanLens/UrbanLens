@@ -1,25 +1,5 @@
 /**
  * Derive enclosed rooms from wall centrelines.
- *
- * Walls are the only stored geometry; a room is a *seed point* that binds to
- * whichever enclosed region contains it. Everything here is the derivation from
- * one to the other, and it is recomputed from scratch on every edit rather than
- * maintained incrementally - at the scale of one building (a few hundred
- * segments) a full rebuild is well under a frame, and an incremental planar
- * subdivision is a well-known source of corruption bugs.
- *
- * The pipeline is weld -> planarize -> heal -> extract faces. The split between
- * the second and third steps is the important one:
- *
- *   - Planarizing is exact. Segments that genuinely cross are split at the
- *     crossing; a vertex genuinely on another segment splits it. No input
- *     coordinate moves.
- *   - Healing is forgiving, and deliberately does not move the user's
- *     coordinates either. It records *virtual* joins between endpoints that
- *     nearly meet, so a room closes without the drawing quietly changing
- *     underneath the person who drew it.
- *
- * Nothing here needs a DOM, which is what makes it directly testable.
  */
 
 import { type Pt, angleOf, cross, distance, pointInRing, projectOnSegment, signedArea, sub } from "./coords";
@@ -89,9 +69,6 @@ export interface DeriveResult {
 
 /**
  * Quantised spatial hash keyed on a tolerance-sized cell.
- *
- * Checking the 9 cells around a point finds every candidate within one
- * tolerance without the O(n^2) scan a naive weld would do.
  */
 class VertexIndex {
     private readonly cells = new Map<string, number[]>();
@@ -160,25 +137,9 @@ function segmentIntersection(a1: Pt, a2: Pt, b1: Pt, b2: Pt): Pt | null {
 
 /**
  * Split every segment at real crossings and at vertices lying on its interior.
- *
- * The second half is what makes interior partitions work: people draw a
- * partition wall that ends *on* an exterior wall rather than at one of its
- * corners, and without splitting the exterior wall there the two never share a
- * vertex and no room ever closes.
  */
 /**
  * A uniform grid over the plan, for asking "what is near this?" cheaply.
- *
- * Splitting walls where they meet is two all-pairs questions - which segments
- * cross, and which endpoints land on another segment's interior - and doing
- * them literally is quadratic in the wall count. Two walls at opposite ends of
- * a warehouse are compared for an intersection that no arithmetic was ever
- * going to find.
- *
- * Cells are keyed by integer coordinates, and anything is registered in every
- * cell its bounding box touches, so a query only has to look at cells the
- * query box touches. This prunes; it never changes an answer, because two
- * things that do not share a cell cannot have overlapping boxes.
  */
 class Grid<T> {
     private readonly cells = new Map<string, T[]>();
@@ -223,10 +184,6 @@ class Grid<T> {
 
 /**
  * A cell size that keeps buckets small without making them numerous.
- *
- * Roughly one cell per segment across the plan's extent: too fine and a long
- * wall is registered in hundreds of cells, too coarse and every query returns
- * everything.
  */
 function cellSizeFor(segments: Segment[], tolerance: number): number {
     let minX = Infinity;
@@ -276,9 +233,7 @@ function planarize(segments: Segment[], tolerance: number): Segment[] {
         }
     }
 
-    // T-junctions: an endpoint sitting on another segment's interior. The query
-    // box is grown by the tolerance, since an endpoint that close counts as on
-    // the segment even when it is fractionally outside its box.
+    // T-junctions: an endpoint sitting on another segment's interior.
     const byEndpoint = new Grid<Pt>(cell);
     for (const s of segments) {
         byEndpoint.add(s.a, s.a.x, s.a.y, s.a.x, s.a.y);
@@ -338,21 +293,9 @@ function buildGraph(segments: Segment[], weldTolerance: number): Graph {
 
 /**
  * Bridge endpoints that nearly meet, so a hand-drawn near-miss still encloses.
- *
- * Only degree-1 vertices are considered: a corner someone already closed is
- * not a candidate, and this keeps the healer from inventing joins in the middle
- * of a tidy drawing. The join is added as an extra edge rather than by moving
- * either endpoint, so what the user drew is preserved exactly.
  */
 /**
- * Whether the segment ``a``->``b`` reaches its target without running through
- * geometry that is already there.
- *
- * A dangling end's nearest free neighbour is not always the one it meant: a
- * short stub beside a longer wall is closer to that wall's *far* end than to
- * the end beside it, and joining those two spans straight over the stub. A
- * join that passes through another vertex is one the author would have drawn
- * to that vertex instead.
+ * Whether the segment ``a``->``b`` reaches its target without running through geometry that is already there.
  */
 function joinIsClear(graph: Graph, a: number, b: number, tolerance: number): boolean {
     const pa = graph.points[a] as Pt;
@@ -383,9 +326,7 @@ function heal(graph: Graph, gap: number, weldTolerance: number): HealedJoin[] {
         for (let j = i + 1; j < dangling.length; j++) {
             const b = dangling[j] as number;
             if (joined.has(b)) continue;
-            // A wall shorter than the gap has both of its own ends dangling,
-            // and they are the closest pair to each other - bridging them
-            // folds the wall onto itself instead of joining it to anything.
+            // A wall shorter than the gap has both of its own ends dangling, and they are the closest pair to each other.
             if (graph.edges.some((e) => (e.u === a && e.v === b) || (e.u === b && e.v === a))) continue;
             const d = distance(graph.points[a] as Pt, graph.points[b] as Pt);
             if (d >= bestDistance) continue;
@@ -410,12 +351,6 @@ function heal(graph: Graph, gap: number, weldTolerance: number): HealedJoin[] {
 
 /**
  * Walk the half-edge structure and return every bounded face.
- *
- * At each vertex the outgoing edges are sorted by angle; from an incoming
- * half-edge the traversal leaves along the neighbour immediately clockwise from
- * where it arrived. Following that consistently traces each bounded face once,
- * counter-clockwise, and the unbounded outer face once clockwise - so the outer
- * face falls out simply by discarding negative signed area.
  */
 function extractFaces(graph: Graph, minArea: number): Face[] {
     const neighbours = new Map<number, number[]>();
@@ -478,14 +413,6 @@ function extractFaces(graph: Graph, minArea: number): Face[] {
 
 /**
  * Derive the enclosed regions formed by a set of wall centrelines.
- *
- * Args:
- *     segments: Wall centrelines in plan-local metres.
- *     options: Tolerances; see :data:`DEFAULTS`.
- *
- * Returns:
- *     The bounded faces, the joins healing inferred, and any endpoint still
- *     left dangling (which the editor surfaces as "not enclosed").
  */
 export function deriveFaces(segments: Segment[], options: DeriveOptions = {}): DeriveResult {
     const { weldTolerance, healGap, minFaceArea } = { ...DEFAULTS, ...options };
@@ -508,9 +435,6 @@ export function deriveFaces(segments: Segment[], options: DeriveOptions = {}): D
 
 /**
  * The smallest face containing *seed*, or null when it encloses nothing.
- *
- * Smallest rather than first because faces nest: a seed inside a cupboard that
- * sits inside a hall is in both, and the cupboard is the room the user meant.
  */
 export function faceForSeed(seed: Pt, faces: readonly Face[]): Face | null {
     let best: Face | null = null;

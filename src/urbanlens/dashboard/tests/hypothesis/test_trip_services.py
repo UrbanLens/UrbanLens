@@ -1,18 +1,4 @@
-"""Property-based and unit tests for the shared trip services.
-
-These cover the parts whose correctness is structural rather than per-case:
-``trip_access.can_perform``'s permission matrix, the marker-numbering rule the
-trip map depends on, and ``trip_map.build_trip_map_points``'s invariants.
-
-On ``@given`` and the database: per this repo's CLAUDE.md, Hypothesis drives
-*pure logic* only - a ``@given`` method on a DB-backed ``TestCase`` re-enters
-pytest's fixture finalizers once per generated example and blows up inside
-``_pytest.fixtures``. So the numbering rule is property-tested here against
-lightweight activity stand-ins (it is pure given an activity's coordinates,
-hidden flag and status), while the DB-backed matrix and map tests enumerate
-their domains exhaustively with ``subTest`` - which for a 5x3 permission
-matrix is stronger than sampling anyway.
-"""
+"""Property-based and unit tests for the shared trip services."""
 
 from __future__ import annotations
 
@@ -52,16 +38,15 @@ _STATUSES = [TripActivity.STATUS_PROPOSED, TripActivity.STATUS_CONFIRMED, TripAc
 def _expected_can_perform(relationship: str, level: str) -> bool:
     """The permission matrix, restated independently of the implementation.
 
-    Written from the documented rules rather than by reading ``can_perform``,
-    so the two have to agree for this to mean anything.
+    Written from the documented rules rather than by reading ``can_perform``, so the two have to agree for this
+    to mean anything.
 
     Args:
         relationship: One of :data:`_RELATIONSHIPS`.
         level: One of :data:`_LEVELS`.
 
     Returns:
-        Whether the profile should be allowed to act.
-    """
+        Whether the profile should be allowed to act."""
     if relationship == "creator":
         return True
     # Anyone who has not accepted the invitation can never act, at any level.
@@ -78,10 +63,8 @@ def _expected_can_perform(relationship: str, level: str) -> bool:
 class _StubActivity:
     """The minimal shape ``compute_activity_index_map`` reads off an activity.
 
-    Standing in for a real ``TripActivity`` keeps the numbering property test
-    pure, so Hypothesis can drive it without a database (see the module
-    docstring).
-    """
+    Standing in for a real ``TripActivity`` keeps the numbering property test pure, so Hypothesis can drive it
+    without a database (see the module docstring)."""
 
     id: int
     lat_override: float | None
@@ -320,10 +303,8 @@ class BuildTripMapPointsInvariantTests(TestCase):
     def test_indices_stay_contiguous_across_every_skip_combination(self) -> None:
         """Exhaustive over one activity of each kind: numbering never gaps.
 
-        The pure numbering rule is property-tested separately in
-        :class:`ActivityIndexNumberingPropertyTests`; this is the end-to-end
-        confirmation that the real query path produces the same thing.
-        """
+        The pure numbering rule is property-tested separately in :class:`ActivityIndexNumberingPropertyTests`;
+        this is the end-to-end confirmation that the real query path produces the same thing."""
         for located, hidden, status in itertools.product([True, False], [True, False], _STATUSES):
             with self.subTest(located=located, hidden=hidden, status=status):
                 self.trip.activities.all().delete()
@@ -386,13 +367,10 @@ class BuildTripMapPointsInvariantTests(TestCase):
 class BuildActivityRowsChildTripMaskingTests(TestCase):
     """build_activity_rows must mask a linked child trip's name/uuid exactly like it masks location.
 
-    Regression: the row dict never carried a masked child-trip field at all,
-    so the template read act.child_trip.name/.uuid directly and unconditionally
-    - even for an activity whose location this viewer can't see. Revealing
-    "this points at trip X" (and X's real name) defeats the point of hiding
-    the location, since the child trip's name alone is often exactly the
-    identifying information the hide was protecting.
-    """
+    Regression: the row dict never carried a masked child-trip field at all, so the template read
+    act.child_trip.name/.uuid directly and unconditionally "this points at trip X" (and X's real name) defeats
+    the point of hiding the location, since the child trip's name alone is often exactly the identifying
+    information the hide was protecting."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -426,14 +404,11 @@ class BuildActivityRowsChildTripMaskingTests(TestCase):
         self.assertEqual(row["display_child_trip_uuid"], str(self.child_trip.uuid))
 
     def test_child_trip_is_also_blanked_when_hidden_only_by_the_adders_privacy_setting(self) -> None:
-        """Must reuse the same effective_location_hidden gate as the location fields,
-        not just the raw location_hidden flag.
+        """Must reuse the same effective_location_hidden gate as the location fields, not just the raw location_hidden flag.
 
-        viewer_hidden_activity_ids' privacy-setting bucket only ever applies to
-        an activity that actually carries a location (there is no place fact to
-        withhold otherwise), so this needs a real Location - unlike the two
-        tests above, which only exercise the raw location_hidden flag.
-        """
+        viewer_hidden_activity_ids' privacy-setting bucket only ever applies to an activity that actually
+        carries a location (there is no place fact to withhold otherwise), so this needs a real Location -
+        unlike the two tests above, which only exercise the raw location_hidden flag."""
         Profile.objects.filter(pk=self.adder.pk).update(trip_pin_location_visibility=VisibilityChoice.NO_ONE)
         location = Location.objects.create(latitude=41.0, longitude=-82.0, official_name="Hidden Spot")
         row = self._row_for(location_hidden=False, location=location)
@@ -444,13 +419,10 @@ class BuildActivityRowsChildTripMaskingTests(TestCase):
 class CompleteActivityVisibilityTests(TestCase):
     """complete_activity must refuse to complete an activity whose location a viewer can't see.
 
-    Regression: completing only required trip-contribute permission, with no
-    check against the activity's own effective location-hidden state - so any
-    trip member could "complete" an activity someone else hid from them, and
-    create_visit_entries_for_completed_activity would materialize its real
-    coordinates into their own Pin/Visit anyway (plus suggest visits to other
-    members with a "yes" RSVP), defeating the hide entirely.
-    """
+    Regression: completing only required trip-contribute permission, with no check against the activity's own
+    effective location-hidden state - so any trip member could "complete" an activity someone else hid from
+    them, and create_visit_entries_for_completed_activity would materialize its real coordinates into their own
+    Pin/Visit anyway (plus suggest visits to other members with a "yes" RSVP), defeating the hide entirely."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -478,13 +450,7 @@ class CompleteActivityVisibilityTests(TestCase):
         self.assertFalse(PinVisit.objects.filter(pin__profile=self.viewer).exists())
 
     def test_adder_can_still_complete_an_activity_hidden_from_others_only_by_their_own_privacy_setting(self) -> None:
-        """Must not overcorrect: viewer_hidden_activity_ids already exempts the
-        adder from their own trip_pin_location_visibility setting (it only
-        ever withholds an activity from *other* viewers), and this gate must
-        preserve that - unlike the explicit location_hidden flag (tested
-        above), which applies uniformly to everyone, adder included, matching
-        how build_activity_rows's effective_location_hidden already treats it.
-        """
+        """Must not overcorrect: viewer_hidden_activity_ids already exempts the adder from their own trip_pin_location_visibility setting (it only ever withholds an activity from *other* viewers), and this gate must preserve that - unlike the explicit location_hidden flag (tested above), which applies uniformly to everyone, adder included, matching how build_activity_rows's effective_location_hidden already treats it."""
         Profile.objects.filter(pk=self.adder.pk).update(trip_pin_location_visibility=VisibilityChoice.NO_ONE)
         activity = TripActivity.objects.create(
             trip=self.trip,

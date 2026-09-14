@@ -1,9 +1,7 @@
 """How the Vault's photo/document gallery is ordered.
 
-Mirrors ``models.album.sort`` (``AlbumSort``/``AlbumSortSpec``) - a named method,
-a spec carrying its ``order_by``, and a lookup that falls back to the default -
-but over a plain ``Image`` queryset rather than ``AlbumItem`` membership rows,
-since the Vault gallery has no per-item custom order to fall back to.
+Mirrors ``models.album.sort`` but over a plain ``Image`` queryset - the Vault gallery has no
+per-item custom order.
 """
 
 from __future__ import annotations
@@ -44,9 +42,8 @@ class GallerySortSpec:
     def apply[QS: QuerySet](self, queryset: QS) -> QS:
         """Return *queryset* ordered by this method.
 
-        Generic over the queryset's own type, matching ``AlbumSortSpec.apply``
-        - a caller chaining an ``ImageQuerySet`` method after this one keeps
-        that type instead of widening to the plain ``QuerySet`` base.
+        Generic over the queryset's own type so chaining an ``ImageQuerySet`` method after
+        this one keeps that type.
 
         Args:
             queryset: An ``Image`` queryset.

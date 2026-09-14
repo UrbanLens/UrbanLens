@@ -1,20 +1,5 @@
 """Gateway for REData's ``/historical-features/`` near-a-coordinate endpoint.
-
-See ``../REData/docs/api-reference.md``, "GET /historical-features/ - mapped
-features that existed near a point at some time": buildings, roads, railways,
-water features, land use, places and named venues retrospectively traced from
-historical sources (OpenHistoricalMap today), most of them long since gone.
-
-Two contract points that shape any consumer:
-
-- ``start_year`` is **not** a construction year. The source's ``start_date``
-  frequently means "first documented on a source of that date" (a Sanborn
-  map, say) rather than "built in that year" - ``source_note`` names what the
-  feature was traced from, and is what tells the two cases apart. Neither
-  bound should be presented to an end user as an age.
-- Volunteer-traced and city-scale coverage: an empty result means "nothing
-  mapped here", never "nothing was here".
-"""
+The source's ``start_date`` frequently means "first documented on a source of that date" (a Sanborn map, say) rather than "built in that year" - ``source_note`` names what the feature was traced from, and is what tells the two cases apart."""
 
 from __future__ import annotations
 
@@ -24,10 +9,9 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import L
 
 _HISTORICAL_FEATURES_PATH = "/api/v1/historical-features/"
 
-#: REData's closed ``kind`` vocabulary, mapped to display labels. Kept here so
-#: consumers render consistent wording without each re-deriving it, and so an
-#: unrecognised kind (a future vocabulary addition) falls back visibly rather
-#: than crashing a panel.
+#: REData's closed ``kind`` vocabulary, mapped to display labels.
+#: Kept here so consumers render consistent wording without each re-deriving it, and so an
+#: unrecognised kind (a future vocabulary addition) falls back visibly rather than crashing a panel.
 HISTORICAL_FEATURE_KIND_LABELS: dict[str, str] = {
     "building": "Building",
     "structure": "Structure",
@@ -74,14 +58,10 @@ class RedataHistoricalFeaturesGateway(RedataLocationContextGateway):
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The parsed envelope. Each ``results`` entry carries ``kind``,
-            ``name``, ``start_year``/``end_year`` (nullable), the publisher's
-            raw ``start_date``/``end_date`` strings, ``source_note`` (what the
-            feature was traced from), and real GeoJSON ``geometry``.
+            The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: The source failed to answer, the
-                request itself failed, or a filter value was rejected.
+            LocationContextUnavailableError: The source failed to answer, the request itself failed, or a filter value was rejected.
         """
         extra_params: dict[str, Any] = {}
         if kinds:

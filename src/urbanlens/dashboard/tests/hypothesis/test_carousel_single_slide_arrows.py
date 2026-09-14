@@ -1,11 +1,4 @@
-"""Street View / Satellite Imagery carousels must not show prev/next arrows for a single slide.
-
-Rendered directly against the template with a controlled `slides` list rather
-than through the real controller endpoints, since those endpoints call out to
-several live external imagery APIs (Google, Esri, USGS, Mapillary, ...) to
-build that list - the arrow-visibility logic itself only depends on the
-slide count, which this isolates cleanly.
-"""
+"""Street View / Satellite Imagery carousels must not show prev/next arrows for a single slide."""
 
 from __future__ import annotations
 
@@ -45,11 +38,7 @@ class StreetViewCarouselArrowTests(SimpleTestCase):
 
 
 class StreetViewInteractiveEmbedTests(SimpleTestCase):
-    """The interactive Google Street View embed must only render when the FIRST
-    slide is actually a Google-sourced slide - it used to trigger for any
-    provider's coordinates just because an api key was configured, which meant
-    embedding Google's own street-view iframe over e.g. Mapillary-only
-    coordinates, guaranteed to fail (Google has never verified that location)."""
+    """Mapillary-only coordinates, guaranteed to fail (Google has never verified that location)."""
 
     def test_embed_shown_when_first_slide_is_google(self) -> None:
         slide = dict(_STREET_VIEW_SLIDE, source="Google Street View")
@@ -83,9 +72,7 @@ class StreetViewInteractiveEmbedTests(SimpleTestCase):
         self.assertRegex(html, r'class="sv-img sv-img--fallback"\s+hidden\s+alt="Google Street View')
 
     def test_embed_not_shown_when_google_slide_exists_but_is_not_first(self) -> None:
-        """The bug this class guards against: only `forloop.first` used to be
-        missing from the check, so a Google slide anywhere in the list (not
-        just first) would still trigger the embed."""
+        """The bug this class guards against: only `forloop.first` used to be missing from the check, so a Google slide anywhere in the list (not just first) would still trigger the embed."""
         first_slide = dict(_STREET_VIEW_SLIDE, source="mapillary")
         google_slide = dict(_STREET_VIEW_SLIDE, source="Google Street View")
         html = render_to_string(

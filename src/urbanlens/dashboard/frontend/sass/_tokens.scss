@@ -214,8 +214,6 @@ $color-brown-1500: #1F1311;
 $color-brown-1700: #0D0807;
 
 // Define SASS variables for colors so that light mode and dark mode can reference a single source of truth.
-// 0-9 progress light to dark, along with accent colors (a) and border colors (b). 10 progresses one step further to black.
-// The main colors for the site use 0-9, inverted for dark mode.
 $color-grey-0a: #ffffff;
 $color-grey-0: #f7f7f7;
 $color-grey-0b: #efefef;
@@ -251,9 +249,7 @@ $color-grey-10: #090909;
 $color-grey-10b: #000000;
 
 // -- Supplementary UI colour palette ------------------------------------------
-// Tailwind-CSS-inspired palette for UI components. Named with the `$ui-` prefix
-// to avoid conflicts with the Material Design scale above.
-// TODO: This is deprecated. Use the Material Design scale instead, and replace these references over time.
+// Tailwind-CSS-inspired palette for UI components.
 
 // -- Map filter-panel & cluster-marker colours --------------------------------
 // Intentionally static - filter panel and map clusters always render on dark
@@ -296,11 +292,7 @@ $selected-color: $color-blue-300;
 $section-header-bg: $color-blue-300;
 
 // -- Semantic colors -----------------------------------------------------------
-// var(), not the raw color: every --ul-grey-N token inverts under
-// [data-theme="dark"] (see below), and $text-primary is compiled once at
-// build time - a raw color here freezes every consumer (.form-input's <select>
-// text among them) at the light-mode value, unreadable once its background
-// (var(--ul-surface-raised)) goes dark.
+// var(), not the raw color: every --ul-grey-N token inverts under [data-theme="dark"], and $text-primary is compiled once at build time.
 $text-primary: var(--ul-grey-9);
 $text-secondary: $color-grey-6;
 $text-muted: $color-grey-4;
@@ -327,12 +319,12 @@ $accent-2-light: $color-amber-300;
 $accent-2-dark: $color-amber-700;
 
 // -- Dark-mode accent palette --------------------------------------------------
-$dk-navy:         $color-blue-1500;                  
-$dk-panel-bg:     $color-deep-purple-1500;           
-$dk-panel-border: rgba($color-deep-purple-1500, .5); 
+$dk-navy:         $color-blue-1500;
+$dk-panel-bg:     $color-deep-purple-1500;
+$dk-panel-border: rgba($color-deep-purple-1500, .5);
 
 // Extended dark-mode surface/state tokens
-$dk-info-link:          $color-blue-300;   
+$dk-info-link:          $color-blue-300;
 $dk-success-bg:         $color-green-900;
 $dk-accept-border:      $color-green-700;
 $dk-accept-hover:       $color-green-900;
@@ -585,11 +577,7 @@ $z-nav: 1100;
     --card-bg: #1e1e1e;
     --ul-border-color: var(--ul-grey-8b);
 
-    // The light-mode $primary-color (a muted blue-grey, #496793) has never had
-    // a dark-mode override despite --ul-primary-color's own comment above
-    // saying it exists precisely so dark mode can do this - it reads as
-    // illegible link/icon text against dark surfaces. Brighter, more
-    // saturated blue for real contrast there.
+    // The light-mode $primary-color (a muted blue-grey, #496793) has never had a dark-mode override despite --ul-primary-color's own comment.
     --ul-primary-color: #039be5;
 
     // Tooltips in dark mode: slightly elevated dark blue-grey to stand out from page surface

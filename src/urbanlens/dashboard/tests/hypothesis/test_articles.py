@@ -18,12 +18,7 @@ from urbanlens.dashboard.services.wiki.articles import diff_revisions, render_ar
 
 
 class EditorDisplayNameTests(SimpleTestCase):
-    """ArticleRevision.editor_display_name - regression coverage for the
-    "'Deleted user' shown for a Wikipedia-seeded starting article" report:
-    a null ``editor`` means either a genuinely
-    deleted account or a system-initiated seed (services.wiki.wiki_seed passes
-    editor=None on purpose) - these must not both show "Deleted user".
-    """
+    """ArticleRevision.editor_display_name - regression coverage for the "'Deleted user' shown for a Wikipedia-seeded starting article" report: a null ``editor`` means either a genuinely deleted account or a system-initiated seed (services.wiki.wiki_seed passes editor=None on purpose) - these must not both show "Deleted user"."""
 
     def test_editor_present_returns_username(self) -> None:
         profile = Profile(user=User(username="alice"))
@@ -287,10 +282,7 @@ class PinArticleViewTests(TestCase):
         self.assertContains(response, "dashboard/js/article-wysiwyg.js")
 
     def test_pin_detail_page_offers_source_and_clear_via_the_actions_menu(self) -> None:
-        """Source/Clear live in the pin-detail actions menu (_hierarchy_actions_fab.html),
-        not a floating toolbar inside the article panel itself - see
-        editorRootForControl() in article-wysiwyg.ts for how they still reach the
-        editor from outside its own DOM subtree."""
+        """Source/Clear live in the pin-detail actions menu (_hierarchy_actions_fab.html), not a floating toolbar inside the article panel itself - see editorRootForControl() in article-wysiwyg.ts for how they still reach the editor from outside its own DOM subtree."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data-article-mode-toggle")

@@ -1,15 +1,8 @@
 /**
- * Signs in once per role and saves the browser state every other project reuses.
- *
- * Signing in is slow (a form POST, a redirect chain, and a full page render),
- * it is the same for every test, and doing it per test would make the login
- * rate limiter - which counts failures per identifier *and* per IP - a real
- * risk on a parallel run. Doing it once here and handing the rest of the suite
- * a saved session is Playwright's standard pattern and the reason this suite
- * can raise its worker count without tripping a lockout.
- *
- * This runs as a project dependency, so a failure here reports as
- * "setup failed" rather than as every UI test failing separately.
+ * Signs in once per role and saves the browser state every other project reuses. Signing in is slow
+ * (a form POST, a redirect chain, and a full page render), it is the same for every test, and doing
+ * it per test would make the login rate limiter - which counts failures per identifier *and* per IP
+ * - a real risk on a parallel run.
  */
 
 import { mkdirSync } from "node:fs";
