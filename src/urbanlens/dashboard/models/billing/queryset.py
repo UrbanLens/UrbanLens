@@ -96,10 +96,6 @@ class RoleSubscriptionManager(abstract.DashboardManager.from_queryset(RoleSubscr
 class StripeWebhookEventQuerySet(abstract.DashboardQuerySet["StripeWebhookEvent"]):
     """Filters for the Stripe webhook idempotency/audit log."""
 
-    def unprocessed(self) -> Self:
-        """Events stored but not yet successfully handled."""
-        return self.filter(processed_at__isnull=True)
-
 
 class StripeWebhookEventManager(abstract.DashboardManager.from_queryset(StripeWebhookEventQuerySet)):
     pass

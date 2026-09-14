@@ -1950,11 +1950,12 @@ asserted. `docs/reports/2026-08-14-view-coverage.md` (X12) stays as the dated me
 
 ---
 
-## P41 — The queryset API's unused half, by call graph: 26 methods deleted, 27 test-only ones left
+## P41 — The queryset API's unused half, by call graph: 29 methods deleted, 27 test-only ones left
 
-`id: P41` · `status: open` · `updated: 2026-09-06`
+`id: P41` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "68 of 249 public queryset methods have no production caller, so their logic may
+Previously titled "The queryset API's unused half, by call graph: 26 methods deleted, 27 test-only
+ones left", before that "68 of 249 public queryset methods have no production caller, so their logic may
 be duplicated inline elsewhere", and before that "Queryset API with no production caller: 70 of 251
 (candidate count)".
 
@@ -2005,10 +2006,15 @@ is the same shape against a migration, which must not call a queryset method at 
   warning is about: several are the `filter_by_criteria`-style aggregators' building blocks, and a
   test that exercises the aggregator does reach them - just not by name. `by_name`, `by_priority`,
   `by_tag`, `rated`, `rated_over`, `rated_under` and `overlapping` on `PinQuerySet` are the bulk.
-- **9 whose name appears only in a string or a template.** Four were spot-checked and all four are
-  false positives of the string check rather than real reuse: `cloned_from` is also a model *field*
-  name, `search_visible_to` appears in a docstring, and `rate_limited` collides with an unrelated
-  constant in two gateways. They are probably deletable; each needs its own look.
+- **Names that appear only in a string or a template: none left in production.** Re-run 2026-09-14
+  by AST over `src/`, `bin/` and every template, the group was 8, not 9. Three had no reference
+  but a string collision and were deleted: `ApiCallLogQuerySet.successful` (htmx's
+  `event.detail.successful`), `ApiCallLogQuerySet.service_disabled` (the enrichment skip reason
+  `"service_disabled"`) and `StripeWebhookEventQuerySet.unprocessed` (`held_upload.py`'s
+  `HELD_PREFIX`). No call site had written their filters out by hand. The other five -
+  `LocationManager.get_for_point`, `VisitQuerySet.manual`, `PlaceExternalTagQuerySet.matching`,
+  `ApiCallLogQuerySet.rate_limited` and `PinQuerySet.rated` - are called from tests, so they belong
+  to the group above.
 - **11 used only inside their own file.** Not dead - `apply_label_groups` is the example this entry
   already carried - but arguably mis-scoped as public API rather than `_`-prefixed helpers.
 
