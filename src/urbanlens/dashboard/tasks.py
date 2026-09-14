@@ -432,7 +432,7 @@ def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
         return publish_held(key, pk, held_name, attempt=self.request.id)
     except STORAGE_ERRORS as exc:
         if self.request.retries >= self.max_retries:
-            logger.exception("The upload held for %s %s could not be read after %s retries", key, pk, self.request.retries)
+            logger.exception("Storage could not read or write the upload held for %s %s after %s retries", key, pk, self.request.retries)
             drop_held(key, pk, held_name)
             return False
         raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 900)) from exc
