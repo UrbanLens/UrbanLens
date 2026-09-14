@@ -1095,9 +1095,12 @@ than fallbacks. The rest of this entry records them and the file-stranding work 
 
   - They do not cover `Image`'s columns. `services/media/images.py::delete_stored_file` handles
     `image`, `thumbnail`, `marker_thumbnail` and `analysis_thumbnail`, deleting each only when no
-    other row names it. Until 2026-09-14 it skipped `analysis_thumbnail` entirely, and skipped every
-    derived file whenever the original was still shared, which a pin share always leaves it
-    (`test_shared_image_file_deletion.py::AnalysisThumbnailDeletionTests`).
+    other row names it, and `models/images/signals.py::remove_stored_file` runs it for every deleted
+    row, cascades included. Until 2026-09-14 it skipped `analysis_thumbnail` entirely, skipped every
+    derived file whenever the original was still shared (which a pin share always leaves it), and
+    account deletion unlinked each photo's original before the cascade, so deleting an account broke
+    every copy it had shared (`test_shared_image_file_deletion.py::AnalysisThumbnailDeletionTests`,
+    `AccountDeletionPhotoFileTests`).
   - They are connected *per sender*. A sender-less receiver makes every model in the project report
     listeners, which disables Django's fast-delete path repo-wide and trips
     `test_bulk_write_signal_guard`.

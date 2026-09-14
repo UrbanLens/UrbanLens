@@ -510,7 +510,10 @@ Three boundaries, each of which the obvious version gets wrong:
   by account deletion for all four.
 - **`Image`'s columns are not managed here.** `services/media/images.py`'s
   `delete_stored_file` handles `image` and its three derived files, and knows
-  when two rows legitimately share a file; this module does not.
+  when two rows legitimately share a file; this module does not. Its own
+  `post_delete` receiver, `models/images/signals.py::remove_stored_file`, runs
+  it for every deleted row, so no caller should unlink a photo's file before
+  deleting the row - account deletion did, and broke every copy it had shared.
 - **Every unlink waits for the commit.** `post_save`/`post_delete` fire *inside*
   the transaction, so deleting there would survive a rollback that put the row
   back. `transaction.on_commit` runs it only once the write lands.

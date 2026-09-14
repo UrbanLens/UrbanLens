@@ -13,6 +13,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.model import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.media.images import delete_stored_file
+from urbanlens.dashboard.services.profile.account_deletion import hard_delete_profile
 from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 
 
@@ -112,3 +113,30 @@ class AnalysisThumbnailDeletionTests(SharedImageFileDeletionTests):
             default_storage.exists(self.analysis_name),
             "the sender's analysis copy outlived its row because the original file was still shared",
         )
+
+
+class AccountDeletionPhotoFileTests(SharedImageFileDeletionTests):
+    """Hard-deleting an account applies the same shared-file rule as deleting one photo."""
+
+    def test_deleting_the_senders_account_keeps_the_file_a_recipient_was_shared(self):
+        hard_delete_profile(self.sender)
+
+        self.assertTrue(
+            default_storage.exists(self.stored_name),
+            "deleting the sender's account removed the file the recipient's shared copy points at",
+        )
+
+    def test_deleting_an_account_removes_every_derived_file_of_its_photos(self):
+        solo = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, file_size=9)
+        solo.image.save("solo-photo.jpg", ContentFile(b"solo-bytes"), save=False)
+        for field_name in ("thumbnail", "marker_thumbnail", "analysis_thumbnail"):
+            getattr(solo, field_name).save(f"solo-{field_name}.jpg", ContentFile(b"derived"), save=False)
+        solo.save()
+        names = [solo.image.name, solo.thumbnail.name, solo.marker_thumbnail.name, solo.analysis_thumbnail.name]
+        self.assertTrue(
+            all(default_storage.exists(name) for name in names), "the premise failed: a file was not written"
+        )
+
+        hard_delete_profile(self.sender)
+
+        self.assertEqual([name for name in names if default_storage.exists(name)], [])

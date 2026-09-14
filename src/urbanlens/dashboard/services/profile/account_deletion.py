@@ -135,9 +135,7 @@ def _delete_profile_files(profile: Profile) -> None:
     """Best-effort delete of storage files owned by this profile, before the DB rows go."""
     _delete_file_field(profile, "avatar", label="profile")
 
-    for image in profile.uploaded_images.all():
-        _delete_file_field(image, "image", label="image")
-
+    # Photos go with the cascade through images/signals.py::remove_stored_file, which keeps a file a shared copy still names.
     for pin in profile.pins.all():
         _delete_file_field(pin, "custom_icon", label="pin")
 
