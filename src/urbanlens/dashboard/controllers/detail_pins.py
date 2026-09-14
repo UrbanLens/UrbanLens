@@ -12,6 +12,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.abstract.field_snapshot import FieldSnapshot
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
@@ -175,6 +176,7 @@ class DetailPinEditView(LoginRequiredMixin, View):
 
     def post(self, request, pin_slug, detail_pin_uuid):
         detail_pin = self._get_detail_pin(request, pin_slug, detail_pin_uuid)
+        snapshot = FieldSnapshot(detail_pin)
         try:
             body = json.loads(request.body)
         except (json.JSONDecodeError, ValueError):
@@ -218,7 +220,7 @@ class DetailPinEditView(LoginRequiredMixin, View):
         if new_location is not None:
             detail_pin.location = new_location
 
-        detail_pin.save()
+        snapshot.save_changes()
         if moved:
             from urbanlens.dashboard.services.undo.mutations import stash_pin_move
 
@@ -411,6 +413,7 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
     def post(self, request, location_slug, detail_pin_uuid):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
+        snapshot = FieldSnapshot(child_wiki)
 
         try:
             body = json.loads(request.body)
@@ -457,7 +460,7 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         old_lat, old_lon = child_wiki.location.latitude, child_wiki.location.longitude
         if new_location is not None:
             child_wiki.location = new_location
-        child_wiki.save()
+        snapshot.save_changes()
 
         if moved:
             from urbanlens.dashboard.services.undo.mutations import stash_wiki_move

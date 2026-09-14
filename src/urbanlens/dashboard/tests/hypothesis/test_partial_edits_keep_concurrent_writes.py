@@ -19,6 +19,8 @@ from urbanlens.dashboard.models.markup.model import CustomLayer, PinMarkup
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
+from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.colors import clean_color
 
 
 def _concurrent_write_before_save(model, **other_writer):
@@ -115,3 +117,53 @@ class CustomLayerEditTests(_OwnPinCase):
         layer.refresh_from_db()
         self.assertEqual(layer.name, "Drains")
         self.assertFalse(layer.default_visible, "the rename reverted a visibility it was never sent")
+
+
+class DetailPinEditTests(_OwnPinCase):
+    def test_restyling_keeps_concurrent_notes(self) -> None:
+        child = baker.make(
+            Pin, profile=self.profile, parent_pin=self.pin, location=baker.make(Location), description="Mine"
+        )
+
+        with _concurrent_write_before_save(Pin, description="Written in another tab"):
+            response = self.client.post(
+                reverse("pin.detail_pin.edit", kwargs={"pin_slug": self.pin.slug, "detail_pin_uuid": child.uuid}),
+                data=json.dumps({"color": "#ff0000"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        child.refresh_from_db()
+        self.assertEqual(child.color, clean_color("#ff0000"))
+        self.assertEqual(child.description, "Written in another tab", "the restyle reverted notes it was never sent")
+
+
+class ChildWikiEditTests(TestCase):
+    def test_restyling_keeps_another_editors_concurrent_description(self) -> None:
+        baker.make("auth.User")  # the first user is auto-promoted to site admin
+        user = baker.make("auth.User")
+        self.client.force_login(user)
+        location = Location.objects.create(latitude=40.0, longitude=-74.0)
+        parent = baker.make_recipe("dashboard.wiki", location=location)
+        baker.make_recipe("dashboard.pin", profile=user.profile, location=location)
+        child = baker.make_recipe(
+            "dashboard.wiki",
+            parent_wiki=parent,
+            location=Location.objects.create(latitude=40.001, longitude=-74.001),
+            name="Gatehouse",
+            description="Before",
+        )
+
+        with _concurrent_write_before_save(Wiki, description="Another editor's words"):
+            response = self.client.post(
+                reverse("location.wiki.detail_pin.edit", args=[location.slug, child.uuid]),
+                data=json.dumps({"color": "#ff0000"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        child.refresh_from_db()
+        self.assertEqual(child.color, clean_color("#ff0000"))
+        self.assertEqual(
+            child.description, "Another editor's words", "the restyle reverted a description it was never sent"
+        )

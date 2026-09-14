@@ -119,19 +119,24 @@ whose `save` already writes only `Meta.fields`, and `test_settings_form_field_sc
 `models/abstract/field_snapshot.py::FieldSnapshot` records a loaded row's column values, and its
 `save_changes` writes only the columns that differ plus `updated`, or nothing at all.
 `test_partial_edits_keep_concurrent_writes.py` lands a second writer's change between the load
-and the save, and it failed at all three of these before they used `FieldSnapshot`:
+and the save, and it failed at each of these before they used `FieldSnapshot`:
 
 | handler | why it mattered |
 |---|---|
 | `controllers/site_admin.py::SiteAdminView.post` | the page autosaves one field per request, and several fields are reassigned from their loaded value whether or not they were sent, so two quick autosaves reverted each other |
 | `controllers/markup.py::MarkupEditView.post` | a relabel reverted another editor's colour or geometry on a shared wiki's annotation |
 | `controllers/custom_layers.py::CustomLayerEditView.post` | a rename reverted a visibility toggle |
+| `controllers/detail_pins.py::DetailPinEditView.post` | the detail panel autosaves style changes, and each one reverted notes written in another tab |
+| `controllers/detail_pins.py::LocationWikiDetailPinEditView.post` | a restyle of a child wiki reverted another editor's description |
+
+`Pin.save` and `Wiki.save` both key their side effects on `update_fields`, and both still fire: a
+move carries `location`, so `Pin._sync_exposures_after_save` propagates exposures, and a rename
+carries `name`, so aliases are synced. One behaviour is gone on purpose: `Wiki.save` backfills an
+unset `place` only on a whole-row save, so a child wiki's style edit no longer does that as a side
+effect.
 
 **Still writing every column on an edit of an existing row:**
 
-- `controllers/detail_pins.py::DetailPinEditView.post` and `LocationWikiDetailPinEditView.post`.
-  These are the same partial-body shape as the markup edit, but on `Pin` and `Wiki`, whose `save`
-  and `from_db` overrides need reading before a scoped write can be trusted.
 - Whole-form edits, where the request sends every field the row has, so a scoped write changes
   less: `controllers/notifications.py` (delivery preferences),
   `controllers/site_admin_costs.py` (component and operating-cost edits),
