@@ -279,9 +279,10 @@
 
         const drawControl = new L.Control.Draw({
             draw: { polygon: { shapeOptions: _sfRegionStyle('include') }, marker: false, circle: false, circlemarker: false, rectangle: false, polyline: false },
-            edit: { featureGroup: drawnItems, remove: true },
+            edit: { featureGroup: drawnItems, remove: false },
         });
         map.addControl(drawControl);
+        window.RegionDelete.add(map, drawnItems, _sfSaveRegions);
 
         map.on(L.Draw.Event.CREATED, (e) => {
             e.layer.options.regionType = _sfActiveRegionMode;
@@ -290,7 +291,6 @@
             _sfSaveRegions();
         });
         map.on(L.Draw.Event.EDITED, _sfSaveRegions);
-        map.on(L.Draw.Event.DELETED, _sfSaveRegions);
 
         savedFilterSetRegionMode('include');
         setTimeout(() => map.invalidateSize(), 0);

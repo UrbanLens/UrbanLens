@@ -11,6 +11,32 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-14: deleted saved-filter regions and list boundaries came back on the next draw
+
+`id: P27` · `status: fixed` · `resolved: 2026-09-14`
+
+Previously titled "Saved-filter regions use leaflet-draw's transactional remove tool, so deleted polygons resurrect on
+the next draw". The 2026-08-08 triage had already found three of its five filter-view defects fixed (icon picker, badge
+picker parity, preview refresh).
+
+leaflet-draw 1.0.4's remove tool only stages a click-deletion: it commits through that tool's Save action, and
+`EditToolbar.disable` calls `revertLayers()` when any other draw or edit tool starts, so `draw:deleted` never fires and
+the layer returns. Reproduced in Chromium against the development stack before the fix: two regions drawn on a saved
+filter, the left one clicked away in delete mode (the hidden input still held 2 polygons), then picking the polygon tool
+put it back. The pin-list boundary map used the same tool.
+
+Both maps now build their draw control with `edit.remove: false` and add `shared/region-delete.ts`, a delete button
+whose `ImmediateDeleteMode` removes a clicked layer and persists at once, disarming when a draw or edit tool starts or
+the last region goes. Verified in the same browser run afterwards: the saved filter's stored value dropped to 1 polygon
+on the click and stayed at 1 after picking the draw tool, and the pin list's stored `smart_boundary` went from 2
+components to 1. `region-delete.test.ts` covers the mode; `test_region_delete_is_immediate.py` fails if any template or
+TS file enables leaflet-draw's remove tool or a region map drops the delete button.
+
+The triage's last item, "page overflows footer", was not reproduced: a 1400px-wide full-page screenshot of a saved
+filter's detail page ends with the footer below all content. Other widths were not checked.
+
+Found while verifying: a stored multi-part region reloads as one layer, so a delete removes every part - P120.
+
 ## RESOLVED 2026-09-14: the saved-filter count badges read every pin in the account to draw a number
 
 `id: P107` · `status: fixed` · `resolved: 2026-09-14`

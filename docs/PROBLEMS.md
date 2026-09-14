@@ -1525,42 +1525,6 @@ lagging or offline client, which is a decision for the owner rather than an audi
 already documents a related deliberate trade (recoverability over forward secrecy), so there is
 precedent for either answer being the intended one.
 
-## P27 — Saved-filter regions use leaflet-draw's transactional remove tool, so deleted polygons resurrect on the next draw
-
-`id: P27` · `status: open` · `updated: 2026-08-08`
-
-Previously titled "Filter-view defects cluster: triaged, 3 of 5 already resolved (2026-08-08)".
-
-Roadmap Tier-1 item 5 listed five defects and prescribed one agent owning the page. Static
-triage shows the list is mostly stale:
-
-- **Icon picker dead - already fixed.** `entries/saved-filter-detail.ts` exists solely to fix
-  it, and its comment names the root cause: the page rendered the shared `_icon_picker.html`
-  partial but never loaded anything defining `window.IconPicker`, so the trigger's onclick
-  threw silently. The entry installs the global picker.
-- **Badge picker parity - already fixed** (2026-07-23, browser-verified; see the label-picker
-  extraction entry above). Both picker shapes now come from `shared/label-picker.ts`.
-- **Preview doesn't refresh on criteria change - already fixed.** The detail page has a
-  debounced live preview on form change/input with a supersession token (the same
-  stale-response pattern this audit fixed in mention-autocomplete), and `_sfSaveRegions`
-  dispatches a synthetic bubbling `change` precisely because property assignment fires no DOM
-  event - region edits refresh the preview too.
-
-**Polygon resurrection - mechanism identified, deliberately not blind-fixed.** The page's own
-logic is correct: `draw:created/edited/deleted` all persist, and loading round-trips through
-`_sfRegionLayers` properly. The resurrection is stock leaflet-draw semantics: delete mode is
-transactional, click-deletions commit only via the sub-toolbar's small "Save" action, and
-disabling delete mode (e.g. by clicking the polygon tool to draw next) **reverts** uncommitted
-deletions - `draw:deleted` never fires, so the layers genuinely return, exactly matching the
-report "deleted polygons resurrect on next draw". The fix is to stop using leaflet-draw's
-remove tool (`edit.remove: false`) and implement immediate-commit deletion - a toggle that
-removes a clicked layer from the feature group and calls `_sfSaveRegions()` at once. Not
-shipped from this environment because it changes live map interaction behaviour, which needs a
-real browser to verify; the roadmap entry carries the design.
-
-**Page overflows footer** - CSS-level, needs a browser to reproduce; nothing checkable
-statically.
-
 ## P86 — Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction
 
 `id: P86` · `status: open` · `updated: 2026-09-06`
@@ -5067,3 +5031,16 @@ fields. It belongs in the `infrastructure` repo beside the other host timers, no
 Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
+
+## P120 — A stored multi-part region reloads as one Leaflet layer, so deleting or editing one part acts on all of them
+
+`id: P120` · `status: open` · `updated: 2026-09-14`
+
+Found verifying P27 on the pin-list boundary map (2026-09-14). Two separate triangles drawn and saved
+were stored as one `MultiPolygon` with 2 components; after a reload the map showed them as a single
+`path.leaflet-interactive`. `L.geoJSON` builds one layer per feature, and the stored value is one
+`MultiPolygon` feature, so the delete tool can only remove every part at once, and the edit tool
+reshapes them as one layer. The saved-filter region map loads through the same `L.geoJSON(...).getLayers()`
+(`_sfAddRegionLayer`), so it should behave the same way; that was read from the code, not observed.
+Splitting a loaded `MultiPolygon` into one `L.polygon` per component on load would give each part its
+own layer; the save paths already flatten layers back into one `MultiPolygon`.

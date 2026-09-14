@@ -651,9 +651,10 @@
 
         const drawControl = new L.Control.Draw({
             draw: { polygon: true, marker: false, circle: false, circlemarker: false, rectangle: false, polyline: false },
-            edit: { featureGroup: drawnItems, remove: true },
+            edit: { featureGroup: drawnItems, remove: false },
         });
         boundaryMap.addControl(drawControl);
+        window.RegionDelete.add(boundaryMap, drawnItems, saveBoundary);
 
         function saveBoundary() {
             const layers = drawnItems.getLayers();

@@ -22,6 +22,7 @@ import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete
 import { installGlobalPinCachePurge } from "../shared/pin-cache";
 import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
 import { installGlobalReactionPicker } from "../shared/reaction-picker";
+import { installGlobalRegionDelete } from "../shared/region-delete";
 import { installGlobalSafetyLiveLocation } from "../shared/safety-live-location";
 import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
 import { installUndoBar } from "../shared/undo-bar";
@@ -49,6 +50,7 @@ installGlobalMapLayers();
 installGlobalMarkupEngine();
 installGlobalMapExport();
 installGlobalLabelPicker();
+installGlobalRegionDelete();
 installGlobalLeaveConfirmation();
 installGlobalPinCachePurge();
 
