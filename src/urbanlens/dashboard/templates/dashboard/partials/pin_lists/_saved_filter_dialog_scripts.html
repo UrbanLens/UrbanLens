@@ -242,7 +242,7 @@
 
     function _sfAddRegionLayer(geojson, mode) {
         if (!_sfRegionLayers) return;
-        const layers = L.geoJSON(geojson).getLayers();
+        const layers = window.RegionDelete.polygonParts(geojson).flatMap((part) => L.geoJSON(part).getLayers());
         layers.forEach((layer) => {
             layer.options.regionType = mode;
             layer.setStyle(_sfRegionStyle(mode));

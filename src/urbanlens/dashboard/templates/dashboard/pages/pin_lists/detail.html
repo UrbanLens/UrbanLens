@@ -642,9 +642,7 @@
         {% if pin_list.smart_boundary %}
         try {
             const existingGeoJson = {{ pin_list.smart_boundary.geojson|safe }};
-            L.geoJSON(existingGeoJson, {
-                onEachFeature: function (feature, layer) { drawnItems.addLayer(layer); },
-            });
+            window.RegionDelete.polygonParts(existingGeoJson).forEach((part) => L.geoJSON(part).eachLayer((layer) => drawnItems.addLayer(layer)));
             if (drawnItems.getLayers().length) boundaryMap.fitBounds(drawnItems.getBounds());
         } catch (e) { /* malformed stored geometry - ignore */ }
         {% endif %}

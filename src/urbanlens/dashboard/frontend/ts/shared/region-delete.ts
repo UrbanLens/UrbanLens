@@ -91,12 +91,41 @@ export function addRegionDeleteControl(map: L.Map, group: L.FeatureGroup, onDele
     return mode;
 }
 
+type RegionGeoJson = GeoJSON.Geometry | GeoJSON.Feature | GeoJSON.FeatureCollection;
+
+/**
+ * Split a stored region into one polygon per part.
+ *
+ * `L.geoJSON` makes one layer per geometry, so a stored MultiPolygon would load as a single layer that the
+ * delete and edit tools can only act on as a whole.
+ *
+ * @param value - The stored region, as GeoJSON.
+ * @returns Its polygons; anything that is not a polygon is dropped.
+ */
+export function polygonParts(value: RegionGeoJson | null | undefined): GeoJSON.Polygon[] {
+    if (!value) return [];
+    switch (value.type) {
+        case "Polygon":
+            return [value];
+        case "MultiPolygon":
+            return value.coordinates.map((coordinates) => ({ type: "Polygon", coordinates }));
+        case "GeometryCollection":
+            return value.geometries.flatMap((geometry) => polygonParts(geometry));
+        case "Feature":
+            return polygonParts(value.geometry);
+        case "FeatureCollection":
+            return value.features.flatMap((feature) => polygonParts(feature));
+        default:
+            return [];
+    }
+}
+
 export function installGlobalRegionDelete(): void {
-    window.RegionDelete = { add: addRegionDeleteControl };
+    window.RegionDelete = { add: addRegionDeleteControl, polygonParts };
 }
 
 declare global {
     interface Window {
-        RegionDelete: { add: typeof addRegionDeleteControl };
+        RegionDelete: { add: typeof addRegionDeleteControl; polygonParts: typeof polygonParts };
     }
 }

@@ -5031,16 +5031,3 @@ fields. It belongs in the `infrastructure` repo beside the other host timers, no
 Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
-
-## P120 — A stored multi-part region reloads as one Leaflet layer, so deleting or editing one part acts on all of them
-
-`id: P120` · `status: open` · `updated: 2026-09-14`
-
-Found verifying P27 on the pin-list boundary map (2026-09-14). Two separate triangles drawn and saved
-were stored as one `MultiPolygon` with 2 components; after a reload the map showed them as a single
-`path.leaflet-interactive`. `L.geoJSON` builds one layer per feature, and the stored value is one
-`MultiPolygon` feature, so the delete tool can only remove every part at once, and the edit tool
-reshapes them as one layer. The saved-filter region map loads through the same `L.geoJSON(...).getLayers()`
-(`_sfAddRegionLayer`), so it should behave the same way; that was read from the code, not observed.
-Splitting a loaded `MultiPolygon` into one `L.polygon` per component on load would give each part its
-own layer; the save paths already flatten layers back into one `MultiPolygon`.

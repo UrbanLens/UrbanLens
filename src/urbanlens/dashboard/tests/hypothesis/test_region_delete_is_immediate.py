@@ -54,3 +54,9 @@ class RegionDeletionIsImmediateTests(SimpleTestCase):
         for name in _REGION_MAPS:
             with self.subTest(template=name):
                 self.assertIn("window.RegionDelete.add(", (_DASHBOARD / name).read_text(encoding="utf-8"))
+
+    def test_every_region_map_loads_each_stored_part_as_its_own_layer(self) -> None:
+        """A stored MultiPolygon loaded whole is one layer, which delete and edit act on as a whole (P120)."""
+        for name in _REGION_MAPS:
+            with self.subTest(template=name):
+                self.assertIn("window.RegionDelete.polygonParts(", (_DASHBOARD / name).read_text(encoding="utf-8"))

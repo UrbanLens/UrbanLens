@@ -11,6 +11,22 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-14: a stored multi-part region reloaded as one layer, so one delete removed every part
+
+`id: P120` · `status: fixed` · `resolved: 2026-09-14`
+
+Previously titled "A stored multi-part region reloads as one Leaflet layer, so deleting or editing one part acts on all
+of them". Found verifying P27: two triangles saved as a pin list's `smart_boundary` reloaded as a single
+`path.leaflet-interactive`, because `L.geoJSON` makes one layer per geometry and the stored value is one `MultiPolygon`.
+On that map it was worse than coarse deletion: `saveBoundary` builds its `MultiPolygon` from each layer's coordinates, so
+a reloaded multi-part layer beside a newly drawn polygon posted coordinates nested at two different depths.
+
+Both region maps now load through `shared/region-delete.ts`'s `polygonParts`, which splits a Polygon, MultiPolygon,
+GeometryCollection, Feature or FeatureCollection into one Polygon per part. Verified in Chromium on the development stack
+with a seeded two-part region on each map: 2 paths loaded, and deleting one left 1 path, the saved filter's stored value
+went from 2 polygons to 1, and the list's stored boundary from 2 components to 1. `region-delete-parts.test.ts` covers the
+split; `test_region_delete_is_immediate.py` fails if either map stops loading through it.
+
 ## RESOLVED 2026-09-14: deleted saved-filter regions and list boundaries came back on the next draw
 
 `id: P27` · `status: fixed` · `resolved: 2026-09-14`
