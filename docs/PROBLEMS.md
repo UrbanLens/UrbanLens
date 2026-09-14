@@ -3324,36 +3324,46 @@ script into a proper bundled TS entry the way `map-annotations.ts` already is fo
 the broader, already-tracked P83/P34 initiative ("over half of every page's HTML is inline `<script>`"), not a
 scoped fix for this one badge. Left open and cross-referenced from both rather than attempted piecemeal here.
 
-## P95 — `ExtractionBudget` cannot bound a single file's decompression, and nothing prices what parsing one costs
+## P95 — An import preview can hold 2 GB of extracted bytes in a sandbox worker that has 3 GB for two jobs
 
-`id: P95` · `status: open` · `updated: 2026-09-10`
+`id: P95` · `status: open` · `updated: 2026-09-14`
 
-Related to P2 (`parse_for_preview` runs archive/KML/GPX/OSM/WKT/shapefile parsing in the request,
-blocking `UL_UNTRUSTED_PARSE_POLICY=deny`) - cross-referenced rather than duplicated: P2 is about
-sandboxing that code path, this is about the resource cost of it regardless of sandboxing.
+Previously titled "`ExtractionBudget` cannot bound a single file's decompression, and nothing prices
+what parsing one costs".
 
-`controllers/pin.py:1181` `parse_for_preview` builds one `ExtractionBudget()`
-(`services/import_export/archive_extractor.py:63-84`, 2 GB / 1000 files) shared across every
-uploaded file and every nested archive - closing the "an outer ZIP holding N nested bombs costs N
-x 2 GB" hole the budget's own docstring names. It does not close the shape one level up: the
-budget caps *total* uncompressed bytes across the whole upload, not what one file, one KML, one
-shapefile, or one `.docx` can cost by itself. `GoogleMapsGateway.parse_for_preview`'s CSV/geocode
-branches and `extract_pins_from_document`'s AI branch (`services/ai/document_import.py`) are
-separately capped by `MAX_PREVIEW_PINS = 20_000` (`services/apis/locations/google/maps.py:946`) -
-a pin-*count* backstop against the eventual output, not a cost bound on the parse that produces it.
+Related to P2 (sandboxing the preview parse) - cross-referenced rather than duplicated: this is about
+the resource cost of the parse, wherever it runs.
 
-nginx bounds the compressed body to 200 MB (`config/nginx/django.conf:42`, `client_max_body_size
-200m`), which bounds bytes *in transit*, not bytes *after decompression* - up to the 2 GB
-`ExtractionBudget` ceiling, entirely inside one authenticated gunicorn worker, per POST. The only
-rate control on this endpoint is the global DRF `user` throttle at `600/minute`
-(`settings/base.py:957`) - a request-*count* budget, not a cost-scoped one, so an account can
-submit 600 near-2GB extractions a minute exactly as cheaply as 600 single-KB ones, as far as the
-throttle is concerned.
+**Where the parse runs, re-checked 2026-09-14.** Not in a gunicorn worker any more.
+`services/pins/import_preview.py::start_import_preview` stores the upload and enqueues
+`tasks.py::parse_import_preview_task` on the sandbox queue, which `media-worker` consumes with
+`--concurrency=2` under a 3 GB `mem_limit` by default (`docker-compose.yml`). `guard_key`'s
+single-flight claim allows one preview per account and answers a second with 409, so the old concern
+that one account could start 600 near-2 GB extractions a minute under the DRF `user` throttle no
+longer holds; two accounts can still fill both worker slots.
 
-Not fixed: needs either a per-file byte/complexity cap inside `ExtractionBudget` or a cost-scoped
-throttle (e.g. keyed to declared upload size) alongside the existing count-based one. Not measured
-this session - no benchmark run against a 2 GB adversarial upload; the risk is by inspection of the
-cap values above, not an observed timeout.
+**The limits, as they stand.** nginx's `client_max_body_size 200m` (`config/nginx/django.conf`) bounds
+the compressed upload. `_read_uploads` builds one `ExtractionBudget` for the whole upload, nested
+archives included: 2 GB uncompressed and 1000 files. `_MAX_SINGLE_FILE_BYTES` caps one entry at 1 GB;
+this entry's old title said no per-file bound existed, and one did.
+
+**Fixed 2026-09-14: the budget was charged after the read, not before.** `_extract_zip` and
+`_extract_tgz` read every entry up to the 1 GB cap and only then deducted it, so an upload with
+1,000 bytes of allowance left still asked for 1,073,741,825 bytes before the budget refused it.
+`ExtractionBudget.read_limit` now bounds the read to what remains
+(`test_extraction_budget_before_read.py`).
+
+**Still open: the total does not fit the worker.** `_read_uploads` keeps every extracted entry's bytes
+in its `files` list until `GoogleMapsGateway.parse_for_preview` returns, so one preview can hold up to
+2 GB plus whatever the parsers build from it, and two run side by side in 3 GB. An OOM kill takes the
+other preview and any photo work on that worker with it. Lowering `_MAX_UNCOMPRESSED_BYTES` is a
+product call - a heavy account's Google Takeout location history is large, and nobody has measured
+how large - and the alternatives are parsing entries as they are extracted rather than holding them,
+or a site-wide cap on concurrent previews. The CPU a given KML or shapefile costs to parse is still
+unpriced; the task's time limits bound its wall time, not its memory. No adversarial 2 GB upload has
+been run; the OOM risk is by arithmetic, not observation.
+
+---
 
 ## P100 — Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them
 

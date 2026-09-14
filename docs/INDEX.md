@@ -85,7 +85,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P85 | open | 2026-09-14 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P91 | open | 2026-09-08 | Seven of eight new security integration specs have never run against a live deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P92 | open | 2026-09-08 | `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P95 | open | 2026-09-10 | `ExtractionBudget` cannot bound a single file's decompression, and nothing prices what parsing one costs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P95 | open | 2026-09-14 | An import preview can hold 2 GB of extracted bytes in a sandbox worker that has 3 GB for two jobs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P104 | open | 2026-09-10 | Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P105 | open | 2026-09-13 | A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict | [`docs/PROBLEMS.md`](PROBLEMS.md) |

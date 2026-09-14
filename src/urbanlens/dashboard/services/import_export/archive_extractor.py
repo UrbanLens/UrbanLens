@@ -81,6 +81,14 @@ class ExtractionBudget:
         if self.remaining_files < 0:
             raise ValueError(f"Archive contains more than {_MAX_FILE_COUNT} supported files.")
 
+    def read_limit(self) -> int:
+        """The most one entry may read: the per-file cap, or less when the upload has less left.
+
+        Returns:
+            Bytes an entry may read before its size alone decides the outcome.
+        """
+        return min(_MAX_SINGLE_FILE_BYTES, max(self.remaining_bytes, 0))
+
     def claim_bytes(self, size: int) -> None:
         """Account for *size* uncompressed bytes.
 
@@ -293,9 +301,9 @@ def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                 budget.claim_file()
 
                 with zf.open(info) as f:
-                    # Read one extra byte so we can detect if the actual size
-                    # exceeds the declared file_size (compression-ratio attack).
-                    content = f.read(_MAX_SINGLE_FILE_BYTES + 1)
+                    # One byte past the limit is enough to tell an entry that exceeds it - its declared file_size
+                    # can lie - without holding the rest of it in memory.
+                    content = f.read(budget.read_limit() + 1)
 
                 budget.claim_bytes(len(content))
 
@@ -349,7 +357,7 @@ def _extract_tgz(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                 if fobj is None:
                     continue
 
-                content = fobj.read(_MAX_SINGLE_FILE_BYTES + 1)
+                content = fobj.read(budget.read_limit() + 1)
                 budget.claim_bytes(len(content))
                 if len(content) > _MAX_SINGLE_FILE_BYTES:
                     logger.warning(
