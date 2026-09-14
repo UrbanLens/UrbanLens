@@ -1079,7 +1079,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         data = cached.data or None
 
         if not data:
-            logger.debug("wikipedia_info: no article found for pin %s at (%s, %s)", pin_slug, lat, lng)
+            logger.debug("wikipedia_info: no article found for pin %s at (%s, %s)", pin_slug, redact_coordinate(lat), redact_coordinate(lng))
             return HttpResponse(status=204)
 
         context = {

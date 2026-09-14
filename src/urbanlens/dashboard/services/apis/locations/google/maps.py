@@ -543,12 +543,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     yield {**takeout, "needs_lookup": True}
                     continue
                 except ValueError as exc:
-                    logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
+                    logger.warning("Failed to extract coordinates from a Takeout URL: %s", type(exc).__name__)
                     yield None
                     continue
 
                 if latitude is None or longitude is None:
-                    logger.warning("Could not resolve coordinates for URL: %s", url)
+                    logger.warning("Could not resolve coordinates for a Takeout URL")
                     yield None
                     continue
 
@@ -558,7 +558,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             coords = pick_latlon(row)
             if coords is None:
                 if any(v.strip() for v in row.values() if v):
-                    logger.warning("Skipping CSV row with no URL or latitude/longitude columns: %s", row)
+                    logger.warning("Skipping CSV row with no URL or latitude/longitude columns (columns: %s)", sorted(k for k in row if k))
                     yield None
                 else:
                     logger.debug("Skipping blank CSV row")

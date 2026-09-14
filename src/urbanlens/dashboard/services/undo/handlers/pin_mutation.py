@@ -33,8 +33,8 @@ def _move(pin: Pin, latitude: float, longitude: float) -> None:
 
     try:
         move_pin_to_coordinates(pin, latitude, longitude)
-    except PinMoveError as exc:
-        logger.info("Undo/redo move of pin %s to (%s, %s) rejected: %s", pin.pk, latitude, longitude, exc)
+    except PinMoveError:
+        logger.info("Undo/redo move of pin %s rejected: another root pin holds the target location", pin.pk)
         _expired("This move can't be replayed: another pin now occupies that exact location.")
 
 

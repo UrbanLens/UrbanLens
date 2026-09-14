@@ -1433,7 +1433,7 @@ def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
             try:
                 cache[key] = get_raw_forecast_slots(*coords)
             except (requests.RequestException, LocationContextUnavailableError):
-                logger.warning("Weather fetch failed for coords %s", key)
+                logger.warning("Weather fetch failed for trip activity %s", act.pk)
                 cache[key] = None
 
         slots = cache.get(key) or []

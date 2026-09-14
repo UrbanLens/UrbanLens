@@ -946,7 +946,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     from urbanlens.dashboard.services.apis.locations import places_resolution
 
                     raw_results = places_resolution.search_nearby_landmarks(lat, lng, radius, ["historical_landmark"], api_key=api_key or "")
-                    logger.info("Google Places (new API): found %d results near (%.4f, %.4f)", len(raw_results), lat, lng)
+                    logger.info("Google Places (new API): found %d results", len(raw_results))
                     for r in raw_results:
                         loc = r.get("location", {})
                         place_lat = loc.get("latitude")

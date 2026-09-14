@@ -3760,49 +3760,61 @@ the current limit was reasoned from.
 
 Found while trying to run the neighbour suite on the real process model.
 
-## P112 — `bun run codeql:gate` fails with 26 untriaged findings, so nobody runs it
+## P112 — `bun run codeql:gate` stays red on triaged false positives, because nothing records a verdict
 
-`id: P112` · `status: open` · `updated: 2026-09-10`
+`id: P112` · `status: open` · `updated: 2026-09-14`
 
-`bun run codeql:gate` exits 1. Not from any recent change: **0 of the 26 findings are in the 45 files
-touched by the availability programme** — every one predates it. Which is the problem. A gate that has
-been red long enough that its redness carries no information is a gate that gets skipped, and
-`CLAUDE.md` lists it among the manual checks to run before a PR.
+Previously titled "`bun run codeql:gate` fails with 26 untriaged findings, so nobody runs it".
 
-By rule:
+`bun run codeql:gate` exits 1 on any error- or warning-level finding. On 2026-09-10 it reported 26,
+every one older than the availability programme. A gate red for that long carries no information, so
+it gets skipped, and `CLAUDE.md` lists it among the checks to run before a PR.
 
-| n | rule |
-|---|---|
-| 6 | `py/bad-tag-filter` |
-| 4 | `js/insecure-randomness` |
-| 3 | `js/xss-through-dom` |
-| 3 | `py/path-injection` |
-| 2 | `py/clear-text-logging-sensitive-data` |
-| 1 each | `js/xss`, `js/incomplete-multi-character-sanitization`, `js/client-side-unvalidated-url-redirection`, and 5 others |
+### Triage (2026-09-14)
 
-The ones worth looking at first, because of what they touch rather than what CodeQL scores them:
+Each finding was read at its source and along its data flow in the SARIF, not only at its sink.
 
-```
-py/path-injection                    controllers/media.py:249, :377, :385
-js/xss + client-side-url-redirection templates/.../messages/index.html:765
-py/clear-text-logging-sensitive-data services/undo/handlers/pin_mutation.py:37
-js/xss-through-dom                   templates/.../saved_filter_detail.html:95
-                                     templates/.../themes/base.html:1382
-                                     ts/entries/floorplan-editor.ts:4106
-```
+**Real: location data written to logs.** CodeQL flagged `services/undo/handlers/pin_mutation.py::_move`,
+which logged a rejected undo's target coordinates twice: as arguments, and again inside
+`PinMoveError`'s message. A grep for the same shape found four more that CodeQL had not flagged:
 
-`media.py` is the one that parses user-supplied bytes and serves them back (`docs/MEDIA_PIPELINE.md`),
-so three path-injection findings there are worth reading properly even if they turn out to be
-false positives — and one `index.html` line carrying both an XSS and an open-redirect finding is
-worth reading before assuming either is.
+- `controllers/pin.py::PinController.wikipedia_info` - raw coordinates.
+- `controllers/maps.py::MapController.nearby_places` - the viewport centre, to four decimals.
+- `controllers/trip.py::_build_activity_forecasts` - an activity's coordinates rounded to 0.01°,
+  which `redact_coordinate`'s docstring rules out.
+- `services/apis/locations/google/maps.py::GoogleMapsGateway._csv_row_iter` - a Takeout Maps URL, which
+  embeds the coordinates, and a whole CSV row with the user's own name and notes for the place.
 
-**Untriaged is the honest status.** None of these has been confirmed or dismissed; CodeQL has false
-positives and the counts above are what the tool says, not what is true. The work is per-finding:
-read it, decide, and where it is real write the exploit test before the fix — this repo's convention
-is that a vulnerability gets a failing test reproducing the attack first, always.
+All five now log an id, a count, an exception type or a column list, and
+`test_coordinates_absent_from_logs.py` failed on each before the change. The grep matched log calls
+naming `latitude`, `longitude`, `lat`, `lng` or `coords`; a coordinate passed under another name
+would not have matched.
 
-Recorded rather than fixed because 26 findings across five rule families is its own piece of work,
-and doing it badly — dismissing in bulk to make a gate green — is worse than leaving it red.
+**False positives:**
+
+| rule | where | why it is not exploitable |
+|---|---|---|
+| `py/path-injection` ×3 | `controllers/media.py::resolve_media_path`, `LocalMediaSource.response` | the resolved path must be inside `MEDIA_ROOT`, and not the root itself, before it is stat'ed or opened. The `lgtm` comments there say so, but the CodeQL CLI does not read them |
+| `py/full-ssrf` | `services/security/url_safety.py::fetch_public_url`, reached from `controllers/media_preview.py::MediaPreviewView.get` | the sink is inside the SSRF guard. The view refuses an unsigned URL before anything else, and each redirect hop is re-validated and pinned to the address it resolved to |
+| `py/url-redirection` | `controllers/api_keys.py::ApiKeyRevokeView.post` | the user's value only becomes a `?page=` query on `reverse('settings.view')`, so the redirect cannot leave the site |
+| `py/weak-sensitive-data-hashing` | `services/apis/security/hibp.py::HaveIBeenPwnedGateway.is_password_pwned` | HIBP's k-anonymity range API is defined over SHA-1, and only a five-character prefix leaves the process |
+| `py/clear-text-storage-sensitive-data` | `management/commands/export_public_locations.py::Command.handle` | it exports locations that passed the public vote, which is what the command is for |
+| `js/xss`, `js/client-side-unvalidated-url-redirection` | `pages/messages/index.html`, `appendBubble` | the source is the DM WebSocket, whose `images[].url` the server builds from `image.image.url` in `services/messaging/direct_messages.py::_serialize_images`. It lands in an `<img src>`, which neither runs script nor navigates |
+| `js/xss-through-dom` | `ts/entries/floorplan-editor.ts`, the pin photo strip | `photo.url` comes from the server-rendered `floorplan-photos` JSON, into an `<img src>` |
+| `js/xss-through-dom` | `pages/pin_lists/saved_filter_detail.html`, `buildPreviewPopup` | `pt.slug` comes from the server-rendered `saved-filter-initial-pins` JSON, after a fixed `/dashboard/map/pin/` prefix |
+| `js/xss-through-dom` | `themes/base.html`, the photo picker's `fileInput.onchange` | the user's own picked file, shown through a `blob:` URL |
+| `py/bad-tag-filter` ×6 | `bin/check_bem_modifiers.py::_SCRIPT_BLOCK` and five profile-page test files | they strip `<script>` blocks out of rendered HTML before a lint or an assertion. Nothing they produce reaches a browser |
+| `js/insecure-randomness` ×4 | `tests/integration/lib/api-client.ts`, `hrsh-boundary-provenance.spec.ts` | `Math.random()` scatters test pin coordinates |
+| `js/incomplete-url-substring-sanitization` | `hrsh-property-data.spec.ts` | a test assertion that a link points at `echo.epa.gov` |
+| `js/incomplete-multi-character-sanitization` | `frontend/browser/harness-parity.test.ts` | strips tags to measure a button's visible text in a test |
+
+### What is left
+
+The gate still fails, because there is nowhere to record a verdict it can read. Excluding a rule in
+`.github/codeql/codeql-config.yml` would also hide the next real finding under that rule. One shape
+that fits is a committed allowlist that `run_codeql.py --gate` subtracts, with one entry per finding,
+keyed on the SARIF's `partialFingerprints` (which survive line moves) and carrying the reason from the
+table. A new finding under the same rule would then still fail the gate. Not built.
 
 ## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else - 2 still open
 
