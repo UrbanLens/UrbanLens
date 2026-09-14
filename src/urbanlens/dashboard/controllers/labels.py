@@ -416,6 +416,11 @@ def _parse_ids_json(request: HttpRequest) -> tuple[list[int] | None, HttpRespons
     return ids, None
 
 
+def _posted_label_ids(request: HttpRequest, key: str) -> list[int]:
+    """The integer ids posted under *key*, dropping any that are not one."""
+    return [parsed for parsed in map(safe_int_or_none, request.POST.getlist(key)) if parsed is not None]
+
+
 def _label_order(value: object, default: int) -> int:
     """Parse a submitted ``Label.order``, bounded to what its integer column stores."""
     return clamp_int(value, low=DB_INTEGER_MIN, high=DB_INTEGER_MAX, default=default)
@@ -620,7 +625,7 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         if name_error:
             return HttpResponse(name_error, status=400)
 
-        parent_ids = request.POST.getlist("parent_ids")
+        parent_ids = _posted_label_ids(request, "parent_ids")
         order = _label_order(request.POST.get("order"), 0)
         parent_order = Label.initial_order_for_parents(profile, parent_ids)
         if parent_order is not None:
@@ -797,7 +802,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         if kind_changed:
             label.parents.clear()
         else:
-            parent_ids = request.POST.getlist("parent_ids")
+            parent_ids = _posted_label_ids(request, "parent_ids")
             valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=label_id)
             safe_parent_ids = [p.id for p in valid_parents if not _would_create_cycle(label, p.id)]
             label.parents.set(safe_parent_ids)

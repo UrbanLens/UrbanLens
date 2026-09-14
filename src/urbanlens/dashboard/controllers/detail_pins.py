@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
-from urbanlens.dashboard.services.core.numbers import safe_int
+from urbanlens.dashboard.services.core.numbers import clamp_int
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.media.quota_rewards import revoke_community_bonuses_on_wiki_delete
@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 
 #: Provisional type until automatic classification runs.
 _PROVISIONAL_PIN_TYPE = PinType.POINT_OF_INTEREST
+
+
+def _opacity(value: object, default: int) -> int:
+    """Parse a posted opacity percentage, clamped to ``[0, 100]``."""
+    return clamp_int(value, low=0, high=100, default=default)
 
 
 def _requested_pin_type(body) -> tuple[str, bool]:
@@ -155,9 +160,9 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             icon=clean_icon(body.get("icon")),
             color=clean_color(body.get("color")),
             detail_bg_color=clean_color(body.get("bg_color"), allow_none_keyword=True),
-            detail_bg_opacity=safe_int(body.get("bg_opacity"), 80),
+            detail_bg_opacity=_opacity(body.get("bg_opacity"), 80),
             detail_border_color=clean_color(body.get("border_color"), allow_none_keyword=True),
-            detail_border_opacity=safe_int(body.get("border_opacity"), 100),
+            detail_border_opacity=_opacity(body.get("border_opacity"), 100),
             parent_pin=parent,
             profile=parent.profile,
             location=location,
@@ -205,9 +210,9 @@ class DetailPinEditView(LoginRequiredMixin, View):
             if value is not None or field in body:
                 setattr(detail_pin, field, value)
         if "bg_opacity" in body:
-            detail_pin.detail_bg_opacity = safe_int(body["bg_opacity"], 80)
+            detail_pin.detail_bg_opacity = _opacity(body["bg_opacity"], 80)
         if "border_opacity" in body:
-            detail_pin.detail_border_opacity = safe_int(body["border_opacity"], 100)
+            detail_pin.detail_border_opacity = _opacity(body["border_opacity"], 100)
 
         # Type is handled apart from the loop above: it is non-nullable (a blank submission is the dialog's
         # "Auto", not "clear it"), and a re-pick has to update pin_type_is_user_provided alongside it.
@@ -384,9 +389,9 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             icon=clean_icon(body.get("icon")),
             color=clean_color(body.get("color")),
             detail_bg_color=clean_color(body.get("bg_color"), allow_none_keyword=True),
-            detail_bg_opacity=safe_int(body.get("bg_opacity"), 80),
+            detail_bg_opacity=_opacity(body.get("bg_opacity"), 80),
             detail_border_color=clean_color(body.get("border_color"), allow_none_keyword=True),
-            detail_border_opacity=safe_int(body.get("border_opacity"), 100),
+            detail_border_opacity=_opacity(body.get("border_opacity"), 100),
             parent_wiki=wiki,
             location=child_location,
         )
@@ -446,9 +451,9 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             if value is not None or field in body:
                 setattr(child_wiki, field, value)
         if "bg_opacity" in body:
-            child_wiki.detail_bg_opacity = safe_int(body["bg_opacity"], 80)
+            child_wiki.detail_bg_opacity = _opacity(body["bg_opacity"], 80)
         if "border_opacity" in body:
-            child_wiki.detail_border_opacity = safe_int(body["border_opacity"], 100)
+            child_wiki.detail_border_opacity = _opacity(body["border_opacity"], 100)
 
         # Type is handled apart from the loop above - see the matching comment
         # in DetailPinEditView for why.

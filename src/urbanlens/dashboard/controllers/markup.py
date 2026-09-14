@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
-from urbanlens.dashboard.services.core.numbers import safe_int
+from urbanlens.dashboard.services.core.numbers import clamp_int
 from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map
@@ -51,6 +51,15 @@ _INDICATOR_TO_FIELD: dict[str, str] = {
     "locked": "locked",
     "vps": "vps",
 }
+
+
+#: Widest line (and, for text, largest font) a drawing stores; the same bound import applies.
+_MAX_STROKE_WIDTH = 200
+
+
+def _opacity(value: object, default: int) -> int:
+    """Parse a posted opacity percentage, clamped to ``[0, 100]``."""
+    return clamp_int(value, low=0, high=100, default=default)
 
 
 def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
@@ -748,8 +757,8 @@ class MarkupView(LoginRequiredMixin, View):
         if security_indicator not in _ALLOWED_SECURITY_INDICATORS:
             security_indicator = ""
 
-        fill_opacity = safe_int(body.get("fill_opacity"), profile.markup_fill_opacity)
-        border_opacity = safe_int(body.get("border_opacity"), profile.markup_border_opacity)
+        fill_opacity = _opacity(body.get("fill_opacity"), profile.markup_fill_opacity)
+        border_opacity = _opacity(body.get("border_opacity"), profile.markup_border_opacity)
 
         if pin_slug is not None:
             owner_kwargs = {"parent_pin": owner}
@@ -775,7 +784,7 @@ class MarkupView(LoginRequiredMixin, View):
             geometry=geometry,
             label=label,
             color=clean_color(body.get("color"), default="#e53e3e"),
-            stroke_width=safe_int(body.get("stroke_width"), 3),
+            stroke_width=clamp_int(body.get("stroke_width"), low=1, high=_MAX_STROKE_WIDTH, default=3),
             border_color=clean_color(body.get("border_color"), default="", allow_none_keyword=True),
             fill_opacity=fill_opacity,
             border_opacity=border_opacity,
@@ -844,13 +853,13 @@ class MarkupEditView(LoginRequiredMixin, View):
         if "color" in body:
             item.color = clean_color(body["color"], default=item.color)
         if "stroke_width" in body:
-            item.stroke_width = safe_int(body["stroke_width"], item.stroke_width)
+            item.stroke_width = clamp_int(body["stroke_width"], low=1, high=_MAX_STROKE_WIDTH, default=item.stroke_width)
         if "border_color" in body:
             item.border_color = clean_color(body["border_color"], default="", allow_none_keyword=True)
         if "fill_opacity" in body:
-            item.fill_opacity = safe_int(body["fill_opacity"], item.fill_opacity)
+            item.fill_opacity = _opacity(body["fill_opacity"], item.fill_opacity)
         if "border_opacity" in body:
-            item.border_opacity = safe_int(body["border_opacity"], item.border_opacity)
+            item.border_opacity = _opacity(body["border_opacity"], item.border_opacity)
         if "layer_uuid" in body:
             layer_uuid = body.get("layer_uuid")
             if layer_uuid:

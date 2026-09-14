@@ -3188,11 +3188,20 @@ a body that is not an object with a 500, and `controllers/labels.py` carried a p
 copy without the `OverflowError` catch. A finite 30-digit `order` parsed cleanly and then overflowed
 `Label.order`'s 32-bit column on save, on create, edit and bulk edit alike; `_label_order` now
 clamps it to `services/core/numbers.py`'s `DB_INTEGER_MIN`/`DB_INTEGER_MAX`
-(`test_label_malformed_bodies.py`). A 30-digit id in a *lookup* is not a crash: Django answers it
-with no rows, which `test_non_numeric_posted_ids.py` pins.
+(`test_label_malformed_bodies.py`). Label create and edit also passed the raw `parent_ids` list to
+`filter(id__in=...)`; `_posted_label_ids` drops the entries that are not integers and keeps the
+rest. A 30-digit id in a *lookup* is not a crash: Django answers it with no rows, which
+`test_non_numeric_posted_ids.py` pins.
 
-The final tally is three false positives in the first sample, 27 benign in the second, and 23
-reproduced crashes reached from them - the argument against leaving the code off: a blanket disable of the code
+The same overflow reached the style columns. `controllers/detail_pins.py` and `controllers/markup.py`
+wrote a posted opacity through `safe_int` with no bound, so 150 or -20 was stored and rendered as
+sent and a 30-digit value failed the save; markup's `stroke_width` likewise, where import already
+clamped it to `[1, 200]`. Both files' `_opacity` now clamp to `[0, 100]` and stroke width to import's
+range, matching `saved_filters.py::_clamp_opacity`, `map_overlays.py::_clamped_opacity`, the
+profile settings form and the external API serializer (`test_style_opacity_bounds.py`).
+
+The final tally is three false positives in the first sample, 27 benign in the second, and 32
+reproduced defects reached from them - the argument against leaving the code off: a blanket disable of the code
 that reports 146 known-benign findings also silences whatever else `misc` covers.
 
 **Why this is filed rather than fixed.** The fix is not one line, and the obvious shortcut does not

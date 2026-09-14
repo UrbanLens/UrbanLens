@@ -71,6 +71,32 @@ class FormOrderTests(_LabelCase):
         if created is not None:
             self.assertLessEqual(created.order, _INT32_MAX)
 
+    def test_creating_with_a_non_numeric_parent(self) -> None:
+        response = self.client.post(
+            reverse("label.create", kwargs={"label_kind": "tag"}), {"name": "Zz Child", "parent_ids": ["abc"]}
+        )
+
+        self.assertLess(response.status_code, 500)
+
+    def test_editing_with_a_non_numeric_parent(self) -> None:
+        response = self.client.post(
+            reverse("label.edit", kwargs={"label_kind": "tag", "label_id": self.label.pk}),
+            {"name": self.label.name, "parent_ids": ["abc"]},
+        )
+
+        self.assertLess(response.status_code, 500)
+
+    def test_a_real_parent_is_still_set_alongside_a_bad_one(self) -> None:
+        parent = baker.make(Label, profile=self.profile, kind="tag", name="Zz Parent")
+
+        response = self.client.post(
+            reverse("label.edit", kwargs={"label_kind": "tag", "label_id": self.label.pk}),
+            {"name": self.label.name, "parent_ids": [str(parent.pk), "abc"]},
+        )
+
+        self.assertLess(response.status_code, 500)
+        self.assertEqual(list(self.label.parents.all()), [parent])
+
     def test_editing_with_an_order_beyond_the_column(self) -> None:
         response = self.client.post(
             reverse("label.edit", kwargs={"label_kind": "tag", "label_id": self.label.pk}),
