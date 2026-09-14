@@ -3776,7 +3776,10 @@ Each finding was read at its source and along its data flow in the SARIF, not on
 
 **Real: location data written to logs.** CodeQL flagged `services/undo/handlers/pin_mutation.py::_move`,
 which logged a rejected undo's target coordinates twice: as arguments, and again inside
-`PinMoveError`'s message. A grep for the same shape found four more that CodeQL had not flagged:
+`PinMoveError`'s message. That message is now coordinate-free at its source in
+`services/pins/pin_edit.py::move_pin_to_coordinates`, since `models/pin/viewset.py::PinViewSet` and
+`external_api/views.py::PinDetailView.patch` log it too. A grep for the same shape found five more that CodeQL had not
+flagged:
 
 - `controllers/pin.py::PinController.wikipedia_info` - raw coordinates.
 - `controllers/maps.py::MapController.nearby_places` - the viewport centre, to four decimals.
@@ -3784,8 +3787,9 @@ which logged a rejected undo's target coordinates twice: as arguments, and again
   which `redact_coordinate`'s docstring rules out.
 - `services/apis/locations/google/maps.py::GoogleMapsGateway._csv_row_iter` - a Takeout Maps URL, which
   embeds the coordinates, and a whole CSV row with the user's own name and notes for the place.
+- `controllers/maps.py::_parse_bbox` - a malformed viewport bbox, verbatim.
 
-All five now log an id, a count, an exception type or a column list, and
+All of these now log an id, a count, an exception type or a column list, and
 `test_coordinates_absent_from_logs.py` failed on each before the change. The grep matched log calls
 naming `latitude`, `longitude`, `lat`, `lng` or `coords`; a coordinate passed under another name
 would not have matched.

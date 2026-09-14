@@ -222,7 +222,7 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
     # Only root pins are constrained - child pins are free to share a Location
     # with their parent and siblings, which is the whole point of detail pins.
     if pin.parent_pin_id is None and Pin.objects.filter(profile_id=pin.profile_id, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).exists():
-        raise PinMoveError(f"Pin {pin.pk} (profile {pin.profile_id}) already has a top-level pin at location {location.pk} ({latitude}, {longitude}).")
+        raise PinMoveError(f"Pin {pin.pk} (profile {pin.profile_id}) already has a top-level pin at location {location.pk}.")
 
     before_lat, before_lng = float(pin.effective_latitude), float(pin.effective_longitude)
     pin.location = location

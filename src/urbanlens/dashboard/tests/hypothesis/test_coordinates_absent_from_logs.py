@@ -144,3 +144,34 @@ class TakeoutImportLogTests(TestCase):
 
         self.assertNotIn("Secret", output)
         self.assertNotIn("river gate", output)
+
+
+class PinMoveErrorMessageTests(TestCase):
+    """Two handlers log this message verbatim, so it must not carry the coordinates itself."""
+
+    def test_a_collision_names_the_pins_but_not_the_coordinates(self) -> None:
+        from urbanlens.dashboard.services.pins.pin_edit import PinMoveError, move_pin_to_coordinates
+
+        profile = baker.make(User).profile
+        moving = baker.make(Pin, profile=profile, location=Location.objects.create(latitude=10.0, longitude=20.0))
+        baker.make(Pin, profile=profile, location=Location.objects.create(latitude=51.123457, longitude=-73.654321))
+
+        with self.assertRaises(PinMoveError) as raised:
+            move_pin_to_coordinates(moving, 51.123457, -73.654321)
+
+        self.assertIn(str(moving.pk), str(raised.exception))
+        self.assertNotIn("51.12", str(raised.exception))
+        self.assertNotIn("73.65", str(raised.exception))
+
+
+class MapBboxLogTests(TestCase):
+    def test_a_malformed_viewport_is_rejected_without_logging_it(self) -> None:
+        from urbanlens.dashboard.controllers.maps import _parse_bbox
+
+        for raw in ("51.123457,-73.654321,51.2", "51.123457,-73.654321,north,east"):
+            with self.subTest(raw=raw), self.assertLogs("urbanlens.dashboard.controllers.maps", "WARNING") as logs:
+                self.assertIsNone(_parse_bbox(raw))
+
+                output = "\n".join(logs.output)
+                self.assertNotIn("51.12", output)
+                self.assertNotIn("73.65", output)

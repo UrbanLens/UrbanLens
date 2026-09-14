@@ -1148,10 +1148,10 @@ def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
     try:
         parts = [float(x) for x in bbox_str.split(",")]
     except (TypeError, ValueError):
-        logger.warning("Invalid bbox parameter: %s", bbox_str)
+        logger.warning("Invalid bbox parameter: a value is not a number")
         return None
     if len(parts) != 4:
-        logger.warning("Invalid bbox parameter: %s", bbox_str)
+        logger.warning("Invalid bbox parameter: %d values, not 4", len(parts))
         return None
     south, west, north, east = parts
     return south, west, north, east
