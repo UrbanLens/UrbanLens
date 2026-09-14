@@ -50,6 +50,7 @@ _SCAN_TARGET = "urbanlens.dashboard.services.security.malware_scan.malware_error
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 _UNDECODABLE = ("broken.png", b"\x89PNG\r\n\x1a\n" + b"\0" * 64)
 _DELETE_LATER = "urbanlens.dashboard.tasks.delete_lost_stored_file"
+_STORED_FIELD_LOGGER = "urbanlens.dashboard.services.media.stored_field"
 _owners = count()
 
 
@@ -348,13 +349,32 @@ class AFileThatCannotBeDeletedRightNowTests(_Case):
         label = self._label_showing(*_fixtures()["png-text"])
         shown = _stored_name(label.custom_icon)
 
-        with override_settings(**SANDBOX), self._refusing_deletes(), mock.patch(_ENQUEUE) as enqueue:
+        with (
+            override_settings(**SANDBOX),
+            self._refusing_deletes(),
+            mock.patch(_ENQUEUE) as enqueue,
+            self.assertNoLogs(_STORED_FIELD_LOGGER, level="ERROR"),
+        ):
             self.assertTrue(reencode_shown("dashboard.Label.custom_icon", label.pk, shown))
 
         label.refresh_from_db()
         self.assertNotEqual(label.custom_icon.name, shown)
         self.assertClean(self._read(label.custom_icon), "the label icon")
         self.assertEqual(_deletes_queued(enqueue), [("dashboard.Label", "custom_icon", shown)])
+
+    def test_a_delete_the_broker_would_not_queue_is_logged_as_an_error_naming_the_file(self) -> None:
+        label = self._label_showing(*_fixtures()["png-text"])
+        shown = _stored_name(label.custom_icon)
+
+        with (
+            override_settings(**SANDBOX),
+            self._refusing_deletes(),
+            mock.patch(_ENQUEUE, return_value=None),
+            self.assertLogs(_STORED_FIELD_LOGGER, level="ERROR") as logs,
+        ):
+            self.assertTrue(reencode_shown("dashboard.Label.custom_icon", label.pk, shown))
+
+        self.assertTrue(any(shown in record.getMessage() for record in logs.records if record.levelname == "ERROR"))
 
     def test_an_undecodable_icon_is_cleared_though_it_cannot_be_deleted(self) -> None:
         label = self._label_showing(*_UNDECODABLE)

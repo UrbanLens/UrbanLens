@@ -13406,7 +13406,10 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   `delete_lost_stored_file`, which retries on the maintenance queue and skips a file a row of that field names again.
   Nothing had tested that the comment scan or `reencode_shown` deletes the file it replaced when storage allows (a held
   publish's replaced avatar and the backfill's cleared SVG avatar were tested); both are now. A broker that refuses the
-  retry leaves the file served, with a warning naming it and the failed enqueue in the log and nothing durable.
+  retry leaves the file served, with nothing durable.
+- **A second review of that** found the only log line naming such a file said its delete was queued, whether or not
+  the broker took it; the enqueue failure is logged without the file. A file whose later delete could not be queued is
+  now logged as an error naming it.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

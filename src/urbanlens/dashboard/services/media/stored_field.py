@@ -28,8 +28,9 @@ logger = logging.getLogger(__name__)
 def delete_unnamed_file(storage: Storage, model: str, field: str, name: str) -> None:
     """Delete a file its row no longer names, queueing the delete for later when storage refuses it now.
 
-    A refused delete does not undo or fail what made the row stop naming the file. The file is not left behind either:
-    the media gate serves any icon or avatar path to every member.
+    A refused delete does not undo or fail what made the row stop naming the file. The file is not left behind either,
+    since the media gate serves any icon or avatar path to every member; one the broker would not queue is logged as an
+    error naming it.
 
     Args:
         storage: The field's storage.
@@ -43,8 +44,10 @@ def delete_unnamed_file(storage: Storage, model: str, field: str, name: str) -> 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import delete_lost_stored_file
 
-        logger.warning("Could not delete %s, which its row no longer names; queued to try again", name, exc_info=True)
-        safely_enqueue_task(delete_lost_stored_file, model, field, name)
+        if safely_enqueue_task(delete_lost_stored_file, model, field, name) is None:
+            logger.exception("Could not delete %s, which no %s row names, nor queue deleting it later; it stays until deleted by hand", name, model)
+        else:
+            logger.warning("Could not delete %s, which its row no longer names; queued to try again", name, exc_info=True)
 
 
 class Reencoded(enum.Enum):
