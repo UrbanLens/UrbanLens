@@ -118,11 +118,13 @@ def held_field(instance: Model, field: str) -> HeldField:
     return HELD_FIELDS[f"{instance._meta.label}.{field}"]  # noqa: SLF001 - _meta is Django's public model API
 
 
-def _delete_quietly(storage: Storage, name: str) -> None:
+def _delete_quietly(storage: Storage, name: str) -> bool:
     try:
         storage.delete(name)
     except OSError:
         logger.warning("Could not delete held upload %s", name, exc_info=True)
+        return False
+    return True
 
 
 def hold_upload(instance: Model, field: str, upload: File) -> str:
@@ -374,6 +376,5 @@ def sweep_held_uploads() -> tuple[int, int]:
             except OSError:
                 continue
             if age >= UNDO_RETENTION + timedelta(days=1):
-                _delete_quietly(storage, name)
-                removed += 1
+                removed += _delete_quietly(storage, name)
     return handled, removed

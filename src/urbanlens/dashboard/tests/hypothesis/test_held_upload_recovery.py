@@ -331,6 +331,18 @@ class AHeldFileNothingNamesTests(_Case):
 
         self.assertEqual((default_storage.exists(expired), default_storage.exists(restorable)), (False, True))
 
+    def test_one_storage_refused_to_delete_is_not_reported_removed(self) -> None:
+        expired = self._orphan((UNDO_RETENTION.days + 2) * 24 * _HOUR)
+
+        with (
+            mock.patch(_ENQUEUE),
+            mock.patch.object(FileSystemStorage, "delete", side_effect=OSError("storage unavailable")),
+        ):
+            _handled, removed = sweep_held_uploads()
+
+        self.assertTrue(default_storage.exists(expired), "storage deleted the file, so nothing here was refused")
+        self.assertEqual(removed, 0, "the sweep counted a file storage refused to delete as removed")
+
 
 class TheSweepsLookupTests(_Case):
     def test_finding_held_uploads_does_not_read_every_row(self) -> None:
