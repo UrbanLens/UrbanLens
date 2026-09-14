@@ -63,6 +63,12 @@ class FencedBlockTests(SimpleTestCase):
 
         self.assertEqual(self._check(document), 1)
 
+    def test_a_fence_left_open_fails_rather_than_exempting_the_rest(self) -> None:
+        """Without this, one missing closing fence would switch the check off for the rest of the document."""
+        document = "```\nsome output\n\nNow at `services/boundaries.py:2`.\n"
+
+        self.assertEqual(self._check(document), 1)
+
     def test_prose_after_a_closed_fence_is_checked_again(self) -> None:
         document = "```\nservices/boundaries.py:328\n```\n\nNow at `services/boundaries.py:329`.\n"
 

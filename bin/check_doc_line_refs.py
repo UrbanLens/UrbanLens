@@ -56,7 +56,7 @@ def _without_struck_text(lines: list[str]) -> list[str]:
     return result
 
 
-def _fenced_lines(lines: list[str]) -> set[int]:
+def _fenced_lines(lines: list[str]) -> tuple[set[int], int | None]:
     """Zero-based indices of the lines inside fenced code blocks, fences included.
 
     A block quotes output: a pasted traceback's frames carry the line numbers the code had when it crashed, and
@@ -66,16 +66,16 @@ def _fenced_lines(lines: list[str]) -> set[int]:
         lines: Every line of the document.
 
     Returns:
-        The indices to skip."""
+        The indices to skip, and the index of a fence still open at the end of the document, if any."""
     fenced: set[int] = set()
-    inside = False
+    opened: int | None = None
     for index, line in enumerate(lines):
         if line.lstrip().startswith("```"):
-            inside = not inside
+            opened = index if opened is None else None
             fenced.add(index)
-        elif inside:
+        elif opened is not None:
             fenced.add(index)
-    return fenced
+    return fenced, opened
 
 
 def _citation_block(lines: list[str], index: int) -> range:
@@ -138,6 +138,7 @@ def check(*, report_drift: bool = False) -> int:
         Process exit code: non-zero when any citation points past end-of-file."""
     index = _tracked_files_by_suffix()
     past_end: list[str] = []
+    unclosed_fences: list[str] = []
     suspected_drift: list[str] = []
 
     for document in _documentation_files():
@@ -146,7 +147,9 @@ def check(*, report_drift: bool = False) -> int:
         # above it: a citation nobody can follow is broken whether or not the
         # sentence around it says the defect is gone.
         unstruck = _without_struck_text(lines)
-        fenced = _fenced_lines(lines)
+        fenced, unclosed = _fenced_lines(lines)
+        if unclosed is not None:
+            unclosed_fences.append(f"{document}:{unclosed + 1}: this code fence never closes, so nothing after it is checked")
         for line_number, line in enumerate(lines, 1):
             if line_number - 1 in fenced:
                 continue
@@ -173,10 +176,17 @@ def check(*, report_drift: bool = False) -> int:
             print(f"  {entry}")
         print()
 
+    if unclosed_fences:
+        print(f"Code fences left open ({len(unclosed_fences)}):")
+        for entry in unclosed_fences:
+            print(f"  {entry}")
+        print()
+
     if past_end:
         print(f"Documentation citations past end-of-file ({len(past_end)}):")
         for entry in past_end:
             print(f"  {entry}")
+    if past_end or unclosed_fences:
         return 1
 
     print("All documentation citations point at a line that exists.")
