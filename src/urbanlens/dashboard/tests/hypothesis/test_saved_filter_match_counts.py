@@ -107,6 +107,23 @@ class SavedFilterMatchCountsViewTests(TestCase):
 
         self.assertEqual(self.client.get(self._url()).json()["counts"][str(saved_filter.uuid)], 1)
 
+    def test_a_filter_on_detail_pin_count_counts_through_its_annotation(self) -> None:
+        """The detail-pin criteria annotate the queryset, which the count reads as a subquery."""
+        baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.tagged_pin,
+            location=baker.make(Location, latitude=40.001, longitude=-74.001),
+        )
+        saved_filter = SavedFilter.objects.create(
+            profile=self.profile, name="No details", criteria={"max_detail_pins": 0}
+        )
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["counts"][str(saved_filter.uuid)], 1)
+
     def test_other_profiles_filters_are_not_included(self) -> None:
         other_profile: Profile = baker.make(User).profile
         theirs = SavedFilter.objects.create(profile=other_profile, name="Not Mine", criteria={})

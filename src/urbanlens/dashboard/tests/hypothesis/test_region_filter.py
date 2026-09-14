@@ -83,6 +83,18 @@ class DissolvePolygonsTests(SimpleTestCase):
         result = dissolve_polygons([a, b])
         self.assertEqual(len(result), 1)
 
+    def test_a_self_intersecting_polygon_dissolves_instead_of_raising(self) -> None:
+        """A bowtie drawn next to a disjoint square: GEOS refuses to union invalid input."""
+        bowtie = Polygon(((-74.0, 40.0), (-73.99, 40.01), (-73.99, 40.0), (-74.0, 40.01), (-74.0, 40.0)), srid=4326)
+        square = _square(-70.0, 45.0, 0.001)
+        self.assertFalse(bowtie.valid)
+
+        result = dissolve_polygons([bowtie, square])
+
+        self.assertTrue(result.valid)
+        self.assertTrue(result.covers(square))
+        self.assertAlmostEqual(result.area, bowtie.make_valid().area + square.area)
+
 
 class FilterByCriteriaRegionTests(TestCase):
     """Pin.objects.filter_by_criteria: include_regions/exclude_regions."""

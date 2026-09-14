@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from django.contrib.gis.gdal import GDALException
-from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Polygon
+from django.contrib.gis.geos import GeometryCollection, GEOSException, GEOSGeometry, MultiPolygon, Polygon
 
 
 class InvalidPolygonGeoJSONError(ValueError):
@@ -40,7 +40,7 @@ MAX_REGION_POLYGONS = 200
 
 #: Most vertices one drawn region may carry in total. A component cap alone would
 #: move the cost rather than remove it: a single polygon with a hundred thousand
-#: points is one cheap `len()` and one expensive `intersects()`.
+#: points is one cheap `len()` and one expensive union.
 MAX_REGION_VERTICES = 50_000
 
 
@@ -108,7 +108,7 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
 
 def dissolve_polygons(polygons: list[Polygon]) -> MultiPolygon:
     """Merge any polygons that intersect (overlap, touch, or contain) into single components.
-    Chained overlaps (A intersects B, B intersects C, A does not intersect C) still fully merge into one component, because after A+B are unioned the resulting shape contains B's footprint and therefore does intersect C.
+    Chained overlaps merge into one component, and a self-intersecting polygon is repaired rather than refused.
 
     Args:
         polygons: GEOS Polygons, all in the same SRID (4326).
@@ -118,11 +118,12 @@ def dissolve_polygons(polygons: list[Polygon]) -> MultiPolygon:
     if not polygons:
         return MultiPolygon([], srid=4326)
 
-    merged = MultiPolygon(polygons, srid=4326).unary_union
-    if isinstance(merged, MultiPolygon):
-        flat = [sub for sub in merged if isinstance(sub, Polygon)]
-    elif isinstance(merged, Polygon):
+    # GEOS refuses to union invalid input, and a hand-drawn polygon can cross itself.
+    merged = MultiPolygon(polygons, srid=4326).make_valid().unary_union
+    if isinstance(merged, Polygon):
         flat = [merged]
+    elif isinstance(merged, GeometryCollection):
+        flat = [sub for sub in merged if isinstance(sub, Polygon)]
     else:
         flat = []
     return MultiPolygon(flat, srid=4326)
