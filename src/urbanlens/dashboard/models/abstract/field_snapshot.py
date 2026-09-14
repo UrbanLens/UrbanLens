@@ -21,7 +21,12 @@ class FieldSnapshot:
 
     def __init__(self, instance: Model) -> None:
         self.instance = instance
-        self._before = {field.attname: copy.deepcopy(getattr(instance, field.attname)) for field in self._fields()}
+        self._before = {field.attname: self._detached(getattr(instance, field.attname)) for field in self._fields()}
+
+    @staticmethod
+    def _detached(value: object) -> object:
+        # Only JSON containers can be mutated in place; deep-copying anything else (a FieldFile) would copy its model.
+        return copy.deepcopy(value) if isinstance(value, dict | list) else value
 
     def _fields(self) -> list[Any]:
         return [field for field in self.instance._meta.concrete_fields if not field.primary_key]  # noqa: SLF001

@@ -140,6 +140,11 @@ and the save, and it failed at all three of these before they used `FieldSnapsho
 
 The remaining bare saves in `controllers/` create new rows, where there is nothing to revert.
 
+A scoped write has one trap of its own, fixed in `models/abstract/model.py::PublicDashboardModel.save`:
+a row with no slug generates one on save, and a save naming its `update_fields` used to drop that
+slug, so it was regenerated on every later save and never stored (`test_slug_generated_on_scoped_save.py`).
+`FieldSnapshot` only deep-copies JSON containers, so a model with a file field is safe to snapshot.
+
 ## P6 — Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins
 
 `id: P6` · `status: open` · `updated: 2026-08-21`

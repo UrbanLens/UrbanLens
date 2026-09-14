@@ -175,6 +175,9 @@ class PublicDashboardModel(FrontendDashboardModel):
             super().save(*args, **kwargs)
             return
 
+        if kwargs.get("update_fields") is not None and "slug" not in kwargs["update_fields"]:
+            kwargs["update_fields"] = [*kwargs["update_fields"], "slug"]
+
         # Handle the race condition where another writer claims our candidate
         # slug between generation and insert: retry with a fresh candidate.
         for _ in range(20):
