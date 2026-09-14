@@ -856,7 +856,7 @@ convention = "google"
 # Dev-only additions on top of [project.dependencies] - `uv sync` installs both by default.
 dev = [
     "bandit~=1.8.6",
-    "coverage>=7.14.1,<7.16.0",
+    "coverage>=7.14.1,<7.17.0",
     # Coverage of the lines a branch actually changed, rather than a whole-tree
     # percentage that moves too slowly to mean anything on any one commit.
     "diff-cover~=10.5.1",
