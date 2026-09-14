@@ -118,12 +118,15 @@ def dissolve_polygons(polygons: list[Polygon]) -> MultiPolygon:
     if not polygons:
         return MultiPolygon([], srid=4326)
 
-    # GEOS refuses to union invalid input, and a hand-drawn polygon can cross itself.
-    merged = MultiPolygon(polygons, srid=4326).make_valid().unary_union
-    if isinstance(merged, Polygon):
-        flat = [merged]
-    elif isinstance(merged, GeometryCollection):
-        flat = [sub for sub in merged if isinstance(sub, Polygon)]
-    else:
-        flat = []
-    return MultiPolygon(flat, srid=4326)
+    # GEOS refuses to union invalid input, and a hand-drawn polygon can cross itself. Each polygon
+    # is repaired alone: make_valid on the whole collection cuts overlaps out instead of merging them.
+    repaired = [part for polygon in polygons for part in _polygon_parts(polygon if polygon.valid else polygon.make_valid())]
+    return MultiPolygon(_polygon_parts(MultiPolygon(repaired, srid=4326).unary_union), srid=4326)
+
+
+def _polygon_parts(geom: GEOSGeometry) -> list[Polygon]:
+    if isinstance(geom, Polygon):
+        return [geom]
+    if isinstance(geom, GeometryCollection):
+        return [sub for sub in geom if isinstance(sub, Polygon)]
+    return []

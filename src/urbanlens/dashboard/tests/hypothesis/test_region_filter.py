@@ -59,6 +59,19 @@ class DissolvePolygonsTests(SimpleTestCase):
         self.assertTrue(result.contains(a.centroid))
         self.assertTrue(result.contains(b.centroid))
 
+    def test_overlapping_polygons_keep_their_shared_area(self) -> None:
+        a = _square(-74.0, 40.0, 0.01)
+        b = _square(-73.99, 40.01, 0.01)
+        result = dissolve_polygons([a, b])
+        self.assertAlmostEqual(result.area, a.union(b).area)
+
+    def test_a_polygon_inside_another_leaves_no_hole(self) -> None:
+        outer = _square(-74.0, 40.0, 0.01)
+        inner = _square(-74.0, 40.0, 0.002)
+        result = dissolve_polygons([outer, inner])
+        self.assertAlmostEqual(result.area, outer.area)
+        self.assertTrue(result.contains(inner.centroid))
+
     def test_chained_overlaps_fully_merge(self) -> None:
         """A overlaps B, B overlaps C, A does not overlap C - all three must still merge into one."""
         a = _square(-74.00, 40.0, 0.006)

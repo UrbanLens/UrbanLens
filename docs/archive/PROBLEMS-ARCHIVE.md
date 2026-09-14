@@ -48,12 +48,16 @@ The original entry's measurement stands as the correction worth keeping: 400 ful
 0.030s, because each merge shrank the working set. The cubic bound needed an adversarial ordering nobody built, so the
 cap is what bounded the request, not the rewrite. Not re-measured after the rewrite.
 
-**The first version of the rewrite regressed invalid input.** GEOS refuses to union a self-intersecting polygon, so a
-hand-drawn bowtie raised `GEOSException` even beside a disjoint square - where the pairwise loop never called `union()`
-and passed it through. Found by the post-batch review, probed against GEOS 3.14.1 in the app container. The union now
-runs on `make_valid()` output and keeps only its polygons (`make_valid` can return a `GeometryCollection` holding a
-`LineString`); `test_a_self_intersecting_polygon_dissolves_instead_of_raising` covers it. A bowtie that overlapped another
-polygon raised under the loop too, so that case is newly repaired rather than restored.
+**The rewrite regressed twice before it was right, both found by post-batch review against GEOS 3.14.1 in the app
+container.** First, GEOS refuses to union a self-intersecting polygon, so a hand-drawn bowtie raised `GEOSException`
+even beside a disjoint square, where the pairwise loop never called `union()`. Second, the repair for that ran
+`make_valid()` on the whole `MultiPolygon`, and `make_valid` treats overlapping components as one invalid ring set: two
+overlapping squares lost their shared area (6 instead of 7) and a square inside another became a hole (96 instead of
+100). The dissolve cases only counted components and checked centroids, so neither showed. Each polygon is now repaired
+on its own before the union, and only polygons are kept (`make_valid` can return a `GeometryCollection` holding a
+`LineString`). `test_a_self_intersecting_polygon_dissolves_instead_of_raising`,
+`test_overlapping_polygons_keep_their_shared_area` and `test_a_polygon_inside_another_leaves_no_hole` cover them. A
+bowtie that overlapped another polygon raised under the loop too, so that case is newly repaired rather than restored.
 
 ## RESOLVED 2026-09-08: `backfill_wiki_edit_points`, extracted from its migration to be testable, had no test
 
