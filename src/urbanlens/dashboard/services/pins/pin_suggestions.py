@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from django.core.files.base import ContentFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import F
 import requests
 
@@ -482,6 +482,20 @@ def pending_suggestions_for_profile(profile: Profile) -> QuerySet[PinSuggestion]
     return qs
 
 
+def _lock_ingests_for(profile: Profile) -> None:
+    """Hold off any other ingest for this profile until the current transaction ends.
+
+    An ingest reads the profile's pending suggestions and then creates or extends them, so two at once
+    can both miss the read and both create, or both extend one row and each save over the other's merged
+    dates.
+
+    Args:
+        profile: Owner whose ingests to serialize.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", [f"pin_suggestion_ingest:{profile.pk}"])
+
+
 def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: PinSuggestionOrigin) -> IngestSummary:
     """Match/cluster a batch of location hits into PinSuggestion rows.
     Re-running this with overlapping hits (e.g. a repeated Immich sweep, or uploading local-scan results twice) merges into existing pending suggestions rather than creating duplicates.
@@ -504,31 +518,33 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
         return IngestSummary(matched_suggestions=0, new_pin_suggestions=0, hits_processed=0)
 
     hit_list = list(hits)
-    matched, unmatched = _match_hits_to_pins(profile, hit_list)
-    suggestion_ids_by_key: dict[str, int] = {}
-    for pin, pin_hits in matched.items():
-        suggestion = _upsert_matched_suggestion(profile, pin, pin_hits, origin)
-        for hit in pin_hits:
-            if hit.source_key:
-                suggestion_ids_by_key[hit.source_key] = suggestion.pk
+    with transaction.atomic():
+        _lock_ingests_for(profile)
+        matched, unmatched = _match_hits_to_pins(profile, hit_list)
+        suggestion_ids_by_key: dict[str, int] = {}
+        for pin, pin_hits in matched.items():
+            suggestion = _upsert_matched_suggestion(profile, pin, pin_hits, origin)
+            for hit in pin_hits:
+                if hit.source_key:
+                    suggestion_ids_by_key[hit.source_key] = suggestion.pk
 
-    clusters = _cluster_hits(unmatched, CLUSTER_RADIUS_M)
-    # Fetched once here rather than inside _find_nearby_pending_new_pin_suggestion per cluster -
-    # _upsert_new_pin_suggestion appends newly-created suggestions to this same list, so later
-    # clusters in this loop still see them without any further database queries.
-    pending_new_pin_suggestions = list(PinSuggestion.objects.filter(profile=profile, pin__isnull=True, status=PinSuggestionStatus.PENDING))
-    for cluster in clusters:
-        suggestion = _upsert_new_pin_suggestion(profile, cluster, origin, pending_new_pin_suggestions)
-        for hit in cluster:
-            if hit.source_key:
-                suggestion_ids_by_key[hit.source_key] = suggestion.pk
+        clusters = _cluster_hits(unmatched, CLUSTER_RADIUS_M)
+        # Fetched once here rather than inside _find_nearby_pending_new_pin_suggestion per cluster -
+        # _upsert_new_pin_suggestion appends newly-created suggestions to this same list, so later
+        # clusters in this loop still see them without any further database queries.
+        pending_new_pin_suggestions = list(PinSuggestion.objects.filter(profile=profile, pin__isnull=True, status=PinSuggestionStatus.PENDING))
+        for cluster in clusters:
+            suggestion = _upsert_new_pin_suggestion(profile, cluster, origin, pending_new_pin_suggestions)
+            for hit in cluster:
+                if hit.source_key:
+                    suggestion_ids_by_key[hit.source_key] = suggestion.pk
 
-    return IngestSummary(
-        matched_suggestions=len(matched),
-        new_pin_suggestions=len(clusters),
-        hits_processed=_weight_of(hit_list),
-        suggestion_ids_by_key=suggestion_ids_by_key,
-    )
+        return IngestSummary(
+            matched_suggestions=len(matched),
+            new_pin_suggestions=len(clusters),
+            hits_processed=_weight_of(hit_list),
+            suggestion_ids_by_key=suggestion_ids_by_key,
+        )
 
 
 def _delete_image_with_file(image: Image) -> None:

@@ -2032,13 +2032,14 @@ Options:
 Worth deciding rather than leaving implicit, because the app currently promises "Message deleted" in
 one surface while quoting the message in another.
 
-## P49 — Doc citations drift silently, and a pin-suggestion race can still duplicate a row
+## P49 — Doc citations drift silently
 
-`id: P49` · `status: open` · `updated: 2026-09-05`
+`id: P49` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "`npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree
-guards", and before that "... none of `deploy.sh`'s guards (minor)". That half is fixed; what is
-left is the two sub-items below.
+Previously titled "Doc citations drift silently, and a pin-suggestion race can still duplicate a row",
+before that "`npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree guards", and
+before that "... none of `deploy.sh`'s guards (minor)". The git-squash and pin-suggestion items are
+fixed; the documentation-citation item below is what is left.
 
 ### `npm run git-squash` (noted 2026-08-17) - fixed 2026-09-05 by deleting it
 
@@ -2070,27 +2071,20 @@ Deleted rather than guarded. Nothing referenced it, `infrastructure/bin/deploy.s
 with a lock, a branch check, a dirty-tree refusal and a health wait, and re-adding a host-side deploy
 script here would undo the move that `ff332e484` made deliberately.
 
-### Pin suggestion `hit_count` is a read-modify-write (noted 2026-08-17) - lost-increment half fixed 2026-08-25
+### Pin suggestion ingest was a check-then-act (noted 2026-08-17) - fixed 2026-09-14
 
-`services/pins/pin_suggestions.py`'s `_upsert_matched_suggestion` and
-`_upsert_new_pin_suggestion` did `existing.hit_count += _weight_of(...)` and save, and their caller
-`ingest_location_hits` takes no lock. Two concurrent ingests for one profile - a repeated Immich
-sweep overlapping a local-scan upload, which the function's own docstring names as the case it
-handles - could lose an increment, and can also both miss on the check-then-act and create
-duplicate pending suggestions for the same pin.
+`services/pins/pin_suggestions.py`'s `ingest_location_hits` read a profile's pending suggestions, then
+created or extended them, with no lock. Two concurrent ingests for one profile (a repeated Immich sweep
+overlapping a local-scan upload) could both miss the read and both create a pending suggestion, or both
+extend one row and each save over the other's merged `visit_dates`, `sample_assets`, aliases and links.
+`hit_count` alone had been made atomic with `F()` on 2026-08-25.
 
-**The lost-increment half is fixed** (`996b481f`): both call sites now do `existing.hit_count =
-F("hit_count") + _weight_of(...)`, compiling to a single atomic UPDATE, with
-`existing.refresh_from_db(fields=["hit_count"])` immediately after per Django's guidance for
-F()-expression fields (the object is reused across multiple clusters within one
-`ingest_location_hits` call). **The duplicate-pending-suggestion half from the same check-then-act
-race is still open** - scope was deliberately limited to the named `hit_count` pattern; the other
-merged fields (`visit_dates`, `sample_assets`, `suggested_aliases`/`links`) are still Python-side
-list/JSON read-modify-writes, unaddressed. Left unfixed deliberately, as originally: `PinSuggestion`
-rows are per-profile, so contention needs one user running two scans at once, and the remaining
-damage is a duplicate low-stakes suggestion row rather than lost money or a discarded rating
-period.
-
+The whole ingest now runs in a transaction that first takes `pg_advisory_xact_lock` on a per-profile key,
+so a second ingest for the same profile waits for the first to commit; other profiles are unaffected.
+`test_pin_suggestion_ingest_races.py` holds two threads between the check and the write: before the
+change a new place and a matched pin each got 2 suggestions and a merged date was lost, and after it
+all three pass. The callers are one Immich sweep per profile, one local-scan upload request, and one
+external-API hit, so the lock is held for one bounded batch.
 
 ### Documentation citations still point at the wrong line (noted 2026-08-17)
 
