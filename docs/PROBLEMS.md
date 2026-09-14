@@ -3810,7 +3810,8 @@ would not have matched.
 
 ### What is left
 
-The gate still fails, because there is nowhere to record a verdict it can read. Excluding a rule in
+A re-run after the fix reports 24 findings, exactly the false positives above; the logging rule no
+longer fires. The gate still fails, because there is nowhere to record a verdict it can read. Excluding a rule in
 `.github/codeql/codeql-config.yml` would also hide the next real finding under that rule. One shape
 that fits is a committed allowlist that `run_codeql.py --gate` subtracts, with one entry per finding,
 keyed on the SARIF's `partialFingerprints` (which survive line moves) and carrying the reason from the
