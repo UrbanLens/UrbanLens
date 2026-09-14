@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
 
@@ -117,6 +118,17 @@ class HazardHistoryPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Fire & Disaster History"
     description: ClassVar[str] = "Shows NIFC wildfire perimeters that reached the pin's site and FEMA disaster declarations for its county on the detail page, sourced through REData's natural-hazards registry. USA only."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_hazards."""
+        return {
+            "redata_hazards": ServiceDefaults(
+                display_name="REData Natural Hazards",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Wildfire perimeters, disaster declarations and earthquakes via GET /hazards/. Also spent by the usgs_earthquakes plugin, which declares nothing so this is the one budget. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_hazards_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the fire & disaster history pin-detail panel."""

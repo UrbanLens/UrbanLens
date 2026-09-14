@@ -1,9 +1,7 @@
-"""A drawn region has to be bounded, because dissolving it is superlinear.
+"""A drawn region has to be bounded, because dissolving it runs in the request.
 
-`dissolve_polygons` merges every pair of components that intersect, and restarts
-the whole scan after each merge - so its cost is O(n^2) per pass with up to n
-passes, in GEOS `intersects()` calls, inside the request that drew the region.
-Nothing capped n. The count comes from a POST body: `parse_region_geojson` reads
+`dissolve_polygons` unions every component of the region inside the request
+that drew it. Nothing capped the count. It comes from a POST body: `parse_region_geojson` reads
 `include_regions`/`exclude_regions` off the saved-filter form and hands whatever
 parsed straight through (N21 H12).
 

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
 
@@ -115,6 +116,29 @@ class SiteConditionsPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Site Conditions"
     description: ClassVar[str] = "Shows NLCD land cover, the EPA walkability index and USDA soil composition for the pin's site on the detail page, sourced through REData. USA only."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_land_cover, redata_soil, redata_walkability."""
+        return {
+            "redata_land_cover": ServiceDefaults(
+                display_name="REData Land Cover",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="NLCD land cover via GET /land-cover/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_land_cover_gateway.",
+            ),
+            "redata_soil": ServiceDefaults(
+                display_name="REData Soil",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="USDA soil composition via GET /soil/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_soil_gateway.",
+            ),
+            "redata_walkability": ServiceDefaults(
+                display_name="REData Walkability",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="EPA walkability index via GET /walkability/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_walkability_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the site-conditions pin-detail panel."""

@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
@@ -76,6 +77,17 @@ class UndergroundPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Underground Structures"
     description: ClassVar[str] = "Shows OSM-mapped tunnels, culverts, station levels, shafts and buried utility runs near the pin on the detail page, sourced through REData's subsurface-structures registry."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_underground."""
+        return {
+            "redata_underground": ServiceDefaults(
+                display_name="REData Underground Structures",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Tunnels, culverts, shafts and buried utilities via GET /underground/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_underground_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the underground-structures pin-detail panel."""

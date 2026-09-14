@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
@@ -83,6 +84,17 @@ class BuildingPermitsPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Building Permits & Violations"
     description: ClassVar[str] = "Shows the pin site's permit, violation and site-plan filing history on the detail page, with deep links to city records and plan drawings where published, sourced through REData's municipal-portals registry."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_permits."""
+        return {
+            "redata_permits": ServiceDefaults(
+                display_name="REData Building Permits",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Permit, violation and site-plan filings via GET /permits/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_permits_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the permits/violations pin-detail panel."""

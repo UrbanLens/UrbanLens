@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
 
 if TYPE_CHECKING:
@@ -87,6 +88,17 @@ class OpenElevationPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Elevation"
     description: ClassVar[str] = "Shows the pin's elevation above/below sea level on the Private Pin page, sourced through REData (USGS 3DEP, Open-Elevation, Open-Meteo/Copernicus)."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_elevation."""
+        return {
+            "redata_elevation": ServiceDefaults(
+                display_name="REData Elevation",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Point elevation via GET /elevation/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_elevation_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the elevation pin-detail panel."""

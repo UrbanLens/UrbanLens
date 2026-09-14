@@ -1267,7 +1267,7 @@ follow-up rather than blocking this pass.
 
 ## P20 — The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone
 
-`id: P20` · `status: open` · `updated: 2026-07-25`
+`id: P20` · `status: open` · `updated: 2026-09-14`
 
 Previously titled "Residues left by the TEMPORARY legacy-CID coordinate repair (found 2026-07-25)".
 
@@ -1284,15 +1284,17 @@ but re-check them then rather than assuming:
    Repointing the CID would fix it globally, but it mutates shared cross-user data off the back of
    one user's import, which is why it wasn't done here. Deliberate call, not an oversight.
 
-2. **`GoogleMapsGateway.import_pins_streaming` was left un-repaired.** It's the older one-shot
-   `pin.upload.takeout` path, and it still places CID pins from `extract_coordinates_from_url`'s
-   S2 decode - i.e. it can still create wrongly-placed pins today. Nothing in
-   `templates/dashboard/pages/location/import/csv.html` (or anywhere else) references that URL;
-   the UI goes through `pin.import.preview` -> `pin.import.confirmed`, which defers CID pins
-   properly. The repair was not wired into it because doing so safely means giving it the same
-   deferral machinery, not because it's correct as-is. Either give it the deferral path or delete
-   the route and `import_pins_streaming` with it - a live URL that silently mis-places pins is
-   worse than no URL.
+2. **`GoogleMapsGateway.import_pins_streaming` survives its route.** It still places CID pins from
+   `extract_coordinates_from_url`'s S2 decode. The `pin.upload.takeout` route that reached it was removed as a superseded
+   duplicate (P35, 2026-08-14), and on 2026-09-14 nothing outside `tests/` calls the method
+   (`grep -rn import_pins_streaming src/ --include=*.py`), so it can no longer misplace a pin. It is ~280 lines of dead
+   code (`services/apis/locations/google/maps.py:583`) held up by `test_import_pins_streaming.py` and one case in
+   `test_label_style_suggestions.py`.
+
+   Not deleted, because it is the only production caller of `services/labels/style_suggestions.suggest_label_style` -
+   the AI-chosen icon and colour for a tag made from an imported file's name. The live import
+   (`iter_confirmed_import_events`) creates a category from the file stem without it. Deleting the method retires that
+   feature; keeping the feature means moving the call into the confirmed path. That is the decision left here.
 
 ## P21 — A shared markup map stamps provenance only for places its sender has pinned
 
@@ -3261,103 +3263,6 @@ unrelated commit.
 Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
 parameterized there because their unused model import was the symptom of the missing type argument.
 
-## P89 — `MarkupJsonView`'s `?children=1` wiki path skips concealment; dormant only because `concealment_active()` is hardcoded False
-
-`id: P89` · `status: open` · `updated: 2026-09-08`
-
-Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0`; confirmed on an independent
-adversarial pass.
-
-`MarkupJsonView.get()` (`controllers/markup.py`) builds its `items` queryset two different ways, and
-only one of them applies wiki concealment. The single-wiki path - `_resolve_owner()`'s wiki branch
-(`controllers/markup.py:170-180`, function starts at line 136) - resolves through
-`resolve_visible_wiki()` and then explicitly narrows:
-`return wiki, visible_rows(PinMarkup.objects.for_wiki(wiki), wiki, profile)` (line 180).
-The `?children=1` aggregation path, inside `MarkupJsonView.get()` 94 lines later in the same file, replaces that
-already-concealed `items` with a raw, unfiltered query:
-
-```python
-elif include_children and isinstance(owner, Wiki):
-    subtree = Wiki.objects.filter(pk=owner.pk).with_descendants()
-    items = PinMarkup.objects.filter(parent_wiki__in=subtree).select_related("parent_wiki__location", "layer")
-```
-
-(`controllers/markup.py:272-274`). `.filter(parent_wiki__in=subtree)` never calls `visible_rows`, so
-a concealed viewer requesting `?children=1` would get every descendant wiki's markup items, not the
-subset `conceal_rows` would let through.
-
-**Not a live leak today.** `concealment_active()` (`services/wiki/concealment.py:153`) is hardcoded
-to return `False` site-wide - "the threshold is a reputation score scaled by the wiki's
-community-voted vulnerability, and cannot be chosen before there is real score data" - so
-`visible_rows()` (`services/wiki/concealment.py:396`:
-`return conceal_rows(queryset, viewer) if concealment_active(wiki, viewer) else queryset`) is
-currently a no-op everywhere, including on the correctly-guarded single-wiki path directly above.
-The two paths behave identically right now for exactly that reason - this is a landmine, not an
-active leak.
-
-**It becomes a live concealment bypass the moment `concealment_active` starts returning `True` for
-anyone.** `?children=1` is reachable by any authenticated request naming a pin or wiki slug/uuid
-with descendants - no elevated privilege needed. The fix `_resolve_owner()` already demonstrates at
-line 180 is one call: wrap the `.filter(...)` result at `controllers/markup.py:274` in
-`visible_rows(items, owner, profile)` the same way. (The `Pin` branch immediately above,
-`controllers/markup.py:269-271`, needs no equivalent fix - concealment is a wiki-only concept, per
-`_current_layer_is_visible`'s docstring at `controllers/markup.py:224-225`.)
-
-Worth flagging now rather than after concealment ships: later in the same `get()` method, the
-wiki-owner layer-visibility computation (`visible_layer_ids`, `controllers/markup.py:284-289`) *does*
-call `visible_rows` correctly. So this is an inconsistency within one view - concealment applied
-correctly a few lines below the exact spot it was skipped - rather than a case where nobody thought
-to apply the filter at all, which is worth knowing before assuming this needs a wider audit than
-just this one queryset.
-
-## P90 — `backfill_wiki_edit_points`, extracted from its migration specifically to be testable, has no test
-
-`id: P90` · `status: open` · `updated: 2026-09-08`
-
-Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0`; confirmed on an independent
-adversarial pass.
-
-`migrations/0032_v0_8_0.py` (the v0.8.0 squash of migrations 0032-0056, `9b3bb298a`) carries three
-`RunPython` data migrations:
-
-1. `_0049_backfill_friendinvitation_email_normalized` (line 14, wired line 319) - tested by
-   `tests/hypothesis/test_friend_invitation.py`.
-2. `_0052__backfill` (line 32, wired line 324) - calls
-   `services.consensus.points.backfill_wiki_edit_points(WikiEdit)`. **No test references it
-   anywhere in the tree**: `grep -rln "backfill_wiki_edit_points" src/urbanlens/dashboard/tests`
-   returns nothing.
-3. `_0054_merge_reciprocal_rows` (line 82, wired line 330) - tested by
-   `tests/hypothesis/test_friendship_pair_uniqueness.py`, which caught a real bug before release
-   (`21a48e652`, "migration 0054 aborted on exactly the rows it exists to merge").
-
-Item 2's own docstring (`services/consensus/points.py:315-317`) says why it is a standalone function
-at all: "Extracted from the migration that calls it so it can be exercised by a test - this repo has
-no migration-test harness, so logic left inline in a `RunPython` is logic nothing runs until
-deploy." Nobody wrote that test. Both siblings, extracted or already standalone for the identical
-reason, got one - and sibling 3 is the proof the extraction pays for itself: its test found a real
-ordering bug that would otherwise have shipped.
-
-What this migration does, unreviewed by any test: marks every `WikiEdit` that is some other row's
-`reverted_by` target as `is_revert=True`, then sets `consensus_points=MANUAL_EDIT_POINTS` on every
-`WikiEdit` with an editor, no `consensus_round`, and `is_revert=False`
-(`services/consensus/points.py:329-335`). It runs once, irreversibly - `_0052__backfill`'s
-`reverse_code` is `RunPython.noop` (line 324) - against every production `WikiEdit` row that
-predates `consensus_points` existing.
-
-It reads `MANUAL_EDIT_POINTS` (`services/consensus/points.py:45`), the same constant
-`points_for_changes()` prices ordinary edits with, and that function itself carries `TODO: reassess
-this whole scheme once there is real usage to look at` (`services/consensus/points.py:150`) -
-flagging the constant as a provisional first cut. An untested, irreversible, one-shot backfill
-reading a constant its own module already says needs reassessment is exactly the combination the
-extraction-for-testability was meant to catch before it reached production.
-
-Suggested test shape, matching the siblings: call `backfill_wiki_edit_points` directly against real
-`WikiEdit` rows (its docstring implies this was the intent of extracting it), seed a revert chain
-plus a mix of consensus-scored, non-consensus, and already-scored rows, run it, and assert
-`is_revert` and `consensus_points` land where `services/consensus/points.py:329-335` says they
-should - in particular that a revert row's *own* award is left standing, per the docstring's explicit
-"draining points people have already been shown is a bigger change... and is not what this is for."
-
 ## P91 — Seven of eight new security integration specs have never run against a live deployment
 
 `id: P91` · `status: open` · `updated: 2026-09-08`
@@ -3450,44 +3355,43 @@ script into a proper bundled TS entry the way `map-annotations.ts` already is fo
 the broader, already-tracked P83/P34 initiative ("over half of every page's HTML is inline `<script>`"), not a
 scoped fix for this one badge. Left open and cross-referenced from both rather than attempted piecemeal here.
 
-## P93 — Nine REData plugins declare no rate-limit defaults for their own gateway's service key
+## P93 — 21 gateway service keys still fall back to `get_limit_config`'s generic 20/min, 500/day
 
-`id: P93` · `status: open` · `updated: 2026-09-08`
+`id: P93` · `status: open` · `updated: 2026-09-14`
 
-Found 2026-09-08 in the pre-PR audit of `release/v_0_8_0`, while fixing the same gap on the release's new
-`HistoricalFeaturesPlugin` (`redata_historical_features.py`, fixed in the same commit as this entry - its
-`get_service_defaults()` now declares `redata_historical_features` and is **not** one of the plugins below).
+Previously titled "Nine REData plugins declare no rate-limit defaults for their own gateway's service key". Those nine
+are fixed; a test written to prove it found 21 more.
 
-`dashboard/CLAUDE.md`'s "API Integrations" section says a plugin subclass "declares its rate-limit defaults." Nine
-pre-existing REData plugins don't: they define a gateway with its own `service_key`, but no
-`get_service_defaults()` override, and that key appears in neither `rate_limiter.SERVICE_REGISTRY` nor any
-plugin's declared defaults. `rate_limiter.get_limit_config()` never sees these keys as configured, so the first
-call to any of them silently creates an `ApiRateLimit` row from the generic fallback baked into
-`get_limit_config()` itself (`calls_per_minute=20`, `calls_per_day=500`, a `.title()`-cased display name, no
-`notes`) instead of a number anyone actually reasoned about for that integration.
+A gateway whose `service_key` appears in neither `rate_limiter.SERVICE_REGISTRY` nor any plugin's
+`get_service_defaults()` is not refused. `get_limit_config()` creates its `ApiRateLimit` row from a fallback baked into
+the function (`calls_per_minute=20`, `calls_per_day=500`, a `.title()`-cased name, no notes) - a limit nobody chose for
+that integration. `test_plugin_rate_limit_coverage.py` cannot see it, because it only inspects keys that are registered.
 
-Affected plugin files (`dashboard/plugins/builtin/`) and the ungoverned service key(s) each one's gateway declares:
+**Fixed 2026-09-14 for the nine plugins this entry named.** `redata_air_quality`, `redata_underground`,
+`redata_hydrology`, `redata_permits`, `redata_incidents`, `hazard_history` (declaring `redata_hazards`, which
+`usgs_earthquakes` also spends), `open_elevation` (`redata_elevation`) and `redata_site_conditions` (`redata_land_cover`,
+`redata_soil`, `redata_walkability`) now declare 20/min with no daily cap, matching the sibling REData plugins. Every
+one of those endpoints sits in REData's single 1,000/hour per-key lookup pool (`../REData/docs/api-reference.md`, "Rate
+limiting"), which a per-service limit here cannot express - the notes say so. Not tuned per endpoint.
 
-- `redata_air_quality.py` → `redata_air_quality`
-- `redata_underground.py` → `redata_underground`
-- `redata_hydrology.py` → `redata_hydrology`
-- `redata_permits.py` → `redata_permits`
-- `redata_incidents.py` → `redata_incidents`
-- `hazard_history.py` → `redata_hazards`
-- `usgs_earthquakes.py` → `redata_hazards` (same key as `hazard_history.py` - two plugins share one ungoverned
-  budget)
-- `open_elevation.py` → `redata_elevation`
-- `redata_site_conditions.py` → `redata_land_cover`, `redata_soil`, `redata_walkability` (three keys from one
-  plugin)
+**Still open.** `tests/hypothesis/test_gateway_service_keys_registered.py` walks every concrete `Gateway` subclass under
+`services/apis/` and fails on an unregistered key. It holds the 21 found on 2026-09-14 in `KNOWN_UNREGISTERED`, and a
+second test fails when one of them is registered without being removed from that set:
 
-Not fixed here: each of these ten keys needs its own considered `calls_per_minute`/`calls_per_day` pair and
-`notes` explaining the choice (per-endpoint, referencing REData's `api-reference.md` "Rate limiting" section, the
-way `redata_historic_registers.py` and the now-fixed `redata_historical_features.py` do) rather than a single
-mechanical pass copying the same numbers into all nine files - that judgment call belongs with whoever does the
-fix, not rushed to close this entry out. `dashboard/tests/hypothesis/test_plugin_rate_limit_coverage.py` will not
-catch this class of gap on its own: it asserts every key present in `all_service_defaults()` has *a* limit, but a
-key that was never registered at all - like these - is simply absent from that mapping rather than showing up
-`unlimited`, so the existing test passes today with all nine still ungoverned.
+- REData gateways: `redata_historical_maps`, `redata_json`, `redata_location_context`, `redata_media`,
+  `redata_nature_observations`, `redata_search_news`, `redata_search_web`, `redata_street_view`.
+- Providers and provider bases inside the REData media and reference-document gateways: `mapillary`, `kartaview`,
+  `panoramax`, `street_view_provider`, `media_provider`, `chronicling_america`, `internet_archive`,
+  `library_of_congress`, `smithsonian`. Several may never send a request through their own session; check before giving
+  one a limit it would never spend.
+- Building footprints: `google_open_buildings`, `microsoft_building_footprints`, `overture_maps`.
+- `twilio`.
+
+**`overture_maps` is a bug of its own.** `OvertureMapsGateway` sets `service_key = None` to opt out of rate limiting
+(P110), but `ServiceMeta.__new__` (`services/core/gateway.py:39`) replaces any falsy key with one derived from the class
+name, so the class carries `"overture_maps"`, and `Gateway.__post_init__` wraps its session with that key. The metaclass
+cannot tell "not set" from "deliberately None". Not changed here; whether P110's reads should be limited is that entry's
+question.
 
 ## P95 — `ExtractionBudget` cannot bound a single file's decompression, and nothing prices what parsing one costs
 
@@ -3519,35 +3423,6 @@ Not fixed: needs either a per-file byte/complexity cap inside `ExtractionBudget`
 throttle (e.g. keyed to declared upload size) alongside the existing count-based one. Not measured
 this session - no benchmark run against a 2 GB adversarial upload; the risk is by inspection of the
 cap values above, not an observed timeout.
-
-## P97 — `dissolve_polygons` is O(n^3) GEOS work over an uncapped user-supplied polygon count
-
-`id: P97` · `status: open` · `updated: 2026-09-10`
-
-`services/geo/geo.py:84` `dissolve_polygons` merges intersecting polygons by restarting an O(n^2)
-pairwise scan (`for i in range(len(clusters)): for j in range(i + 1, len(clusters))`,
-`geo.py:111-119`) after every merge found, so a fully-chained input (each polygon touches the next)
-costs O(n^3) `GEOSGeometry.intersects()`/`.union()` calls. `saved_filters.py:83`'s
-`_dissolve_regions` (`saved_filters.py:63-83`) calls it once per `include_regions`/`exclude_regions`
-key parsed from `SearchForm.parse_region_geojson`, with no cap on how many polygons that GeoJSON
-form field may contain. Reachable via the saved-filter create/update endpoints.
-
-**Measured 2026-09-10, and the severity does not hold.** In the app container: 400 disjoint
-polygons dissolve in 0.030s, 400 fully-chained overlapping polygons in 0.030s, and two overlapping
-200,000-vertex polygons in 0.026s (an 8.65 MB GeoJSON payload parses in 0.803s, which dominates).
-The restart converges much faster than the bound suggests, because each merge does `del clusters[j]`
-and breaks, shrinking the working set - a chain of n collapses in far fewer than n full scans.
-
-What was *not* tested is an adversarial ordering that forces the intersecting pair to be found last
-on every pass, which is what the O(n^3) bound actually requires. So the bound stands as a bound and
-the input remains uncapped, but no realistic or chained input reaches it, and the practical exposure
-is the GeoJSON payload size (bounded by nginx `client_max_body_size 200m`) rather than the polygon
-count. Downgraded from a hazard to a latent bound; not worth a rewrite at these numbers.
-
-Worth recording for whoever does revisit it: GEOS answers this natively.
-`MultiPolygon(polygons, srid=4326).unary_union` was verified to produce identical results on the
-cases this function's own tests cover - chained overlaps merge to one component, disjoint stay
-separate, touching merge, SRID preserved - in one call instead of the pairwise loop.
 
 ## P100 — Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them
 
@@ -3773,40 +3648,6 @@ the one being fixed. PL7 phase 2 specifies "stays 200 when degraded"; doing it n
 changed in the same breath, and that is an owner call across two repositories.
 
 See D11 for the Valkey split this sits inside; the chaos scenario is the reproduction.
-
-## P107 — The saved-filter count badges read every pin in the account to draw a number
-
-`id: P107` · `status: open` · `updated: 2026-09-10`
-
-`SavedFilterMatchCountsView.get` (`controllers/saved_filters.py:314`) returns one count per saved
-filter — a body sized by how many filters a profile has, which does not grow with the pin table at
-all. It builds that body by materialising every root pin's uuid in Python:
-
-```python
-base_uuids = {str(u) for u in base_query.values_list("uuid", flat=True)}
-```
-
-and then intersects that set with each filter's own cached uuid set. The map page calls this endpoint
-on every filter change, so the cost of drawing a badge is one full read of the account's pin table.
-
-The set-intersection design above it is deliberate and good — the comments record that it replaced
-`O(F^2)` chained `.filter(uuid__in=...)` queries for F saved filters, and the projection is the right
-call. What was not reconsidered at the same time is that the *base* set is unbounded.
-
-**Why nothing caught it.** This is the first defect found by the rows-fetched axis, and it is
-invisible to all three older instruments: `QueryScalingMixin` sees one statement at every size
-(correctly — there *is* one), a bytes-per-row budget sees a body that never moves (correctly — it
-never does), and `InstantiationScalingMixin` sees no model objects (correctly — `values_list` builds
-none). Only "rows read per rendered row, under the capped budget" separates it from a healthy list
-endpoint, which reads the same one row per row and renders them.
-
-Guarded by `dashboard/tests/hypothesis/test_saved_filter_counts_scaling.py`, whose reproduction is
-`xfail(strict=True)` and turns red when this is fixed.
-
-Not fixed, and not measured against a large account this session — the complexity is read from the
-code. The fix is to count in the database (a `COUNT(*)` per filter, or one grouped query over the
-filter/pin join) rather than by intersecting Python sets, at which point the per-filter uuid cache
-this depends on may stop earning its keep too.
 
 ## P109 — One import's task fan-out fills the only Celery queue for hours, and a safety task waits behind it
 

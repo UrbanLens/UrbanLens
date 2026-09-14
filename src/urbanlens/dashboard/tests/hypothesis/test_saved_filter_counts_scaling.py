@@ -8,7 +8,6 @@ from django.contrib.auth.models import User
 from django.http import HttpResponse
 from django.urls import reverse
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.endpoint_scaling import EndpointScalingMixin
 from urbanlens.core.tests.scaling import MIN_GROWTH_BYTES
@@ -56,16 +55,15 @@ class _CountsCase(EndpointScalingMixin, TestCase):
         return len(counts) if isinstance(counts, dict) else None
 
 
-class TheCountBadgesReadEveryPinTests(_CountsCase):
-    """The reproduction: bounded output, unbounded reading."""
+class TheCountBadgesDoNotReadEveryPinTests(_CountsCase):
+    """Bounded output, and bounded reading (P107)."""
 
-    @pytest.mark.xfail(strict=True, reason="SavedFilterMatchCountsView materialises every root pin uuid per request")
     def test_it_does_not_read_a_row_per_pin_to_answer(self) -> None:
         self.assert_endpoint_scaling(self.url, expect_growth=False, growth_waiver=_WAIVER)
 
 
 class TheMeasurementIsRealTests(_CountsCase):
-    """Guards the reproduction. Not xfail: if these fail, the one above is noise."""
+    """Guards the scaling test: if these fail, the one above is measuring nothing."""
 
     def test_the_endpoint_really_counts_the_seeded_pins(self) -> None:
         """Proves the view got past its early return and actually did the work.

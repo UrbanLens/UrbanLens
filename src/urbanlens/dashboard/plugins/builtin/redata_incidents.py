@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
@@ -157,6 +158,17 @@ class PoliceIncidentsPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Reported Police Incidents"
     description: ClassVar[str] = "Shows recent reported police incidents on the pin's block as visit-safety context, from city open-data portals via REData. Locations are block-scale by publication; traffic collisions are excluded."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_incidents."""
+        return {
+            "redata_incidents": ServiceDefaults(
+                display_name="REData Police Incidents",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Reported incidents via GET /incidents/, for both the recent and the paid history panel. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_incidents_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the reported-incidents panel and its gated incident-history sibling."""

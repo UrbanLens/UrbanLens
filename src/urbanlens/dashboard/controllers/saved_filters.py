@@ -23,7 +23,6 @@ from urbanlens.dashboard.services.geo.geo import dissolve_polygons
 from urbanlens.dashboard.services.geo.sampling import select_spread
 from urbanlens.dashboard.services.pins.pin_list_membership import resync_lists_for_saved_filter
 from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
-from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
 from urbanlens.dashboard.services.undo.handlers.saved_filter import MODEL_LABEL as SAVED_FILTER_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -308,26 +307,19 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             base_query = base_query.filter_by_criteria(criteria)
 
-        base_uuids = {str(u) for u in base_query.values_list("uuid", flat=True)}
-
         active_ids = {v for v in request.GET.get("toolbar_filter_ids", "").split(",") if v.strip()}
         active_filters = [f for f in saved_filters if str(f.uuid) in active_ids]
 
-        # Resolve each filter's matching-uuid set exactly once up front (this is already backend-cached per
-        # filter, but was still being re-fetched and re-queried against the DB via chained .filter(uuid__in=...)
-        # for every (candidate, active) pair below - O(F^2) query construction for F saved filters).
-        fingerprint = pins_fingerprint(profile)
-        matching_uuids: dict[str, set[str]] = {str(f.uuid): set(get_or_compute_matching_uuids(profile, f, fingerprint=fingerprint)) for f in saved_filters}
+        matching_pks = {str(f.uuid): Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(deserialize_criteria(f.criteria, profile)).values("pk") for f in saved_filters}
 
         counts: dict[str, int] = {}
         for candidate in saved_filters:
             candidate_key = str(candidate.uuid)
-            matches = base_uuids & matching_uuids[candidate_key]
+            matches = base_query.filter(pk__in=matching_pks[candidate_key])
             for other in active_filters:
-                if other.uuid == candidate.uuid:
-                    continue
-                matches &= matching_uuids[str(other.uuid)]
-            counts[candidate_key] = len(matches)
+                if other.uuid != candidate.uuid:
+                    matches = matches.filter(pk__in=matching_pks[str(other.uuid)])
+            counts[candidate_key] = matches.count()
 
         return JsonResponse({"counts": counts})
 

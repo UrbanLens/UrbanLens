@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
@@ -90,6 +91,17 @@ class HydrologyPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Water & Hydrology"
     description: ClassVar[str] = "Shows streams, waterbodies, wetlands and the containing watershed near the pin on the detail page, from USGS and USFWS via REData. USA only."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_hydrology."""
+        return {
+            "redata_hydrology": ServiceDefaults(
+                display_name="REData Hydrology",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Streams, waterbodies, wetlands and watersheds via GET /hydrology/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_hydrology_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the hydrology pin-detail panel."""

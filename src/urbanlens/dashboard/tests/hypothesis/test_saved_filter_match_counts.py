@@ -7,7 +7,6 @@ distinguishable from each other).
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest import mock
 
 from django.contrib.auth.models import User
 from django.test import Client
@@ -18,7 +17,6 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.search.saved_filter_cache import pins_fingerprint
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -101,20 +99,13 @@ class SavedFilterMatchCountsViewTests(TestCase):
         data = response.json()
         self.assertEqual(data["counts"][str(saved_filter.uuid)], 2)
 
-    def test_pins_fingerprint_is_computed_once_per_request_not_once_per_filter(self) -> None:
-        """With N saved filters that was N redundant, identical queries per toggle instead of 1."""
-        for i in range(5):
-            SavedFilter.objects.create(profile=self.profile, name=f"Extra {i}", criteria={})
-        self.assertGreater(self.profile.saved_filters.count(), 5)
+    def test_a_deleted_pin_stops_counting_on_the_next_request(self) -> None:
+        saved_filter = SavedFilter.objects.create(profile=self.profile, name="All", criteria={})
+        self.assertEqual(self.client.get(self._url()).json()["counts"][str(saved_filter.uuid)], 2)
 
-        with mock.patch(
-            "urbanlens.dashboard.controllers.saved_filters.pins_fingerprint",
-            wraps=pins_fingerprint,
-        ) as wrapped:
-            response = self.client.get(self._url())
+        self.other_pin.delete()
 
-        self.assertEqual(response.status_code, 200)
-        wrapped.assert_called_once()
+        self.assertEqual(self.client.get(self._url()).json()["counts"][str(saved_filter.uuid)], 1)
 
     def test_other_profiles_filters_are_not_included(self) -> None:
         other_profile: Profile = baker.make(User).profile

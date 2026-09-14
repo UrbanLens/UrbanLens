@@ -11,6 +11,68 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-14: the saved-filter count badges read every pin in the account to draw a number
+
+`id: P107` · `status: fixed` · `resolved: 2026-09-14`
+
+`SavedFilterMatchCountsView.get` (`controllers/saved_filters.py`) returns one count per saved filter, and the map
+calls it on every filter change. It built those counts by materialising every root pin's uuid in Python
+(`base_query.values_list("uuid", flat=True)`) and intersecting that set with each filter's cached uuid set, so drawing a
+badge read the account's whole pin table. It was invisible to the query-count, bytes-per-row and instantiation
+instruments, each correctly: one statement, a body that never grows, no model objects. Only rows fetched per rendered
+row separated it from a healthy list endpoint.
+
+Each count is now a `COUNT` in the database: the sidebar's base query, filtered by `pk__in` subqueries for the candidate
+filter and every other active toolbar filter. The view no longer reads `saved_filter_cache`, which still serves
+`controllers/maps.py`. `test_saved_filter_counts_scaling.py`'s `xfail(strict=True)` reproduction is now a plain test,
+and the match-count tests still pass, with the fingerprint-once test replaced by one checking a deleted pin stops
+counting on the next request.
+
+The cost moved rather than vanished: one `COUNT` per saved filter per request, each re-running that filter's criteria,
+where a warm cache had answered from memory. That is bounded by the number of filters rather than pins. Not measured
+against a large account.
+
+## RESOLVED 2026-09-14: `dissolve_polygons` looped pairwise over an uncapped user-supplied polygon count
+
+`id: P97` · `status: fixed` · `resolved: 2026-09-14`
+
+`services/geo/geo.py`'s `dissolve_polygons` merged a drawn region's intersecting components by rescanning every
+remaining pair after each merge - O(n^3) GEOS calls in the worst ordering - over a component count that arrived in the
+saved-filter POST body with no cap. Two changes closed it. `parse_multipolygon_geojson` refuses a region above
+`MAX_REGION_POLYGONS` (200) components or `MAX_REGION_VERTICES` (50,000) vertices as a 400 (N21 H12,
+`test_region_geometry_ceiling.py`), and on 2026-09-14 the pairwise loop was replaced by one
+`MultiPolygon(...).unary_union`, which `test_region_filter.py`'s dissolve cases (empty, single, disjoint, overlapping,
+chained, touching) pass unchanged.
+
+The original entry's measurement stands as the correction worth keeping: 400 fully-chained polygons dissolved in
+0.030s, because each merge shrank the working set. The cubic bound needed an adversarial ordering nobody built, so the
+cap is what bounded the request, not the rewrite. Not re-measured after the rewrite.
+
+## RESOLVED 2026-09-08: `backfill_wiki_edit_points`, extracted from its migration to be testable, had no test
+
+`id: P90` · `status: fixed` · `resolved: 2026-09-08`
+
+`migrations/0032_v0_8_0.py`'s `_0052__backfill` calls `services.consensus.points.backfill_wiki_edit_points`, a one-shot
+irreversible backfill extracted from the migration specifically so a test could run it. Nothing did. It marks every
+`WikiEdit` another row names as `reverted_by` as `is_revert=True`, then sets `consensus_points=MANUAL_EDIT_POINTS` on
+every edit with an editor, no consensus round and `is_revert=False`.
+
+`tests/hypothesis/test_backfill_wiki_edit_points.py` (`89df92068`) now covers a revert row keeping its own award,
+consensus-scored rows left alone, unscored and already-scored non-consensus rows both landing on the flat rate, editorless
+rows untouched, and a mixed batch. The entry was left open in `PROBLEMS.md` after that commit; archived 2026-09-14.
+
+## RESOLVED 2026-09-08: `MarkupJsonView`'s `?children=1` wiki path skipped concealment
+
+`id: P89` · `status: fixed` · `resolved: 2026-09-08`
+
+`controllers/markup.py`'s `MarkupJsonView.get()` narrowed a single wiki's markup through `visible_rows`, then on
+`?children=1` replaced that queryset with a raw `PinMarkup.objects.filter(parent_wiki__in=subtree)`, so a concealed
+viewer would have received every descendant wiki's markup. Dormant, because `concealment_active()` returns False
+site-wide. The subtree queryset is now wrapped in `visible_rows(..., owner, profile)` (`e98047ffb`), and
+`test_markup_json_children_concealment.py` patches concealment on and checks a stranger's descendant item is hidden while
+the viewer's own and a friend's still show. The entry was left open in `PROBLEMS.md` after that commit; archived
+2026-09-14.
+
 ## RESOLVED 2026-09-13: A stored photo kept its XMP, IPTC, comment or PNG text unless it also carried EXIF
 
 `id: P118` · `status: fixed` · `resolved: 2026-09-13`

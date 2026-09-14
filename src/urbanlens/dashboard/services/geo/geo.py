@@ -33,11 +33,9 @@ class TooComplexGeometryError(InvalidPolygonGeoJSONError):
     """
 
 
-#: Most components one drawn region may have. :func:`dissolve_polygons` compares
-#: every remaining pair and restarts after each merge, so its cost is quadratic
-#: per pass with up to one pass per merge - and the count arrives in a POST body.
-#: Far above what anyone draws by hand; far below what makes the request
-#: expensive.
+#: Most components one drawn region may have. The count arrives in a POST body and
+#: every component is unioned inside the request. Far above what anyone draws by
+#: hand.
 MAX_REGION_POLYGONS = 200
 
 #: Most vertices one drawn region may carry in total. A component cap alone would
@@ -120,25 +118,11 @@ def dissolve_polygons(polygons: list[Polygon]) -> MultiPolygon:
     if not polygons:
         return MultiPolygon([], srid=4326)
 
-    # union() returns the general GEOSGeometry type (not narrowed to
-    # Polygon | MultiPolygon), so clusters has to be typed that broadly too.
-    clusters: list[GEOSGeometry] = list(polygons)
-    merged_any = True
-    while merged_any:
-        merged_any = False
-        for i in range(len(clusters)):
-            for j in range(i + 1, len(clusters)):
-                if clusters[i].intersects(clusters[j]):
-                    clusters[i] = clusters[i].union(clusters[j])
-                    del clusters[j]
-                    merged_any = True
-                    break
-            if merged_any:
-                break
-    flat: list[Polygon] = []
-    for geom in clusters:
-        if isinstance(geom, MultiPolygon):
-            flat.extend(sub for sub in geom if isinstance(sub, Polygon))
-        elif isinstance(geom, Polygon):
-            flat.append(geom)
+    merged = MultiPolygon(polygons, srid=4326).unary_union
+    if isinstance(merged, MultiPolygon):
+        flat = [sub for sub in merged if isinstance(sub, Polygon)]
+    elif isinstance(merged, Polygon):
+        flat = [merged]
+    else:
+        flat = []
     return MultiPolygon(flat, srid=4326)
