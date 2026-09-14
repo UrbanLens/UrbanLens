@@ -373,6 +373,35 @@ def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
         raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 900)) from exc
 
 
+@shared_task(bind=True, queue=Queue.MAINTENANCE, max_retries=5)
+def delete_lost_stored_file(self, model: str, field: str, name: str) -> bool:
+    """Delete a stored file its row stopped naming, whose delete storage refused at the time.
+
+    Args:
+        model: The model's label, e.g. ``"dashboard.Label"``.
+        field: The file field that named it.
+        name: The stored name.
+
+    Returns:
+        Whether the file was deleted: False when a row of that field names it again, or storage kept refusing.
+    """
+    from django.apps import apps
+
+    from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
+
+    model_class = apps.get_model(model)
+    if model_class._default_manager.filter(**{field: name}).exists():  # noqa: SLF001 - Django's public model API
+        return False
+    try:
+        model_class._meta.get_field(field).storage.delete(name)  # noqa: SLF001 - Django's public model API
+    except STORAGE_ERRORS as exc:
+        if self.request.retries >= self.max_retries:
+            logger.exception("Storage could not delete %s, which no %s row names, after %s retries", name, model, self.request.retries)
+            return False
+        raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 900)) from exc
+    return True
+
+
 @shared_task(queue=Queue.MAINTENANCE)
 def measure_media_usage_task() -> float:
     """Measure the media volume for the site-admin system panel."""

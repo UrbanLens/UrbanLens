@@ -267,7 +267,9 @@ def _publish_read(held: HeldField, key: str, row: Model, raw: bytes) -> bool:
         return False
     _delete_quietly(storage, held_name)
     if held.delete_replaced and previous[0]:
-        _delete_quietly(storage, previous[0])
+        from urbanlens.dashboard.services.media.stored_field import delete_unnamed_file
+
+        delete_unnamed_file(storage, held.model, held.field, previous[0])
     if held.after_publish is not None:
         held.after_publish(pk)
     return True

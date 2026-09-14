@@ -25,12 +25,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _delete_lost(storage: Storage, name: str) -> None:
-    # The row no longer names it, so a refused delete must not read as a failed swap.
+def delete_unnamed_file(storage: Storage, model: str, field: str, name: str) -> None:
+    """Delete a file its row no longer names, queueing the delete for later when storage refuses it now.
+
+    A refused delete does not undo or fail what made the row stop naming the file. The file is not left behind either:
+    the media gate serves any icon or avatar path to every member.
+
+    Args:
+        storage: The field's storage.
+        model: The model's label, e.g. ``"dashboard.Label"``.
+        field: The file field that named it.
+        name: The stored name.
+    """
     try:
         storage.delete(name)
     except STORAGE_ERRORS:
-        logger.warning("Could not delete %s, which its row no longer names", name, exc_info=True)
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import delete_lost_stored_file
+
+        logger.warning("Could not delete %s, which its row no longer names; queued to try again", name, exc_info=True)
+        safely_enqueue_task(delete_lost_stored_file, model, field, name)
 
 
 class Reencoded(enum.Enum):
@@ -71,7 +85,8 @@ def reencode_stored_field(
     Raises:
         OSError: Storage could not read the file or write the re-encoded one; on the S3 backend, any of
             :data:`~urbanlens.dashboard.services.media.held_upload.STORAGE_ERRORS`. That says nothing about the file,
-            so it is not ``UNDECODABLE``. A file the swap left unnamed that cannot be deleted is logged and kept.
+            so it is not ``UNDECODABLE``. A file the swap left unnamed that cannot be deleted is deleted later, by
+            :func:`delete_unnamed_file`.
     """
     filters = {"pk": pk, field: stored_name, **(only_if or {})}
     row = rows.filter(**filters).first()
@@ -90,7 +105,7 @@ def reencode_stored_field(
     # Not the uploaded name: it can say as much as the metadata, and icon and avatar paths are served to every member.
     new_name = storage.save(stored.field.generate_filename(row, f"{uuid.uuid4().hex}{extension}"), ContentFile(data))
     replaced = rows.filter(**filters).update(**{field: new_name, **(also_set or {})})
-    _delete_lost(storage, stored_name if replaced else new_name)
+    delete_unnamed_file(storage, rows.model._meta.label, field, stored_name if replaced else new_name)  # noqa: SLF001 - _meta is Django's public model API
     return Reencoded.REPLACED if replaced else Reencoded.STALE
 
 
@@ -111,5 +126,5 @@ def clear_stored_field(rows: QuerySet[Any], pk: int, field: str, stored_name: st
     row = holding.first()
     if row is None or not holding.update(**{field: "", **(also_set or {})}):
         return False
-    _delete_lost(getattr(row, field).storage, stored_name)
+    delete_unnamed_file(getattr(row, field).storage, rows.model._meta.label, field, stored_name)  # noqa: SLF001 - _meta is Django's public model API
     return True

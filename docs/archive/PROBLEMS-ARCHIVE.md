@@ -13399,6 +13399,12 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   branch after the swap had published the comment, which then deleted the published comment and told its author it
   could not be posted; the backfill counted a finished swap as failed. The delete is now logged and the file kept, as
   `_delete_quietly` does for held uploads. Nothing yet removes such a file later.
+- **A review of that** found the file kept that way was still served: the media gate authorizes any `avatars/` or icon
+  path for every member without looking for a row, so an original icon or avatar the backfill replaced, or an
+  achievement icon or avatar a held publish replaced, stayed fetchable at its old path with whatever metadata it had.
+  (A comment image is authorized through the row naming it, so a kept one is not served.) A refused delete now queues
+  `delete_lost_stored_file`, which retries on the maintenance queue and skips a file a row of that field names again.
+  Nothing had tested that the replaced file is deleted at all when storage allows; that is now tested too.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file
