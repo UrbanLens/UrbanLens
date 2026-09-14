@@ -28,8 +28,8 @@ SEEDABLE_PHOTO_LIMIT = 60
 #: Security fields shared between Pin and Wiki (both inherit SecurityModel).
 SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked")
 
-#: Pin scalar fields a user may copy into a newly created wiki.
-#: Keys are the tokens posted by the create-wiki dialog.
+#: Pin stat fields a user may contribute to a wiki, as their own vote, on any share.
+#: Keys are the tokens posted by the share dialog.
 SEEDABLE_FIELDS = ("danger", "vulnerability")
 
 #: Stat fields seeded as the pin owner's own initial WikiStatVote, rather than

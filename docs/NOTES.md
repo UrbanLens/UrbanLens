@@ -145,9 +145,10 @@ initials are too short (`Ford Motors` → `ford`), or a truncation of that word 
 word is too long (`Switzerland` → `switz`).
 
 Only the immediate parent contributes. A grandchild `Boiler Room` under `hrsh-powerhouse` is
-`powerhouse-boiler-room`: the parent's own slug is longer than 8 characters, so it is never a
-candidate, and the prefix comes from the parent's name or aliases instead. Chaining prefixes would
-break that length bound at every level.
+`powerhouse-boiler-room`: the parent's own slug is a candidate like any other name, but at 15
+characters it is too long, and the prefix comes from the parent's name instead. Only a parent slug
+of 8 characters or fewer (`hrsh-gym`) can carry the root's prefix down, and it only wins when the
+parent's name and aliases give no shorter candidate. Chaining prefixes on purpose would break the length bound.
 
 Truncation drops whole trailing words rather than clipping mid-word. Hyphenated compounds
 (`non-contributing`) are one word, so `Staff/Tenant House 1900 (non-contributing)` under HRSH

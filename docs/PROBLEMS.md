@@ -2666,7 +2666,7 @@ message without one, and no slide or arrow markup.
 `hrsh-powerhouse` is `powerhouse-boiler-room`, and `ph-bldg-boiler-room` when the parent has that
 alias. `docs/NOTES.md` records it. Shallow prefixing follows from the prefix's 3-8 character bound
 rather than being a choice made separately from it - a parent slug that already carries a prefix
-is always longer than 8, so chaining would mean dropping the bound.
+is almost always longer than 8, so chaining would mean dropping the bound.
 
 ~~**`TripCommentDeleteView` has zero test coverage.**~~ **Covered 2026-09-06** in
 `test_trip_comment_delete.py`. No defect: the view was already correct, and is now guarded - the
