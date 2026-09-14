@@ -2354,11 +2354,11 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
 
-## P57 — The test-quality audit's follow-ups: 14 done; three untested surfaces, one unproven lock and two decisions remain
+## P57 — The test-quality audit's follow-ups: 14 done; one untested surface, one unproven lock and two decisions remain
 
 `id: P57` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "The test-quality audit's follow-ups: 13 done; three untested surfaces, two unproven locks and two decisions remain", and before that "Test-quality audit follow-ups (2026-08-29)".
+Previously titled "The test-quality audit's follow-ups: 14 done; three untested surfaces, one unproven lock and two decisions remain", and before that "Test-quality audit follow-ups (2026-08-29)".
 
 Found while auditing existing unit tests for real positive/negative coverage (see
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
@@ -2388,8 +2388,9 @@ Three of the "untested surface" entries are covered as of 2026-09-06 too - `Wiki
   subject *is* that method, leaving the rest of the guard - and the socket guard and the placeholder
   credentials - standing. `test_ai_gateway_guarded` still passes, which is what proves it.
 
-What remains: **three untested surfaces** (`CalendarImportView`, the carousel's "no imagery
-available" branch, and the multi-level pin/wiki nesting prefix), two stale-documentation items, one lock with no real-concurrency proof (the ledger sweep's), and two that need a decision from whoever owns the area.
+`CalendarImportView` and the carousel's "no imagery available" branch are covered as of 2026-09-14; neither test found a defect.
+
+What remains: **one untested surface** (the multi-level pin/wiki nesting prefix), two stale-documentation items, one lock with no real-concurrency proof (the ledger sweep's), and two that need a decision from whoever owns the area.
 
 *(An earlier version of this line claimed every untested surface was covered. That was written
 after reading only the first half of this entry and is wrong - the five above are all listed
@@ -2643,14 +2644,12 @@ no draft/official field left on `Wiki` found during this audit. `services/wiki/w
 official distinction exists somewhere this audit pass didn't locate, or this is stale documentation
 spanning at least three production files describing removed behavior - worth a follow-up look.
 
-**`CalendarImportView` has no test coverage at all.** `dashboard/controllers/calendar_sync.py`'s
-`CalendarImportView` (GET renders the upcoming-events dialog via `list_importable_events`, POST
-parses per-event form fields into `import_events_as_trips` selections and handles
-`GoogleAuthExpiredError`/`GatewayRequestError`/empty-selection 400s) is reached by no test in the
-suite - only its underlying service functions are unit-tested. The view's own request-parsing
-(`create_activity_<id>`, `invite_<id>`, `auto_sync_<id>` field names, digit-filtering of invite
-ids) and error-branch responses are unverified end-to-end, unlike its sibling
-`CalendarImportPreviewView` which does have a `CalendarImportPreviewViewTests` class.
+~~**`CalendarImportView` has no test coverage at all.**~~ **Covered 2026-09-14** in
+`test_calendar_import_view.py`: the no-account dialog and 400, blank `event_ids`, the per-event
+`create_activity_<id>`/`invite_<id>`/`auto_sync_<id>` parsing (including the digit-only invite
+filter, which drops `-3`), one real import through a mocked gateway, the toast wording for
+invitations and for one or several skips, and both failure branches - an expired grant deletes the
+account, a gateway failure keeps it, and neither shows the upstream error text. The view was correct.
 
 ~~**Map-overlay caption length check is untested even though it's drivable.**~~ **Covered
 2026-09-06**, and this entry was right on both counts: the check is correct, and the docstring
@@ -2667,11 +2666,10 @@ the status alone would have filed a bug against working code, so the test assert
 `Image` nor the `MapImageOverlay` is created, and a second one drives the JSON caller to pin the
 400 half.
 
-**Missing coverage for the carousel "no imagery available" branch.**
-`test_carousel_single_slide_arrows.py` is the only test file touching
-`street_view.html`/`satellite_view.html`, and neither template's `{% else %}` branch (rendered when
-`slides` is empty, showing `view-unavailable` and the `error` message) has any test coverage
-anywhere in the repo.
+~~**Missing coverage for the carousel "no imagery available" branch.**~~ **Covered 2026-09-14** in
+`test_carousel_single_slide_arrows.py`: with no slides, both `street_view.html` and
+`satellite_view.html` render `view-unavailable` with the caller's `error`, or their own default
+message without one, and no slide or arrow markup.
 
 **Multi-level pin/wiki nesting prefix is undocumented and untested.** `_slug_parent_prefix()`
 derives a child's prefix only from its *immediate* parent (name/official_name/slug/aliases), so a

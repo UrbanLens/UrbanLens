@@ -123,3 +123,36 @@ class SatelliteViewCarouselArrowTests(SimpleTestCase):
         )
         self.assertIn("sat-prev", html)
         self.assertIn("sat-next", html)
+
+
+class NoImageryTests(SimpleTestCase):
+    def _render(self, template: str, **context: object) -> str:
+        return render_to_string(f"dashboard/pages/location/{template}", {"slides": [], "debug_entries": [], **context})
+
+    def test_street_view_without_slides_shows_the_callers_error(self) -> None:
+        html = self._render("street_view.html", error="Street view is rate-limited right now.")
+
+        self.assertIn("view-unavailable", html)
+        self.assertIn("Street view is rate-limited right now.", html)
+        self.assertNotIn("sv-slide", html)
+        self.assertNotIn("sv-prev", html)
+
+    def test_street_view_without_slides_or_error_says_it_is_unavailable(self) -> None:
+        html = self._render("street_view.html")
+
+        self.assertIn("view-unavailable", html)
+        self.assertIn("Street view unavailable.", html)
+
+    def test_satellite_view_without_slides_shows_the_callers_error(self) -> None:
+        html = self._render("satellite_view.html", error="Imagery providers did not respond.")
+
+        self.assertIn("view-unavailable", html)
+        self.assertIn("Imagery providers did not respond.", html)
+        self.assertNotIn("sat-slide", html)
+        self.assertNotIn("sat-prev", html)
+
+    def test_satellite_view_without_slides_or_error_says_there_is_no_imagery(self) -> None:
+        html = self._render("satellite_view.html")
+
+        self.assertIn("view-unavailable", html)
+        self.assertIn("No satellite imagery available.", html)
