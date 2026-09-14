@@ -43,6 +43,18 @@ def _stem(filename: str) -> str:
     return base.rsplit(".", 1)[0].lower() if "." in base else base.lower()
 
 
+def is_shapefile_part(filename: str) -> bool:
+    """Whether *filename* is one of the sidecar files a Shapefile bundle is made of.
+
+    Args:
+        filename: The file's name.
+
+    Returns:
+        True for ``.shp``, ``.dbf``, ``.shx``, ``.prj`` and ``.cpg``.
+    """
+    return _extension(filename) in _SHAPEFILE_PART_EXTENSIONS
+
+
 def extract_shapefile_bundles(files: list[tuple[str, bytes]]) -> tuple[list[ShapefileBundle], list[tuple[str, bytes]]]:
     """Split *files* into Shapefile bundles (grouped by stem) and everything else.
 

@@ -26,11 +26,12 @@ from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
 
     from django.core.files.uploadedfile import UploadedFile
 
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.import_export.archive_extractor import ExtractedFile, ExtractionBudget
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,15 @@ GUARD_TTL_SECONDS = KEEP_SECONDS
 #: the parse's hard limit, a queue wait, and the finishing lookups. Past it a worker is missing or was
 #: killed, and nothing else would ever end the preview.
 STALL_AFTER = timedelta(minutes=10)
+
+#: How long a preview waiting for a free parse slot sleeps before asking again.
+PARSE_SLOT_RETRY_SECONDS = 15
+
+#: Enough retries to wait out ``STALL_AFTER``, where the preview ends itself instead.
+PARSE_SLOT_MAX_RETRIES = int(STALL_AFTER.total_seconds()) // PARSE_SLOT_RETRY_SECONDS + 1
+
+#: A slot outlives the parse's hard limit, so a killed worker's slot frees itself.
+_PARSE_SLOT_TTL_SECONDS = PARSE_TIME_LIMIT_SECONDS + 60
 
 ARTIFACT_DIRNAME = "import_previews"
 
@@ -113,6 +123,18 @@ def guard_key(profile_id: int) -> str:
     return f"pin_import_preview:{profile_id}"
 
 
+def parse_slot_key(index: int) -> str:
+    """The single-flight key for one of the site-wide slots a preview is read in.
+
+    Args:
+        index: Which slot, below ``IMPORT_PREVIEW_MAX_CONCURRENT_PARSES``.
+
+    Returns:
+        The cache key.
+    """
+    return f"pin_import_preview_parse_slot:{index}"
+
+
 def start_import_preview(profile: Profile, uploads: Iterable[UploadedFile]) -> str:
     """Store an upload for the sandbox worker to read, as the account's one preview.
 
@@ -159,15 +181,20 @@ def start_import_preview(profile: Profile, uploads: Iterable[UploadedFile]) -> s
     return job_id
 
 
-def parse_import_preview(profile_id: int, job_id: str) -> None:
+def parse_import_preview(profile_id: int, job_id: str) -> bool:
     """Read a stored upload in the sandbox worker, finishing here when nothing needs the network.
 
-    However it ends the uploaded files are removed, and the account's guard is released unless
+    Only ``IMPORT_PREVIEW_MAX_CONCURRENT_PARSES`` previews are read at once site-wide. One that finds
+    no slot free is left as it is to be tried again, until it has waited past ``STALL_AFTER``.
+    However a read ends the uploaded files are removed, and the account's guard is released unless
     the networked half was queued, which releases it instead.
 
     Args:
         profile_id: The uploading profile.
         job_id: The preview :func:`start_import_preview` stored.
+
+    Returns:
+        False when the preview is waiting for a slot and should be tried again, otherwise True.
     """
     from celery.exceptions import SoftTimeLimitExceeded
 
@@ -177,13 +204,26 @@ def parse_import_preview(profile_id: int, job_id: str) -> None:
 
     status = ImportPreviewStatus(job_id)
     directory = job_dir(job_id)
+    slot = _claim_parse_slot(job_id)
+    if slot is None:
+        state = status.read()
+        waiting = state.get("status") in _WAITING
+        if waiting and not _stalled(state):
+            status.write("pending", 0, "Waiting for other uploads to finish reading...")
+            return False
+        if waiting:
+            status.write("error", 100, _STALLED)
+        shutil.rmtree(os.path.join(directory, _UPLOADS), ignore_errors=True)
+        _release_guard(profile_id, job_id)
+        return True
+
     handed_off = False
     try:
         profile = Profile.objects.filter(pk=profile_id).first()
         names = _read_json(directory, _MANIFEST)
         if profile is None or not isinstance(names, list):
             status.write("error", 0, _NOT_FOUND)
-            return
+            return True
         status.write("running", 0, "Reading your files...")
         parsed = _read_uploads(profile, directory, names)
         warnings: list[str] = []
@@ -191,7 +231,7 @@ def parse_import_preview(profile_id: int, job_id: str) -> None:
             _write_json(directory, _PARSED, parsed)
             handed_off = safely_enqueue_task(finish_import_preview_task, profile_id, job_id) is not None
             if handed_off:
-                return
+                return True
             warnings.append(_UNFINISHED)
         _write_result(job_id, directory, parsed["lists"], warnings)
     except _UnreadableUploadError as exc:
@@ -203,9 +243,11 @@ def parse_import_preview(profile_id: int, job_id: str) -> None:
         status.write("error", 0, _UNREADABLE)
         raise
     finally:
+        _release_key(slot, job_id)
         shutil.rmtree(os.path.join(directory, _UPLOADS), ignore_errors=True)
         if not handed_off:
             _release_guard(profile_id, job_id)
+    return True
 
 
 def finish_import_preview(profile_id: int, job_id: str) -> None:
@@ -299,47 +341,91 @@ def read_preview(user_id: int, job_id: str) -> dict[str, Any] | None:
 
 def _read_uploads(profile: Profile, directory: str, names: list[str]) -> dict[str, Any]:
     from urbanlens.dashboard.services.ai.document_import import is_supported_document_filename, read_document_text
-    from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway, _filename_stem
-    from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, extract_archive, is_archive
+    from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
-    files: list[tuple[str, bytes]] = []
     documents: list[dict[str, Any]] = []
+    others: list[tuple[str, str]] = []
+    for index, name in enumerate(names):
+        path = os.path.join(directory, _UPLOADS, str(index))
+        # Documents first: a .docx starts with ZIP magic bytes.
+        if not is_supported_document_filename(name):
+            others.append((name, path))
+            continue
+        with open(path, "rb") as handle:
+            text, too_large = read_document_text(name, handle.read())
+        documents.append({"name": name, "text": text, "too_large": too_large})
+
+    parse = GoogleMapsGateway().parse_for_preview(_uploaded_files(others), profile)
+    return {"lists": parse.lists, "unresolved": parse.unresolved, "failed_formats": parse.failed_formats, "documents": documents}
+
+
+def _uploaded_files(uploads: list[tuple[str, str]]) -> Iterator[tuple[str, bytes]]:
+    """Each file the upload holds, archives expanded, read only when the parser asks for it.
+
+    Raises:
+        _UnreadableUploadError: An uploaded archive could not be extracted.
+    """
+    from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, is_archive
+
     # One allowance for the whole upload: the extractor's limits are per archive, and each nested archive calls it again.
     budget = ExtractionBudget()
-    for index, name in enumerate(names):
-        with open(os.path.join(directory, _UPLOADS, str(index)), "rb") as handle:
+    for name, path in uploads:
+        with open(path, "rb") as handle:
             data = handle.read()
-        # Documents first: a .docx starts with ZIP magic bytes.
-        if is_supported_document_filename(name):
-            text, too_large = read_document_text(name, data)
-            documents.append({"name": name, "text": text, "too_large": too_large})
-            continue
-        if not is_archive(data):
-            files.append((name, data))
-            continue
-        try:
-            extracted = extract_archive(data, budget)
-        except ValueError as exc:
-            logger.warning("Could not extract archive: %s", exc)
-            raise _UnreadableUploadError("Invalid archive.") from None
-        entries = [entry for entry in extracted if not is_archive(entry.data)]
-        # A KMZ wraps one "doc.kml" whatever the user named it, so the outer name is the useful one.
-        if len(extracted) == 1 and len(entries) == 1 and _filename_stem(entries[0].name) == "doc":
-            suffix = entries[0].name.rsplit(".", 1)[-1] if "." in entries[0].name else ""
-            stem = _filename_stem(name)
-            files.append((f"{stem}.{suffix}" if suffix else stem, entries[0].data))
-            continue
-        for entry in extracted:
-            if not is_archive(entry.data):
-                files.append((entry.name, entry.data))
-                continue
-            try:
-                files.extend((inner.name, inner.data) for inner in extract_archive(entry.data, budget))
-            except ValueError:
-                logger.warning("Could not extract nested archive during preview")
+        if is_archive(data):
+            yield from _archive_files(name, data, budget)
+        else:
+            yield name, data
 
-    parse = GoogleMapsGateway().parse_for_preview(files, profile)
-    return {"lists": parse.lists, "unresolved": parse.unresolved, "failed_formats": parse.failed_formats, "documents": documents}
+
+def _archive_files(name: str, data: bytes, budget: ExtractionBudget) -> Iterator[tuple[str, bytes]]:
+    from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
+    from urbanlens.dashboard.services.import_export.archive_extractor import is_archive, iter_archive
+
+    try:
+        entries = iter_archive(data, budget)
+        first = next(entries, None)
+        if first is None:
+            return
+        second = next(entries, None)
+        # A KMZ wraps one "doc.kml" whatever the user named it, so the outer name is the useful one.
+        if second is None and not is_archive(first.data) and _filename_stem(first.name) == "doc":
+            suffix = first.name.rsplit(".", 1)[-1] if "." in first.name else ""
+            stem = _filename_stem(name)
+            yield (f"{stem}.{suffix}" if suffix else stem), first.data
+            return
+        yield from _expanded(first, budget)
+        del first
+        if second is not None:
+            yield from _expanded(second, budget)
+            del second
+        for entry in entries:
+            yield from _expanded(entry, budget)
+    except ValueError as exc:
+        logger.warning("Could not extract archive: %s", exc)
+        raise _UnreadableUploadError("Invalid archive.") from None
+
+
+def _expanded(entry: ExtractedFile, budget: ExtractionBudget) -> Iterator[tuple[str, bytes]]:
+    from urbanlens.dashboard.services.import_export.archive_extractor import is_archive, iter_archive
+
+    if not is_archive(entry.data):
+        yield entry.name, entry.data
+        return
+    try:
+        for inner in iter_archive(entry.data, budget):
+            yield inner.name, inner.data
+    except ValueError:
+        logger.warning("Could not extract nested archive during preview")
+
+
+def _claim_parse_slot(job_id: str) -> str | None:
+    for index in range(settings.IMPORT_PREVIEW_MAX_CONCURRENT_PARSES):
+        key = parse_slot_key(index)
+        if single_flight.holder(key) == job_id or single_flight.claim(key, _PARSE_SLOT_TTL_SECONDS):
+            single_flight.adopt(key, job_id, _PARSE_SLOT_TTL_SECONDS)
+            return key
+    return None
 
 
 def _write_result(job_id: str, directory: str, lists: list[dict[str, Any]], warnings: list[str]) -> None:
@@ -369,9 +455,12 @@ def _stalled(state: dict[str, Any]) -> bool:
 
 
 def _release_guard(profile_id: int, job_id: str) -> None:
-    guard = guard_key(profile_id)
-    if single_flight.holder(guard) == job_id:
-        single_flight.release(guard)
+    _release_key(guard_key(profile_id), job_id)
+
+
+def _release_key(key: str, job_id: str) -> None:
+    if single_flight.holder(key) == job_id:
+        single_flight.release(key)
 
 
 def _merge(lists: list[dict[str, Any]], placed: dict[str, Any]) -> None:

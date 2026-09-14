@@ -346,10 +346,17 @@ def run_confirmed_pin_import(profile_id: int, job_id: str) -> dict[str, Any]:
     return confirmed_import.run_confirmed_import(profile_id, job_id)
 
 
-@shared_task(queue=SANDBOX_QUEUE, soft_time_limit=import_preview.PARSE_SOFT_TIME_LIMIT_SECONDS, time_limit=import_preview.PARSE_TIME_LIMIT_SECONDS)
-def parse_import_preview_task(profile_id: int, job_id: str) -> None:
-    """Read an import preview's uploaded files in the sandbox worker."""
-    import_preview.parse_import_preview(profile_id, job_id)
+@shared_task(
+    bind=True,
+    queue=SANDBOX_QUEUE,
+    soft_time_limit=import_preview.PARSE_SOFT_TIME_LIMIT_SECONDS,
+    time_limit=import_preview.PARSE_TIME_LIMIT_SECONDS,
+    max_retries=import_preview.PARSE_SLOT_MAX_RETRIES,
+)
+def parse_import_preview_task(self, profile_id: int, job_id: str) -> None:
+    """Read an import preview's uploaded files in the sandbox worker, once a site-wide slot is free."""
+    if not import_preview.parse_import_preview(profile_id, job_id):
+        raise self.retry(countdown=import_preview.PARSE_SLOT_RETRY_SECONDS)
 
 
 @shared_task(queue=Queue.INTERACTIVE)

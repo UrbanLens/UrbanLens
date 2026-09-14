@@ -3324,12 +3324,13 @@ script into a proper bundled TS entry the way `map-annotations.ts` already is fo
 the broader, already-tracked P83/P34 initiative ("over half of every page's HTML is inline `<script>`"), not a
 scoped fix for this one badge. Left open and cross-referenced from both rather than attempted piecemeal here.
 
-## P95 — An import preview can hold 2 GB of extracted bytes in a sandbox worker that has 3 GB for two jobs
+## P95 — One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured
 
 `id: P95` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "`ExtractionBudget` cannot bound a single file's decompression, and nothing prices
-what parsing one costs".
+Previously titled "An import preview can hold 2 GB of extracted bytes in a sandbox worker that has
+3 GB for two jobs", and before that "`ExtractionBudget` cannot bound a single file's decompression,
+and nothing prices what parsing one costs".
 
 Related to P2 (sandboxing the preview parse) - cross-referenced rather than duplicated: this is about
 the resource cost of the parse, wherever it runs.
@@ -3340,28 +3341,41 @@ the resource cost of the parse, wherever it runs.
 `--concurrency=2` under a 3 GB `mem_limit` by default (`docker-compose.yml`). `guard_key`'s
 single-flight claim allows one preview per account and answers a second with 409, so the old concern
 that one account could start 600 near-2 GB extractions a minute under the DRF `user` throttle no
-longer holds; two accounts can still fill both worker slots.
+longer holds.
 
 **The limits, as they stand.** nginx's `client_max_body_size 200m` (`config/nginx/django.conf`) bounds
 the compressed upload. `_read_uploads` builds one `ExtractionBudget` for the whole upload, nested
 archives included: 2 GB uncompressed and 1000 files. `_MAX_SINGLE_FILE_BYTES` caps one entry at 1 GB;
 this entry's old title said no per-file bound existed, and one did.
 
-**Fixed 2026-09-14: the budget was charged after the read, not before.** `_extract_zip` and
-`_extract_tgz` read every entry up to the 1 GB cap and only then deducted it, so an upload with
-1,000 bytes of allowance left still asked for 1,073,741,825 bytes before the budget refused it.
-`ExtractionBudget.read_limit` now bounds the read to what remains
-(`test_extraction_budget_before_read.py`).
+**Fixed 2026-09-14, three ways a preview outgrew the worker.**
 
-**Still open: the total does not fit the worker.** `_read_uploads` keeps every extracted entry's bytes
-in its `files` list until `GoogleMapsGateway.parse_for_preview` returns, so one preview can hold up to
-2 GB plus whatever the parsers build from it, and two run side by side in 3 GB. An OOM kill takes the
-other preview and any photo work on that worker with it. Lowering `_MAX_UNCOMPRESSED_BYTES` is a
-product call - a heavy account's Google Takeout location history is large, and nobody has measured
-how large - and the alternatives are parsing entries as they are extracted rather than holding them,
-or a site-wide cap on concurrent previews. The CPU a given KML or shapefile costs to parse is still
-unpriced; the task's time limits bound its wall time, not its memory. No adversarial 2 GB upload has
-been run; the OOM risk is by arithmetic, not observation.
+- **The budget was charged after the read.** `_extract_zip` and `_extract_tgz` read every entry up to
+  the 1 GB cap and only then deducted it, so an upload with 1,000 bytes of allowance left still asked
+  for 1,073,741,825 bytes. `ExtractionBudget.read_limit` bounds the read to what remains
+  (`test_extraction_budget_before_read.py`).
+- **Every entry was held until the parser returned**, up to the whole 2 GB. `_read_uploads` now hands
+  `GoogleMapsGateway.parse_for_preview` a generator (`import_preview.py::_uploaded_files`, over
+  `archive_extractor.py::iter_archive`), so each entry is parsed and let go before the next is
+  extracted. Shapefile sidecar parts are the exception - a bundle is parsed once all its parts are in -
+  so they are parsed after every other file: their lists come last, and they are what is dropped when
+  a preview reaches `MAX_PREVIEW_PINS`. Ten 8 MiB entries peaked at 100.8 MB under `tracemalloc`
+  before; `test_import_preview_memory.py` holds the peak under half of what was extracted.
+- **Two previews could run side by side** in `media-worker`'s two slots. `parse_import_preview` now
+  claims one of `IMPORT_PREVIEW_MAX_CONCURRENT_PARSES` site-wide slots first
+  (`import_preview.py::_claim_parse_slot`, default 1). A preview that finds none stays "pending" and
+  `parse_import_preview_task` retries it every `PARSE_SLOT_RETRY_SECONDS`, until `STALL_AFTER`, when
+  it ends itself and frees the account. A slot outlives the parse's hard limit by a minute, so a
+  killed worker's slot frees itself.
+
+**Still open: one entry and its parse.** An entry is still read whole, up to `_MAX_SINGLE_FILE_BYTES`
+(1 GB), and the parsers build their own structures from it, so a single preview can still outgrow
+`media-worker` - and the slot keeps a second preview off the worker, not a photo job. What a large
+KML or shapefile costs to parse is unmeasured; the task's time limits bound its wall time, not its
+memory. No adversarial upload has been run, so the risk is by arithmetic, not observation. Lowering
+the per-entry cap is a product call - a heavy account's Google Takeout location history is large, and
+nobody has measured how large. With one slot, a preview also waits behind every preview ahead of it,
+each up to its 110-second soft limit.
 
 ---
 

@@ -869,7 +869,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
     def parse_for_preview(
         self,
-        files: list[tuple[str, bytes]],
+        files: Iterable[tuple[str, bytes]],
         user_profile: Profile,
     ) -> PreviewParse:
         """Parse uploaded files without importing, and without any network request.
@@ -879,7 +879,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         is recorded rather than reported, because the admin notice sends mail.
 
         Args:
-            files: List of ``(filename, raw_bytes)`` pairs (archives already expanded).
+            files: ``(filename, raw_bytes)`` pairs (archives already expanded), read one at a time:
+                only Shapefile parts are kept until the rest have been read.
             user_profile: The profile the import is for.
 
         Returns:
@@ -889,30 +890,18 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         from urbanlens.dashboard.services.import_export.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
         from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
-        from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, shapefile_to_dict
+        from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, is_shapefile_part, shapefile_to_dict
         from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 
         parse = PreviewParse()
         previewed = 0
-
-        # Shapefiles ship as a set of same-stem sidecar files rather than one file,
-        # so they must be grouped before the per-file loop below.
-        shapefile_bundles, files = extract_shapefile_bundles(files)
-        for bundle in shapefile_bundles:
-            try:
-                raw_pins = shapefile_to_dict(bundle, user_profile)
-            except (OSError, ValueError, ShapefileDataSourceError) as exc:
-                logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", bundle.stem, exc)
-                parse.failed_formats.append("shapefile")
-                continue
-            pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
-            if pins:
-                previewed += len(pins)
-                parse.lists.append({"stem": bundle.stem, "pins": pins})
-            if previewed >= self.MAX_PREVIEW_PINS:
-                return parse
+        # The one kind of file held until the rest are read: a Shapefile is a set of same-stem sidecar files.
+        shapefile_parts: list[tuple[str, bytes]] = []
 
         for filename, raw_bytes in files:
+            if is_shapefile_part(filename):
+                shapefile_parts.append((filename, raw_bytes))
+                continue
             fmt = validate_content_type(filename, raw_bytes)
             if fmt is None or fmt in ("location_history", "my_activity"):
                 continue
@@ -947,8 +936,22 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 previewed += len(pins)
                 parse.lists.append({"stem": stem, "pins": pins})
             if previewed >= self.MAX_PREVIEW_PINS:
-                break
+                return parse
 
+        shapefile_bundles, _ = extract_shapefile_bundles(shapefile_parts)
+        for bundle in shapefile_bundles:
+            try:
+                raw_pins = shapefile_to_dict(bundle, user_profile)
+            except (OSError, ValueError, ShapefileDataSourceError) as exc:
+                logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", bundle.stem, exc)
+                parse.failed_formats.append("shapefile")
+                continue
+            pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
+            if pins:
+                previewed += len(pins)
+                parse.lists.append({"stem": bundle.stem, "pins": pins})
+            if previewed >= self.MAX_PREVIEW_PINS:
+                return parse
         return parse
 
     def resolve_preview_rows(self, rows: list[dict[str, Any]], user_profile: Profile, *, room: int) -> tuple[list[dict[str, Any]], int]:

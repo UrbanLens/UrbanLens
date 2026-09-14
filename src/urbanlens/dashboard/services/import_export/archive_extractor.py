@@ -8,11 +8,14 @@ import logging
 import re
 import struct
 import tarfile
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 import zipfile
 
 from urbanlens.dashboard.services.import_formats.heuristics import DEFAULT_LATITUDE_KEYS, DEFAULT_LONGITUDE_KEYS, normalize_header_key
 from urbanlens.dashboard.services.sandbox import untrusted_parse
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +129,23 @@ def extract_archive(data: bytes, budget: ExtractionBudget | None = None) -> list
 
     Raises:
         ValueError: If the archive is malformed or exceeds safety limits."""
+    return list(iter_archive(data, budget))
+
+
+def iter_archive(data: bytes, budget: ExtractionBudget | None = None) -> Iterator[ExtractedFile]:
+    """Extract supported files from a ZIP or TGZ archive one at a time, as each is asked for.
+
+    A caller that lets go of an entry before asking for the next holds one entry, not the archive.
+
+    Args:
+        data: Raw bytes of the archive.
+        budget: Allowance to draw on.
+
+    Returns:
+        An iterator of :class:`ExtractedFile`, one per supported entry.
+
+    Raises:
+        ValueError: If the archive is not a ZIP or TGZ; while iterating, if it is malformed or exceeds safety limits."""
     if budget is None:
         budget = ExtractionBudget()
     if data[:4] == _ZIP_MAGIC:
@@ -267,10 +287,8 @@ def _extension(filename: str) -> str:
 
 
 @untrusted_parse("archive.extract")
-def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
-    """Extract supported files from a ZIP archive, drawing on *budget*."""
-    results: list[ExtractedFile] = []
-
+def _extract_zip(data: bytes, budget: ExtractionBudget) -> Iterator[ExtractedFile]:
+    """Extract supported files from a ZIP archive one at a time, drawing on *budget*."""
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             for info in zf.infolist():
@@ -314,20 +332,16 @@ def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                     )
                     continue
 
-                results.append(ExtractedFile(safe_name, content))
+                yield ExtractedFile(safe_name, content)
 
     except zipfile.BadZipFile as exc:
         logger.info("Invalid ZIP archive: %s", exc)
         raise ValueError("Invalid ZIP archive.") from exc
 
-    return results
-
 
 @untrusted_parse("archive.extract")
-def _extract_tgz(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
-    """Extract supported files from a GZIP-compressed TAR archive, drawing on *budget*."""
-    results: list[ExtractedFile] = []
-
+def _extract_tgz(data: bytes, budget: ExtractionBudget) -> Iterator[ExtractedFile]:
+    """Extract supported files from a GZIP-compressed TAR archive one at a time, drawing on *budget*."""
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
             for member in tf.getmembers():
@@ -366,10 +380,8 @@ def _extract_tgz(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                     )
                     continue
 
-                results.append(ExtractedFile(safe_name, content))
+                yield ExtractedFile(safe_name, content)
 
     except tarfile.TarError as exc:
         logger.info("Invalid TGZ archive: %s", exc)
         raise ValueError("Invalid TGZ archive.") from exc
-
-    return results

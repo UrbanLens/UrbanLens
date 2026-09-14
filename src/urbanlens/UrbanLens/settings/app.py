@@ -233,6 +233,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "first marker, not server memory - the document is streamed in batches either way."
         ),
     )
+    import_preview_max_concurrent_parses: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "How many pin import previews the sandbox worker reads at once, site-wide; the rest wait their turn. "
+            "One preview may extract up to 2 GB, and media-worker reads two jobs at a time in 3 GB, so raising this "
+            "risks an OOM kill that takes a photo upload down with the preview."
+        ),
+    )
     cache_breaker_seconds: float = Field(
         default=10.0,
         description=(
