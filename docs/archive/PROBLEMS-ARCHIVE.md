@@ -13404,7 +13404,9 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   achievement icon or avatar a held publish replaced, stayed fetchable at its old path with whatever metadata it had.
   (A comment image is authorized through the row naming it, so a kept one is not served.) A refused delete now queues
   `delete_lost_stored_file`, which retries on the maintenance queue and skips a file a row of that field names again.
-  Nothing had tested that the replaced file is deleted at all when storage allows; that is now tested too.
+  Nothing had tested that the comment scan or `reencode_shown` deletes the file it replaced when storage allows (a held
+  publish's replaced avatar and the backfill's cleared SVG avatar were tested); both are now. A broker that refuses the
+  retry leaves the file served, with a warning naming it and the failed enqueue in the log and nothing durable.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

@@ -415,6 +415,16 @@ class AFileThatCannotBeDeletedRightNowTests(_Case):
         retry.assert_called_once()
         self.assertTrue(default_storage.exists(name))
 
+    def test_the_later_delete_gives_up_after_its_last_retry_without_raising(self) -> None:
+        from urbanlens.dashboard.tasks import delete_lost_stored_file
+
+        name = default_storage.save("label_icons/lost.png", _upload(*_fixtures()["png-text"]))
+
+        with self._refusing_deletes(), mock.patch.object(delete_lost_stored_file, "max_retries", 0):
+            self.assertFalse(delete_lost_stored_file("dashboard.Label", "custom_icon", name))
+
+        self.assertTrue(default_storage.exists(name))
+
 
 class ALabelRestoredByUndoTests(_Case):
     def test_a_label_deleted_while_its_icon_waited_queues_the_publish_when_restored(self) -> None:
