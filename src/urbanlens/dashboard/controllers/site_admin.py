@@ -31,6 +31,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
+from urbanlens.dashboard.models.abstract.field_snapshot import FieldSnapshot
 from urbanlens.dashboard.models.site_settings import (
     EnvironmentOverrideChoice,
     SiteSettings,
@@ -147,6 +148,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def post(self, request: HttpRequest):
         settings = SiteSettings.get_current()
+        snapshot = FieldSnapshot(settings)
 
         try:
             max_members = int(request.POST.get("max_trip_members", settings.max_trip_members))
@@ -271,7 +273,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if "video_downscale_vip" in request.POST:
             settings.video_downscale_vip = request.POST.get("video_downscale_vip") in {"1", "true", "on", "True"}
 
-        settings.save()
+        snapshot.save_changes()
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             # Several numeric fields above are silently clamped into range rather than rejected (e.g.

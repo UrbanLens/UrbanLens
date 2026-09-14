@@ -13,6 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.abstract.field_snapshot import FieldSnapshot
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
 from urbanlens.dashboard.models.markup.model import CustomLayer, MarkupMap, MarkupType, PinMarkup, SecurityIndicatorType
@@ -823,6 +824,7 @@ class MarkupEditView(LoginRequiredMixin, View):
             JsonResponse with ``ok`` on success.
         """
         owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, map_uuid)
+        snapshot = FieldSnapshot(item)
         body = _parse_body(request)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
@@ -864,7 +866,8 @@ class MarkupEditView(LoginRequiredMixin, View):
         if "security_indicator" in body:
             indicator = body.get("security_indicator") or ""
             item.security_indicator = indicator if indicator in _ALLOWED_SECURITY_INDICATORS else ""
-        item.save()
+        item.coerce_colors()
+        snapshot.save_changes()
         if item.security_indicator and isinstance(owner, (Pin, Wiki)):
             _apply_security_indicator(owner, item.security_indicator)
         if isinstance(owner, MarkupMap):

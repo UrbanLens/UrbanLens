@@ -70,7 +70,7 @@ should also decide this route's fate rather than deleting it unilaterally here.
 
 ## P5 — Dialog forms post every field and handlers save every column, so untouched values overwrite and re-attribute
 
-`id: P5` · `status: open` · `updated: 2026-08-25`
+`id: P5` · `status: open` · `updated: 2026-09-14`
 
 Previously titled "forms submit and save every field, not the ones that changed".
 
@@ -105,17 +105,40 @@ placeholder name, an empty description and all eight security indicators as thou
 them. Fixed in `2f9885db` by diffing against a baseline - the record as the submitter saw it -
 rather than by making the form honest, because the form is one of many.
 
-**Scope of the audit** (counted 2026-08-25, `src/urbanlens/dashboard`):
-
-- 28 files build a full `FormData` payload on submit;
-- 23 bare `.save()` calls in `controllers/` write every column, against 88 that scope
-  `update_fields` - so the good pattern is already the majority and the outliers are findable;
-- 17 `form.save()` ModelForm calls, which write every field in the form by default.
-
 Two directions, and they compose: make submits dirty-only (the client knows what it prefilled, so
-it can send only what differs), and make writes field-scoped (`update_fields`, which most of the
-codebase already does). The second is the safety net for anything that still posts everything, and
-is the cheaper half to finish first.
+it can send only what differs), and make writes field-scoped. The second is the safety net for
+anything that still posts everything, and is the cheaper half to finish first.
+
+### Field-scoped writes, as of 2026-09-14
+
+The 2026-08-25 count (28 files posting a full `FormData`, 23 bare `.save()` calls in `controllers/`,
+17 `form.save()` calls) was re-read call by call. The `form.save()` count overstated the gap: the
+settings page's fifteen section forms all subclass `forms/settings_form.py::ProfileSettingsForm`,
+whose `save` already writes only `Meta.fields`, and `test_settings_form_field_scope.py` guards it.
+
+`models/abstract/field_snapshot.py::FieldSnapshot` records a loaded row's column values, and its
+`save_changes` writes only the columns that differ plus `updated`, or nothing at all.
+`test_partial_edits_keep_concurrent_writes.py` lands a second writer's change between the load
+and the save, and it failed at all three of these before they used `FieldSnapshot`:
+
+| handler | why it mattered |
+|---|---|
+| `controllers/site_admin.py::SiteAdminView.post` | the page autosaves one field per request, and several fields are reassigned from their loaded value whether or not they were sent, so two quick autosaves reverted each other |
+| `controllers/markup.py::MarkupEditView.post` | a relabel reverted another editor's colour or geometry on a shared wiki's annotation |
+| `controllers/custom_layers.py::CustomLayerEditView.post` | a rename reverted a visibility toggle |
+
+**Still writing every column on an edit of an existing row:**
+
+- `controllers/detail_pins.py::DetailPinEditView.post` and `LocationWikiDetailPinEditView.post`.
+  These are the same partial-body shape as the markup edit, but on `Pin` and `Wiki`, whose `save`
+  and `from_db` overrides need reading before a scoped write can be trusted.
+- Whole-form edits, where the request sends every field the row has, so a scoped write changes
+  less: `controllers/notifications.py` (delivery preferences),
+  `controllers/site_admin_costs.py` (component and operating-cost edits),
+  `controllers/site_admin.py::SiteAdminApiLimitsView.post`, `controllers/boundary.py` (polygon) and
+  `controllers/custom_fields.py` (one value).
+
+The remaining bare saves in `controllers/` create new rows, where there is nothing to revert.
 
 ## P6 — Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins
 

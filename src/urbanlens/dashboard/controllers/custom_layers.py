@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.abstract.field_snapshot import FieldSnapshot
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
 from urbanlens.dashboard.models.markup.meta import CUSTOM_LAYER_ICON_CHOICES
 from urbanlens.dashboard.models.markup.model import CustomLayer
@@ -264,6 +265,7 @@ class CustomLayerEditView(LoginRequiredMixin, View):
             Re-rendered layer list on success, or a 400 with an error message.
         """
         owner, qs, layer = _get_layer(request, pin_slug, location_slug, layer_uuid)
+        snapshot = FieldSnapshot(layer)
 
         if "name" in request.POST:
             name = request.POST["name"].strip()
@@ -281,7 +283,7 @@ class CustomLayerEditView(LoginRequiredMixin, View):
             layer.icon = icon if icon in _ALLOWED_ICONS else ""
         if "default_visible" in request.POST:
             layer.default_visible = request.POST["default_visible"] in ("1", "true", "on")
-        layer.save()
+        snapshot.save_changes()
         return _render_layer_list(request, owner, qs)
 
     def delete(self, request: HttpRequest, layer_uuid: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:

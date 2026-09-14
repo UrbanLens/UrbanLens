@@ -35,7 +35,7 @@ still resolves after it is fixed, and the id is never handed out again.
 |---|---|---|---|---|
 | P1 | open | 2026-09-01 | VirusTotal scanning is hash-lookup-only, so a file VirusTotal has never seen falls back to ClamAV forever | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P3 | open | 2026-08-31 | The pin-detail hero no longer links to `PinRelinkView.get`, orphaning the `pin.link` wiki picker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P5 | open | 2026-08-25 | Dialog forms post every field and handlers save every column, so untouched values overwrite and re-attribute | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P5 | open | 2026-09-14 | Dialog forms post every field and handlers save every column, so untouched values overwrite and re-attribute | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P6 | open | 2026-08-21 | Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P7 | open | 2026-09-14 | REData's reconciled building `ref` is stored as permanent identity, and REData does not guarantee it is stable | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P9 | open | 2026-09-08 | REData gaps: mostly closed 2026-09-08; `?limit=` is REData-side, land-use-area geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
