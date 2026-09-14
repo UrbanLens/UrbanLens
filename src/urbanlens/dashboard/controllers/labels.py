@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
-from urbanlens.dashboard.services.core.numbers import safe_int, safe_int_or_none
+from urbanlens.dashboard.services.core.numbers import DB_INTEGER_MAX, DB_INTEGER_MIN, clamp_int, safe_int, safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
@@ -407,7 +407,7 @@ def _parse_ids_json(request: HttpRequest) -> tuple[list[int] | None, HttpRespons
     try:
         data = json.loads(request.body)
         ids = [int(x) for x in data.get("ids", [])]
-    except (json.JSONDecodeError, ValueError, TypeError):
+    except (json.JSONDecodeError, ValueError, TypeError, OverflowError, AttributeError):
         return None, JsonResponse({"error": "Invalid data"}, status=400)
     if not ids:
         return None, HttpResponse("No items specified.", status=400)
@@ -416,16 +416,9 @@ def _parse_ids_json(request: HttpRequest) -> tuple[list[int] | None, HttpRespons
     return ids, None
 
 
-def _safe_int(value: object, default: int = 0) -> int:
-    """Parse an integer from JSON or form data."""
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str | float | bytes | bytearray):
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
-    return default
+def _label_order(value: object, default: int) -> int:
+    """Parse a submitted ``Label.order``, bounded to what its integer column stores."""
+    return clamp_int(value, low=DB_INTEGER_MIN, high=DB_INTEGER_MAX, default=default)
 
 
 def _parse_bulk_payload(data: dict) -> dict:
@@ -440,11 +433,11 @@ def _parse_bulk_payload(data: dict) -> dict:
         "icon": clean_icon(data.get("icon"), max_length=column_max_length(Label, "icon")),
         "color": clean_color(data.get("color")),
         "description": data.get("description", ""),
-        "order": _safe_int(data.get("order"), 0),
+        "order": _label_order(data.get("order"), 0),
         # int() over a client-supplied list raises ValueError on any non-numeric entry;
         # unparseable ids are dropped rather than failing the whole request.
-        "add_parent_ids": [i for i in (_safe_int(x, -1) for x in data.get("add_parent_ids", [])) if i >= 0],
-        "add_child_ids": [i for i in (_safe_int(x, -1) for x in data.get("add_child_ids", [])) if i >= 0],
+        "add_parent_ids": [i for i in (safe_int(x, -1) for x in data.get("add_parent_ids", [])) if i >= 0],
+        "add_child_ids": [i for i in (safe_int(x, -1) for x in data.get("add_child_ids", [])) if i >= 0],
     }
 
 
@@ -628,7 +621,7 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
             return HttpResponse(name_error, status=400)
 
         parent_ids = request.POST.getlist("parent_ids")
-        order = safe_int(request.POST.get("order"))
+        order = _label_order(request.POST.get("order"), 0)
         parent_order = Label.initial_order_for_parents(profile, parent_ids)
         if parent_order is not None:
             order = parent_order
@@ -775,7 +768,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         # but still let arbitrary free text be stored as an icon here while create rejected it.
         label.icon = clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None
         label.color = clean_color(request.POST.get("color"))
-        label.order = safe_int(request.POST.get("order"), label.order)
+        label.order = _label_order(request.POST.get("order"), label.order)
 
         # allow_auto_tag can only be changed when the user actually has some auto-tagging path available for
         # this label's kind (AI or keyword-based); and never on the protected "Visited" label.
@@ -857,7 +850,7 @@ class LabelReorderView(_LabelKindMixin, LoginRequiredMixin, View):
                 KIND_STATUS: "status_ids",
             }[self.kind]
             label_ids = [int(x) for x in data.get(id_key, [])]
-        except (json.JSONDecodeError, ValueError, AttributeError):
+        except (json.JSONDecodeError, ValueError, AttributeError, OverflowError, TypeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
         profile = _request_profile(request)

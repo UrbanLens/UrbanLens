@@ -3,6 +3,10 @@ Views that call `int(request.POST.get(...))` directly therefore turn a malformed
 
 from __future__ import annotations
 
+#: The range of a Django ``IntegerField`` column; a larger parsed value fails the write rather than the parse.
+DB_INTEGER_MIN = -(2**31)
+DB_INTEGER_MAX = 2**31 - 1
+
 
 def safe_int_or_none(value: object) -> int | None:
     """Return ``value`` as an int, or ``None`` when it is not one.

@@ -84,6 +84,13 @@ class CustomFieldTests(_LoggedInCase):
             )
         )
 
+    def test_an_id_beyond_the_integer_column_range(self) -> None:
+        image = baker.make(Image, profile=self.profile)
+
+        self.assertRefused(
+            self.client.post(reverse("custom_fields.photo", args=[image.pk]), {"field_id": "9" * 30, "value": "x"})
+        )
+
     def test_a_real_field_still_saves(self) -> None:
         image = baker.make(Image, profile=self.profile)
         field = CustomField.objects.create(profile=self.profile, entity_type="photo", name="Film stock")

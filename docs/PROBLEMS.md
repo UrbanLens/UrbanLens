@@ -3182,7 +3182,16 @@ body that is not an object. All reproduced first (15 failures) and fixed through
 `test_non_numeric_posted_ids.py`. The game invite and kick views already caught `ValueError` and were
 left alone.
 
-The final tally is three false positives in the first sample, 27 benign in the second, and 15
+The label JSON endpoints had the same gaps without an id lookup in between. `_parse_ids_json` (bulk
+edit and bulk convert) and `LabelReorderView` answered `Infinity`, an id field that is not a list, or
+a body that is not an object with a 500, and `controllers/labels.py` carried a private `_safe_int`
+copy without the `OverflowError` catch. A finite 30-digit `order` parsed cleanly and then overflowed
+`Label.order`'s 32-bit column on save, on create, edit and bulk edit alike; `_label_order` now
+clamps it to `services/core/numbers.py`'s `DB_INTEGER_MIN`/`DB_INTEGER_MAX`
+(`test_label_malformed_bodies.py`). A 30-digit id in a *lookup* is not a crash: Django answers it
+with no rows, which `test_non_numeric_posted_ids.py` pins.
+
+The final tally is three false positives in the first sample, 27 benign in the second, and 23
 reproduced crashes reached from them - the argument against leaving the code off: a blanket disable of the code
 that reports 146 known-benign findings also silences whatever else `misc` covers.
 
