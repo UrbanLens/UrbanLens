@@ -2354,7 +2354,7 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
 
-## P57 — The test-quality audit's follow-ups: 14 done; one untested surface, one unproven lock and two decisions remain
+## P57 — The test-quality audit's follow-ups: 15 done; one untested surface and two decisions remain
 
 `id: P57` · `status: open` · `updated: 2026-09-14`
 
@@ -2364,9 +2364,11 @@ Found while auditing existing unit tests for real positive/negative coverage (se
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
 convention rather than fixed inline.
 
-**Thirteen are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
+**Thirteen were fixed by 2026-09-06** - among them the `connect_ex` guard (which turned out to be two holes), the
 `make_cache_key` collision, the hard-delete overlap lock, the `SubscriptionRole.clean()` gap, and
-`PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found.
+`PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found. The
+other two, the webhook-event row lock and the sweep path's ledger lock, were proven under real threads
+on 2026-09-14 and needed no fix.
 
 Three of the "untested surface" entries are covered as of 2026-09-06 too - `WikiBoundaryView`,
 `purge_old_backups`'s count-based retention, and `RedataBasemapTilesGateway.list_sources` - and
@@ -2390,15 +2392,11 @@ Three of the "untested surface" entries are covered as of 2026-09-06 too - `Wiki
 
 `CalendarImportView` and the carousel's "no imagery available" branch are covered as of 2026-09-14; neither test found a defect.
 
-What remains: **one untested surface** (the multi-level pin/wiki nesting prefix), two stale-documentation items, one lock with no real-concurrency proof (the ledger sweep's), and two that need a decision from whoever owns the area.
-
-*(An earlier version of this line claimed every untested surface was covered. That was written
-after reading only the first half of this entry and is wrong - the five above are all listed
-below it. Corrected 2026-09-06.)*
+What remains: **one untested surface** (the multi-level pin/wiki nesting prefix), two stale-documentation items, and two that need a decision from whoever owns the area.
 
 Worth noting about this entry's own hit rate: it filed the AI trip tools as tidy-up ("duplicated
-business logic ... can silently drift"), and they were a live permission bypass. Two of the three
-"untested surface" items turned out the same way. An entry that says only "this is untested" is not
+business logic ... can silently drift"), and they were a live permission bypass. Two of the five
+"untested surface" items covered so far turned out the same way. An entry that says only "this is untested" is not
 a statement that the code is correct.
 
 ~~**`LocalhostOnlyNetwork` (`core/testing_network.py`) doesn't patch `socket.socket.connect_ex`.**~~
@@ -2559,18 +2557,18 @@ fixtures, which all use the `sources` key and well-formed rows. Worth a dedicate
 instantiates the gateway directly (with `base_url`/`api_key` kwargs and a mocked `session`) rather
 than mocking the gateway's own methods.
 
-**Sweep-path locking on `advance_usage_ledger` has no real-concurrency coverage.**
-`test_billing_ledger_lock.py` proves `_locked`'s `select_for_update` under real threads only via
-`banking.apply_payment`, whose internal `advance_usage_ledger` call is nested inside the already-
-held outer lock (so removing just that nested lock changes nothing observable). The one call site
-where `advance_usage_ledger`'s own lock is load-bearing - the daily sweep
-(`advance_pwyw_usage_ledgers`) calling it directly and unnested - is untested under real threads;
-the only test of a sweep racing a payment
-(`test_billing_ledger_concurrency.py::test_a_payment_is_not_rolled_back_by_the_daily_sweep`)
-deterministically sequences two in-memory snapshots and explicitly disclaims exercising the
-database's actual lock. A real-thread version is possible (worked through by inspection: under
-correct locking both thread orderings converge to the same final ledger state, so it wouldn't be
-flaky-when-correct) but needs an actual run to confirm it reliably catches a lock-removal mutant.
+~~**Sweep-path locking on `advance_usage_ledger` has no real-concurrency coverage.**~~ **Covered
+2026-09-14** in `test_billing_ledger_sweep_lock.py`. `test_billing_ledger_lock.py` reaches
+`advance_usage_ledger` only through `apply_payment`, whose outer lock already holds the row; the
+daily sweep (`advance_pwyw_usage_ledgers`) calls it directly, where its own lock is the only one.
+The new test pauses the sweep inside the ledger - after its locked read, before its save, by holding
+its first `role_pwyw_threshold_cents` call - while a payment on a second connection tries to land.
+It asserts the payment had not finished when the pause ended, which is the lock holding it off, and
+that coverage ends at 60 days rather than the 30 a stale save would rewind it to. Because the pause
+sits after the read, it would also fail a version that kept the re-read but dropped
+`select_for_update`. That is argued from the ordering, not observed: no mutant was run, per the audit's
+rule against mutating production code. Under correct locking the test always waits out the pause, one
+second.
 
 ~~**`SubscriptionRole.clean()` doesn't validate `pwyw_minimum_cents` requires `pay_what_you_want`.**~~
 **Fixed 2026-09-06**, as the symmetric half of the `pwyw_dynamic_threshold` rule beside it. `0`/`None`
