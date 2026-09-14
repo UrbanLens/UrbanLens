@@ -13,6 +13,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.detail_pins import WikiEdit
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.colors import clean_color
 
 
 class _ChildWikiCase(TestCase):
@@ -54,7 +55,7 @@ class StyleEditTests(_ChildWikiCase):
         self.assertEqual(response.status_code, 200)
         self.child.refresh_from_db()
         self.assertEqual(self.child.name, "Guard House")
-        self.assertNotEqual(self.child.color, "#111111")
+        self.assertEqual(self.child.color, clean_color("#ff0000"))
         self.assertEqual(self.child.description, "Keep this.")
         self.assertFalse(WikiEdit.objects.filter(wiki=self.parent_wiki).exists(), "a style edit wrote an audit entry")
 

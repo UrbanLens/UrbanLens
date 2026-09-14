@@ -1876,11 +1876,12 @@ the component gallery whose entire purpose is to show what each variant looks li
 
 ---
 
-## P37 — A 2026-08-14 coverage run found 100 write handlers no test executed; all but one of its top roster are tested now
+## P37 — A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured
 
 `id: P37` · `status: open` · `updated: 2026-09-14`
 
-Previously titled "100 write handlers totalling 1,217 statements never execute under the test suite",
+Previously titled "A 2026-08-14 coverage run found 100 write handlers no test executed; all but one
+of its top roster are tested now", before that "100 write handlers totalling 1,217 statements never execute under the test suite",
 and before that "1,217 statements of write handlers that no test executes".
 
 Measured 2026-08-14 with `coverage.py` over the full suite; full list in
@@ -1909,7 +1910,7 @@ request to its route, not by re-running coverage, so the other ~90 handlers are 
 | `controllers/calendar_sync.py::CalendarImportView.post` [30] | `test_calendar_import_view.py` |
 | `controllers/albums.py::AlbumEditView.post` [31] | exercised by `test_wiki_albums.py` since `01e1b5988` |
 | `controllers/pin.py::PinController.upload_takeout` [39] | deleted, along with its route |
-| `controllers/consensus.py::ConsensusPhotoUploadView.post` [31] | **still untested.** `test_consensus_photos.py` covers `services/consensus/photos.py::record_in_round_upload` beneath it, not the view's participant, duplicate-checksum or quota refusals |
+| `controllers/consensus.py::ConsensusPhotoUploadView.post` [31] | `test_consensus_photo_upload_view.py` (2026-09-14): the alpha gate, a non-participant, an unaccepted invite, a round from another session, no file, a non-image, the quota and a duplicate checksum each store nothing and award nothing; a success lands on the round's wiki, queues processing once and awards the bonus |
 
 "Exercised" means a test sends a request that reaches the handler. It does not mean every branch is
 asserted. `docs/reports/2026-08-14-view-coverage.md` (X12) stays as the dated measurement.
