@@ -19,7 +19,8 @@ Previously titled "A stored multi-part region reloads as one Leaflet layer, so d
 of them". Found verifying P27: two triangles saved as a pin list's `smart_boundary` reloaded as a single
 `path.leaflet-interactive`, because `L.geoJSON` makes one layer per geometry and the stored value is one `MultiPolygon`.
 On that map it was worse than coarse deletion: `saveBoundary` builds its `MultiPolygon` from each layer's coordinates, so
-a reloaded multi-part layer beside a newly drawn polygon posted coordinates nested at two different depths.
+by the code a reloaded multi-part layer beside a newly drawn polygon would post coordinates nested at two different depths;
+that save was not exercised.
 
 Both region maps now load through `shared/region-delete.ts`'s `polygonParts`, which splits a Polygon, MultiPolygon,
 GeometryCollection, Feature or FeatureCollection into one Polygon per part. Verified in Chromium on the development stack
