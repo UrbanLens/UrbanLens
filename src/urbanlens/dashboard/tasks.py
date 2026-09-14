@@ -426,11 +426,11 @@ def finish_import_preview_task(profile_id: int, job_id: str) -> None:
 @shared_task(bind=True, queue=SANDBOX_QUEUE, max_retries=5)
 def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
     """Re-encode a held icon or avatar in the sandbox worker and show it."""
-    from urbanlens.dashboard.services.media.held_upload import drop_held, publish_held
+    from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS, drop_held, publish_held
 
     try:
         return publish_held(key, pk, held_name, attempt=self.request.id)
-    except OSError as exc:
+    except STORAGE_ERRORS as exc:
         if self.request.retries >= self.max_retries:
             logger.exception("The upload held for %s %s could not be read after %s retries", key, pk, self.request.retries)
             drop_held(key, pk, held_name)

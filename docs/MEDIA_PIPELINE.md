@@ -199,7 +199,8 @@ into the field and clears the column in one conditional update, so the field onl
 ever names a file this server encoded and nothing that renders it needs a check. An
 upload replaced, cleared or superseded (an emoji avatar, a removed avatar) before the
 worker runs is never published; one that cannot be decoded is dropped and the field
-keeps what it showed; one storage cannot read is retried, then dropped. A replaced
+keeps what it showed; one storage cannot read or write (an OSError, or on the S3 backend a botocore error) is
+retried, then dropped. A replaced
 avatar or achievement icon is deleted; a replaced label or pin icon is kept, because
 undo restores by stored name, and undo queues a held upload again. A publish lands
 while other requests hold the row in memory, so `models/abstract/held_upload.py`'s

@@ -14,6 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 import uuid
 
+from botocore.exceptions import BotoCoreError, ClientError
 from django.apps import apps
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -28,6 +29,9 @@ if TYPE_CHECKING:
     from django.db.models import Model, QuerySet
 
 logger = logging.getLogger(__name__)
+
+#: What storage raises when it cannot do its job. The S3 backend's errors are botocore's, most of which are not OSError.
+STORAGE_ERRORS: tuple[type[Exception], ...] = (OSError, BotoCoreError, ClientError)
 
 #: Where held uploads are stored.
 HELD_PREFIX = "unprocessed"
@@ -121,7 +125,7 @@ def held_field(instance: Model, field: str) -> HeldField:
 def _delete_quietly(storage: Storage, name: str) -> bool:
     try:
         storage.delete(name)
-    except OSError:
+    except STORAGE_ERRORS:
         logger.warning("Could not delete held upload %s", name, exc_info=True)
         return False
     return True
@@ -199,7 +203,8 @@ def publish_held(key: str, pk: int, held_name: str, attempt: str | None = None) 
         Whether the field now shows the re-encoded upload.
 
     Raises:
-        OSError: Storage could not hand back the held file.
+        OSError: Storage could not read the held file or write the re-encoded one; on the S3 backend, any of
+            :data:`STORAGE_ERRORS`.
     """
     from django.conf import settings
     from django.core.cache import cache
@@ -244,7 +249,7 @@ def _publish_read(held: HeldField, key: str, row: Model, raw: bytes) -> bool:
 
     try:
         new_name = storage.save(shown.field.generate_filename(row, f"{uuid.uuid4().hex}{extension}"), ContentFile(data))
-    except OSError:
+    except STORAGE_ERRORS:
         # Finished, and handed to a retry: only a publish that never comes back is counted against the upload.
         cache.set(_starts_key(held_name), max(0, cache.get(_starts_key(held_name), 1) - 1), timeout=_STARTS_TTL)
         raise
@@ -349,7 +354,7 @@ def sweep_held_uploads() -> tuple[int, int]:
                     handled += drop_held(held.key, pk, name)
                     continue
                 stalled = now - storage.get_modified_time(name) >= STALLED_HELD_AGE
-            except OSError:
+            except STORAGE_ERRORS:
                 logger.warning("Could not check the upload held for %s %s", held.key, pk, exc_info=True)
                 continue
             if not stalled or cache.get(_running_key(name)):
@@ -365,7 +370,7 @@ def sweep_held_uploads() -> tuple[int, int]:
     for storage in storages.values():
         try:
             _directories, files = storage.listdir(HELD_PREFIX)
-        except OSError:
+        except STORAGE_ERRORS:
             continue
         for file in files:
             name = f"{HELD_PREFIX}/{file}"
@@ -373,7 +378,7 @@ def sweep_held_uploads() -> tuple[int, int]:
                 continue
             try:
                 age = now - storage.get_modified_time(name)
-            except OSError:
+            except STORAGE_ERRORS:
                 continue
             if age >= UNDO_RETENTION + timedelta(days=1):
                 removed += _delete_quietly(storage, name)

@@ -16,6 +16,7 @@ from typing import IO
 from unittest import mock
 import uuid
 
+from botocore.exceptions import ClientError, EndpointConnectionError
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache.backends.locmem import LocMemCache
@@ -48,6 +49,14 @@ _REENCODE = "urbanlens.dashboard.services.media.images.reencode_image_file"
 _SWEEP = "urbanlens.dashboard.tasks.sweep_held_uploads"
 _owners = count()
 _HOUR = 3600
+
+#: What storage raises when it cannot do its job: the filesystem's OSError, and the S3 backend's botocore errors, of
+#: which only the timeouts derive from OSError.
+_STORAGE_FAILURES = (
+    PermissionError("storage unavailable"),
+    EndpointConnectionError(endpoint_url="http://objectstore:3900"),
+    ClientError({"Error": {"Code": "SlowDown", "Message": "Please reduce your request rate."}}, "PutObject"),
+)
 
 
 def _age(name: str, seconds: float) -> None:
@@ -137,27 +146,31 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
 
     def test_a_publish_retried_through_a_storage_outage_is_still_published(self) -> None:
         """A start that ended in a storage error handed itself to a retry; it finished, so it is not a killed worker."""
-        profile = self._profile()
-        held = self._held_while_the_broker_was_down(profile)
-        _age(held, _HOUR)
         key = "dashboard.Profile.avatar"
+        for error in _STORAGE_FAILURES:
+            with self.subTest(error=type(error).__name__):
+                profile = self._profile()
+                held = self._held_while_the_broker_was_down(profile)
+                _age(held, _HOUR)
 
-        for attempt in range(4):
-            with (
-                override_settings(**SANDBOX),
-                mock.patch.object(FileSystemStorage, "save", side_effect=OSError("storage unavailable")),
-                self.assertRaises(
-                    OSError, msg=f"attempt {attempt} published nothing, so the upload was already dropped"
-                ),
-            ):
-                tasks.publish_held_upload(key, profile.pk, held)
-            self._sweep()
+                for attempt in range(4):
+                    with (
+                        override_settings(**SANDBOX),
+                        mock.patch.object(FileSystemStorage, "save", side_effect=error),
+                        mock.patch.object(tasks.publish_held_upload, "retry", side_effect=error) as retry,
+                        self.assertRaises(
+                            type(error), msg=f"attempt {attempt} published nothing, so the upload was already dropped"
+                        ),
+                    ):
+                        tasks.publish_held_upload(key, profile.pk, held)
+                    self.assertTrue(retry.called, f"attempt {attempt} failed outright instead of being retried")
+                    self._sweep()
 
-        with override_settings(**SANDBOX):
-            self.assertTrue(tasks.publish_held_upload(key, profile.pk, held))
-        profile.refresh_from_db()
-        self.assertEqual(profile.avatar_upload, "")
-        self.assertTrue(profile.avatar)
+                with override_settings(**SANDBOX):
+                    self.assertTrue(tasks.publish_held_upload(key, profile.pk, held))
+                profile.refresh_from_db()
+                self.assertEqual(profile.avatar_upload, "")
+                self.assertTrue(profile.avatar)
 
     def test_a_publish_still_decoding_when_the_sweep_runs_is_not_dropped(self) -> None:
         """Two starts a deploy killed, then a third the sweep finds mid-decode: that one may yet finish."""
@@ -290,22 +303,24 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
         self.assertEqual(handled, 0, "the sweep counted a publish the broker refused as queued")
 
     def test_one_file_storage_cannot_stat_does_not_stop_the_rest_being_recovered(self) -> None:
-        unreadable, recoverable = self._profile(), self._profile()
-        broken = self._held_while_the_broker_was_down(unreadable)
-        held = self._held_while_the_broker_was_down(recoverable)
-        for name in (broken, held):
-            _age(name, _HOUR)
         real = FileSystemStorage.get_modified_time
+        for error in _STORAGE_FAILURES:
+            with self.subTest(error=type(error).__name__):
+                unreadable, recoverable = self._profile(), self._profile()
+                broken = self._held_while_the_broker_was_down(unreadable)
+                held = self._held_while_the_broker_was_down(recoverable)
+                for name in (broken, held):
+                    _age(name, _HOUR)
 
-        def stat(storage: FileSystemStorage, name: str):
-            if name == broken:
-                raise PermissionError(name)
-            return real(storage, name)
+                def stat(storage: FileSystemStorage, name: str, broken: str = broken, error: Exception = error):
+                    if name == broken:
+                        raise error
+                    return real(storage, name)
 
-        with mock.patch.object(FileSystemStorage, "get_modified_time", stat):
-            queued = self._publishes(self._sweep())
+                with mock.patch.object(FileSystemStorage, "get_modified_time", stat):
+                    queued = self._publishes(self._sweep())
 
-        self.assertIn((tasks.publish_held_upload, "dashboard.Profile.avatar", recoverable.pk, held), queued)
+                self.assertIn((tasks.publish_held_upload, "dashboard.Profile.avatar", recoverable.pk, held), queued)
 
     def test_a_held_file_a_row_still_names_is_never_removed_as_left_behind(self) -> None:
         profile = self._profile()
@@ -332,16 +347,16 @@ class AHeldFileNothingNamesTests(_Case):
         self.assertEqual((default_storage.exists(expired), default_storage.exists(restorable)), (False, True))
 
     def test_one_storage_refused_to_delete_is_not_reported_removed(self) -> None:
-        expired = self._orphan((UNDO_RETENTION.days + 2) * 24 * _HOUR)
+        for error in _STORAGE_FAILURES:
+            with self.subTest(error=type(error).__name__):
+                expired = self._orphan((UNDO_RETENTION.days + 2) * 24 * _HOUR)
 
-        with (
-            mock.patch(_ENQUEUE),
-            mock.patch.object(FileSystemStorage, "delete", side_effect=OSError("storage unavailable")),
-        ):
-            _handled, removed = sweep_held_uploads()
+                with mock.patch(_ENQUEUE), mock.patch.object(FileSystemStorage, "delete", side_effect=error):
+                    _handled, removed = sweep_held_uploads()
 
-        self.assertTrue(default_storage.exists(expired), "storage deleted the file, so nothing here was refused")
-        self.assertEqual(removed, 0, "the sweep counted a file storage refused to delete as removed")
+                self.assertTrue(default_storage.exists(expired), "storage deleted the file, so nothing was refused")
+                self.assertEqual(removed, 0, "the sweep counted a file storage refused to delete as removed")
+                default_storage.delete(expired)
 
 
 class TheSweepsLookupTests(_Case):

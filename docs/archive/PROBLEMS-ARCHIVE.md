@@ -13368,6 +13368,11 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
   that never finished (two, if the copy that ends first failed on storage: a failed read ends before its start is
   counted, and a failed write takes its start back), that copy ending in an error while the other is still running,
   and the hourly sweep inside that window.
+- **A review of the sweep's counts** found both counted work that did not happen (an enqueue the broker refused, a
+  delete storage refused), and that on the S3 backend every storage failure the held path handled was caught as
+  OSError, which botocore's `ClientError` and `EndpointConnectionError` are not: one such error ended the whole sweep,
+  and a failed save kept its counted start and was not retried, so an object store outage could drop a healthy
+  upload. `STORAGE_ERRORS` covers both backends. The rest of the codebase that talks to storage still catches OSError.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file
