@@ -23,6 +23,7 @@ from django.db import DatabaseError
 from PIL.Image import DecompressionBombError
 
 from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
 from urbanlens.dashboard.services.media.images import (
     discard_superseded_file,
     downscale_stored_image,
@@ -68,7 +69,7 @@ class Command(BaseCommand):
             for image in queryset.iterator():
                 try:
                     recorded += self._reencode(image)
-                except (OSError, ValueError, EOFError, SyntaxError, DecompressionBombError, DatabaseError) as exc:
+                except (*STORAGE_ERRORS, ValueError, EOFError, SyntaxError, DecompressionBombError, DatabaseError) as exc:
                     self.stderr.write(f"  [pk={image.pk}] {type(exc).__name__}: {exc}")
                     failed += 1
                     continue
@@ -102,7 +103,7 @@ class Command(BaseCommand):
             nonlocal rewritten, failed
             try:
                 rewritten += rewrite()
-            except (OSError, DatabaseError) as exc:
+            except (*STORAGE_ERRORS, DatabaseError) as exc:
                 self.stderr.write(f"  [{label} pk={pk}] {type(exc).__name__}: {exc}")
                 failed += 1
 
@@ -148,7 +149,7 @@ class Command(BaseCommand):
             Whether exif_data was recorded.
 
         Raises:
-            OSError: The file cannot be read from or written to storage.
+            OSError: The file cannot be read from or written to storage; on the S3 backend, any of ``STORAGE_ERRORS``.
             ValueError: Pillow could not make sense of the file.
         """
         recorded = False

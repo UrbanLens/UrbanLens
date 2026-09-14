@@ -13387,6 +13387,13 @@ restores. Fixed in three passes on 2026-09-13, each gap reproduced by a failing 
 - **A review of that** found two commit messages wrong that the held path passes no `ChecksumAlgorithm`: under botocore's
   default `request_checksum_calculation` of `when_supported`, s3transfer sets CRC32 on every upload. CRC32 needs no CRT,
   so `FlexibleChecksumError`'s unsupported-algorithm raise still cannot fire, and the code is unchanged.
+- **A review of the give-up log's wording** found the same read-only, OSError-only claim on `reencode_stored_field` and
+  `reencode_shown`, which also write the re-encoded file and delete the replaced one. Their callers caught OSError only,
+  so on the S3 backend a refused read or write ended the comment image scan with no retry or rejection, leaving the
+  comment pending, and stopped `strip_exif_from_stored_photos` at the first refused file. Both now catch
+  `STORAGE_ERRORS`. The photo upload tasks still catch OSError alone. The same review found a commit message saying
+  django-storages reads `AWS_S3_OBJECT_PARAMETERS` and `AWS_S3_CLIENT_CONFIG` from Django settings only; `S3Storage`
+  also takes both as storage options. `_S3_STORAGE_OPTIONS` passes neither, so nothing sets a checksum option there.
 
 The original entry guessed that a `pending_scan`-style flag would hide icons and avatars until processed. It could
 not: the media gate authorizes any icon or avatar path for every member, so a flag on the row does not stop the file

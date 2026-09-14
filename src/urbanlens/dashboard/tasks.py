@@ -1779,6 +1779,7 @@ def _run_comment_image_scan(task, comment, model) -> bool:
         _reject_comment_upload(comment, malware_error)
         return False
 
+    from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
     from urbanlens.dashboard.services.media.storage import get_downscale_policy
     from urbanlens.dashboard.services.media.stored_field import Reencoded, reencode_stored_field
 
@@ -1796,9 +1797,9 @@ def _run_comment_image_scan(task, comment, model) -> bool:
             only_if={"pending_scan": True},
             also_set={"pending_scan": False},
         )
-    except OSError as exc:
+    except STORAGE_ERRORS as exc:
         if task.request.retries >= task.max_retries:
-            logger.exception("Image for comment %s could not be read after %s retries", comment.pk, task.request.retries)
+            logger.exception("Storage could not read or write the image for comment %s after %s retries", comment.pk, task.request.retries)
             _reject_comment_upload(comment, "That photo couldn't be processed.")
             return False
         raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc

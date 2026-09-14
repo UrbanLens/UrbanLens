@@ -59,7 +59,9 @@ def reencode_stored_field(
         What happened. On ``UNDECODABLE`` nothing was changed; the caller decides what to do with the file.
 
     Raises:
-        OSError: Storage could not hand back the file. That says nothing about the file, so it is not ``UNDECODABLE``.
+        OSError: Storage could not read the file, write the re-encoded one or delete the one replaced; on the S3 backend,
+            any of :data:`~urbanlens.dashboard.services.media.held_upload.STORAGE_ERRORS`. That says nothing about the
+            file, so it is not ``UNDECODABLE``.
     """
     filters = {"pk": pk, field: stored_name, **(only_if or {})}
     row = rows.filter(**filters).first()

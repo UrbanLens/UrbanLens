@@ -5,7 +5,11 @@ from __future__ import annotations
 import io
 from unittest.mock import patch
 
+from botocore.exceptions import ClientError
+from celery.exceptions import Retry
+from django.core.files.storage import FileSystemStorage
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models.fields.files import FieldFile
 from django.test import RequestFactory
 from django.urls import reverse
 from model_bakery import baker
@@ -25,6 +29,13 @@ def _fake_image(name: str = "photo.png") -> SimpleUploadedFile:
     buf = io.BytesIO()
     PILImage.new("RGB", (60, 40), color=(10, 20, 30)).save(buf, format="PNG")
     return SimpleUploadedFile(name, buf.getvalue(), content_type="image/png")
+
+
+def _slow_down(operation: str) -> ClientError:
+    """What the S3 backend raises when the object store turns a request away."""
+    return ClientError(
+        {"Error": {"Code": "SlowDown", "Message": "busy"}, "ResponseMetadata": {"HTTPStatusCode": 503}}, operation
+    )
 
 
 class StartCommentImageScanTests(TestCase):
@@ -140,6 +151,37 @@ class ScanCommentImageTaskTests(TestCase):
             NotificationLog.objects.filter(
                 profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
             ).exists()
+        )
+
+    def test_an_object_store_that_refuses_to_hand_back_the_image_is_retried(self) -> None:
+        comment = self._pending_comment()
+        with (
+            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None),
+            patch.object(FieldFile, "open", side_effect=_slow_down("GetObject")),
+            patch.object(scan_comment_image, "retry", side_effect=Retry()) as retry,
+            self.assertRaises(Retry),
+        ):
+            scan_comment_image(comment.pk)
+        retry.assert_called_once()
+        comment.refresh_from_db()
+        self.assertTrue(comment.pending_scan)
+
+    def test_an_object_store_that_keeps_refusing_the_reencoded_image_rejects_it(self) -> None:
+        comment = self._pending_comment(text="never stored")
+        comment_id = comment.pk
+        with (
+            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None),
+            patch.object(FileSystemStorage, "save", side_effect=_slow_down("PutObject")),
+            patch.object(scan_comment_image, "max_retries", 0),
+        ):
+            result = scan_comment_image(comment_id)
+        self.assertFalse(result)
+        self.assertFalse(Comment.objects.filter(pk=comment_id).exists())
+        self.assertIn(
+            "never stored",
+            NotificationLog.objects.get(
+                profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
+            ).message,
         )
 
     def test_missing_comment_is_a_no_op(self) -> None:

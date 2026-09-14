@@ -8,6 +8,7 @@ import shutil
 import tempfile
 from unittest import mock
 
+from botocore.exceptions import ClientError
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -47,6 +48,21 @@ def _jpeg_with_comment() -> bytes:
     buffer = io.BytesIO()
     PILImage.new("RGB", (320, 240), (10, 20, 30)).save(buffer, format="JPEG", comment=b"Old Mill House")
     return buffer.getvalue()
+
+
+def _refusing_to_open(name: str):
+    """FieldFile.open, except that the object store turns away a read of *name*, as the S3 backend reports it."""
+    original = FieldFile.open
+
+    def open_(field_file: FieldFile, mode: str = "rb") -> FieldFile:
+        if field_file.name == name:
+            raise ClientError(
+                {"Error": {"Code": "SlowDown", "Message": "busy"}, "ResponseMetadata": {"HTTPStatusCode": 503}},
+                "HeadObject",
+            )
+        return original(field_file, mode)
+
+    return open_
 
 
 class StripExifBackfillTests(TestCase):
@@ -151,6 +167,17 @@ class StripExifBackfillTests(TestCase):
         self.assertNotEqual(image.image.name, original_name)
         with image.image.open("rb") as handle:
             self.assertNotIn(b"Old Mill House", handle.read())
+
+    def test_a_photo_the_object_store_refuses_does_not_stop_the_rest(self) -> None:
+        refused = self._stored_image(_jpeg_with_exif(), name="refused.jpg")
+        later = self._stored_image(_jpeg_with_exif(), name="later.jpg")
+        stderr = io.StringIO()
+
+        with mock.patch.object(FieldFile, "open", _refusing_to_open(refused.image.name)):
+            call_command("strip_exif_from_stored_photos", stderr=stderr)
+
+        self.assertIn("ClientError", stderr.getvalue())
+        self.assertIsNone(self._read_back(later).getexif().get(_MAKE_TAG))
 
 
 class OtherStoredImagesBackfillTests(TestCase):
@@ -268,6 +295,23 @@ class OtherStoredImagesBackfillTests(TestCase):
 
         comment.refresh_from_db()
         self.assertEqual(comment.image.name, name)
+
+    def test_a_comment_image_the_object_store_refuses_does_not_stop_the_rest(self) -> None:
+        comment = self._comment()
+        name = comment.image.name
+        Profile.objects.filter(pk=self.profile.pk).update(
+            avatar=default_storage.save("avatars/old.jpg", self._upload())
+        )
+        stderr = io.StringIO()
+
+        with mock.patch.object(FieldFile, "open", _refusing_to_open(name)):
+            call_command("strip_exif_from_stored_photos", stderr=stderr)
+
+        self.assertIn("ClientError", stderr.getvalue())
+        comment.refresh_from_db()
+        self.assertEqual(comment.image.name, name)
+        self.profile.refresh_from_db()
+        self.assertFalse(self._carries_the_comment(self.profile.avatar))
 
     def test_a_comment_still_pending_is_left_to_its_scan_task(self) -> None:
         comment = self._comment(pending_scan=True)

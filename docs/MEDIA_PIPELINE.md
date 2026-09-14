@@ -187,8 +187,8 @@ Comment and trip comment images, custom icons (label, pin, achievement) and avat
 from every writer go through the same encoder (`images.reencode_image_file`), under a
 random name rather than the uploaded one. A comment image is re-encoded by
 `stored_field.reencode_stored_field` before its `pending_scan` clears, in the same
-update; one that cannot be decoded is rejected, and one storage cannot read is
-retried, then rejected.
+update; one that cannot be decoded is rejected, and one storage cannot read or
+write (any of `held_upload.STORAGE_ERRORS`) is retried, then rejected.
 
 An icon or avatar cannot be hidden by a flag on its row, because the media gate
 serves any icon or avatar path to every member, so the upload is held instead.
