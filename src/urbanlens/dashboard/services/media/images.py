@@ -1490,11 +1490,20 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
 
     Returns:
         True when the file was deleted, False when another row still needs it (or there was no file)."""
+    excluded = [image.pk, *also_deleting]
+    # Before the original's check: a pin share reuses the original without its derived files, so a
+    # shared original must not keep this row's thumbnails alive.
+    for field_name in ("thumbnail", "marker_thumbnail", "analysis_thumbnail"):
+        derived = getattr(image, field_name, None)
+        if derived and derived.name and not file_still_referenced(field_name, derived.name, exclude_pks=excluded):
+            with contextlib.suppress(OSError):
+                derived.delete(save=False)
+
     name = image.image.name if image.image else ""
     if not name:
         return False
 
-    if file_still_referenced("image", name, exclude_pks=[image.pk, *also_deleting]):
+    if file_still_referenced("image", name, exclude_pks=excluded):
         logger.debug("Keeping stored file %s: another image row still references it", name)
         return False
 
@@ -1506,13 +1515,6 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
         image.image.delete(save=False)
     except OSError:
         logger.warning("Could not remove stored file %s; deleting the row anyway", name, exc_info=True)
-    # Checked separately from the original: they are shared together today, but
-    # nothing enforces that, and either is just as easy to orphan.
-    for field_name in ("thumbnail", "marker_thumbnail"):
-        derived = getattr(image, field_name, None)
-        if derived and derived.name and not file_still_referenced(field_name, derived.name, exclude_pks=[image.pk, *also_deleting]):
-            with contextlib.suppress(OSError):
-                derived.delete(save=False)
     return True
 
 

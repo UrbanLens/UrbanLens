@@ -83,3 +83,32 @@ class SharedImageFileDeletionTests(TestCase):
         remaining.delete()
 
         self.assertFalse(default_storage.exists(self.stored_name))
+
+
+class AnalysisThumbnailDeletionTests(SharedImageFileDeletionTests):
+    """The sandbox's downscaled analysis copy belongs to one row and goes with it (P14)."""
+
+    def setUp(self):
+        super().setUp()
+        self.image.analysis_thumbnail.save("shared-photo-analysis.jpg", ContentFile(b"analysis"), save=True)
+        self.analysis_name = self.image.analysis_thumbnail.name
+
+    def test_deleting_an_unshared_photo_removes_its_analysis_copy(self):
+        solo = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, file_size=9)
+        solo.image.save("solo-photo.jpg", ContentFile(b"solo-bytes"), save=True)
+        solo.analysis_thumbnail.save("solo-analysis.jpg", ContentFile(b"analysis"), save=True)
+        analysis = solo.analysis_thumbnail.name
+
+        delete_stored_file(solo)
+        solo.delete()
+
+        self.assertFalse(default_storage.exists(analysis))
+
+    def test_a_shared_original_still_removes_its_own_analysis_copy(self):
+        self._sender_deletes_their_photo()
+
+        self.assertTrue(default_storage.exists(self.stored_name), "the premise failed: the shared file went")
+        self.assertFalse(
+            default_storage.exists(self.analysis_name),
+            "the sender's analysis copy outlived its row because the original file was still shared",
+        )

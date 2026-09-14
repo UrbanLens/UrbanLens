@@ -1093,10 +1093,11 @@ than fallbacks. The rest of this entry records them and the file-stranding work 
 
   Three things the receivers deliberately are not, each of which the obvious version gets wrong:
 
-  - They do not cover `Image`'s columns. `services/media/images.py`'s `delete_stored_file` handles
-    `image`, `thumbnail` and `marker_thumbnail` and knows when two rows legitimately share a file.
-    **`analysis_thumbnail` is handled by neither** - a smaller, separate leak, recorded here rather
-    than fixed in passing because the shared-reference rule needs the same treatment.
+  - They do not cover `Image`'s columns. `services/media/images.py::delete_stored_file` handles
+    `image`, `thumbnail`, `marker_thumbnail` and `analysis_thumbnail`, deleting each only when no
+    other row names it. Until 2026-09-14 it skipped `analysis_thumbnail` entirely, and skipped every
+    derived file whenever the original was still shared, which a pin share always leaves it
+    (`test_shared_image_file_deletion.py::AnalysisThumbnailDeletionTests`).
   - They are connected *per sender*. A sender-less receiver makes every model in the project report
     listeners, which disables Django's fast-delete path repo-wide and trips
     `test_bulk_write_signal_guard`.

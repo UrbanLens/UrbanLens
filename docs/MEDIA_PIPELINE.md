@@ -509,9 +509,8 @@ Three boundaries, each of which the obvious version gets wrong:
   with an achievement or profile, kept with a deleted label or pin, and deleted
   by account deletion for all four.
 - **`Image`'s columns are not managed here.** `services/media/images.py`'s
-  `delete_stored_file` handles `image`, `thumbnail` and `marker_thumbnail`, and
-  knows when two rows legitimately share a file; this module does not.
-  (`analysis_thumbnail` is handled by neither - see P14.)
+  `delete_stored_file` handles `image` and its three derived files, and knows
+  when two rows legitimately share a file; this module does not.
 - **Every unlink waits for the commit.** `post_save`/`post_delete` fire *inside*
   the transaction, so deleting there would survive a rollback that put the row
   back. `transaction.on_commit` runs it only once the write lands.
