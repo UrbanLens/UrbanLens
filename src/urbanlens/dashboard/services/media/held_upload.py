@@ -355,10 +355,9 @@ def sweep_held_uploads() -> tuple[int, int]:
             starts = cache.get(_starts_key(name), 0)
             if starts >= MAX_HELD_STARTS:
                 logger.warning("Dropping the upload held for %s %s: its publish started %s times and never finished", held.key, pk, starts)
-                drop_held(held.key, pk, name)
+                handled += drop_held(held.key, pk, name)
             else:
-                safely_enqueue_task(publish_held_upload, held.key, pk, name)
-            handled += 1
+                handled += safely_enqueue_task(publish_held_upload, held.key, pk, name) is not None
 
     removed = 0
     for storage in storages.values():

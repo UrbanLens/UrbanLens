@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.media.held_upload import (
     held_rows,
     hold_upload,
     queue_held_upload,
+    sweep_held_uploads,
 )
 from urbanlens.dashboard.tests.hypothesis.test_every_stored_photo_is_reencoded import SANDBOX, _fixtures
 
@@ -275,6 +276,18 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
         profile.refresh_from_db()
         self.assertEqual(profile.avatar_upload, "")
         self.assertTrue(profile.avatar)
+
+    def test_a_sweep_during_a_broker_outage_reports_nothing_queued(self) -> None:
+        """The count is what an operator reads mid-incident, and an enqueue the broker refused queued nothing."""
+        profile = self._profile()
+        held = self._held_while_the_broker_was_down(profile)
+        _age(held, _HOUR)
+
+        with mock.patch(_ENQUEUE, return_value=None) as enqueue:
+            handled, _removed = sweep_held_uploads()
+
+        self.assertTrue(self._publishes(enqueue), "the sweep never tried to queue the stalled upload")
+        self.assertEqual(handled, 0, "the sweep counted a publish the broker refused as queued")
 
     def test_one_file_storage_cannot_stat_does_not_stop_the_rest_being_recovered(self) -> None:
         unreadable, recoverable = self._profile(), self._profile()
