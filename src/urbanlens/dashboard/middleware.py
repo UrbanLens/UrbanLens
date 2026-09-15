@@ -272,14 +272,14 @@ class RequestTelemetryMiddleware:
 
         stats = _SqlStats()
         response: HttpResponse | None = None
-        started, cpu_started = time.perf_counter(), time.process_time()
+        started, cpu_started = time.perf_counter(), time.thread_time()
         try:
             with connection.execute_wrapper(stats):
                 response = self.get_response(request)
         finally:
             wall_ms = (time.perf_counter() - started) * 1000
             if wall_ms >= threshold_ms:
-                self._log(request, response, wall_ms, (time.process_time() - cpu_started) * 1000, stats)
+                self._log(request, response, wall_ms, (time.thread_time() - cpu_started) * 1000, stats)
         return response
 
     @staticmethod
@@ -296,8 +296,8 @@ class RequestTelemetryMiddleware:
             request: The request being reported.
             response: The response, or None when the request raised.
             wall_ms: Total time, which is what the user experienced.
-            cpu_ms: Time this process spent running, which separates a busy
-                worker from one that was waiting.
+            cpu_ms: Time the thread serving the request spent running, which
+                separates a busy request from one that was waiting.
             stats: The request's accumulated query time, count and rows.
         """
         match = getattr(request, "resolver_match", None)

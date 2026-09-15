@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import threading
 import time
 from typing import TYPE_CHECKING
 
@@ -31,6 +32,24 @@ def slow_view(request: HttpRequest) -> HttpResponse:
     return HttpResponse("slow")
 
 
+def neighbour_busy_view(request: HttpRequest) -> HttpResponse:
+    """Sleep while another thread in the same process burns CPU, as a concurrent request on a gthread worker does."""
+    stop = threading.Event()
+
+    def _burn() -> None:
+        while not stop.is_set():
+            sum(range(1000))
+
+    neighbour = threading.Thread(target=_burn, daemon=True)
+    neighbour.start()
+    try:
+        time.sleep(SLOW_SECONDS)
+    finally:
+        stop.set()
+        neighbour.join()
+    return HttpResponse("waited")
+
+
 def fast_view(request: HttpRequest) -> HttpResponse:
     """Return immediately."""
     return HttpResponse("fast")
@@ -51,6 +70,7 @@ def raising_view(request: HttpRequest) -> HttpResponse:
 
 urlpatterns = [
     path("slow/", slow_view, name="telemetry.slow"),
+    path("neighbour-busy/", neighbour_busy_view, name="telemetry.neighbour_busy"),
     path("fast/", fast_view, name="telemetry.fast"),
     path("querying/", querying_view, name="telemetry.querying"),
     path("raising/", raising_view, name="telemetry.raising"),
@@ -129,6 +149,20 @@ class TheNumbersAreRightTests(TestCase):
             wall_ms / 2,
             f"a sleeping view reported cpu_ms={cpu_ms} against wall_ms={wall_ms}; the CPU clock is "
             "not measuring what it claims",
+        )
+
+    def test_another_threads_work_is_not_charged_to_this_request(self) -> None:
+        """A gthread worker serves several requests at once, so the process's CPU clock counts all of them."""
+        with self.assertLogs("urbanlens.dashboard.middleware", level="WARNING") as logged:
+            self.client.get("/neighbour-busy/")
+
+        line = _slow_lines(logged.records)[0]
+        wall_ms, cpu_ms = float(_field(line, "wall_ms")), float(_field(line, "cpu_ms"))
+        self.assertLess(
+            cpu_ms,
+            wall_ms / 2,
+            f"a request that only slept reported cpu_ms={cpu_ms} against wall_ms={wall_ms}: "
+            "it was charged for another thread's work",
         )
 
     def test_rows_fetched_counts_the_rows_the_view_read(self) -> None:
