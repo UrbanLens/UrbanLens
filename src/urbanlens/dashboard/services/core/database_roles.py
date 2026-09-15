@@ -97,7 +97,7 @@ def declared_roles() -> tuple[DatabaseRole, ...]:
     task_deadline = int(settings.CELERY_TASK_TIME_LIMIT)
     reads_stats = frozenset({"pg_read_all_stats"})
     return (
-        # 3 gunicorn workers x 16 greenlets, plus room for timeout_utils' executor threads, which connect separately.
+        # 3 gunicorn workers x 16 greenlets; timeout_utils' executor threads connect separately and share the other 6.
         DatabaseRole("web", 54, REQUEST_DEADLINE_SECONDS, reads_stats),
         # Channels runs every consumer's database call on one thread; the health probe is the other.
         DatabaseRole("websocket", 3, REQUEST_DEADLINE_SECONDS, reads_stats),
@@ -138,7 +138,8 @@ def app_role_password(owner_password: str) -> str:
 def apply_database_roles(roles: Sequence[DatabaseRole], password: str, *, using: str = "default") -> list[AppliedRole]:
     """Create or converge the group role, every login role, and their privileges, in one transaction.
 
-    Must run as a superuser: only one may grant the predefined roles.
+    Must run as a superuser: only one may grant the predefined roles. Concurrent runs against one database wait for
+    each other; roles are cluster-wide, but the lock is not, so runs against two databases on one server may collide.
 
     Args:
         roles: The login roles to converge on, normally ``declared_roles()``.
