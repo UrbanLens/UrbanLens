@@ -454,7 +454,7 @@ These all currently take `(self, wiki)` with no viewer. Add `for_wiki(wiki, *, v
 Concealment is a **third, independent conjunct**, applied after the two gates `docs/PRIVACY_MODEL.md` defines. Never modify the existing filters:
 
 - `ImageQuerySet.visible_to` (`models/images/queryset.py:85`) — the settings gate. Concealment ANDs on top: `.visible_to(viewer).conceal_for(wiki, viewer)`. Do **not** widen `visible_to` to admit ownerless rows as part of this work (§2.11) — that is a separate privacy-model decision affecting every viewer.
-- `visible_wiki_location_ids_cached` / `location_visible_to` (`wiki_access.py:212,257`) — the container gate. Answers *whether the page renders*. Concealment answers *what it contains*. Keeping them separate is what stops concealment from accidentally becoming an access-control bypass.
+- `visible_wiki_locations_cached` / `location_visible_to` (`wiki_access.py:212,257`) — the container gate. Answers *whether the page renders*. Concealment answers *what it contains*. Keeping them separate is what stops concealment from accidentally becoming an access-control bypass.
 - `resolve_visible_identities` / `masked_editor_name` (`wiki_detail.py:51-69`) — masks **who**, never **that**. A masked name still proves a person edited. Concealment must remove the row, not mask the name. Do not mistake existing masking for existing concealment anywhere on this surface.
 - `visible_owners` / `sale_rows` (`services/property/owner_access.py`) — the *entitlement* gate (`SiteFeature.PROPERTY_OWNERS`). Orthogonal; both must hold; `parties_withheld` must be computed over entitlement only.
 

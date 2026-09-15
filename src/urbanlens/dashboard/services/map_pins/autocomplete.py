@@ -55,7 +55,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.locations.external_tag_groups import tag_match_q
     from urbanlens.dashboard.services.wiki.concealment import concealment_active
-    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
 
     results: list[AutocompleteResult] = []
     q = query.strip()
@@ -132,7 +132,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         Wiki.objects.filter(
             Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q) | tag_match_q(q, "location__place__external_tags"),
         )
-        .filter(location_id__in=visible_wiki_location_ids_cached(profile))
+        .filter(location_id__in=visible_wiki_locations_cached(profile))
         .select_related("location")
         .distinct()[:5]
     )

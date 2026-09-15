@@ -24,10 +24,10 @@ class ArticleQuerySet(DashboardQuerySet):
         Returns:
             Queryset filtered to readable articles.
         """
-        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
 
         return self.filter(
-            Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile)),
+            Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_locations_cached(profile)),
         ).distinct()
 
     def with_content(self) -> ArticleQuerySet:

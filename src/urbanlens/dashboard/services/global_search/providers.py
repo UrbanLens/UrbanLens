@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
-from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
 
 #: Preserves the concrete queryset class through the shared helpers.
 #: Without it they hand back a plain QuerySet, and a provider that then calls a custom manager method
@@ -575,7 +575,7 @@ class PhotoSearchProvider(SearchProvider):
                 # net, and visible_to() below is the gate.
                 # It follows wiki reach so the candidates match what that gate now admits - a photo
                 # on a wiki reached through the place domain.
-                Q(profile=profile) | Q(pin__profile=profile) | Q(location_id__in=visible_wiki_location_ids_cached(profile)),
+                Q(profile=profile) | Q(pin__profile=profile) | Q(location_id__in=visible_wiki_locations_cached(profile)),
             )
             .select_related("pin", "location__wiki", "profile")
             .exclude(image="")
@@ -662,7 +662,7 @@ class WikiSearchProvider(SearchProvider):
             return []
         # Asks the access authority rather than restating one of its clauses.
         queryset = Wiki.objects.filter(
-            location_id__in=visible_wiki_location_ids_cached(profile),
+            location_id__in=visible_wiki_locations_cached(profile),
         ).select_related("location")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
@@ -717,10 +717,10 @@ class ArticleSearchProvider(SearchProvider):
 
         access = Q(pin__profile=profile)
         if profile.community_enabled:
-            # wiki__location_id__in=visible_wiki_location_ids_cached: same
+            # wiki__location_id__in=visible_wiki_locations_cached: same
             # domain-aware access rule as the wiki page itself, not just an
             # exact-Location pin match.
-            access |= Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile))
+            access |= Q(wiki__location_id__in=visible_wiki_locations_cached(profile))
         queryset = Article.objects.filter(access).with_content().select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place) | place_filter("wiki__location", parsed.place))
@@ -1106,11 +1106,11 @@ class CommentSearchProvider(SearchProvider):
             return []
         results: list[SearchResult] = []
 
-        # wiki__location_id__in=visible_wiki_location_ids_cached: same domain-aware
+        # wiki__location_id__in=visible_wiki_locations_cached: same domain-aware
         # access rule as the wiki page itself, not just an exact-Location pin match.
         comment_qs = (
             Comment.objects.filter(
-                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile)),
+                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_locations_cached(profile)),
             )
             .filter(term_filter(parsed.terms, ["text"]))
             .filter(date_range_filter("created", parsed))

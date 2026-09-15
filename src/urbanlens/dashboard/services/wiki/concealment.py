@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 ALWAYS_UNSET: tuple[str, ...] = ("fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked")
 
 #: Cached per request on the Profile instance, like
-#: ``visible_wiki_location_ids_cached`` - a Profile is loaded fresh per request,
+#: ``visible_wiki_locations_cached`` - a Profile is loaded fresh per request,
 #: so the entry cannot outlive one, and nothing has to invalidate it.
 _FRIEND_CACHE_ATTR = "_ul_accepted_friend_ids"
 

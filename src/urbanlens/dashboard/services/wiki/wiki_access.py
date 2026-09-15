@@ -6,12 +6,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.location.model import Location
@@ -218,57 +220,71 @@ def location_visible_to(location: Location, profile: Profile) -> bool:
     return _visible_given_pins(location, Pin.objects.filter(profile=profile), profile)
 
 
-def visible_wiki_location_ids(profile: Profile) -> set[int]:
-    """Location ids of every Wiki visible to *profile*.
-    Entirely database-side now that access is a domain lookup rather than a containment scan.
+type VisibleWikiLocations = QuerySet[Pin, int] | QuerySet[Location, int]
+
+
+def visible_wiki_locations(profile: Profile) -> VisibleWikiLocations:
+    """Location ids of every Wiki visible to *profile*, as a subquery to filter with.
+
+    The ids stay in the database, so a query filtering on them costs the same to build and plan however many
+    places the viewer has pinned.
 
     Args:
         profile: The viewing profile.
 
     Returns:
-        Set of Location primary keys whose Wiki is visible to *profile*."""
+        A one-column queryset of Location primary keys whose Wiki is visible to *profile*."""
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
-    direct_ids = set(Pin.objects.filter(profile=profile).values_list("location_id", flat=True))
+    pinned = Pin.objects.filter(profile=profile, location_id__isnull=False).values_list("location_id", flat=True)
     domains = accessible_domain_ids(profile)
     if not domains:
-        return direct_ids
-    return direct_ids | set(Location.objects.filter(wiki__isnull=False, place__domain_root_id__in=domains).values_list("pk", flat=True))
+        return pinned
+    return Location.objects.filter(Q(pk__in=pinned) | Q(wiki__isnull=False, place__domain_root_id__in=domains)).values_list("pk", flat=True)
 
 
-#: Instance attribute the per-request memoization hangs on.
-_CACHE_ATTR = "_ul_visible_wiki_location_ids"
-
-
-def visible_wiki_location_ids_cached(profile: Profile) -> set[int]:
-    """:func:`visible_wiki_location_ids`, memoised on the profile instance.
-    Cached on the instance rather than in a module-level dict deliberately: a ``Profile`` is loaded fresh per request, so the entry cannot outlive the request that made it, and nothing has to invalidate it when a pin moves.
+def visible_wiki_location_ids(profile: Profile) -> set[int]:
+    """:func:`visible_wiki_locations` read into a set, for membership tests.
 
     Args:
         profile: The viewing profile.
 
     Returns:
         Set of Location primary keys whose Wiki is visible to *profile*."""
+    return set(visible_wiki_locations(profile))
+
+
+#: Instance attribute the per-request memoization hangs on.
+_CACHE_ATTR = "_ul_visible_wiki_locations"
+
+
+def visible_wiki_locations_cached(profile: Profile) -> VisibleWikiLocations:
+    """:func:`visible_wiki_locations`, memoised on the profile instance.
+    Cached on the instance rather than in a module-level dict deliberately: a ``Profile`` is loaded fresh per request, so the entry cannot outlive the request that made it. What it saves is the domain lookup; the pinned half is read by each query that filters on it.
+
+    Args:
+        profile: The viewing profile.
+
+    Returns:
+        A one-column queryset of Location primary keys whose Wiki is visible to *profile*."""
     cached = getattr(profile, _CACHE_ATTR, None)
     if cached is None:
-        cached = visible_wiki_location_ids(profile)
+        cached = visible_wiki_locations(profile)
         # setattr rather than a direct assignment: the attribute is not declared on Profile, and
         # assigning it directly is an error django-stubs is right to flag.
-        # Memoizing on the instance is still the point - a Profile is loaded fresh per request, so
-        # the entry cannot outlive one.
         setattr(profile, _CACHE_ATTR, cached)
     return cached
 
 
-def visible_wiki_location_ids_if_primed(profile: Profile) -> set[int] | None:
-    """The memoised set, but only when somebody has already asked for it.
+def visible_wiki_locations_if_primed(profile: Profile) -> VisibleWikiLocations | None:
+    """The memoised subquery, but only when somebody has already asked for it.
 
     Args:
         profile: The viewing profile.
 
     Returns:
-        The primed set, or None when nothing has primed it."""
+        The primed subquery, or None when nothing has primed it."""
     return getattr(profile, _CACHE_ATTR, None)
 
 
@@ -294,10 +310,7 @@ def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> lis
     new_point = Point(float(longitude), float(latitude), srid=4326)
     profile = pin.profile
 
-    visible_ids = visible_wiki_location_ids(profile)
-    if not visible_ids:
-        return []
-    candidates = list(Wiki.objects.filter(location_id__in=visible_ids).select_related("location", "location__place"))
+    candidates = list(Wiki.objects.filter(location_id__in=visible_wiki_locations(profile)).select_related("location", "location__place"))
     if not candidates:
         return []
 

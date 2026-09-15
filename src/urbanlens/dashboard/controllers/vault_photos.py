@@ -480,12 +480,12 @@ class PhotoActionView(LoginRequiredMixin, View):
         """
         from urbanlens.dashboard.models.wiki import Wiki
         from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
-        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
 
         if image.media_type == MediaKind.DOCUMENT:
             return _toast("Documents can't be sent to a wiki.", "error")
         location_slug = (request.POST.get("location_slug") or "").strip()
-        wiki = Wiki.objects.filter(location__slug=location_slug, location_id__in=visible_wiki_location_ids_cached(profile)).select_related("location").first()
+        wiki = Wiki.objects.filter(location__slug=location_slug, location_id__in=visible_wiki_locations_cached(profile)).select_related("location").first()
         if wiki is None:
             return _toast("That wiki could not be found.", "error")
         if image.wiki_id == wiki.pk:

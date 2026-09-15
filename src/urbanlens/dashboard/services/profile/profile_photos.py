@@ -43,12 +43,9 @@ def strip_photos_visible_to(profile: Profile, viewer: Profile) -> QuerySet[Image
 
     Returns:
         Up to `STRIP_LIMIT` wiki-attached photos of profile's that viewer has pinned the location for (and whose upload/viewer photo- visibility settings otherwise permit - see `ImageQuerySet.visible_to`)."""
-    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations
 
-    visible_location_ids = visible_wiki_location_ids(viewer)
-    if not visible_location_ids:
-        return Image.objects.none()
-    return Image.objects.filter(profile=profile, media_type=MediaKind.PHOTO, wiki__location_id__in=visible_location_ids).visible_to(viewer).select_related("wiki__location").order_by("-created")[:STRIP_LIMIT]
+    return Image.objects.filter(profile=profile, media_type=MediaKind.PHOTO, wiki__location_id__in=visible_wiki_locations(viewer)).visible_to(viewer).select_related("wiki__location").order_by("-created")[:STRIP_LIMIT]
 
 
 def attachment_points_for_image(image: Image) -> list[dict]:

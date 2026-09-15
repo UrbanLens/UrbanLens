@@ -45,7 +45,7 @@ def prime_viewer_scope(profile: Profile) -> None:
     from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.trips.model import TripMembership
-    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
 
     accepted = FriendshipStatus.ACCEPTED
     friends = set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(
@@ -57,7 +57,7 @@ def prime_viewer_scope(profile: Profile) -> None:
     setattr(profile, _PINNED_LOCATION_IDS_ATTR, set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True)))
     setattr(profile, _TRIP_IDS_ATTR, set(TripMembership.objects.trip_ids_for(profile)))
     # Fills the same instance attribute _shared_within_reach_of reads through.
-    visible_wiki_location_ids_cached(profile)
+    visible_wiki_locations_cached(profile)
 
 
 def _named_this_viewer(viewer_profile: Profile) -> Q:
@@ -89,11 +89,10 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     # prime_viewer_scope), and reads fresh otherwise.
     # Never populates: reading through the self-caching variant would make every caller a cacher,
     # and a request that pins a place and then asks what it can see would get the answer from before
-    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids, visible_wiki_location_ids_if_primed
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations, visible_wiki_locations_if_primed
 
-    primed = visible_wiki_location_ids_if_primed(viewer_profile)
-    location_ids = visible_wiki_location_ids(viewer_profile) if primed is None else primed
-    return Q(wiki__location_id__in=location_ids)
+    primed = visible_wiki_locations_if_primed(viewer_profile)
+    return Q(wiki__location_id__in=visible_wiki_locations(viewer_profile) if primed is None else primed)
 
 
 def _viewer_scoped(profile: Profile, attribute: str, compute: Callable[[], set[int]]) -> set[int]:

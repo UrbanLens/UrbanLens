@@ -83,7 +83,7 @@ This is the target, verified against code. It has **two phases**, and the second
 
 8. **`wiki_exists` boolean** in `external_api/views_pin_sync.py:74,112,158`. *(merges #4, #33)*
 9. **`resolve_visible_wiki` answers 200 vs 404** — `services/wiki/wiki_access.py:388-393`, the single resolution point for all 25 wiki view classes. There is no fourth branch for "exists but must read as absent". *(#36)*
-10. **Global search: wiki / article / comment / photo providers** — `services/global_search/providers.py:478, 525, 867, 383`, scoped only by `visible_wiki_location_ids_cached`. Returns `excerpt(wiki.description, …)` — the withheld text itself. *(merges #7, #39, #78)*
+10. **Global search: wiki / article / comment / photo providers** — `services/global_search/providers.py:478, 525, 867, 383`, scoped only by `visible_wiki_locations_cached`. Returns `excerpt(wiki.description, …)` — the withheld text itself. *(merges #7, #39, #78)*
 11. **Map autocomplete** — `services/map_pins/autocomplete.py:96-98` (own‑pin OR clauses on hidden `name`/`aliases`/`description`: a blind substring oracle) and `:138-162` (community block, no gate, no `officially_created`, returns wiki name + exact lat/lng). *(merges #8, #9, #38, #77)*
 12. **Pin‑move 409 names the wiki** — `external_api/views.py:823`, `services/wiki/wiki_access.py:283-330`. *(#35)*
 13. **Device‑scan nearby markers** — `external_api/views_device_scans.py:105`. *(#41)*

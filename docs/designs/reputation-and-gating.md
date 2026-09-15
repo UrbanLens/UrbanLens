@@ -975,7 +975,7 @@ shuts the probing attack, then enrich. Each phase is independently shippable and
    accepted invitations. No gating yet; this phase proves the pipeline stays off the request
    path.
 3. **The gate (`T_community`) + the reveal budget.** The tier that closes the attack. Hooked
-   into `resolve_visible_wiki` / `get_for_location` / `visible_wiki_location_ids_cached` —
+   into `resolve_visible_wiki` / `get_for_location` / `visible_wiki_locations_cached` —
    the same authorities the 2026-08-24 sweep consolidated on, never a parallel filter.
    Subscription bypass ships here (one `SiteFeature` value, `user_has_feature`), because the
    gate is not safe to turn on without it.
