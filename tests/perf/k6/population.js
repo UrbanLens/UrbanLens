@@ -358,8 +358,8 @@ function renderVerdict(data) {
     const lines = ["", `capacity run: levels ${holds(STAGES).map((stage) => stage.users).join(" -> ")}, page p95 < ${BUDGETS.page}ms, fragment p95 < ${BUDGETS.fragment}ms`, ""];
     lines.push("  hold        failed    ws ok   worst page p95            worst fragment p95         map_document p95");
     for (const stage of holds(STAGES)) {
-        const failed = value(data, `http_req_failed{stage:${stage.name}}`, "rate");
-        const ws = value(data, `ws_handshake_ok{stage:${stage.name}}`, "rate");
+        const failed = rate(data, `http_req_failed{stage:${stage.name}}`);
+        const ws = rate(data, `ws_handshake_ok{stage:${stage.name}}`);
         const worst = (budgetClass) => {
             let found = null;
             for (const [endpoint, klass] of Object.entries(ENDPOINTS)) {
@@ -388,6 +388,15 @@ function value(data, key, stat) {
     return metric && metric.values ? metric.values[stat] : undefined;
 }
 
-function percent(rate) {
-    return rate === undefined ? "-" : `${(rate * 100).toFixed(2)}%`;
+/** A rate, or undefined when nothing was recorded: k6 reports an empty sub-metric as 0. */
+function rate(data, key) {
+    const metric = data.metrics[key];
+    if (!metric || !metric.values || metric.values.passes + metric.values.fails === 0) {
+        return undefined;
+    }
+    return metric.values.rate;
+}
+
+function percent(share) {
+    return share === undefined ? "-" : `${(share * 100).toFixed(2)}%`;
 }

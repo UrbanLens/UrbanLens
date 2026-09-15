@@ -166,12 +166,17 @@ export function pickJourney(random, journeys = JOURNEYS) {
     return journeys[journeys.length - 1].name;
 }
 
-/** A client address unique to one VU, for the proxy to key per-visitor limits on. */
+/**
+ * A client address unique to one VU, for the proxy to key per-visitor limits on.
+ *
+ * Carrier-grade NAT space rather than a private range: the proxy trusts private ranges as its own hops, and an
+ * address it trusts is skipped when it looks for the visitor.
+ */
 export function forwardedFor(vuId) {
-    if (!Number.isInteger(vuId) || vuId < 1 || vuId > 0xfffffe) {
+    if (!Number.isInteger(vuId) || vuId < 1 || vuId > 0x3fffff) {
         throw new Error(`No address for VU ${vuId}.`);
     }
-    return `10.${(vuId >> 16) & 255}.${(vuId >> 8) & 255}.${vuId & 255}`;
+    return `100.${64 + ((vuId >> 16) & 63)}.${(vuId >> 8) & 255}.${vuId & 255}`;
 }
 
 /** Which manifest account a VU signs in as. Stable for the VU's life. */

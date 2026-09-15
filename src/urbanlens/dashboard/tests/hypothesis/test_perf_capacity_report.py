@@ -159,3 +159,17 @@ def test_the_report_marks_an_endpoint_over_budget(tmp_path: Path) -> None:
 
     assert "**OVER**" in text
     assert "| u100 | 100 | 1.00% | - | 42 |" in text
+
+
+def test_a_rate_with_no_samples_is_no_data_rather_than_zero() -> None:
+    """k6 reports an empty sub-metric as rate 0 with its threshold passed."""
+    summary = {
+        "metrics": {
+            "http_req_failed{stage:u100}": {"values": {"rate": 0.0, "passes": 0, "fails": 120}},
+            "ws_handshake_ok{stage:u100}": {"values": {"rate": 0.0, "passes": 0, "fails": 0}},
+        },
+    }
+
+    text = report_capacity.render(summary, STAGES_DOCUMENT, [], [])
+
+    assert "| u100 | 100 | 0.00% | - |" in text

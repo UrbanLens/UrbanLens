@@ -231,8 +231,8 @@ def render(summary: dict[str, Any], stages_document: dict[str, Any], containers:
     for stage in stages_document["stages"]:
         if stage["kind"] != "hold":
             continue
-        failed = metrics.get(f"http_req_failed{{stage:{stage['name']}}}", {}).get("values", {}).get("rate")
-        socket = metrics.get(f"ws_handshake_ok{{stage:{stage['name']}}}", {}).get("values", {}).get("rate")
+        failed = _rate(metrics.get(f"http_req_failed{{stage:{stage['name']}}}"))
+        socket = _rate(metrics.get(f"ws_handshake_ok{{stage:{stage['name']}}}"))
         views = sum(int(metric.get("values", {}).get("count", 0)) for key, metric in metrics.items() if parse_metric_key(key)[0] == "page_views" and parse_metric_key(key)[1].get("stage") == stage["name"])
         lines.append(f"| {stage['name']} | {stage['users']} | {_percent(failed)} | {_percent(socket)} | {views or '-'} |")
 
@@ -254,6 +254,18 @@ def render(summary: dict[str, Any], stages_document: dict[str, Any], containers:
             lines.append(f"| {row['stage']} | {row['requests']} | {errors} | {row['p95_seconds']:.3f} |")
     lines.append("")
     return "\n".join(lines)
+
+
+def _rate(metric: dict[str, Any] | None) -> float | None:
+    """A rate metric's value, or None when nothing was recorded.
+
+    k6 reports an empty sub-metric as rate 0 and passes its threshold, so without this a hold where no socket ever
+    opened reads as 0% handshakes and a hold where none was attempted reads the same.
+    """
+    values = (metric or {}).get("values", {})
+    if "passes" in values and values.get("passes", 0) + values.get("fails", 0) == 0:
+        return None
+    return values.get("rate")
 
 
 def _percent(value: float | None) -> str:

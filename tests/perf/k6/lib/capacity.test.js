@@ -115,15 +115,20 @@ describe("what a user does", () => {
         }
     });
 
-    test("every VU gets its own address, and none is the network's", () => {
+    test("every VU gets its own address, outside every range the proxy trusts", () => {
         const seen = new Set();
-        for (let vu = 1; vu <= 3000; vu += 1) {
+        for (const vu of [...Array.from({ length: 3000 }, (_, index) => index + 1), 65536, 0x3fffff]) {
             const address = forwardedFor(vu);
-            expect(address).toMatch(/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/);
+            const octets = address.split(".").map(Number);
+            expect(octets[0]).toBe(100);
+            expect(octets[1]).toBeGreaterThanOrEqual(64);
+            expect(octets[1]).toBeLessThanOrEqual(127);
+            expect(octets.every((octet) => octet >= 0 && octet <= 255)).toBe(true);
             seen.add(address);
         }
-        expect(seen.size).toBe(3000);
+        expect(seen.size).toBe(3002);
         expect(() => forwardedFor(0)).toThrow();
+        expect(() => forwardedFor(0x400000)).toThrow();
     });
 
     test("VUs map onto accounts one to one until they run out", () => {
