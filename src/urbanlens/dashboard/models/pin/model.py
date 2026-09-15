@@ -861,6 +861,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             Index(fields=["profile", "priority"], name="idxdb_pin_pfile_prio"),
             Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),
+            Index(fields=["profile", "created"], name="idxdb_pin_pfile_created"),
         ]
         constraints = [
             UniqueConstraint(
