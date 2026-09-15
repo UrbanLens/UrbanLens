@@ -1,18 +1,53 @@
 from __future__ import annotations
 
+from functools import cache, partial, wraps
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.models import User
 from django.db import DatabaseError
+from django.utils.functional import SimpleLazyObject, empty
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
 
+class Deferred(SimpleLazyObject):
+    """A context value computed on first read. A template calls it, so filters receive the value rather than this."""
+
+    def __call__(self) -> Any:
+        if self._wrapped is empty:
+            self._setup()
+        return self._wrapped
+
+
+def _read(compute: Callable[[], Mapping[str, object]], key: str) -> object:
+    return compute().get(key)
+
+
+def deferred(*keys: str) -> Callable[[Callable[[HttpRequest], Mapping[str, object]]], Callable[[HttpRequest], dict[str, Deferred]]]:
+    """Run a processor only if the template reads one of *keys*, and once however many it reads.
+
+    Django runs every processor on every render, including fragments that read none of their values.
+    """
+
+    def decorate(processor: Callable[[HttpRequest], Mapping[str, object]]) -> Callable[[HttpRequest], dict[str, Deferred]]:
+        @wraps(processor)
+        def lazily(request: HttpRequest) -> dict[str, Deferred]:
+            compute = cache(partial(processor, request))
+            return {key: Deferred(partial(_read, compute, key)) for key in keys}
+
+        return lazily
+
+    return decorate
+
+
+@deferred("site_title", "app_version", "public_costs_page_enabled")
 def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
     """Inject site-wide settings into template context.
 
@@ -41,6 +76,7 @@ def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
     }
 
 
+@deferred("show_dev_toolbar", "dev_toolbar_theme_mode", "dev_toolbar_map_dark_mode")
 def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
     """Inject dev toolbar visibility and theme state.
 
@@ -75,6 +111,7 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
     }
 
 
+@deferred("env_indicator_type", "env_indicator_label")
 def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
     """Expose the active environment for the non-production banner.
 
@@ -146,6 +183,7 @@ def add_page_name(request: HttpRequest) -> dict[str, str]:
     return {"page_name": page_name, "nav_section": nav_section}
 
 
+@deferred("distance_units")
 def add_distance_units(request: HttpRequest) -> dict[str, str]:
     """Expose the viewer's distance unit to templates.
 
@@ -166,6 +204,7 @@ def add_distance_units(request: HttpRequest) -> dict[str, str]:
     return {"distance_units": units}
 
 
+@deferred("keyboard_shortcuts")
 def add_keyboard_shortcuts(request: HttpRequest) -> dict[str, dict[str, str]]:
     """Expose the viewer's shortcut overrides to templates.
 
@@ -183,6 +222,7 @@ def add_keyboard_shortcuts(request: HttpRequest) -> dict[str, dict[str, str]]:
     return {"keyboard_shortcuts": {}}
 
 
+@deferred("pending_account_deletion", "account_deletion_date", "account_deletion_days_left")
 def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
     """Expose pending-deletion state for the warning banner.
 
@@ -206,6 +246,7 @@ def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
     return {"pending_account_deletion": False, "account_deletion_date": None, "account_deletion_days_left": None}
 
 
+@deferred("show_messages_icon", "e2ee_needs_oauth_enroll")
 def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
     """Expose whether the navbar messages icon should render.
 
@@ -234,19 +275,25 @@ def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
     return {"show_messages_icon": False, "e2ee_needs_oauth_enroll": False}
 
 
+#: Template flag, and the ``SiteFeature`` member it reports.
+_FEATURE_FLAGS = {
+    "can_use_ai_features": "AI",
+    "show_places_layer": "PLACES",
+    "can_use_web_search": "SEARCH",
+    "can_upload_videos": "VIDEO_UPLOADS",
+    "can_upload_documents": "DOCUMENT_UPLOADS",
+    "show_games_nav": "ALPHA_FEATURES",
+    "has_beta_features": "BETA_FEATURES",
+}
+
+
+@deferred(*_FEATURE_FLAGS)
 def add_feature_access(request: HttpRequest) -> dict[str, bool]:
     """Expose subscription-gated feature visibility to templates."""
     try:
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_features
 
-        return {
-            "can_use_ai_features": user_has_feature(request.user, SiteFeature.AI),
-            "show_places_layer": user_has_feature(request.user, SiteFeature.PLACES),
-            "can_use_web_search": user_has_feature(request.user, SiteFeature.SEARCH),
-            "can_upload_videos": user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS),
-            "can_upload_documents": user_has_feature(request.user, SiteFeature.DOCUMENT_UPLOADS),
-            "show_games_nav": user_has_feature(request.user, SiteFeature.ALPHA_FEATURES),
-            "has_beta_features": user_has_feature(request.user, SiteFeature.BETA_FEATURES),
-        }
+        features = user_features(request.user)
     except (ImportError, DatabaseError):
-        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False, "can_upload_videos": False, "show_games_nav": False, "has_beta_features": False}
+        return dict.fromkeys(_FEATURE_FLAGS, False)
+    return {flag: SiteFeature[member] in features for flag, member in _FEATURE_FLAGS.items()}

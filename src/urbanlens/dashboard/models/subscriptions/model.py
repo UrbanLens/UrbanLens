@@ -296,6 +296,23 @@ def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeatur
     return any(role.grants(feature) for role in _paid_subscription_roles(user))
 
 
+def user_features(user: AbstractBaseUser | AnonymousUser) -> frozenset[str]:
+    """Every feature the user has, via the admin permission, the site default or an active role.
+
+    For a caller asking about several features; ``user_has_feature`` stops at the first grant.
+    """
+    if not isinstance(user, User) or not user.is_authenticated:
+        return frozenset()
+    if user.has_perm("dashboard.view_site_admin"):
+        return frozenset(SiteFeature.values)
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    features = set(SiteSettings.get_current().feature_set)
+    for role in active_subscription_roles(user):
+        features |= role.feature_set
+    return frozenset(features)
+
+
 def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:
     """Return the subscription roles the user currently holds, admin-granted or paid.
 

@@ -7,5 +7,6 @@ from urbanlens.dashboard.models.subscriptions.model import (
     UserSubscription,
     active_subscription_roles,
     grant_subscription,
+    user_features,
     user_has_feature,
 )
