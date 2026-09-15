@@ -190,6 +190,21 @@ export function filterQueries(pinNamePrefix) {
     return [pinNamePrefix, `${pinNamePrefix} 1`, `${pinNamePrefix} 12`];
 }
 
+/** What the map page fetches after its HTML, in order: with no pin cache it downloads every pin before polling meta. */
+export function mapLoadEndpoints(cold) {
+    return cold ? ["map_document", "map_pins_meta"] : ["map_pins_meta"];
+}
+
+/** The fingerprint a filter sends to claim the page's pin store, read from a meta response. Empty asks for payloads. */
+export function storeClaim(metaBody) {
+    try {
+        const data = JSON.parse(metaBody);
+        return data && typeof data.fingerprint === "string" ? data.fingerprint : "";
+    } catch (error) {
+        return "";
+    }
+}
+
 /**
  * Thresholds that name every endpoint in every hold, which is the only way k6 aggregates a sub-metric, plus the
  * asserted ones.

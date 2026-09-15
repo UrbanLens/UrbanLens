@@ -18,9 +18,11 @@ import {
     forwardedFor,
     holds,
     k6Stages,
+    mapLoadEndpoints,
     parseLevels,
     pickJourney,
     stageAt,
+    storeClaim,
     thinkSeconds,
     totalSeconds,
 } from "./capacity.js";
@@ -145,6 +147,18 @@ describe("what a user does", () => {
         for (const query of narrower) {
             expect(query.startsWith(broad)).toBe(true);
         }
+    });
+
+    test("a cold map downloads every pin and then asks whether they changed", () => {
+        expect(mapLoadEndpoints(true)).toEqual(["map_document", "map_pins_meta"]);
+        expect(mapLoadEndpoints(false)).toEqual(["map_pins_meta"]);
+    });
+
+    test("a filter claims the store with the fingerprint meta served, and claims nothing it cannot read", () => {
+        expect(storeClaim(JSON.stringify({ fingerprint: "f1", last_updated: "2026-09-15T00:00:00Z" }))).toBe("f1");
+        expect(storeClaim(JSON.stringify({ last_updated: "2026-09-15T00:00:00Z" }))).toBe("");
+        expect(storeClaim("<!doctype html>")).toBe("");
+        expect(storeClaim(null)).toBe("");
     });
 });
 

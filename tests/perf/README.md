@@ -125,9 +125,12 @@ Each VU sends its own `X-Forwarded-For`, so per-visitor proxy limits see a
 thousand visitors rather than one; nginx trusts that header from the Docker
 bridge the way it trusts it from the tunnel.
 
-What a VU does is modelled on the templates, not guessed: every page load fetches
-the header's unread counts and safety banner, the map fetches its document on a
-cold pin cache and the meta otherwise, an open page polls unread messages every
+What a VU does is modelled on the templates, not guessed: a page load is the page
+and whatever it fetches as it renders (the header's unread counts and safety
+banner come inside the page), the map downloads its document on a cold pin cache
+before polling meta, a filter claims the pin store with the fingerprint meta
+served (so the server answers with identifiers, as it does a browser whose store
+is complete), an open page polls unread messages every
 60 s and the map's meta every 2 min, and every page opens `/ws/notifications/`
 and closes it on the next navigation. The messages page's own socket, saved-filter
 counts and anything a user writes are not modelled yet.

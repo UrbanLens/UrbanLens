@@ -26,9 +26,11 @@ import {
     forwardedFor,
     holds,
     k6Stages,
+    mapLoadEndpoints,
     parseLevels,
     pickJourney,
     stageAt,
+    storeClaim,
     thinkSeconds,
     totalSeconds,
 } from "./lib/capacity.js";
@@ -151,8 +153,8 @@ function signedIn(response) {
     check(response, { "still signed in": (r) => !String(r.url).includes(LOGIN_PATH) }, { guard: "signed_in" });
 }
 
-function fetchOne(state, endpoint, path) {
-    const response = get(state.session, path, { endpoint, stage: stageNow() }, { timeout: REQUEST_TIMEOUT });
+function fetchOne(state, endpoint, path, extra) {
+    const response = get(state.session, path, { endpoint, stage: stageNow() }, Object.assign({ timeout: REQUEST_TIMEOUT }, extra));
     signedIn(response);
     return response;
 }
@@ -183,10 +185,19 @@ const JOURNEY_STEPS = {
     map(state) {
         const cold = !state.mapVisited && Math.random() < COLD_CACHE_SHARE;
         state.mapVisited = true;
-        page(state, "map_view", ROUTES["map.view"], [cold ? ["map_document", ROUTES["map.document"]] : ["map_pins_meta", ROUTES["map.pins.meta"]]]);
+        fetchOne(state, "map_view", ROUTES["map.view"]);
+        let claim = "";
+        for (const endpoint of mapLoadEndpoints(cold)) {
+            if (endpoint === "map_pins_meta") {
+                claim = storeClaim(fetchOne(state, endpoint, ROUTES["map.pins.meta"], { responseType: "text" }).body);
+            } else {
+                fetchOne(state, endpoint, ROUTES["map.document"]);
+            }
+        }
         if (Math.random() < FILTER_SHARE) {
             for (const query of filterQueries(MANIFEST.pin_name_prefix || "Perf Pin")) {
-                const response = postForm(state.session, ROUTES["map.search"], { name: query }, { endpoint: "map_search", stage: stageNow() }, { timeout: REQUEST_TIMEOUT });
+                const body = { name: query, store_fingerprint: claim };
+                const response = postForm(state.session, ROUTES["map.search"], body, { endpoint: "map_search", stage: stageNow() }, { timeout: REQUEST_TIMEOUT });
                 signedIn(response);
                 sleep(0.7 + Math.random() * 1.3);
             }
