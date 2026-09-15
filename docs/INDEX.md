@@ -41,7 +41,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P9 | open | 2026-09-08 | REData gaps: mostly closed 2026-09-08; `?limit=` is REData-side, land-use-area geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-09-06 | 84 raw `fetch()` calls bypass `fetch-json.ts`, and "all the wrappers are gone" was a count, not a search | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P14 | open | 2026-09-15 | Media gate residue: replaced or deleted pin and label icons strand their files, and historical orphans remain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P14 | open | 2026-09-15 | Historical `pin_images/` files whose Image row is gone are never removed (disk only) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-07-22 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-09-06 | Audit re-verification's residual gaps remain: a 1,100-line `_dark.scss`, a stub AI gateway, blocking AI in the request | [`docs/PROBLEMS.md`](PROBLEMS.md) |

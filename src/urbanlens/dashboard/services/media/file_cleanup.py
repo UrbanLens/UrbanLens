@@ -24,6 +24,7 @@ MANAGED_FILE_FIELDS: tuple[tuple[str, str, str], ...] = (
 #: Deliberately absent: `Pin.custom_icon` and `Label.custom_icon`.
 #: Both models are restorable by the undo framework, which stashes the icon as its stored *name*
 #: rather than its bytes (`services/undo/handlers/pin.py`, `.../label.py`).
+#: `services/media/stored_field.py::sweep_unnamed_files` removes their files once no undo can restore them.
 UNDO_RESTORABLE_FILE_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("dashboard", "Pin", "custom_icon"),
     ("dashboard", "Label", "custom_icon"),

@@ -1001,134 +1001,54 @@ reporter considers too slow to refresh.
 
 ---
 
-## P14 — Media gate residue: replaced or deleted pin and label icons strand their files, and historical orphans remain
+## P14 — Historical `pin_images/` files whose Image row is gone are never removed (disk only)
 
 `id: P14` · `status: open` · `updated: 2026-09-15`
 
-Previously titled "Media gate residue: icons are owner-scoped now; stranded icon files and safety
-check-in photo audiences remain", before that "Custom pin and label icons are readable by any authenticated user; narrowing
-that needs a pin-visibility query nothing has", before that "Authenticated media gate - residual
-per-family risk (2026-07-23)".
+Previously titled "Media gate residue: replaced or deleted pin and label icons strand their files,
+and historical orphans remain", before that "Media gate residue: icons are owner-scoped now;
+stranded icon files and safety check-in photo audiences remain", before that "Custom pin and label
+icons are readable by any authenticated user; narrowing that needs a pin-visibility query nothing
+has", before that "Authenticated media gate - residual per-family risk (2026-07-23)".
 
-`/media/...` is now served through `dashboard.controllers.media.MediaGateView` (nginx `location
-/media/` proxies to Django; authorized responses hand back to the `internal`-only
-`/_protected_media/` alias via X-Accel-Redirect). Ownership is enforced per path family where it
-is cleanly derivable, but several families intentionally fall back to **authenticated-only**
-access (any logged-in user can fetch, no per-object check). Marked with `TODO(media-auth)`
-comments in `src/urbanlens/dashboard/controllers/media.py`:
+What is left is a disk-usage question. Nothing here is a disclosure route any more.
 
-**Largely closed 2026-08-29.** The gate is now default-deny and the policy lives in
-`dashboard/services/media/access.py` as a registry keyed by `upload_to` prefix. What changed:
+**The gate side is closed.** `dashboard.controllers.media.MediaGateView` is default-deny, with the
+policy in `dashboard/services/media/access.py` as a registry keyed by `upload_to` prefix, and
+`check_media_authorizers` (`dashboard.E002`) refuses to start when a file field stores under an
+unregistered directory. An unresolvable file or unknown family is refused. Photo paths are
+unguessable. Pin and label icons are served only to the owner of a row using the file, or to
+everyone for a global label (`test_custom_icon_media_gate.py`). Safety check-in photos reach only
+the check-in's audience (`test_media_gate.py::SafetyCheckinMediaGateTests`,
+`SafetyContactTokenPhotoTests`). `avatars/` and `achievement_icons/` stay open to any signed-in
+account on purpose, since both render on other members' pages.
 
-- **Thumbnails were readable by any logged-in account.** `_authorize_image` resolved the owning
-  row with `Image.objects.filter(image=rel_path)`, but a thumbnail is stored in the separate
-  `thumbnail` column, so that lookup never matched, `image is None` was always true, and every
-  preview took the permissive orphan branch below. `visible_to`, the DM participant rule and
-  share revocation were unreachable code for every thumbnail, including DM attachments and
-  safety check-in photos. Both columns are matched now.
-- **An unresolvable file is refused, not served.** The orphan and unknown-family fallbacks both
-  returned True; they return False. An orphan is indistinguishable from a live file whose owner
-  the viewer may not learn about, and nobody holds a URL for a real orphan except by guessing.
-- **Forgetting an authorizer is now a startup error.** `dashboard/checks.py`
-  (`check_media_authorizers`, id `dashboard.E002`) fails `manage.py check` when a model field
-  stores files under a directory the registry does not cover, so fail-closed cannot silently
-  break image loading in production instead.
-- **Stored paths are unguessable.** `pin_image_upload_path`/`pin_image_thumbnail_path` file each
-  upload under `<2-char bucket>/<random token>/`, so a URL cannot be derived from the filename it
-  was uploaded under. `pin_image_upload_path` deliberately preserves the camera stem for the
-  attribution heuristic, which had made `IMG_4821` -> `IMG_4822` a working enumeration. Existing
-  rows keep their paths; the gate is what protects those.
+**Icon, avatar and comment image files do not strand.** `services/media/file_cleanup.py` deletes
+an `Achievement.custom_icon` or `Profile.avatar` file after the save that replaced it or the delete
+that removed its row. Pin and label icons are left out of it, because undo restores those rows by
+the stored name. `services/media/stored_field.py::sweep_unnamed_files` (P119, hourly beat) removes
+any file in `avatars/`, the three icon directories and `comment_images/` that no file field naming
+that directory holds, once it is older than the Celery hard time limit and no undo record inside the
+retention window mentions it. That covers a replaced or deleted pin or label icon after its undo
+expires, and every historical orphan in those directories
+(`test_held_upload_recovery.py::AShownFileNothingNamesTests`).
 
-The two families below stay deliberately authenticated-only, now as registered decisions rather
-than fallbacks. The rest of this entry records them and the file-stranding work around them.
+**Still open: `pin_images/`.** `services/media/images.py::delete_stored_file`, run for every deleted
+`Image` row by `models/images/signals.py::remove_stored_file`, removes the original and its three
+derived files when no other row names them. Nothing sweeps what was stranded before those paths
+were fixed on 2026-09-14: every deleted row's analysis thumbnail, and the derived files of an
+original another row still shared. The gate refuses those files, because no `Image` row matches
+them.
 
-- **`pin_custom_icons/` (Pin.custom_icon) and `label_icons/` (Label.custom_icon): scoped
-  2026-09-14.** `authorize_pin_icon` serves a pin icon only to the owner of a pin that uses the
-  file, and `authorize_label_icon` serves a label icon only where `Label.objects.visible_to` would
-  show the label: its owner, or everyone for a global label. `achievement_icons/` stays open to
-  any signed-in account, because awards render on other members' profiles.
-  `test_custom_icon_media_gate.py` reproduced a stranger fetching both before the change.
+They cannot just be added to `SWEPT_FIELDS`. That sweep lists one flat directory and skips fields
+with a callable `upload_to`. `Image` files sit under nested `<bucket>/<token>/` paths in
+`pin_images/`, `pin_images/thumbs/`, `pin_images/markers/` and `pin_images/analysis/`, and whether
+a file is named depends on all four columns. A sweep there needs a recursive walk (a paginated
+prefix listing on S3) and a name set covering every `Image` row. That is a job sized to the table,
+not an hourly one.
 
-  The 2026-09-05 attempt stopped for want of a `Pin.objects.visible_to`, on the assumption that
-  shared pins, trip member maps and wiki pages render other accounts' pin icons. Reading every
-  surface that emits an icon URL found none that does. Map payloads, the pin sidebar, pin lists,
-  pin sync and the external API all scope to the pin's owner. A pin accepted from a share is the
-  recipient's own row, and `services/sharing/pin_sharing.py::create_pin_from_share` deliberately copies neither
-  `icon` nor `custom_icon` (`test_share_pin_copy_fidelity.py`). A wiki-published floorplan copy has no `linked_pin`. The label organiser, label
-  pickers and label serializers all list `Label.objects.visible_to(viewer)`, and the wiki
-  label-membership panel draws no custom icons. So the gate needs ownership, not a visibility
-  queryset, and one should be built only when a surface that shows another account's pin exists.
-- **Orphan files** (a file on disk under `pin_images/` or `comment_images/` whose owning
-  Image/Comment/TripComment row no longer exists, e.g. row deleted without file cleanup):
-  now **denied** (2026-08-29). The stranding paths below still matter for disk usage; they are
-  no longer a disclosure route.
-
-  **Update (chunk 520, 2026-08-15): the orphan *source* is closed for comments.** Swept every
-  delete path: all `Image` paths already removed their file (bulk ones with a shared-file
-  reference rule), but `comment.delete()` did not - Django stopped deleting `FileField` files in
-  1.3 - so every deleted comment-with-photo stranded a file that this branch then served to any
-  authenticated user. Both comment delete paths (pin/wiki and trip) now discard the file;
-  `attach_existing_comment_image` copies rather than sharing storage, which is what makes that
-  safe. Two tests. The residual risk is now bounded to *historical* orphans and crash windows
-  rather than accumulating with normal use - a one-time sweep of `comment_images/` against
-  surviving rows would close it entirely.
-
-  **Systematic sweep (chunk 521)**: seven file-bearing model fields exist. `Image.image` and both
-  comment images are now handled; explicit *clears* of `Achievement.custom_icon` and
-  `Label.custom_icon` now delete their files too (a user pressing "remove icon" is the same
-  expectation as deleting a photo). **Still stranding files, recorded not fixed**: replacing an
-  icon or avatar with a new upload leaves the previous file, and deleting a Pin/Label/Achievement
-  row leaves its icon. Those want a `post_delete`/`pre_save` receiver pair rather than per-caller
-  code. **Partly done 2026-09-05**, after the owner's review the entry asked for.
-  `services/media/file_cleanup.py` deletes the previous file after a successful save that replaced
-  it, and a row's files when the row goes - for `Achievement.custom_icon` and `Profile.avatar`.
-
-  **`Pin.custom_icon` and `Label.custom_icon` are deliberately excluded, and that is the finding.**
-  Both models are restorable by the undo framework, which stashes the icon as its stored *name*
-  rather than its bytes (`services/undo/handlers/pin.py`, `.../label.py`). Unlinking on delete - or
-  on replace - would leave an undo within its window restoring a row that names a file no longer
-  there: a broken icon with nothing to explain it, which is worse than the stranded file this was
-  meant to stop. They want the unlink deferred until the `UndoAction` is pruned, so the file
-  outlives the row for exactly as long as the row can come back. That is a different mechanism, not
-  a longer list, and it is the remaining work here.
-
-  Three things the receivers deliberately are not, each of which the obvious version gets wrong:
-
-  - They do not cover `Image`'s columns. `services/media/images.py::delete_stored_file` handles
-    `image`, `thumbnail`, `marker_thumbnail` and `analysis_thumbnail`, deleting each only when no
-    other row names it, and `models/images/signals.py::remove_stored_file` runs it for every deleted
-    row, cascades included. Until 2026-09-14 it skipped `analysis_thumbnail` entirely, skipped every
-    derived file whenever the original was still shared (which a pin share always leaves it), and
-    account deletion unlinked each photo's original before the cascade, so deleting an account broke
-    every copy it had shared (`test_shared_image_file_deletion.py::AnalysisThumbnailDeletionTests`,
-    `AccountDeletionPhotoFileTests`).
-  - They are connected *per sender*. A sender-less receiver makes every model in the project report
-    listeners, which disables Django's fast-delete path repo-wide and trips
-    `test_bulk_write_signal_guard`.
-  - They never unlink before the write commits. `post_save`/`post_delete` fire *inside* the
-    transaction, so deleting there survives a rollback that puts the row back;
-    `transaction.on_commit` defers each unlink until the write is real.
-
-  Still open: **historical** orphans. This stops new ones for two of the four fields; a one-time
-  sweep against surviving rows would close what is already there. It is a disk item only: an
-  orphaned icon file matches no pin or label row, so the icon authorizers refuse it.
-- **Unknown path families**: now **denied** and logged at WARNING (2026-08-29), and
-  `check_media_authorizers` refuses to start with an unregistered family, so a new `upload_to`
-  prefix cannot inherit a fallback either way.
-- **`avatars/` (Profile.avatar)**: deliberately any-authenticated-user (avatars render site-wide
-  next to usernames) - not a gap, but noted for completeness.
-- **Safety check-in photos are scoped to the check-in's audience (re-checked 2026-09-15).**
-  `Image.objects.visible_to` admits them through `_named_this_viewer`: the owner, a contact with an
-  account (`SafetyCheckin.objects.shared_with`) and an accepted partner (`partnered_with`). The
-  settings-based branch cannot match one, because it requires the photo to sit in a wiki the viewer
-  reaches, and a check-in photo has no wiki. A signed-out contact is served through the magic-link
-  route `safety.contact.photo`. `test_media_gate.py::SafetyCheckinMediaGateTests` covers the owner,
-  a partner, an unaccepted invitee, a stranger, a signed-in contact, and a friend whom the owner's
-  photo settings admit; `SafetyContactTokenPhotoTests` covers the token route.
-
-**Suggested next step**: deferring the unlink of a replaced or deleted `Pin`/`Label` icon until
-its undo window closes, and a cleanup job for orphaned media files (a disk-usage question, not a
-disclosure one).
+**Suggested next step**: count the files under `pin_images/` that none of the four columns names,
+on production, before deciding whether the disk is worth a one-off sweep.
 
 ---
 
