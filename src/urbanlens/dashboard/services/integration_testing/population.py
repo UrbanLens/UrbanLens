@@ -138,6 +138,8 @@ SHARED_ROUTES = (
     "map.document",
     "map.pins.meta",
     "map.search",
+    "map.autocomplete.local",
+    "map.pins.list",
     "saved_filters.counts",
     "notifications.view",
     "notifications.unread_count",

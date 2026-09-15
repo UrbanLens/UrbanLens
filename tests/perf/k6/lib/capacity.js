@@ -56,6 +56,8 @@ export const ENDPOINTS = {
     friend_profile: "page",
     map_pins_meta: "fragment",
     map_search: "fragment",
+    map_autocomplete: "fragment",
+    map_pins_list: "fragment",
     pin_gallery: "fragment",
     pin_nearby: "fragment",
     pin_visits: "fragment",
@@ -188,6 +190,12 @@ export function accountIndex(vuId, count) {
 /** What a user types into the map's name filter, one debounced request per entry. The first matches every seeded pin. */
 export function filterQueries(pinNamePrefix) {
     return [pinNamePrefix, `${pinNamePrefix} 1`, `${pinNamePrefix} 12`];
+}
+
+/** What the map's search box sends as someone types a pin's name: one request per 400 ms pause, never under two characters. */
+export function autocompleteQueries(pinNamePrefix) {
+    const word = pinNamePrefix.split(" ")[0];
+    return [word.length >= 2 ? word : pinNamePrefix, pinNamePrefix, `${pinNamePrefix} 1`];
 }
 
 /** What the map page fetches after its HTML, in order: with no pin cache it downloads every pin before polling meta. */

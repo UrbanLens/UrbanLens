@@ -8,7 +8,7 @@
 # Usage:
 #   bin/run_capacity_tests.sh --url http://localhost:31000 \
 #       --provision-container ul_perf_app --db-container ul_perf_db \
-#       --container-prefix ul_perf_ --nginx-container ul_perf_nginx --population 1000
+#       --container-prefix ul_perf_ --nginx-container ul_perf_nginx --app-container ul_perf_app --population 1000
 #
 # Anything after `--` is handed to `k6 run` unchanged.
 
@@ -23,6 +23,7 @@ PROVISION_CONTAINER=""
 POPULATION=1000
 DB_CONTAINER=""
 NGINX_CONTAINER=""
+APP_CONTAINER=""
 CONTAINER_PREFIX=""
 LEVELS=""
 HOLD_SECONDS=""
@@ -47,6 +48,9 @@ usage() {
 		  --container-prefix TEXT    Sample CPU and memory of every container
 		                             whose name starts with this.
 		  --nginx-container NAME     Keep this proxy's access log for the run.
+		  --app-container NAME       Follow this app's log for the run and rank
+		                             what each view costs from its slow-request
+		                             lines (every request, at UL_SLOW_REQUEST_MS=1).
 		  --levels A,B,C             Concurrent users at each hold (default: 100,250,500,1000).
 		  --hold-seconds N           Seconds per hold (default: 240).
 		  --think-median N           Median seconds on a page (default: 30).
@@ -68,6 +72,7 @@ while [[ $# -gt 0 ]]; do
 		--population) POPULATION="$2"; shift 2 ;;
 		--db-container) DB_CONTAINER="$2"; shift 2 ;;
 		--nginx-container) NGINX_CONTAINER="$2"; shift 2 ;;
+		--app-container) APP_CONTAINER="$2"; shift 2 ;;
 		--container-prefix) CONTAINER_PREFIX="$2"; shift 2 ;;
 		--levels) LEVELS="$2"; shift 2 ;;
 		--hold-seconds) HOLD_SECONDS="$2"; shift 2 ;;
@@ -99,7 +104,7 @@ case "${BASE_URL}" in
 	*urbanlens.org*) refuse "${BASE_URL} is on urbanlens.org but is not a *.dev.urbanlens.org environment." ;;
 esac
 
-for container in "${PROVISION_CONTAINER}" "${DB_CONTAINER}" "${NGINX_CONTAINER}" "${CONTAINER_PREFIX}"; do
+for container in "${PROVISION_CONTAINER}" "${DB_CONTAINER}" "${NGINX_CONTAINER}" "${APP_CONTAINER}" "${CONTAINER_PREFIX}"; do
 	case "${container}" in
 		urbanlens_production_*) refuse "${container} is a production container." ;;
 		urbanlens_staging_*) refuse "${container} is a staging container." ;;
@@ -160,6 +165,11 @@ if [[ -n "${CONTAINER_PREFIX}" ]]; then
 	bash "${REPO_ROOT}/bin/perf/container_sampler.sh" --prefix "${CONTAINER_PREFIX}" --out "${OUT_DIR}/containers.csv" &
 	SAMPLER_PIDS+=($!)
 fi
+# Followed rather than read afterwards: the app's log rotates within minutes when every request is logged.
+if [[ -n "${APP_CONTAINER}" ]]; then
+	docker logs --follow --since "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${APP_CONTAINER}" >"${OUT_DIR}/app.log" 2>&1 &
+	SAMPLER_PIDS+=($!)
+fi
 
 # -- k6 ----------------------------------------------------------------------
 
@@ -203,6 +213,10 @@ REPORT_ARGS=(--summary "${OUT_DIR}/capacity.json" --stages "${OUT_DIR}/stages.js
 [[ -f "${OUT_DIR}/nginx.log" ]] && REPORT_ARGS+=(--nginx-log "${OUT_DIR}/nginx.log")
 if [[ -f "${OUT_DIR}/capacity.json" && -f "${OUT_DIR}/stages.json" ]]; then
 	python3 "${REPO_ROOT}/bin/perf/report_capacity.py" "${REPORT_ARGS[@]}" || true
+fi
+if [[ -s "${OUT_DIR}/app.log" ]]; then
+	python3 "${REPO_ROOT}/bin/perf/report_request_costs.py" --limit 40 "${OUT_DIR}/app.log" >"${OUT_DIR}/request_costs.txt" || true
+	echo "==> what each view cost: ${OUT_DIR}/request_costs.txt"
 fi
 
 echo

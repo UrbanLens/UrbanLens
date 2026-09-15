@@ -48,7 +48,13 @@ hammering the filter cost something else entirely. The model the harness
 - **What the map does**, read from `pages/map/index.html`: the whole pin
   document when the browser has no pin cache (30% of users on their first map
   visit), the meta otherwise; 40% of map visits then type into the name filter,
-  one debounced search per keystroke group, three of them.
+  one debounced search per keystroke group, three of them. Half of those
+  filter sessions have the pin list open, which refetches the list once the
+  filter commits (`_refreshPinList`), sent without the viewport's `bounds`, so
+  it counts the account's whole match set. A quarter of map visits type a
+  pin's name into the search box, one `map.autocomplete.local` request per
+  400 ms pause, three of them. Both shares are assumptions, not observations;
+  `UL_CAP_SIDEBAR_SHARE` and `UL_CAP_SEARCH_BOX_SHARE` change them.
 - **What an open page keeps doing**: unread messages every 60 s, and the map's
   meta every 2 minutes.
 - **The notification socket** that `_notification_push.html` opens on every
@@ -93,9 +99,12 @@ D12 own that number.
 
 - **Writes.** Nobody imports, uploads, edits a label or sends a message. A
   capacity figure without writes is a ceiling on reading.
-- The messages page's own socket, saved-filter counts, games, media, trips'
-  editing, the external API, map tiles (served by third parties, except the
-  proxied REData layers).
+- The messages page's own socket, games, media, trips' editing, the external
+  API, map tiles (served by third parties, except the proxied REData layers).
+- The search box on the pages other than the map that carry it: the composer
+  in `themes/base.html`, trips, lists, the photo vault and the safety map.
+- Saved-filter counts are left out because nothing requests them: the toolbar
+  asks only for filters with no icon, and every write path gives one (X20).
 - **The host.** The perf environment runs on chiron with the load generator
   beside it, not on damballa. A figure from it says where the design breaks,
   not what production will do on the day.

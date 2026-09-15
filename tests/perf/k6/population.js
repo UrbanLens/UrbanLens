@@ -20,6 +20,7 @@ import {
     DEFAULT_THINK_SIGMA,
     ENDPOINTS,
     accountIndex,
+    autocompleteQueries,
     buildStages,
     buildThresholds,
     filterQueries,
@@ -57,6 +58,12 @@ const COLD_CACHE_SHARE = Number(__ENV.UL_CAP_COLD_CACHE_SHARE || 0.3);
 
 /** Share of map visits that go on to type into the name filter. */
 const FILTER_SHARE = Number(__ENV.UL_CAP_FILTER_SHARE || 0.4);
+
+/** Share of map visits that type a pin's name into the search box. Assumed, not observed. */
+const SEARCH_BOX_SHARE = Number(__ENV.UL_CAP_SEARCH_BOX_SHARE || 0.25);
+
+/** Share of filter sessions run with the pin list open, which refetches the list when the filter commits. Assumed, not observed. */
+const SIDEBAR_SHARE = Number(__ENV.UL_CAP_SIDEBAR_SHARE || 0.5);
 
 /** Share of page views that open the notification bell. */
 const BELL_SHARE = 0.1;
@@ -110,7 +117,7 @@ export function setup() {
     if (ACCOUNTS.length < TARGET_USERS && __ENV.UL_CAP_ALLOW_SHARED_ACCOUNTS !== "1") {
         fail(`${TARGET_USERS} users need ${TARGET_USERS} accounts and the manifest holds ${ACCOUNTS.length}. Accounts shared between VUs share caches and sockets, which flatters the result.`);
     }
-    for (const name of ["map.view", "map.document", "map.pins.meta", "map.search", "messages.unread_count", "notifications.unread_count", "safety.active_banner"]) {
+    for (const name of ["map.view", "map.document", "map.pins.meta", "map.search", "map.autocomplete.local", "map.pins.list", "messages.unread_count", "notifications.unread_count", "safety.active_banner"]) {
         if (!ROUTES[name]) {
             fail(`The manifest resolves no route named ${name}.`);
         }
@@ -194,12 +201,24 @@ const JOURNEY_STEPS = {
                 fetchOne(state, endpoint, ROUTES["map.document"]);
             }
         }
+        const prefix = MANIFEST.pin_name_prefix || "Perf Pin";
+        if (Math.random() < SEARCH_BOX_SHARE) {
+            for (const query of autocompleteQueries(prefix)) {
+                fetchOne(state, "map_autocomplete", `${ROUTES["map.autocomplete.local"]}?q=${encodeURIComponent(query)}`);
+                sleep(0.4 + Math.random() * 0.8);
+            }
+        }
         if (Math.random() < FILTER_SHARE) {
-            for (const query of filterQueries(MANIFEST.pin_name_prefix || "Perf Pin")) {
+            let committed = prefix;
+            for (const query of filterQueries(prefix)) {
                 const body = { name: query, store_fingerprint: claim };
                 const response = postForm(state.session, ROUTES["map.search"], body, { endpoint: "map_search", stage: stageNow() }, { timeout: REQUEST_TIMEOUT });
                 signedIn(response);
+                committed = query;
                 sleep(0.7 + Math.random() * 1.3);
+            }
+            if (Math.random() < SIDEBAR_SHARE) {
+                fetchOne(state, "map_pins_list", `${ROUTES["map.pins.list"]}?name=${encodeURIComponent(committed)}&page_size=25`);
             }
         }
     },

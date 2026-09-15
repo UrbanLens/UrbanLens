@@ -12,6 +12,7 @@ import {
     MIN_RAMP_SECONDS,
     MIN_THINK_SECONDS,
     accountIndex,
+    autocompleteQueries,
     buildStages,
     buildThresholds,
     filterQueries,
@@ -146,6 +147,18 @@ describe("what a user does", () => {
         expect(broad).toBe("Perf Pin");
         for (const query of narrower) {
             expect(query.startsWith(broad)).toBe(true);
+        }
+    });
+
+    test("typing into the search box asks at each pause, long enough to be answered, narrowing as it goes", () => {
+        const queries = autocompleteQueries("Perf Pin");
+
+        expect(queries.length).toBeGreaterThan(1);
+        for (const [index, query] of queries.entries()) {
+            expect(query.length).toBeGreaterThanOrEqual(2);
+            if (index > 0) {
+                expect(query.startsWith(queries[index - 1])).toBe(true);
+            }
         }
     });
 
