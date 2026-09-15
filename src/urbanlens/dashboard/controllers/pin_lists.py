@@ -27,7 +27,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTI
 from urbanlens.dashboard.services.geo.sampling import select_spread
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
-from urbanlens.dashboard.services.pins.pin_list_membership import add_pins_to_list, reorder_list_items, resync_smart_list
+from urbanlens.dashboard.services.pins.pin_list_membership import add_pin_ids_to_list, reorder_list_items, resync_smart_list
 from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
 from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as PIN_LIST_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -456,7 +456,7 @@ class PinListAddPinsView(LoginRequiredMixin, View):
             except (ValueError, AttributeError, TypeError):
                 slug_values.append(value)
         if pin_id_values or slug_values or uuid_values:
-            pins = list(Pin.objects.filter(profile=profile).filter(Q(pk__in=pin_ids) | Q(slug__in=slug_values) | Q(uuid__in=uuid_values)))
+            matches = Pin.objects.filter(profile=profile).filter(Q(pk__in=pin_ids) | Q(slug__in=slug_values) | Q(uuid__in=uuid_values))
         else:
             search_form = SearchForm(request.POST, profile=profile)
             if not search_form.is_valid():
@@ -469,22 +469,18 @@ class PinListAddPinsView(LoginRequiredMixin, View):
                 criteria["custom_fields"] = custom_field_criteria
             criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
-            pins = list(Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria))
+            matches = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria)
 
-        # Counted here rather than left to add_pins_to_list because the confirmation handshake below has to
-        # happen *before* anything is written - the service dedupes against the same set again, which is
-        # idempotent and costs one query.
-        existing_pin_ids = set(pin_list.items.values_list("pin_id", flat=True))
-        new_pins = [pin for pin in pins if pin.pk not in existing_pin_ids]
-
-        if not new_pins:
+        new_pins = matches.exclude(pk__in=pin_list.items.values("pin_id"))
+        count = new_pins.count()
+        if not count:
             return _render_items_panel(request, pin_list)
 
         confirmed = request.POST.get("confirmed") == "true"
-        if len(new_pins) > _BULK_ADD_CONFIRM_THRESHOLD and not confirmed:
-            return JsonResponse({"confirm_required": True, "count": len(new_pins)}, status=409)
+        if count > _BULK_ADD_CONFIRM_THRESHOLD and not confirmed:
+            return JsonResponse({"confirm_required": True, "count": count}, status=409)
 
-        result = add_pins_to_list(pin_list, new_pins)
+        result = add_pin_ids_to_list(pin_list, list(new_pins.values_list("pk", flat=True)))
 
         response = _render_items_panel(request, pin_list)
         if result.skipped_over_cap:

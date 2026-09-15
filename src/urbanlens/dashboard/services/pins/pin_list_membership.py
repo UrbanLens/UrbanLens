@@ -204,6 +204,19 @@ def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str |
 
     Returns:
         A :class:`ListAddResult` describing what happened."""
+    return add_pin_ids_to_list(pin_list, [pin.pk for pin in pins], added_via=added_via)
+
+
+def add_pin_ids_to_list(pin_list: PinList, pin_ids: Sequence[int], *, added_via: str | None = None) -> ListAddResult:
+    """Add the pins with *pin_ids* to *pin_list*, skipping duplicates and honoring the per-list cap.
+
+    Args:
+        pin_list: The list to add to.
+        pin_ids: Primary keys of pins the caller has already scoped to the list's owner.
+        added_via: Provenance stamped on the new rows.
+
+    Returns:
+        A :class:`ListAddResult` describing what happened."""
     from urbanlens.dashboard.models.pin_list.model import PinListItem
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
@@ -215,28 +228,28 @@ def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str |
         # Preserves caller order while de-duplicating a payload that names the
         # same pin twice - without this, two rows for one pin would violate
         # uq_pin_list_item inside bulk_create.
-        new_pins: list[Pin] = []
+        new_ids: list[int] = []
         seen: set[int] = set()
-        for pin in pins:
-            if pin.pk in existing_pin_ids or pin.pk in seen:
+        for pin_id in pin_ids:
+            if pin_id in existing_pin_ids or pin_id in seen:
                 continue
-            seen.add(pin.pk)
-            new_pins.append(pin)
+            seen.add(pin_id)
+            new_ids.append(pin_id)
 
         base_order = len(existing_pin_ids)
         skipped_over_cap = 0
         if max_pins > 0:
             remaining = max(0, max_pins - base_order)
-            if len(new_pins) > remaining:
-                skipped_over_cap = len(new_pins) - remaining
-                new_pins = new_pins[:remaining]
+            if len(new_ids) > remaining:
+                skipped_over_cap = len(new_ids) - remaining
+                new_ids = new_ids[:remaining]
 
-        if new_pins:
+        if new_ids:
             PinListItem.objects.bulk_create(
-                [PinListItem(pin_list=pin_list, pin=pin, order=base_order + i, added_via=provenance) for i, pin in enumerate(new_pins)],
+                [PinListItem(pin_list=pin_list, pin_id=pin_id, order=base_order + i, added_via=provenance) for i, pin_id in enumerate(new_ids)],
             )
 
-    return ListAddResult(added=len(new_pins), skipped_over_cap=skipped_over_cap, max_pins=max_pins)
+    return ListAddResult(added=len(new_ids), skipped_over_cap=skipped_over_cap, max_pins=max_pins)
 
 
 def remove_pins_from_list(pin_list: PinList, pin_ids: Sequence[int]) -> int:
