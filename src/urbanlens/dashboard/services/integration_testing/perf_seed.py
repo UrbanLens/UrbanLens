@@ -4,7 +4,7 @@ The performance work this exists for is about what *one* user's account costs ev
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import connection, transaction
 
@@ -12,6 +12,9 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 #: Pins created per `bulk_create` round trip. Large enough that 20,000 rows is a
 #: score of statements rather than thousands, small enough that one statement's
@@ -31,10 +34,23 @@ ORIGIN_LONGITUDE = -140.0
 #: collides on the `(latitude, longitude)` unique constraint.
 GRID_SIDE = 200
 
-#: Largest seed this coordinate scheme can lay out without leaving valid
-#: latitudes. `GRID_SIDE` columns per row, `COORDINATE_STEP` degrees per row,
-#: starting at `ORIGIN_LATITUDE` and running north.
-MAX_SEEDED_PINS = int((90.0 - ORIGIN_LATITUDE) / COORDINATE_STEP) * GRID_SIDE
+#: Where a seed starts when the caller does not place it.
+DEFAULT_ORIGIN = (ORIGIN_LATITUDE, ORIGIN_LONGITUDE)
+
+
+def max_seeded_pins(origin_latitude: float = ORIGIN_LATITUDE) -> int:
+    """Largest seed a grid starting at *origin_latitude* can lay out before running past the pole.
+
+    Args:
+        origin_latitude: Latitude of the grid's first row; rows run north.
+
+    Returns:
+        The pin count that fills every row up to latitude 90.
+    """
+    return int(round((90.0 - origin_latitude) / COORDINATE_STEP, 6)) * GRID_SIDE
+
+
+MAX_SEEDED_PINS = max_seeded_pins()
 
 #: Name of the label every seeded pin carries. One shared label keeps the label-edit fan-out at its heaviest.
 HEAVY_LABEL_NAME = "Perf Heavy"
@@ -70,32 +86,34 @@ PIN_NAME_PREFIX = "Perf Pin"
 _ANALYZED_TABLES = ("dashboard_locations", "dashboard_user_pins", "dashboard_labels")
 
 
-def _grid(index: int) -> tuple[str, str]:
+def _grid(index: int, origin: tuple[float, float] = DEFAULT_ORIGIN) -> tuple[str, str]:
     """One pin's coordinates, laid out on a fixed grid.
     A grid rather than a line so a bounding-box query over the seeded block returns a realistic subset rather than everything or nothing.
 
     Args:
         index: Which pin, zero-based.
+        origin: ``(latitude, longitude)`` of pin zero.
 
     Returns:
         ``(latitude, longitude)`` as strings, since the columns are decimals and a float would round differently on the way in."""
-    latitude = ORIGIN_LATITUDE + (index // GRID_SIDE) * COORDINATE_STEP
-    longitude = ORIGIN_LONGITUDE + (index % GRID_SIDE) * COORDINATE_STEP
+    latitude = origin[0] + (index // GRID_SIDE) * COORDINATE_STEP
+    longitude = origin[1] + (index % GRID_SIDE) * COORDINATE_STEP
     return f"{latitude:.6f}", f"{longitude:.6f}"
 
 
-def _precompute_map_center(profile: Profile, total: int) -> tuple[float, float] | None:
+def _precompute_map_center(profile: Profile, total: int, origin: tuple[float, float] = DEFAULT_ORIGIN) -> tuple[float, float] | None:
     """Store the account's map centre without computing it the expensive way.
 
     Args:
         profile: The seeded account.
         total: How many pins it now has.
+        origin: Where its grid starts.
 
     Returns:
         The stored ``(latitude, longitude)``, or None when there was nothing to average."""
     if total <= 0:
         return None
-    points = [_grid(index) for index in range(total)]
+    points = [_grid(index, origin) for index in range(total)]
     latitude = sum(float(lat) for lat, _ in points) / total
     longitude = sum(float(lng) for _, lng in points) / total
     Profile.objects.filter(pk=profile.pk).update(map_center_latitude=latitude, map_center_longitude=longitude)
@@ -111,6 +129,7 @@ def seed_heavy_account(
     analyze: bool = True,
     precompute_map_center: bool = True,
     labels_per_pin: int = 1,
+    origin: tuple[float, float] = DEFAULT_ORIGIN,
 ) -> dict[str, Any]:
     """Give *profile* *pins* root pins, all carrying one shared label.
 
@@ -120,14 +139,19 @@ def seed_heavy_account(
         analyze: Refresh planner statistics afterwards.
         labels_per_pin: How many labels each pin carries.
         precompute_map_center: Store the map centre directly instead of leaving the first page load to derive it.
+        origin: ``(latitude, longitude)`` of the account's first pin. Two accounts whose grids overlap share the
+            places under the overlap, as two real users pinning the same building do.
 
     Raises:
-        ValueError: ``pins`` is larger than the coordinate scheme can lay out.
+        ValueError: ``pins`` is larger than the grid can lay out from ``origin``, or the grid would cross the antimeridian.
 
     Returns:
         What was done, for the provisioning manifest: the final pin count, how many were created now, the shared label's id and name, whether `ANALYZE` ran, and how long it took."""
-    if pins > MAX_SEEDED_PINS:
-        raise ValueError(f"{pins} pins would run the grid past the north pole; this coordinate scheme tops out at {MAX_SEEDED_PINS}.")
+    ceiling = max_seeded_pins(origin[0])
+    if pins > ceiling:
+        raise ValueError(f"{pins} pins would run the grid past the north pole; a grid starting at latitude {origin[0]} tops out at {ceiling}.")
+    if not -180.0 <= origin[1] <= 180.0 - (GRID_SIDE - 1) * COORDINATE_STEP:
+        raise ValueError(f"A grid starting at longitude {origin[1]} would cross the antimeridian.")
     # One short of the vocabulary, so the window can rotate: a pin that took every
     # label would make every pin identical, which is the case this exists to avoid.
     if labels_per_pin < 1 or labels_per_pin > len(VOCABULARY):
@@ -154,7 +178,7 @@ def seed_heavy_account(
     for start in range(0, wanted, BATCH_SIZE):
         count = min(BATCH_SIZE, wanted - start)
         with transaction.atomic():
-            coordinates = [_grid(existing + start + offset) for offset in range(count)]
+            coordinates = [_grid(existing + start + offset, origin) for offset in range(count)]
             locations = _locations_for(coordinates, first_index=existing + start)
             seeded_pins = Pin.objects.bulk_create(
                 [
@@ -182,8 +206,8 @@ def seed_heavy_account(
             through.objects.bulk_create(pairs)
         created += len(seeded_pins)
 
-    analyzed = analyze and _analyze()
-    centre = _precompute_map_center(profile, existing + created) if precompute_map_center else None
+    analyzed = analyze and analyze_seeded_tables()
+    centre = _precompute_map_center(profile, existing + created, origin) if precompute_map_center else None
     return {
         "map_center": list(centre) if centre else None,
         "pins": existing + created,
@@ -243,19 +267,22 @@ def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> l
         raise RuntimeError(f"No Location at {error.args[0]} after creating it; the grid and the column's rounding disagree.") from error
 
 
-def _analyze() -> bool:
-    """Refresh planner statistics for the tables the seed wrote to.
+def analyze_seeded_tables(tables: Sequence[str] = _ANALYZED_TABLES) -> bool:
+    """Refresh planner statistics for the tables a seed wrote to.
 
     Only the tables' owner may, and Postgres skips anyone else with a warning rather than an error, so a
     per-tier login role would otherwise report a refresh that never happened.
+
+    Args:
+        tables: Table names, as the models declare them.
 
     Returns:
         Whether it ran."""
     if connection.vendor != "postgresql":
         return False
     with connection.cursor() as cursor:
-        cursor.execute("SELECT bool_and(pg_has_role(relowner, 'USAGE')) FROM pg_class WHERE oid = ANY(%s::regclass[])", [list(_ANALYZED_TABLES)])
+        cursor.execute("SELECT bool_and(pg_has_role(relowner, 'USAGE')) FROM pg_class WHERE oid = ANY(%s::regclass[])", [list(tables)])
         if cursor.fetchone() != (True,):
             return False
-        cursor.execute("ANALYZE " + ", ".join(f'"{table}"' for table in _ANALYZED_TABLES))
+        cursor.execute("ANALYZE " + ", ".join(connection.ops.quote_name(table) for table in tables))
     return True

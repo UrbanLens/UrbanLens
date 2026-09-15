@@ -1,0 +1,176 @@
+/** `capacity.js` decides what a run measures; a wrong stage tag or a skewed draw is invisible in the result. */
+
+import { describe, expect, test } from "bun:test";
+
+import {
+    ARRIVALS_PER_SECOND,
+    DEFAULT_LEVELS,
+    DRAIN_SECONDS,
+    ENDPOINTS,
+    JOURNEYS,
+    MAX_THINK_SECONDS,
+    MIN_RAMP_SECONDS,
+    MIN_THINK_SECONDS,
+    accountIndex,
+    buildStages,
+    buildThresholds,
+    filterQueries,
+    forwardedFor,
+    holds,
+    k6Stages,
+    parseLevels,
+    pickJourney,
+    stageAt,
+    thinkSeconds,
+    totalSeconds,
+} from "./capacity.js";
+
+/** A seeded uniform source, so a distribution test cannot flake. */
+function seeded(seed) {
+    let state = seed >>> 0;
+    return () => {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        return state / 4294967296;
+    };
+}
+
+describe("the timeline", () => {
+    test("alternates a ramp and a hold per level, then drains", () => {
+        const stages = buildStages([100, 1000], 240);
+
+        expect(stages.map((stage) => stage.kind)).toEqual(["ramp", "hold", "ramp", "hold", "drain"]);
+        expect(stages.map((stage) => stage.users)).toEqual([100, 100, 1000, 1000, 0]);
+        expect(stages[stages.length - 1].seconds).toBe(DRAIN_SECONDS);
+    });
+
+    test("starts are the running total of the durations", () => {
+        const stages = buildStages();
+        for (let index = 1; index < stages.length; index += 1) {
+            expect(stages[index].start).toBe(stages[index - 1].start + stages[index - 1].seconds);
+        }
+        expect(totalSeconds(stages)).toBe(stages.reduce((sum, stage) => sum + stage.seconds, 0));
+    });
+
+    test("a large step ramps at the arrival rate rather than all at once", () => {
+        const [first, , second] = buildStages([100, 1000], 60);
+
+        expect(first.seconds).toBe(MIN_RAMP_SECONDS);
+        expect(second.seconds).toBe(Math.ceil(900 / ARRIVALS_PER_SECOND));
+    });
+
+    test("k6 is handed the same timeline", () => {
+        const stages = buildStages([10, 20], 30);
+
+        expect(k6Stages(stages)).toEqual(stages.map((stage) => ({ duration: `${stage.seconds}s`, target: stage.users })));
+    });
+
+    test("every second is tagged with the stage that covers it", () => {
+        const stages = buildStages([100, 250], 120);
+
+        for (const stage of stages) {
+            expect(stageAt(stage.start, stages)).toBe(stage.name);
+            expect(stageAt(stage.start + stage.seconds - 0.001, stages)).toBe(stage.name);
+        }
+        expect(stageAt(totalSeconds(stages) + 60, stages)).toBe("drain");
+    });
+
+    test("levels that do not climb are refused", () => {
+        expect(() => buildStages([100, 100])).toThrow();
+        expect(() => buildStages([250, 100])).toThrow();
+        expect(() => buildStages([])).toThrow();
+        expect(() => buildStages([1.5])).toThrow();
+        expect(() => buildStages([100], 0)).toThrow();
+    });
+
+    test("levels parse from the runner's flag, and blank is the default", () => {
+        expect(parseLevels("50, 200,800")).toEqual([50, 200, 800]);
+        expect(parseLevels("")).toEqual(DEFAULT_LEVELS);
+        expect(() => parseLevels("100,lots")).toThrow();
+    });
+});
+
+describe("what a user does", () => {
+    test("think time is bounded and centred on the median", () => {
+        const random = seeded(7);
+        const samples = Array.from({ length: 20000 }, () => thinkSeconds(random, 30, 0.8)).sort((a, b) => a - b);
+
+        expect(samples[0]).toBeGreaterThanOrEqual(MIN_THINK_SECONDS);
+        expect(samples[samples.length - 1]).toBeLessThanOrEqual(MAX_THINK_SECONDS);
+        expect(samples[samples.length / 2]).toBeGreaterThan(27);
+        expect(samples[samples.length / 2]).toBeLessThan(33);
+    });
+
+    test("journeys are drawn in proportion to their weights", () => {
+        const random = seeded(11);
+        const draws = 50000;
+        const counts = {};
+        for (let index = 0; index < draws; index += 1) {
+            const name = pickJourney(random);
+            counts[name] = (counts[name] || 0) + 1;
+        }
+        const total = JOURNEYS.reduce((sum, journey) => sum + journey.weight, 0);
+
+        for (const journey of JOURNEYS) {
+            expect(Math.abs((counts[journey.name] || 0) / draws - journey.weight / total)).toBeLessThan(0.01);
+        }
+    });
+
+    test("every VU gets its own address, and none is the network's", () => {
+        const seen = new Set();
+        for (let vu = 1; vu <= 3000; vu += 1) {
+            const address = forwardedFor(vu);
+            expect(address).toMatch(/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/);
+            seen.add(address);
+        }
+        expect(seen.size).toBe(3000);
+        expect(() => forwardedFor(0)).toThrow();
+    });
+
+    test("VUs map onto accounts one to one until they run out", () => {
+        expect(accountIndex(1, 1000)).toBe(0);
+        expect(accountIndex(1000, 1000)).toBe(999);
+        expect(accountIndex(1001, 1000)).toBe(0);
+        expect(() => accountIndex(1, 0)).toThrow();
+    });
+
+    test("typing into the filter starts broad and narrows", () => {
+        const [broad, ...narrower] = filterQueries("Perf Pin");
+
+        expect(broad).toBe("Perf Pin");
+        for (const query of narrower) {
+            expect(query.startsWith(broad)).toBe(true);
+        }
+    });
+});
+
+describe("the thresholds", () => {
+    const stages = buildStages([100, 250], 60);
+
+    test("every endpoint is aggregated in every hold, and nothing in a ramp", () => {
+        const thresholds = buildThresholds(stages);
+
+        for (const stage of holds(stages)) {
+            for (const endpoint of Object.keys(ENDPOINTS)) {
+                expect(thresholds[`http_req_duration{endpoint:${endpoint},stage:${stage.name}}`]).toBeDefined();
+            }
+        }
+        expect(Object.keys(thresholds).some((key) => key.includes("stage:ramp_"))).toBe(false);
+    });
+
+    test("a budget class of null is recorded rather than asserted", () => {
+        const thresholds = buildThresholds(stages, { page: 1000, fragment: 500, bulk: null });
+
+        expect(thresholds["http_req_duration{endpoint:map_document,stage:u100}"]).toEqual(["p(95)>=0"]);
+        expect(thresholds["http_req_duration{endpoint:map_view,stage:u100}"]).toEqual(["p(95)<1000"]);
+        expect(thresholds["http_req_duration{endpoint:map_search,stage:u100}"]).toEqual(["p(95)<500"]);
+    });
+
+    test("a run without sockets does not assert on them", () => {
+        expect(Object.keys(buildThresholds(stages, undefined, { sockets: false })).some((key) => key.startsWith("ws_"))).toBe(false);
+        expect(buildThresholds(stages)["ws_handshake_ok{stage:u250}"]).toEqual(["rate>0.995"]);
+    });
+
+    test("the sign-in guard is always asserted", () => {
+        expect(buildThresholds(stages)["checks{guard:signed_in}"]).toEqual(["rate==1"]);
+    });
+});

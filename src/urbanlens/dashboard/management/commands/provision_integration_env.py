@@ -55,6 +55,12 @@ class Command(BaseCommand):
             help=f"Which role --heavy-pins seeds (default: {_HEAVY_ROLE}). Must be one of --roles.",
         )
         parser.add_argument(
+            "--population",
+            type=int,
+            default=0,
+            help="Provision this many ordinary accounts for the capacity test instead of --roles, each signed in with a minted session. Requires --out.",
+        )
+        parser.add_argument(
             "--no-analyze",
             action="store_true",
             help="Skip refreshing planner statistics after seeding. Only useful for demonstrating what skipping it costs; every measurement taken afterwards is of the planner's ignorance rather than of the query.",
@@ -87,6 +93,10 @@ class Command(BaseCommand):
             self._purge(execute=options["execute"])
             return
 
+        if options["population"]:
+            self._provision_population(options)
+            return
+
         roles = [role.strip() for role in options["roles"].split(",") if role.strip()]
         if not roles:
             raise CommandError("--roles resolved to an empty list.")
@@ -110,22 +120,57 @@ class Command(BaseCommand):
             self.stdout.write(payload)
             return
 
-        path = Path(destination)
+        path = self._write_private(Path(destination), payload)
+
+        created = ", ".join(result.created_roles) or "none"
+        refreshed = ", ".join(result.refreshed_roles) or "none"
+        self.stdout.write(f"Wrote {len(result.accounts)} account(s) to {path}. Created: {created}. Refreshed: {refreshed}.")
+        self.stdout.write(f"Point the suite at it with UL_E2E_ACCOUNTS_FILE={path}")
+
+    def _write_private(self, path: Path, payload: str) -> Path:
+        """Write *payload* to *path*, readable by its owner alone before any byte of it lands.
+
+        Owner-only because a manifest holds live credentials and is frequently written to a shared /tmp on a shared
+        staging box.
+
+        Args:
+            path: Where to write.
+            payload: The manifest.
+
+        Returns:
+            The path written.
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(payload, encoding="utf-8")
-        # Owner-only. The manifest holds live passwords and API keys, and this
-        # is frequently written to a shared /tmp on a shared staging box.
+        path.touch(mode=0o600, exist_ok=True)
         try:
             path.chmod(0o600)
         except OSError:
             # Windows and some mounted filesystems do not implement this. Not
             # worth failing a provisioning run over, but worth saying out loud.
             self.stderr.write(self.style.WARNING(f"Could not restrict permissions on {path}; it holds plaintext credentials."))
+        path.write_text(payload, encoding="utf-8")
+        return path
 
-        created = ", ".join(result.created_roles) or "none"
-        refreshed = ", ".join(result.refreshed_roles) or "none"
-        self.stdout.write(f"Wrote {len(result.accounts)} account(s) to {path}. Created: {created}. Refreshed: {refreshed}.")
-        self.stdout.write(f"Point the suite at it with UL_E2E_ACCOUNTS_FILE={path}")
+    def _provision_population(self, options: dict) -> None:
+        """Provision the capacity test's population and write its manifest.
+
+        Args:
+            options: Parsed command options.
+
+        Raises:
+            CommandError: No ``--out`` was given. A session for every account does not belong in scrollback.
+        """
+        from urbanlens.dashboard.services.integration_testing.population import provision_population
+
+        if options["out"] is None:
+            raise CommandError("--population writes a live session for every account; pass --out so they go to a file.")
+        self.stderr.write(f"Provisioning a population of {options['population']} accounts. A first run seeds every pin and takes a while.")
+        result = provision_population(options["population"], analyze=not options["no_analyze"], progress=self.stderr.write)
+        manifest = result.manifest(site_url=django_settings.SITE_URL, environment=str(app_settings.environment_name))
+        path = self._write_private(Path(options["out"]), json.dumps(manifest))
+        self.stdout.write(
+            f"Wrote {len(result.accounts)} population account(s) to {path}: {result.created} created, {result.pins_created} pins created, analyzed={result.analyzed}, {result.seconds}s.",
+        )
 
     def _seed(self, result, options: dict) -> dict[str, object]:
         """Seed the heavy account, if asked, and report what was made.

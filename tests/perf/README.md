@@ -96,6 +96,42 @@ fit comfortably together — see the operational note in the repo's own memory),
 and `docker compose restart app` leaves nginx resolving a stale upstream, so
 restart `nginx` alongside it or every request 502s.
 
+## The capacity test asks a different question
+
+The neighbour test asks what one account costs another. `k6/population.js` asks
+how many people the deployment serves at once:
+
+```bash
+bin/run_capacity_tests.sh --url http://localhost:31000 \
+    --provision-container ul_perf_app --db-container ul_perf_db \
+    --container-prefix ul_perf_ --nginx-container ul_perf_nginx --population 1000
+```
+
+| file | what it is |
+|---|---|
+| `k6/population.js` | Ramps through levels of concurrent users, each browsing, polling and holding a notification socket. |
+| `k6/lib/capacity.js` | The timeline, the journey weights, think time and budgets. Tested by `capacity.test.js`. |
+| `../../bin/run_capacity_tests.sh` | Provisions the population, runs the samplers, returns a verdict. |
+| `../../bin/perf/container_sampler.sh` | cgroup CPU, throttling and memory for every container of the stack, read from the host. |
+| `../../bin/perf/report_capacity.py` | One table per hold: endpoints against budget, containers, the proxy's errors. |
+
+`provision_integration_env --population N` creates `e2e-load-*` accounts sized
+from a heavy-tailed distribution (60% under 100 pins, 1% at 10,000-20,000),
+befriended, with conversations, notifications and visits, and writes a manifest
+of **minted sessions** rather than passwords. Minting is what makes a thousand
+users possible: at ~1 s of PBKDF2 each, signing them in would measure the hasher.
+
+Each VU sends its own `X-Forwarded-For`, so per-visitor proxy limits see a
+thousand visitors rather than one; nginx trusts that header from the Docker
+bridge the way it trusts it from the tunnel.
+
+What a VU does is modelled on the templates, not guessed: every page load fetches
+the header's unread counts and safety banner, the map fetches its document on a
+cold pin cache and the meta otherwise, an open page polls unread messages every
+60 s and the map's meta every 2 min, and every page opens `/ws/notifications/`
+and closes it on the next navigation. The messages page's own socket, saved-filter
+counts and anything a user writes are not modelled yet.
+
 ## What it still cannot tell you
 
 The load generator shares the host with the target, so its own CPU is part of

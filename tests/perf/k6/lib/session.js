@@ -117,15 +117,26 @@ export function unsafeHeaders(baseUrl, referer) {
 
 /** GET, tagged so the summary can slice by endpoint and by what the actor was doing. */
 export function get(session, path, tags, extra) {
-    return http.get(
-        `${session.baseUrl}${path}`,
-        Object.assign({ tags: Object.assign({ role: session.role }, tags) }, jarParam(session), extra),
+    return http.get(`${session.baseUrl}${path}`, getParams(session, tags, extra));
+}
+
+/** The params `get` sends, for building an `http.batch` of the same requests. */
+export function getParams(session, tags, extra) {
+    return Object.assign(
+        { headers: sessionHeaders(session), tags: Object.assign({ role: session.role }, tags) },
+        jarParam(session),
+        extra,
     );
 }
 
 /** The session's own jar as request params, or nothing when it has none. */
 function jarParam(session) {
     return session.jar ? { jar: session.jar } : {};
+}
+
+/** Headers every request in *session* carries, under the call's own. */
+function sessionHeaders(session, headers) {
+    return Object.assign({}, session.headers || {}, headers || {});
 }
 
 /**
@@ -140,7 +151,7 @@ export function postForm(session, path, body, tags, extra) {
         url,
         payload,
         Object.assign(
-            { headers: unsafeHeaders(session.baseUrl, url), tags: Object.assign({ role: session.role }, tags) },
+            { headers: sessionHeaders(session, unsafeHeaders(session.baseUrl, url)), tags: Object.assign({ role: session.role }, tags) },
             jarParam(session),
             extra,
         ),
@@ -150,7 +161,7 @@ export function postForm(session, path, body, tags, extra) {
 /** POST a JSON document, for the endpoints that take one. */
 export function postJson(session, path, document, tags, extra) {
     const url = `${session.baseUrl}${path}`;
-    const headers = Object.assign({ "Content-Type": "application/json" }, unsafeHeaders(session.baseUrl, url));
+    const headers = sessionHeaders(session, Object.assign({ "Content-Type": "application/json" }, unsafeHeaders(session.baseUrl, url)));
     headers["X-CSRFToken"] = csrfToken(session.baseUrl, session.jar);
     return http.post(
         url,

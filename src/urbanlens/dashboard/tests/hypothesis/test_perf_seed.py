@@ -17,6 +17,7 @@ from urbanlens.dashboard.services.integration_testing.perf_seed import (
     MAX_SEEDED_PINS,
     PIN_NAME_PREFIX,
     VOCABULARY,
+    max_seeded_pins,
     seed_heavy_account,
 )
 
@@ -333,3 +334,50 @@ class TheSeedCanCarryARealisticLabelCountTests(TestCase):
     def test_more_labels_than_the_vocabulary_holds_is_refused(self) -> None:
         with self.assertRaises(ValueError):
             seed_heavy_account(self.profile, pins=SEEDED, labels_per_pin=len(VOCABULARY) + 1)
+
+
+class TheSeedCanBePlacedTests(TestCase):
+    """A population places each account's grid, and neighbours must share only what they are placed to share."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile: Profile = baker.make(User).profile
+        self.other: Profile = baker.make(User).profile
+
+    def test_grids_far_apart_share_no_places(self) -> None:
+        seed_heavy_account(self.profile, pins=SEEDED, origin=(-60.0, -170.0))
+        seed_heavy_account(self.other, pins=SEEDED, origin=(-58.5, -170.0))
+
+        mine = set(Location.objects.filter(pins__profile=self.profile).values_list("pk", flat=True))
+        theirs = set(Location.objects.filter(pins__profile=self.other).values_list("pk", flat=True))
+        self.assertFalse(mine & theirs)
+
+    def test_overlapping_grids_share_the_places_under_the_overlap(self) -> None:
+        """Two accounts pinning the same building point at one `Location`, as real ones do."""
+        seed_heavy_account(self.profile, pins=SEEDED, origin=(-60.0, -170.0))
+        seed_heavy_account(self.other, pins=SEEDED, origin=(-60.0, -169.95))
+
+        mine = set(Location.objects.filter(pins__profile=self.profile).values_list("pk", flat=True))
+        theirs = set(Location.objects.filter(pins__profile=self.other).values_list("pk", flat=True))
+        self.assertEqual(len(mine & theirs), SEEDED - 5)
+
+    def test_a_placed_grid_starts_at_its_origin_and_tops_up_in_place(self) -> None:
+        seed_heavy_account(self.profile, pins=5, origin=(-45.0, -120.0))
+        seed_heavy_account(self.profile, pins=45, origin=(-45.0, -120.0))
+
+        coordinates = set(Location.objects.filter(pins__profile=self.profile).values_list("latitude", "longitude"))
+        self.assertEqual(len(coordinates), 45)
+        self.assertIn((-45.0, -120.0), {(float(lat), float(lng)) for lat, lng in coordinates})
+
+    def test_the_ceiling_follows_the_origin(self) -> None:
+        self.assertEqual(max_seeded_pins(89.5), 50 * 200)
+
+        with self.assertRaises(ValueError):
+            seed_heavy_account(self.profile, pins=max_seeded_pins(89.5) + 1, origin=(89.5, 0.0))
+
+    def test_a_grid_that_would_cross_the_antimeridian_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            seed_heavy_account(self.profile, pins=SEEDED, origin=(0.0, 179.0))
+
+        self.assertEqual(Pin.objects.filter(profile=self.profile).count(), 0)

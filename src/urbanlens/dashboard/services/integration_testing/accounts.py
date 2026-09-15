@@ -171,10 +171,7 @@ def provision_account(role: str, *, password: str, with_api_keys: bool = True, e
     user.set_password(password)
     user.save(update_fields=["email", "is_active", "password"])
 
-    _mark_email_verified(user)
-    _clear_second_factors(user)
-
-    profile = _prepare_profile(user, external_apis=external_apis)
+    profile = prepare_signed_in_account(user, external_apis=external_apis)
 
     api_key = restricted_key = None
     if with_api_keys:
@@ -243,6 +240,21 @@ def purge() -> list[str]:
     if deleted:
         logger.info("integration: purged %d account(s): %s", len(deleted), ", ".join(deleted))
     return deleted
+
+
+def prepare_signed_in_account(user: User, *, external_apis: bool = False) -> Profile:
+    """Put *user* past everything that stands between a session and the application.
+
+    Args:
+        user: An integration account.
+        external_apis: Whether to leave outbound providers and AI enabled.
+
+    Returns:
+        The account's profile.
+    """
+    _mark_email_verified(user)
+    _clear_second_factors(user)
+    return _prepare_profile(user, external_apis=external_apis)
 
 
 # -- internals -------------------------------------------------------------
