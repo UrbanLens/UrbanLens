@@ -79,8 +79,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
 
     def visited(self) -> Self:
         """Pins marked visited via timestamp or Visited status label."""
-        visited_q = Q(last_visited__isnull=False) | Q(labels__name="Visited", labels__kind=KIND_STATUS)
-        return self.filter(visited_q).distinct()
+        labelled_visited = Exists(self.model._base_manager.filter(labels__name="Visited", labels__kind=KIND_STATUS, pk=OuterRef("pk")))  # noqa: SLF001
+        return self.filter(Q(last_visited__isnull=False) | labelled_visited)
 
     def visited_without_record(self) -> Self:
         """Visited pins with no dated visit row, excluding dismissed ones.

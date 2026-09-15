@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.postgres.search import TrigramSimilarity
-from django.db.models import BooleanField, Case, Count, Exists, F, OuterRef, Q, Value, When
+from django.core.exceptions import FieldDoesNotExist
+from django.db.models import BooleanField, Case, Count, Exists, F, Model, OuterRef, Q, Value, When
 from django.db.models.functions import Concat
 from django.urls import reverse
 
@@ -165,13 +166,55 @@ _PLACE_FIELDS = (
 )
 
 
-def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q] | None = None) -> Q:
+def _crosses_many(model: type[Model], path: str) -> bool:
+    """Whether an ORM path from *model* passes through a relation that can match several rows.
+
+    Args:
+        model: The model the path starts from.
+        path: A ``__``-separated field path, without a lookup.
+
+    Returns:
+        True when some step is a many-to-many or reverse foreign key."""
+    for part in path.split("__"):
+        try:
+            field = model._meta.get_field(part)  # noqa: SLF001
+        except FieldDoesNotExist:
+            return False
+        if field.many_to_many or field.one_to_many:
+            return True
+        related = field.related_model
+        if not isinstance(related, type):
+            return False
+        model = related
+    return False
+
+
+def _semijoin(model: type[Model] | None, path: str, condition: Q) -> Q:
+    """*condition* as a semi-join when *path* crosses a to-many relation.
+
+    A row matching through several related rows stays one row without DISTINCT, and the statement never joins the
+    relation: planning a join across several of them cost more than running it.
+
+    Args:
+        model: The model being filtered; None leaves *condition* as it is.
+        path: The ORM path *condition* filters through.
+        condition: The predicate, written against *model*.
+
+    Returns:
+        A Q usable in ``filter()`` on *model*."""
+    if model is None or not _crosses_many(model, path):
+        return condition
+    return Q(Exists(model._base_manager.filter(condition, pk=OuterRef("pk"))))  # noqa: SLF001
+
+
+def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q] | None = None, model: type[Model] | None = None) -> Q:
     """Build the standard text predicate: every term in at least one field.
 
     Args:
         terms: Lowercased search terms (AND-ed together).
         fields: ORM field paths each term may appear in (OR-ed together).
         extra: Optional per-term Q builder, OR-ed alongside the field matches - e.g. tag-equivalence matching, which isn't expressible as a plain ``field__icontains`` lookup.
+        model: The model being searched. Given, a field path through a to-many relation matches as a semi-join.
 
     Returns:
         The combined Q object; empty Q when ``terms`` is empty."""
@@ -179,7 +222,7 @@ def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q
     for term in terms:
         term_q = Q()
         for field_path in fields:
-            term_q |= Q(**{f"{field_path}__icontains": term})
+            term_q |= _semijoin(model, field_path, Q(**{f"{field_path}__icontains": term}))
         if extra is not None:
             term_q |= extra(term)
         combined &= term_q
@@ -283,7 +326,7 @@ def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labe
         included = Q()
         for name in parsed.labels:
             included |= Q(**{f"{relation}__name__iexact": name})
-        queryset = queryset.filter(included)
+        queryset = queryset.filter(_semijoin(queryset.model, relation, included))
     if parsed.exclude_labels:
         excluded = Q()
         for name in parsed.exclude_labels:
@@ -344,7 +387,8 @@ def apply_pin_has_clause(queryset: _QS, parsed: ParsedQuery) -> _QS:  # noqa: UP
         negated = raw.startswith("-")
         choice = raw[1:] if negated else raw
         if choice == "labels":
-            queryset = queryset.filter(labels__isnull=negated)
+            labelled = Exists(queryset.model._base_manager.filter(labels__isnull=False, pk=OuterRef("pk")))  # noqa: SLF001
+            queryset = queryset.filter(~labelled if negated else labelled)
         elif choice == "wiki":
             queryset = queryset.filter(wiki__isnull=negated)
         elif choice == "checkins":
@@ -437,24 +481,26 @@ class SearchProvider(ABC):
         # ranks everything by distance, it doesn't exclude anything far away.
         has_near = location_path is not None and parsed.near_me and parsed.near_lat is not None and parsed.near_lng is not None
         geo_q = distance_filter(location_path, parsed) if has_near and location_path is not None else Q()
-        extra = None
+        model = queryset.model
+        extra: Callable[[str], Q] | None = None
         if tag_path is not None:
-            from functools import partial
-
             from urbanlens.dashboard.services.locations.external_tag_groups import tag_match_q
 
-            extra = partial(tag_match_q, path=tag_path)
+            def tag_semijoin(term: str, path: str = tag_path) -> Q:
+                return _semijoin(model, path, tag_match_q(term, path))
+
+            extra = tag_semijoin
 
         if not parsed.terms:
             if has_near:
-                phrase_q = term_filter([parsed.near_phrase], fields) if parsed.near_phrase else Q()
+                phrase_q = term_filter([parsed.near_phrase], fields, model=model) if parsed.near_phrase else Q()
                 queryset = queryset.filter(geo_q | phrase_q)
             return queryset.order_by("-created")
 
         if has_near:
             queryset = queryset.annotate(near_hit=Case(When(geo_q, then=Value(value=True)), default=Value(value=False), output_field=BooleanField()))
 
-        text_q = term_filter(parsed.terms, fields, extra=extra)
+        text_q = term_filter(parsed.terms, fields, extra=extra, model=model)
         order = (["-near_hit"] if has_near else []) + ["-created"]
         if self.fuzzy_field:
             queryset = queryset.annotate(search_sim=TrigramSimilarity(self.fuzzy_field, parsed.text))
@@ -526,7 +572,7 @@ class PinSearchProvider(SearchProvider):
             ],
             location_path="location",
             tag_path="location__place__external_tags",
-        ).distinct()
+        )
         if parsed.sort == "most-visited":
             queryset = queryset.annotate(_visit_count=Count("visit_history", distinct=True)).order_by("-_visit_count")
         else:
@@ -606,7 +652,7 @@ class PhotoSearchProvider(SearchProvider):
                 "location__locality",
             ],
             location_path="location",
-        ).distinct()
+        )
 
         # Applied here, and applied at all.
         # This queryset reaches other people's photos deliberately - the third disjunct above is
@@ -671,7 +717,7 @@ class WikiSearchProvider(SearchProvider):
         if (author_match := author_clause("created_by", parsed, profile)) is not None:
             author_ann, author_q = author_match
             queryset = queryset.annotate(**author_ann).filter(author_q)
-        queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"], location_path="location", tag_path="location__place__external_tags").distinct()
+        queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"], location_path="location", tag_path="location__place__external_tags")
         queryset, _ = apply_sort(queryset, parsed, location_path="location")
         wikis = _concealment_survivors(queryset, profile, limit, lambda w: w, lambda w, v: _concealed_wiki_survives(w, v, parsed.terms))
 
@@ -728,7 +774,7 @@ class ArticleSearchProvider(SearchProvider):
         if (author_match := author_clause("last_edited_by", parsed, profile)) is not None:
             author_ann, author_q = author_match
             queryset = queryset.annotate(**author_ann).filter(author_q)
-        queryset = self.apply_text(queryset, parsed, ["content", "pin__name", "pin__aliases__name", "wiki__name", "wiki__aliases__name"]).distinct()
+        queryset = self.apply_text(queryset, parsed, ["content", "pin__name", "pin__aliases__name", "wiki__name", "wiki__aliases__name"])
         queryset, _ = apply_sort(queryset, parsed)
         articles = _concealment_survivors(queryset, profile, limit, lambda a: a.wiki, lambda a, v: _concealed_article_survives(a, v, parsed.terms))
 
@@ -787,8 +833,9 @@ class TripSearchProvider(SearchProvider):
         from django.utils import timezone
 
         from urbanlens.dashboard.models.trips import Trip
+        from urbanlens.dashboard.models.trips.model import TripMembership
 
-        queryset = Trip.objects.filter(Q(profiles=profile) | Q(creator=profile))
+        queryset = Trip.objects.filter(Q(pk__in=TripMembership.objects.filter(profile=profile).values("trip_id")) | Q(creator=profile))
         if parsed.date_start and parsed.date_end:
             # A trip matches when its scheduled window overlaps the asked range.
             queryset = queryset.filter(start_date__lte=parsed.date_end).filter(
@@ -817,7 +864,7 @@ class TripSearchProvider(SearchProvider):
             queryset,
             parsed,
             ["name", "description", "activities__title", "activities__notes", "comments__text"],
-        ).distinct()
+        )
         queryset, _ = apply_sort(queryset, parsed)
 
         results = []
@@ -866,7 +913,7 @@ class VisitSearchProvider(SearchProvider):
             parsed,
             ["notes", "pin__name", "pin__location__official_name", "pin__location__wiki__name"],
             location_path="pin__location",
-        ).distinct()
+        )
         queryset, sort_applied = apply_sort(queryset, parsed, location_path="pin__location", visited_field="visited_at")
 
         results = []
@@ -1071,7 +1118,7 @@ class SafetySearchProvider(SearchProvider):
             if state == "archived":
                 queryset = queryset.filter(archive__isnull=negated)
             # else: unbacked or unrecognized - already surfaced via parsed.unsupported.
-        queryset = self.apply_text(queryset, parsed, ["title", "plan_details", "messages__body"]).distinct()
+        queryset = self.apply_text(queryset, parsed, ["title", "plan_details", "messages__body"])
         queryset, _ = apply_sort(queryset, parsed)
 
         results = []
@@ -1115,7 +1162,6 @@ class CommentSearchProvider(SearchProvider):
             .filter(term_filter(parsed.terms, ["text"]))
             .filter(date_range_filter("created", parsed))
             .select_related("pin", "wiki__location", "profile__user")
-            .distinct()
             .order_by("-created")
         )
         if (author_match := author_clause("profile", parsed, profile)) is not None:
@@ -1156,7 +1202,7 @@ class CommentSearchProvider(SearchProvider):
                 ),
             )
 
-        trip_comment_qs = TripComment.objects.filter(trip__profiles=profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").distinct().order_by("-created")
+        trip_comment_qs = TripComment.objects.filter(trip__profiles=profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").order_by("-created")
         if (author_match := author_clause("author", parsed, profile)) is not None:
             author_ann, author_q = author_match
             trip_comment_qs = trip_comment_qs.annotate(**author_ann).filter(author_q)
