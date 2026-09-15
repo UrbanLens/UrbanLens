@@ -187,7 +187,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
         from urbanlens.dashboard.models.pin_list.model import PinList
 
-        pin_lists = list(PinList.objects.for_profile(profile).order_by("name"))
+        pin_lists = list(PinList.objects.for_profile(profile).with_pin_counts().order_by("name"))
 
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
