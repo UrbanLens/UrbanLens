@@ -70,15 +70,21 @@ conversation key ──▶ encrypts ──▶ message body
   additionally never serves them pre-join messages at all), while a removed
   member is excluded from every later version.
 
-  **What is and isn't enforced.** The server does not check the `key_version` a
-  message is sent with beyond `>= 1` — it never verifies the version exists,
-  belongs to that group, or is current. A client can therefore encrypt under a
-  pre-removal version whose envelopes a removed member still holds, whether by
-  accident (a stale tab, an offline outbox replaying) or deliberately. What
-  keeps post-removal messages from that member today is the *server*: they have
-  no active membership, so `visible_window` never serves them the ciphertext.
-  Treat the removal boundary as server-enforced rather than cryptographic until
-  that is decided — see the open question in `docs/PROBLEMS.md`.
+  **The removal boundary is enforced when a message is sent, not only when it
+  is delivered.** Envelope rows are the server's record of who can open each
+  version, so `create_group_message` refuses (409) a `key_version` that has an
+  envelope held by anyone outside the active membership — removed, left, or
+  deleted. A deleted profile's envelope survives with `profile` null for
+  exactly this reason. The check holds before anyone has rotated, when the
+  latest version is itself the one the removed member holds, which is why
+  "reject anything but the latest" would not have been enough. An older version
+  whose holders are all still members stays usable: a member added since cannot
+  read it, but nobody outside the group can.
+
+  What it does not do: stop a member leaking, since any member can forward the
+  plaintext; or catch a removal that commits between the check and the insert.
+  `visible_window` still keeps a removed member from being served the
+  ciphertext either way.
   Removed members keep their old envelopes — their own history stays readable,
   the same recoverability trade as everywhere else in this design.
 

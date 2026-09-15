@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Exists, OuterRef, Q
+
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
@@ -104,6 +106,21 @@ class GroupKeyQuerySet(abstract.DashboardQuerySet):
             Matching rows, unordered (callers apply their own ordering).
         """
         return self.filter(group=group)
+
+    def with_outside_holders(self) -> GroupKeyQuerySet:
+        """Annotate ``has_outside_holder``: whether anyone outside the group's active membership holds this version.
+
+        An envelope whose profile was deleted counts as outside, since that person may still hold the key.
+
+        Returns:
+            The queryset, annotated.
+        """
+        from urbanlens.dashboard.models.e2ee.group_key import GroupKeyEnvelope
+        from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
+
+        active_members = GroupChatMembership.objects.active().filter(group_id=OuterRef(OuterRef("group_id"))).values("profile_id")
+        outside = GroupKeyEnvelope.objects.filter(key_id=OuterRef("pk")).filter(Q(profile__isnull=True) | ~Q(profile_id__in=active_members))
+        return self.annotate(has_outside_holder=Exists(outside))
 
 
 class GroupKeyManager(abstract.DashboardManager.from_queryset(GroupKeyQuerySet)):

@@ -55,6 +55,9 @@ class GroupKeyEnvelope(abstract.DashboardModel):
 
     ``wrapped_key`` is a base64 ``crypto_box_seal`` blob addressed to the
     member's identity public key; only that member's private key can open it.
+
+    The rows are also the record of who can open a version, which decides whether it may encrypt a new message.
+    A deleted profile therefore nulls ``profile`` instead of deleting the row: that person may still hold the key.
     """
 
     key = ForeignKey(
@@ -64,14 +67,16 @@ class GroupKeyEnvelope(abstract.DashboardModel):
     )
     profile = ForeignKey(
         "dashboard.Profile",
-        on_delete=CASCADE,
+        on_delete=SET_NULL,
         related_name="group_key_envelopes",
+        null=True,
+        blank=True,
     )
     wrapped_key = TextField()
 
     if TYPE_CHECKING:
         key_id: int
-        profile_id: int
+        profile_id: int | None
 
     def __str__(self) -> str:
         """Return a human-readable description of this envelope.

@@ -560,6 +560,24 @@ class GroupMessageTests(MessagingBaseTestCase):
         response = self._post_json(self.url, {"body": "photo", "image_uuids": [str(image.uuid)]})
         self.assertEqual(response.status_code, 400)
 
+    def test_a_key_version_a_former_member_holds_is_refused_with_409(self) -> None:
+        """409 rather than 400: the request was well-formed, and the remedy is to refetch the keys and re-encrypt."""
+        from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope
+        from urbanlens.dashboard.services.messaging.group_chats import remove_group_member
+
+        key = GroupKey.objects.create(group=self.group, version=1)
+        GroupKeyEnvelope.objects.bulk_create(
+            [
+                GroupKeyEnvelope(key=key, profile=holder, wrapped_key="c2VhbGVk")
+                for holder in (self.sender, self.partner)
+            ]
+        )
+        remove_group_member(self.group, self.sender, self.partner)
+
+        response = self._post_json(self.url, {"ciphertext": "c2VhbGVk", "nonce": "bm9uY2U=", "key_version": 1})
+
+        self.assertEqual(response.status_code, 409)
+
 
 class RetentionSettingsTests(MessagingBaseTestCase):
     """The retention preference round-trips."""

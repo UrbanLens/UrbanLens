@@ -27,6 +27,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LEN
 from urbanlens.dashboard.services.messaging.direct_messages import messageable_profile_pks
 from urbanlens.dashboard.services.messaging.group_chats import (
     MAX_GROUP_MEMBERS,
+    STALE_GROUP_KEY_MESSAGE,
     AddMembersRequiresCreatorError,
     ConflictingMessageContentError,
     EmptyMessageError,
@@ -41,6 +42,7 @@ from urbanlens.dashboard.services.messaging.group_chats import (
     NotAGroupMemberError,
     NotMessageSenderError,
     RemoveMemberRequiresCreatorError,
+    StaleKeyVersionError,
     TargetNotAMemberError,
     TooManyGroupMembersError,
     UnknownKeyVersionError,
@@ -269,6 +271,9 @@ class GroupSendView(LoginRequiredMixin, View):
         except UnknownKeyVersionError as exc:
             logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
             return HttpResponseBadRequest("Unknown encryption key version for this group.")
+        except StaleKeyVersionError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponse(STALE_GROUP_KEY_MESSAGE, status=409, content_type="text/plain; charset=utf-8")
         except EmptyMessageError as exc:
             logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
             return HttpResponseBadRequest("Message cannot be empty.")

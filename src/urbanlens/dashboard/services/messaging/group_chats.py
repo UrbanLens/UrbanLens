@@ -71,6 +71,14 @@ class UnknownKeyVersionError(GroupChatValidationError):
     """``key_version`` doesn't name a ``GroupKey`` this group actually has."""
 
 
+class StaleKeyVersionError(GroupChatValidationError):
+    """``key_version`` names a key someone outside the group's active membership can open."""
+
+
+#: What a person is told when their message raced a membership change; resending re-fetches the key.
+STALE_GROUP_KEY_MESSAGE = "The group's members changed as you sent that, so it wasn't sent. Please try again."
+
+
 class EmptyMessageError(GroupChatValidationError):
     """Neither ``body`` nor ``ciphertext`` was given."""
 
@@ -535,6 +543,7 @@ def create_group_message(
         ConflictingMessageContentError: Both `body` and `ciphertext` were given.
         MalformedEncryptedMessageError: The ciphertext/nonce/key_version triple is missing, invalid, or inconsistent.
         UnknownKeyVersionError: `key_version` doesn't name a `GroupKey` this group has.
+        StaleKeyVersionError: Someone outside the active membership holds `key_version`; the client must rotate and re-encrypt.
         EmptyMessageError: Neither `body` nor `ciphertext` was given.
         NotAGroupMemberError: `sender` isn't an active member."""
     from urbanlens.dashboard.models.e2ee import GroupKey
@@ -565,9 +574,12 @@ def create_group_message(
             raise ConflictingMessageContentError(f"Sender {sender.pk} supplied both body and ciphertext for one message.")
         if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
             raise MalformedEncryptedMessageError("ciphertext/nonce failed valid_blob() validation, or key_version < 1.")
-        # The version has to name a key this group actually has.
-        if not GroupKey.objects.filter(group=group, version=key_version).exists():
+        # Every envelope holder can open this version, so all of them must still be members.
+        has_outside_holder = GroupKey.objects.for_group(group).filter(version=key_version).with_outside_holders().values_list("has_outside_holder", flat=True).first()
+        if has_outside_holder is None:
             raise UnknownKeyVersionError(f"No GroupKey with version={key_version} exists for group {group.pk}.")
+        if has_outside_holder:
+            raise StaleKeyVersionError(f"GroupKey version={key_version} of group {group.pk} is held by someone outside its active membership.")
     elif nonce or key_version:
         raise MalformedEncryptedMessageError(f"nonce/key_version given without ciphertext (sender {sender.pk}, group {group.pk}).")
     if not body and not ciphertext:

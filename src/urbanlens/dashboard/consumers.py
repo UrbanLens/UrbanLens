@@ -585,7 +585,7 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
 
         group_uuid = str(data.get("group") or "").strip()
         if group_uuid:
-            from urbanlens.dashboard.services.messaging.group_chats import GroupChatPermissionError, GroupChatValidationError, NotAGroupMemberError
+            from urbanlens.dashboard.services.messaging.group_chats import STALE_GROUP_KEY_MESSAGE, GroupChatPermissionError, GroupChatValidationError, NotAGroupMemberError, StaleKeyVersionError
 
             # A group-chat frame: same validation/broadcast pipeline, but the
             # message fans out to every active member (see services.messaging.group_chats).
@@ -602,6 +602,9 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
             except GroupChatPermissionError as exc:
                 logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
                 await self.send(text_data=json.dumps({"type": "error", "detail": "You don't have permission to do that."}))
+            except StaleKeyVersionError as exc:
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": STALE_GROUP_KEY_MESSAGE}))
             except GroupChatValidationError as exc:
                 logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
                 await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please check it and try again."}))

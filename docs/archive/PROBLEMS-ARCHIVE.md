@@ -11,6 +11,43 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-15: a group message could be sent under a key version a former member still holds
+
+`id: P26` · `status: fixed` · `resolved: 2026-09-15`
+
+Previously titled "A group message can still be sent under a stale key version, and refusing one risks an
+availability outage", before that "E2EE group messages: the cryptographic membership boundary depends on the
+server (2026-08-07)". P46 was merged into it.
+
+**The defect.** `models/e2ee/group_key.py` says versioning enforces the membership boundary
+cryptographically, but `create_group_message` accepted any version the group had ever had. A message could be
+encrypted under a pre-removal version whose envelopes include the removed member: a tab open across the
+removal, an outbox replay, or an API client caching the version it last fetched. Only the delivery gate
+(`visible_window`) kept that ciphertext from them, and a gate does not survive a database copy or a
+compromised host. Versions the group never had were already refused from 2026-09-06.
+
+**Fixed by refusing a version anyone outside the active membership holds.** The envelope rows are the record
+of who can open a version, so the send path asks one `EXISTS` (`GroupKeyQuerySet.with_outside_holders`): is
+there an envelope for this version whose profile is not an active member? If so, every send path refuses it:
+`StaleKeyVersionError`, answered with a 409 over HTTP and an error frame over WebSocket. That holds before
+anyone has rotated, treats leaving the same as removal, and still accepts an older version whose holders are
+all still members. Deleting an account used to CASCADE its envelopes away, which would have made its version
+look clean. Envelopes now `SET_NULL` their profile (migration 0045), and a NULL counts as an outside holder.
+Tests: `test_group_key_version_is_real.py`, `test_external_api_messaging.py`.
+
+**The availability outage this entry feared does not happen.** It assumed a refusal would block any group that
+cannot rotate, since one un-enrolled member makes rotation 409. But the client re-fetches keys before every
+send and rotates when `needs_rotation` is set. When rotation is impossible, `ensureGroupKey` reports the group
+`unencryptable` and the message is not encrypted at all. The refusal only reaches a client that raced a
+membership change or cached a version, and resending clears it.
+
+**It was graded Critical in the 2026-09-15 tally, and Major is fairer.** A remaining member who picks an old
+version so an ejected member can read a message could equally forward them the plaintext; no protocol stops
+that. The fix protects against stale clients and a leaked database.
+
+**Still open:** the check and the insert are not one transaction, so a removal committed between them lets one
+message through under the old version. See `docs/designs/e2ee.md`.
+
 ## RESOLVED 2026-09-15: P7's 2026-08-19 REData/dev-tooling sweep - everything but the `ref`-stability item
 
 `refs: P7 (open - the ref-stability item remains, see live entry)` · `resolved: 2026-09-15`

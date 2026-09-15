@@ -96,6 +96,7 @@ from urbanlens.dashboard.services.messaging.group_chats import (
     NotAGroupMemberError,
     NotMessageSenderError,
     RemoveMemberRequiresCreatorError,
+    StaleKeyVersionError,
     TargetNotAMemberError,
     TooManyGroupMembersError,
     UnknownKeyVersionError,
@@ -701,9 +702,11 @@ class GroupMessagesView(ExternalApiView):
             "Sends a message to the group. Supply `client_uuid` for idempotent retries; a repeat returns the "
             "existing message with HTTP 200. Attachments, replies, markup maps and shares are not supported "
             "on group messages and are refused with 400 rather than silently dropped - use the group pin-share "
-            "endpoint for pins."
+            "endpoint for pins.\n\n"
+            "409 means `key_version` is still held by someone who is no longer a member, so a message under it would "
+            "be readable to them. Fetch the group keys, rotate when `needs_rotation` is set, and re-encrypt."
         ),
-        responses={201: None, 200: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+        responses={201: None, 200: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer},
     )
     def post(self, request: Request, group_uuid: UUID) -> Response:
         """Send one message into this group."""
@@ -751,6 +754,9 @@ class GroupMessagesView(ExternalApiView):
         except UnknownKeyVersionError as exc:
             logger.info("external API group message rejected: %s", exc)
             return Response({"error": "Unknown encryption key version for this group."}, status=400)
+        except StaleKeyVersionError as exc:
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": "Someone who holds that key version has left the group. Fetch the group keys, rotate, and re-encrypt."}, status=409)
         except EmptyMessageError as exc:
             logger.info("external API group message rejected: %s", exc)
             return Response({"error": "Message cannot be empty."}, status=400)
