@@ -23,23 +23,29 @@ from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_K
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.middleware.csrf import CSRF_ALLOWED_CHARS, CSRF_SECRET_LENGTH
 from django.urls import reverse
 from django.utils import timezone
 
+from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
 from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.notifications.meta import NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_EMAIL_DOMAIN, INTEGRATION_USERNAME_PREFIX
 from urbanlens.dashboard.services.integration_testing.accounts import generate_password, prepare_signed_in_account
-from urbanlens.dashboard.services.integration_testing.perf_seed import COORDINATE_STEP, GRID_SIDE, PIN_NAME_PREFIX, analyze_seeded_tables, seed_heavy_account
+from urbanlens.dashboard.services.integration_testing.perf_seed import COORDINATE_STEP, GRID_SIDE, HEAVY_LABEL_NAME, PIN_NAME_PREFIX, analyze_seeded_tables, seed_heavy_account
+from urbanlens.dashboard.services.pins.pin_list_membership import resync_smart_list
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -109,6 +115,20 @@ PINS_PER_VISIT = 10
 MAX_VISITS = 50
 
 LABELS_PER_PIN = 3
+
+#: Comments on each account's first pin by its owner, and on that pin's wiki by its owner and a friend.
+COMMENTS_PER_PIN = 4
+
+#: Smart lists per account, each matching one label part of its pins carry.
+SMART_LISTS = 3
+
+#: Global labels each account restyles, where that many tags or categories exist.
+LABEL_CUSTOMIZATIONS = 2
+#: One pin in this many carries each global label an account restyles.
+GLOBAL_LABEL_SPACING = 10
+
+#: Stops on each account's trip, each at one of its pins, planned with a friend.
+TRIP_ACTIVITIES = 3
 
 #: Routes every account uses, resolved once for the manifest so the harness never writes a path by hand.
 SHARED_ROUTES = (
@@ -259,7 +279,8 @@ def provision_population(
 ) -> PopulationResult:
     """Create or top up *count* population accounts and sign each one in.
 
-    Idempotent: accounts, pins, friendships, conversations, notifications and visits are only added where missing.
+    Idempotent: accounts, pins, friendships, conversations, notifications, visits, comments, trips, smart lists and
+    label customizations are only added where missing.
     Sessions are new on every run.
 
     Args:
@@ -303,11 +324,14 @@ def provision_population(
     _befriend(profiles)
     _converse(profiles)
     _notify(profiles)
+    _discuss(profiles)
+    _plan_trips(profiles)
+    _organize(profiles)
     if analyze:
         result.analyzed = analyze_seeded_tables(_written_tables())
 
     for index, (user, profile) in enumerate(zip(users, profiles, strict=True)):
-        friend = profiles[index + 1] if index + 1 < count else (profiles[index - 1] if index else None)
+        friend = _friend_of(profiles, index)
         result.accounts.append(
             PopulationAccount(
                 index=index,
@@ -413,6 +437,71 @@ def _notify(profiles: Sequence[Profile]) -> None:
     )
 
 
+def _friend_of(profiles: Sequence[Profile], index: int) -> Profile | None:
+    """The account the one at *index* shares a conversation, a trip and a wiki thread with."""
+    if index + 1 < len(profiles):
+        return profiles[index + 1]
+    return profiles[index - 1] if index else None
+
+
+def _first_pins(profile: Profile, count: int) -> list[Pin]:
+    """The account's first root pins, which its journeys open."""
+    return list(Pin.objects.filter(profile=profile).root_pins().select_related("location").order_by("pk")[:count])
+
+
+def _discuss(profiles: Sequence[Profile]) -> None:
+    """Comments on each account's first pin, and on its wiki from the account and a friend, where there are none."""
+    comments: list[Comment] = []
+    for index, profile in enumerate(profiles):
+        pins = _first_pins(profile, 1)
+        if not pins or pins[0].location is None or Comment.objects.filter(pin=pins[0]).exists():
+            continue
+        pin = pins[0]
+        wiki, _ = Wiki.objects.get_or_create(location=pin.location, defaults={"name": pin.name})
+        voices = (profile, _friend_of(profiles, index) or profile)
+        for position in range(COMMENTS_PER_PIN):
+            comments.append(Comment(pin=pin, profile=profile, text=f"Perf note {position}"))
+            comments.append(Comment(wiki=wiki, profile=voices[position % 2], text=f"Perf comment {position}"))
+    Comment.objects.bulk_create(comments, batch_size=1_000)
+
+
+def _plan_trips(profiles: Sequence[Profile]) -> None:
+    """A trip through each account's first pins with a friend on it, for every account without one."""
+    planned = set(Trip.objects.filter(creator__in=profiles).values_list("creator_id", flat=True))
+    for index, profile in enumerate(profiles):
+        friend = _friend_of(profiles, index)
+        if friend is None or profile.pk in planned:
+            continue
+        with transaction.atomic():
+            trip = Trip.objects.create(name=f"Perf Trip {index}", creator=profile)
+            TripMembership.objects.bulk_create([TripMembership(trip=trip, profile=profile, is_organizer=True), TripMembership(trip=trip, profile=friend)])
+            stops = _first_pins(profile, TRIP_ACTIVITIES)
+            TripActivity.objects.bulk_create([TripActivity(trip=trip, pin=pin, location=pin.location, added_by=profile, title=pin.name, order=order) for order, pin in enumerate(stops)])
+
+
+def _organize(profiles: Sequence[Profile]) -> None:
+    """Smart lists over labels each account's pins carry, and restyled global labels, where it has none."""
+    listed = set(PinList.objects.filter(profile__in=profiles, is_smart=True).values_list("profile_id", flat=True))
+    customized = set(LabelCustomization.objects.filter(profile__in=profiles).values_list("profile_id", flat=True))
+    shared = list(Label.objects.global_only().suggestable().order_by("pk").values_list("pk", flat=True)[:LABEL_CUSTOMIZATIONS])
+    for profile in profiles:
+        if profile.pk not in listed:
+            carried = Exists(Pin.labels.through.objects.filter(label_id=OuterRef("pk"), pin__profile=profile))
+            for label_id in list(Label.objects.for_profile(profile).location_labels().filter(carried).exclude(name=HEAVY_LABEL_NAME).order_by("pk").values_list("pk", flat=True)[:SMART_LISTS]):
+                resync_smart_list(PinList.objects.create(profile=profile, name=f"Perf Smart {label_id}", is_smart=True, smart_filter={"tags": [label_id]}))
+        if shared and profile.pk not in customized:
+            _restyle(profile, shared)
+
+
+def _restyle(profile: Profile, label_ids: Sequence[int]) -> None:
+    """Carry each global label on a share of the account's pins, and override its colour."""
+    pin_ids = list(Pin.objects.filter(profile=profile).root_pins().order_by("pk").values_list("pk", flat=True))[::GLOBAL_LABEL_SPACING]
+    through = Pin.labels.through
+    with transaction.atomic():
+        through.objects.bulk_create([through(pin_id=pin_id, label_id=label_id) for pin_id in pin_ids for label_id in label_ids], ignore_conflicts=True, batch_size=5_000)
+        LabelCustomization.objects.bulk_create([LabelCustomization(profile=profile, label_id=label_id, color="#a5584a") for label_id in label_ids])
+
+
 def _account_paths(profile: Profile, friend: Profile | None) -> dict[str, str]:
     """The account-specific pages the harness visits, ensuring the wiki it links to exists."""
     paths: dict[str, str] = {}
@@ -434,5 +523,5 @@ def _account_paths(profile: Profile, friend: Profile | None) -> dict[str, str]:
 
 def _written_tables() -> list[str]:
     """Every table provisioning writes rows to in bulk."""
-    models = (Pin, Location, Label, Pin.labels.through, Friendship, DirectMessage, NotificationLog, PinVisit)
+    models = (Pin, Location, Label, Pin.labels.through, Friendship, DirectMessage, NotificationLog, PinVisit, Comment, Trip, TripMembership, TripActivity, PinList, PinListItem, LabelCustomization)
     return [model._meta.db_table for model in models]  # noqa: SLF001 - _meta is Django's metadata API
