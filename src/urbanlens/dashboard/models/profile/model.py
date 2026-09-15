@@ -940,9 +940,9 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             ``services.pins.common_pins.pinned_place_keys``), so two pins
             fifty metres apart on the same parcel still count as shared.
         """
-        from urbanlens.dashboard.services.pins.common_pins import pinned_place_keys
+        from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with
 
-        return bool(pinned_place_keys(subject) & pinned_place_keys(other))
+        return pins_sharing_a_place_with(subject).filter(profile=other).exists()
 
     @staticmethod
     def _have_common_friend(subject: Profile, other: Profile) -> bool:
@@ -1246,8 +1246,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         """
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-        from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.trips.model import TripMembership
+        from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with
 
         subjects = list(subjects)
         visible = {subject.pk for subject in subjects if getattr(subject, field) == VisibilityChoice.ANYONE}
@@ -1291,17 +1291,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         wants_trip = needs & {VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON}
 
         if wants_pin:
-            # Place-aware, not a raw Location match - two pins on the same parcel fifty metres apart
-            # must count as shared (see services.pins.common_pins.pinned_place_keys, which this
-            # mirrors in batch form rather than per-pair).
-            viewer_place_ids: set[int] = set()
-            viewer_location_ids: set[int] = set()
-            for location_id, place_id in Pin.objects.filter(profile=viewer, location__isnull=False).values_list("location_id", "location__place_id"):
-                (viewer_place_ids if place_id is not None else viewer_location_ids).add(place_id if place_id is not None else location_id)
-            if viewer_place_ids or viewer_location_ids:
-                common_pin = set(
-                    Pin.objects.filter(profile__in=pending_pks).filter(Q(location__place_id__in=viewer_place_ids) | Q(location_id__in=viewer_location_ids)).values_list("profile_id", flat=True),
-                )
+            common_pin = set(pins_sharing_a_place_with(viewer).filter(profile__in=pending_pks).values_list("profile_id", flat=True).distinct())
         if wants_friend:
             viewer_friends = set(
                 Friendship.objects.filter(from_profile=viewer, status=accepted).values_list("to_profile_id", flat=True),
@@ -1393,8 +1383,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         """
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
         from urbanlens.dashboard.models.friendship.model import Friendship
-        from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.trips.model import TripMembership
+        from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with
 
         author_id = f"{author_path}_id"
         setting = f"{author_path}__{visibility_field}"
@@ -1409,17 +1399,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             askers = Friendship.objects.filter(to_profile=viewer, status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING)).values("from_profile_id")
             connected |= models.Q(**{f"{author_id}__in": askers})
 
-        # Place-keyed where a pin has a place, exact Location otherwise - the
-        # SQL form of services.pins.common_pins.pinned_place_keys, so two pins
-        # fifty metres apart on one parcel count as shared.
-        viewer_pins = Pin.objects.filter(profile=viewer, location__isnull=False)
-        common_pin = models.Q(
-            **{
-                f"{author_id}__in": Pin.objects.filter(
-                    models.Q(location__place_id__in=viewer_pins.exclude(location__place__isnull=True).values("location__place_id")) | models.Q(location_id__in=viewer_pins.filter(location__place__isnull=True).values("location_id")),
-                ).values("profile_id"),
-            },
-        )
+        common_pin = models.Q(**{f"{author_id}__in": pins_sharing_a_place_with(viewer).values("profile_id")})
 
         common_friend = models.Q()
         for mine in (friends_out, friends_in):
@@ -1455,8 +1435,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         """
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-        from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.trips.model import TripMembership
+        from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with
 
         accepted = FriendshipStatus.ACCEPTED
         related: set[int] = {viewer.pk}
@@ -1474,14 +1454,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             ).values_list("from_profile_id", flat=True),
         )
 
-        viewer_place_ids: set[int] = set()
-        viewer_location_ids: set[int] = set()
-        for location_id, place_id in Pin.objects.filter(profile=viewer, location__isnull=False).values_list("location_id", "location__place_id"):
-            (viewer_place_ids if place_id is not None else viewer_location_ids).add(place_id if place_id is not None else location_id)
-        if viewer_place_ids or viewer_location_ids:
-            related |= set(
-                Pin.objects.filter(Q(location__place_id__in=viewer_place_ids) | Q(location_id__in=viewer_location_ids)).values_list("profile_id", flat=True),
-            )
+        related |= set(pins_sharing_a_place_with(viewer).values_list("profile_id", flat=True).distinct())
 
         if friends:
             related |= set(
@@ -1544,8 +1517,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         """
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-        from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.trips.model import TripMembership
+        from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with
 
         viewer_pks = {viewer.pk for viewer in viewers}
         if not viewer_pks:
@@ -1587,16 +1560,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             wants_trip = undecided and visibility in (VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON)
 
             if wants_pin:
-                # Place-aware, not a raw Location match - see the matching
-                # comment in visible_profile_pks above.
-                subject_place_ids: set[int] = set()
-                subject_location_ids: set[int] = set()
-                for location_id, place_id in Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", "location__place_id"):
-                    (subject_place_ids if place_id is not None else subject_location_ids).add(place_id if place_id is not None else location_id)
-                if subject_place_ids or subject_location_ids:
-                    visible |= set(
-                        Pin.objects.filter(profile_id__in=undecided).filter(Q(location__place_id__in=subject_place_ids) | Q(location_id__in=subject_location_ids)).values_list("profile_id", flat=True),
-                    )
+                visible |= set(pins_sharing_a_place_with(subject).filter(profile_id__in=undecided).values_list("profile_id", flat=True).distinct())
             if wants_friend:
                 subject_friends = set(
                     Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True),

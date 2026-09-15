@@ -30,20 +30,18 @@ def _own_contribution_q() -> Q:
 #: Instance attributes :func:`prime_viewer_scope` fills in, and
 #: ``ImageQuerySet._viewer_scoped`` reads.
 _FRIEND_IDS_ATTR = "_ul_visible_friend_ids"
-_PINNED_LOCATION_IDS_ATTR = "_ul_visible_pinned_location_ids"
 _TRIP_IDS_ATTR = "_ul_visible_trip_ids"
 
 
 def prime_viewer_scope(profile: Profile) -> None:
     """Resolve a viewer's relationship sets once, for a caller about to reuse them.
-    ``visible_to`` is eager: it resolves the viewer's friends, pinned locations, trip memberships and reachable wikis before it can build its filter.
+    ``visible_to`` resolves the viewer's friends, trip memberships and reachable wikis as it builds its filter.
     Explicit rather than automatic, and this is the important part: caching on first read would change what ``visible_to`` means for every caller, including one that creates a pin and then asks about visibility in the same breath.
 
     Args:
         profile: The viewer whose sets to resolve.
     """
     from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.trips.model import TripMembership
     from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
 
@@ -54,7 +52,6 @@ def prime_viewer_scope(profile: Profile) -> None:
     # setattr rather than direct assignment: these are not declared on Profile,
     # and django-stubs is right to flag that.
     setattr(profile, _FRIEND_IDS_ATTR, friends)
-    setattr(profile, _PINNED_LOCATION_IDS_ATTR, set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True)))
     setattr(profile, _TRIP_IDS_ATTR, set(TripMembership.objects.trip_ids_for(profile)))
     # Fills the same instance attribute _shared_within_reach_of reads through.
     visible_wiki_locations_cached(profile)
@@ -98,11 +95,11 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
 def _viewer_scoped(profile: Profile, attribute: str, compute: Callable[[], set[int]]) -> set[int]:
     """Read a viewer-scoped id set, using a primed value when there is one.
 
-    These three sets describe the *viewer*, not the queryset, so every
+    These sets describe the *viewer*, not the queryset, so every
     ``visible_to`` call in one render wants the same answer - and a page can make
     several. Album detail resolves the same visibility four times
     (``visible_album_item_pairs``, ``album_images_page``, ``eligible_images_for``
-    and the picker payload), which cost four copies of all three lookups.
+    and the picker payload), which cost four copies of each lookup.
 
     **Opt-in, and never self-populating.** An earlier version cached on first
     read, which silently changed what ``visible_to`` means: a caller that creates
@@ -138,17 +135,6 @@ def _friend_ids_for(profile: Profile) -> set[int]:
     return _viewer_scoped(profile, _FRIEND_IDS_ATTR, compute)
 
 
-def _location_ids_for(profile: Profile) -> set[int]:
-    """Location ids *profile* has pinned."""
-
-    def compute() -> set[int]:
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        return set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True))
-
-    return _viewer_scoped(profile, _PINNED_LOCATION_IDS_ATTR, compute)
-
-
 def _trip_ids_for(profile: Profile) -> set[int]:
     """Trip ids *profile* is a member of."""
 
@@ -161,7 +147,7 @@ def _trip_ids_for(profile: Profile) -> set[int]:
 
 
 class _ViewerScope:
-    """The viewer's three relationship sets, each resolved on first use.
+    """The viewer's relationships, each resolved on first use.
 
     Which of them an answer depends on is decided by the settings being
     evaluated, not known in advance: ``ANYONE`` and ``NO_ONE`` need none,
@@ -177,12 +163,11 @@ class _ViewerScope:
     whether it is reached for.
     """
 
-    __slots__ = ("_friend_ids", "_location_ids", "_profile", "_trip_ids")
+    __slots__ = ("_friend_ids", "_profile", "_trip_ids")
 
     def __init__(self, profile: Profile) -> None:
         self._profile = profile
         self._friend_ids: set[int] | None = None
-        self._location_ids: set[int] | None = None
         self._trip_ids: set[int] | None = None
 
     @property
@@ -192,12 +177,11 @@ class _ViewerScope:
             self._friend_ids = _friend_ids_for(self._profile)
         return self._friend_ids
 
-    @property
-    def location_ids(self) -> set[int]:
-        """Location ids the viewer has pinned."""
-        if self._location_ids is None:
-            self._location_ids = _location_ids_for(self._profile)
-        return self._location_ids
+    def shares_a_place_with(self, uploader_id: int) -> bool:
+        """Whether the viewer and *uploader_id* have pinned the same place."""
+        from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with
+
+        return pins_sharing_a_place_with(self._profile).filter(profile_id=uploader_id).exists()
 
     @property
     def trip_ids(self) -> set[int]:
@@ -281,10 +265,6 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         """Profile ids of *profile*'s accepted friends."""
         return _friend_ids_for(profile)
 
-    def _get_location_ids(self, profile: Profile) -> set[int]:
-        """Location ids *profile* has pinned."""
-        return _location_ids_for(profile)
-
     def _get_trip_ids(self, profile: Profile) -> set[int]:
         """Trip ids *profile* is a member of."""
         return _trip_ids_for(profile)
@@ -315,10 +295,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
             return False
 
         def common_pin() -> bool:
-            from urbanlens.dashboard.models.pin.model import Pin
-
-            uploader_loc_ids = set(Pin.objects.filter(profile_id=uploader_id, location__isnull=False).values_list("location_id", flat=True))
-            return bool(scope.location_ids & uploader_loc_ids)
+            return scope.shares_a_place_with(uploader_id)
 
         def common_friend() -> bool:
             return bool(scope.friend_ids & self._get_friend_ids_by_id(uploader_id))

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
+
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 
@@ -28,6 +30,22 @@ def pinned_place_keys(profile: Profile) -> set[tuple[str, int]]:
     for location_id, place_id in Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", "location__place_id"):
         keys.add(("place", place_id) if place_id is not None else ("location", location_id))
     return keys
+
+
+def pins_sharing_a_place_with(profile: Profile) -> QuerySet[Pin]:
+    """Anyone's pins on something *profile* has also pinned, keyed as :func:`pinned_place_keys` keys it.
+
+    Left in the database, so asking whether two people share a place reads one row however much either has pinned.
+
+    Args:
+        profile: The profile whose pinned places to match.
+
+    Returns:
+        A ``Pin`` queryset to narrow by owner, including *profile*'s own pins."""
+    own = Pin.objects.filter(profile=profile, location__isnull=False)
+    return Pin.objects.filter(
+        Q(location__place_id__in=own.exclude(location__place__isnull=True).values("location__place_id")) | Q(location_id__in=own.filter(location__place__isnull=True).values("location_id")),
+    )
 
 
 def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
