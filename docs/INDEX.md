@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P123` · `T3` · `PL8` · `D16` · `X20` · `I5` · `R30` · `N24`
+**Next free id:** `P123` · `T3` · `PL8` · `D16` · `X21` · `I5` · `R30` · `N24`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -125,6 +125,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | X16 | holds | 2026-09-10 | The four chaos scenarios, run for the first time: one catastrophic, three clean | [`docs/notes/first-chaos-run.md`](notes/first-chaos-run.md) |
 | X17 | holds | 2026-09-11 | What one account's map data actually costs: the cache is 662 bytes a pin, not 1,700 | [`docs/notes/map-data-cost-measured.md`](notes/map-data-cost-measured.md) |
 | X19 | holds | 2026-09-15 | Bigint keys are not what makes fetching a uuid cost a join; the join is, and today's bigint-plus-random-uuid design inserts slowest | [`docs/notes/uuid-primary-key-benchmark.md`](notes/uuid-primary-key-benchmark.md) |
+| X20 | holds | 2026-09-15 | A browser label cache pays in rendering and filter round-trips, not in label joins: Organize spends ~250 ms CPU a view rendering and a filter change 300-460 ms of server time, against 1-2 ms in a browser | [`docs/notes/label-cache-and-filter-cost-measured.md`](notes/label-cache-and-filter-cost-measured.md) |
 | I1 | unvalidated | 2026-08-27 | Splitting into a near-zero-knowledge server and a data-holding agent was planned in full, then deferred | [`docs/designs/rejected-and-deferred/split-architecture.md`](designs/rejected-and-deferred/split-architecture.md) |
 | I2 | actionable | 2026-08-27 | Ten free/open APIs surveyed as integration candidates; several have since shipped as plugins, so re-check before using it | [`docs/reports/api-expansion-candidates.md`](reports/api-expansion-candidates.md) |
 | I3 | absorbed | 2026-07-30 | SpotGuessr's backend was sound and its frontend was the debt; all five recommendations shipped | [`docs/reports/spotguessr-audit.md`](reports/spotguessr-audit.md) |
