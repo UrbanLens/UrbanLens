@@ -97,7 +97,7 @@ class VisibleProfilePksAgreementTests(TestCase):
         self._assert_agrees([with_common, without])
 
     def test_common_pin_across_different_locations_sharing_a_place(self) -> None:
-        """A pin fifty metres away on the same parcel must still count as "common pin" - the same fix already proven in services.pins.common_pins.pinned_place_keys, now shared by _have_common_pin/visible_profile_pks/viewers_who_can_see instead of each comparing raw Location rows."""
+        """A pin fifty metres away on the same parcel must still count as "common pin" - the same fix already proven in services.pins.common_pins.pins_sharing_a_place_with, now shared by _have_common_pin/visible_profile_pks/viewers_who_can_see instead of each comparing raw Location rows."""
         place = baker.make(Place, kind=PlaceKind.PARCEL)
         viewer_location = baker.make(Location, place=place)
         baker.make(Pin, profile=self.viewer, location=viewer_location, parent_pin=None)

@@ -937,7 +937,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             True when the profiles' pinned places intersect - keyed by Place
             where a pin's location has one, falling back to the exact
             Location otherwise (see
-            ``services.pins.common_pins.pinned_place_keys``), so two pins
+            ``services.pins.common_pins.pins_sharing_a_place_with``), so two pins
             fifty metres apart on the same parcel still count as shared.
         """
         from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with

@@ -53,16 +53,15 @@ def apply_trip_visibility_filter(
 
     if common_pin_acts:
         # Place-aware, not a raw Location match: the viewer's own pin fifty metres away on the same
-        # parcel must still qualify as "common pin" (see
-        # services.pins.common_pins.pinned_place_keys, which this mirrors).
-        # Resolve each activity's location to its place_id (falling back to the location itself when
+        # parcel must still qualify as "common pin" (see services.pins.common_pins.pins_sharing_a_place_with).
         from urbanlens.dashboard.models.location.model import Location
 
         loc_ids = {a.location_id for a in common_pin_acts if a.location_id is not None}
         loc_to_place: dict[int, int | None] = dict(Location.objects.filter(pk__in=loc_ids).values_list("pk", "place_id"))
         viewer_place_ids: set[int] = set()
         viewer_location_ids: set[int] = set()
-        for location_id, place_id in Pin.objects.filter(profile=viewer, location__isnull=False).values_list("location_id", "location__place_id"):
+        at_these_stops = Q(location__place_id__in={place for place in loc_to_place.values() if place is not None}) | Q(location_id__in={loc for loc, place in loc_to_place.items() if place is None})
+        for location_id, place_id in Pin.objects.filter(at_these_stops, profile=viewer).values_list("location_id", "location__place_id").distinct():
             (viewer_place_ids if place_id is not None else viewer_location_ids).add(place_id if place_id is not None else location_id)
         for act in common_pin_acts:
             if act.added_by_id in viewer_friend_ids:

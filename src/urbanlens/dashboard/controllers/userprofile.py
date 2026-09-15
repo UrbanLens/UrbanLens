@@ -181,13 +181,10 @@ class ViewProfileView(LoginRequiredMixin, View):
             # ("has a last_visited timestamp or carries the profile's Visited status label") and
             # its docstring asks callers to build on it rather than re-derive the Q, which this
             # did - one of four inline copies that had to stay in step by hand.
-            their_visited_ids = set(
-                Pin.objects.filter(profile=profile, location__isnull=False).visited().values_list("location_id", flat=True),
+            their_visited = Pin.objects.filter(profile=profile, location__isnull=False).visited().values("location_id")
+            shared_visited_ids = set(
+                Pin.objects.filter(profile=my_profile, location_id__in=their_visited).visited().values_list("location_id", flat=True).distinct(),
             )
-            my_visited_ids = set(
-                Pin.objects.filter(profile=my_profile, location__isnull=False).visited().values_list("location_id", flat=True),
-            )
-            shared_visited_ids = their_visited_ids & my_visited_ids
         context["common_pin_count"] = len(common_ids) if common_pins_permitted else None
         context["can_view_common_pins"] = bool(common_ids) and common_pins_permitted
         # Gated on the same mutual permission as common_pin_count above.
