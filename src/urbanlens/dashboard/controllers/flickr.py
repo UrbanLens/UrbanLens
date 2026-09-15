@@ -23,6 +23,7 @@ from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredEr
 from urbanlens.dashboard.services.apis.flickr.public import MAX_ALBUM_PHOTOS, FlickrPublicGateway
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.geo.distance import haversine_meters
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
@@ -223,7 +224,7 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
                     # blindly.
                     pin_point = (latitude, longitude)
                     photos = [photo for photo in photos if _within_radius(pin_point, photo, radius_m)]
-        except GatewayRequestError as exc:
+        except (GatewayRequestError, RequestCancelledError) as exc:
             logger.warning("Flickr picker request failed: %s", exc)
             return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Flickr library right now."})
 

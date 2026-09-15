@@ -97,8 +97,10 @@ would isolate tiers from one another, but not from the owner, and are not done.
 - **No load test:** the limits come from configured concurrency. X15's filter storm peaked at exactly 3 × 20
   web backends under the old flag; no storm has run against these limits. `ul_web` is the likeliest to fall
   short. A request that has already queried keeps its connection while it waits on an executor thread, and
-  that thread's `ApiCallLog` write opens a second one. Past 6 of those at once, the write fails with
-  `too many connections for role "ul_web"`, though only inside the web tier.
+  that thread's gateway call opens a second one to reserve its `ApiCallLog` row. Past 6 of those at once, the
+  connection is refused and `_reserve_call` refuses the call with `RateLimiterUnavailableError`. The pin
+  page's web search and media carousels and the Flickr and Immich pickers show their error card; other views
+  that call out return a 500 on any refused call (P122). Nothing outside the web tier is affected.
 - **The outage has not been reproduced:** its own shape, with slots held as the application's role, has still
   not been run (N20).
 - **Kubernetes:** the infrastructure repo's k8s manifests still connect as the owner (N23).

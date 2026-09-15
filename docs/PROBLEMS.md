@@ -3017,3 +3017,36 @@ fields. It belongs in the `infrastructure` repo beside the other host timers, no
 Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
+
+## P122 — A refused external call returns a 500 from views that catch only `GatewayRequestError`
+
+`id: P122` · `status: open` · `updated: 2026-09-15`
+
+Every gateway call passes through `rate_limiter._reserve_call`, which refuses a call by raising a
+`RequestCancelledError`:
+- `RateLimitExceededError`;
+- `ServiceDisabledError`;
+- `RateLimiterUnavailableError`, when the limit cannot be read.
+
+That family subclasses `DashboardError`, not `GatewayRequestError`. So a view that handles a failed call
+with `except GatewayRequestError` lets a refused one escape as a 500. Refusals are routine:
+- development and the demo refuse most services outright;
+- under R29, `RateLimiterUnavailableError` fires whenever `ul_web` is at its connection limit.
+
+Still a 500 on a refusal, found by review on 2026-09-15 (read, not run):
+- **Settings geocoding:** `controllers/settings.py` `geocode_address` catches `(ImportError, OSError, ValueError)`
+  around `GoogleGeocodingGateway.geocode_place_name`.
+- **Immich connection check:** `controllers/immich.py` `ImmichSettingsView.post` calls `ImmichGateway.ping()`
+  with no handler, and `ping` catches only `GatewayRequestError`.
+- **Immich thumbnails:** `controllers/pin_suggestions.py`'s thumbnail proxy catches only `GatewayRequestError`.
+- **Google Photos picker:** `controllers/google_photos.py`'s session, polling and download steps catch only
+  `GatewayRequestError`.
+
+The Flickr and Immich search pickers catch both (`test_a_refused_call_degrades_its_picker.py`).
+
+**Likely fix:** make `RequestCancelledError` a `GatewayRequestError`, so every existing handler covers
+refusals. Audit the 48 production `except GatewayRequestError` sites first, looking for two things:
+- a handler that shadows a more specific `except RateLimitExceededError` below it;
+- a handler that treats a failure as grounds to retry or to disconnect an account.
+
+Catching refusals site by site is the alternative, and the next view will forget it again.

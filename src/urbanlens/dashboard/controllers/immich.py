@@ -31,6 +31,7 @@ from urbanlens.dashboard.services.apis.immich.nearby import NEARBY_ASSET_LIMIT, 
 from urbanlens.dashboard.services.core import bounded_cache, single_flight
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
@@ -278,7 +279,7 @@ class PinImmichSearchView(LoginRequiredMixin, View):
                     context["nearby_truncated"] = neighbourhood.truncated
                 else:
                     results = None
-        except GatewayRequestError as exc:
+        except (GatewayRequestError, RequestCancelledError) as exc:
             logger.warning("Immich picker request failed: %s", exc)
             return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Immich library right now."})
 

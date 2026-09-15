@@ -558,7 +558,8 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
 
     Raises:
         RateLimitExceededError: If the call would exceed the configured rate limit, or land sooner than ``min_interval_seconds`` after the last one.
-        ServiceDisabledError: If the service is administratively disabled."""
+        ServiceDisabledError: If the service is administratively disabled.
+        RateLimiterUnavailableError: If the limit cannot be read or the call cannot be recorded."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
     from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 
@@ -568,44 +569,48 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
     # scheduled work, which belongs to nobody.
     actor_id = current_write_actor()
 
-    # Ensure the row exists (auto-created from defaults) before locking it - get_or_create is safe
-    # to call outside the lock since it already handles its own creation race.
-    # Its result is deliberately discarded: the row must be re-read under the lock below, and that
-    # locked instance is then threaded into check_rate_limit/service_is_enabled rather than each
-    get_limit_config(service)
-
     to_raise: RequestCancelledError | None = None
     entry_pk: int
 
-    with transaction.atomic():
-        config = ApiRateLimit.objects.select_for_update().get(service=service)
+    try:
+        with transaction.atomic():
+            # Ensure the row exists (auto-created from defaults) before locking it - get_or_create is safe
+            # to call outside the lock since it already handles its own creation race.
+            # Its result is deliberately discarded: the row must be re-read under the lock below, and that
+            # locked instance is then threaded into check_rate_limit/service_is_enabled rather than each
+            get_limit_config(service)
+            config = ApiRateLimit.objects.select_for_update().get(service=service)
 
-        if config.min_interval_seconds is not None and config.last_call_at is not None:
-            elapsed = (timezone.now() - config.last_call_at).total_seconds()
-            if elapsed < config.min_interval_seconds:
-                logger.warning(
-                    "Minimum interval not yet elapsed for %s: %.2fs since last call (need %.2fs)",
-                    service,
-                    elapsed,
-                    config.min_interval_seconds,
-                )
+            if config.min_interval_seconds is not None and config.last_call_at is not None:
+                elapsed = (timezone.now() - config.last_call_at).total_seconds()
+                if elapsed < config.min_interval_seconds:
+                    logger.warning(
+                        "Minimum interval not yet elapsed for %s: %.2fs since last call (need %.2fs)",
+                        service,
+                        elapsed,
+                        config.min_interval_seconds,
+                    )
+                    ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
+                    to_raise = RateLimitExceededError(service)
+
+            if to_raise is None and not check_rate_limit(service, config):
                 ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
                 to_raise = RateLimitExceededError(service)
 
-        if to_raise is None and not check_rate_limit(service, config):
-            ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
-            to_raise = RateLimitExceededError(service)
+            if to_raise is None and not service_is_enabled(service, config):
+                ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=False, was_service_disabled=True)
+                to_raise = ServiceDisabledError(service)
 
-        if to_raise is None and not service_is_enabled(service, config):
-            ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=False, was_service_disabled=True)
-            to_raise = ServiceDisabledError(service)
-
-        if to_raise is None:
-            entry = ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=True)
-            entry_pk = entry.pk
-            if config.min_interval_seconds is not None:
-                config.last_call_at = timezone.now()
-                config.save(update_fields=["last_call_at"])
+            if to_raise is None:
+                entry = ApiCallLog.objects.create(service=service, profile_id=actor_id, endpoint=truncated_endpoint, success=True)
+                entry_pk = entry.pk
+                if config.min_interval_seconds is not None:
+                    config.last_call_at = timezone.now()
+                    config.save(update_fields=["last_call_at"])
+    except DatabaseError as exc:
+        # Refused, as service_is_enabled refuses: an unread limit has no safe affirmative answer.
+        logger.exception("Failed to reserve a call to %s - refusing it", service)
+        raise RateLimiterUnavailableError(service) from exc
 
     if to_raise is not None:
         raise to_raise
@@ -725,3 +730,10 @@ class ServiceDisabledError(RequestCancelledError):
 
     def __init__(self, service: str) -> None:
         super().__init__(service, f"Service '{service}' is disabled")
+
+
+class RateLimiterUnavailableError(RequestCancelledError):
+    """Raised when a call is refused because its rate limit could not be read or recorded."""
+
+    def __init__(self, service: str) -> None:
+        super().__init__(service, f"Rate limit for service '{service}' could not be checked")
