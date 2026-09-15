@@ -547,10 +547,28 @@ def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> tuple[li
     return [], None
 
 
+def _global_conversion_error(label: Label, new_kind: str) -> str | None:
+    """Why *label* may not become *new_kind*, or None when it may.
+
+    A global label sits on pins, wikis and photos across the site, and a category or a status is always
+    profile-scoped, so converting one would leave everyone else's rows carrying a label owned by the editor.
+    """
+    if label.profile_id is not None or new_kind == label.kind or new_kind not in (KIND_STATUS, KIND_CATEGORY):
+        return None
+    return f'"{escape(label.name)}" is a global tag, carried by other people\'s pins. Converting it to a {_config(new_kind).singular_title.lower()} would make it yours alone; create a new one instead.'
+
+
 def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> bool:
-    """Apply a kind change to a label. Returns True if kind changed."""
+    """Apply a kind change to a label. Returns True if kind changed.
+
+    Raises:
+        ValueError: The conversion would take a global label away from its bearers; callers ask
+            :func:`_global_conversion_error` first and answer the request with it.
+    """
     if new_kind not in _ORGANIZE_KINDS or new_kind == label.kind:
         return False
+    if error := _global_conversion_error(label, new_kind):
+        raise ValueError(error)
     label.kind = new_kind
     if new_kind in (KIND_STATUS, KIND_CATEGORY):
         # Category, like Status, is always profile-scoped: _queryset_for_kind() looks categories up via
@@ -745,6 +763,10 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
 
         if new_kind != label.kind and label.is_protected:
             return HttpResponse("Protected statuses cannot be converted to another type.", status=403)
+
+        # Asked before anything is written, including the icon side effects below.
+        if conversion_error := _global_conversion_error(label, new_kind):
+            return HttpResponse(conversion_error, status=400)
 
         # Scoped to only the fields this form actually edits, so a bare save() never reverts a field changed
         # concurrently by another request (e.g. the external API's LabelDetailView.patch, which can touch fields
@@ -1328,7 +1350,7 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         # The pin's Organize dialog combines label-picking with list-picking under
         # tabs (see _label_dialog.html), so this panel also needs the profile's lists.
         ctx["dialog_title"] = "Add to Pin"
-        ctx["pin_lists"] = list(PinList.objects.for_profile(profile).order_by("name"))
+        ctx["pin_lists"] = list(PinList.objects.for_profile(profile).with_pin_counts().order_by("name"))
         # Lazily loaded (see label.pin_suggestions) rather than fetched here -
         # a live REData call has no business blocking this panel's own render.
         ctx["redata_labels_enabled"] = redata_labels_configured()
