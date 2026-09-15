@@ -1,4 +1,4 @@
-# X20 — A browser label cache pays in rendering and filter round-trips, not in label joins: Organize spends ~250 ms CPU a view rendering and a filter change 300-460 ms of server time, against 1-2 ms in a browser
+# X20 — A browser label cache pays in Organize rendering and in filter and search round-trips, not in label joins: ~250 ms of server CPU an Organize view and 40-130 ms a map filter, against 1-2 ms in a browser
 
 > **Written by a Claude agent. Not authoritative.**
 >
@@ -24,7 +24,7 @@ JIT off. Dev test containers stopped; nothing else loading the host.
 **Account `e2e-labels-heavy`:** 10,000 root pins; 210 visible labels (own + global), 150 carried by pins; 120
 parent→child edges (10 tag roots → 30 children → 60 grandchildren, 5 category roots → 25 children); 48,539 pin-label
 rows, 4.85 per pin, Zipf-distributed (busiest label on 6,376 pins, median 110); 10 restyled global labels, 4,000
-reviews, 2,500 aliases, 8 saved filters.
+reviews, 2,500 aliases, 8 saved filters (6 of them seeded with no icon, see §1).
 
 **Server:** in-process Django test client over the full middleware stack, inside a rolled-back transaction; 5 warm-ups
 then 30 timed runs; wall and app-thread CPU p50/p95, SQL time and statement count, response bytes raw and at gzip
@@ -45,8 +45,8 @@ Node (V8) on the same 8-core host, not a phone; a phone will be several times sl
 
 ## 1. A filter change on the map
 
-Each change fires `map.search` and `saved_filters.counts`, plus `map.pins.list` when the sidebar is open. Warm p50
-(p95).
+A typed name filter posts `map.search` after each 600 ms pause. Committing a change also fetches `map.pins.list` when
+the sidebar is open, and `saved_filters.counts` when a toolbar filter has no icon. Warm p50 (p95).
 
 | Request | wall ms | app CPU ms | SQL ms (stmts) | gz1 bytes |
 |---|---|---|---|---|
@@ -55,8 +55,18 @@ Each change fires `map.search` and `saved_filters.counts`, plus `map.pins.list` 
 | `map.search`, label root + descendants | 41 | 21 | 18 (7) | 37,568 |
 | `map.search`, and(tag,tag) not(status) | 43 | 21 | 23 (9) | 19,619 |
 | `map.search`, label root + min_rating 3 | 39 | 20 | 19 (7) | 10,571 |
-| `saved_filters.counts` (8 filters) | 260-336 | 58-64 | 216-277 (22-25) | ~245 |
 | `map.pins.list` sidebar | 98-269 | 27-57 | 63-212 (6-12) | 167-4,437 |
+| `saved_filters.counts` (8 filters, 6 icon-less) | 260-336 | 58-64 | 216-277 (22-25) | ~245 |
+
+**`saved_filters.counts` is effectively never requested.** The toolbar renders a count placeholder only for a filter
+with an empty icon (`templates/dashboard/partials/map/_saved_filters_toolbar.html:17-23`), and the browser fetches
+counts only when a placeholder exists (`pages/map/index.html:4026-4028`). The defaults carry icons
+(`models/labels/signals.py:204-205`), and every write path turns a blank icon into `bookmark`: UI create
+(`controllers/saved_filters.py:120`), API create and update (`external_api/views.py:2124`, `:2187`) and the archive
+importer (`services/import_export/import_data.py:2423`). The one way in is a hand-built edit request with a
+whitespace-only icon (the form sends the icon picker's value), which
+`(request.POST.get("icon") or "bookmark").strip()` (`controllers/saved_filters.py:232`) stores as empty. The benchmark reached it only by seeding icon-less filters directly. The row prices the request if the badge is
+ever made reachable; it costs nothing today.
 
 **In the browser:** an authoritative matcher over the pin store (name, official, wiki and alias names; rating; label
 groups with descendant expansion), five filters, 50 runs each:
@@ -67,19 +77,18 @@ groups with descendant expansion), five filters, 50 runs each:
 | 20,000 | 1.1-3.4 ms | 7.4 ms |
 | 50,000 | 3-11 ms | 14 ms |
 
-The descendant index builds in 0.16-0.36 ms, once per vocabulary change. Counting 8 saved filters is about 8 passes.
+The descendant index builds in 0.16-0.36 ms, once per vocabulary change.
 
-**At D15's ~9 name-filter changes/s** (`docs/designs/capacity-target-and-load-model.md:48-51`), if every filtering
-account were this size:
-
-- `map.search`: 0.61 app cores + 0.54 DB-seconds/s, and 1.96 MB/s egress for the broad filter.
-- `saved_filters.counts`: 0.54 app cores + 2.2-2.5 DB-seconds/s, on a database with 2 CPUs. The view returns early for
-  an account with no saved filters; otherwise it costs roughly pins × saved filters on every change.
+**At D15's ~9 name-filter searches/s** (`docs/designs/capacity-target-and-load-model.md:48-51`), if every filtering
+account were this size, `map.search` costs 0.19-0.61 app cores and 0.47-0.55 DB-seconds/s (narrow to broad name), with
+up to ~2 MB/s egress when a name matches every pin. The sidebar list adds 0.03-0.06 app cores and 0.06-0.21
+DB-seconds/s per list request per second; how often the sidebar is open is not known.
 
 **Caveats:**
 
-- **The k6 capacity journey undercounts filter cost.** `tests/perf/k6/population.js` fires `map.search` but neither
-  `saved_filters.counts` nor `map.pins.list`.
+- **The k6 journey omits the sidebar list.** `tests/perf/k6/population.js` posts `map.search` only. D15 lists
+  saved-filter counts as not covered (`capacity-target-and-load-model.md:96`), which is correct in practice given the
+  above.
 - **The browser can be authoritative only for criteria the store carries:** names, rating, label groups (once hierarchy
   edges are in the vocabulary) and `last_visited`. Danger, vulnerability, date ranges, custom fields, regions, links
   and detail pin counts still need the server. Two semantics differ: server `min_rating` matches any review
@@ -140,9 +149,13 @@ Two queries, `Bench Tag 1` and `Perf Pin 12`.
 - The same search over the browser store: 1-2 ms at 10k pins, 3-10 ms at 50k; its text index builds once per load in
   10 ms (10k) or 38 ms (50k).
 - At D15's search rate (5% of views, two panel requests each, ~2.5/s) the pins query alone is 0.64-0.83 DB-seconds/s.
+- **The statement's cost reaches past the account.** Its plan for `Bench Tag 1` runs the `labels__name` semi-join as a
+  hashed subplan with no profile condition: a sequential scan of all 62,354 labels on the site, then 116,875 pin-label
+  rows from every account whose labels match `bench`, 299 of 575 ms under load. Each per-pin semi-join also joins
+  `dashboard_user_pins` back to itself (`_semijoin`, `services/global_search/providers.py:192-207`). A small account's
+  search therefore slows as other accounts add matching labels.
 - The server ranks by trigram similarity, which tolerates typos; the browser test matched substrings. In-browser results
   are instant hits, not the same ranking.
-- That one statement is worth fixing server-side whatever is decided about caching.
 - "pin" is a type keyword and "tag" a stopword in the parser, so neither query ran every provider; only the pins
   provider's share is comparable.
 
@@ -166,15 +179,18 @@ dictionary in its head on every build.
 
 - **Organize's per-view saving is real** (~230-255 ms CPU on a 117-card tab), from cached HTML or a client render;
   cached HTML gets it without a client rendering path.
-- **Filter round-trips are the largest removable load:** up to three requests per change, with `saved_filters.counts`
-  the heaviest (216-277 ms SQL per change for this account).
+- **A map filter's round-trip is removable where the store covers the criteria:** 20-68 ms CPU and 18-61 ms SQL per
+  `map.search`, up to 223 KB when a name matches everything, against 1-2 ms in the browser.
 - **A client vocabulary saves little inside the map document build;** membership dominates the labels' share.
-- **Search's pins-provider query is a server fix target** independent of any caching decision.
-- **The k6 journey should add `saved_filters.counts` and `map.pins.list` to a filter change.**
+- **Search's pins-provider statement is a server fix target** independent of any caching decision, and its unscoped
+  label semi-join is a cross-account cost.
+- **The saved-filter count badge is unreachable** except through a whitespace icon on edit; either the feature or its
+  endpoint is dead.
 
 ## What this does not establish
 
 - Whether to build any of it: these are costs, not a decision.
+- How often the sidebar list is open, and so what `map.pins.list` adds at 1,000 users.
 - Any client behaviour on a phone, or any figure through nginx, TLS or a network.
 - A cold-disk figure.
 - The `_sfClientMatches` defects in a running browser.
