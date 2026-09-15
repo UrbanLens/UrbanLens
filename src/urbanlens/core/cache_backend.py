@@ -48,6 +48,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from django.core.cache.backends.base import DEFAULT_TIMEOUT
 from django.core.cache.backends.redis import RedisCache
 
 if TYPE_CHECKING:
@@ -158,15 +159,15 @@ class ResilientRedisCache(RedisCache):
     def get(self, key: str, default: Any = None, version: int | None = None) -> Any:
         return self._guard("get", lambda: super(ResilientRedisCache, self).get(key, default, version), fallback=default)
 
-    def set(self, key: str, value: Any, timeout: Any = ..., version: int | None = None) -> None:
+    def set(self, key: str, value: Any, timeout: Any = DEFAULT_TIMEOUT, version: int | None = None) -> None:
         self._guard("set", lambda: super(ResilientRedisCache, self).set(key, value, timeout, version), fallback=None)
 
-    def add(self, key: str, value: Any, timeout: Any = ..., version: int | None = None) -> bool:
+    def add(self, key: str, value: Any, timeout: Any = DEFAULT_TIMEOUT, version: int | None = None) -> bool:
         # False, not True: this is the claim half of every lock here, and a
         # lock granted by a store that cannot hold it is not a lock.
         return bool(self._guard("add", lambda: super(ResilientRedisCache, self).add(key, value, timeout, version), fallback=False))
 
-    def touch(self, key: str, timeout: Any = ..., version: int | None = None) -> bool:
+    def touch(self, key: str, timeout: Any = DEFAULT_TIMEOUT, version: int | None = None) -> bool:
         return bool(self._guard("touch", lambda: super(ResilientRedisCache, self).touch(key, timeout, version), fallback=False))
 
     def delete(self, key: str, version: int | None = None) -> bool:
@@ -178,7 +179,7 @@ class ResilientRedisCache(RedisCache):
     def get_many(self, keys: Iterable[str], version: int | None = None) -> dict[str, Any]:
         return self._guard("get_many", lambda: super(ResilientRedisCache, self).get_many(keys, version), fallback={})
 
-    def set_many(self, data: dict[str, Any], timeout: Any = ..., version: int | None = None) -> list[str]:
+    def set_many(self, data: dict[str, Any], timeout: Any = DEFAULT_TIMEOUT, version: int | None = None) -> list[str]:
         # Django's contract is "the keys that failed", which with no store is
         # all of them.
         return self._guard("set_many", lambda: super(ResilientRedisCache, self).set_many(data, timeout, version), fallback=list(data))

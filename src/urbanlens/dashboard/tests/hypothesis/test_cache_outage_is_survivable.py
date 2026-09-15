@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from django.core.cache.backends.redis import RedisCache
+from django.core.cache.backends.redis import RedisCache, RedisCacheClient
 from redis.exceptions import (
     ConnectionError as RedisConnectionError,
     OutOfMemoryError,
@@ -50,6 +50,24 @@ OUTAGE_ERRORS = (
 
 def _cache(**options) -> ResilientRedisCache:
     return ResilientRedisCache(_SERVER, {"OPTIONS": options})
+
+
+class AnOmittedTimeoutIsTheConfiguredDefaultTests(SimpleTestCase):
+    """The outage tests replace ``RedisCache``'s methods, so none of them reached its timeout arithmetic."""
+
+    def test_every_write_hands_the_store_the_default(self) -> None:
+        cache = ResilientRedisCache(_SERVER, {"TIMEOUT": 123, "OPTIONS": {}})
+        writes = {
+            "set": lambda: cache.set("k", "v"),
+            "add": lambda: cache.add("k", "v"),
+            "touch": lambda: cache.touch("k"),
+            "set_many": lambda: cache.set_many({"k": "v"}),
+        }
+
+        for operation, write in writes.items():
+            with self.subTest(operation=operation), mock.patch.object(RedisCacheClient, operation) as store:
+                write()
+                self.assertEqual(store.call_args.args[-1], 123)
 
 
 class ADownCacheBehavesLikeAnEmptyOneTests(SimpleTestCase):
