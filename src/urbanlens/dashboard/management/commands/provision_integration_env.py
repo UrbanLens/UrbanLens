@@ -7,7 +7,6 @@ a new pair each time.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from django.conf import settings as django_settings
@@ -16,7 +15,7 @@ from django.core.management.base import BaseCommand, CommandError
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_OVERRIDE_ENV_VAR
 from urbanlens.dashboard.services.integration_testing.accounts import DEFAULT_ROLES, integration_users, provision, purge
-from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
+from urbanlens.dashboard.services.integration_testing.guards import is_production, production_unlocked
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 #: Role the load harness drives as the noisy neighbour. Not in ``DEFAULT_ROLES`` because provisioning it is
@@ -215,11 +214,7 @@ class Command(BaseCommand):
         return {role: report}
 
     def _check_environment(self, *, force: bool) -> None:
-        """Refuse to run against production unless both locks are open.
-
-        Two locks rather than one because each covers a different mistake: ``--force`` covers a command
-        typed in the wrong terminal, and the environment variable covers a script that has always carried
-        ``--force`` being pointed somewhere new.
+        """Refuse to run against production unless both locks in ``guards`` are open.
 
         Args:
             force: Whether ``--force`` was passed.
@@ -227,10 +222,9 @@ class Command(BaseCommand):
         Raises:
             CommandError: This is production and either lock is closed.
         """
-        if str(app_settings.environment_name) != EnvironmentTypes.PRODUCTION:
+        if not is_production():
             return
-        override = os.environ.get(INTEGRATION_OVERRIDE_ENV_VAR, "").strip().lower() in {"1", "true", "yes", "on"}
-        if force and override:
+        if production_unlocked(force=force):
             self.stderr.write(self.style.WARNING("Running against a PRODUCTION environment because --force and the override variable are both set."))
             return
         raise CommandError(

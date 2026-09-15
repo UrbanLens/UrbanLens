@@ -269,9 +269,7 @@ class ThePopulationCommandTests(TestCase):
     def test_production_is_refused_for_a_population(self) -> None:
         with (
             tempfile.TemporaryDirectory() as directory,
-            mock.patch(
-                "urbanlens.dashboard.management.commands.provision_integration_env.app_settings"
-            ) as app_settings,
+            mock.patch("urbanlens.dashboard.services.integration_testing.guards.app_settings") as app_settings,
         ):
             app_settings.environment_name = "production"
             with self.assertRaises(CommandError):
