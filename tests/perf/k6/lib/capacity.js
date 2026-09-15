@@ -202,6 +202,7 @@ export function buildThresholds(stages, budgets = DEFAULT_BUDGETS_MS, { sockets 
     };
     for (const stage of holds(stages)) {
         thresholds[`http_req_failed{stage:${stage.name}}`] = ["rate<0.005"];
+        thresholds[`page_views{stage:${stage.name}}`] = ["count>=0"];
         if (sockets) {
             thresholds[`ws_handshake_ok{stage:${stage.name}}`] = ["rate>0.995"];
         }

@@ -175,6 +175,14 @@ describe("the thresholds", () => {
         expect(buildThresholds(stages)["ws_handshake_ok{stage:u250}"]).toEqual(["rate>0.995"]);
     });
 
+    test("page views are aggregated per hold, since k6 exports only the submetrics a threshold names", () => {
+        const thresholds = buildThresholds(stages);
+
+        for (const stage of holds(stages)) {
+            expect(thresholds[`page_views{stage:${stage.name}}`]).toEqual(["count>=0"]);
+        }
+    });
+
     test("the sign-in guard is always asserted", () => {
         expect(buildThresholds(stages)["checks{guard:signed_in}"]).toEqual(["rate==1"]);
     });
