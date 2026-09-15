@@ -11,6 +11,1402 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-15: P7's 2026-08-19 REData/dev-tooling sweep - everything but the `ref`-stability item
+
+`refs: P7 (open - the ref-stability item remains, see live entry)` · `resolved: 2026-09-15`
+
+Found during the 2026-08-19 sweep of REData integration and dev-tooling defects, verified by reading
+both the query definition and every call site. The three worst
+(`group_conversations_for` materialising every message in every group, `_notify_group_message`
+loading a group's whole history on every send, and the rate limiter reading one row four times per
+outbound call) were fixed in the same pass and never made it into `PROBLEMS.md`; these did, and are
+also fixed:
+
+**The navbar messages dropdown built the entire inbox to render at most 8 rows.** Fixed 2026-08-19.
+`conversations_for` takes `only_unread`, which becomes a HAVING on the aggregate it already computes,
+so the partner/last-message/identity lookups are sized by what will be shown. `unread_conversations_for`
+merges that with the group half (bounded by memberships, filtered in Python). The empty-state flag no
+longer needs the inbox either: `has_any_conversation` is two `exists()` calls, where it used to test
+the length of the list the view had just built.
+
+**The homepage ran ~12 aggregate/list queries for widgets the user may have disabled.** Fixed
+2026-08-19. Worth stating precisely, because most of that context was never the problem: nearly every
+entry is an unevaluated queryset, so a disabled widget costs nothing already. Exactly two were eager -
+the ten counts behind `home_stats`, and `home_recent_comments`, forced by the `sorted()` that merges
+pin and trip comments. Both are now built only when their widget is enabled, guarded by a test that
+compares actual query counts with the widgets on and off.
+
+**The pin-list detail page cost two extra queries per pin (rating and wiki), unpaginated.** Fixed
+2026-08-19. `_list_items_with_labels` now selects `pin__location__wiki` and prefetches
+`pin__reviews`. Worth noting how it hid: the function's docstring already claimed it "matches the
+same prefetch shape the main map's bulk pin endpoints use ... without N+1 queries", and both model
+properties involved (`Pin.rating`, `Location.display_name`) document in their own docstrings exactly
+which prefetch they need. Three accurate comments, and the code between them still missed two
+relations. The page's own pagination gap was **fixed 2026-08-25** (`582458d3`): item rows now paginate
+at 50/page via the same height-based "revealed" HTMX pattern the Memories gallery uses, a trailing
+sentinel div lazy-loading the next page through a new `PinListItemsPageView`. The overview map still
+plots every pin on the list regardless of pagination, since map data was never the expensive part.
+
+**Pin merge suggestion cards issued 8 `COUNT` queries each.** Fixed 2026-08-19 by annotating the four
+counts on `pending_merge_suggestions`, with `distinct=True` on each - the four joins multiply one
+another, so plain counts would report visits x photos.
+
+**Verified end to end 2026-08-19.** `bin/dev_env.py create` produced a working
+`https://e2e-check.dev.urbanlens.org` (HTTP 200 direct and through the router), 17 healthy
+containers and its own checkouts on disk; `list` reported both environments running; `destroy`
+removed containers, files, registry entry and route completely. `--no-redata` skipped the REData
+steps cleanly.
+
+**A dev environment used to cost a second REData stack.** Fixed 2026-08-21. A default `create` used
+to start *two* stacks - nine UrbanLens containers and eight REData ones (app, celery-worker with
+Playwright/Chromium, celery-beat, flaresolverr, tor, searxng, valkey, db), the REData half alone
+taking roughly eight minutes on a cold image cache and then sitting idle for any agent not working on
+REData integrations. `create` now takes `redata="production" | "own" | "none"` and defaults to
+**production**, writing the host's `UL_REDATA_API_URL`/`UL_REDATA_API_KEY` into the environment's
+`.env` and building nothing. `--own-redata` opts back into a private stack; `--no-redata` still means
+neither.
+
+The containers were never the main cost. REData exposes almost no write surfaces - most of its
+"write" operations do not store what we send, they make REData go *fetch* external data about a
+location - so a throwaway instance spends third-party quota pulling data that is destroyed with the
+environment. Production serves most of the same calls from its cache without contacting anything,
+and caches whatever is genuinely new for good. See `../infrastructure/docs/OPS_TOOLING.md` for the
+modes and `REDATA_MODES` in `bin/opslib/devenv.py` for the reasoning next to the code.
+
+**The cold-boot fix was unexercised at the time.** `docker compose up -d` exits non-zero when a
+dependent service gives up on the app's healthcheck, and the app legitimately takes minutes on a
+first boot (migrate, collectstatic, frontend build); a run could then *skip* the fifteen-minute
+health wait that would have seen it succeed. Fixed - the wait now runs whenever the app container
+exists - but the verification run had warm images and `up` succeeded outright, so the new branch
+never fired then. The evidence for the bug was the previous run's own log ("dependency failed to
+start: container ul_afb299e_app is unhealthy") followed by a healthy stack.
+
+**`UL_CONTAINER_NAME=agent_<slug>` named nothing.** The isolation override pins every
+`container_name` and `_compose` passes `-p ul-<slug>`, so both things that variable would have set
+were overridden; it is a collision guard only. The comment above the start step asserted the opposite
+("No -p: UL_CONTAINER_NAME ... already sets both"), and that stale comment is what `list_envs` was
+written against. Both now say what is true.
+
+**Four ops-tooling paths reported failure as success.** Fixed 2026-08-19:
+
+- `dev_env.py destroy` set `containers: True` unconditionally and deleted the registry entry whatever
+  `docker compose down` returned, so a failed teardown left containers running with nothing recording
+  that they existed. It now reports from the exit codes, keeps the entry marked `orphaned` when the
+  teardown failed, and `bin/dev_env.py` exits 1 with the compose output.
+- `dev_env.py list` looked for `agent_<slug>`, a prefix nothing creates - so every environment read as
+  not running. All three sites that need this name now share `devenv.container_name`.
+- `dev_env.py create` wrote its registry entry before cloning and `run_step` records failures rather
+  than raising, so a failed clone crashed the next step on a missing directory *after* claiming the
+  environment existed. It now marks the entry failed and stops.
+- The staging **data-preservation check passed vacuously**, in two independent ways: `_VERIFIED_TABLES`
+  named `dashboard_pins`, which no model owns (`Pin.Meta.db_table` is `dashboard_user_pins`), and both
+  database containers were addressed as `urbanlens_<UL_ENVIRONMENT>_db` while compose names them
+  `urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db`. Either makes a count come back
+  `-1`, and the comparison skipped `-1` silently while reporting "5 tables match". An uncountable
+  table is now a failure in its own right, the summary counts what was actually compared, and both
+  container names come from one helper.
+- **And a fifth, found by the tests written for those four:** `bin/run_tests.sh` synced `src/` but not
+  `bin/`, while `tests/hypothesis/test_ops_tooling.py` imports `bin/opslib` directly. Every
+  ops-tooling test was running against whatever was baked into the image - the exact failure the
+  script's own header describes for `src/`, unnoticed here because the imports kept working while the
+  code behind them aged. The sync and both halves of the parity check now cover `bin/` too.
+
+**Every dev environment used to be configured with a REData URL its own app container could not
+reach.** Fixed 2026-08-20, and it had **two** halves - the second only found by testing the first
+against the live `e2e-check` environment rather than reasoning about it.
+
+1. The URL was `http://127.0.0.1:<redata_port>`, which inside the app container is the app
+   container; REData publishes on a *host* port. Confirmed live: `URLError [Errno 111] Connection
+   refused` from inside `ul_e2e-check_app`. The isolation override now gives the five application
+   services (`app`, `app-ws`, and the three celery services)
+   `extra_hosts: host.docker.internal:host-gateway`, and the env file points at that alias.
+2. Routing to it is not enough. REData's seed `.env` sets
+   `RD_ALLOWED_HOSTS=localhost,127.0.0.1,redata.urbanlens.org`, so a request arriving with any other
+   `Host` gets **400 DisallowedHost**. Measured: over the gateway the container got 400 where the
+   host got 401, and 401 once the `Host` header was forced to `localhost`. `create` now writes
+   `RD_ALLOWED_HOSTS` including the alias, and `redata_api_url`/`redata_allowed_hosts` are held to
+   each other by a test.
+3. And with routing and hosts both fixed, every call still came back **401**. `UL_REDATA_API_KEY` is
+   seeded from the host's `.env` along with the other secrets - but it is not that kind of secret.
+   It names a *row in a database*, and a private REData starts with an empty one, so the inherited
+   key authenticates against nothing. `create` now mints a key in the new instance
+   (`_provision_redata_key`, via `manage.py shell -c` - REData has no key-issuing command, the key
+   is normally created through the admin) and writes it into the UrbanLens `.env` before that stack
+   starts. Best-effort: a failure there leaves the environment usable for everything that is not
+   REData, and says so in the step log.
+
+Each failure was close to invisible on its own, and they got worse in order: connection-refused is
+obviously wrong; a 400 from a service that is plainly up reads as a bad request; a 401 reads as a
+credentials problem with the *host's* REData rather than as "this instance has never heard of you".
+
+**Verified live 2026-08-20** by repairing the running `e2e-check` environment in place rather than
+trusting the reasoning: from inside `ul_e2e-check_app`, `GET /capabilities/?lat=&lng=` now returns
+21 domains through the authenticated gateway. That answer also validated the satellite work in P9 -
+this instance reports `mapbox`/`bing_maps`/`azure_maps` as *not* applicable (no vendor keys), so the
+hardcoded list had been asking three providers it could never serve.
+
+**Recreating the `app` container 502s the stack until nginx is restarted.** Fixed 2026-09-14. nginx
+resolved each literal `proxy_pass` host once, at config load, so an app back on a new container IP kept
+being dialled at the old one while every container reported healthy. `django.conf` and
+`media.conf.template` now declare `resolver 127.0.0.11 valid=10s ipv6=off` (Docker's embedded DNS; the
+Kubernetes manifests in `../infrastructure` run no nginx) and proxy to `$app_upstream`/`$app_ws_upstream`.
+`test_nginx_resolves_upstreams_per_request.py` fails on a literal upstream or a missing resolver.
+Verified on the development stack: the app was disconnected from `app_network`, a placeholder took its
+address, and on reconnecting at 172.25.0.13 nginx served three 200s from the new address with no reload.
+
+**Sending a group message cost a `Friendship` lookup per member, twice.** Fixed 2026-08-20. Measured
+first: an 8-member send ran 18 queries, 8 of them `Friendship.between(member, sender)`. The
+per-member cost was a *recorded decision* (2026-07-23) rather than an oversight - the payload carries
+the sender's name, so it has to pass each recipient's own visibility, and the alternative leaks a
+masked name over the live channel. What was missing was a way to ask the question in bulk.
+
+`Profile.visible_profile_pks` batches many subjects for one viewer. A group message is the mirror:
+one subject, many viewers - which that function cannot express, so both halves of a send
+(`_notify_group_message` for the bell title, `broadcast_group_message` for the live payload)
+resolved it a row at a time. `Profile.viewers_who_can_see(subject, viewers)` is the mirror, with
+`DirectMessageTemporaryAccess.granting_viewer_pks` under it and
+`identity_visibility.resolve_identity_for_viewers` on top; group create and add-members use it too.
+Both directions are now held to `can_view_profile` by `test_identity_visibility_batch` across every
+`VisibilityChoice` and relationship - the same treatment the original batch got, and for a sharper
+reason: this one decides whether a *whole room* sees a name.
+
+`_notify_group_message`'s docstring had promised a fixed query count since the unread check and the
+preference lookup were batched. It was true of two of the three per-member things it did. There is
+now a test holding it, and it counts reads only - one INSERT per notified member is the work itself.
+
+**Same class, four more sites, fixed in the same pass:** the external API's group-member roster and
+friend-ratings list, the group sidebar's last-sender previews, and global search's DM results all
+resolved identity one row at a time when `visible_profile_pks` already existed for exactly that. The
+sidebar one is worth naming: it *had* a query-scaling test, and the test passed, because every group
+in its fixture had the **same** last sender and the function's own dedup cache hid the cost. The
+test now uses distinct senders.
+
+**The Building Attributes card picked the nearest building without excluding envelope parents,
+ambiguous overlaps, or off-property records.** Fixed 2026-08-19. `_nearest_building` now applies
+`buildings_on_property`/`countable_buildings`/`confident_buildings` before ranking. Each is a
+*preference*, not a hard filter: when nothing survives, the next-weakest set is ranked instead, so a
+parcel whose only record is ambiguous still shows what is known rather than going blank.
+
+**`ensure_building_places` ignored `parent_ref`.** Fixed 2026-08-19 - nesting is resolved
+topologically, with a cycle break, and a parent outside the list falls back to the parcel rather
+than losing the building. The same pass found a second defect the fix exposed: `find_matching_place`
+applied its mutual-centroid-containment fallback to records that *do* carry a stable provider id, so
+an L-shaped block and a wing tucked into its corner could merge back into one place - undoing exactly
+the reconciliation REData did to keep them apart, fixed for that case. **What is not fixed** is the
+underlying assumption that a `ref` never changes at all - see the live P7 entry.
+
+**`flatten_timeline` read `capture_date_resolved` one nesting level too high.** Not a defect on the
+tree as re-verified 2026-08-19. `_resolved_flag` reads the `attributes` blob first and falls back to
+the top level, and has since commit `8bf86daf`; the finding described the code before that.
+
+## RESOLVED 2026-09-15: P9's REData consumption gaps - all but `?limit=` and land-use geometry
+
+`refs: P9 (open - the two items above remain, see live entry)` · `resolved: 2026-09-15`
+
+A full cross-repo sweep of UrbanLens's REData integration on 2026-08-19 (both repos read end to end:
+REData's `api/urls.py`, every serializer, `../REData/docs/api-reference.md`,
+`docs/fields-available.md` and the whole `CHANGELOG.md` `[Unreleased]` section, against all ~32
+`redata_*` gateways and 8 panels). Everything that was *wrong* was fixed in the same pass - four
+panels reading keys REData has never emitted, the places gateway parsing a `{count, results}`
+envelope as a bare array, `?is_aerial=true` being a parameter of a different endpoint, CRIS
+selecting resources that were not CRIS's, Florida's whole sale-record provider being dropped on
+attribution. What follows is what the sweep found and deliberately did not build at first, then
+built over the following weeks.
+
+**Of the 15 routes this entry originally judged worth wiring up (re-audited 2026-09-08), all but
+one are now built**, and one (the street-view base/download routes) turned out on inspection to
+already be a non-issue rather than a gap. In value order, as originally written, with what actually
+happened to each:
+
+1. The `/street-view/` base endpoint and its two mirrored-bytes download routes (the carousel
+   currently hot-links provider URLs that rot) turned out **not to be a gap.** `/street-view/timeline/`
+   (a superset of the base endpoint - every capture at every date, not just current) was already
+   consumed (pre-existing, `services/apis/locations/redata_street_view_gateway.py`), and the download
+   routes were already a considered, documented tradeoff rather than an oversight:
+   `RedataStreetViewGateway`'s own module docstring explains `download_url` needs REData API auth,
+   so the browser is deliberately served the network's own `image_url`/`thumbnail_url` instead, which
+   attribution requires linking to anyway. The "rot" framing in the original title was speculative,
+   not measured.
+2. **Built:** `GET /places/cid/{cid}/` plus its media download. New "Google Maps Details" info card
+   (name, category, rating/review count, price level, hours summary, phone, website, up to 3 photos)
+   for any pin whose `Location.cid` is already known, reading REData's already-run deep scrape
+   instead of discarding it - `RedataCidGateway.get_place_detail`/`download_media`,
+   `plugins/builtin/redata_place_details.py`, a server-side media proxy
+   (`PinPlaceCidMediaView`) so REData's key never reaches the browser. Commit `069f43e8e`.
+3. **Built:** `/parcels/{uuid}/coverage/`. `RedataGateway.lookup_coverage` now gates the Property
+   Records panel's `assessments`/`sale-records` calls (the two supplementary domains coverage
+   actually reports on - `liens`/`tax-payments` aren't coverage-registry domains at all, so those
+   two stay unconditional as before), falling back to "always call" if the precheck itself fails.
+   Commit `a12827a6f`.
+4. **Built:** three of the four `/parks/{code}/` routes - `alerts` (the live closure/hazard one,
+   surfaced as icon-led, safety-critical `facts` ahead of routine park info, on both the JSON API and
+   the web panel - see below), `visitor-centers`, `campgrounds`.
+   `RedataNationalParksGateway.get_alerts`/`get_visitor_centers`/`get_campgrounds`,
+   `plugins/builtin/nps.py`. The bare park-detail route (`GET /parks/{code}/`) and `places`/`webcams`/
+   `media` were left unbuilt: detail's fields are already embedded in the `/parks/nearby/` row this
+   panel already caches, and places/webcams/media resolve to the same generic `PointOfInterest`/
+   `MediaItem` rows other panels already surface, at lower value than the four built. Commit
+   `4d01e40aa`.
+5. **Built:** `POST /imagery/capture/`, for materializing one date of a `time_series` (NASA GIBS)
+   layer - previously skipped entirely (`if delivery == "time_series": return None`), now
+   materializes the most recent published date per layer via
+   `RedataImageryGateway.capture_time_series`. Bundled with a second, related imagery fix: the
+   satellite carousel's `tile_template` slides (see below) also went from one raw, badly-framed
+   256px tile to REData's own composited `GET /imagery/{uuid}/download/` image. Commit `3d97e6d36`.
+6. **Built:** `/reference-documents/` near-point (Wikipedia + Wikidata). New free/ungated panel
+   surfacing the nearest Wikipedia article (as the card's description/footer link) and the nearest
+   Wikidata entity's structured claims (what it is, when built, designer, architectural style,
+   heritage designation) - data no other panel in this app surfaces.
+   `RedataReferenceDocumentsGateway.get_reference_documents` (added to the *existing* gateway class,
+   which already served the unrelated by-name `/reference-documents/search/` endpoint - do not
+   confuse the two), `plugins/builtin/redata_reference_documents_nearby.py`. Commit `a34e1c197`.
+7. **Partly built, one part deliberately deferred:** the `land-use-areas`/`demographics`/
+   `national-parks` parcel trio. `demographics` (census-tract population/income/home-value/rent/
+   owner-renter-split) and `national-parks`' `containing_park` (a real point-in-boundary check, more
+   precise than the existing `nps.py` panel's nearest-by-coordinate search - kept deliberately
+   decoupled from that panel rather than wired together, to avoid a cross-plugin coupling that wasn't
+   asked for) both now render on the Property Records card. `RedataGateway.lookup_demographics`/
+   `lookup_national_parks`. Commit `a12827a6f`. **`land-use-areas`' boundary *geometry* is the one
+   piece deliberately deferred** - see the live P9 entry.
+
+Of the original "45 of 106 routes with no UrbanLens caller" count, 23 were already correctly judged
+irrelevant by design (nested write CRUD, the readback ViewSets, IIIF) and are still irrelevant; the
+7 items above accounted for the rest that were worth a look. That 45/106 count itself was already
+stated as stale the moment it was written, since REData adds routes continuously (see
+`/historical-features/` below).
+
+**Web panel follow-up, same day:** the alerts JSON-API wiring above (item 4) only reached
+`NpsPanelSource.api_payload` - `PinController.nps_info` (the actual web-rendered `pin_nps.html`
+partial a park explorer sees) still called only the pre-existing `park_facts()`, never the new
+`alert_facts()`, so a live closure/hazard alert reached API clients but not the page itself. Fixed
+the same day: `nps_info` now passes `alert_facts(data)` into the template context, rendered as its
+own icon-led list ahead of the routine facts block, mirroring the API's own "safety-critical first"
+ordering.
+
+**`GET /weather/history/` is consumed on trips and on visit history; the bulk Memories lists are
+deliberately left out.** (Visit history added 2026-08-20.)
+
+Each visit row on a pin's Visit History tab now says what the weather actually was that day -
+`68° / 50°F · 1.00 in rain · gusts 31 mph` - which is the fact that makes a photograph of a flooded
+basement mean something. Three things about how, since the obvious implementation is wrong in each:
+
+- **The panel never makes the call.** The first version did, on the reasoning that the panel is
+  already loaded by `hx-trigger="load"` behind a spinner. That reasoning was wrong twice over: a
+  spinner does not make it acceptable for a slow REData to hold up an entire visit list for a
+  decorative line of text, and it put an outbound call inside a page render, which is a thing no
+  other external-data surface in this app does. Two *unrelated* tests found it, by tripping the
+  suite's localhost-only network guard the moment the panel started fetching. It now reads the cache
+  (`recorded_days(..., allow_fetch=False)`) and queues the gap
+  (`tasks.fetch_recorded_weather`) - the same fetch-behind/render-from-cache split every pin-detail
+  panel uses. Weather appears on the second view, which for this is the right trade. Days inside
+  ERA5's publication lag are never queued: they are not missing, they are unanswerable until
+  published, and queueing them would retry forever.
+- **Sparse days are not a range.** `recorded_range` fetches `min..max` in one request - right for a
+  trip's activities, wrong here: a page of visits to the same ruin can span decades, and the range
+  form would fetch *and cache* every day in between to display ten. `recorded_days` clusters instead,
+  merging days within a month and splitting beyond it.
+- **Grouped by `Location`, not by pin.** `?children=1` lists a whole subtree, and those are different
+  places; one request per location, not per visit.
+
+**Not done, and not an oversight: the Memories timeline and Visits subpage.** Both are bulk lists
+spanning a whole account - hundreds of visits across hundreds of locations - so a fetch per location
+is not something a list render may do. The cache-only alternative (`allow_fetch=False`) would show
+weather on whichever rows a user had happened to open the pin page for and nothing on the rest,
+which reads as broken data rather than as a partial feature. Doing it properly needs a background
+enrichment source that fills the cache per Location, which is a different piece of work.
+
+**The trip half predates this sweep:** a finished trip's weather panel was empty - the view filtered
+to activities scheduled today or later, so a forecast-only panel had nothing to say about a trip
+that had happened. Past activities now show what the weather actually was
+(`controllers.trip._build_activity_history`), fetched as one range per location rather than one
+call per day, and converted to the units every other weather surface uses. Days inside ERA5's ~6-day
+publication lag are never requested, so they cannot be cached as blank.
+`visit_weather.recorded_weather(location, day)` is the single-day entry point shared across all three
+surfaces.
+
+**Fields fetched, cached, and never shown.** `special_land_use_areas` (military installation /
+correctional facility / national park / campus), `flood_zone_code`, `deed_document_links` - shown on
+the Property Records card as of 2026-08-20. The land-use categories are chipped rather than listed,
+and ahead of "Delinquent taxes"/"Boundary available": two of the four describe ground where being
+present is a different statute rather than a trespass question, which is a fact about the *visit* and
+not another attribute of the property. A category present but unnamed still renders - TIGERweb rows
+are confirmed to omit fields per category, and dropping the row would turn "inside a correctional
+facility" into silence.
+
+`raw_attributes` on the parcel record (per-jurisdiction keys, no display shape that generalises)
+stays unread - a deliberate skip, not an oversight.
+
+**The sheet thumbnail, library landing page and georeference accuracy on the historical-map picker**
+were shown as of 2026-08-20. The thumbnail is the one that mattered: choosing between a dozen scanned
+sheets of one neighbourhood is a *visual* task, and the picker offered eleven rows all reading
+"Sanborn Fire Insurance Map of ...". Both the thumbnail and the catalogue page are the
+**institution's** own public URLs, not REData-authenticated ones, so unlike the tile template they
+need no proxy - that distinction is why they were safe to link directly and worth stating, since the
+tile template is the one that must never reach the browser.
+
+Accuracy needed a judgement rather than a field read. `rmse_meters` is the fit's own residual, and
+REData's model docstring warns that a thin-plate spline interpolates its control points *by
+construction*, so its residual is ~0 whatever the placement is actually like. Printing "±0 m" for one
+would advertise a perfect fit for possibly the worst sheet in the list, so splines report nothing;
+so does anything under 25 m, which on a scanned historical map is noise. What survives is the case
+worth disclosing before somebody traces a building off the overlay: "placed to ±60 m (4 control
+points)". The picker's rows also gained a thumbnail slot: a fixed 2.5rem box, because the list
+scrolls inside a 14rem window and one tall scan would otherwise push every other sheet out of view.
+
+**Entrance fees, real operating hours, directions and weather guidance on the national-park panel**
+were shown as of 2026-08-20, via `plugins.builtin.nps.park_facts`, which the web panel and the API
+payload now share (they rendered different hand-built subsets of the same payload before).
+
+The hours case was the sharpest instance of this whole category: the template rendered "Standard
+hours vary - check NPS.gov" **whenever `standardHours` was present** - that is, precisely when it
+did not have to say that. Consecutive days with identical hours are now grouped
+("Mon-Fri: 9:00AM - 5:00PM; Sat-Sun: Closed"), and a week NPS has only partially published renders
+nothing rather than collapsing an unknown day into a range, which would read as "closed that day".
+
+Fees needed the same care in the other direction: `cost` is a *string* in NPS's API and is sometimes
+free text ("varies"), so an unparseable fee is skipped rather than guessed, and **absent fees are
+not reported as free** - "Free" has to mean free. `weather_info` is deliberately still unread: it is
+a paragraph of seasonal prose and the pin already has a weather panel showing the actual forecast.
+
+**Found while doing it: the NPS panel had no stylesheet at all.** Every `nps-*` class in
+`pin_nps.html` matched nothing - the card rendered with only the generic `.card` chrome, one concrete
+instance of P36 ("BEM modifiers applied in templates with no CSS rule"), and it now has one. The fact
+grid mirrors `.simple-info-panel`'s `.simple-info-meta` values rather than sharing the selector:
+hoisting that rule out of its parent changes its specificity for every panel that uses it, which is a
+bigger change than this panel is worth.
+
+**Correction 2026-08-20 to this entry's own last item.** It named "`residual_geometry` and each
+source's `attributes` (the assessor's sqft/stories/condition) on the reconciled building record" as
+an UrbanLens gap. Checked against REData: `BuildingRecord` promotes `name`, `address`,
+`building_number` and `year_built` and nothing else - sqft, stories and condition are **not**
+standardized per building, they sit in each source's raw `attributes` under whatever that county's
+GIS layer calls them. Consuming them from here would mean guessing column names per jurisdiction,
+which is the exact trap `cris_buildings` is stuck in. The parcel-level equivalents *are* standardized
+(`BuildingCharacteristics`) and the Property Records card already shows them. So this is a REData-side
+gap - promote the per-building CAMA fields there - not an unread field here.
+
+`residual_geometry` (a parent envelope's footprint minus its polygon-bearing children) is genuinely
+unread, and on inspection has no consumer worth building: it does *not* fix Place-tree overlap,
+because a parent Place containing its children is correct hierarchy rather than the sibling overlap
+that was the actual bug. What it would support is a map annotation for "building mass no mapped wing
+accounts for", which is a real but narrow thing to want.
+
+**Hardcoded maps that filter out new REData providers, fixed 2026-08-20.** `satellite_imagery`'s
+`_REDATA_PROVIDER_NAMES` had both restricted the request and gated rendering, so REData's
+`s2cloudless` provider was invisible. `cris_buildings` read one inventory's raw column names and so
+could not show the other cultural-resource providers at all, and the count was low: REData registers
+**25** historic inventories and UrbanLens read one.
+
+`cris_buildings` was not the place to fix the second half. It renders CRIS's own raw ArcGIS columns
+(`USNName`, `USNNum`, `EligibilityDesc`), so it *has* to name its provider - handing it an NRHP row
+blanks the card, which is a bug that already happened once and is why the request was restricted in
+the first place. Widening it would have meant either re-introducing that bug or rewriting a working
+NY-only panel, its media gallery and its enrichment source.
+
+`plugins.builtin.redata_historic_registers` is the other half instead: one card over the whole
+registry, rendering only the fields REData standardizes (`name`, `resource_type`, `scope`, `status`,
+`year_built`, `architectural_style`, `use_type`) and never a provider's `attributes`. It discovers
+its providers from `/capabilities/` and excludes only `ny_cris`, which has the richer panel. New
+`RedataCulturalResourcesGateway` keeps the `{count, complete, results, providers}` envelope that
+`property_records.RedataGateway.lookup_cultural_resources` flattens away, so `RedataInfoPanelSource`'s
+outage rule applies - one inventory being down must not be cached as "this place is on no register".
+
+Two details worth keeping:
+
+- The register **name map is not a gate**. A provider missing from it renders under a title-cased
+  tag. Reading a display-name map as a permission list is precisely what hid `s2cloudless`, and the
+  test says so.
+- Only the kept fields are cached. `attributes`, `detail_payload` and `geometry` are per-provider,
+  large, or both, and cached payloads are read on every pin-detail render.
+
+**Still unread:** attachments outside CRIS. `nps_nrhp` can fetch a nomination *document*, and other
+providers declare their own `detail_fetchable_types`; this panel is search-tier only, so those never
+reach the Media gallery the way CRIS's survey photographs and inventory forms do. That is the natural
+next step and a bigger one - it needs a per-provider detail fetch and a proxy route per provider, not
+another panel.
+
+The satellite half, since the fix was not simply "call capabilities":
+
+- `s2cloudless` is **one global cloud-free Sentinel-2 mosaic per year since 2016**, delivered as a
+  tile template with a `captured_on` per year. For this app's subject that is the single most useful
+  source in the carousel - a yearly sequence is how you see a roof come off or a building
+  disappear - and the timeline endpoint was already fetching the captures, which the carousel then
+  dropped for having no entry in a dict in this repo. It was excluded with no recorded reason.
+- The provider list now comes from `GET /capabilities/`; what stays written down is
+  `_SHOWN_ELSEWHERE`, the handful another *UrbanLens* panel covers better (Esri's direct gateway, the
+  USGS topo panel, the historical-map picker) plus the `loc_` prefix for loc.gov's scanned-map
+  collections, which are generated on REData's side. A display name is looked up if we have one and
+  title-cased from the tag if we do not, so a new source appears rather than being dropped.
+- A capability outage falls back to the curated list rather than to nothing, unlike the
+  points-of-interest panel: `/imagery/` takes an explicit provider list either way, so the fallback is
+  a bounded request rather than a fan-out. **But an empty list means "all providers" at REData's
+  end**, so "everything applicable belongs to another panel" has to mean *no request at all* - there
+  is a test for that, because the two empty cases read identically at the call site.
+
+**A `tile_template` slide used to be one 256px tile, and the pin could be at its edge.** Resolved
+2026-09-08. `_resolve_tile_template` resolved the single tile *containing* the coordinate at zoom 15
+(~1.2 km across), so a site near a tile boundary was shown in the corner of its own photograph, or
+half out of frame - tolerable for OpenTopoMap, where the slide is terrain context, wrong for
+`s2cloudless`, where the slide is supposed to be a picture of the place. The compositing this entry
+guessed would be "a real piece of work (fetch, stitch, encode)" turned out to already exist
+server-side: `GET /imagery/{uuid}/download/` composes exactly that from the covering tiles. The fix
+was a client-side call to it, not the pipeline this entry expected to have to build. Commit
+`3d97e6d36` (bundled with `POST /imagery/capture/`'s wiring above).
+
+**The points-of-interest registry is consumed.** Resolved 2026-08-19. It was the largest unconsumed
+surface and the one most relevant to this app - agency surveillance-camera registers,
+`osm_surveillance` (worldwide, and outside Chicago and Austin the only camera source there is),
+`fcc_asr` antenna structures, FAA facility groups, EPA contamination programmes, storage tanks, school
+layers - reachable only one provider at a time, with only `yelp` and `epa_echo` called.
+
+`plugins.builtin.redata_site_features` now surfaces them as one "Cameras & Structures" panel. Three
+things about *how*, since the obvious implementation would have been wrong:
+
+- **No provider list is hardcoded.** Most of these providers are generated on REData's side from
+  dataset tables, so their tags are not knowable to a client and a list here would silently stop
+  growing. The panel asks `GET /capabilities/?lat=&lng=` which providers cover the point - a bounds
+  test, no upstream call - and requests exactly those. That also answers the "capabilities is fetched
+  only to render one admin card" finding: it is now on the pin-detail path, cached an hour per coarse
+  coordinate, with its own rate-limit budget.
+- **Failed discovery asks nothing, not everything.** A request with no `provider` fans out across the
+  whole registry, which is the one outcome the capability lookup exists to prevent, so the failure
+  direction had to be the safe one.
+- **The two exclusion sets are kept apart.** `_SHOWN_ELSEWHERE` (providers with their own UrbanLens
+  panel) is a fact about this app's UI, so a test holds every entry to a registered panel key.
+  `_TOO_GENERIC` is one judgement about REData's taxonomy - `osm`'s generic point set, which would
+  make the panel about nothing in particular - and is the only entry a REData change could
+  invalidate. Writing them as one set hid that difference, and the test caught it.
+
+An earlier draft of this entry said `yelp` is billable, as a reason to curate. It is not:
+`billable=True` appears 11 times in REData and none are in this registry. The real cost is upstream
+queries and quota, not money.
+
+**`/historical-features/` is now consumed - and the 45/15 counts above were already stale in a way
+this sweep did not anticipate.** Added 2026-09-08. REData's `/api/v1/historical-features/`
+(retrospectively-mapped buildings, roads, water, railways, land use, places and venues near a point,
+self-hosted OpenHistoricalMap/Overpass-backed) did not exist as of the 2026-08-19 sweep - it is
+REData's single newest endpoint (`parcels/migrations/0094_historicalfeature.py`, the top commit in
+REData's `git log`, first bullet in REData's `CHANGELOG.md` `[Unreleased]` section) - so it was never
+on either count above. Wiring it up therefore does not shrink the "15 unwired" list; it demonstrates
+that the list ages in a second direction nobody had reason to check for at the time: REData adds
+endpoints continuously, so any route diff is stale the moment new routes ship, not only when an old
+one finally gets consumed. New:
+`services/apis/locations/redata_historical_features_gateway.RedataHistoricalFeaturesGateway` (follows
+the same `RedataLocationContextGateway.near_point()` pattern as every other REData near-point
+gateway) and `plugins/builtin/redata_historical_features.HistoricalFeaturesPanelSource`, a
+free/ungated "Historical Features" card on the Private Pin page - REData's own docs are explicit that
+`start_year` is frequently the date of the *source map* a feature was traced from, not a construction
+year, and the panel never presents it as an age.
+
+**`/incidents/` gained a second, paid consumer.** Added 2026-09-08, and not a route-consumption
+change: `IncidentHistoryPanelSource` (`plugins/builtin/redata_incidents.py:89-153`) calls the same
+`RedataIncidentsGateway.get_incidents` the free `PoliceIncidentsPanelSource` already called, at
+REData's full `years=25` ceiling (`_HISTORY_YEARS`, REData's own max) instead of the free panel's 3,
+rendering a year-by-year trend instead of a short recent-rows list, and requires the new
+`SiteFeature.INCIDENT_HISTORY` (`models/subscriptions/model.py:58`). The existing free "Reported
+Incidents" panel is untouched and deliberately stays free: `SiteFeature.NEARBY_RESEARCH`'s own
+docstring (`models/subscriptions/model.py:41-51`) already named it as one of several panels
+"deliberately left free," and gating it now would take away something users already have, which was
+never the ask - the new panel is purely additive. Why a dedicated flag rather than reusing
+`NEARBY_RESEARCH` (which already gates EPA ECHO's nearby-facilities panel) is recorded as its own
+decision - see [D10](../designs/incident-history-feature-gate.md).
+
+## RESOLVED 2026-09-15: P11's frontend TS audit - the `fetch()`-wrapper migration and most correctness bullets
+
+`refs: P11 (open - a handful of correctness bullets and structural debt remain, see live entry)` ·
+`resolved: 2026-09-15`
+
+Full-tree audit of `dashboard/frontend/ts/` (every file read, eight passes, starting 2026-08-15). The
+four security/safety items were fixed in the same pass; everything below was found later and fixed
+across 2026-08-19 through 2026-09-06.
+
+**Fixed 2026-08-19:**
+
+- The one-shot `AbortController` in `entries/photo-location-scan.ts`. Every scan now begins with a
+  fresh controller and cleared hits/clusters/selection (`beginScanState`), so the Firefox/Safari
+  `webkitdirectory` path survives a Stop and a re-scan no longer double-counts photos into clusters.
+  The directory-walk path passes `alreadyBegun` so the walk and Stop stay on *one* controller -
+  resetting twice would have made Stop silently do nothing.
+- The missing `pointercancel` in `shared/map-image-overlays.ts`. An interrupted touch drag on an
+  overlay corner left `map.dragging` disabled until reload; `pointercancel` and `lostpointercapture`
+  now run the same release handler, which is idempotent.
+- The dead people-label Merge button (`_organize_label_card.html`, `peopleMergeSingle`). The fix is
+  **not** the one the original finding implied: wiring it to `label.merge` would 404, because
+  `KIND_USER` and `KIND_MEDIA` both set `enable_single_merge=False`. The control was for a capability
+  the server refuses, so it is gone. Guarded by `tests/hypothesis/test_label_card_merge_affordance.py`.
+  Separately, `_organize_label_card.html:77`'s reference to `peopleMergeSingle` (defined nowhere) is
+  gone too: the merge button is an `hx-get` at `merge_url` now.
+
+Also **not** a defect, checked 2026-08-19: `flatten_timeline`'s `capture_date_resolved` read. A later
+report claimed it looked at the wrong nesting level; `_resolved_flag`
+(`services/locations/imagery_timeline.py`) already checks `attributes` first and the top level
+second, and has since commit `8bf86daf`.
+
+**The `fetch()`-wrapper migration, 2026-09-06.** Raw `fetch()` call sites bypassed
+`shared/fetch-json.ts` (`fetchJson`/`sendJson`), several with no `response.ok` check at all. Six
+hand-rolled wrappers existed beside it, and there was a seventh: `shared/photo-context-menu.ts` had
+its own `postJson` (raw `fetch`, hand-built CSRF header, hand-rolled `response.ok` check) and was
+never in the original list, because that list was a count carried forward from the original audit
+rather than a fresh search - a caution for the next such migration: search for the shape (a local
+function that calls `fetch` and then `.json()`) rather than checking names off a list. It got the
+same substitution `album-items.ts` got - `sendJson(..., { reportsItsOwnErrors: true })`, since all
+four call sites already catch and toast the server's own sentence - and the CSRF header is
+byte-identical either way (`shared/csrf.ts`'s `getCsrfToken()` is `window.csrftoken ?? ""`, exactly
+what `writeInit` inlines). `postForm`/`getJson` (triplicated across the three games) became
+`shared/session-request.ts`; `postJson` (album-items) and `savePosition` (album-map) were straight
+substitutions, since `fetchJson` already reads an `error` key out of a refusal and falls back to
+`HTTP <status>`, which is what both did by hand.
+
+`postForHtml` (organize-tab-manager) was **not** a straight substitution, and that is why it survived
+two earlier passes: it wants the response *body*, because Organize's bulk delete/edit/merge answer
+with the re-rendered row list, and `fetch-json.ts` had no text-returning sibling - `fetchText`/
+`sendForText` are that sibling now. Worth knowing for the next such call site: the old wrapper threw
+`new Error(await response.text())`, so a Django debug page went into the toast verbatim -
+`errorMessage()` discards markup, which is a behaviour change in the right direction but a behaviour
+change. Two deliberate exceptions were kept: `webauthn-client.ts` (self-contained for the minimal
+auth layout, already ok-checked) and the two E2EE calls that need raw `Response` semantics.
+
+**Two corrections found 2026-09-06 while doing the first slice:**
+
+- **"~40" was low. It was 99**, counted across `frontend/ts/` excluding tests and `fetch-json.ts`
+  itself (`grep -rn '\bfetch(' --include=*.ts`, minus `globalThis.fetch`/`window.fetch`) - 85 by the
+  time of the migration. Two files held 43 of them: `entries/map-annotations.ts` (22) and
+  `shared/e2ee-client.ts` (21), the second mostly the raw-`Response` exception above.
+- **"a non-2xx dies in a `void`-ed promise with no toast" was not quite right, and the reason
+  mattered.** `themes/base.html:204-231` wraps `window.fetch` globally and toasts
+  `Request failed (HTTP 503).` for every non-ok response - so there *was* a net, just a generic one,
+  and it didn't stop the caller then calling `.json()` on an error page and throwing a `SyntaxError`
+  into that voided promise. Migrating a call site therefore has to opt *out* of the generic message
+  or the user gets told twice. `fetchJson` sets `__ulReported` on the init object the wrapper reads,
+  which is what let the rest of the migration happen one call site at a time.
+
+**The three game clients, done 2026-09-06.** `shared/session-request.ts` replaced the triplicated
+`postForm`/`getJson`, and `entries/trivia.ts` no longer has a fourth unchecked `fetch` for
+`urls.start`. Both helpers keep resolving with the parsed body rather than throwing, because that is
+the contract 62 call sites already have; a refusal comes back as `{ error: "<the server's own
+message>" }`, which is exactly what every `postForm` caller already tests for. `getJson`
+additionally toasts and `postForm` does not, which is asymmetric on purpose: all 33 `getJson` call
+sites ignored the result's shape entirely (`data.friends ?? []`, so a failure rendered an empty list
+and said nothing), while the `postForm` ones test `.error` themselves. Verified in a browser against
+the running dev stack: the trivia page's friends fetch returns 200 and renders, and with the same
+route stubbed to 503 the user gets one toast carrying the server's own sentence, with no page
+errors. `postForHtml` and `postJson` still exist by name as three-line delegates to
+`sendForText`/`sendJson`; `savePosition` was never a wrapper at all - a local closure over one URL
+that returns the raw `Response` because the caller branches on a 409.
+
+**Correctness bullets fixed 2026-08-22, one by one:**
+
+- `entries/map-annotations.ts:2264` - right-click-to-delete-vertex was dead code
+  (`m.on("contextmenu.rcdelete" as never, ...)` is jQuery-style namespacing Leaflet doesn't support)
+  while the toast told the user to right-click. Now binds the real `"contextmenu"` event.
+- `entries/map-annotations.ts:1371` `loadDetailPins` had no ok-check and cleared the existing pin
+  layer and list on failure; `:2558 flushDpAutoSave` swallowed validation errors; `:1643/:1712` bulk
+  promote/delete `Promise.all` paths had no `.catch`. Fixed, except `doDeleteSelectedDp` (`:1712`)
+  already had its `.catch(() => false)` from an earlier change - only `doPromoteSelectedDp` (`:1643`)
+  needed it.
+- `shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaited tile fetches (up to 8s
+  each) but no caller awaited it: no spinner, no toast, unhandled rejections, and the save flow
+  closed the composer mid-export so shapes projected against a map being torn down. All three call
+  sites in `base.html` now await the promise, toast on failure, and disable their trigger for the
+  duration. The save flow now chains `_closeComposer()` onto the download's own completion instead of
+  firing the download and closing the composer in the same tick - it was the composer's
+  `deactivate()` tearing down `_composerMap` itself while `download()` was still awaiting tile
+  fetches from it.
+- `shared/markup-toolbar.ts:748` `flushMarkupAutoSave` never checked `r.ok`, so a 400 (e.g. an
+  over-long label) reported success; the single pending-save slot also meant editing item A then B
+  inside the 500ms debounce silently discarded A's changes. Added the ok-check, and replaced the
+  single shared slot with a per-item-uuid map, since it turned out reachable without even editing two
+  items in sequence - `setItemLayer` (the sidebar's inline layer picker) shares the same autosave
+  path and can target a completely different item than whatever the edit panel has open.
+- `shared/organize-filter-engine.ts:188` `countVisibleCards` tested `card.style.display`, but tree
+  view sets `display` on the `.tag-tree-item` *wrapper*, so cross-tab match counts and the "N
+  categories also match" footer counted every card as visible. Now delegates to `getOrgVisibleCards`
+  (:99), which already got it right.
+- `shared/map-image-overlays.ts:209` corner drag never handled `pointercancel`; an interrupted touch
+  gesture left `map.dragging` disabled permanently. The release handler is now bound to
+  `pointercancel` and `lostpointercapture` as well as `pointerup`, and is idempotent.
+- `entries/spotguessr.ts:1491` `submitGuess` had no in-flight guard, so a double-click posted twice
+  and double-counted the session score. Now disables the submit button for the duration, re-enabling
+  only on failure.
+- `entries/trivia.ts:856` and `entries/consensus.ts:1051` were missing the round-id guard spotguessr
+  has (`lastRevealedRoundId`), so the last player to answer double-counted HUD points. Fixed
+  differently in each game because their reveal broadcasts aren't the same shape: trivia.ts got a
+  matching `lastRevealedRoundId` guard; consensus.ts needed a **resolution-aware** guard instead
+  (`{roundId, resolution}`, not just `roundId`), since `services/consensus/session.py`'s
+  competitive-round disagreement sub-phase broadcasts `round.revealed` for the *same* round_id twice
+  by design.
+- `shared/organize-priority.ts:69` and `shared/album-items.ts:118` had optimistic reorder with no
+  rollback on failure, leaving the DOM showing an order the server never got. Partially fixed: both
+  now capture the order at drag-start and restore it if the save fails. (The "no save sequencing"
+  half is still open, see the live P11 entry.)
+- `shared/confirm-dialog.ts:90` had a re-entrancy bug: opening a second dialog while one was open
+  overwrote `resolveCurrent` (the first promise pending forever) and `showModal()` on an open dialog
+  threw into the promise executor. A call while the dialog is already open now settles the earlier
+  one as cancelled first, same as a backdrop click.
+- `shared/scroll-to-hash.ts:50` re-scrolled on *every* `htmx:afterSettle` for the page's life, so any
+  later swap yanked the reader back to the original anchor. Now remembers the hash it already
+  scrolled to and only re-arms if the hash itself changes.
+- `shared/onboarding-tour.ts:87` auto-dismiss hooks bound only to elements present at init; HTMX
+  swaps orphaned them, so dismissed cards reappeared. Now re-runs registration on every
+  `htmx:afterSettle` (a `WeakSet` keeps that idempotent). Also fixed the same fix's own prerequisite
+  bug found while here: the doc comment said `retryEvent` fires *in addition to* `htmx:afterSettle`,
+  but the code was an `if/else` between them - Organize's own `retryEvent` (a tab-switch, not an HTMX
+  event) meant that page never listened to `htmx:afterSettle` at all.
+- `shared/organize-header.ts:113` - a transient window resize below 768px *permanently* overwrote the
+  stored gallery view preference. The mobile fallback is now purely a display-time computation
+  (`effectiveView()`) layered over the stored preference rather than a call to `setSharedView()` that
+  persisted "list" over it.
+
+**E2EE keys persisting in IndexedDB across logout** were fixed 2026-09-05, tracked separately as P48
+(above): `wireSignOutForm` now clears a signed-out profile's keys too. This bullet had gone stale in
+P11 itself, still asserting the opposite of current behavior - found during the pre-merge audit of
+`release/v_0_8_0` (2026-09-08) and removed from the live entry rather than left standing next to its
+own resolution.
+
+## RESOLVED 2026-09-15: P19's re-verification-pass fixes, and four stale "still open" claims corrected
+
+`refs: P19 (open - a handful of maintainability gaps remain, see live entry)` · `resolved: 2026-09-15`
+
+After the initial 35-unit audit was worked through fix-by-fix in an earlier session, six independent
+re-verification passes re-read every finding in `docs/audits/codebase-audit.md` against the current
+code and reported per-finding FIXED/PARTIALLY-FIXED/NOT-FIXED/REGRESSED verdicts. The handful of
+regressions and higher-value gaps the re-verification surfaced were fixed directly in that pass:
+
+- **`services/ai/openai.py`'s `get_client()`** unconditionally passed `base_url=str(self.api_url)`
+  to the OpenAI SDK. `OpenAIGateway.setup()` never actually sets `api_url` (unlike the
+  Cloudflare/HuggingFace gateways), so this was always `str(None)` - the literal string `"None"` -
+  meaning a real OpenAI call would have tried to connect to that instead of the SDK's real default
+  endpoint. Pre-existing bug, not a regression from the earlier fix pass; now only passes `base_url`
+  when set.
+- **SpotGuessr's new reverse-geocode cache (`services/spotguessr/geo_bonus.py`) treated a rate-limit
+  failure as a genuine "no result" and cached it for the full 30-day TTL** - a transient Nominatim
+  rate-limit hit (the exact failure mode the cache exists to work around) would have silently
+  disabled the country/state/city bonus for an entire ~111m cell for a month. `reverse_geocode_admin`
+  (`services/apis/locations/nominatim.py`) now lets request/transport failures propagate instead of
+  swallowing them to `None`, and `geo_bonus.py` gives a failed lookup a 60-second TTL instead of 30
+  days, while a genuine "nothing found" result still gets the long TTL.
+- **The undo framework's `stash_for_undo()` calls in `pin_bulk.py`, `detail_pins.py` (×2), and
+  `location_wiki.py` ran *before* the `transaction.atomic()` block wrapping the delete**, with a
+  comment claiming the atomic wrapper prevented a partial-delete-with-stashed-undo inconsistency -
+  it didn't, since the stash (an immediate `UndoAction.objects.create()`) had already committed
+  before the atomic block even opened. Moved the stash call inside each atomic block, before the
+  delete, so a mid-delete failure now rolls back both together.
+- **The storage-quota check-then-create race (`services/media/storage.py`'s `per_profile_upload_lock`)
+  was only wired up at 2 of 8 call sites** (`photos.py`, `image_gallery.py`) - `article.py`,
+  `direct_messages.py`, `maps.py`, `safety.py`, `tools.py`, and `visits.py` still raced. All six now
+  wrap their check-then-create in `per_profile_upload_lock`.
+- **`LocationManager.get_nearby_or_create()`** (unlike `PinManager`'s already-fixed version) had no
+  `try/except IntegrityError` around its `create()` call, despite `Location` having a real
+  `unique_together = ["latitude", "longitude"]` constraint that two concurrent requests creating a
+  Location at the exact same coordinates could hit. Now catches it and returns the
+  concurrently-created row, matching `PinManager`'s pattern.
+- **`services/messaging/direct_messages.py`'s email/text-alert debounce (`is_email_debounced`/
+  `is_text_alert_debounced`) was still a plain `cache.get()` check-then-later-`cache.set()`** - the
+  same TOCTOU shape already fixed in the sibling `notification_text_alerts.py` via atomic
+  `cache.add()`. Ported the same fix; the now-redundant `cache.set()` calls inside
+  `send_message_email_now`/`send_message_text_alerts_now` were removed since the marker is claimed
+  atomically by the check itself.
+- **`services/ai/assistant.py`'s `_tool_add_trip_activity`** had the identical TOCTOU race
+  (`trip.activities.count() >= max_activities` check-then-create) that `_tool_create_trip` and
+  `link_extraction.start_link_extraction` had just been fixed for in the same pass - it wasn't
+  itself covered. Now locks the `Trip` row (not the profile - the count is per-trip, and other
+  members can add activities to the same trip) for the check-then-create.
+- **Duplicate, conflicting dark-mode CSS for `.subscription-admin-page .role-pill`** - independent
+  fix passes had added a `[data-theme="dark"]` override in both `_admin.scss` and `_dark.scss`,
+  with different colors; `_admin.scss`'s `@use` order meant its version always won, making the
+  `_dark.scss` copy dead and misleading. Removed the dead copy.
+- **The undo framework's `MODEL_LABEL` constants** (added to `handlers/pin.py`, `handlers/wiki.py`,
+  `handlers/safety_checkin.py` specifically to stop call sites hand-typing `"pin"`/`"wiki"`/
+  `"safety_checkin"` as bare strings) were never actually imported at any of the ~8
+  `stash_for_undo(...)` call sites - the fix added the constants but didn't wire them up. Added the
+  missing `MODEL_LABEL` constants to `handlers/saved_filter.py`/`handlers/trip.py` and updated every
+  call site (`pin_bulk.py`, `detail_pins.py`, `location_wiki.py`, `safety.py`, `saved_filters.py`,
+  `trip.py`, `models/pin/viewset.py`) to import and use the shared constant instead of a literal.
+
+**Unit 08 is also fixed** (not part of the original re-verification pass, found later): `pin.py`'s
+`media_send_to_wiki` no longer synchronously downloads media in the request handler - it's async now,
+via `tasks.cache_media_item_into_wiki` (commit `57a4a90afe`, 2026-08-27).
+
+**Four "confirmed still open" claims went stale and were corrected 2026-09-15**, found during this
+archiving pass rather than a dedicated re-verification: Unit 20's claim that `PinSerializer.create()`
+and `parse_for_preview` still make blocking AI calls is false - both are async now; Unit 21/22/23's
+claim that `GameSessionConsumer`/`TriviaSessionConsumer` have no shared base or per-connection rate
+limiting is false - they now share a base class with per-connection rate limiting; Unit 13/14/19's
+claim that `controllers/labels.py`'s `ai_kind_enabled`/`keyword_kind_enabled` duplication between
+`.get`/`.post` is unchanged is false - it's consolidated into `AutoTagService` now. All three were
+struck from the live entry's "still open" list rather than left standing next to code that had moved
+on. **Unit 24/25's stale-entry correction happened earlier** (re-checked 2026-08-25): the
+SpotGuessr/Trivia `eligible_locations()`/`eligible_questions()` retry-loop finding had already been
+resolved before this audit even ran, by commit `d02fce8a` (2026-08-06, "Unit 24/25: resolve
+SpotGuessr round eligibility once instead of per retry").
+
+## RESOLVED 2026-09-15: P113's 65-finding availability sweep - all but H54 and H56
+
+`refs: P113 (open - H54 and H56 remain, see live entry)` · `resolved: 2026-09-15`
+
+The full re-verified findings list and the two still-open rows (H54, H56) and four
+parked-by-decision rows (H21, H34, H44, H47) stay on the live P113 entry as its status
+board. What follows is the fix narrative for everything else on that list: what each
+finding actually was, the corrections found while fixing it, and the reasoning behind
+each choice - moved here so the live entry stays a board rather than a log.
+
+| finding | the shape | now |
+|---|---|---|
+| H42/H49 | the global-search panel fires per keystroke, hands an unbounded `q` to ~11 providers each running an un-indexable trigram scan, and had no throttle - while the *API* surface of the same engine caps the query at 250 characters for exactly that reason | the same cap, truncating rather than refusing, and a per-account throttle counting GET |
+| H26 | `LabelBulkEditView` capped neither the id list nor the parent/child lists, then ran a graph-walking cycle check per (label, parent) pair and an account-wide pin touch per label saved | `LABEL_BULK_EDIT_MAX_IDS`, refused rather than trimmed, checked before the first save |
+| H41 | one group message enqueued one Celery task per member, each building its own event loop and channel-layer connection to push a single frame | one task carrying the batch, delivered in one loop |
+
+H26 refuses where the filter ceilings trim, and the difference is worth keeping straight: a bulk
+*edit* that silently applied to some of what somebody selected is worse than one that says no,
+while a *filter* that returns results for part of itself is better than one that errors.
+
+**H20 and (mostly) H41 were already fixed** when checked. The export view claims a single-flight
+lock before it creates anything and releases it if the enqueue fails - which is the debounce the
+approved decision asked for, already in place. H41's group-chat half already built its payloads
+once per broadcast rather than once per member; what was left was the delivery, which is the part
+fixed above. Both went on the list because the audit was read rather than the code.
+
+**H39 is fixed** (2026-09-12), and it had a third door the finding did not name. Markup `geometry`
+is written from the request body into a JSONField after a type check and nothing else, so one shape
+could carry any number of coordinate pairs; and the reader answered for a whole pin/wiki subtree at
+once. On a community wiki both are read by everyone who opens the page, so one person's drawing set
+what every later viewer downloaded. Geometry is refused past `MARKUP_MAX_GEOMETRY_POINTS` at *both*
+write doors (create and update take the same body), and the listing is cut at
+`MARKUP_MAX_ITEMS_PER_RESPONSE` with a `truncated` marker — a silent cut reads as "this pin has five
+drawings", which is a different claim.
+
+The third door: `SafetyContactMarkupJsonView` builds its own listing, so capping `MarkupJsonView`
+would have left the *less* guarded of the two unbounded — that route is reachable by anyone holding
+the magic link, with no account at all. Both now read through one helper.
+
+**A fourth and fifth door, and H37 with them** (2026-09-12). Re-reading H39's own recommendation
+found it had named `_sanitize_latlngs` — a function the first fix never touched, because the
+controller was where the finding pointed. The snapshot composer reaches the same table by a
+different route entirely: `sanitize_map_data` → `replace_items_from_snapshot`, capping neither how
+many shapes a snapshot carries nor how many points each one does. Six callers share it — pin and
+wiki comments, visits, memories, trips and lists — and `replace_items_from_snapshot` saves row by
+row, each save firing the two `PinMarkup` receivers, so N shapes is N inserts plus 2N receiver runs
+inside one request. `MARKUP_MAX_SHAPES_PER_SNAPSHOT` and the existing point ceiling now bound both.
+
+Trimmed rather than refused, which is the opposite of the geometry door's choice and deliberate:
+the callers read a `None` snapshot as "no map was submitted", and `materialize_markup_map` responds
+to that by **deleting the map the user already had**. Refusing an oversized snapshot would have
+destroyed data. `_sanitize_markup_shapes` was already a sanitizer that silently drops malformed
+entries, so returning fewer shapes extends what it already did; trimming markup is direction-safe
+in a way trimming a `not` filter is not, because a shape omitted is only a shape not drawn.
+
+The fifth door is the read side, and the one other people actually pay for. `MarkupMap.to_snapshot()`
+is a separate path from `MarkupJsonView` with no ceiling of its own, and `Comment.map_snapshot`
+calls it per comment — so a wiki thread embedded one unbounded snapshot per comment for everyone who
+opened the page. It is sliced at `MARKUP_MAX_ITEMS_PER_RESPONSE` now. Rows written before any of
+these ceilings existed are still stored, which is the second reason the read side needed its own.
+This closes H37, which named the same function from the memories-maps end.
+
+Capping the read introduced a way to lose data, which the fix had to close rather than ship: items
+are created one at a time and nothing counted how many an owner held, so a map could pass the
+listing ceiling item by item — and then the composer prefill or `clone_markup_map`, both of which
+round-trip through `to_snapshot()`, would write back only what they could read and delete the rest.
+The create door now refuses past the same ceiling for a standalone map, so no map can outgrow its
+reader and the round-trip is lossless. Cloning inherits the ceiling deliberately: the alternative is
+one button press copying an unbounded number of rows, and the recipient still gets everything the
+reader showed.
+
+Scoped to `parent_map` on purpose, and the first attempt got this wrong. Capping every owner kind
+would have put a ceiling on a *community wiki* — a surface many people draw on — so one person
+filling it would lock everybody else out, which is the exact harm this work exists to remove, just
+relocated. Pin and wiki markup is never written back from a snapshot, so neither can lose anything,
+and each create is one cheap insert against a read that is already capped.
+
+`_coordinate_count` was checked against the obvious evasions and holds: padding a payload with
+nested empty lists does not get pairs past the ceiling, and walking the largest body Django will
+accept costs ~0.08s. `json.loads` raising `RecursionError` on a deeply nested body did escape
+`_parse_body`, which caught only `JSONDecodeError`/`ValueError` — a 500 rather than a fallback.
+
+Still open here: the `truncated` flag the listing returns is read by nothing. Three consumers do
+`(data.markup_items || []).forEach(...)` and ignore the rest of the payload, so the cut is reported
+in JSON and invisible to the person looking at the map. The photo layer already solved this
+(`map-annotations.ts` renders a note only when capped); markup should match it.
+
+**H29 and H48 are fixed** (2026-09-12). The Organize lists panel ran
+`prefetch_related("items__pin")` and the template used exactly one thing from it -
+`pin_list.pin_count`, which is `len(self.items.all())`. So every pin on every list the profile owns
+was fetched and built into a model instance to produce an integer the database can count without
+sending a row, and the `pin_count` sort materialised the whole queryset in Python on top of that.
+Measured before the fix: 54 extra model objects for 27 extra pins - exactly two per pin, the
+`PinListItem` and the `Pin`. `with_pin_counts()` annotates the count and the sort moves into SQL.
+
+The test states the invariant as "adding pins must not change what the panel costs" rather than as
+a fixed object budget, because the panel renders one card per list either way - the axis that
+matters is pins, and a fixed budget would need recalibrating whenever a card grows a field.
+
+H48: `/costs/` is anonymous, gated only by a SiteSettings flag, and every GET ran seven
+cost-tracking helpers - `active_user_count` joins every user against every pin they own, and
+`cost_per_user` and `cost_per_supporter` each call `effective_monthly_cost` again. Twelve queries
+per view, uncached, for a page a crawler can hold open. Only the figures are cached, never the
+response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
+gate runs every request and the window only covers numbers that are trailing aggregates anyway.
+
+**H40 is fixed** (2026-09-12). `ApiKeyAuthMiddleware._resolve` was decorated
+`@database_sync_to_async`, whose `thread_sensitive` defaults to True - verified against the
+installed asgiref rather than taken from the finding - so it ran in the single shared executor
+thread that every other `database_sync_to_async` call in the daphne process uses for its database
+work. Inside it, `authenticate_api_key` calls `check_password`, a deliberately expensive hash. One
+client reconnecting in a loop with `?key=` occupied that thread a hash at a time and every other
+socket's database work queued behind it.
+
+The cost is not the problem; where it is paid is. The hash must stay expensive, so it moved rather
+than shrank: the lookup is one indexed query by the key's public prefix and stays where the
+connection handling is, and only the hash runs on a plain worker thread. `api_key_candidate` and
+`touch_api_key` split the two halves out, and `authenticate_api_key` is rebuilt from them so the
+HTTP path still runs the same parsing and lookup rules. `api_key_candidate`'s docstring says in as
+many words that a row it returns is **not** authenticated.
+
+Deliberately not fixed by caching the verdict: a cached credential check means a revoked key keeps
+working until the entry expires, which trades an availability problem for a security one.
+
+**A test whose stated reason was the opposite of what the code does** (2026-09-12).
+`test_required_feature_is_only_set_where_the_web_gates_too` asserted the gated panel set was exactly
+`{"epa_echo"}`, and its docstring said membership of `PinController._NEARBY_RESEARCH_TABS` was what
+kept the web and the API agreeing about who may see a panel. The comment on that dict says the
+reverse explicitly - it "decides *ordering and labels only*", and the gate is each source's own
+`required_feature`, read through one shared `panel_visible_to` by both surfaces. Three panels
+legitimately became gated, the hardcoded set drifted, and the docstring would have sent the next
+reader to edit the wrong file. Replaced with the property: every gated panel must be refused to a
+viewer without its feature, so new gated panels are covered the day they are added.
+
+Worth recording how close that came to being reported as a leak. The property assertion failed for
+all four gated panels, which reads alarmingly - but `user_has_feature` grants every feature to site
+admins, and this codebase auto-promotes the *first* user. The fixture created its user without the
+throwaway other tests in the repo use, so it was testing an admin. `default_features` is blank by
+default, so the promotion was the whole explanation. The gate is enforced.
+
+**H35/H22/H13 are fixed** (2026-09-12) - three audit lines about one `cache.set`. The basemap tile
+proxy stored raw vendor bytes with no size check, into the same 512MB Valkey that holds sessions,
+the Channels layer and the Celery broker. One oversized tile, or a vendor answering a tile request
+with something that is not a tile, evicts other people's sessions to make room for itself.
+
+`bounded_cache.set_if_small` already existed for this and the Immich thumbnail proxy already used
+it, so the fix was to stop having two answers to the same question rather than to invent a third.
+
+It also closed an unhandled failure path that has nothing to do with size. A bare `cache.set`
+against a full or unreachable Valkey **raises**, and here nothing caught it - so a cache problem
+became a 500 on a map tile. The helper catches it and serves the tile uncached, which is the right
+answer: refusing to cache must never mean refusing to answer. There is a test for it, and it was red
+before the change.
+
+**The same default-binding trap as H33, in the helper itself.** `set_if_small` took
+`max_bytes: int = MAX_CACHED_BODY_BYTES`, and a module constant used as a parameter default is fixed
+when the function is *defined* - so the ceiling could be neither configured nor overridden in a
+test, and the first attempt at the size test failed for that reason rather than for the defect. It
+now resolves at call time. Worth noticing that this is the second place in one session where a
+ceiling was written as a default argument and was therefore inert.
+
+**H21 is verified but deliberately not started.** `resolve_deferred_pin_locations` re-serialises the
+still-pending payload into the broker on every retry, and retries continue for up to two days. It is
+*bounded* - `MAX_PREVIEW_PINS` caps an import at 20,000 pins - so the exposure is a few megabytes per
+retry rather than unbounded, but into the shared instance. The two real fixes are persisting the
+payload behind an id (a schema change) or the Valkey split already planned as PL7 phase 4; choosing
+one here would pre-empt that plan, so it is recorded rather than done.
+
+**H58 is fixed** (2026-09-12). Undoing a bulk pin delete validated the batch one row at a time:
+for every pin, a separate `.exists()` for its profile, its location, its wiki, a `.count()` for its
+labels, and another `.exists()` for the root-pin collision - with `_resolved_parent_pk` adding a
+sixth for a parent outside the batch. A bulk delete is capped at 500 pins, so an undo could issue
+thousands of queries before recreating the first row, inside the transaction holding the undo row's
+lock. Measured: three extra queries per pin on a batch with no wikis or labels, which is the floor
+rather than the typical case.
+
+The pre-flight is now one query per relation for the whole batch, extracted as
+`assert_restorable` so the cost has a seam that can be measured. The extraction was made first and
+run unchanged, so the query-count test failed on the real defect rather than on a missing method -
+worth doing deliberately, because an extraction that goes straight to the batched form proves only
+that the new code is fast, not that the old code was slow.
+
+**What this does not cover:** the create loop still calls `_resolved_parent_pk` per entry, so a
+parent *outside* the batch is still resolved one at a time there. For a bulk delete of a subtree
+most parents are in-batch and cost nothing, so this is a smaller residue than the pre-flight was -
+but it is a residue, not an absence.
+
+The refusals are the part that matters more than the count: they are what stands between an undo
+and an `IntegrityError` on `db_pin_unique_location_per_profile`. Fifteen existing tests across
+`test_undo_restore_conflicts` and `test_undo_pin_restore_conflict` already pin those semantics, and
+this file adds a case per refusal plus an intact-batch case, so a batched check that quietly stopped
+refusing fails here too.
+
+**H45 is fixed** (2026-09-12). `set_profile_avatar` runs the shared `image_upload_error` gauntlet
+without `skip_malware_scan`, so the antivirus scan happens inside the request - the file is copied
+into a BytesIO in the worker and streamed to the shared clamd daemon. The only size bound on it was
+`file_size_error_for_upload`, the *site-wide photo/video* cap: 250MB by default, and an admin may
+raise it to 900MB. One person changing their profile picture could hold a worker, and the clamd
+daemon every other upload shares, for as long as a quarter-gigabyte scan takes.
+
+The asymmetry is the argument for the number. `_download_avatar_from_url` - the OAuth path, fetching
+from Discord or Google - already refuses anything over 512KB. The same product concept was bounded
+two orders of magnitude apart depending on which door it came through, and the *tighter* door was
+the one where the size is not even the user's choice.
+
+**Bounded rather than deferred, and that is a deliberate trade.** Moving the scan off the request
+the way comment images do would mean storing, and potentially serving, a picture nothing has scanned
+yet. Comment images only get away with that because `pending_scan` hides them from everyone but
+their author until it clears; a profile picture has no equivalent gate. So the fix makes the scan
+cheap rather than late - the cost is proportional to the bytes, and an avatar has no business being
+250MB. Adding a `pending_scan` equivalent would be the alternative, and it is a schema and render
+change rather than a ceiling.
+
+The test that carries the weight asserts the scan is never *called* for an oversized upload. Before
+the fix that test failed with `AvatarMalwareDetectedError` - the scan had already run on the
+oversized file, which is the defect stated exactly.
+
+**H36 is fixed, on both pickers** (2026-09-12). The finding named Flickr; the Immich picker has the
+identical shape and would have been left holding a worker after the other was capped.
+
+Both "visits" modes issue one search per visit date, because both providers' taken-date filters take
+a range rather than a set of days. `MAX_VISIT_DATES` is 15 and each gateway's own
+`_REQUEST_TIMEOUT` is 30 seconds - so the inner timeouts bound each call and nothing bounded their
+sum. **Every per-call timeout could be honoured and the request still run for 450 seconds.** That is
+the shape worth remembering: a per-call timeout is not a request budget, and a fan-out of N calls
+needs its own.
+
+`call_with_deadline` already existed for this and `controllers/pin.py` already used it for its own
+provider fan-out. Both pickers now wrap all three modes - including Immich's "nearby", which
+measures against a whole library download - and degrade to the same error card the gateway-failure
+path already showed.
+
+What this does *not* do is stop the abandoned call: Python cannot kill a blocked thread, which is
+why the helper keeps a small dedicated pool. It stops the *request* waiting on it, which is what the
+worker is for. The tests assert the view returns promptly under a hanging gateway (the red run took
+37 seconds; the green one takes 8), and pair it with a prompt-search case so a view that simply
+always errored could not pass.
+
+**The read half of H24/H38 is fixed; the cache half was already done** (2026-09-12).
+`bounded_cache.set_if_small` already refuses to store an oversized body, with a comment noting the
+server is the user's own and `size=thumbnail` is a request rather than a guarantee - the ninth audit
+entry to turn out already fixed. What that never touched is the read: `_get_binary` called
+`response.content`, buffering the whole body in the gunicorn worker before any size was known. So
+the cache was safe and the worker was not, and the server on the other end is configured by the
+account holder - which makes the response size something one user picks and everyone sharing that
+worker pays for.
+
+Streamed now, and refused as soon as the ceiling is passed, because a refusal *after* buffering
+saves nothing. The test that matters asserts a 2,000-chunk response is refused within 20 chunks;
+a fix that checked `len(content)` at the end would pass a naive size assertion and fail that one.
+
+Two ceilings, because one helper serves two doors, and neither is an invented number.
+`IMMICH_MAX_THUMBNAIL_BYTES` bounds the thumbnail. The original is bounded by
+`max_upload_file_size_bytes()` - the site's own upload limit, already clamped to the ingress cap -
+on the reasoning that a file the site would refuse from a browser is not one it should accept from
+someone's Immich. `max_bytes` is a required keyword so a third caller has to state its own ceiling
+rather than inherit one chosen for a different door.
+
+**The trip half of H43/H52 is fixed, and it led to a defect in a shared helper** (2026-09-12).
+`visible_comment_tree` - the pin and wiki path - builds a `can_view` dict keyed by author precisely
+because, in its own words, "each call runs up to 3 extra query pairs, which is redundant when one
+author appears several times in a thread". `trips.trip_comments.build_comment_tree` copied the gate
+and not the dict; its comment even says the check works "exactly as pin/wiki comments already do",
+which is true of the gate and false of the memo beside it. Measured before the fix: five extra
+queries per comment. The memo took it to one.
+
+That remaining one was the interesting part. `_aggregate_reactions` called
+`.select_related("profile")` on whatever queryset it was handed - and on a prefetched relation that
+is not a refinement but a **clone**, and a clone does not carry the result cache a prefetch
+populated. So every one of its six call sites, across the pin, wiki and trip comment surfaces, was
+paying a query per comment despite carefully prefetching `reactions`. `.all()` has the same effect
+for the same reason, which is why the first attempt at the fix changed nothing.
+
+The join was never needed: the aggregate reads `emoji` and `profile_id`, both columns on the
+reaction row. It now iterates the queryset exactly as given. Worth remembering as a shape: a
+prefetch is only free if nothing downstream refines the queryset, and `.all()` counts as refining.
+
+**H47's memo half was already fixed** - `visible_comment_tree` has had the dict all along. That is
+the eighth audit entry to turn out already done. Only its pagination half is open, and that needs a
+decision rather than a patch: `visible_comment_tree` filters in Python, so paginating the queryset
+would hand back short pages and change the API contract.
+
+**H33 is fixed** (2026-09-12) - the external twin of H26, which was capped at the internal door in
+an earlier batch and left this one open. `LabelBulkEditSerializer` gave `uuids` a literal
+`max_length=500` and gave `add_parent_uuids`/`add_child_uuids` no ceiling at all, so the real cost -
+for every label, for every proposed parent, a `would_create_cycle` walk of the label graph in the
+database - was one capped number multiplied by an uncapped one, inside a single `transaction.atomic()`.
+
+All three lists now read `LABEL_BULK_EDIT_MAX_IDS` at validation time rather than binding a field
+`max_length` at import, which could be neither configured nor overridden in a test.
+
+**The first version of the test was worthless and passed 6/6 against unfixed code.** It built the
+parent list from `baker.prepare` uuids, which do not exist - and the view already refuses a uuid it
+cannot resolve, so the 400 it asserted came from that pre-existing check rather than from any
+ceiling. The rewrite uses real, resolvable labels, and adds a test asserting the unresolvable-uuid
+400 *separately*, so the two refusal paths cannot be confused for one another again. Worth recording
+as a pattern: when a ceiling test asserts a status code, check what else can produce that code.
+
+**H46 is fixed, and it had a second door** (2026-09-12). Both revision-history endpoints - the pin
+article's and the wiki article's - ran `list(article.revisions...)` and built a row dict per revision
+*before* handing the result to `paginated_response`, so the page size bounded the response body and
+nothing else. Each row carries `size_delta`, which is `len(content)`, so every revision's complete
+source (200,000 characters is the field's own ceiling) was read out of the database to produce one
+integer per row. Measured: 48 extra model objects for 16 extra revisions behind a two-row page, on
+each door.
+
+`paginated_response`'s own docstring already described the anti-pattern and offered `row_builder` as
+the fix - "Passing a queryset plus this is strictly better than pre-building a list of dicts and
+paginating that" - so the tool was there and neither caller used it.
+
+`size_delta` is why this could not be a plain slice: a row's delta is measured against the revision
+before it, which on the last row of a page sits on the *next* page. A window function
+(`Lag(Length("content"))`) computes it against the true neighbour before `LIMIT` applies, so paging
+never changes a number - there is a test that pages to the second page and checks the deltas rather
+than only counting rows. `content` itself is deferred, so the bodies are never loaded at all.
+
+Two smaller things fell out: `select_related("restored_from")` was a join for a value read as
+`restored_from_id`, already on the row; and `masked_editor_name` calls `resolve_visible_identities`,
+a helper written to take a batch, once per revision with a single-item list - memoised per editor
+like H28.
+
+**H28's second half is fixed, and H07 and H28's first half were already done** (2026-09-12).
+`bound_map_layer` already caps both photo-map JSON endpoints with a `truncated` marker, which is
+what those entries mostly asked for - the sixth and seventh audit lines found already fixed. What
+was left is the part the cap does not touch: every surviving photo still called
+`_visible_uploader_name` -> `Profile.can_view_profile`, and at the `COMMON_PIN` setting that reaches
+`_have_common_pin`, which reads *both* accounts' entire pin sets into Python. One viewer opening a
+community wiki paid that twice per photo, and a wiki collects photos from everyone who has been
+there.
+
+Memoised per uploader for the life of one response. Scoped to the response deliberately rather than
+cached across requests: a visibility setting a user has just changed must take effect on their next
+page load, not when a TTL expires - this is a privacy gate, and a stale yes is a leak.
+
+Writing the test taught the domain something worth recording: **photo visibility and identity
+visibility are two independent gates.** `Image.objects.visible_to(profile)` decides whether the row
+appears at all; `can_view_profile` only decides whether it carries a name. The first draft of the
+test conflated them - it removed the uploader's shared pin to make the identity invisible, which
+dropped the rows entirely and made the assertion fail for a reason that had nothing to do with
+masking. The tests now hold photo visibility fixed and vary only identity.
+
+**H31 and H37 are fixed** (2026-09-12) - the same page from two angles. The Maps subpage built a
+card per `MarkupMap` the profile owns with no pagination and no ceiling, and each card calls
+`to_snapshot()`, so the response carried every annotation of every map. The page's own advertised
+workflow - draw a route on a check-in, a comment, a visit - is what makes an account have many of
+them. The per-map half was already bounded by the `to_snapshot()` ceiling above; what was left was
+the number of maps.
+
+Paginated rather than capped: a map the user drew and can no longer reach is worse than a second
+page, and unlike a map layer a list of cards has an obvious place to put a Next button. The slice
+happens before any card is built, so an off-page map costs nothing rather than being built and
+discarded. The reusable `_pagination_controls.html` has a `page_links` mode written for exactly this
+case - a full-page view, where an `hx-get` would swap a whole HTML document into one div, and where
+plain links keep the back button working.
+
+**A stale performance record, not a regression** (2026-09-12). `test_pin_list_query_fingerprint` was
+failing on the branch before any of this work - confirmed by reverting to HEAD and re-running. Two
+committed improvements changed the external-API pin list's SQL and nobody re-recorded the fixture:
+`0fab2b35a` moved `child_count` from `Count(distinct=True)` (which makes the planner sort the whole
+join product) to a scalar subquery, and `07e608367` inlined the media-relevance exclusion as
+`~Exists` instead of a separate SELECT. The re-recorded fixture is two queries shorter with no
+GROUP BY and nothing else changed. Worth stating because the first reading of it looked like
+`child_count` had been silently dropped from the API - it had not; it moved.
+
+**H32 and H53 were already fixed** when checked — the third and fourth audit entries to turn out
+that way, after H20 and H41. Album detail caps its map through `bound_map_layer`, which counts
+first and only projects coordinates when the count is over the limit, keeps the area covered rather
+than the first N, and reports `map_truncated`. That is the same shape the approved decision asked
+for on photo maps, already in place. Both entries went on the list because the audit was read
+rather than the code, which is now the most common reason an entry is wrong.
+
+Still open in family 4: the findings N21 lists beyond these, most of which are request-path
+loops over one account's data in surfaces nobody has measured yet.
+
+**H19 is fixed** (2026-09-11), and it is the one that could have taken the site down rather than
+slowed it. Upvoting an external photo materializes it - downloads up to 20MB and stores it on the
+shared media volume, which is the filesystem Postgres lives on - with `QuotaExemption.EXTERNAL_MEDIA`
+set, so the storage quota does not apply. The exemption is right and deliberate: the person who
+upvoted someone else's photo did not author it and should not be charged for caching it. It was also
+the *only* bound, as `media_materialize`'s own docstring said in as many words ("Only the per-item
+`_MAX_DOWNLOAD_BYTES` cap applies") - and per-item is not a bound on an account.
+
+`EXTERNAL_MEDIA_DAILY_BYTES` (512MB, rolling 24 hours, per profile) is the missing half. The
+exemption decides who is charged; the ceiling decides how fast. It is checked after the dedupe
+lookup, so re-voting a photo already cached is free and never refused, and before the download, so a
+refusal does not arrive with the bytes already spent.
+
+`WikiMediaVoteView`'s docstring claimed the materialize "costs the *voter's* storage quota". It never
+did - that is the exemption - and the claim is corrected rather than left as the first thing a reader
+would check.
+
+**H12 and H14 are fixed** (2026-09-11), both by the same move: a ceiling at the door the
+client-supplied thing comes through.
+
+- `dissolve_polygons` compares every remaining pair of components and restarts after each merge, so
+  its cost is quadratic per pass with up to one pass per merge - in GEOS `intersects()` calls, inside
+  the request. The component count came from a POST body and nothing bounded it.
+  `MAX_REGION_POLYGONS` (200) and `MAX_REGION_VERTICES` (50,000) bound both halves, checked in
+  `parse_multipolygon_geojson` rather than in the dissolve, because a ceiling checked after something
+  has stored the shape is on the wrong side of the write. One consequence is worth knowing: on the
+  map filter an unusable region drops that criterion rather than failing the search, so a region over
+  the ceiling *widens* the result. That is the pre-existing contract for a corrupt region, now
+  written down.
+- The four REData media proxies cached whatever they downloaded, unbounded, into the shared Valkey,
+  with no login required and a cache key built from path parameters. Both halves are bounded now: a
+  4MB per-entry ceiling (larger than `bounded_cache`'s thumbnail default, named at the call site,
+  because these are scanned PDFs) and a rate. `throttled` had to learn to count GETs first - it
+  counted only unsafe methods, which was right for the signup POSTs it was written for and useless
+  for a download proxy.
+
+**H10 is fixed** (2026-09-11), in two places because one cannot cover the other.
+
+`InboundVolumeMixin` bounds how fast an account may *send* on a socket, and its docstring said the
+shared tier "is what stops one account opening fifty sockets" - which is true of flooding from fifty
+and not of holding them. An idle socket sends nothing, so it was charged nothing, while occupying one
+of nginx's `worker_connections` (1024 per worker, shared with every HTTP request) and a slot in the
+single daphne behind them. Holding them is the cheap attack; sending on them was the one already
+bounded.
+
+`services/security/socket_budget.py` caps connections per *account* -
+`WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT`, default 20 - claimed before any group is joined, because
+Channels fires `disconnect()` only for a connection that reached `accept()` and a refusal after
+`group_add` would leak the membership permanently. Two properties matter more than the number:
+
+- **It fails open.** A cap that cannot read its counter allows, exactly as the request throttle does.
+  A Valkey outage already degrades the site; turning it into "nobody may open a socket" makes an
+  outage worse rather than safer. This is the opposite of the single-flight guard, and the difference
+  is which way the failure hurts.
+- **A crashed worker must not lock an account out.** A plain counter would be incremented and never
+  decremented. The claims are a sorted set scored by time, so a dead worker's leftovers age out on
+  their own; the worst a crash costs is a smaller allowance until `STALE_AFTER_SECONDS`.
+
+The application cap runs *after* authentication, so it cannot see the cheapest attack of all: a
+handshake that never authenticates still occupies a connection and a daphne slot before Django closes
+it. `limit_conn ws_conn 60` on the `/ws/` location is what bounds that, keyed on the real address the
+vhost establishes first - and the test asserts that ordering, since keying on the front door's
+address would give every visitor behind the tunnel one shared budget.
+
+Reviewing the first version turned up the defect that would have mattered most, and it was on the
+client. `live-socket.ts` stopped for good on 4404 and reconnected on everything else, so a 4429
+became a retry - at a one-second backoff that `retryNow` reset on every tab focus and every `online`
+event. A browser one socket over the allowance would have hammered the refusal on every window
+switch, each attempt a handshake, an auth resolution and a store round trip. A limiter that provokes
+the load it prevents is not a limiter. A capacity refusal now waits the full ceiling and is not
+brought forward by those triggers, and clears once a place comes free; three of the five new tests
+fail against the previous version.
+
+That fix covered `live-socket.ts`, which the three game consumers use - and nothing else. The
+notification, direct-message and safety-chat sockets are written by hand in their templates, and the
+notification one is the socket every logged-in page opens. All three reconnected on any code but
+4404, and the notification one reset its backoff on every tab focus *and* escalated to HTTP polling
+after two failures, so a refused socket would have been answered with a stream of requests. Found by
+grepping for `new WebSocket(` rather than by reasoning about which page opens what; a test now
+discovers them the same way, so a fifth hand-rolled socket fails there rather than in production.
+
+A second leak, and a permanent one rather than a temporary one: Channels fires `disconnect()` only
+for a connection that reached `accept()`, so a failure between the claim and the accept held the
+place - and the renewal task kept that claim fresh for the life of the process, so it would never
+even age out. Every connect-failure path releases now.
+
+The claims also renew. They expire so a worker that went away stops costing an account part of its
+allowance, but these sockets live as long as their tab - hours - so without a renewal a long-lived
+one would quietly stop counting, which is lenient rather than dangerous but would make the cap
+meaningless for exactly the connections it bounds. With a renewal every 5 minutes the window can be
+15 rather than the 2 hours it would otherwise need, so a dead worker's claims clear in minutes.
+
+**H16 is overstated.** The audit says "every wiki/photo access check re-reads the whole site-wide
+Place aggregate table, so each media-file fetch costs a full-table scan". The scan is real -
+`_earn_aggregates` reads every aggregate `Place` and then every member of those - but the media path
+does not reach it. `services/media/access.py` authorizes an ordinary photo through
+`Image.objects.filter(pk=...).visible_to(profile)`; only `authorize_comment_image` calls
+`location_visible_to`, and `visible_wiki_location_ids_cached` already memoises the result on the
+`Profile` instance for the life of the request. What remains is that the cost grows with total site
+data rather than with the requester's, which is worth fixing when the aggregate count justifies it -
+and is not the per-fetch full-table scan the finding describes.
+
+**H05 is fixed, on both pickers, and the batch form already existed for half of it**
+(2026-09-13). `RecipientSearchView` asked `can_direct_message` and then `can_view_profile` once per
+candidate, for up to `RECIPIENT_SEARCH_LIMIT * 4` of them, on every keystroke past the second
+character. Both reach `visibility_permits`, and at `COMMON_PIN` or `ANYTHING_IN_COMMON` that reads
+*both* accounts' entire `Pin` tables into Python — so the requester's own pin table was scanned four
+times per candidate, and the candidates are whoever else happens to match the substring.
+
+Measured on the endpoint: **51 queries for 3 candidates, 240 for 24**, the pinned-place read alone
+running 96 times. After: **41 and 41**. Flat, not merely smaller.
+
+`Profile.visible_profile_pks` — the batch form of the *identity* gate — has existed since the
+2026-08-17 audit, with an agreement test, and the picker never used it. The message gate had no
+batch form, so `Profile.accepting_direct_messages_pks` is new and got the same treatment: held to
+`accepts_direct_messages_from` across every `VisibilityChoice`, with and without a friendship, with
+and without a shared place, blocked in each direction, and with a prior message that triggers the
+reply exception. A batch permission check that disagrees with the single one offers someone as
+messageable who would refuse the send, or hides someone who would accept.
+
+Two things worth keeping from building it:
+
+- **The group-chat member picker is the same comprehension over the same queryset**, and says so in
+  its own comment. Fixing one door would have left the other paying the full cost — the H36 shape
+  again. The scaling test is parameterised over both URLs rather than duplicated.
+- **The first scaling seed measured nothing.** It gave every candidate a pin at its own location, so
+  nobody shared a place, so both gates refused everyone and the picker rendered an empty list at
+  both sizes. `QueryScalingMixin`'s "the seed does not exercise this endpoint" guard is what caught
+  it, which is the second time that guard has earned its place.
+
+**H06 is narrowed rather than closed** by the same work, and the residue is worth naming: one
+evaluation per *distinct* author still reads both pin tables. `controllers/comments.py:223` builds
+its blurred-commenter set with `can_view_photos_from` per commenter;
+`services/comments/comments.py:166` and `services/trips/trip_comments.py:216` memoise repeats but
+still pay one full pair of scans per distinct author. Those need a batch form of the photo and
+comment gates, the way `visible_profile_pks` is one of the identity gate.
+
+**H55 is fixed** (2026-09-13). nginx buffers a request body past `client_body_buffer_size` to
+`client_body_temp_path` before the upstream sees a byte, and that path is `/tmp` — the image's
+writable layer, which on this host is the same 501GB logical volume that holds the `postgres-data`
+volume. No login is required to send a body and nothing bounds how many are in flight, so anonymous
+POST volume was unbounded write pressure on the disk the database lives on. Response buffering is
+the same hazard read backwards: `proxy_max_temp_file_size` defaults to **1024m per connection** and
+was never set.
+
+Both nginx services now mount `/tmp` as a sized tmpfs — 512m for the app vhost, which has to hold
+one maximum-size body (`client_max_body_size 200m`) plus the response ceiling, and 64m for the media
+vhost, which caps a body at 64k and whose only `proxy_pass` returns a header. `proxy_max_temp_file_size`
+is 64m: past it nginx stops buffering and streams at the client's pace, so a large response costs a
+held upstream connection rather than a spool — bounded either way.
+
+**`mem_limit` had to move with it, and that is the part that would have been missed.** tmpfs pages
+are charged to the container's cgroup, so a tmpfs that can fill past the memory limit converts one
+oversized upload into an OOM-killed nginx — the whole site, which is a worse outage than the one
+being prevented. The app vhost's limit is 768m against a 512m spool. The test asserts the two
+numbers against each other in both directions, because neither file can see the other: the tmpfs
+must be at least the vhost's own `client_max_body_size`, or a legitimate maximum-size upload starts
+failing, and it must be under `mem_limit`.
+
+Verified by running it rather than by reading it. A 120MB POST put **117,192 KB into the tmpfs** and
+Django answered 403; the disk was untouched. Three concurrent 200MB uploads deliberately overflowed
+the 512m spool: two got 500, one succeeded, **other users' requests served 200 in 53ms throughout**,
+nginx stayed healthy and the tmpfs drained to zero. That is the invariant stated as an experiment —
+one user's excess is bounded to that user.
+
+What this does not do is stop a body being *accepted* that nothing needs. `client_max_body_size` is
+one number for every route, so an anonymous `POST /signup/` may still spool 200MB before Django
+rejects it — now into RAM that frees immediately rather than onto the database's disk. Making the
+ceiling per-route needs a route list, and building a second one now would drift from the
+`heavy_routes.txt` mechanism PL7 phase 3c already specifies. Recorded there rather than guessed at
+here.
+
+One rough edge left alone: nginx answers `ENOSPC` on the spool with a 500. A 413 or 507 would tell
+the uploader something true, and there is no directive to change it.
+
+**H23 is fixed, and it had two other things wrong with it** (2026-09-13). The saved-filter cache
+keys its matching-uuid list on a fingerprint of the profile's pins, so an entry self-invalidates on
+any create, edit or delete. That makes it *unreadable*, not *gone*: the superseded copy holds its
+bytes for the full day of the TTL, in the 512MB instance that also holds sessions, the Channels
+layer and the Celery broker under `volatile-lru`. One afternoon of editing pins leaves one dead copy
+per edit per saved filter, and the eviction that makes room for them takes other people's sessions.
+
+A pointer key now names the entry currently live for each `(profile, filter)`, so writing a
+replacement drops the one it replaces. No lock is needed and none is used: a key names the exact pin
+state it describes, so any key that is not the one being written describes state that has already
+moved. The guard that matters is `superseded != key` — without it, recomputing after an eviction
+would delete the entry it had just written.
+
+Editing the filter's *criteria* is cleaned up by the same mechanism, which was not the goal: the
+filter's own `updated` is in the key too, so a criteria edit strands a copy exactly as a pin edit
+did.
+
+The two things found while fixing it are the same defect class twice:
+
+- **A bare `cache.set` raises**, and nothing here caught it, so a full or unreachable Valkey turned a
+  map toolbar load into a 500. This is the third place in this effort with that shape — the tile
+  proxy had it (H35), and `bounded_cache` exists because of it. `get_or_none`, `set_or_skip` and
+  `delete_quietly` are now beside `set_if_small` there, and `set_if_small` is rebuilt on one of
+  them rather than keeping its own copy of the try/except.
+- **The value had no ceiling.** One uuid per matching pin, with nothing bounding how many pins an
+  account has: a 200,000-pin account would put a multi-megabyte value into a single key, and Valkey
+  runs commands on one thread, so the cost of reading it is paid by everyone. Past
+  `SAVED_FILTER_MAX_CACHED_UUIDS` the toolbar recomputes from the database instead. Refusing to
+  cache never changes the answer, which is the property the test asserts alongside the refusal.
+
+The test that nearly passed for the wrong reason is the warm-hit one: it asserted `Pin.objects` was
+untouched on the second call, and `pins_fingerprint` legitimately runs a `Pin` aggregate when the
+caller does not pass one in. Passing the fingerprint explicitly is what makes the assertion mean
+what it says.
+
+**H65: a download that held a worker, found by reviewing H55** (2026-09-13).
+`ExportDownloadView` answered with a `FileResponse` over the export ZIP, so the bytes travelled
+through gunicorn. nginx absorbs a response up to `proxy_max_temp_file_size` and then matches the
+client's pace, so past that ceiling one person on a slow connection holds a worker for as long as
+their download takes — and an export is every photo the account owns, copied. Every other large
+file here is handed to nginx instead, and exports already sit under `MEDIA_ROOT/exports/`, which is
+the volume the internal `/_protected_media/` location aliases. The hand-off was available the whole
+time and this one path did not use it.
+
+Found by asking what H55's `proxy_max_temp_file_size 64m` newly exposed. It narrowed the window
+rather than opening it — the ceiling was nginx's 1024m default before, so the same hold existed for
+anything over a gigabyte — but narrowing it is what made the question worth asking.
+
+**Two things had to move with it, and the second was nearly missed.**
+
+`media.conf.template` already records, measured on this image, which headers survive nginx following
+an `X-Accel-Redirect`: `Cache-Control`, `Content-Type`, `Content-Disposition`, `ETag`,
+`Last-Modified` and `Accept-Ranges` do; `Content-Security-Policy`, `X-Frame-Options`,
+`X-Content-Type-Options` and `Referrer-Policy` do not. So the filename survives — but the security
+headers Django sets would have vanished.
+
+The media *host* states them at server level for exactly this reason. The app's own vhost states
+none, so this is not a regression the export would have introduced: **every file already served
+through `django.conf`'s `/_protected_media/` has been losing those four headers** — which is every
+media file on any deployment where `UL_MEDIA_BASE_URL` is unset, since `MEDIA_URL` is then relative
+and the app's own vhost is what answers. They are stated on that location now. In the location rather than at server level, because nginx's `add_header`
+replaces everything inherited the moment a block declares one of its own, and two locations in that
+file already do — a server-level set would have silently skipped them.
+
+**And the parser this is tested with was wrong.** `core/tests/nginx_config.py` tokenised `{` and `}`
+as block delimiters wherever they appeared, including inside a quoted string — and `django.conf`
+quotes its hashed-static regex specifically because of the `{8,32}` quantifier in it, with a comment
+saying an unquoted one once took the whole nginx container down. Reading that file split the regex
+on its own quantifier and unbalanced the block stack, so every context after it was wrong. Nothing
+caught it because the only caller read `nginx.conf`, which has no quoted braces. Fixed, and the
+context frames now carry each block's whole header, so a test can name
+`("location", "/_protected_media/")` rather than hoping there is only one location.
+
+**H06 is closed, and the memo was the thing that made it look closed** (2026-09-13). The finding is
+that `pinned_place_keys` reads a profile's whole `Pin` table into Python and the pair check calls it
+for both sides. Every surface that renders a list of people had already been "fixed" by memoising
+the verdict per distinct author or uploader — which stops one person being resolved twice and does
+nothing about the resolution. A thread with twenty distinct authors still paid twenty pairs of full
+scans, and a community wiki collects photos from everyone who has been to the place.
+
+So the memo turned an O(rows) cost into an O(distinct people) one and stopped there, because the
+axis it removed is the visible one. Distinct people is the axis these surfaces actually grow along.
+
+Four sites, one resolution each now:
+
+| site | gate |
+|---|---|
+| `controllers/comments.py` blurred-commenter set | `can_view_photos_from` |
+| `services/comments/comments.py` pin and wiki threads | `can_view_comments_from` |
+| `services/trips/trip_comments.py` | `can_view_comments_from` |
+| the two photo-map layers, via `prime_uploader_memo` | `can_view_profile` |
+
+The vault's two list callers are deliberately untouched: the uploader there is the viewer, so
+`_visible_uploader_name` returns before any gate runs, and both call sites already say so.
+
+**`viewers_who_can_see` had to be split to make one of these possible.** `can_view_photos_from` is
+two-sided — the uploader's `photo_upload_visibility` must admit the viewer *and* the viewer's own
+`viewer_photo_filter` must admit the uploader — and those are opposite shapes: many subjects against
+one viewer, then one subject against many viewers. The first had a parameterised batch
+(`_visible_subject_pks`); the second existed only hardcoded to `profile_visibility`. It is
+`_permitting_viewer_pks` now, parameterised the same way, with `viewers_who_can_see` as a one-line
+caller — so there is still exactly one implementation of each direction rather than a third copy of
+the relationship queries.
+
+Held to the per-pair functions rather than to written expectations, across every `VisibilityChoice`
+with no relationship, with a friendship, with a shared place, with a shared trip, with the viewer in
+their own list, and in mixed lists — a batch is far likelier to smear one row's answer across its
+neighbours than to get a single-row list wrong. The two-sided gate gets four more: each half
+refusing while the other permits, and both permitting, because a batch that applied only one half
+would pass every one-sided case.
+
+The scenarios carry an anti-vacuity check of their own. `_assert_both_outcomes` fails a scenario
+where every subject agrees, since a batch that returned nothing at all would satisfy it — and the
+photo case tripped it immediately: `viewer_photo_filter` defaults to `ANYTHING_IN_COMMON`, so with
+the inherited scenarios' unrelated strangers the viewer's own half refused everyone and the
+uploader's setting never mattered.
+
+
 ## RESOLVED 2026-09-15: production's `UL_SITE_URL` has no scheme, so request-less links were built as `urbanlens.org/...`
 
 `id: P23` · `status: fixed` · `resolved: 2026-09-15`

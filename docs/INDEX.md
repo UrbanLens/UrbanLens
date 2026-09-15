@@ -37,14 +37,14 @@ still resolves after it is fixed, and the id is never handed out again.
 | P3 | open | 2026-08-31 | The pin-detail hero no longer links to `PinRelinkView.get`, orphaning the `pin.link` wiki picker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P5 | open | 2026-09-15 | Dialog forms still post every field; edit handlers write only the columns that changed, but submits are not dirty-only | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P6 | open | 2026-08-21 | Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P7 | open | 2026-09-14 | REData's reconciled building `ref` is stored as permanent identity, and REData does not guarantee it is stable | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P9 | open | 2026-09-08 | REData gaps: mostly closed 2026-09-08; `?limit=` is REData-side, land-use-area geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P11 | open | 2026-09-06 | 84 raw `fetch()` calls bypass `fetch-json.ts`, and "all the wrappers are gone" was a count, not a search | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P7 | open | 2026-09-15 | REData's reconciled building `ref` has no stability guarantee, and UrbanLens persists it as permanent identity | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P9 | open | 2026-09-15 | REData's `?limit=` param is inert client-side, and land-use-area boundary geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P11 | open | 2026-09-15 | Frontend TS audit: a few correctness bullets and structural debt found but not fixed | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P14 | open | 2026-09-15 | Historical `pin_images/` files whose Image row is gone are never removed (disk only) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P16 | open | 2026-07-22 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P19 | open | 2026-09-06 | Audit re-verification's residual gaps remain: a 1,100-line `_dark.scss`, a stub AI gateway, blocking AI in the request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P16 | open | 2026-09-15 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P19 | open | 2026-09-15 | Audit re-verification's residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P20 | open | 2026-09-14 | The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -82,7 +82,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P83 | open | 2026-09-06 | Over half of every page's HTML is inline `<script>`, re-sent uncached on every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P85 | open | 2026-09-14 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P91 | open | 2026-09-08 | Seven of eight new security integration specs have never run against a live deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P91 | open | 2026-09-15 | Four of eight security integration specs have never run against a live deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P92 | open | 2026-09-08 | `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P95 | open | 2026-09-14 | One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
