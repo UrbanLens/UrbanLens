@@ -77,7 +77,7 @@ class SettingsSiteUrlPortTests(SimpleTestCase):
 
     def test_the_site_url_fallback_is_not_a_literal_port(self) -> None:
         source = _SETTINGS_PATH.read_text(encoding="utf-8")
-        fallback = re.search(r"SITE_URL = _site_url_env or ([^\n]+)", source)
+        fallback = re.search(r"SITE_URL = _site_url_from_env\(_site_url_env, ([^\n]+)\)", source)
 
         self.assertIsNotNone(fallback)
         self.assertIn("_APP_PORT", fallback.group(1), "the fallback names a port independently of UL_APP_PORT")

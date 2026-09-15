@@ -41,14 +41,13 @@ still resolves after it is fixed, and the id is never handed out again.
 | P9 | open | 2026-09-08 | REData gaps: mostly closed 2026-09-08; `?limit=` is REData-side, land-use-area geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-09-06 | 84 raw `fetch()` calls bypass `fetch-json.ts`, and "all the wrappers are gone" was a count, not a search | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P14 | open | 2026-09-14 | Media gate residue: icons are owner-scoped now; stranded icon files and safety check-in photo audiences remain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P14 | open | 2026-09-15 | Media gate residue: replaced or deleted pin and label icons strand their files, and historical orphans remain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-07-22 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-09-06 | Audit re-verification's residual gaps remain: a 1,100-line `_dark.scss`, a stub AI gateway, blocking AI in the request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P20 | open | 2026-09-14 | The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P23 | open | 2026-07-31 | The production celery worker's env sets `UL_SITE_URL=staging.urbanlens.org`, so built URLs point at staging | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-08-05 | A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P25 | open | 2026-08-07 | `Comment.profile` CASCADEs but `TripComment.author` SET_NULLs, so account deletion erases only some comments | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P26 | open | 2026-09-06 | A group message can still be sent under a stale key version, and refusing one risks an availability outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |

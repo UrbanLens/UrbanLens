@@ -1001,11 +1001,12 @@ reporter considers too slow to refresh.
 
 ---
 
-## P14 — Media gate residue: icons are owner-scoped now; stranded icon files and safety check-in photo audiences remain
+## P14 — Media gate residue: replaced or deleted pin and label icons strand their files, and historical orphans remain
 
-`id: P14` · `status: open` · `updated: 2026-09-14`
+`id: P14` · `status: open` · `updated: 2026-09-15`
 
-Previously titled "Custom pin and label icons are readable by any authenticated user; narrowing
+Previously titled "Media gate residue: icons are owner-scoped now; stranded icon files and safety
+check-in photo audiences remain", before that "Custom pin and label icons are readable by any authenticated user; narrowing
 that needs a pin-visibility query nothing has", before that "Authenticated media gate - residual
 per-family risk (2026-07-23)".
 
@@ -1116,15 +1117,18 @@ than fallbacks. The rest of this entry records them and the file-stranding work 
   prefix cannot inherit a fallback either way.
 - **`avatars/` (Profile.avatar)**: deliberately any-authenticated-user (avatars render site-wide
   next to usernames) - not a gap, but noted for completeness.
-- **Safety check-in photos** (`Image.safety_checkin` set) currently follow the generic
-  `Image.objects.visible_to` photo-visibility logic rather than the safety feature's own
-  contact-sharing rules; if check-ins are ever shared with emergency contacts who fail the
-  photo-visibility check, those contacts would be denied the photos (and vice versa: users
-  passing `visible_to` but outside the check-in's audience can fetch them).
+- **Safety check-in photos are scoped to the check-in's audience (re-checked 2026-09-15).**
+  `Image.objects.visible_to` admits them through `_named_this_viewer`: the owner, a contact with an
+  account (`SafetyCheckin.objects.shared_with`) and an accepted partner (`partnered_with`). The
+  settings-based branch cannot match one, because it requires the photo to sit in a wiki the viewer
+  reaches, and a check-in photo has no wiki. A signed-out contact is served through the magic-link
+  route `safety.contact.photo`. `test_media_gate.py::SafetyCheckinMediaGateTests` covers the owner,
+  a partner, an unaccepted invitee, a stranger, a signed-in contact, and a friend whom the owner's
+  photo settings admit; `SafetyContactTokenPhotoTests` covers the token route.
 
 **Suggested next step**: deferring the unlink of a replaced or deleted `Pin`/`Label` icon until
-its undo window closes, a cleanup job for orphaned media files (a disk-usage question, not a
-disclosure one), and a review of safety check-in photo audience rules.
+its undo window closes, and a cleanup job for orphaned media files (a disk-usage question, not a
+disclosure one).
 
 ---
 
@@ -1414,22 +1418,6 @@ investigated further - REData is a separate codebase/service another agent maint
 contributed to or is independent of the CID-resolution backlog (both endpoints share the same
 gunicorn workers, so one starving the other for memory is plausible) was not determined.
 
-## P23 — The production celery worker's env sets `UL_SITE_URL=staging.urbanlens.org`, so built URLs point at staging
-
-`id: P23` · `status: open` · `updated: 2026-07-31`
-
-Previously titled "2026-07-31: Production celery worker's `.env` has `UL_REDATA_API_URL`... but check `UL_SITE_URL=staging.urbanlens.org`".
-
-Noticed while inspecting `redata-production-app-1`'s environment (via scoped, non-secret-exposing
-`grep` - see below) during the CID-resolution investigation: a variable read off what's supposed to
-be the *production* UrbanLens celery worker's environment showed `UL_SITE_URL=staging.urbanlens.org`.
-That looks like a copy-paste/deploy-config leftover from a staging `.env`, which would make any
-absolute URL the production worker builds (e.g. notification deep-links via `request.build_absolute_uri`
-equivalents, `reverse()`-based URLs sent in emails/notifications) point at staging instead of
-production. Not confirmed as a real production `.env` (vs. this session misidentifying which
-container/host it was inspecting) and not fixed - purely operational (an env var value on the
-deployed host, not a code change) and outside this session's remit. Worth a human checking the
-actual production `.env` deploy config directly.
 
 ## P24 — A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster
 

@@ -922,9 +922,25 @@ DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
 # The inbound throttle on signup/reset caps how often mail is sent, not how long
 # a send may take, so the two are needed together.
 EMAIL_TIMEOUT = _app_settings.email_timeout
+def _site_url_from_env(value: str | None, default: str) -> str:
+    """``UL_SITE_URL`` as an absolute URL, taking a bare host to be served over https.
+
+    Args:
+        value: The environment value, if set.
+        default: What to use when it is unset or blank.
+
+    Returns:
+        The base every request-less link is built on.
+    """
+    value = (value or "").strip()
+    if not value:
+        return default
+    return value if "://" in value else f"https://{value}"
+
+
 # Base URL for absolute links from request-less contexts (e.g. Celery).
-_site_url_env = os.getenv("UL_SITE_URL")
-SITE_URL = _site_url_env or f"http://localhost:{_APP_PORT}"
+_site_url_env = (os.getenv("UL_SITE_URL") or "").strip()
+SITE_URL = _site_url_from_env(_site_url_env, f"http://localhost:{_APP_PORT}")
 if not _site_url_env and not _is_dev:
     import logging
 

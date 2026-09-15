@@ -569,6 +569,32 @@ class SafetyCheckinMediaGateTests(TestCase):
 
         self.assertEqual(self._fetch(), 200)
 
+    def test_a_friend_the_owners_photo_settings_admit_is_still_outside_the_checkin(self):
+        """The audience is who the check-in names, not who the owner's photo settings would let see a photo."""
+        friend_user = _new_user()
+        Friendship.objects.create(
+            from_profile=friend_user.profile,
+            to_profile=self.owner,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+        )
+        Profile.objects.filter(pk=self.owner.pk).update(photo_upload_visibility=VisibilityChoice.ANYONE)
+        self.client.force_login(friend_user)
+
+        self.assertEqual(self._fetch(), 404)
+
+    def test_a_signed_in_emergency_contact_can_fetch_a_checkin_photo(self):
+        contact_user = _new_user()
+        baker.make(
+            "dashboard.SafetyCheckinContact",
+            checkin=self.checkin,
+            email=None,
+            contact_profile=contact_user.profile,
+        )
+        self.client.force_login(contact_user)
+
+        self.assertEqual(self._fetch(), 200)
+
 
 class SafetyContactTokenPhotoTests(TestCase):
     """A signed-out emergency contact can see the check-in's photos.

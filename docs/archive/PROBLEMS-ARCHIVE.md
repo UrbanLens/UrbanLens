@@ -11,6 +11,36 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-15: production's `UL_SITE_URL` has no scheme, so request-less links were built as `urbanlens.org/...`
+
+`id: P23` · `status: fixed` · `resolved: 2026-09-15`
+
+Previously titled "The production celery worker's env sets `UL_SITE_URL=staging.urbanlens.org`, so
+built URLs point at staging", before that "2026-07-31: Production celery worker's `.env` has
+`UL_REDATA_API_URL`... but check `UL_SITE_URL=staging.urbanlens.org`".
+
+**The original claim was wrong.** It came from reading `redata-production-app-1`, which is REData's
+container, not UrbanLens's. Re-checked 2026-09-15 by reading only `UL_SITE_URL` from each container on
+damballa, filtered on the host so no other variable left it: every `urbanlens_production_*` service
+that sets it has `urbanlens.org`, and every `urbanlens_staging_*` one has
+`https://staging.urbanlens.org`.
+
+**What the re-check found instead: production's value has no scheme.** `settings/base.py` used it
+verbatim, and request-less links are built as `f"{settings.SITE_URL.rstrip('/')}{path}"` - in
+`services/notifications/notification_delivery.py`, `services/visits/safety.py`,
+`services/messaging/direct_messages.py` and `services/profile/account_deletion.py` - so notification
+emails, safety alerts and account-deletion links came out as `urbanlens.org/...`, which most mail
+clients show as text rather than a link. `_origin_from_url` found no origin in it either, so the site
+URL contributed no trusted origin of its own. Production's deployed `base.py` still reads it verbatim.
+
+**Fixed in code.** `settings/base.py::_site_url_from_env` strips the value and prefixes `https://` to a
+bare host (`test_site_url_scheme.py`). That takes effect on production's next deploy; setting
+`UL_SITE_URL=https://urbanlens.org` on the host fixes it sooner and is the cleaner value either way.
+
+The same listing showed production running no `celery_worker_bulk`, `media_worker` or
+`media_worker_batch` container: it predates the D13 queue split and the sandbox workers, so deploying
+this branch there means creating those services, not only rebuilding images.
+
 ## RESOLVED 2026-09-14: `bun run codeql:gate` stayed red on triaged false positives, because nothing recorded a verdict
 
 `id: P112` · `status: fixed` · `resolved: 2026-09-14`
