@@ -280,12 +280,15 @@ def ensure_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool
     """
     if not created or instance.location_id is None or not instance.profile.community_enabled:
         return
+    from urbanlens.dashboard.services.core.celery import follow_on_queue
+
     location_id = instance.location_id
+    queue = follow_on_queue()
 
     def _run() -> None:
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import ensure_wiki_for_location
 
-        safely_enqueue_task(ensure_wiki_for_location, location_id)
+        safely_enqueue_task(ensure_wiki_for_location, location_id, queue=queue)
 
     transaction.on_commit(_run)

@@ -64,7 +64,7 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
     """
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import follow_on_queue, safely_enqueue_task
 
     location = Location.objects.filter(pk=location_id).first()
     if location is None:
@@ -73,7 +73,7 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
 
     wiki, created = Wiki.objects.get_or_create_for_location(location)
     if created:
-        safely_enqueue_task(enrich_wiki_location, wiki.pk)
+        safely_enqueue_task(enrich_wiki_location, wiki.pk, queue=follow_on_queue())
         from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
 
         seed_wiki_article_from_wikipedia(location)

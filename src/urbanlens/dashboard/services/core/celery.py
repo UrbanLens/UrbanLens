@@ -6,13 +6,34 @@ from dataclasses import dataclass
 import logging
 from typing import Any
 
-from celery import current_app
+from celery import current_app, current_task
 from celery.result import AsyncResult
 from kombu.exceptions import KombuError
+
+from urbanlens.dashboard.services.sandbox.queues import Queue
 
 logger = logging.getLogger(__name__)
 
 PROGRESS_STATE = "PROGRESS"
+
+#: Queues whose jobs are sized by what one account owns.
+_BATCH_QUEUES = frozenset({Queue.BULK, Queue.MAINTENANCE, Queue.SANDBOX_BATCH, Queue.DEFAULT})
+
+
+def follow_on_queue() -> str | None:
+    """The queue for work a model signal enqueues, given the task (if any) that caused the save.
+
+    A signal fires once per saved row, so an import queues its per-row work once per row. From inside a
+    batch job that work goes to ``bulk``, rather than to the interactive worker the safety check-ins share.
+
+    Returns:
+        ``Queue.BULK`` inside a task delivered from, or declared on, a batch queue; otherwise None, which
+        keeps the enqueued task's own queue.
+    """
+    if not current_task:
+        return None
+    delivered = (current_task.request.delivery_info or {}).get("routing_key")
+    return Queue.BULK if (delivered or getattr(current_task, "queue", None)) in _BATCH_QUEUES else None
 
 
 @dataclass(frozen=True, slots=True)

@@ -106,8 +106,8 @@ problems on its first run is a check somebody switches off.
 | `classify_trivia_submission` | INTERACTIVE | a player is waiting on the verdict |
 | `detect_dm_address_mentions` | INTERACTIVE | message is being read now |
 | `dispatch_native_push` | INTERACTIVE | a person is waiting for the notification |
-| `enrich_wiki_location` | INTERACTIVE | on-demand enrichment |
-| `ensure_wiki_for_location` | INTERACTIVE | on-demand |
+| `enrich_wiki_location` | INTERACTIVE | on-demand enrichment; bulk when queued from a batch task (`services/core/celery.py::follow_on_queue`, P109) |
+| `ensure_wiki_for_location` | INTERACTIVE | on-demand; bulk when queued from a batch task (`follow_on_queue`) |
 | `escalate_overdue_checkins` | INTERACTIVE | safety: someone is overdue and help is being notified |
 | `fetch_panel_source` | INTERACTIVE | feeds a progress UI; PANEL_FETCH already exists for this and is not used |
 | `fetch_recorded_weather` | INTERACTIVE | panel content |
@@ -120,14 +120,14 @@ problems on its first run is a check somebody switches off.
 | `refresh_pin_web_search` | INTERACTIVE | panel content |
 | `resolve_location_place_name` | INTERACTIVE | on-demand resolution |
 | `run_link_extraction` | INTERACTIVE | user just added the link |
-| `score_reputation_event` | INTERACTIVE | immediate feedback on an action |
+| `score_reputation_event` | INTERACTIVE | immediate feedback on an action; bulk when queued from a batch task (`follow_on_queue`) |
 | `send_direct_message_email_if_unread` | INTERACTIVE | notification delivery |
 | `send_direct_message_text_alerts_if_unread` | INTERACTIVE | notification delivery |
 | `send_due_checkin_reminders` | INTERACTIVE | safety: the reminder is the whole mechanism |
 | `send_final_checkin_warnings` | INTERACTIVE | safety: last warning before escalation |
 | `send_notification_text_alerts_if_unread` | INTERACTIVE | notification delivery |
 | `suggest_pin_category` | INTERACTIVE | feeds a suggestion the user is looking at |
-| `suggest_wiki_category` | INTERACTIVE | feeds a suggestion the user is looking at |
+| `suggest_wiki_category` | INTERACTIVE | feeds a suggestion the user is looking at; bulk when queued from a batch task (`follow_on_queue`) |
 | `warm_saved_filter_cache` | INTERACTIVE | user-facing latency |
 | `advance_pwyw_usage_ledgers` | MAINTENANCE | beat-driven and site-wide |
 | `archive_link_to_wayback` | MAINTENANCE | beat-driven and site-wide |

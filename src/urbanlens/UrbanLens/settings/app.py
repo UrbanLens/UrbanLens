@@ -238,8 +238,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ge=1,
         description=(
             "How many pin import previews the sandbox worker reads at once, site-wide; the rest wait their turn. "
-            "One preview may extract up to 2 GB, and media-worker reads two jobs at a time in 3 GB, so raising this "
-            "risks an OOM kill that takes a photo upload down with the preview."
+            "One preview holds an extracted entry of up to 1 GB plus whatever its parser builds from it, and "
+            "media-worker reads two jobs at a time in 3 GB, so raising this risks an OOM kill that takes a photo "
+            "upload down with the preview."
         ),
     )
     cache_breaker_seconds: float = Field(

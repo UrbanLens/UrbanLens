@@ -3604,11 +3604,15 @@ changed in the same breath, and that is an owner call across two repositories.
 
 See D11 for the Valkey split this sits inside; the chaos scenario is the reproduction.
 
-## P109 — One import's task fan-out fills the only Celery queue for hours, and a safety task waits behind it
+## P109 — One import's per-pin task fan-out is unbounded, and drains on the bulk queue behind every other account's jobs
 
-`id: P109` · `status: open` · `updated: 2026-09-10`
+`id: P109` · `status: open` · `updated: 2026-09-14`
 
-Importing **1,000 pins** left **2,644 tasks** on the default `celery` queue — about 2.6 tasks per
+Previously titled "One import's task fan-out fills the only Celery queue for hours, and a safety task
+waits behind it".
+
+**Measured 2026-09-10, before the queue classes (D13) existed.** Importing **1,000 pins** left
+**2,644 tasks** on the default `celery` queue — about 2.6 tasks per
 pin, from the `Pin` post_save signal chain. A 400-task sample of the queue:
 
 | tasks | name |
@@ -3642,18 +3646,36 @@ earlier was still resident and still draining. The user who ran the import saw a
 **Not a defect in `ensure_wiki_for_location` itself.** Wiki enrichment is community data about a
 `Location` rather than the importing user's own lookups, so it deliberately is not gated on that
 profile's `external_apis_enabled` — which is correct, and also why an integration account's
-cost protections do not cover it. The defect is that there is one queue, no class of service on it,
-and no bound on how much of it one action may occupy.
+cost protections do not cover it. The defect was one queue with no class of service on it, and is
+still that nothing bounds how much of a queue one action may occupy.
 
 Worth noting for the harness: `perf_seed.seed_heavy_account` uses `bulk_create` and so fires no
 signals at all — 20,000 seeded pins produce zero tasks. Every task counted above came from the
 import path. That is the right behaviour for a load fixture and it is why the seeded account is not
 also carrying a backlog.
 
-The fix is PL7 phase 6's queue classes: `interactive` / `bulk` / `maintenance` with separate workers,
-so an import's fan-out cannot delay a safety escalation, plus a bound on how many tasks one request
-may enqueue. Until then the mitigation is operational — an import of any size should be assumed to
-cost hours of background work on a shared queue.
+**Fixed 2026-09-14: the fan-out no longer shares a worker with the safety tasks.** D13 split the
+queue, but classed all four per-pin tasks - `ensure_wiki_for_location`, `enrich_wiki_location`,
+`suggest_wiki_category` and `score_reputation_event` - interactive: right for one pin somebody adds,
+wrong for a thousand an import adds, which still drained through `celery-worker`'s four slots beside
+`escalate_overdue_checkins`. The signals that queue them
+(`models/pin/signals.py::ensure_wiki_for_pin_location`,
+`models/wiki/signals.py::suggest_and_add_categories`, and the handlers
+`models/reputation/signals.py::_make_handler` builds) and `tasks.py::ensure_wiki_for_location` now
+pass `services/core/celery.py::follow_on_queue`. It answers `bulk` inside a task declared on or
+delivered from `bulk`, `maintenance`, `sandbox_batch` or `celery`, and otherwise keeps the task's own
+queue, so a pin added by hand or a photo processed on `sandbox` stays interactive. The queue is read
+when the signal fires rather than in its on-commit callback, and an `ensure_wiki_for_location` routed
+to bulk passes it on to `enrich_wiki_location` through its delivery routing key
+(`test_import_fanout_queue.py`). Not yet observed on a running stack.
+
+**Still open: nothing bounds the fan-out.** An import still queues about 2.6 tasks a pin. They now wait
+on `celery-worker-bulk` at concurrency 2, alongside every other account's bulk jobs, so a large import
+still costs hours of background work - charged to other people's exports and photo imports rather
+than to safety check-ins. `evaluate_achievements_for_profile` was already bulk, and
+`warm_saved_filter_cache` is queued per profile rather than per pin, so neither moved. Whether a batch
+should coalesce its per-pin work - one wiki pass over the import's locations rather than a task each -
+is the remaining design question.
 
 **Half of it is fixed for development, 2026-09-10.** `rate_limiter.outbound_calls_permitted` now
 refuses outbound provider calls on `development` and `local` deployments unless
@@ -3671,8 +3693,7 @@ Measured before and after, importing 50 pins on the same stack:
 | queue cleared | ~220 min (never observed to finish) | **under 60 s** |
 
 That does *not* fix the shape of the problem, and it does nothing for staging or production, where
-the calls are supposed to happen: one queue, no class of service, and one action able to fill it are
-all still true. What it removes is a development box quietly spending a real budget, and the
+the calls are supposed to happen: one action can still fill a queue. What it removes is a development box quietly spending a real budget, and the
 several-hour tail that made a dev stack unusable after any import.
 
 Two traps found while doing it, both recorded in

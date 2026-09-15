@@ -55,7 +55,7 @@ class PinEnsuresWikiSignalTests(SimpleTestCase):
             ensure_wiki_for_pin_location(sender=object, instance=_Pin(location_id=55), created=True)
             callbacks[0]()
 
-        enqueue.assert_called_once_with(ensure_wiki_for_location, 55)
+        enqueue.assert_called_once_with(ensure_wiki_for_location, 55, queue=None)
 
     def test_skips_when_not_newly_created(self) -> None:
         from urbanlens.dashboard.models.pin.signals import ensure_wiki_for_pin_location
@@ -96,7 +96,7 @@ class WikiCategorySignalTests(SimpleTestCase):
             suggest_and_add_categories(sender=object, instance=_Wiki(), created=True)
             callbacks[0]()
 
-        enqueue.assert_called_once_with(suggest_wiki_category, _Wiki.pk)
+        enqueue.assert_called_once_with(suggest_wiki_category, _Wiki.pk, queue=None)
 
     def test_skips_existing_wiki(self) -> None:
         with mock.patch("urbanlens.dashboard.models.wiki.signals.transaction.on_commit") as on_commit:

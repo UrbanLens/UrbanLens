@@ -18,11 +18,14 @@ def suggest_and_add_categories(sender: type[Wiki], instance: Wiki, created: bool
     """
     if not created:
         return
+    from urbanlens.dashboard.services.core.celery import follow_on_queue
+
+    queue = follow_on_queue()
 
     def _enqueue() -> None:
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import suggest_wiki_category
 
-        safely_enqueue_task(suggest_wiki_category, instance.pk)
+        safely_enqueue_task(suggest_wiki_category, instance.pk, queue=queue)
 
     transaction.on_commit(_enqueue)
