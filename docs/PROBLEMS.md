@@ -68,11 +68,12 @@ Left as-is rather than removed: a separate, not-yet-actioned note already flags 
 was surfacing inappropriate suggestions, e.g. a building's own parent parcel) - resolving that
 should also decide this route's fate rather than deleting it unilaterally here.
 
-## P5 — Dialog forms post every field and handlers save every column, so untouched values overwrite and re-attribute
+## P5 — Dialog forms still post every field; edit handlers write only the columns that changed, but submits are not dirty-only
 
-`id: P5` · `status: open` · `updated: 2026-09-14`
+`id: P5` · `status: open` · `updated: 2026-09-15`
 
-Previously titled "forms submit and save every field, not the ones that changed".
+Previously titled "Dialog forms post every field and handlers save every column, so untouched values
+overwrite and re-attribute", before that "forms submit and save every field, not the ones that changed".
 
 Surfaced by the concealment work, where it caused real data loss, but the concealment case is one
 instance of a general pattern and fixing that instance did not fix the pattern.
@@ -109,7 +110,7 @@ Two directions, and they compose: make submits dirty-only (the client knows what
 it can send only what differs), and make writes field-scoped. The second is the safety net for
 anything that still posts everything, and is the cheaper half to finish first.
 
-### Field-scoped writes, as of 2026-09-14
+### Field-scoped writes, as of 2026-09-15
 
 The 2026-08-25 count (28 files posting a full `FormData`, 23 bare `.save()` calls in `controllers/`,
 17 `form.save()` calls) was re-read call by call. The `form.save()` count overstated the gap: the
@@ -128,6 +129,10 @@ and the save, and it failed at each of these before they used `FieldSnapshot`:
 | `controllers/custom_layers.py::CustomLayerEditView.post` | a rename reverted a visibility toggle |
 | `controllers/detail_pins.py::DetailPinEditView.post` | the detail panel autosaves style changes, and each one reverted notes written in another tab |
 | `controllers/detail_pins.py::LocationWikiDetailPinEditView.post` | a restyle of a child wiki reverted another editor's description |
+| `controllers/site_admin.py::SiteAdminApiLimitsView.post` | saving a service's limits reverted the `last_call_at` the rate limiter writes on every call |
+| `controllers/boundary.py::WikiBoundaryView.post` | redrawing a community boundary reverted a generated boundary that landed meanwhile |
+| `controllers/site_admin_costs.py` (both edit views) | an edit reverted another admin's change to a field the form carried unchanged |
+| `controllers/notifications.py::NotificationPreferencesView.post` | the form carries every preference, so a save in one tab reverted a change made in another |
 
 `Pin.save` and `Wiki.save` both key their side effects on `update_fields`, and both still fire: a
 move carries `location`, so `Pin._sync_exposures_after_save` propagates exposures, and a rename
@@ -135,15 +140,14 @@ carries `name`, so aliases are synced. One behaviour is gone on purpose: `Wiki.s
 unset `place` only on a whole-row save, so a child wiki's style edit no longer does that as a side
 effect.
 
-**Still writing every column on an edit of an existing row:**
+**Still writing every column on an edit of an existing row:** `controllers/custom_fields.py`'s
+value save, on purpose. `CustomFieldValue.set_value` clears every typed column and sets one, so the
+row's columns are a single value between them; a scoped write could keep a concurrent writer's
+column beside the new one. The remaining bare saves in `controllers/` create new rows, where there
+is nothing to revert.
 
-- Whole-form edits, where the request sends every field the row has, so a scoped write changes
-  less: `controllers/notifications.py` (delivery preferences),
-  `controllers/site_admin_costs.py` (component and operating-cost edits),
-  `controllers/site_admin.py::SiteAdminApiLimitsView.post`, `controllers/boundary.py` (polygon) and
-  `controllers/custom_fields.py` (one value).
-
-The remaining bare saves in `controllers/` create new rows, where there is nothing to revert.
+What is left of this entry is the other direction: dirty-only submits, so a client stops asserting
+values the user never touched.
 
 A scoped write has one trap of its own, fixed in `models/abstract/model.py::PublicDashboardModel.save`:
 a row with no slug generates one on save, and a save naming its `update_fields` used to drop that

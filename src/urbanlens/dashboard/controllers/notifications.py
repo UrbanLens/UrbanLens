@@ -11,6 +11,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.abstract.field_snapshot import FieldSnapshot
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.services.core.pagination import get_page
@@ -254,6 +255,7 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
         # deliver to, so neither channel can be turned on server-side either, regardless of what a client sends.
         can_whatsapp = bool(profile.whatsapp_number)
         can_sms = bool(profile.phone_number)
+        snapshot = FieldSnapshot(prefs)
         for field, _ in _PREF_FIELDS:
             site = f"{field}__site" in request.POST
             email = f"{field}__email" in request.POST
@@ -268,7 +270,7 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
             setattr(prefs, field, value)
             setattr(prefs, f"{field}_whatsapp", can_whatsapp and f"{field}_whatsapp" in request.POST)
             setattr(prefs, f"{field}_sms", can_sms and f"{field}_sms" in request.POST)
-        prefs.save()
+        snapshot.save_changes()
         return self._render(request, profile, prefs, saved=True)
 
 

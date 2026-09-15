@@ -18,6 +18,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 
+from urbanlens.dashboard.models.abstract.field_snapshot import FieldSnapshot
 from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.admin.cost_tracking import (
@@ -178,12 +179,13 @@ class SiteAdminCostComponentEditView(_CostAdminMixin, View):
 
     def post(self, request: HttpRequest, component_id: int) -> HttpResponse:
         component = get_object_or_404(CostComponent, pk=component_id)
+        snapshot = FieldSnapshot(component)
         try:
             _apply_component_form(component, request)
         except ValidationError as exc:
             return render(request, _BODY_PARTIAL, _admin_context(component_form_errors=exc.message_dict), status=400)
 
-        component.save()
+        snapshot.save_changes()
         messages.success(request, f"Updated cost component “{component.name}”.")
         return _toast_response(request, level="success", message=f"Updated cost component “{component.name}”.")
 
@@ -215,12 +217,13 @@ class SiteAdminOperatingCostEditView(_CostAdminMixin, View):
 
     def post(self, request: HttpRequest, cost_id: int) -> HttpResponse:
         cost = get_object_or_404(OperatingCost, pk=cost_id)
+        snapshot = FieldSnapshot(cost)
         try:
             _apply_operating_cost_form(cost, request)
         except ValidationError as exc:
             return render(request, _BODY_PARTIAL, _admin_context(operating_form_errors=exc.message_dict), status=400)
 
-        cost.save()
+        snapshot.save_changes()
         messages.success(request, f"Updated operating cost “{cost.name}”.")
         return _toast_response(request, level="success", message=f"Updated operating cost “{cost.name}”.")
 

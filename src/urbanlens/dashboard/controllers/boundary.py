@@ -21,6 +21,7 @@ from django.http import HttpRequest, JsonResponse
 from django.views import View
 from rest_framework.viewsets import GenericViewSet
 
+from urbanlens.dashboard.models.abstract.field_snapshot import FieldSnapshot
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
 from urbanlens.dashboard.models.pin.model import Pin
@@ -263,12 +264,16 @@ class WikiBoundaryView(LoginRequiredMixin, View):
                     status=400,
                 )
 
+            snapshot = FieldSnapshot(row) if row is not None else None
             if row is None:
                 row = Boundary(wiki=wiki, location=location, boundary_type=boundary_type)
             row.polygon = geom
             if row.location_id != wiki.location_id:
                 row.location = wiki.location
-            row.save()
+            if snapshot is None:
+                row.save()
+            else:
+                snapshot.save_changes()
             new_wkt = geom.wkt
         else:
             if row is not None:

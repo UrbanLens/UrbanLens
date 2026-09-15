@@ -1084,8 +1084,9 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 return response
             return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=error")
 
+        snapshot = FieldSnapshot(cfg)
         self._apply_rate_limit_config(cfg, request.POST)
-        cfg.save()
+        snapshot.save_changes()
 
         if is_htmx:
             response = HttpResponse(status=204)
