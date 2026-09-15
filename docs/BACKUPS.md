@@ -9,7 +9,8 @@ round trip is re-runnable: `bin/verify_backup_restore.sh`.
 
 ## What is on disk
 
-`pg_dump -U <user> -h <host> -p <port> -w <db> -f <path>` - **plain SQL**, no `-Fc`, written to
+`pg_dump -U <user> -h <host> -p <port> -w --no-privileges <db> -f <path>`, run in `celery-worker-bulk`, so `<user>` is
+`ul_bulk`, which holds `pg_read_all_data` for the schemas the app never touches (R29) - **plain SQL**, no `-Fc`, written to
 `<backups_dir>/backup_<YYYYMMDD>_<HHMMSS>.sql`. The dump is written to a `.tmp` path and renamed
 only on success, so a dump killed mid-write leaves an obviously-partial file rather than a
 truncated one under a real backup name. Retention keeps `settings.backup_retention` files (30 in
@@ -27,16 +28,23 @@ bin/restore_backup.sh --list                                    # what is availa
 bin/restore_backup.sh backup_20260905_060200.sql my_scratch_db  # restore into a new database
 ```
 
-The script creates the target itself and refuses to touch the live database. By hand, from inside
-the **app** container - not the database container, and as a **superuser**:
+The script creates the target itself and refuses to touch the live database. It runs `psql` in the
+**app** container - not the database container - but as the database's **owner**, a superuser, whose
+credentials it reads from the db container. The app's own `ul_web` can neither create a database nor
+run the dump's `CREATE EXTENSION`. By hand, in the app container, with `UL_DB_USER` and `UL_DB_PASS`
+from the deployment's `.env`:
 
 ```bash
-export PGPASSWORD="$UL_DB_PASS"
-psql -U "$UL_DB_USER" -h "$UL_DB_HOST" -p "$UL_DB_PORT" -d postgres \
+export PGPASSWORD='<UL_DB_PASS from .env>'
+psql -U '<UL_DB_USER from .env>' -h "$UL_DB_HOST" -p "$UL_DB_PORT" -d postgres \
      -c "CREATE DATABASE restored TEMPLATE template0 ENCODING 'UTF8';"
-psql -U "$UL_DB_USER" -h "$UL_DB_HOST" -p "$UL_DB_PORT" -d restored \
+psql -U '<UL_DB_USER from .env>' -h "$UL_DB_HOST" -p "$UL_DB_PORT" -d restored \
      -v ON_ERROR_STOP=1 --single-transaction -f /app/src/backups/backup_20260905_060200.sql
 ```
+
+The dump carries no grants, so it restores into a cluster that has never had the tiers' roles. The
+restored tables are the owner's alone: no tier can read them until `db-setup` runs against that
+database, which every `docker compose up` does before starting one.
 
 `-h` and `-p` are not optional, and that is not pedantry: the app container runs no PostgreSQL of
 its own, so a bare `psql -U postgres` dies on `/var/run/postgresql/.s.PGSQL.5432: No such file or

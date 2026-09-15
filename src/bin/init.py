@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from enum import Enum
 import json
 import logging
 import os
@@ -15,6 +16,19 @@ logger = logging.getLogger(__name__)
 
 class UnrecoverableError(Exception):
     """Fatal error; results in sys.exit(1)."""
+
+
+class Mode(Enum):
+    """Which part of initialization one invocation performs."""
+
+    #: Build, migrate and serve, all as whoever the credentials name.
+    FULL = "full"
+    #: Build the frontend and collect static files; touches no database, so the image build can run it.
+    FRONTEND = "frontend"
+    #: Create and migrate the database and apply the per-tier roles; needs the owner's credentials.
+    DATABASE = "database"
+    #: Build the frontend and serve, against a database DATABASE has already prepared.
+    SERVE = "serve"
 
 
 def resolve_executable(name: str) -> str:
@@ -355,6 +369,24 @@ class DjangoProjectInitializer:
         """
         self.run_command(["python", "src/urbanlens/manage.py", "migrate"], "migrating db")
 
+    def apply_database_roles(self):
+        """Create or update the per-tier login roles; needs the owner's credentials.
+
+        Raises:
+            UnrecoverableError: if the roles cannot be applied.
+        """
+        self.run_command(["python", "src/urbanlens/manage.py", "apply_database_roles"], "applying database roles")
+
+    def setup_database(self):
+        """Everything that needs the owner: create the database, migrate it, and apply the per-tier roles.
+
+        Raises:
+            UnrecoverableError: if any step fails.
+        """
+        self.init_db()
+        self.run_migrations()
+        self.apply_database_roles()
+
     def run_command(
         self,
         command: list[str],
@@ -472,8 +504,11 @@ class DjangoProjectInitializer:
         ]
         return self.run_command(command, "checking database", raise_error=False)
 
-    def initialize_project(self):
+    def initialize_project(self, mode: Mode = Mode.FULL):
         """Initialize the project.
+
+        Args:
+            mode: Which part of initialization to perform.
 
         Raises:
             UnrecoverableError: if initialization fails.
@@ -489,15 +524,22 @@ class DjangoProjectInitializer:
             raise UnrecoverableError("SSH keys are not valid. Cannot initialize project.")
         self.clone_repo()
         """
+        if mode is Mode.FRONTEND:
+            self.build_frontend()
+            return
+        if mode is Mode.DATABASE:
+            self.setup_database()
+            return
+
         self.copy_sample_env()
 
         # Install and build the frontend
         # self.npm_init()
         self.build_frontend()
 
-        # Setup the DB
-        self.init_db()
-        self.run_migrations()
+        if mode is Mode.FULL:
+            self.init_db()
+            self.run_migrations()
 
         if not self.no_runserver:
             if self.environment == "development":
@@ -525,12 +567,30 @@ def main():
         help="Do not run the development server after migration",
     )
     parser.add_argument("--debug", "-v", action="store_true", help="Enable debug logging")
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--frontend-only",
         "-f",
-        action="store_true",
+        dest="mode",
+        action="store_const",
+        const=Mode.FRONTEND,
         help="Build the frontend and collect static files, then exit. Touches no database, so the image build can run it.",
     )
+    modes.add_argument(
+        "--db-only",
+        dest="mode",
+        action="store_const",
+        const=Mode.DATABASE,
+        help="Create and migrate the database and apply the per-tier Postgres roles, then exit. Needs the owner's credentials.",
+    )
+    modes.add_argument(
+        "--no-db",
+        dest="mode",
+        action="store_const",
+        const=Mode.SERVE,
+        help="Build the frontend and serve, leaving the database to a --db-only run.",
+    )
+    parser.set_defaults(mode=Mode.FULL)
     parser.add_argument(
         "--environment",
         "-e",
@@ -545,10 +605,7 @@ def main():
 
     try:
         initializer = DjangoProjectInitializer(no_runserver=args.no_runserver, environment=args.environment)
-        if args.frontend_only:
-            initializer.build_frontend()
-        else:
-            initializer.initialize_project()
+        initializer.initialize_project(args.mode)
     except KeyboardInterrupt:
         logger.info("Initialization cancelled.")
         sys.exit(0)

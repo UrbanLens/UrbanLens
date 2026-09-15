@@ -160,6 +160,8 @@ class DatabaseBackup:
             "-p",
             db_port,
             "-w",
+            # Grants are db-setup's to derive; a dumped GRANT to a role the target cluster lacks aborts the restore.
+            "--no-privileges",
             db_name,
             "-f",
             temp_path,

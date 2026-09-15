@@ -210,8 +210,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     process_role: str = Field(
         default="unspecified",
         description=(
-            "What this process is: web, websocket, worker, panels, beat, metrics, or sandbox. Set per service in "
-            "docker-compose.yml. Only 'sandbox' may hand untrusted uploaded bytes to a parser (Pillow, ffmpeg, "
+            "What this process is: web, websocket, worker, bulk, panels, sandbox, ai, inference, beat, metrics, or "
+            "setup. Set per service in docker-compose.yml, which also logs each in to Postgres as ul_<role>. "
+            "Only 'sandbox' may hand untrusted uploaded bytes to a parser (Pillow, ffmpeg, "
             "LibreOffice, GDAL, zipfile); see UL_UNTRUSTED_PARSE_POLICY."
         ),
     )
@@ -526,6 +527,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "serves only /ws/, so its HTTP metrics would be empty). Enabling this in staging or "
             "production without UL_METRICS_TOKEN or UL_METRICS_ALLOWED_CIDRS is a startup error - see "
             "dashboard.checks.check_metrics_endpoint_is_guarded."
+        ),
+    )
+    db_app_pass: str = Field(
+        default="",
+        description=(
+            "Password for the per-tier Postgres login roles (ul_web, ul_sandbox, ...) that db-setup creates. Distinct "
+            "from UL_DB_PASS, the owner's, so no serving tier holds superuser credentials. Unset falls back to "
+            "UL_DB_PASS outside production; in production db-setup refuses to run without it."
         ),
     )
     metrics_token: str = Field(

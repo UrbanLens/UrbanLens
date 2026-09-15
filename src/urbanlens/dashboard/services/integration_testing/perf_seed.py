@@ -246,10 +246,16 @@ def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> l
 def _analyze() -> bool:
     """Refresh planner statistics for the tables the seed wrote to.
 
+    Only the tables' owner may, and Postgres skips anyone else with a warning rather than an error, so a
+    per-tier login role would otherwise report a refresh that never happened.
+
     Returns:
         Whether it ran."""
     if connection.vendor != "postgresql":
         return False
     with connection.cursor() as cursor:
+        cursor.execute("SELECT bool_and(pg_has_role(relowner, 'USAGE')) FROM pg_class WHERE oid = ANY(%s::regclass[])", [list(_ANALYZED_TABLES)])
+        if cursor.fetchone() != (True,):
+            return False
         cursor.execute("ANALYZE " + ", ".join(f'"{table}"' for table in _ANALYZED_TABLES))
     return True

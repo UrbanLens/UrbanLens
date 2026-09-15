@@ -2483,58 +2483,6 @@ observation, downgraded from a hazard.
 
 Not fixed. Not measured this session.
 
-## P104 — Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage
-
-`id: P104` · `status: open` · `updated: 2026-09-10`
-
-See R28 (`docs/notes/wsgi-worker-model-and-connections.md`) for the WSGI-worker-model history this
-sits alongside - that reference frames a decision still open; this records a defect already proven
-live.
-
-No `cpu_shares`, `cpuset`, or reservation exists anywhere in `docker-compose.yml` - every service's
-`cpus:` is a CFS *ceiling*, not a floor, and the ceilings sum to ~20.75 CPU across `app` (2,
-`docker-compose.yml:325`), `app-ws` (1, `:411`), `nginx` (2, `:458`), `media-nginx` (2, `:518`),
-`db` (2, `:564`), `celery-worker` (2, `:618`), `celery-worker-panels` (1, `:668`), `media-worker`
-(2, `:734`), `media-worker-batch` (1, `:766`), `celery-beat` (0.5, `:808`), `celery-metrics` (0.5,
-`:867`), `clamav` (2, `:903`), `valkey` (1, `:951`), `egress-proxy` (0.25, `:997`), `ai-inference`
-(0.5, `:1082`), `ai-worker` (1, `:1150`). A CPU limit on Celery would not have prevented the
-incident below, because CPU was never the shared, exhaustible resource - **Postgres connections
-are**: `max_connections` is the stock 100 (no override anywhere in the tree - confirmed via the
-`db` service's environment block, `docker-compose.yml:544-546`, and `settings/base.py`),
-`CONN_MAX_AGE=0` (`settings/base.py:272`), there is no connection pooler anywhere in the tree, and
-every container connects as the same `POSTGRES_USER` role (`docker-compose.yml:544`), so there is
-no per-role cap even in principle. `docker-compose.yml`'s own comment on the `db` service
-(`:560-563`) estimates "~25-30 simultaneous backends" against `WEB_CONCURRENCY` gunicorn workers
-plus daphne plus both Celery workers; the web tier is additionally unbounded on top of that because
-gevent's per-worker greenlet count is not itself capped by `WEB_CONCURRENCY` (that variable sets
-*worker process* count, not concurrent-request count within a worker).
-
-**This already happened**: an 11-hour production outage with the database reporting 97/100
-connections idle and 3,360 `FATAL: sorry, too many clients already` (Postgres error 53300) events
-logged. Not re-investigated this session for the incident's own postmortem/timeline - recorded here
-as the evidence that the connection ceiling, not CPU, is the resource that actually ran out.
-
-**Half of it is measured as fixed, 2026-09-10.** This entry names the web tier's unbounded greenlet
-count as what makes the demand "additionally unbounded" on top of the ~25-30 estimate. That is now
-bounded and the bound was measured, not assumed: under a 60-user filter storm on a staging-model
-environment, Postgres peaked at **61/100 backends, 60 of them `urbanlens-web`, 0% idle** — exactly
-`--worker-connections 20 × 3 workers`, to the connection (X15). The same work on the unbounded
-development server reached 75. The web tier can no longer be the thing that fills the pool.
-
-`cpu_shares` weights landed at the same time, which this entry correctly says would not have
-prevented the incident; they are there for a different reason and are not a fix for this.
-
-**Still not fixed, and the entry's conclusion stands for the rest:** there is no pooler, no per-role
-`CONNECTION LIMIT`, and every container still connects as the same role, so the remaining ~40 slots
-are shared by daphne, four Celery workers, beat and the AI tier with no budget between them. One of
-them can still starve another; the web tier just is not the one doing it any more.
-
-**And the outage's own shape has not been reproduced.** The chaos run that tried (X16) held slots as
-an external superuser rather than as the application's own role, so the app's existing connections
-were never the ones taken and it kept serving at 100/100. `chaos.py`'s `connection-exhaustion`
-scenario holds them *as the application's role*, which is the faithful version; it could not be run
-because that tool cannot dispatch (N20).
-
 ## P105 — A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict
 
 `id: P105` · `status: open` · `updated: 2026-09-13`

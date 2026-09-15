@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P122` · `T3` · `PL8` · `D15` · `X18` · `I5` · `R29` · `N23`
+**Next free id:** `P122` · `T3` · `PL8` · `D15` · `X18` · `I5` · `R30` · `N24`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -85,7 +85,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P92 | open | 2026-09-08 | `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P95 | open | 2026-09-14 | One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P104 | open | 2026-09-10 | Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P105 | open | 2026-09-13 | A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P109 | open | 2026-09-14 | One import's per-pin task fan-out is unbounded, and drains on the bulk queue behind every other account's jobs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P110 | open | 2026-09-14 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -102,7 +101,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | D8 | accepted | 2026-09-06 | Storage quotas are enforced generally, not exactly: an over-quota profile keeps its assets and is barred from uploading more | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
 | D9 | accepted | 2026-09-07 | A moderator's removal costs reputation slightly and reversibly - a per-event weight, not the binary retraction | [`docs/designs/reputation-removal-weighting.md`](designs/reputation-removal-weighting.md) |
 | D10 | accepted | 2026-09-08 | A block's incident history is its own paid flag, not `NEARBY_RESEARCH` - it is a distinct pricing lever, not a variant of one | [`docs/designs/incident-history-feature-gate.md`](designs/incident-history-feature-gate.md) |
-| D11 | accepted | 2026-09-10 | One user's expensive request must be unable to reach another user's request, and the way to guarantee that is bounded pools with named budgets | [`docs/designs/request-isolation-and-connection-budget.md`](designs/request-isolation-and-connection-budget.md) |
+| D11 | accepted | 2026-09-15 | One user's expensive request must be unable to reach another user's request, and the way to guarantee that is bounded pools with named budgets | [`docs/designs/request-isolation-and-connection-budget.md`](designs/request-isolation-and-connection-budget.md) |
 | D12 | accepted | 2026-09-11 | The map cache becomes an accelerator the site can lose, and labels stop being copied into every pin; built, with the delta and viewport mode deferred | [`docs/designs/map-data-contract-v11.md`](designs/map-data-contract-v11.md) |
 | D13 | accepted | 2026-09-11 | Celery queue classes: one account's big job must not delay everyone's small ones | [`docs/designs/celery-queue-classes.md`](designs/celery-queue-classes.md) |
 | D14 | accepted | 2026-09-12 | A shared service budget is divided by who is actually competing for it, not by the user count | [`docs/designs/external-api-fair-share.md`](designs/external-api-fair-share.md) |
@@ -155,6 +154,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | R26 | current | 2026-09-05 | Restoring these plain-SQL dumps needs an empty target and psql from the app container; round trip verified | [`docs/BACKUPS.md`](BACKUPS.md) |
 | R27 | current | 2026-09-10 | The map payload's cost was 88% Python object construction, not SQL; the fix is query- and allocation-flat | [`docs/MAP_PERFORMANCE.md`](MAP_PERFORMANCE.md) |
 | R28 | current | 2026-09-10 | The WSGI tier runs gevent with no recorded rationale, contradicting reasoning the project applied everywhere else it chose a worker model | [`docs/notes/wsgi-worker-model-and-connections.md`](notes/wsgi-worker-model-and-connections.md) |
+| R29 | current | 2026-09-15 | Every tier logs in as its own capped Postgres role, and only db-setup holds the owner | [`docs/notes/database-roles.md`](notes/database-roles.md) |
 | N1 | stale | 2026-09-03 | The Celery requeue loop was a two-request DoS; fixed, and the durable version now lives in NOTES.md | [`docs/archive/NOTES-celery-acks.md`](archive/NOTES-celery-acks.md) |
 | N2 | current | 2026-08-27 | 82 ways a gated wiki gives itself away collapse to eleven classes and three viewer-less chokepoints | [`docs/designs/reputation-gating-tells.md`](designs/reputation-gating-tells.md) |
 | N3 | stale | 2026-08-27 | A 631-chunk audit log whose fixes landed and whose open items were refiled into docs/PROBLEMS.md | [`docs/reports/2026-08-11-codebase-audit.md`](reports/2026-08-11-codebase-audit.md) |
@@ -177,3 +177,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N20 | current | 2026-09-10 | The neighbour test runs, and what it measured changes what staging should expect | [`docs/handoffs/infrastructure-neighbour-test-results.md`](handoffs/infrastructure-neighbour-test-results.md) |
 | N21 | current | 2026-09-11 | The availability audit of 2026-09-11, and what it found | [`docs/notes/availability-audit-2026-09-11.md`](notes/availability-audit-2026-09-11.md) |
 | N22 | current | 2026-09-12 | Staging crash-looped on an nginx config three tests called correct, and its logs held five more defects | [`docs/notes/staging-boot-log-findings-2026-09-12.md`](notes/staging-boot-log-findings-2026-09-12.md) |
+| N23 | current | 2026-09-15 | Ask: staging and production need `UL_DB_APP_PASS` before their next deploy, and k8s needs the per-tier roles | [`docs/handoffs/infrastructure-per-tier-database-roles.md`](handoffs/infrastructure-per-tier-database-roles.md) |

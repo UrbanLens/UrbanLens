@@ -204,6 +204,7 @@ DATABASES = {
         "TEST": {"NAME": os.getenv("UL_TEST_DB_NAME") or None},
     },
 }
+UL_DB_APP_PASS = _app_settings.db_app_pass
 # Valkey/Redis for pin payloads and Django cache when configured.
 VALKEY_URL = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
 if VALKEY_URL:

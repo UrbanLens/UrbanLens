@@ -13,10 +13,12 @@
 #
 # Environment:
 #   UL_APP_CONTAINER   app container name (default urbanlens_development_main_app)
+#   UL_DB_CONTAINER    database container, whose owner this runs as (default: the app's name, _app -> _db)
 
 set -euo pipefail
 
 CONTAINER="${UL_APP_CONTAINER:-urbanlens_development_main_app}"
+DB_CONTAINER="${UL_DB_CONTAINER:-${CONTAINER%_app}_db}"
 KEEP=0
 [ "${1:-}" = "--keep" ] && KEEP=1
 
@@ -31,15 +33,18 @@ die() { echo "error: $*" >&2; exit 1; }
 
 docker inspect "$CONTAINER" >/dev/null 2>&1 \
     || die "container '$CONTAINER' not found. Set UL_APP_CONTAINER or start the stack."
+docker inspect "$DB_CONTAINER" >/dev/null 2>&1 \
+    || die "container '$DB_CONTAINER' not found; this runs as the owner it was created with. Set UL_DB_CONTAINER."
 
-DB_USER=$(docker exec "$CONTAINER" printenv UL_DB_USER)
+# The app logs in as ul_web, which can neither create the scratch databases nor restore a dump's extensions.
+DB_USER=$(docker exec "$DB_CONTAINER" printenv POSTGRES_USER)
 DB_HOST=$(docker exec "$CONTAINER" printenv UL_DB_HOST)
 DB_PORT=$(docker exec "$CONTAINER" printenv UL_DB_PORT)
 LIVE_DB=$(docker exec "$CONTAINER" printenv UL_DB_NAME)
 
-# Password stays in the container env, never in the host process table.
-# shellcheck disable=SC2016  # the single quotes are the point: $UL_DB_PASS expands in the container, not here
-pg() { docker exec "$CONTAINER" sh -c 'export PGPASSWORD="$UL_DB_PASS"; exec "$@"' _ "$@"; }
+# The owner's password crosses from one container to the other over a pipe, never into a process table.
+# shellcheck disable=SC2016  # the single quotes are the point: PGPASSWORD is read in the container, not here
+pg() { docker exec "$DB_CONTAINER" printenv POSTGRES_PASSWORD | docker exec -i "$CONTAINER" sh -c 'IFS= read -r PGPASSWORD; export PGPASSWORD; exec "$@"' _ "$@"; }
 psql_t() { pg psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$@"; }
 
 cleanup() {

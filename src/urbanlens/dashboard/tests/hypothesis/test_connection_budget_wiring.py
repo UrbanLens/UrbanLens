@@ -9,6 +9,7 @@ import re
 import yaml
 
 from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.dashboard.services.core.database_roles import REQUEST_DEADLINE_SECONDS, declared_roles
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
@@ -17,6 +18,9 @@ GEVENT_DEFAULT_WORKER_CONNECTIONS = 1000
 
 #: `max_connections` (100) less `superuser_reserved_connections` (3).
 USABLE_CONNECTIONS = 97
+
+#: The services given the owner's credentials: the one-shot setup job, and the test stack against its own database.
+OWNER_SERVICES = frozenset({"db-setup", "test-runner"})
 
 
 def _start_command() -> str:
@@ -28,6 +32,32 @@ def _start_command() -> str:
 def _compose() -> dict:
     """The compose file, parsed."""
     return yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
+
+
+def _environment(service: dict) -> dict[str, str]:
+    """A service's environment as a mapping, in whichever form compose was given it."""
+    environment = service.get("environment") or {}
+    if isinstance(environment, list):
+        return dict(entry.split("=", 1) for entry in environment)
+    return {key: str(value) for key, value in environment.items()}
+
+
+def _command(service: dict) -> str:
+    command = service.get("command") or ""
+    return command if isinstance(command, str) else " ".join(command)
+
+
+def _tier_services() -> dict[str, dict]:
+    """Every service that reaches the application database as one of the per-tier roles."""
+    return {
+        name: service
+        for name, service in _compose()["services"].items()
+        if "UL_DB_HOST" in _environment(service) and name not in OWNER_SERVICES
+    }
+
+
+def _limits() -> dict[str, int]:
+    return {role.process_role: role.connection_limit for role in declared_roles()}
 
 
 class TheGreenletPopulationIsBoundedTests(SimpleTestCase):
@@ -45,33 +75,114 @@ class TheGreenletPopulationIsBoundedTests(SimpleTestCase):
             f"{GEVENT_DEFAULT_WORKER_CONNECTIONS} greenlets per worker; the start command must cap it",
         )
 
-    def test_the_cap_leaves_room_for_every_other_container(self) -> None:
-        """The web tier is not the only thing connecting to this database.
+    def test_the_web_tier_fits_inside_its_role_with_room_to_spare(self) -> None:
+        """Arithmetic rather than a hardcoded expectation, so raising WEB_CONCURRENCY or the cap fails here.
 
-        Deliberately arithmetic rather than a hardcoded expectation, so that raising WEB_CONCURRENCY or the
-        per-worker cap fails here instead of in production."""
+        Strictly under: timeout_utils' executor threads connect separately from the greenlet they serve."""
         command = _start_command()
         match = re.search(r"--worker-connections\s+(\d+)", command)
         self.assertIsNotNone(match, f"could not read --worker-connections out of {command!r}")
         assert match is not None
         per_worker = int(match.group(1))
+        workers = int(str(_compose()["x-app-env"]["WEB_CONCURRENCY"]).split(":-")[-1].rstrip("}"))
 
-        compose = _compose()
-        web_concurrency = compose["x-app-env"]["WEB_CONCURRENCY"] if "x-app-env" in compose else None
-        workers = int(str(web_concurrency).split(":-")[-1].rstrip("}")) if web_concurrency else 3
-
-        non_web_allowance = 32
-        demanded = per_worker * workers
-        self.assertLessEqual(
-            demanded + non_web_allowance,
-            USABLE_CONNECTIONS,
-            f"{workers} workers x {per_worker} greenlets = {demanded} connections, and about "
-            f"{non_web_allowance} more belong to daphne, the Celery workers and beat - over the "
-            f"{USABLE_CONNECTIONS} a stock Postgres leaves for non-superusers",
+        self.assertLess(
+            per_worker * workers,
+            _limits()["web"],
+            f"{workers} workers x {per_worker} greenlets reaches ul_web's connection limit, so ordinary load would fail requests",
         )
 
     def test_overflow_queues_rather_than_connecting(self) -> None:
         self.assertIn("--backlog", _start_command())
+
+
+class EveryTierHasItsOwnConnectionBudgetTests(SimpleTestCase):
+    """A tier that exhausts its role's limit fails its own connections, and nobody else's."""
+
+    def test_every_service_that_reaches_the_database_logs_in_as_its_own_tier(self) -> None:
+        limits = _limits()
+        for name, service in _tier_services().items():
+            environment = _environment(service)
+            role = environment.get("UL_PROCESS_ROLE")
+            with self.subTest(service=name):
+                self.assertEqual(
+                    environment.get("UL_DB_USER"),
+                    f"ul_{role}",
+                    "a tier logging in as another tier's role spends that tier's budget",
+                )
+                self.assertIn(
+                    role, limits, "no DatabaseRole declares this tier, so db-setup never creates its login role"
+                )
+
+    def test_no_tier_is_given_the_owners_password(self) -> None:
+        for name, service in _tier_services().items():
+            with self.subTest(service=name):
+                self.assertTrue(
+                    _environment(service)["UL_DB_PASS"].startswith("${UL_DB_APP_PASS"),
+                    "the owner is a superuser; a tier holding its password can bypass every limit here",
+                )
+
+    def test_only_db_setup_and_the_test_stack_hold_the_owner(self) -> None:
+        services = _compose()["services"]
+        for name in OWNER_SERVICES:
+            environment = _environment(services[name])
+            with self.subTest(service=name):
+                self.assertTrue(environment["UL_DB_USER"].startswith("${UL_DB_USER"))
+                self.assertTrue(environment["UL_DB_PASS"].startswith("${UL_DB_PASS"))
+
+    def test_every_tier_waits_for_its_role_to_exist(self) -> None:
+        for name, service in _tier_services().items():
+            with self.subTest(service=name):
+                condition = ((service.get("depends_on") or {}).get("db-setup") or {}).get("condition")
+                self.assertEqual(
+                    condition,
+                    "service_completed_successfully",
+                    "started before db-setup, it may log in as a role that does not exist yet",
+                )
+
+    def test_db_setup_does_the_owners_work_once_and_the_app_none_of_it(self) -> None:
+        services = _compose()["services"]
+        self.assertIn("--db-only", _command(services["db-setup"]))
+        self.assertEqual(services["db-setup"].get("restart"), "no")
+        self.assertIn(
+            "--no-db", _command(services["app"]), "ul_web cannot migrate, so an app that tried would never start"
+        )
+
+    def test_each_tiers_concurrency_fits_inside_its_limit(self) -> None:
+        """A Celery container needs its pool plus its parent; daphne, beat and the exporter need one each."""
+        demand: dict[str, int] = {}
+        for name, service in _tier_services().items():
+            if name == "app":
+                continue
+            role = _environment(service)["UL_PROCESS_ROLE"]
+            concurrency = re.search(r"--concurrency[= ](\d+)", _command(service))
+            demand[role] = demand.get(role, 0) + (int(concurrency.group(1)) + 1 if concurrency else 1)
+
+        limits = _limits()
+        for role, needed in demand.items():
+            with self.subTest(role=role):
+                self.assertLessEqual(
+                    needed,
+                    limits[role],
+                    f"{role}'s containers can open {needed} connections against a limit of {limits[role]}",
+                )
+
+    def test_the_limits_fit_inside_a_stock_postgres(self) -> None:
+        """db-setup checks the live server too; this fails before a deploy rather than during one."""
+        total = sum(_limits().values())
+        self.assertLessEqual(
+            total,
+            USABLE_CONNECTIONS,
+            f"role limits sum to {total}, over the {USABLE_CONNECTIONS} a stock Postgres accepts from non-superusers",
+        )
+
+    def test_the_request_deadline_is_nginxs(self) -> None:
+        """A statement still running after nginx gave up on its request has nobody to answer."""
+        conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf").read_text()
+        match = re.search(r"location / \{\s*proxy_read_timeout (\d+)s;", conf)
+        self.assertIsNotNone(match, "could not read the app location's proxy_read_timeout")
+        assert match is not None
+        self.assertEqual(int(match.group(1)), REQUEST_DEADLINE_SECONDS)
 
 
 class TheMetricsExporterIsGatedTests(SimpleTestCase):
@@ -109,7 +220,7 @@ class TheProxyLogCanExplainATimeoutTests(SimpleTestCase):
 
 
 class TheDatabaseSaysWhoIsConnectedTests(SimpleTestCase):
-    """`pg_stat_activity` could not name the tier holding the connections."""
+    """`pg_stat_activity` should name the process, not only the login role."""
 
     def test_connections_are_labelled_with_the_process_role(self) -> None:
         base = (REPO_ROOT / "src/urbanlens/UrbanLens/settings/base.py").read_text()
@@ -117,8 +228,8 @@ class TheDatabaseSaysWhoIsConnectedTests(SimpleTestCase):
         self.assertIn(
             "application_name",
             base,
-            "every container connects as the same role, so without application_name nothing "
-            "records which tier held the connections when the pool was exhausted",
+            "db-setup and the test stack both log in as the owner, so without application_name "
+            "pg_stat_activity cannot say which of them holds a connection",
         )
         self.assertIn("UL_PROCESS_ROLE", base)
 
@@ -130,6 +241,8 @@ class TheDatabaseSaysWhoIsConnectedTests(SimpleTestCase):
         from django.conf import settings
 
         options = settings.DATABASES["default"]["OPTIONS"]
+        if not isinstance(options, dict):
+            self.fail(f"DATABASES['default']['OPTIONS'] is a {type(options).__name__}, not a dict")
         self.assertIn("application_name", options)
         self.assertTrue(
             str(options["application_name"]).startswith("urbanlens-"),

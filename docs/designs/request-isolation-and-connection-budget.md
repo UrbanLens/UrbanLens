@@ -125,15 +125,19 @@ object still alive in some process. Every container connects as the same superus
 could not say which tier held them, and the 3 reserved slots protected nothing — the superuser is
 what the app connects as.
 
-Ten login roles inheriting one grant-holding group, with limits summing to 73 of 97 usable
-(`ul_web` 20, `ul_panels` 20, `ul_web_heavy` 6, `ul_worker` 6, `ul_ws`/`ul_bulk`/`ul_maintenance`/
-`ul_sandbox` 4, `ul_ai` 3, `ul_beat` 2), plus `statement_timeout`,
-`idle_in_transaction_session_timeout`, `idle_session_timeout` and `lock_timeout` per role via
-`ALTER ROLE ... SET`. Applied by an idempotent one-shot compose service on every `up`, so changing a
-budget is a config edit; not `initdb` (runs only on an empty volume, so it can never reach the live
-one) and not a migration (migrations run as the app role and cannot `CREATE ROLE`, and passwords do
-not belong in migration history). Migrations keep the owner role, so no `statement_timeout` ever
-applies to one.
+One login role per process tier, inheriting table privileges from one group, each with a
+`CONNECTION LIMIT` and a `statement_timeout` and `idle_in_transaction_session_timeout` set by
+`ALTER ROLE ... SET`. An idempotent one-shot compose service applies them on every `up`, so changing a
+budget is an edit to one registry. Not `initdb`, which runs only on an empty volume and so can never
+reach the live one. Not a migration either: passwords do not belong in migration history, and creating
+roles needs the superuser that no serving tier may be. Migrations keep the owner role, so no
+`statement_timeout` ever applies to one.
+
+Built 2026-09-15 as R29, with three departures from the sketch this section first held:
+- **Nine roles, not ten.** `ul_web_heavy` and `ul_maintenance` have no container of their own yet.
+- **Limits sum to all 97 usable slots, not 73.** The owner is a superuser and keeps the 3 reserved.
+- **No `idle_session_timeout` or `lock_timeout`.** `CONN_MAX_AGE=0` already closes idle sessions, and
+  `statement_timeout` bounds a lock wait.
 
 `max_connections` stays at 100. Raising it is a false comfort: PGPROC memory is trivial but each
 backend can allocate `work_mem` per sort or hash node on top of a several-MB baseline, and the `db`

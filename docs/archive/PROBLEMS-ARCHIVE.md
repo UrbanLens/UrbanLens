@@ -11,6 +11,40 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-15: every container connected as the superuser, so any tier could take every Postgres connection
+
+`id: P104` · `status: fixed` · `resolved: 2026-09-15`
+
+Previously titled "Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an
+11-hour outage".
+
+**The defect.** An 11-hour production outage read 97/100 connections held and logged 3,360
+`FATAL: sorry, too many clients already`. 97 is exactly what Postgres leaves for non-superusers. Every container
+connected as the one superuser, so:
+- any tier could take every slot;
+- the three reserved slots protected nothing;
+- `pg_stat_activity` could not say who held the connections.
+
+CPU limits were never the lever, because connections were the resource that ran out.
+
+**Fixed in two halves.**
+- **2026-09-10: the web tier.** `--worker-connections` bounded its greenlets, measured at exactly 60 backends under a
+  filter storm (X15), and `application_name` now labels each tier.
+- **2026-09-15: every tier.** Each logs in as its own `ul_<process role>`, with a `CONNECTION LIMIT` and deadlines;
+  the limits sum to the 97 slots. Only a one-shot `db-setup` service holds the owner's credentials (R29). A tier
+  at its limit now fails only its own connections, and the superuser's reserved slots are real again.
+
+Tests: `test_database_roles.py` checks the applied roles, and `test_connection_budget_wiring.py` checks that every
+compose service logs in as its own tier, fits inside its limit, and starts after `db-setup`. On `development_main`
+every tier started as its own role, and the backup ran as `ul_bulk`. The backup now dumps without grants, so it
+still restores into a cluster that has never had these roles (R29).
+
+**What it is not.**
+- **Not a pooler.** Connections are bounded and attributed, not reused; pgbouncer stays deferred on D11's triggers.
+- **Not load-tested.** The limits come from configured concurrency. The outage's own shape, with slots held as the
+  application's role, has still not been run against them; X16 held them as a superuser instead (N20).
+- **Not on k8s.** The k8s deployments still connect as the owner (N23).
+
 ## RESOLVED 2026-09-15: a group message could be sent under a key version a former member still holds
 
 `id: P26` · `status: fixed` · `resolved: 2026-09-15`

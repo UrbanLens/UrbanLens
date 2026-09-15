@@ -17,10 +17,12 @@
 #
 # Environment:
 #   UL_APP_CONTAINER   app container name (default urbanlens_development_main_app)
+#   UL_DB_CONTAINER    database container, whose owner the restore runs as (default: the app's name, _app -> _db)
 
 set -euo pipefail
 
 CONTAINER="${UL_APP_CONTAINER:-urbanlens_development_main_app}"
+DB_CONTAINER="${UL_DB_CONTAINER:-${CONTAINER%_app}_db}"
 BACKUP_DIR=/app/src/backups
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -78,7 +80,10 @@ else
         || die "'$BACKUP' is neither a file on this host nor a name in $BACKUP_DIR. Try --list."
 fi
 
-DB_USER=$(in_app "$CONTAINER" printenv UL_DB_USER)
+# The app logs in as ul_web, which can neither create a database nor run the dump's CREATE EXTENSION.
+docker inspect "$DB_CONTAINER" >/dev/null 2>&1 \
+    || die "container '$DB_CONTAINER' not found; the restore runs as the owner it was created with. Set UL_DB_CONTAINER."
+DB_USER=$(docker exec "$DB_CONTAINER" printenv POSTGRES_USER)
 DB_HOST=$(in_app "$CONTAINER" printenv UL_DB_HOST)
 DB_PORT=$(in_app "$CONTAINER" printenv UL_DB_PORT)
 LIVE_DB=$(in_app "$CONTAINER" printenv UL_DB_NAME)
@@ -88,12 +93,13 @@ LIVE_DB=$(in_app "$CONTAINER" printenv UL_DB_NAME)
 [ "$TARGET" != "$LIVE_DB" ] \
     || die "'$TARGET' is the live database this deployment serves. Restore into a scratch database and cut over deliberately - see docs/BACKUPS.md."
 
-# Read the password inside the container so it never appears in the host process table.
+# The owner's password crosses from one container to the other over a pipe, never into a process table.
 # `shift`, not "${@:4}": the container's /bin/sh is dash.
 psql_t() {
-    # shellcheck disable=SC2016  # the single quotes are the point: $UL_DB_PASS expands in the container, not here
-    in_app "$CONTAINER" sh -c 'export PGPASSWORD="$UL_DB_PASS"; u=$1; h=$2; p=$3; shift 3; exec psql -U "$u" -h "$h" -p "$p" "$@"' \
-        _ "$DB_USER" "$DB_HOST" "$DB_PORT" "$@"
+    # shellcheck disable=SC2016  # the single quotes are the point: PGPASSWORD is read in the container, not here
+    docker exec "$DB_CONTAINER" printenv POSTGRES_PASSWORD \
+        | in_app -i "$CONTAINER" sh -c 'IFS= read -r PGPASSWORD; export PGPASSWORD; u=$1; h=$2; p=$3; shift 3; exec psql -U "$u" -h "$h" -p "$p" "$@"' \
+            _ "$DB_USER" "$DB_HOST" "$DB_PORT" "$@"
 }
 
 # Dump's CREATE EXTENSION needs a superuser; fail fast rather than mid-restore.
