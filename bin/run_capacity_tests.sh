@@ -117,6 +117,7 @@ if [[ -z "${OUT_DIR}" ]]; then
 	OUT_DIR="${SUITE_DIR}/results/capacity-$(date -u +%Y%m%dT%H%M%SZ)"
 fi
 mkdir -p "${OUT_DIR}"
+OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 echo "==> results in ${OUT_DIR}"
 
 # -- population --------------------------------------------------------------
