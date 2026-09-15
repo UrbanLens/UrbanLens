@@ -275,6 +275,45 @@ def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
     return {"show_messages_icon": False, "e2ee_needs_oauth_enroll": False}
 
 
+@deferred("nav_unread_messages")
+def add_unread_messages_badge(request: HttpRequest) -> dict[str, int]:
+    """The header's unread-conversations count, rendered with the page rather than fetched after it."""
+    if isinstance(request.user, User):
+        try:
+            from urbanlens.dashboard.services.messaging.direct_messages import unread_conversation_total
+
+            return {"nav_unread_messages": unread_conversation_total(request.user.profile)}
+        except (AttributeError, DatabaseError):
+            pass
+    return {"nav_unread_messages": 0}
+
+
+@deferred("nav_unread_notifications")
+def add_unread_notifications_badge(request: HttpRequest) -> dict[str, int]:
+    """The header's unread-notifications count, rendered with the page rather than fetched after it."""
+    if isinstance(request.user, User):
+        try:
+            from urbanlens.dashboard.services.notifications.notification_center import unread_count
+
+            return {"nav_unread_notifications": unread_count(request.user.profile)}
+        except (AttributeError, DatabaseError):
+            pass
+    return {"nav_unread_notifications": 0}
+
+
+@deferred("nav_active_checkins")
+def add_active_checkins_banner(request: HttpRequest) -> dict[str, list[Any]]:
+    """The header banner's active safety check-ins, rendered with the page rather than fetched after it."""
+    if isinstance(request.user, User):
+        try:
+            from urbanlens.dashboard.services.visits.safety import get_active_checkins
+
+            return {"nav_active_checkins": list(get_active_checkins(request.user.profile))}
+        except (AttributeError, DatabaseError):
+            pass
+    return {"nav_active_checkins": []}
+
+
 #: Template flag, and the ``SiteFeature`` member it reports.
 _FEATURE_FLAGS = {
     "can_use_ai_features": "AI",

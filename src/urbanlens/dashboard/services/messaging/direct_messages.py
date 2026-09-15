@@ -1213,6 +1213,19 @@ def has_used_direct_messages(profile: Profile) -> bool:
     return DirectMessage.objects.involving(profile).exists() or GroupChatMembership.objects.active().filter(profile=profile).exists()
 
 
+def unread_conversation_total(profile: Profile) -> int:
+    """Direct and group conversations holding at least one message the profile has not read, as the navbar counts them.
+
+    Args:
+        profile: The reader.
+
+    Returns:
+        The number of conversations needing attention."""
+    from urbanlens.dashboard.services.messaging.group_chats import unread_group_conversation_count
+
+    return DirectMessage.objects.unread_conversation_count(profile) + unread_group_conversation_count(profile)
+
+
 #: Default result cap for the Messages page's own search (as opposed to
 #: global search's smaller per-section limit, since this is the only section
 #: rendered here).

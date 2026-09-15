@@ -41,9 +41,10 @@ hammering the filter cost something else entirely. The model the harness
 - **What a page view is**, weighted: map 30, pin 14, home 8, notifications 6,
   messages 6, conversation 5, wiki 5, organize 5, search dialog 5, memories 4,
   trips 4, a friend's profile 4, own profile 3, a pin's visit tab 1.
-- **What every signed-in page does as it renders**, read from
-  `partials/layout/header.html`: unread messages, unread notifications and the
-  safety banner, fetched together.
+- **What a signed-in page brings with it**: the header's unread counts and
+  safety banner render in the page's own request
+  (`partials/layout/header.html`), so a page view is the page plus whatever
+  that page fetches as it loads.
 - **What the map does**, read from `pages/map/index.html`: the whole pin
   document when the browser has no pin cache (30% of users on their first map
   visit), the meta otherwise; 40% of map visits then type into the name filter,
@@ -63,10 +64,11 @@ pin, friends, conversations with unread messages, notifications and visits.
 
 ### What that implies, by arithmetic rather than measurement
 
-About 5 requests per page view and a 41-second cycle give roughly **24 page
-views, ~120 application requests and ~24 socket handshakes a second, with 1,000
-sockets open**, at 1,000 users. At 10,000 it is ten times each: ~1,200 requests
-a second and 10,000 open sockets. Those are the numbers a design has to be
+About 2.4 requests per page view (the page, what it fetches alongside, the bell
+for one view in ten, and the polls a long view runs) and a 41-second cycle give
+roughly **24 page views, ~60 application requests and ~24 socket handshakes a
+second, with 1,000 sockets open**, at 1,000 users. At 10,000 it is ten times
+each: ~600 requests a second and 10,000 open sockets. Those are the numbers a design has to be
 checked against before anything is measured.
 
 ## What "supports" means

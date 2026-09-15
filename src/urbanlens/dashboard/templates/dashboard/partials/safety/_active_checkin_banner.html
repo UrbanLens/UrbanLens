@@ -1,6 +1,6 @@
 {% load humanize %}
 {% comment %}Navbar banner shown site-wide for each of the profile's active (unresolved) safety check-ins.{% endcomment %}
-<div id="safety-active-banner">
+<div id="safety-active-banner" hx-get="{% url 'safety.active_banner' %}" hx-trigger="safetyBannerRefresh from:body" hx-swap="outerHTML">
     {% for checkin in checkins %}
     <div class="safety-active-banner" id="safety-active-banner-{{ checkin.uuid }}">
         <div class="safety-active-banner-inner">

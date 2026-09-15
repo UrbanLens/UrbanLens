@@ -60,11 +60,9 @@ export const ENDPOINTS = {
     pin_nearby: "fragment",
     pin_visits: "fragment",
     notifications_dropdown: "fragment",
-    notifications_unread: "fragment",
     messages_list: "fragment",
     messages_unread: "fragment",
     search_panel: "fragment",
-    safety_banner: "fragment",
     map_document: "bulk",
 };
 

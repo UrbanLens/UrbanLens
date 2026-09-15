@@ -254,10 +254,8 @@
             if (pickerContainer && data.contacts_html) replaceHtmlAndRunScripts(pickerContainer, data.contacts_html);
             var titleEl = document.getElementById('safety-title-text');
             if (titleEl && data.title) titleEl.textContent = data.title;
-            // The site-wide "active check-in" banner (header.html) is only fetched
-            // once on page load - refresh it too, in case the title just changed.
-            var banner = document.getElementById('safety-active-banner');
-            if (banner && window.htmx) window.htmx.trigger(banner, 'load');
+            // The header's active check-in banner shows the title too.
+            if (window.htmx) window.htmx.trigger(document.body, 'safetyBannerRefresh');
             setStatus('Saved', false);
             (data.warnings || []).forEach(function (warning) { if (window.toastr) toastr.error(warning); });
         }).catch(function () {

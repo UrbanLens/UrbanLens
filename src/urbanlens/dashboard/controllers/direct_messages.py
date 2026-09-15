@@ -785,11 +785,9 @@ class MessagesUnreadCountView(LoginRequiredMixin, View):
             The label partial with the count of conversations that have at least one unread message (not the
             total unread message count - one label...
         """
-        from urbanlens.dashboard.services.messaging.group_chats import unread_group_conversation_count
+        from urbanlens.dashboard.services.messaging.direct_messages import unread_conversation_total
 
-        profile = _get_profile(request)
-        count = DirectMessage.objects.unread_conversation_count(profile) + unread_group_conversation_count(profile)
-        return render(request, "dashboard/partials/messages/_label.html", {"unread_count": count})
+        return render(request, "dashboard/partials/messages/_label.html", {"unread_count": unread_conversation_total(_get_profile(request))})
 
 
 class RecipientSearchView(LoginRequiredMixin, View):

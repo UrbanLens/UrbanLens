@@ -171,15 +171,12 @@ function fetchTogether(state, requests) {
     return responses;
 }
 
-/** A full page load, then what every signed-in page's header fetches as it renders. */
+/** A full page load, then what that page fetches as it renders. The header's badges arrive with the page. */
 function page(state, endpoint, path, alongside) {
     fetchOne(state, endpoint, path);
-    fetchTogether(state, [
-        ["messages_unread", ROUTES["messages.unread_count"]],
-        ["notifications_unread", ROUTES["notifications.unread_count"]],
-        ["safety_banner", ROUTES["safety.active_banner"]],
-        ...(alongside || []),
-    ]);
+    if (alongside && alongside.length) {
+        fetchTogether(state, alongside);
+    }
 }
 
 const JOURNEY_STEPS = {

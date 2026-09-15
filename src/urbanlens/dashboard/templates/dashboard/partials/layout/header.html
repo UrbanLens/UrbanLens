@@ -51,9 +51,8 @@
                     <i class="material-icons nav-notif-icon">forum</i>
                     <span id="msg-badge-wrap"
                           hx-get="{% url 'messages.unread_count' %}"
-                          hx-trigger="load, every 60s, msgCountRefresh from:body"
-                          hx-swap="innerHTML">
-                    </span>
+                          hx-trigger="every 60s, msgCountRefresh from:body"
+                          hx-swap="innerHTML">{% include "dashboard/partials/messages/_label.html" with unread_count=nav_unread_messages %}</span>
                 </button>
                 <div class="nav-notif-panel" id="msg-dropdown-wrap" role="menu"
                      hx-get="{% url 'messages.dropdown' %}"
@@ -70,9 +69,8 @@
                     <i class="material-icons nav-notif-icon">notifications</i>
                     <span id="notif-badge-wrap"
                           hx-get="{% url 'notifications.unread_count' %}"
-                          hx-trigger="load, notifCountRefresh from:body"
-                          hx-swap="innerHTML">
-                    </span>
+                          hx-trigger="notifCountRefresh from:body"
+                          hx-swap="innerHTML">{% include "dashboard/partials/notifications/notification_label.html" with unread_count=nav_unread_notifications %}</span>
                 </button>
                 <div class="nav-notif-panel" id="notif-dropdown-wrap" role="menu"
                      hx-get="{% url 'notifications.dropdown' %}"
@@ -169,11 +167,7 @@
 
 {% if user.is_authenticated %}
 {% include 'dashboard/partials/search/_dialog.html' %}
-<div id="safety-active-banner"
-     hx-get="{% url 'safety.active_banner' %}"
-     hx-trigger="load"
-     hx-swap="outerHTML">
-</div>
+{% include 'dashboard/partials/safety/_active_checkin_banner.html' with checkins=nav_active_checkins %}
 {% endif %}
 
 {# -- Mobile nav drawer (shown below nav bar on small screens) ---------------- #}
