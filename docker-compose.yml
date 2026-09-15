@@ -227,6 +227,9 @@ services:
       UL_PROCESS_ROLE: websocket
       UL_DB_USER: ul_websocket
       UL_METRICS_ENABLED: "false"
+      # Channels makes every database call on one thread, so the connection is kept rather than logged into per call.
+      UL_DB_CONN_MAX_AGE: "300"
+      UL_DB_CONN_HEALTH_CHECKS: "true"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]

@@ -185,6 +185,22 @@ class EveryTierHasItsOwnConnectionBudgetTests(SimpleTestCase):
         self.assertEqual(int(match.group(1)), REQUEST_DEADLINE_SECONDS)
 
 
+class TheSocketTierKeepsItsDatabaseConnectionTests(SimpleTestCase):
+    """Channels closes an expired connection around every database hop, and daphne makes every hop on one thread.
+
+    At ``CONN_MAX_AGE=0`` that is a Postgres login per hop, several per handshake, queued behind each other."""
+
+    def test_app_ws_reuses_its_connection(self) -> None:
+        environment = _environment(_compose()["services"]["app-ws"])
+
+        self.assertGreater(int(environment.get("UL_DB_CONN_MAX_AGE", "0")), 0)
+        self.assertEqual(
+            environment.get("UL_DB_CONN_HEALTH_CHECKS"),
+            "true",
+            "a connection Postgres dropped would fail the next socket's lookup rather than be replaced",
+        )
+
+
 class TheMetricsExporterIsGatedTests(SimpleTestCase):
     """A precondition in a comment gates nothing."""
 

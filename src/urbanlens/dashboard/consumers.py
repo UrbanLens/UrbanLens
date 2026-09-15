@@ -6,6 +6,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
@@ -183,11 +184,8 @@ class SocketAllowanceMixin(_CredentialScopeBase):
         identity = self.connection_identity()
         if not identity:
             return True
-        # database_sync_to_async for a call that touches Valkey rather than the
-        # database: it is the hop every other blocking call in this file uses,
-        # and matching its thread-sensitivity is worth more here than naming the
-        # store precisely.
-        allowed = await database_sync_to_async(socket_budget.claim)(identity, self.channel_name)
+        # Valkey only, so kept off the one thread every socket's database work queues on.
+        allowed = await sync_to_async(socket_budget.claim, thread_sensitive=False)(identity, self.channel_name)
         if allowed:
             self._socket_slot_identity = identity
             self._socket_slot_task = asyncio.create_task(self._renew_socket_slot_periodically())
@@ -205,7 +203,7 @@ class SocketAllowanceMixin(_CredentialScopeBase):
         if not identity:
             return
         self._socket_slot_identity = ""
-        await database_sync_to_async(socket_budget.release)(identity, self.channel_name)
+        await sync_to_async(socket_budget.release, thread_sensitive=False)(identity, self.channel_name)
 
     async def _renew_socket_slot_periodically(self) -> None:
         """Keep this connection's claim from being swept while it is still live.
@@ -224,7 +222,7 @@ class SocketAllowanceMixin(_CredentialScopeBase):
                 identity = self._socket_slot_identity
                 if not identity:
                     return
-                await database_sync_to_async(socket_budget.refresh)(identity, self.channel_name)
+                await sync_to_async(socket_budget.refresh, thread_sensitive=False)(identity, self.channel_name)
         except asyncio.CancelledError:
             pass
 
