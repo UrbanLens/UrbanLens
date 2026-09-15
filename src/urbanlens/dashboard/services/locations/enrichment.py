@@ -389,7 +389,7 @@ def _nearby_density_score(location: Location) -> int:
 
     if location.point is None:
         return 0
-    count = Location.objects.filter(point__distance_lte=(location.point, D(km=_DENSITY_RADIUS_KM))).exclude(pk=location.pk).count()
+    count = Location.objects.filter(point__dwithin=(location.point, D(km=_DENSITY_RADIUS_KM))).exclude(pk=location.pk).count()
     return min(count, _DENSITY_SCORE_CAP)
 
 

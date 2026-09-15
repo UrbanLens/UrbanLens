@@ -45,7 +45,7 @@ def find_profile_pin_near_location(profile_id: int, location: Location | None, *
     return Pin.objects.filter(
         profile_id=profile_id,
         parent_pin__isnull=True,
-        location__point__distance_lte=(location.point, D(m=radius_meters)),
+        location__point__dwithin=(location.point, D(m=radius_meters)),
     ).first()
 
 

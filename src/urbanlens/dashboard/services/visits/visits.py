@@ -129,7 +129,7 @@ def find_nearest_pin(latitude: float, longitude: float, profile: Profile, radius
     # internal representation, so this returned an arbitrary pin inside the radius.
     # Measured: a pin 75m away was picked over one 11m away, which attributes an imported visit to
     # the wrong place whenever a profile has two pins inside VISIT_MATCH_RADIUS_M.
-    return Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile).annotate(_match_distance=Distance("location__point", point)).order_by("_match_distance").first()
+    return Pin.objects.filter(location__point__dwithin=(point, D(m=radius_m)), profile=profile).annotate(_match_distance=Distance("location__point", point)).order_by("_match_distance").first()
 
 
 def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> bool:
@@ -596,7 +596,7 @@ def _pin_contains_point(pin: Pin, point: GEOSPoint) -> bool:
     polygon = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
     if polygon is not None:
         return bool(polygon.contains(point))
-    return Pin.objects.filter(pk=pin.pk, location__point__distance_lte=(point, D(m=50))).exists()
+    return Pin.objects.filter(pk=pin.pk, location__point__dwithin=(point, D(m=50))).exists()
 
 
 def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Iterable[Pin] | None = None) -> Pin | None:

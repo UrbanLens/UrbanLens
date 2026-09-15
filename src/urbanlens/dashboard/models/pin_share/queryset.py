@@ -37,7 +37,7 @@ class LocationExposureQuerySet(abstract.DashboardQuerySet):
         """
         return self.filter(
             profile_id=profile_id,
-            location__point__distance_lte=(location.point, D(m=radius_meters)),
+            location__point__dwithin=(location.point, D(m=radius_meters)),
         )
 
 

@@ -154,7 +154,7 @@ def _propagate_exact_site_to_nearby_locations(location: Location, exact_site: di
         return
 
     point = Point(site_lng, site_lat, srid=4326)
-    nearby_locations = LocationModel.objects.filter(point__distance_lte=(point, D(mi=_EXACT_MATCH_RADIUS_MILES))).exclude(pk=location.pk).filter(pins__isnull=False).distinct()
+    nearby_locations = LocationModel.objects.filter(point__dwithin=(point, D(mi=_EXACT_MATCH_RADIUS_MILES))).exclude(pk=location.pk).filter(pins__isnull=False).distinct()
 
     for neighbor in nearby_locations:
         cache_row = LocationCache.objects.filter(location=neighbor, source=_CACHE_SOURCE).first()

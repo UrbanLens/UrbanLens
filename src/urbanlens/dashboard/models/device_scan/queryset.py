@@ -89,7 +89,7 @@ class WikiDeviceMarkerQuerySet(abstract.FrontendDashboardQuerySet):
 
     def near(self, point: Point, radius_meters: float) -> Self:
         """Markers whose centroid falls within *radius_meters* of *point*."""
-        return self.filter(centroid__distance_lte=(point, D(m=radius_meters)))
+        return self.filter(centroid__dwithin=(point, D(m=radius_meters)))
 
 
 class WikiDeviceMarkerManager(abstract.FrontendDashboardManager.from_queryset(WikiDeviceMarkerQuerySet)):

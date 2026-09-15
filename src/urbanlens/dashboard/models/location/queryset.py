@@ -73,7 +73,7 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
         place = Place.objects.resolve_for_point(latitude, longitude)
         if place is not None:
             return self.filter(place__domain_root_id=place.domain_root_id).distinct()
-        return self.filter(place__isnull=True).filter(point__distance_lte=(pt, D(m=DEFAULT_RADIUS_METERS))).distinct()
+        return self.filter(place__isnull=True).filter(point__dwithin=(pt, D(m=DEFAULT_RADIUS_METERS))).distinct()
 
     def filter_by_criteria(self, criteria):
         query = Q()
@@ -159,7 +159,7 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
 
         # Find existing locations within the threshold distance
         existing_locations = self.filter(
-            point__distance_lte=(point, D(m=threshold_meters)),
+            point__dwithin=(point, D(m=threshold_meters)),
         )
 
         if existing_locations.exists():
@@ -182,7 +182,7 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
             # A concurrent request created a Location at these exact coordinates between the
             # existence check above and this insert (the (latitude, longitude) unique_together
             # constraint) - return that row instead of letting the race surface as an unhandled 500.
-            existing_locations = self.filter(point__distance_lte=(point, D(m=threshold_meters)))
+            existing_locations = self.filter(point__dwithin=(point, D(m=threshold_meters)))
             if existing_locations.exists():
                 return existing_locations.first(), False
             raise
