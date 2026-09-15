@@ -113,8 +113,7 @@ def _pinned_getaddrinfo(host, port, *args, **kwargs):
 
 # Installed by assignment at import, which makes ordering matter: anything that reassigns
 # socket.getaddrinfo *after* this module is imported replaces the wrapper and the pin stops
-# applying, silently.
-# The live case is gevent - gunicorn runs `-k gevent` and monkey-patches the socket module in the
+# applying, silently. gevent's monkey-patching is one such reassignment.
 if socket.getaddrinfo is not _pinned_getaddrinfo:  # pragma: no branch - idempotent install
     socket.getaddrinfo = _pinned_getaddrinfo
 

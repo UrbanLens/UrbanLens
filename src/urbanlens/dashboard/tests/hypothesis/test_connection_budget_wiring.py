@@ -13,9 +13,6 @@ from urbanlens.dashboard.services.core.database_roles import REQUEST_DEADLINE_SE
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
-#: gevent's own default, and the number this exists to stop us shipping.
-GEVENT_DEFAULT_WORKER_CONNECTIONS = 1000
-
 #: `max_connections` (100) less `superuser_reserved_connections` (3).
 USABLE_CONNECTIONS = 97
 
@@ -60,28 +57,22 @@ def _limits() -> dict[str, int]:
     return {role.process_role: role.connection_limit for role in declared_roles()}
 
 
-class TheGreenletPopulationIsBoundedTests(SimpleTestCase):
-    """Under gevent, unbounded greenlets means unbounded database connections."""
+class TheRequestThreadPopulationIsBoundedTests(SimpleTestCase):
+    """Each request thread keeps one connection, so the thread count is the web tier's connection count."""
 
-    def test_worker_connections_is_set_at_all(self) -> None:
-        """Left unset, one worker may open a thousand.
-
-        Each greenlet serving a request can hold its own backend under CONN_MAX_AGE=0, so three workers at the
-        default could demand 3,000 connections against a ceiling of 100."""
-        self.assertIn(
-            "--worker-connections",
-            _start_command(),
-            "gunicorn's gevent worker defaults to "
-            f"{GEVENT_DEFAULT_WORKER_CONNECTIONS} greenlets per worker; the start command must cap it",
-        )
+    def test_the_worker_runs_threads(self) -> None:
+        """A gevent greenlet's connection is local to a greenlet that ends with its request, so it is never reused."""
+        self.assertRegex(_start_command(), r"(-k|--worker-class)\s+gthread\b")
 
     def test_the_web_tier_fits_inside_its_role_with_room_to_spare(self) -> None:
-        """Arithmetic rather than a hardcoded expectation, so raising WEB_CONCURRENCY or the cap fails here.
+        """Arithmetic rather than a hardcoded expectation, so raising WEB_CONCURRENCY or the thread count fails here.
 
-        Strictly under: timeout_utils' executor threads connect separately from the greenlet they serve."""
+        Strictly under: timeout_utils' executor threads connect separately from the request they serve."""
         command = _start_command()
-        match = re.search(r"--worker-connections\s+(\d+)", command)
-        self.assertIsNotNone(match, f"could not read --worker-connections out of {command!r}")
+        match = re.search(r"--threads\s+(\d+)", command)
+        self.assertIsNotNone(
+            match, f"could not read --threads out of {command!r}; gthread's default of 1 is not a choice"
+        )
         assert match is not None
         per_worker = int(match.group(1))
         workers = int(str(_compose()["x-app-env"]["WEB_CONCURRENCY"]).split(":-")[-1].rstrip("}"))
@@ -89,7 +80,7 @@ class TheGreenletPopulationIsBoundedTests(SimpleTestCase):
         self.assertLess(
             per_worker * workers,
             _limits()["web"],
-            f"{workers} workers x {per_worker} greenlets reaches ul_web's connection limit, so ordinary load would fail requests",
+            f"{workers} workers x {per_worker} threads reaches ul_web's connection limit, so ordinary load would fail requests",
         )
 
     def test_overflow_queues_rather_than_connecting(self) -> None:
@@ -198,6 +189,20 @@ class TheSocketTierKeepsItsDatabaseConnectionTests(SimpleTestCase):
             environment.get("UL_DB_CONN_HEALTH_CHECKS"),
             "true",
             "a connection Postgres dropped would fail the next socket's lookup rather than be replaced",
+        )
+
+
+class TheWebTierKeepsItsDatabaseConnectionTests(SimpleTestCase):
+    """At ``CONN_MAX_AGE=0`` every request pays a Postgres login, which costs more CPU than a poll's own Python."""
+
+    def test_app_reuses_its_connection(self) -> None:
+        environment = _environment(_compose()["services"]["app"])
+
+        self.assertGreater(int(environment.get("UL_DB_CONN_MAX_AGE", "0")), 0)
+        self.assertEqual(
+            environment.get("UL_DB_CONN_HEALTH_CHECKS"),
+            "true",
+            "a connection Postgres dropped would fail the next request rather than be replaced",
         )
 
 

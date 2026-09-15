@@ -163,6 +163,9 @@ services:
       UL_PROCESS_ROLE: web
       UL_DB_USER: ul_web
       UL_METRICS_ENABLED: ${UL_METRICS_ENABLED:-false}
+      # A login costs more CPU than a poll's own Python; each gthread request thread keeps its connection.
+      UL_DB_CONN_MAX_AGE: "300"
+      UL_DB_CONN_HEALTH_CHECKS: "true"
     labels:
       prometheus_scrape: "${UL_METRICS_ENABLED:-false}"
       prometheus_port: "8000"

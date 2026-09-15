@@ -272,7 +272,7 @@ class ObjectByteDeliveryTests(SimpleTestCase):
         target = response["X-Accel-Redirect"]
         self.assertTrue(target.startswith("/_object_media/"))
         self.assertIn("X-Amz-Signature", target)
-        # The body is empty: nginx supplies the bytes, so no gevent worker moves
+        # The body is empty: nginx supplies the bytes, so no app worker moves
         # them and nothing was opened.
         self.assertEqual(response.content, b"")
         self.assertEqual(storage.opened, [])

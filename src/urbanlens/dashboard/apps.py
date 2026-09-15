@@ -22,8 +22,8 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.checks
 
         # drf-spectacular resolves each extension's target_class lazily by
-        # mutating a shared class attribute with no lock - unsafe under this
-        # app's gevent concurrency. See schema.patch_extension_thread_safety.
+        # mutating a shared class attribute with no lock - unsafe under
+        # threaded workers. See schema.patch_extension_thread_safety.
         from urbanlens.dashboard.external_api.schema import patch_extension_thread_safety
 
         patch_extension_thread_safety()

@@ -150,7 +150,7 @@ _extension_load_lock = threading.Lock()
 def patch_extension_thread_safety() -> None:
     """Serialize drf-spectacular's per-extension ``target_class`` resolution.
 
-    Two schema requests arriving together (this app runs gevent workers, so genuinely concurrent
+    Two schema requests arriving together (the web tier runs threaded workers, so genuinely concurrent
     requests to one process are ordinary) can both see the string, both start resolving, and one can
     read ``target_class`` mid-mutation - e.g. as the ``None`` the other's failed-import branch just
     wrote - raising ``AttributeError: 'NoneType' object has no attribute 'startswith'`` instead of

@@ -7,20 +7,16 @@ also configures ``ai-inference``, which runs a different WSGI application with
 no Django and no ORM. Each hook below therefore checks that it applies to the
 process it has landed in, rather than assuming it is the app.
 
-Why ``--worker-connections 16`` is on that command line, since package.json
-cannot carry a comment. gevent's default is 1000 greenlets per worker, and under
-``CONN_MAX_AGE=0`` each greenlet serving a request can hold its own Postgres
-backend - the mechanism behind P104's outage. The app logs in as ``ul_web``,
-whose ``CONNECTION LIMIT`` lives in ``services/core/database_roles.py``: 3
-workers x 16 stays under it with room for ``timeout_utils``' executor threads,
-which open connections of their own. The flag keeps the steady state inside the
-limit; the limit makes a burst fail the web tier's own connections rather than
-another tier's. ``test_connection_budget_wiring`` fails if the product outgrows
-the limit.
+Why ``-k gthread --threads 4`` is on that command line, since package.json
+cannot carry a comment (D11). Each request thread keeps its Postgres connection
+(``UL_DB_CONN_MAX_AGE`` on the app service), so a request pays no login, and the
+connection population is ``workers x threads``. The app logs in as ``ul_web``,
+whose ``CONNECTION LIMIT`` lives in ``services/core/database_roles.py``;
+``test_connection_budget_wiring`` fails if the thread count outgrows it. A
+gevent greenlet's connection ends with its request, so under gevent the same
+setting would reuse nothing.
 
-``--backlog 256`` so overflow queues in the kernel rather than opening a
-connection. D11 replaces both with ``gthread``, where the connection population
-is ``workers x threads`` by construction rather than by flag.
+``--backlog 256`` so overflow queues in the kernel rather than being refused.
 """
 
 import os
@@ -92,9 +88,7 @@ def post_fork(server, worker):
     Only under the gevent worker. The patch registers a *gevent* wait callback
     on psycopg2, so under any other worker class there is no hub to yield to -
     it is at best inert and at worst a query waiting on a loop nobody runs.
-    ``ai-inference`` already inherits this hook while running ``gthread``, and
-    D11 moves the app itself to ``gthread``, so the guard is what makes that
-    switch a flag change rather than a code change.
+    Both the app and ``ai-inference`` run ``gthread`` and inherit this hook.
 
     Deliberately does NOT also warm the URLconf (see ``post_worker_init``
     below for why that has to happen later, in a different hook, not just
@@ -113,7 +107,7 @@ def post_fork(server, worker):
 
 
 def post_worker_init(worker):
-    """Warm the URLconf after gevent patching has run.
+    """Warm the URLconf once the worker has initialised.
 
     Args:
         worker: The freshly initialised worker, used for its logger.

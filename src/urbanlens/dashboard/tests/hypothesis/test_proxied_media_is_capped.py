@@ -4,7 +4,7 @@
 the shared Valkey (H14, H22, H35). Nothing stopped it being *read*: every media
 download in the REData gateways was `response.content`, which buffers the whole
 body into the web worker regardless of size. The throttle in front of these
-endpoints bounds how often that happens, not how big it gets, and under gevent a
+endpoints bounds how often that happens, not how big it gets, and a
 worker killed for memory takes every other in-flight request on it with it.
 
 The trap this guards is the reason the cap is not simply a `len()` check after

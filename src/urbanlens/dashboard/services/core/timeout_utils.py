@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 import logging
 from typing import TYPE_CHECKING
 
-from django.db import close_old_connections
+from django.db import connections
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -43,11 +43,8 @@ def call_with_deadline[T](func: Callable[[], T], *, timeout: float, default: T, 
         try:
             return func()
         finally:
-            # Executor threads live for the life of the process and Django DB connections are
-            # thread-local: a callable that touches the ORM (e.g. writing LocationCache from inside
-            # the deadline) would otherwise leave an idle connection pinned to this pool slot
-            # indefinitely.
-            close_old_connections()
+            # Closed outright rather than left to CONN_MAX_AGE: ul_web's limit counts request threads, not these.
+            connections.close_all()
 
     future = _EXECUTOR.submit(_run)
     try:

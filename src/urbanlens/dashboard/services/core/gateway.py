@@ -101,8 +101,8 @@ class GatewayRateLimitedError(GatewayRequestError):
 #:
 #: Generous against real content - a full-resolution listing photo, a map tile,
 #: a scanned attachment - and small against the worker's own memory limit, which
-#: is the number that matters: under gevent a worker killed for memory takes
-#: every other in-flight request on it down too.
+#: is the number that matters: a worker killed for memory takes every other
+#: in-flight request on it down too.
 MAX_PROXIED_MEDIA_BYTES = 25 * 1024 * 1024
 
 
