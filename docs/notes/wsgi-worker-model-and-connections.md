@@ -8,15 +8,16 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-## R28 — The WSGI tier runs gevent with no recorded rationale, contradicting reasoning the project applied everywhere else it chose a worker model
+## R28 — The WSGI tier ran gevent with no recorded rationale until D11 moved it to gthread, which persistent database connections need
 
-`id: R28` · `status: current` · `updated: 2026-09-10`
+`id: R28` · `status: current` · `updated: 2026-09-15`
 
-This documents the current state and an internal contradiction for a human to resolve. It is not a
-recommendation, and no decision is recorded here — see P104 for the concrete, already-manifested
-risk this leaves open.
+The `app` service runs `gunicorn -k gthread --threads 4` (`package.json`, the `start` script) with
+`UL_DB_CONN_MAX_AGE=300`, under D11 decision 1. A gevent greenlet's connection ends with its request,
+so persistent connections were not available until it moved. This entry keeps how it came to run
+gevent, and what that left behind.
 
-**Origin.** `gunicorn -k gevent` (`package.json:16`, the `start` script) enters at `549c22537`
+**Origin.** `gunicorn -k gevent` entered at `549c22537`
 (2026-07-04, "Clean Git History. Release v0.2.0-alpha"), an empty commit body; its parent ran plain
 sync gunicorn. `daphne` (Channels' ASGI server) arrives separately at `ad4933141` (2026-07-06),
 whose body reads only "Channels for Real-time chat." Neither commit records why that worker class,
@@ -47,11 +48,10 @@ adding that hop). That archived entry itself records, at the time, "Deliberately
 switching the WSGI worker off gevent entirely... considered... but [a] larger architecture change"
 — a decision to defer, not a decision to keep gevent on its merits.
 
-**Open, not decided**: whether the `app` service should move off gevent (to threads or sync
-workers, per the reasoning the project already applied to `celery-worker-panels` and
-`urbanlens_ai`), and if so what replaces the async-request-corruption protection
-`channel_broadcast` currently provides. Left for a human decision; this entry exists so the next
-person making it has the contradiction and its evidence in one place rather than re-discovering it.
+**Still open**: `channel_broadcast`'s Celery hop. The corruption it prevents came from greenlets
+sharing one thread, so one greenlet's running event loop was visible to the others. Request threads
+do not share a thread, so that reason no longer applies. The hop has not been removed, and its cost
+(one task per broadcast, delivered at the queue's latency) has not been measured.
 
 ## N14 — Nothing in pytest or local dev exercises the shared-connection-pool topology that caused P104's outage
 
@@ -60,13 +60,13 @@ person making it has the contradiction and its evidence in one place rather than
 Complements `docs/TOOLING.md`'s own "Load testing (Locust / k6)" gap note (`TOOLING.md:632-634`,
 R13) with the specific reason this particular failure mode (P104) cannot surface short of one:
 `src/bin/init.py:604-607` runs `manage.py runserver` in `development`
-(`init.py:484-492`, `run_dev_server`) and only reaches gunicorn/gevent in `staging`/`production`
+(`init.py:484-492`, `run_dev_server`) and only reaches gunicorn in `staging`/`production`
 (`init.py:494-502`, `run_prod_server`, which shells out to `bun run start`). `settings/test.py`
 swaps Redis for `LocMemCache` (`test.py:65`) and Celery's broker/result-backend for the in-process
 `memory://`/`cache+memory://` transport (`test.py:82-83`) under test.
 
 So neither a local dev run nor the pytest suite ever constructs the shared-connection-pool topology
-— gunicorn workers with gevent greenlets, daphne, and two Celery workers, all connecting as the
+— gunicorn worker threads, daphne, and two Celery workers, all connecting as the
 same Postgres role with no pooler — that produced the 11-hour outage in P104. Proving or disproving
 that availability invariant needs a load probe against a real multi-container deployment, not
 another unit test.

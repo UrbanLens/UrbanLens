@@ -8,7 +8,7 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: D11` · `status: accepted` · `updated: 2026-09-10`
+`id: D11` · `status: accepted` · `updated: 2026-09-15`
 
 Supersedes the open question in R28 (`docs/notes/wsgi-worker-model-and-connections.md`) and is the
 fix P104 was waiting on a decision for.
@@ -19,6 +19,10 @@ same guarantee — it removed one way to spend a worker, and left the mechanism 
 the mechanism.
 
 ## Decision 1: the WSGI tier moves from `gevent` to `gthread`, 3 workers × 4 threads
+
+**Applied 2026-09-15** (`534055e5c`), with `UL_DB_CONN_MAX_AGE=300` and health checks on the `app`
+service. What finally decided it was connection cost, not the collateral-kill argument below; see
+the last part of the measured section.
 
 Verified in gunicorn 26.2.0's own source, because the three worker classes differ in a way that
 decides this:
@@ -94,6 +98,13 @@ complete and 94.8% of its requests could not be started, because all 60 slots be
 account. Whatever happens to the worker class, something has to stop one user owning the whole
 request pool.
 
+**What the capacity work (D15) measured on 2026-09-15 is a stronger reason.** Timed inside
+`ul_perf_app` over 200 runs each, as `ul_web`: a fresh login plus `SELECT 1` took 15.4 ms p50 and
+9.4 ms of client CPU; the same query on a reused connection took 0.06 ms. A poll's whole Python cost
+is 4–10 ms, so at `CONN_MAX_AGE=0` the login was the largest single cost of a light request, paid
+again on the database's two CPUs for SCRAM verification. A persistent connection cannot help under
+gevent, which is what made the move worth making. X18 has the capacity runs before and after.
+
 ## Decision 2: a second gunicorn pool, `app-heavy`, owns the endpoints that can legitimately cost seconds
 
 `sync` workers, own `cpus`/`mem_limit`, own Postgres role, own nginx `location` with
@@ -136,8 +147,9 @@ roles needs the superuser that no serving tier may be. Migrations keep the owner
 Built 2026-09-15 as R29, with three departures from the sketch this section first held:
 - **Nine roles, not ten.** `ul_web_heavy` and `ul_maintenance` have no container of their own yet.
 - **Limits sum to all 97 usable slots, not 73.** The owner is a superuser and keeps the 3 reserved.
-- **No `idle_session_timeout` or `lock_timeout`.** `CONN_MAX_AGE=0` already closes idle sessions, and
-  `statement_timeout` bounds a lock wait.
+- **No `idle_session_timeout` or `lock_timeout`.** `statement_timeout` bounds a lock wait. The web and
+  socket tiers keep idle connections on purpose (`CONN_MAX_AGE=300`), bounded by their thread counts;
+  the Celery tiers still close theirs per task.
 
 `max_connections` stays at 100. Raising it is a false comfort: PGPROC memory is trivial but each
 backend can allocate `work_mem` per sort or hash node on top of a several-MB baseline, and the `db`
