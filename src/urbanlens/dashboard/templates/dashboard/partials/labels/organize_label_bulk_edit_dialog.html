@@ -52,7 +52,7 @@
                 </div>
             </div>
             <div class="form-field">
-                {% include 'dashboard/partials/ui/_label_relationship_picker.html' with instance_id=ns|add:'-bulk' mode='additive' ns=ns candidates=parent_items|default:priority_items %}
+                {% include 'dashboard/partials/ui/_label_relationship_picker.html' with instance_id=ns|add:'-bulk' mode='additive' ns=ns candidates_from=candidates_from|default:'priority' %}
             </div>
         </div>
         <div class="tag-form-actions">

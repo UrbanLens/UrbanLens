@@ -4,6 +4,6 @@
         data-id="{{ label.id }}" data-kind="{{ label.kind }}" data-name="{{ label.name|lower }}"
         {% if label.color %}style="--tag-color:{{ label.color }}"{% endif %}
         {% if oob_target %}hx-swap-oob="beforeend:#{{ oob_target }}"{% endif %}
-        onclick="LabelRelPicker.select('{{ instance_id }}', '{{ rel_type }}', this)">
+        onclick="LabelRelPicker.pick(this)">
     {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=label show_kind=show_kind %}
 </button>

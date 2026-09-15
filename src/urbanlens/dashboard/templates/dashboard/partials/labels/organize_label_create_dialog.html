@@ -33,7 +33,7 @@
             </div>
         </div>
         <div class="form-field">
-            {% include 'dashboard/partials/ui/_label_relationship_picker.html' with instance_id='new-'|add:ns mode='replace' ns=ns candidates=parent_items %}
+            {% include 'dashboard/partials/ui/_label_relationship_picker.html' with instance_id='new-'|add:ns mode='replace' ns=ns candidates_from=candidates_from %}
         </div>
         <div class="tag-form-actions"><button type="submit" class="btn btn--primary">Create</button><button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button></div>
     </form>

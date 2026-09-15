@@ -19,7 +19,7 @@
                     <button type="button" class="label-rel-add-btn" onclick="LabelRelPicker.toggle('{{ instance_id }}', 'parent', this)">
                         <i class="material-symbols-outlined">add</i> Add
                     </button>
-                    {% include 'dashboard/partials/ui/_label_rel_popup.html' with instance_id=instance_id rel_type='parent' ns=ns candidates=candidates selected_ids=selected_ids %}
+                    {% include 'dashboard/partials/ui/_label_rel_popup.html' with instance_id=instance_id rel_type='parent' ns=ns candidates=candidates candidates_from=candidates_from selected_ids=selected_ids %}
                 </div>
             </div>
             <div class="label-rel-selected-chips" id="{{ instance_id }}-sel-parent">
@@ -42,7 +42,7 @@
                     <button type="button" class="label-rel-add-btn" onclick="LabelRelPicker.toggle('{{ instance_id }}', 'child', this)">
                         <i class="material-symbols-outlined">add</i> Add
                     </button>
-                    {% include 'dashboard/partials/ui/_label_rel_popup.html' with instance_id=instance_id rel_type='child' ns=ns candidates=candidates selected_ids=selected_ids %}
+                    {% include 'dashboard/partials/ui/_label_rel_popup.html' with instance_id=instance_id rel_type='child' ns=ns candidates=candidates candidates_from=candidates_from selected_ids=selected_ids %}
                 </div>
             </div>
             <div class="label-rel-selected-chips" id="{{ instance_id }}-sel-child">

@@ -13,7 +13,8 @@
     <input type="text" class="form-input label-rel-search" placeholder="Search labels..."
            oninput="LabelRelPicker.filter('{{ instance_id }}', '{{ rel_type }}', this.value)" autocomplete="off">
 
-    <div class="tag-parent-select label-rel-suggestions" id="{{ instance_id }}-suggestions-{{ rel_type }}" data-active-tab="">
+    <div class="tag-parent-select label-rel-suggestions" id="{{ instance_id }}-suggestions-{{ rel_type }}" data-rel-type="{{ rel_type }}" data-active-tab=""{% if candidates_from %} data-candidates-from="{{ candidates_from }}"{% endif %}>
+        {% if not candidates_from %}
         {% for b in candidates %}
         {% if ns != 'people' %}
         {% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=b instance_id=instance_id rel_type=rel_type selected_ids=selected_ids show_kind=True %}
@@ -21,5 +22,6 @@
         {% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=b instance_id=instance_id rel_type=rel_type selected_ids=selected_ids show_kind=False %}
         {% endif %}
         {% endfor %}
+        {% endif %}
     </div>
 </div>

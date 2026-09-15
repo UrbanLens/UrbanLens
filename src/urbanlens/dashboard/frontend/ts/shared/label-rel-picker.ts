@@ -14,12 +14,41 @@ export const LabelRelPicker = {
             p.hidden = true;
         });
         if (!wasHidden) return;
+        LabelRelPicker._loadCandidates(instanceId, relType);
         (popup as HTMLElement).hidden = false;
         const search = popup.querySelector<HTMLInputElement>(".label-rel-search");
         if (search) {
             search.value = "";
             search.focus();
         }
+    },
+
+    /** Selects a suggestion into the picker and direction whose popup holds it. */
+    pick(btn: HTMLElement): void {
+        const instanceId = btn.closest<HTMLElement>(".label-rel-picker")?.dataset.pickerId;
+        const relType = btn.closest<HTMLElement>(".label-rel-suggestions")?.dataset.relType;
+        if (instanceId && (relType === "parent" || relType === "child")) LabelRelPicker.select(instanceId, relType, btn);
+    },
+
+    /** Copies the page's shared candidate list into a popup the first time it opens. */
+    _loadCandidates(instanceId: string, relType: RelType): void {
+        const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
+        const source = container?.dataset.candidatesFrom;
+        if (!container || !source || container.dataset.candidatesLoaded === "1") return;
+        const template = document.getElementById(`label-rel-candidates-${source}`);
+        if (!(template instanceof HTMLTemplateElement)) return;
+        const offered = new Set(Array.from(container.querySelectorAll<HTMLElement>(".label-rel-suggestion"), (button) => button.dataset.id));
+        const chosen = new Set([...LabelRelPicker.getSelectedIds(instanceId, "parent"), ...LabelRelPicker.getSelectedIds(instanceId, "child")].map(String));
+        const copies = document.createDocumentFragment();
+        template.content.querySelectorAll<HTMLElement>(".label-rel-suggestion").forEach((candidate) => {
+            if (offered.has(candidate.dataset.id)) return;
+            const copy = candidate.cloneNode(true) as HTMLElement;
+            if (chosen.has(copy.dataset.id ?? "")) copy.classList.add("label-rel-suggestion--hidden");
+            copies.appendChild(copy);
+        });
+        container.prepend(copies);
+        container.dataset.candidatesLoaded = "1";
+        LabelRelPicker._applyFilters(instanceId, relType);
     },
 
     select(instanceId: string, relType: RelType, btn: HTMLElement): void {
