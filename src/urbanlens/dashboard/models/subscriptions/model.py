@@ -279,38 +279,28 @@ def _paid_subscription_roles(user: User) -> list[SubscriptionRole]:
 
 
 def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
-    """Return whether the user has the feature, via the site default or an active role.
+    """Return whether the user has the feature, via the admin permission, the site default or an active role.
     Anonymous users never have subscription-backed features.
     """
-    if not isinstance(user, User) or not user.is_authenticated:
-        return False
-    if user.has_perm("dashboard.view_site_admin"):
-        return True
-    from urbanlens.dashboard.models.site_settings import SiteSettings
-
-    if SiteSettings.get_current().grants(feature):
-        return True
-    subscriptions = UserSubscription.objects.active_for(user).select_related("role")
-    if any(subscription.role.grants(feature) for subscription in subscriptions):
-        return True
-    return any(role.grants(feature) for role in _paid_subscription_roles(user))
+    return str(feature) in user_features(user)
 
 
 def user_features(user: AbstractBaseUser | AnonymousUser) -> frozenset[str]:
     """Every feature the user has, via the admin permission, the site default or an active role.
 
-    For a caller asking about several features; ``user_has_feature`` stops at the first grant.
+    Remembered for the rest of a request, until a settings or subscription row is saved.
     """
     if not isinstance(user, User) or not user.is_authenticated:
         return frozenset()
     if user.has_perm("dashboard.view_site_admin"):
         return frozenset(SiteFeature.values)
-    from urbanlens.dashboard.models.site_settings import SiteSettings
+    from urbanlens.dashboard.models.site_settings import SiteSettings, request_cache
 
-    features = set(SiteSettings.get_current().feature_set)
-    for role in active_subscription_roles(user):
-        features |= role.feature_set
-    return frozenset(features)
+    features = request_cache.get_features(user.pk)
+    if features is None:
+        features = frozenset(SiteSettings.get_current().feature_set).union(*(role.feature_set for role in active_subscription_roles(user)))
+        request_cache.set_features(user.pk, features)
+    return features
 
 
 def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:

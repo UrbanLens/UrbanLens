@@ -6,6 +6,8 @@ account-deletion banner it never shows. Three of them on every page view, and ag
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from django.contrib.auth.models import User
 from django.db import connection
 from django.template import RequestContext, Template
@@ -16,7 +18,14 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings, request_cache
-from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.models.subscriptions.model import (
+    SiteFeature,
+    SubscriptionRole,
+    UserSubscription,
+    grant_subscription,
+    user_features,
+    user_has_feature,
+)
 
 FLAGS = (
     "{{ can_use_ai_features }}{{ show_places_layer }}{{ can_use_web_search }}{{ can_upload_videos }}"
@@ -49,8 +58,6 @@ class ContextProcessorCostTests(TestCase):
         self.assertEqual(queries, 0)
 
     def test_every_feature_flag_together_costs_one_feature_lookup(self) -> None:
-        from urbanlens.dashboard.models.subscriptions.model import user_features
-
         user = User.objects.get(pk=self.user.pk)
         request_cache.begin_scope()
         try:
@@ -79,16 +86,63 @@ class ContextProcessorCostTests(TestCase):
 
 
 class TheFeatureSetTests(TestCase):
-    def test_it_agrees_with_asking_one_feature_at_a_time(self) -> None:
-        from urbanlens.dashboard.models.subscriptions.model import user_features
-
+    def test_a_member_has_the_site_default_and_an_admin_has_everything(self) -> None:
         SiteSettings.objects.filter(pk=SiteSettings.get_current().pk).update(default_features="places")
         baker.make(User)
         member = User.objects.get(pk=baker.make(User).pk)
         admin = User.objects.get(pk=baker.make(User, is_superuser=True, is_active=True).pk)
 
-        for user in (member, admin):
-            with self.subTest(superuser=user.is_superuser):
-                asked = {feature for feature in SiteFeature.values if user_has_feature(user, feature)}
-                self.assertEqual(set(user_features(user)), asked)
         self.assertEqual(set(user_features(member)), {"places"})
+        self.assertEqual(set(user_features(admin)), set(SiteFeature.values))
+        self.assertEqual({feature for feature in SiteFeature.values if user_has_feature(member, feature)}, {"places"})
+
+
+class OneRequestAsksAboutFeaturesOnceTests(TestCase):
+    """Views check features directly as well as through the template flags; a request should look them up once."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+
+    def _queries_within_a_request(self, check: Callable[[], object]) -> int:
+        request_cache.begin_scope()
+        try:
+            with CaptureQueriesContext(connection) as ctx:
+                check()
+        finally:
+            request_cache.end_scope()
+        return len(ctx.captured_queries)
+
+    def test_every_check_after_the_first_is_free(self) -> None:
+        fresh = User.objects.get(pk=self.user.pk)
+        one = self._queries_within_a_request(lambda: user_features(fresh))
+        user = User.objects.get(pk=self.user.pk)
+
+        every = self._queries_within_a_request(
+            lambda: ([user_has_feature(user, feature) for feature in SiteFeature.values], user_features(user))
+        )
+
+        self.assertGreater(one, 0)
+        self.assertEqual(every, one)
+
+    def test_a_grant_made_during_the_request_is_seen_by_the_next_check(self) -> None:
+        role = baker.make(SubscriptionRole, features=SiteFeature.BETA_FEATURES)
+        request_cache.begin_scope()
+        try:
+            self.assertFalse(user_has_feature(self.user, SiteFeature.BETA_FEATURES))
+            grant_subscription(self.user, role, self.user, None)
+            self.assertTrue(user_has_feature(self.user, SiteFeature.BETA_FEATURES))
+        finally:
+            request_cache.end_scope()
+
+    def test_outside_a_request_nothing_is_remembered(self) -> None:
+        """A socket consumer holds one user for the life of its connection."""
+        role = baker.make(SubscriptionRole, features=SiteFeature.BETA_FEATURES)
+        subscription = grant_subscription(self.user, role, self.user, None)
+        subscription.revoke()
+        self.assertFalse(user_has_feature(self.user, SiteFeature.BETA_FEATURES))
+
+        UserSubscription.objects.filter(pk=subscription.pk).update(revoked_at=None)
+
+        self.assertTrue(user_has_feature(self.user, SiteFeature.BETA_FEATURES))

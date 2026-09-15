@@ -29,7 +29,7 @@ class DashboardConfig(AppConfig):
         patch_extension_thread_safety()
 
         from django.core.signals import request_finished, request_started
-        from django.db.models.signals import post_save
+        from django.db.models.signals import post_delete, post_save
 
         from urbanlens.dashboard.models.achievements.signals import connect as connect_achievement_signals
         import urbanlens.dashboard.models.aliases.signals
@@ -61,12 +61,17 @@ class DashboardConfig(AppConfig):
 
         # Memoise the SiteSettings singleton for the length of a request only - see that
         # module's docstring for why this is scoped to requests instead of cached globally.
+        from urbanlens.dashboard.models.billing import RoleSubscription
         from urbanlens.dashboard.models.site_settings import request_cache as site_settings_cache
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
+        from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
 
         request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
         request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")
         post_save.connect(site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate")
+        for sender in (UserSubscription, RoleSubscription, SubscriptionRole):
+            post_save.connect(site_settings_cache.invalidate, sender=sender, dispatch_uid=f"site_settings_cache_invalidate_{sender.__name__}_save")
+            post_delete.connect(site_settings_cache.invalidate, sender=sender, dispatch_uid=f"site_settings_cache_invalidate_{sender.__name__}_delete")
 
         # Achievements subscribe to a dozen unrelated models, so their receivers
         # are registered from a table rather than one import per sender.
