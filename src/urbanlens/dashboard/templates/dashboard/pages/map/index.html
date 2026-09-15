@@ -1944,6 +1944,8 @@
                         head = obj;
                         if (obj.mode !== 'document') return null;
                         _mergeLabels(obj.labels);
+                    } else if (obj.t === 'labels') {
+                        _mergeLabels(obj.labels);
                     } else if (obj.t === 'pin') {
                         pins.push(obj.p);
                         if (pins.length % 500 === 0) {

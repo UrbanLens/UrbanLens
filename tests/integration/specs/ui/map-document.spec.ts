@@ -88,20 +88,23 @@ test.describe("map document", () => {
         expect(lines.at(-1)).toEqual({ t: "end", sent: pins.length });
     });
 
-    test("the head defines every label its pins name", async ({ page, api }) => {
-        // A pin carries label ids, not its labels, so a head that does not define
-        // one draws that pin with a chip missing and no error anywhere.
+    test("every label is defined before the pin that names it", async ({ page, api }) => {
+        // A pin carries label ids, not its labels, so a label the client has not
+        // read yet draws that pin with a chip missing and no error anywhere.
         await api.createPin();
 
         const lines = documentLines(await (await timedGet(page)).response.text());
 
-        const defined = new Set(Object.keys((lines.at(0)?.labels ?? {}) as Record<string, unknown>));
-        const named = new Set(
-            lines
-                .filter((line) => line.t === "pin")
-                .flatMap((line) => ((line.p as { label_ids?: unknown[] }).label_ids ?? []).map(String)),
-        );
-        expect([...named].filter((id) => !defined.has(id))).toEqual([]);
+        const defined = new Set<string>();
+        const namedBeforeDefined: string[] = [];
+        for (const line of lines) {
+            for (const id of Object.keys((line.labels ?? {}) as Record<string, unknown>)) defined.add(id);
+            if (line.t !== "pin") continue;
+            for (const id of ((line.p as { label_ids?: unknown[] }).label_ids ?? []).map(String)) {
+                if (!defined.has(id)) namedBeforeDefined.push(id);
+            }
+        }
+        expect(namedBeforeDefined).toEqual([]);
     });
 
     test("what Valkey hands back is what the database produced", async ({ page, api }) => {

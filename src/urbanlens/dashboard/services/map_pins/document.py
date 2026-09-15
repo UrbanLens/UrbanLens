@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 #: Bumped when the line grammar changes, independently of the payload's shape.
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 
 #: What the endpoint serves, and what the client should do about it.
 MODE_DOCUMENT = "document"
@@ -85,15 +85,16 @@ def stream(
     Yields:
         Chunks of whole NDJSON lines, each line ending in a newline."""
     service = MapPinPayloadService(profile)
-    # The whole label vocabulary up front, so a pin line can name its labels by
-    # id and the client can resolve them the moment it reads one.
+    # Every label is defined before a pin names it, so the client can draw a pin the moment it reads one.
+    vocabulary = service.vocabulary_dictionary()
+    defined = set(vocabulary)
     head = {
         "t": "head",
         "mode": MODE_DOCUMENT,
         "total": total,
         "etag": etag,
         "version": FORMAT_VERSION,
-        "labels": service.label_dictionary(),
+        "labels": vocabulary,
     }
     buffer: list[bytes] = [_line(head)]
     pending = len(buffer[0])
@@ -103,8 +104,11 @@ def stream(
     while True:
         page = service.page(query, cursor=cursor, limit=BATCH_SIZE)
         pins = decorate(page.pins) if decorate else page.pins
-        for pin in pins:
-            line = _line({"t": "pin", "p": pin})
+        lines = [_line({"t": "pin", "p": pin}) for pin in pins]
+        if undefined := {key: entry for key, entry in service.label_dictionary_for(pins).items() if key not in defined}:
+            defined.update(undefined)
+            lines.insert(0, _line({"t": "labels", "labels": undefined}))
+        for line in lines:
             buffer.append(line)
             pending += len(line)
             if pending >= CHUNK_BYTES:

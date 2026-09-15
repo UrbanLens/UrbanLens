@@ -8,7 +8,7 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: D12` · `status: accepted` · `updated: 2026-09-11`
+`id: D12` · `status: accepted` · `updated: 2026-09-15`
 
 Follows R27 (`docs/MAP_PERFORMANCE.md`), which measured the map payload's cost as 88% Python object
 construction and replaced the object graph with a column projection. That fix made the payload
@@ -83,10 +83,14 @@ dictionary that replaces the repetition is 1,335 bytes. Gzip was already collaps
 duplication, so the compressed saving is the smaller number; the uncompressed one is what the server
 allocates, the client parses and the browser's store holds. Full figures in X17.
 
-Every response carries the labels its own pins name, not the account's whole vocabulary: the views
-are already in hand from serializing those pins, so a page costs no query for it. Only the streamed
-document asks for the account's, because its head goes out before its first pin line - one join over
-the through table, measured at 26 ms on a 10,000-pin account, once per document.
+Every paged response carries the labels its own pins name: the views are already in hand from
+serializing those pins, so a page costs no query for it. The streamed document's head goes out before
+its first pin line, so it carries every chip-bearing label the account can see - its own and the
+global ones, read from the labels table. A batch naming a label outside that set, such as one carried
+over from another account, is preceded by a `labels` line built from views the batch already read.
+The head was once the distinct labels on the account's pins, which read every pin-label pair: 113-171 ms
+for the 53,160 pairs of the capacity population's heaviest account, against about 5 ms for its 63-label
+vocabulary.
 
 Icon and colour resolution stays on the server, in `payload.py`, unchanged — `resolve_icon` and
 `resolve_color` remain the only implementation of those rules. The client derives only chips, status
@@ -100,10 +104,11 @@ make three copies of one rule.
 The client currently makes 20 sequential round trips of 500 pins for a 10k account, and polls
 `Max(Pin.updated)` — which a deletion never moves, so a pin deleted in another tab stays on the map.
 
-- `GET /dashboard/map/document/` streams `head`, `pin` lines in batches of 1000, and `end`. NDJSON
+- `GET /dashboard/map/document/` streams `head`, `pin` lines in batches of 1000 (a batch naming a
+  label the head lacks opens with a `labels` line), and `end`. NDJSON
   because the inline script can split a `ReadableStream` on newlines in a few dozen lines, each line
   is a complete value, and a missing `end` line detects a truncated response — which a bare JSON
-  array cannot. **Built 2026-09-11**, without the label dictionary, which waits on decision 2.
+  array cannot. **Built 2026-09-11.**
   `map.pins` is unchanged and still pages: it is what a client that wants pages uses, what an
   account over the ceiling is told to fall back to, and what progressive loading would be built on.
 - The ETag is **derived**, not stored: a hash over `Max(Pin.updated)`, the root-pin count,

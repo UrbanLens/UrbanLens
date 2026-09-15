@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.locations import display
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Iterator, Mapping, Sequence
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -83,7 +83,7 @@ class LabelView:
         return {"id": self.id, "kind": self.kind, "name": self.name, "color": self.effective_color, "icon": self.effective_icon}
 
     @classmethod
-    def from_row(cls, row: dict[str, Any], customization: dict[str, Any] | None) -> LabelView:
+    def from_row(cls, row: Mapping[str, Any], customization: Mapping[str, Any] | None) -> LabelView:
         """Build a view from a label's columns and this profile's override row.
 
         Args:
@@ -227,7 +227,7 @@ def _build_payload(
         "rating": rating or 0,
         "color": resolve_color(pin_color=own_color, pin_icon=own_icon, pin_custom_icon_url=own_custom_icon_url, labels=labels),
         # The labels themselves travel once per response, not once per pin that
-        # carries them - see `MapPinPayloadService.label_dictionary`. Ordered by
+        # carries them - see `MapPinPayloadService.label_dictionary_for`. Ordered by
         # `(-order, name)`, so the client's chips keep the server's priority.
         "label_ids": [label.id for label in chips],
         "address": address,
@@ -370,15 +370,29 @@ class MapPinPayloadService:
                 already built are reused rather than re-read.
         """
         missing = label_ids - self._label_views.keys()
-        if not missing:
-            return
-        overrides = {row["label_id"]: row for row in LabelCustomization.objects.filter(profile=self.profile, label_id__in=missing).values("label_id", "name", "icon", "color")}
-        for row in Label.objects.filter(pk__in=missing).values("id", "kind", "name", "order", "icon", "color", "custom_icon"):
+        if missing:
+            self._store_label_views(Label.objects.filter(pk__in=missing), LabelCustomization.objects.filter(profile=self.profile, label_id__in=missing))
+
+    def _store_label_views(self, labels: QuerySet[Label], customizations: QuerySet[LabelCustomization]) -> list[int]:
+        """Build and hold a :class:`LabelView` for each of *labels*.
+
+        Args:
+            labels: The labels to read.
+            customizations: This profile's overrides, covering at least *labels*.
+
+        Returns:
+            The ids read.
+        """
+        overrides = {row["label_id"]: row for row in customizations.values("label_id", "name", "icon", "color")}
+        read: list[int] = []
+        for row in labels.values("id", "kind", "name", "order", "icon", "color", "custom_icon"):
             self._label_views[row["id"]] = LabelView.from_row(row, overrides.get(row["id"]))
+            read.append(row["id"])
+        return read
 
     def label_dictionary_for(self, payloads: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         """The labels *payloads* name, resolved from what building them already read.
-        Prefer this wherever the payloads exist before the response is written, which is everywhere except the streamed document - whose head goes out before its first pin, so it has to ask :meth:`label_dictionary` instead.
+        The streamed document's head goes out before its first pin, so it carries :meth:`vocabulary_dictionary` and uses this for any label a batch names outside it.
 
         Args:
             payloads: Map payloads carrying ``label_ids``.
@@ -394,17 +408,15 @@ class MapPinPayloadService:
                     entries[key] = view.as_dictionary_entry()
         return entries
 
-    def label_dictionary(self) -> dict[str, dict[str, Any]]:
-        """Every label the profile's pins can name, keyed by id as a string.
-        One query, and it walks the whole through table for the profile - which is why only the streamed document uses it.
+    def vocabulary_dictionary(self) -> dict[str, dict[str, Any]]:
+        """Every chip-bearing label the profile can see, keyed by id as a string.
+        Read from the labels rather than from the pins carrying them, so its cost follows the vocabulary, not the account. A pin can still name a label outside it; :meth:`label_dictionary_for` covers that one once the pin is built.
 
         Returns:
-            ``{"<id>": {id, kind, name, color, icon}}`` for the profile's chip-bearing labels."""
-        attached = set(
-            Pin.labels.through.objects.filter(pin__profile=self.profile).values_list("label_id", flat=True).distinct(),
-        )
-        self._resolve_label_views(attached)
-        return {str(label_id): view.as_dictionary_entry() for label_id in attached if (view := self._label_views.get(label_id)) is not None and view.kind in DISPLAY_LABEL_KINDS}
+            ``{"<id>": {id, kind, name, color, icon}}`` for the global labels and the profile's own."""
+        visible = Label.objects.visible_to(self.profile).filter(kind__in=DISPLAY_LABEL_KINDS).order_by()
+        read = self._store_label_views(visible, LabelCustomization.objects.filter(profile=self.profile))
+        return {str(label_id): self._label_views[label_id].as_dictionary_entry() for label_id in read}
 
     def _serialize_rows(self, rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
         """Turn one batch of projected rows into payloads."""
