@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
+from django.contrib.gis.geos import Point
 from django.db import connection, transaction
 
 from urbanlens.dashboard.models.labels.model import Label
@@ -252,7 +253,7 @@ def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> l
     Raises:
         RuntimeError: A coordinate was neither found nor created, which would mean the grid produced a value the database rounded differently - silently pairing pins with the wrong places."""
     Location.objects.bulk_create(
-        [Location(latitude=lat, longitude=lng, official_name=f"Perf Place {first_index + offset}") for offset, (lat, lng) in enumerate(coordinates)],
+        [Location(latitude=lat, longitude=lng, point=Point(float(lng), float(lat), srid=4326), official_name=f"Perf Place {first_index + offset}") for offset, (lat, lng) in enumerate(coordinates)],
         ignore_conflicts=True,
     )
     # Re-read rather than trusting `bulk_create`'s return: with

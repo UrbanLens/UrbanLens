@@ -60,6 +60,30 @@ class TheSeedCreatesWhatItReportsTests(TestCase):
         coordinates = set(Location.objects.filter(pins__profile=self.profile).values_list("latitude", "longitude"))
         self.assertEqual(len(coordinates), SEEDED)
 
+    def test_every_location_stands_where_its_coordinates_say(self) -> None:
+        """`bulk_create` skips `Location.save`, which is what moves `point` off its (0, 0) default."""
+        seed_heavy_account(self.profile, pins=SEEDED)
+
+        for location in Location.objects.filter(pins__profile=self.profile):
+            with self.subTest(location=location.pk):
+                self.assertAlmostEqual(location.point.x, float(location.longitude), places=6)
+                self.assertAlmostEqual(location.point.y, float(location.latitude), places=6)
+
+    def test_a_nearby_search_sees_the_grid_rather_than_one_point(self) -> None:
+        seed_heavy_account(self.profile, pins=SEEDED)
+        first = (
+            Pin.objects.filter(profile=self.profile)
+            .root_pins()
+            .select_related("location")
+            .order_by("location__latitude", "location__longitude")
+            .first()
+        )
+        assert first is not None  # nosec B101
+
+        nearby = Pin.objects.filter(profile=self.profile).near_point(first.location.point, radius_km=0.5)
+
+        self.assertEqual(list(nearby.values_list("pk", flat=True)), [first.pk])
+
     def test_every_pin_carries_the_shared_label(self) -> None:
         """A seed that spread labels would make the fan-out look cheap."""
         seed_heavy_account(self.profile, pins=SEEDED)
@@ -268,11 +292,14 @@ class TheSeedHoldsTheMapCentreConstantTests(TestCase):
         the densest-cluster centroid is the plain mean."""
         seed_heavy_account(self.profile, pins=SEEDED)
         self.profile.refresh_from_db()
-        stored = (float(self.profile.map_center_latitude), float(self.profile.map_center_longitude))
+        latitude, longitude = self.profile.map_center_latitude, self.profile.map_center_longitude
+        assert latitude is not None and longitude is not None  # nosec B101
+        stored = (float(latitude), float(longitude))
 
         Profile.objects.filter(pk=self.profile.pk).update(map_center_latitude=None, map_center_longitude=None)
         self.profile.refresh_from_db()
         computed = self.profile.compute_map_center()
+        assert computed is not None  # nosec B101
 
         self.assertAlmostEqual(stored[0], computed[0], places=4)
         self.assertAlmostEqual(stored[1], computed[1], places=4)
