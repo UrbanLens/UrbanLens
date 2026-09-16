@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P124` · `T4` · `PL8` · `D16` · `X24` · `I5` · `R30` · `N25`
+**Next free id:** `P124` · `T4` · `PL8` · `D16` · `X25` · `I5` · `R30` · `N25`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -187,4 +187,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | T3 | open | 2026-09-16 | Nothing in the integration suite opens the comment-map composer; a page-error guard is the only thing standing behind it now that it ships as its own file | [`docs/notes/comment-map-composer-test-coverage.md`](notes/comment-map-composer-test-coverage.md) |
 | N24 | current | 2026-09-16 | Playwright's default worker count exhausts `ul_web`'s 54-connection cap and prints as unrelated 500s on unrelated endpoints, not as a connection error | [`docs/notes/browser-testing-development-main-connection-limits.md`](notes/browser-testing-development-main-connection-limits.md) |
 | X22 | holds | 2026-09-16 | Fragment-caching the nav costs more than the rendering it skips; the cost is `reverse()`, not the template | [`docs/notes/nav-fragment-cache-cost-measured.md`](notes/nav-fragment-cache-cost-measured.md) |
-| X23 | holds | 2026-09-16 | Template-engine work is ~26% of a map request, not the 61-66% the Jinja2/JinjaX port was justified on, and the two conflicting `header.html` figures were both correct | [`docs/notes/template-engine-share-measured.md`](notes/template-engine-share-measured.md) |
+| X23 | holds | 2026-09-16 | Template-engine share of a map request is unpinned between ~26% and ~41%, not the 61-66% the Jinja2/JinjaX port was originally justified on; the two conflicting `header.html` figures were still both correct | [`docs/notes/template-engine-share-measured.md`](notes/template-engine-share-measured.md) |
+| X24 | holds | 2026-09-16 | The map request's redundant SQL is app code defeating Django's caches, and one template tag is 28% of it | [`docs/notes/map-request-redundant-sql-measured.md`](notes/map-request-redundant-sql-measured.md) |

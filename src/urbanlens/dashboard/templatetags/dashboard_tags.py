@@ -466,7 +466,12 @@ def assistant_enabled_flag(user) -> bool:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.ai.access import assistant_available
 
-    profile, _ = Profile.objects.get_or_create(user=user)
+    # Reuses the profile the request already loaded, and hands assistant_available a profile whose cached
+    # user still has its permission cache; get_or_create selects again and returns one with neither.
+    try:
+        profile = user.profile
+    except Profile.DoesNotExist:
+        profile, _ = Profile.objects.get_or_create(user=user)
     return assistant_available(profile)
 
 
