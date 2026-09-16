@@ -3264,6 +3264,66 @@ Not fixed: non-matching bare-term variant (Pin, Photo); either variant of the `l
 path (Wiki, and likely Pin/Photo too, unchecked). Partially fixed: matching bare-term variant (Pin,
 Photo). Out of scope, not a capacity defect: Wiki's missing bare-term label search.
 
+### Integration-level reproduction: the neighbour harness, at 50,000 labels (2026-09-16)
+
+`tests/perf/k6/neighbour.js`'s `NEIGHBOUR_REQUESTS` gained two entries, `global_search_match` and
+`global_search_miss` (`/dashboard/search/panel/?q=...`), and `perf_seed.py` gained
+`seed_bulk_labels()` — bulk-created, unattached to any pin/photo/wiki, growing `dashboard_labels`
+via a new `--heavy-labels` flag on `provision_integration_env` and `bin/run_perf_tests.sh`.
+Unattached is deliberate, not a shortcut: `_semijoin` scans the label table before any join to
+another model narrows it, so what the rows are attached to has no bearing on the cost (see
+`tests/perf/README.md`'s new P123 section). No actor phase is needed to reproduce this — the defect
+tracks total row count, not real-time action — so growing the table is a seeding step.
+
+Two real bugs surfaced wiring this up, both fixed: the new requests were missing the `/dashboard/`
+prefix every other route in the file carries (`urls.py` mounts `dashboard.urls` under
+`path("dashboard/", include(...))`; the un-prefixed path 404s), and a `SEARCH_ENDPOINTS` constant
+used inside `buildThresholds()` was declared after the module-level `options` block that calls it,
+a temporal-dead-zone `ReferenceError` at load time. The per-phase verdict table also turned out to
+dilute the signal — 2 of 5 rotation slots, blended with health/map traffic into one p95 per phase —
+so `buildThresholds`/`renderVerdict` gained a second table, `http_req_duration{...,endpoint:X}`
+recorded independent of phase, showing each search variant's latency on its own.
+
+The target environment (`ul_perf_*`, a separate checkout normally left running rather than rebuilt)
+had three unrelated, pre-existing problems that blocked any run at all until fixed: its venv was
+missing dependencies added since it was last built (including `jinjax`, this same day), all 237
+tables/235 sequences in `urbanlens_perf` were owned by `postgres` instead of `ul_web` (the app's
+runtime role) because the DB was seeded via the superuser without the usual role-convergence step
+(`bin/init.py --db-only`, which `db-setup` normally runs), and three migrations were pending,
+including **0049 — this problem's own trigram-index fix** — so the very first attempt would have
+measured the unfixed matching variant. None of these are new findings about the application; they
+are the perf environment's own drift, fixed in place so it reflects the checkout under test.
+
+**Result, a validated 60-second idle-phase pass (`--phases idle`, `budget p95 < 705ms` derived from
+this same host and run):**
+
+| endpoint | count | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|
+| `global_search_match` | 60 | 222-230ms | 276-285ms | 372-385ms | 467-535ms |
+| `global_search_miss` | 60 | 139-152ms | 187-205ms | 221-347ms | 225-533ms |
+
+Both variants run well above ordinary map/health traffic on this same host (44-82ms p50/p95,
+from the pre-fix baseline pass) — the labels-table cost is visible at the HTTP level, not just in
+`EXPLAIN` row counts. Notably, `global_search_match` is the **slower** of the two here, not the
+faster one the unit-level "matching variant is partially fixed" result might suggest: the match
+term (`"Perf Bulk Label"`) was deliberately seeded to match all 50,000 bulk rows, so confirming
+*which* rows match likely costs more than confirming *none* do, once the match count is this large.
+The unit-level entry above already flagged this exact gap — "Measured at test scale (~500 labels
+after growth)... re-measure there before trusting the ratio" — and this is that re-measurement, at
+100x the scale, showing the ratio does not hold: the fix's benefit is term-dependent, not just
+variant-dependent, and a term matching a large slice of the table is its own cost shape.
+
+**The full 8-phase, ~15-minute measured pass (`map_init_1/4`, `map_search_1/8`, `label_edit`,
+`search_storm`, `import_confirmed`, `cooldown`) did not complete** — killed three consecutive times
+by the host's memory watchdog (a known condition on this shared host, not a code defect; see the
+repo's own operational notes on perf runs saturating it), each time further in: immediately during
+setup, then 1m06s into `map_init_1`, then 7m04s in, right as `search_storm` ramped to 60 VUs.
+`map_init_1`, `map_init_4`, `map_search_1`, `map_search_8` and `label_edit` all completed cleanly
+across these attempts before each kill. Since P123 is a static, row-count-driven cost rather than
+an actor-phase-driven one, the idle-phase result above is a complete answer to this problem's own
+question; the full battery would additionally show whether it compounds with `search_storm`'s
+connection pressure, which remains unmeasured.
+
 ## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
 
 `id: P124` · `status: open` · `updated: 2026-09-16`

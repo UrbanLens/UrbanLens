@@ -224,6 +224,51 @@ def seed_heavy_account(
     }
 
 
+#: Name prefix for labels seeded purely to grow the labels table (P123). Unattached to any
+#: pin/image/wiki on purpose: the semi-join this reproduces (`services/global_search/providers.py`'s
+#: `_semijoin`) scans the whole `dashboard_labels` table before any join to another model narrows
+#: it, so what these rows are attached to has no bearing on the cost - only how many exist does.
+BULK_LABEL_PREFIX = "Perf Bulk Label"
+
+
+def seed_bulk_labels(profile: Profile, *, count: int, analyze: bool = True, batch_size: int = BATCH_SIZE) -> dict[str, Any]:
+    """Grow `dashboard_labels` by *count* rows, for P123's cross-account label-scan load test.
+
+    Args:
+        profile: Whose account the rows are created under. Immaterial to the defect being
+            reproduced - the scan is unscoped by profile - but a label row requires one.
+        count: How many bulk labels should exist in total. Tops up rather than restarting:
+            existing bulk labels (by name prefix) are counted first and only the shortfall is
+            created, the same convention `seed_heavy_account` uses for pins.
+        analyze: Refresh planner statistics on `dashboard_labels` afterwards.
+        batch_size: Rows per `bulk_create` round trip.
+
+    Returns:
+        What was done, for the provisioning manifest: the final count, how many were created now,
+        whether `ANALYZE` ran, and how long it took."""
+    started = time.perf_counter()
+    existing = Label.objects.filter(profile=profile, name__startswith=BULK_LABEL_PREFIX).count()
+    wanted = max(count - existing, 0)
+
+    created = 0
+    for start in range(0, wanted, batch_size):
+        batch = min(batch_size, wanted - start)
+        Label.objects.bulk_create(
+            [Label(profile=profile, kind="tag", name=f"{BULK_LABEL_PREFIX} {existing + start + offset}", color="#4a6fa5") for offset in range(batch)],
+        )
+        created += batch
+
+    analyzed = analyze and analyze_seeded_tables(("dashboard_labels",))
+    return {
+        "labels": existing + created,
+        "created": created,
+        "already_present": existing,
+        "name_prefix": BULK_LABEL_PREFIX,
+        "analyzed": analyzed,
+        "seconds": round(time.perf_counter() - started, 1),
+    }
+
+
 def _vocabulary_labels(profile: Profile) -> list[Label]:
     """The shared vocabulary, created if absent.
 

@@ -54,6 +54,12 @@ class Command(BaseCommand):
             help=f"Which role --heavy-pins seeds (default: {_HEAVY_ROLE}). Must be one of --roles.",
         )
         parser.add_argument(
+            "--heavy-labels",
+            type=int,
+            default=0,
+            help="Grow dashboard_labels to this many rows on the --heavy-role account, for P123's cross-account label-scan load test. Tops up rather than restarting.",
+        )
+        parser.add_argument(
             "--population",
             type=int,
             default=0,
@@ -185,32 +191,51 @@ class Command(BaseCommand):
             A mapping of role name to that role's seed report; empty when nothing was seeded.
 
         Raises:
-            CommandError: ``--heavy-pins`` names a role that was not provisioned.
+            CommandError: ``--heavy-pins`` or ``--heavy-labels`` names a role that was not provisioned.
         """
-        wanted = options["heavy_pins"]
-        if wanted <= 0:
+        wanted_pins = options["heavy_pins"]
+        wanted_labels = options["heavy_labels"]
+        if wanted_pins <= 0 and wanted_labels <= 0:
             return {}
-
-        from urbanlens.dashboard.services.integration_testing.perf_seed import seed_heavy_account
 
         role = options["heavy_role"]
         account = next((candidate for candidate in result.accounts if candidate.role == role), None)
         if account is None:
             provisioned = ", ".join(candidate.role for candidate in result.accounts) or "none"
-            raise CommandError(f"--heavy-pins asked to seed the '{role}' account, but only these were provisioned: {provisioned}. Add it to --roles.")
-
+            raise CommandError(f"--heavy-pins/--heavy-labels asked to seed the '{role}' account, but only these were provisioned: {provisioned}. Add it to --roles.")
         profile = Profile.objects.get(user__username=account.username)
+        report: dict[str, object] = {}
+
         # Progress goes to stderr because stdout is a document: with --format json and no --out it is the
         # manifest itself, and with --format text it is a block of shell exports.
-        self.stderr.write(f"Seeding {account.username} to {wanted} pins. This writes rows in bulk and can take a while at large sizes.")
-        report = seed_heavy_account(profile, pins=wanted, analyze=not options["no_analyze"])
-        self.stderr.write(
-            f"  {report['pins']} pins ({report['created']} created, {report['already_present']} already there) on label {report['label']!r} (id {report['label_id']}), analyzed={report['analyzed']}, {report['seconds']}s",
-        )
-        if not report["analyzed"]:
+        if wanted_pins > 0:
+            from urbanlens.dashboard.services.integration_testing.perf_seed import seed_heavy_account
+
+            self.stderr.write(f"Seeding {account.username} to {wanted_pins} pins. This writes rows in bulk and can take a while at large sizes.")
+            pins_report = seed_heavy_account(profile, pins=wanted_pins, analyze=not options["no_analyze"])
             self.stderr.write(
-                self.style.WARNING("Planner statistics were NOT refreshed. Every timing taken against this account measures the planner's ignorance, not the query."),
+                f"  {pins_report['pins']} pins ({pins_report['created']} created, {pins_report['already_present']} already there) on label {pins_report['label']!r} (id {pins_report['label_id']}), analyzed={pins_report['analyzed']}, {pins_report['seconds']}s",
             )
+            if not pins_report["analyzed"]:
+                self.stderr.write(
+                    self.style.WARNING("Planner statistics were NOT refreshed. Every timing taken against this account measures the planner's ignorance, not the query."),
+                )
+            report.update(pins_report)
+
+        if wanted_labels > 0:
+            from urbanlens.dashboard.services.integration_testing.perf_seed import seed_bulk_labels
+
+            self.stderr.write(f"Growing dashboard_labels to {wanted_labels} rows on {account.username}. This writes rows in bulk and can take a while at large sizes.")
+            labels_report = seed_bulk_labels(profile, count=wanted_labels, analyze=not options["no_analyze"])
+            self.stderr.write(
+                f"  {labels_report['labels']} bulk labels ({labels_report['created']} created, {labels_report['already_present']} already there), analyzed={labels_report['analyzed']}, {labels_report['seconds']}s",
+            )
+            if not labels_report["analyzed"]:
+                self.stderr.write(
+                    self.style.WARNING("Planner statistics were NOT refreshed. Every timing taken against this account measures the planner's ignorance, not the query."),
+                )
+            report["bulk_labels"] = labels_report
+
         return {role: report}
 
     def _check_environment(self, *, force: bool) -> None:

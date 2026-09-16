@@ -25,6 +25,7 @@ MANIFEST=""
 PROVISION_CONTAINER=""
 DB_CONTAINER=""
 HEAVY_PINS=20000
+HEAVY_LABELS=0
 RATE=5
 BASELINE_SECONDS=60
 BUDGET_MS=""
@@ -47,6 +48,10 @@ usage() {
 		                             manifest back out of it.
 		  --db-container NAME        Sample pg_stat_activity here during the run.
 		  --heavy-pins N             Pins to seed the heavy account to (default: ${HEAVY_PINS}).
+		  --heavy-labels N           Rows to grow dashboard_labels to on the heavy account, for
+		                             P123's cross-account label-scan reproduction (default:
+		                             ${HEAVY_LABELS}, i.e. off - the neighbour's search endpoints
+		                             still run, they just measure whatever the table already holds).
 		  --rate N                   Neighbour requests per second (default: ${RATE}).
 		  --budget-ms N              Skip the baseline pass and use this p95 ceiling.
 		  --baseline-seconds N       Baseline pass length (default: ${BASELINE_SECONDS}).
@@ -70,6 +75,7 @@ while [[ $# -gt 0 ]]; do
 		--provision-container) PROVISION_CONTAINER="$2"; shift 2 ;;
 		--db-container) DB_CONTAINER="$2"; shift 2 ;;
 		--heavy-pins) HEAVY_PINS="$2"; shift 2 ;;
+		--heavy-labels) HEAVY_LABELS="$2"; shift 2 ;;
 		--rate) RATE="$2"; shift 2 ;;
 		--budget-ms) BUDGET_MS="$2"; SKIP_BASELINE=1; shift 2 ;;
 		--baseline-seconds) BASELINE_SECONDS="$2"; shift 2 ;;
@@ -127,11 +133,12 @@ echo "==> results in ${OUT_DIR}"
 # -- seed --------------------------------------------------------------------
 
 if [[ -n "${PROVISION_CONTAINER}" ]]; then
-	echo "==> provisioning and seeding in ${PROVISION_CONTAINER} (${HEAVY_PINS} pins)"
+	echo "==> provisioning and seeding in ${PROVISION_CONTAINER} (${HEAVY_PINS} pins, ${HEAVY_LABELS} bulk labels)"
 	REMOTE_MANIFEST="/tmp/ul-perf-manifest.json"
 	docker exec "${PROVISION_CONTAINER}" /app/.venv/bin/python src/urbanlens/manage.py provision_integration_env \
 		--roles primary,secondary,heavy \
 		--heavy-pins "${HEAVY_PINS}" \
+		--heavy-labels "${HEAVY_LABELS}" \
 		--out "${REMOTE_MANIFEST}"
 	MANIFEST="${OUT_DIR}/manifest.json"
 	docker cp "${PROVISION_CONTAINER}:${REMOTE_MANIFEST}" "${MANIFEST}"
@@ -188,7 +195,8 @@ echo "==> measured pass"
 STATUS=0
 run_k6 "measured.json" \
 	-e UL_PERF_BUDGET_MS="${BUDGET_MS}" \
-	-e UL_PERF_EXPECTED_PINS="${HEAVY_PINS}" || STATUS=$?
+	-e UL_PERF_EXPECTED_PINS="${HEAVY_PINS}" \
+	-e UL_PERF_EXPECTED_LABELS="${HEAVY_LABELS}" || STATUS=$?
 
 POOL_STATUS=0
 if [[ -n "${SAMPLER_PID}" ]]; then

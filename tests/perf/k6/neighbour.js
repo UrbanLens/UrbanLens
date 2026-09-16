@@ -45,15 +45,35 @@ const FIXTURES = {
     importTimeout: __ENV.UL_PERF_IMPORT_TIMEOUT || "230s",
     actorTimeout: __ENV.UL_PERF_ACTOR_TIMEOUT || "120s",
     expectedPins: Number(__ENV.UL_PERF_EXPECTED_PINS || seedValue("pins", 0)),
+    // Informational only (logged in the pre-flight line): there is no cheap
+    // endpoint that reports a site-wide label count to check this against.
+    expectedLabels: Number(__ENV.UL_PERF_EXPECTED_LABELS || 0),
 };
 
-/** The neighbour's rotation. One cheap, one representative, one that proves the
- * process is answering at all - so a failure says which layer went.
+/** P123: matches the bulk labels `--heavy-labels` seeds (`perf_seed.py`'s `BULK_LABEL_PREFIX`) -
+ * many hits, none attached to anything the neighbour can see, so the matching variant's fix
+ * (migration 0049's trigram index) is what stands between this and the same cost as the miss below. */
+const SEARCH_MATCH_TERM = "Perf Bulk Label";
+
+/** P123's still-open variant: matches nothing, anywhere, ever - the true negative that has to read
+ * the whole labels table to conclude that. */
+const SEARCH_MISS_TERM = "zzz-nonexistent-term-xyz";
+
+/** The neighbour's rotation. Two cheap/representative/liveness checks, plus P123's two global-search
+ * variants - so a budget breach on `global_search_miss` alone points at that specific defect, not a
+ * general slowdown.
  */
+/** P123: each is 1-in-5 of the neighbour's rotation, so a phase table (mostly health/map traffic)
+ * dilutes exactly the signal these exist to show. Recorded across the whole run, independent of
+ * phase, so the miss variant's cost - or the match variant's fix - is visible on its own. */
+const SEARCH_ENDPOINTS = ["global_search_match", "global_search_miss"];
+
 const NEIGHBOUR_REQUESTS = [
     { endpoint: "health_ready", path: "/health/ready" },
     { endpoint: "map_pins", path: "/dashboard/map/pins/?limit=50" },
     { endpoint: "map_page", path: "/dashboard/map/" },
+    { endpoint: "global_search_match", path: `/dashboard/search/panel/?q=${encodeURIComponent(SEARCH_MATCH_TERM)}` },
+    { endpoint: "global_search_miss", path: `/dashboard/search/panel/?q=${encodeURIComponent(SEARCH_MISS_TERM)}` },
 ];
 
 export const options = {
@@ -109,7 +129,16 @@ export function setup() {
         fail("No heavy label id. Pass UL_PERF_LABEL_ID, or seed through provision_integration_env --heavy-pins so the manifest carries it.");
     }
 
-    console.log(`pre-flight ok: ${total} pins on ${heavy.username}, label ${FIXTURES.labelId}, budget p95 < ${BUDGET_MS}ms`);
+    // P123: neither variant should already be broken at rest - a non-200 here means the run would
+    // measure an error page's latency, not the search's.
+    for (const term of [SEARCH_MATCH_TERM, SEARCH_MISS_TERM]) {
+        const searchResponse = get(secondary, `/dashboard/search/panel/?q=${encodeURIComponent(term)}`, { endpoint: "preflight", phase: "setup" }, { responseType: "text" });
+        if (searchResponse.status !== 200) {
+            fail(`Pre-flight GET search.panel?q=${term} answered ${searchResponse.status} as ${secondary.role}; the run would measure an error page.`);
+        }
+    }
+
+    console.log(`pre-flight ok: ${total} pins on ${heavy.username}, label ${FIXTURES.labelId}, ${FIXTURES.expectedLabels || "unknown"} bulk labels expected, budget p95 < ${BUDGET_MS}ms`);
     return { total, cookies: { secondary: secondary.cookies, heavy: session.cookies } };
 }
 
@@ -177,9 +206,10 @@ function buildScenarios() {
 /** Thresholds, which in k6 are also the *only* way to ask for a sub-metric. A tag combination that no threshold names is never aggregated, so it is absent from the summary however many requests carried it. */
 function buildThresholds() {
     const recordBaseline = { [`http_req_duration{scenario:neighbour,phase:${baselinePhase(ACTIVE)}}`]: ["p(95)>=0"] };
+    const recordSearch = Object.fromEntries(SEARCH_ENDPOINTS.map((endpoint) => [`http_req_duration{scenario:neighbour,endpoint:${endpoint}}`, ["p(95)>=0"]]));
     if (BASELINE) {
         // Guard matters most here: a baseline against the sign-in page would judge every later phase against it.
-        return Object.assign({ "checks{guard:signed_in}": ["rate==1"] }, recordBaseline);
+        return Object.assign({ "checks{guard:signed_in}": ["rate==1"] }, recordBaseline, recordSearch);
     }
     const thresholds = {
         // Dropped iterations mean VUs stuck inside requests: the invariant failing, not a slow page.
@@ -189,6 +219,7 @@ function buildThresholds() {
         "http_req_failed{scenario:neighbour}": ["rate==0"],
         // No ceiling on the reference itself: a threshold there would be circular.
         ...recordBaseline,
+        ...recordSearch,
     };
     for (const phase of assertedPhases(ACTIVE)) {
         thresholds[`http_req_duration{scenario:neighbour,phase:${phase}}`] = [`p(95)<${BUDGET_MS}`];
@@ -225,6 +256,19 @@ function renderVerdict(data) {
         lines.push(
             `  ${phase.padEnd(20)} ${String(values.count).padStart(6)} ${fixed(values.med)} ${fixed(values["p(95)"])} ${fixed(values["p(99)"])} ${fixed(values.max)}   ${verdict}`,
         );
+    }
+
+    lines.push("");
+    lines.push("  P123: search latency across the whole run, independent of phase");
+    lines.push("  endpoint              count      p50      p95      p99      max");
+    for (const endpoint of SEARCH_ENDPOINTS) {
+        const metric = data.metrics[`http_req_duration{scenario:neighbour,endpoint:${endpoint}}`];
+        if (!metric) {
+            lines.push(`  ${endpoint.padEnd(20)}  (no requests carried this endpoint tag)`);
+            continue;
+        }
+        const values = metric.values;
+        lines.push(`  ${endpoint.padEnd(20)} ${String(values.count).padStart(6)} ${fixed(values.med)} ${fixed(values["p(95)"])} ${fixed(values["p(99)"])} ${fixed(values.max)}`);
     }
 
     const dropped = data.metrics.dropped_iterations;

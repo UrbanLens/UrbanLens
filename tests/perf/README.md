@@ -20,6 +20,29 @@ bin/run_perf_tests.sh --url http://localhost:21810 \
 | `../../bin/perf/derive_budget.py` | Baseline p95 → the ceiling the measured pass is judged against. |
 | `../../bin/perf/pg_activity_sampler.sh` | 1 Hz `pg_stat_activity` by role, for the failures latency cannot see. |
 
+## P123: does the neighbour's search degrade as the labels table grows?
+
+The neighbour's rotation includes two `search.panel` requests, `global_search_match` and
+`global_search_miss` (see `docs/PROBLEMS.md`'s P123 for the mechanism: a cross-account label-table
+scan with no access scoping). Neither needs an actor phase to reproduce - the defect is triggered by
+total row count in `dashboard_labels`, not by anything happening in real time - so growing that
+table is a seeding step, not a scenario:
+
+```
+bin/run_perf_tests.sh --url http://localhost:21810 \
+    --provision-container urbanlens_development_main_app \
+    --db-container urbanlens_development_main_db \
+    --heavy-pins 20000 --heavy-labels 50000
+```
+
+`--heavy-labels N` grows `dashboard_labels` to `N` rows on the heavy account via
+`perf_seed.py`'s `seed_bulk_labels` - bulk-created, unattached to any pin/image/wiki, and topped up
+rather than restarted on a re-run. Unattached is deliberate: the scan this reproduces happens before
+any join to another model narrows it, so what the rows are attached to has no bearing on the cost.
+Omit the flag (or pass 0) and the two search endpoints still run, they just measure whatever the
+target's `dashboard_labels` already holds - useful for confirming the endpoints work before
+committing to a large seed, not for judging the defect.
+
 ## Three things that are easy to get wrong here
 
 **A load test that measures the sign-in page passes.** k6 resets a VU's cookie
