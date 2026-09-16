@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P123` · `T4` · `PL8` · `D16` · `X23` · `I5` · `R30` · `N25`
+**Next free id:** `P124` · `T4` · `PL8` · `D16` · `X24` · `I5` · `R30` · `N25`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -92,6 +92,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P113 | open | 2026-09-13 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 2 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P122 | open | 2026-09-15 | A refused external call returns a 500 from views that catch only `GatewayRequestError` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P123 | open | 2026-09-16 | Global search's pins-provider statement scans every account's labels, so one account's search slows as unrelated accounts add matching labels | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
@@ -186,3 +187,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | T3 | open | 2026-09-16 | Nothing in the integration suite opens the comment-map composer; a page-error guard is the only thing standing behind it now that it ships as its own file | [`docs/notes/comment-map-composer-test-coverage.md`](notes/comment-map-composer-test-coverage.md) |
 | N24 | current | 2026-09-16 | Playwright's default worker count exhausts `ul_web`'s 54-connection cap and prints as unrelated 500s on unrelated endpoints, not as a connection error | [`docs/notes/browser-testing-development-main-connection-limits.md`](notes/browser-testing-development-main-connection-limits.md) |
 | X22 | holds | 2026-09-16 | Fragment-caching the nav costs more than the rendering it skips; the cost is `reverse()`, not the template | [`docs/notes/nav-fragment-cache-cost-measured.md`](notes/nav-fragment-cache-cost-measured.md) |
+| X23 | holds | 2026-09-16 | Template-engine work is ~26% of a map request, not the 61-66% the Jinja2/JinjaX port was justified on, and the two conflicting `header.html` figures were both correct | [`docs/notes/template-engine-share-measured.md`](notes/template-engine-share-measured.md) |

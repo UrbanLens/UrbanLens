@@ -3070,3 +3070,71 @@ refusals. Audit the 48 production `except GatewayRequestError` sites first, look
 - a handler that treats a failure as grounds to retry or to disconnect an account.
 
 Catching refusals site by site is the alternative, and the next view will forget it again.
+
+## P123 — Global search's pins-provider statement scans every account's labels, so one account's search slows as unrelated accounts add matching labels
+
+`id: P123` · `status: open` · `updated: 2026-09-16`
+
+**This is a capacity problem, not a correctness or privacy one.** Search results are correctly
+access-scoped; nothing here is a data leak. The defect is that the query *plan* for the pins
+provider touches other accounts' label and pin-label rows before any access filter narrows the
+result, so the statement's cost tracks total site data, not the viewer's own data.
+
+### Evidence (X20, `docs/notes/label-cache-and-filter-cost-measured.md` §4 — method and full numbers there, not restated here)
+
+- `search.panel`: 476-530 ms wall, 122-127 ms CPU, 339-397 ms SQL.
+- The pins provider alone: 26-31 ms CPU and 255-332 ms SQL **in one statement**, 75-84% of the
+  panel's SQL.
+- For the query `Bench Tag 1`, the plan runs the `labels__name` semi-join as a hashed subplan with
+  **no profile condition**: a sequential scan of all 62,354 labels on the site, then 116,875
+  pin-label rows from every account whose labels match `bench` — 299 of 575 ms under load.
+- Each per-pin semi-join also joins `dashboard_user_pins` back to itself.
+- At D15's search rate (5% of views, two panel requests each, ~2.5/s) the pins query alone is
+  **0.64-0.83 DB-seconds/s**, against 0.47-0.55 for all of `map.search`.
+- X20's own conclusion already names this: "Search's pins-provider statement is a server fix
+  target independent of any caching decision, and its unscoped label semi-join is a cross-account
+  cost."
+
+### Mechanism (source read this session)
+
+`services/global_search/providers.py`'s `_semijoin` (`providers.py:192-207`):
+
+```python
+def _semijoin(model, path, condition):
+    if model is None or not _crosses_many(model, path):
+        return condition
+    return Q(Exists(model._base_manager.filter(condition, pk=OuterRef("pk"))))
+```
+
+`_base_manager` is the unfiltered default manager, so the `Exists` subquery carries no profile
+predicate. `PinSearchProvider.search` (`providers.py:525`) applies the viewer's own `profile=profile`
+filter only to the *outer* `Pin` queryset (`providers.py:535`), where it cannot restrict the
+subplan the `labels__name` branch of `apply_text` builds through `_semijoin`. The helper's own
+docstring gives the reason it exists — a row matching through several related rows should stay one
+row without `DISTINCT`, and planning a join across several to-many relations costs more than
+running one — and that reasoning is sound; the gap is only that the subquery it builds carries no
+scope of its own.
+
+**Not the same finding as a prior refutation.** An earlier session hypothesised that search
+providers were unscoped and access-checked and refuted it: every provider *is* access-scoped, and
+there is no leak. That refutation answered the security question only. It does not close this
+capacity question, and the two have already been conflated once.
+
+### Relationship to P100 — distinct code path, does not transfer
+
+P100 covers `services/map_pins/autocomplete.py`'s `search_local` (the map search box, fired per
+keystroke), and was downgraded 2026-09-10: 141-217 ms per keystroke of which ~70 ms is SQL, served
+by an Incremental Sort off the presorted `dashboard_user_pins.id` key under the `Limit` so it never
+materialises the full match set, and `profile=profile`-scoped so its cost tracks the viewer's own
+pin count. P100's refutation does not transfer here: this is a different statement in a different
+provider, and unlike P100, this one's subquery is genuinely unscoped in the plan, not just
+apparently so.
+
+### Candidate direction (unverified — do not treat as a fix)
+
+Push the viewer's access scope into the `Exists` subquery itself, so the planner can restrict the
+label scan to rows that could match, instead of scoping only the outer `Pin` queryset. Not
+implemented, not measured. No fix should be claimed for this entry until there is a
+failing-then-passing measurement against the plan cited above.
+
+Not fixed. Not re-measured this session beyond the source read of `_semijoin` and its callers.
