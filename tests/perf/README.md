@@ -48,8 +48,10 @@ committing to a large seed, not for judging the defect.
 `docs/PROBLEMS.md`'s P123 entry generalises the same unscoped semi-join to
 `ArticleSearchProvider`'s `pin__aliases__name`/`wiki__aliases__name`, `TripSearchProvider`'s
 `activities__title`/`activities__notes`/`comments__text`, and `SafetySearchProvider`'s
-`messages__body` - confirmed at the unit level, not yet re-measured at HTTP scale the way labels
-was above. `--heavy-search-relations N` grows all five relations (`PinAlias`, `WikiAlias`,
+`messages__body` - confirmed at the unit level, and re-measured at HTTP scale the same way as labels
+(see `docs/PROBLEMS.md`'s "Integration-level reproduction of the five generalised relations" entry:
+60-second idle-phase pass at 50,000 rows each, comfortably inside budget, connection pool untroubled).
+`--heavy-search-relations N` grows all five relations (`PinAlias`, `WikiAlias`,
 `TripActivity`, `TripComment`, `SafetyCheckinMessage`) to `N` rows each, on one dedicated host row
 per relation (a pin, its wiki, a trip, a check-in - each foreign key is NOT NULL, unlike `Label`,
 so a host is unavoidable, but which host is as immaterial to the cost as labels' being unattached):

@@ -3427,6 +3427,52 @@ Updated summary: not fixed — Wiki's `label:` operator (either variant), Photo'
 (either variant), Pin's `label:` operator non-matching variant. Already fine, measured: Pin's
 `label:` operator matching variant (mechanism not diagnosed).
 
+### Integration-level reproduction of the five generalised relations, at 50,000 rows each (2026-09-17)
+
+`--heavy-search-relations` (added to `provision_integration_env`/`bin/run_perf_tests.sh` alongside
+this entry's earlier generalisation work) validated live against `ul_perf` — the same environment,
+same `--phases idle` short-run methodology as the original 50,000-label validation above. The
+checkout there was 39 commits behind (it predated this whole generalisation), so bringing it current
+needed a real update, not just a re-run: `git pull`, a rebuild of the `app` image, and
+`docker compose up -d` to pick up services added upstream since the environment was last built
+(RabbitMQ as the Celery broker, Dragonfly renaming Valkey, a `celery-worker-bulk` worker). The
+environment's own machine-generated `docker-compose.agent.yml` (container-naming overlay, "generated
+per environment - do not edit") still referenced the retired `valkey`/`test-valkey` service names,
+which fails the build outright (`service "valkey" has neither an image nor a build context`); fixed
+in place with the equivalent `dragonfly`/`rabbitmq`/`celery-worker-bulk`/`test-dragonfly`/
+`test-rabbitmq` entries, following the naming convention every other entry in that file already
+uses. Migrations were already current and table ownership had not drifted this time - the three
+problems the first labels validation found and fixed in place did not recur.
+
+```
+bin/run_perf_tests.sh --url http://localhost:31000 \
+    --provision-container ul_perf_app --db-container ul_perf_db \
+    --heavy-pins 20000 --heavy-labels 50000 --heavy-search-relations 50000 --phases idle
+```
+
+All five relations grew cleanly to 50,000 rows each on a fresh account (`pin_aliases`,
+`wiki_aliases`, `trip_activities`, `trip_comments`, `safety_messages`: 50,000 created, 0 already
+there per the pre-flight log).
+
+**Result, a validated 60-second idle-phase pass (`budget p95 < 830ms`, derived from this same host
+and run):**
+
+| endpoint | count | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|
+| `global_search_match` | 60 | 255ms | 312ms | 317ms | 320ms |
+| `global_search_miss` | 60 | 179ms | 225ms | 242ms | 253ms |
+
+Both comfortably inside budget; the connection pool peaked at 9/100 backends (89% idle at the peak).
+Roughly the same order of magnitude as the labels-only validation above (222-285ms p50/p95 for
+`global_search_match`, 139-205ms for `global_search_miss`) despite adding 250,000 more rows across
+five more tables on top of the 50,000 labels already there - consistent with `GlobalSearchEngine`
+fanning one query out across every provider rather than paying per-relation, though a 60-request
+sample on a shared host is not precise enough to say the five new relations added zero cost, only
+that they did not compound into a budget failure. The full multi-phase battery (`search_storm`
+especially) was not attempted here, for the same host-memory-watchdog reason the labels-only
+validation's own full battery was abandoned after three kills; not repeated a fourth time on this
+already-successful narrower result.
+
 ## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
 
 `id: P124` · `status: open` · `updated: 2026-09-16`
