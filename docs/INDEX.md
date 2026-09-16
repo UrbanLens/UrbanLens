@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P123` · `T3` · `PL8` · `D16` · `X21` · `I5` · `R30` · `N24`
+**Next free id:** `P123` · `T4` · `PL8` · `D16` · `X22` · `I5` · `R30` · `N25`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -52,7 +52,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P25 | open | 2026-08-07 | `Comment.profile` CASCADEs but `TripComment.author` SET_NULLs, so account deletion erases only some comments | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P86 | open | 2026-09-07 | Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-08-13 | 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P34 | open | 2026-08-13 | 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P34 | open | 2026-09-16 | Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-05 | 50 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-14 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -79,10 +79,10 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
 | PL7 | live | 2026-09-11 | Making "no user can affect another user's availability" a property the tests can prove; phases 0, 1 and 5 done, 2 and 6 partly | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
 | P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P83 | open | 2026-09-06 | Over half of every page's HTML is inline `<script>`, re-sent uncached on every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P83 | open | 2026-09-16 | The map page's inline share fell from 72% to 37%; pin-detail and Settings are still moving half their HTML as script every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P85 | open | 2026-09-14 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P91 | open | 2026-09-15 | Four of eight security integration specs have never run against a live deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P92 | open | 2026-09-08 | `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P92 | open | 2026-09-16 | `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's cluster layer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P95 | open | 2026-09-14 | One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P105 | open | 2026-09-13 | A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -182,3 +182,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | N21 | current | 2026-09-11 | The availability audit of 2026-09-11, and what it found | [`docs/notes/availability-audit-2026-09-11.md`](notes/availability-audit-2026-09-11.md) |
 | N22 | current | 2026-09-12 | Staging crash-looped on an nginx config three tests called correct, and its logs held five more defects | [`docs/notes/staging-boot-log-findings-2026-09-12.md`](notes/staging-boot-log-findings-2026-09-12.md) |
 | N23 | current | 2026-09-15 | Ask: staging and production need `UL_DB_APP_PASS` before their next deploy, and k8s needs the per-tier roles | [`docs/handoffs/infrastructure-per-tier-database-roles.md`](handoffs/infrastructure-per-tier-database-roles.md) |
+| X21 | holds | 2026-09-16 | Moving the map page's and every page's inline `<script>` to cached files cut 275 KB and 52 KB off every load; a shared `CFG` name silently broke the map page until each file got its own | [`docs/notes/inline-script-extraction-map-and-theme.md`](notes/inline-script-extraction-map-and-theme.md) |
+| T3 | open | 2026-09-16 | Nothing in the integration suite opens the comment-map composer; a page-error guard is the only thing standing behind it now that it ships as its own file | [`docs/notes/comment-map-composer-test-coverage.md`](notes/comment-map-composer-test-coverage.md) |
+| N24 | current | 2026-09-16 | Playwright's default worker count exhausts `ul_web`'s 54-connection cap and prints as unrelated 500s on unrelated endpoints, not as a connection error | [`docs/notes/browser-testing-development-main-connection-limits.md`](notes/browser-testing-development-main-connection-limits.md) |

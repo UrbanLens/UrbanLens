@@ -804,6 +804,9 @@ Recorded so they do not have to be rediscovered:
   single retry: "a row written through the API is visible through the web UI"
   and "renders its own map". Both wait on a page that pulls Leaflet from a
   public CDN.
+- **The comment-map composer is never opened.** No spec references `CommentMap`, `attachMap` or
+  `composer`; the smoke sweep's page-error guard is the only thing behind the file it now ships as
+  on every page. See `docs/notes/comment-map-composer-test-coverage.md` (T3).
 
 ## Pointing it at the right URL
 

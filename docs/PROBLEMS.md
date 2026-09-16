@@ -868,43 +868,53 @@ Worth doing because the one route from this set that *was* investigated - `pin.l
 endpoint - turned out to fail with a 500 on every request (see the entry above). An untested write
 route is not merely unverified; it is where a permanently broken feature can sit unnoticed.
 
-## P34 — 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers
+## P34 — Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not
 
-`id: P34` · `status: open` · `updated: 2026-08-13`
+`id: P34` · `status: open` · `updated: 2026-09-16` · `partially addressed 2026-09-16, see X21`
 
-Previously titled "Inline template JS: 21,543 lines, 14 escaping helpers, zero test coverage".
+Previously titled "22,636 lines of inline template JS sit outside every automated check, with
+duplicated escaping helpers", and before that "Inline template JS: 21,543 lines, 14 escaping
+helpers, zero test coverage".
 
-Measured 2026-08-14. `dashboard/templates/` contains **21,543 lines of inline JavaScript across
-101 templates**, versus 22,684 lines in `frontend/ts/` which `tsc --noEmit` and 394 bun tests
-cover. Half the frontend is outside every automated check.
+Measured 2026-08-14: `dashboard/templates/` held **21,543 lines of inline JavaScript across 101
+templates**, versus 22,684 lines in `frontend/ts/` which `tsc --noEmit` and 394 bun tests cover.
+**The 101-template, 21,543-line total was not re-measured this session** - only the two rows below
+were, by `git show <commit> --numstat` against the two extraction commits.
 
-Concentration (top 5 = 49% of the total):
+Concentration, as measured 2026-08-14 (top 5 = 49% of the then-total):
 
-| lines | template |
-|---|---|
-| 5,175 | `pages/map/index.html` |
-| 1,772 | `pages/messages/index.html` |
-| 1,377 | `pages/trips/detail.html` |
-| 1,294 | `pages/location/index.html` |
-| 1,118 | `themes/base.html` |
+| lines (2026-08-14) | template | 2026-09-16 |
+|---|---|---|
+| 5,175 | `pages/map/index.html` | **done** - `git show 23a861765 --numstat` removed 5,389 lines to `frontend/static/js/map-page.js`; 33 lines of page wiring remain |
+| 1,772 | `pages/messages/index.html` | unmoved |
+| 1,377 | `pages/trips/detail.html` | unmoved |
+| 1,294 | `pages/location/index.html` | unmoved |
+| 1,118 | `themes/base.html` | **partly done** - `git show 3c924327e --numstat` removed 957 lines (the comment-map/image-attachment composer) to `frontend/static/js/comment-map.js`; 242 lines remain (an `html-root` flash-of-theme IIFE, a hotkeys JSON block, passwordless-account wiring) |
 
 The concrete cost, beyond "untested": 44 function names are defined in more than one template,
 including **14 HTML-escaping helpers under 9 names**, of which 6 escape `&<>` only and 8 also
 escape quotes. Nothing in any of the names distinguishes the text-node case from the attribute
 case, and the 2026-08-14 audit found two real bugs that existed precisely because the wrong one
-was in reach (`memories/index.html`, `map/index.html`).
+was in reach (`memories/index.html`, `map/index.html`). Not re-checked this session - neither
+extraction touched an escaping helper.
 
-Suggested order of work, largest payoff first:
+**Suggested-order-of-work item 1 is done.** See X21 for the move and the two defects the mechanical
+extraction introduced along the way (a template tag inside a quoted string; two extracted files
+silently colliding on one top-level `const CFG`), both now caught by
+`src/urbanlens/core/tests/inline_scripts.py`. Remaining, largest payoff first:
 
-1. **Move `pages/map/index.html`'s script into `frontend/ts/`.** One file, 5,175 lines, ~24% of
-   the problem, and the page where the audit found the most issues.
-2. **Add `frontend/ts/shared/escaping.ts`** exporting `escapeText` and `escapeAttr` (names that
-   say which context they are for), and have migrated code import it rather than redefine it.
-3. Migrate the next four largest templates.
+1. `frontend/ts/shared/escaping.ts` exporting `escapeText` and `escapeAttr` (names that say which
+   context they are for), with migrated code importing it rather than redefining it.
+2. `pages/messages/index.html`, `pages/trips/detail.html`, `pages/location/index.html` - the next
+   three largest as of 2026-08-14, all still untouched.
+3. The remaining templates below the top 5, and `themes/base.html`'s leftover 242 lines.
 
-This is a large job and nothing above is urgent in isolation. It is recorded because every future
-bug of this shape in these files will be invisible to CI, and because the duplication means fixing
-one instance fixes nothing else.
+Extraction to a file is necessary but not sufficient for P92's TypeScript-checked-bundle goal:
+X21's two moves produced plain `.js` files fed by a JSON config element, not `tsc`-checked bundled
+entries, so a script still cannot `import` from `frontend/ts/`. This is still a large job and
+nothing above is urgent in isolation. It is recorded because every future bug of this shape in
+these files is invisible to CI, and because the duplication means fixing one instance fixes
+nothing else.
 
 ---
 
@@ -2131,27 +2141,32 @@ shared with a mutating action whose pagination links would otherwise point at it
   the citation was stale leftover text from before that fix landed, not a second unbounded case.
   Removed rather than left standing next to its own contradiction.
 
-## P83 — Over half of every page's HTML is inline `<script>`, re-sent uncached on every load
+## P83 — The map page's inline share fell from 72% to 37%; pin-detail and Settings are still moving half their HTML as script every load
 
-`id: P83` · `status: open` · `updated: 2026-09-06`
+`id: P83` · `status: open` · `updated: 2026-09-16` · `re-measured 2026-09-16 after X21; supersedes the 2026-09-06 table`
 
 Found 2026-09-06 while measuring whether the Settings page's Security tab was worth deferring
 (P69). It is not - those queries are 5 of 22 and under 3ms of 71ms - but the same measurement
 found where that page's weight actually is, and it is not the database.
 
-Measured against the dev stack, logged in, `DEBUG=False`, counting only `<script>` tags with no
-`src`:
+**Re-measured 2026-09-16**, same three pages, same method (`inline_blocks()` from
+`src/urbanlens/core/tests/inline_scripts.py` against a logged-in `Client(SERVER_NAME="localhost")`
+response, counting only `<script>` tags with no `src`), run via `manage.py shell` in
+`urbanlens_development_main_app` against the dev database - a different account and pin count than
+2026-09-06's run, so totals are not a clean diff, and this pass ran with `DEBUG=True` where the
+original was `DEBUG=False`:
 
-| page | HTML | inline script | share |
+| page | HTML (09-06 → 09-16) | inline script (09-06 → 09-16) | share (09-06 → 09-16) |
 |---|---|---|---|
-| `/dashboard/map/` | 550,852 | 400,066 | 72% |
-| `/dashboard/map/pin/<slug>/` | 343,443 | 190,886 | 55% |
-| `/dashboard/settings/` | 309,647 | 169,194 | 54% |
+| `/dashboard/map/` | 550,852 → 240,779 | 400,066 → 90,113 | 72% → **37.4%** |
+| `/dashboard/map/pin/<slug>/` | 343,443 → 300,005 | 190,886 → 144,353 | 55% → 48.1% |
+| `/dashboard/settings/` | 309,647 → 262,747 | 169,194 → 121,946 | 54% → 46.4% |
 
-Nine of the seventeen blocks are the same on all three - 111KB from `themes/base.html` and the
-layout partials, on every page in the app. 22KB of that is the dev toolbar, which
-`show_dev_toolbar` gates to dev, so production pays roughly 89KB. The rest is per page, and the
-map page's share is one block of **265,146 bytes** out of a 305KB `pages/map/index.html`.
+**What moved: the map page's own 265,146-byte block (X21) is gone**, replaced by
+`frontend/static/js/map-page.js`. Its largest remaining block on all three pages is now 22,347
+bytes - shared chrome, not decomposed further this session. Pin-detail's own largest block is now
+**59,463 bytes**, larger than anything left on the map page and untouched by X21; that block is the
+next obvious target, not the shared 22KB one. Settings' largest is 28,694 bytes, also unexamined.
 
 Why it matters: a `<script src>` is fetched once and cached for the life of its hash; an inline
 block is re-sent on every navigation, is not shared between pages that duplicate it, cannot be
@@ -2165,11 +2180,11 @@ there is nothing to import into. `dashboard/CLAUDE.md` already says "Use Typescr
 cannot accomplish the interaction" and "Every existing JS interaction is a candidate for HTMX
 refactoring"; this measures how far the code is from that.
 
-Not started, and not a one-batch job. The obvious first cut is the map page's single 265KB block,
-which is also the file P53 and P68 both had to edit around - twice now a fix has been written once
-in `ts/shared/` and then a second time by hand into that template, because the template cannot
-import. Whether the answer is moving it into `frontend/ts/entries/` or something narrower is a
-design question, not a mechanical one.
+**The map page's block is done** (X21). Not decomposed or attempted this session: pin-detail's
+59,463-byte block, Settings' 28,694-byte block, or the ~22KB still shared by all three pages. Per
+P92, X21's fix was a plain `.js` file behind a config element, not a `tsc`-checked bundle, so
+whether the answer for what remains is `frontend/ts/entries/` or something narrower is still an
+open design question - unchanged by X21 even for the part of this entry that is now done.
 
 ## P85 — Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it
 
@@ -2357,9 +2372,9 @@ hardcoded-URL audit), not by running this file - so `disclosure.spec.ts` remains
 with no evidence it has ever caught anything by being executed, the exact gap P75 describes. These
 four need the same live run the other four already got.
 
-## P92 — `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script
+## P92 — `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's cluster layer
 
-`id: P92` · `status: open` · `updated: 2026-09-08`
+`id: P92` · `status: open` · `updated: 2026-09-16` · `citation refreshed 2026-09-16, see X21`
 
 Found 2026-09-08 while closing out the pre-merge audit of `release/v_0_8_0` (the "audit wasn't done yet" tail of
 that pass, not a new sweep - see the audit's own confirmed finding "map-clusters.ts's shared cluster-icon module
@@ -2368,9 +2383,11 @@ was never wired into the main map it claims to cover").
 `shared/map-clusters.ts`'s module docstring used to claim it was shared by "the main map's inline cluster layer,
 and the pin-detail / wiki maps." That was only half true: `entries/map-annotations.ts` (the pin-detail/wiki map
 entry) does import and use `createPinClusterGroup`/`pinClusterIconParts` from it (`detailPinLayer`), but the main
-`/map/` page's own inline `<script>` (`templates/dashboard/pages/map/index.html:979-999`) never imports this
-module at all - it hand-rolls its own `L.markerClusterGroup` call with its own copy of the badge sizing table and
-`iconCreateFunction`:
+map page's own cluster layer never imports this module at all - it hand-rolls its own `L.markerClusterGroup` call
+with its own copy of the badge sizing table and `iconCreateFunction`. **Re-cited 2026-09-16:** X21 moved this code
+out of the template - it is no longer `templates/dashboard/pages/map/index.html:979-999`, it is
+`frontend/static/js/map-page.js:343-364` - but it moved as raw text, not as a bundled TypeScript entry, so nothing
+about this problem changed. The duplication below is exactly as unresolved as it was on 2026-09-08:
 
 ```js
 var clusterGroup = L.markerClusterGroup({
@@ -2393,13 +2410,16 @@ threshold counts (`< 10`/`< 100`) or the pixel sizes in one place silently stops
 the only place both would visibly disagree (a squashed-oval badge on one map but not the other).
 
 Docstring corrected in the same pass this entry was filed (no longer overclaims shared coverage), but the actual
-duplication is unfixed. Not fixed here because the real fix isn't a one-liner: the main map's clustering code is
-inline template JavaScript, which cannot `import` a TS module - unifying it needs either (a) a mechanism for an
-inline `<script>` to read shared constants/functions from a bundled entry (no such mechanism exists anywhere else
-in this codebase today, per a search for `window.UL =`/`globalThis.UL =`), or (b) migrating the main map's inline
-script into a proper bundled TS entry the way `map-annotations.ts` already is for pin-detail/wiki maps - which is
-the broader, already-tracked P83/P34 initiative ("over half of every page's HTML is inline `<script>`"), not a
-scoped fix for this one badge. Left open and cross-referenced from both rather than attempted piecemeal here.
+duplication is unfixed. Not fixed here because the real fix isn't a one-liner: the main map's clustering code was
+inline template JavaScript, which could not `import` a TS module - unifying it needs either (a) a mechanism for a
+plain script to read shared constants/functions from a bundled entry (no such mechanism exists anywhere else in
+this codebase today, per a search for `window.UL =`/`globalThis.UL =`), or (b) migrating the main map's script into
+a proper bundled TS entry the way `map-annotations.ts` already is for pin-detail/wiki maps.
+
+**2026-09-16: (a) is now the live blocker, not (b).** X21 gave the script a `<script src>` and a cache header, which
+is the part of P83/P34 this entry used to point at, but it is still a hand-written `.js` file fed by a generated
+config element, not a `tsc`-checked bundle - `map-page.js` cannot `import` from `shared/map-clusters.ts` any more
+than the inline block could. Closing this now needs (a) or (b) specifically, not just "finish P83/P34".
 
 ## P95 — One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured
 
