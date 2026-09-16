@@ -48,12 +48,19 @@ const FIXTURES = {
     // Informational only (logged in the pre-flight line): there is no cheap
     // endpoint that reports a site-wide label count to check this against.
     expectedLabels: Number(__ENV.UL_PERF_EXPECTED_LABELS || 0),
+    // Same caveat as expectedLabels - informational only.
+    expectedSearchRelations: Number(__ENV.UL_PERF_EXPECTED_SEARCH_RELATIONS || 0),
 };
 
-/** P123: matches the bulk labels `--heavy-labels` seeds (`perf_seed.py`'s `BULK_LABEL_PREFIX`) -
- * many hits, none attached to anything the neighbour can see, so the matching variant's fix
- * (migration 0049's trigram index) is what stands between this and the same cost as the miss below. */
-const SEARCH_MATCH_TERM = "Perf Bulk Label";
+/** P123: matches both `--heavy-labels`' bulk labels (`perf_seed.py`'s `BULK_LABEL_PREFIX`, "Perf
+ * Bulk Label ...") and `--heavy-search-relations`' bulk aliases/activities/comments/messages
+ * (`BULK_RELATIONS_PREFIX`, "Perf Bulk Relation ...") - both prefixes share this common substring,
+ * so one search term exercises every relation's matching-variant cost through the same two
+ * requests, GlobalSearchEngine already fanning the query out across every provider. None of the
+ * matched rows are attached to anything the neighbour can see, so the matching variant's fix
+ * (migration 0049's trigram index, labels only so far) is what stands between this and the same
+ * cost as the miss below. */
+const SEARCH_MATCH_TERM = "Perf Bulk";
 
 /** P123's still-open variant: matches nothing, anywhere, ever - the true negative that has to read
  * the whole labels table to conclude that. */
@@ -138,7 +145,10 @@ export function setup() {
         }
     }
 
-    console.log(`pre-flight ok: ${total} pins on ${heavy.username}, label ${FIXTURES.labelId}, ${FIXTURES.expectedLabels || "unknown"} bulk labels expected, budget p95 < ${BUDGET_MS}ms`);
+    console.log(
+        `pre-flight ok: ${total} pins on ${heavy.username}, label ${FIXTURES.labelId}, ${FIXTURES.expectedLabels || "unknown"} bulk labels expected, ` +
+            `${FIXTURES.expectedSearchRelations || "unknown"} bulk search relations expected, budget p95 < ${BUDGET_MS}ms`,
+    );
     return { total, cookies: { secondary: secondary.cookies, heavy: session.cookies } };
 }
 

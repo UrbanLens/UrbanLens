@@ -3,11 +3,14 @@ The performance work this exists for is about what *one* user's account costs ev
 
 from __future__ import annotations
 
+from datetime import timedelta
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from django.contrib.gis.geos import Point
 from django.db import connection, transaction
+from django.db.models import Model
+from django.utils import timezone
 
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -16,6 +19,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+_ModelT = TypeVar("_ModelT", bound=Model)
 
 #: Pins created per `bulk_create` round trip. Large enough that 20,000 rows is a
 #: score of statements rather than thousands, small enough that one statement's
@@ -267,6 +272,126 @@ def seed_bulk_labels(profile: Profile, *, count: int, analyze: bool = True, batc
         "analyzed": analyzed,
         "seconds": round(time.perf_counter() - started, 1),
     }
+
+
+#: Name prefix shared by every row `seed_bulk_search_relations` creates. Each relation is attached
+#: to one dedicated host row (a pin, a wiki, a trip, a check-in) rather than left unattached like
+#: `BULK_LABEL_PREFIX` - a NOT NULL foreign key requires a host - but the host is otherwise
+#: irrelevant to the defect: like the labels semi-join, `_semijoin` scans the whole relation table
+#: before any join to the search account's own rows narrows it, so which host the rows are attached
+#: to has no bearing on the cost.
+BULK_RELATIONS_PREFIX = "Perf Bulk Relation"
+
+#: Host object names/titles - deliberately a different string from `BULK_RELATIONS_PREFIX`. A pin's
+#: own name is auto-aliased on save (`Pin.save`'s alias-history sync), so naming the host pin with
+#: the bulk prefix itself would make `_top_up`'s `name__startswith` count that one alias as already
+#: present on every fresh run - harmless to the defect (it is one more row in a table this measures
+#: by total size anyway) but a confusing off-by-one in the report.
+_HOST_NAME_PREFIX = "Perf Search Relations Host"
+
+#: (host attribute on the seeded account, db_table) pairs `seed_bulk_search_relations` grows -
+#: one host row apiece, `count` children apiece. Mirrors P123's docs/PROBLEMS.md entry on
+#: ArticleSearchProvider/TripSearchProvider/SafetySearchProvider's own to-many-crossing paths.
+_RELATION_TABLES = (
+    "dashboard_pin_aliases",
+    "dashboard_wiki_aliases",
+    "dashboard_trip_activities",
+    "dashboard_trip_comments",
+    "dashboard_safety_checkin_messages",
+)
+
+
+def _bulk_relation_host_location(profile: Profile) -> Location:
+    """The `Location` that seeds *profile*'s `seed_bulk_search_relations` host rows.
+
+    `Wiki` carries no `profile` field of its own - it is a global page keyed by `location` alone -
+    so this location has to be unique per profile, not shared the way `seed_bulk_labels`' unattached
+    rows are: two profiles sharing one location would share one `host_wiki`, and each profile's
+    `WikiAlias` top-up would count the other's rows as already present.
+
+    Args:
+        profile: The account whose host location this is.
+
+    Returns:
+        The location, created on first use."""
+    longitude = 179.0 - (profile.pk % 900_000) * 0.000_001
+    location, _ = Location.objects.get_or_create(
+        latitude="-89.000000",
+        longitude=f"{longitude:.6f}",
+        defaults={"official_name": f"Perf Search Relations Host ({profile.pk})", "point": Point(longitude, -89.0, srid=4326)},
+    )
+    return location
+
+
+def seed_bulk_search_relations(profile: Profile, *, count: int, analyze: bool = True, batch_size: int = BATCH_SIZE) -> dict[str, Any]:
+    """Grow the five to-many relations P123 generalised to, for the same cross-account scan load test.
+
+    One dedicated host row per relation (a pin, its wiki, a trip, a check-in) carries *count* children
+    each: `PinAlias`/`WikiAlias` (`ArticleSearchProvider`'s `pin__aliases__name`/`wiki__aliases__name`),
+    `TripActivity`/`TripComment` (`TripSearchProvider`'s `activities__title`/`activities__notes`/
+    `comments__text`), and `SafetyCheckinMessage` (`SafetySearchProvider`'s `messages__body`). See
+    `docs/PROBLEMS.md`'s P123 entry for the mechanism each shares with the original label semi-join.
+
+    Args:
+        profile: Whose account the host rows are created under. Immaterial to the defect being
+            reproduced - every semi-join here is unscoped - but each relation's foreign key is
+            NOT NULL, so a host is required.
+        count: How many bulk children each relation should end up with. Tops up rather than
+            restarting: existing bulk rows (by name/text/title prefix) are counted first and only
+            the shortfall is created, the same convention `seed_bulk_labels` uses.
+        analyze: Refresh planner statistics on all five tables afterwards.
+        batch_size: Rows per `bulk_create` round trip, per relation.
+
+    Returns:
+        What was done, for the provisioning manifest: one sub-report per relation plus whether
+        `ANALYZE` ran and how long the whole thing took."""
+    from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinMessage
+    from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    started = time.perf_counter()
+    location = _bulk_relation_host_location(profile)
+
+    host_pin, _ = Pin.objects.get_or_create(
+        profile=profile,
+        location=location,
+        defaults={"name": f"{_HOST_NAME_PREFIX} Pin", "slug": "perf-search-relations-host-pin"},
+    )
+    host_wiki, _ = Wiki.objects.get_or_create(location=location, defaults={"name": f"{_HOST_NAME_PREFIX} Wiki"})
+    host_trip, _ = Trip.objects.get_or_create(creator=profile, name=f"{_HOST_NAME_PREFIX} Trip")
+    host_checkin, _ = SafetyCheckin.objects.get_or_create(
+        profile=profile,
+        title=f"{_HOST_NAME_PREFIX} Checkin",
+        defaults={"checkin_by": timezone.now() + timedelta(days=3650)},
+    )
+
+    def _top_up(model: type[_ModelT], host_field: str, host: Model, text_field: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        existing = model._default_manager.filter(**{host_field: host, f"{text_field}__startswith": BULK_RELATIONS_PREFIX}).count()  # noqa: SLF001
+        wanted = max(count - existing, 0)
+        created = 0
+        for start in range(0, wanted, batch_size):
+            batch = min(batch_size, wanted - start)
+            rows: list[_ModelT] = []
+            for offset in range(batch):
+                fields: dict[str, Any] = {host_field: host, text_field: f"{BULK_RELATIONS_PREFIX} {existing + start + offset}"}
+                fields.update(extra or {})
+                rows.append(model(**fields))
+            model._default_manager.bulk_create(rows)  # noqa: SLF001
+            created += batch
+        return {"count": existing + created, "created": created, "already_present": existing}
+
+    report: dict[str, Any] = {
+        "pin_aliases": _top_up(PinAlias, "pin", host_pin, "name"),
+        "wiki_aliases": _top_up(WikiAlias, "wiki", host_wiki, "name"),
+        "trip_activities": _top_up(TripActivity, "trip", host_trip, "title", extra={"notes": ""}),
+        "trip_comments": _top_up(TripComment, "trip", host_trip, "text"),
+        "safety_messages": _top_up(SafetyCheckinMessage, "checkin", host_checkin, "body"),
+    }
+    report["analyzed"] = analyze and analyze_seeded_tables(_RELATION_TABLES)
+    report["name_prefix"] = BULK_RELATIONS_PREFIX
+    report["seconds"] = round(time.perf_counter() - started, 1)
+    return report
 
 
 def _vocabulary_labels(profile: Profile) -> list[Label]:

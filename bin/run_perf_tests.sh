@@ -26,6 +26,7 @@ PROVISION_CONTAINER=""
 DB_CONTAINER=""
 HEAVY_PINS=20000
 HEAVY_LABELS=0
+HEAVY_SEARCH_RELATIONS=0
 RATE=5
 BASELINE_SECONDS=60
 BUDGET_MS=""
@@ -52,6 +53,10 @@ usage() {
 		                             P123's cross-account label-scan reproduction (default:
 		                             ${HEAVY_LABELS}, i.e. off - the neighbour's search endpoints
 		                             still run, they just measure whatever the table already holds).
+		  --heavy-search-relations N Rows to grow pin/wiki aliases, trip activities/comments, and
+		                             safety check-in messages to (each) on the heavy account, for
+		                             P123's other five to-many-crossing search paths (default:
+		                             ${HEAVY_SEARCH_RELATIONS}, i.e. off).
 		  --rate N                   Neighbour requests per second (default: ${RATE}).
 		  --budget-ms N              Skip the baseline pass and use this p95 ceiling.
 		  --baseline-seconds N       Baseline pass length (default: ${BASELINE_SECONDS}).
@@ -76,6 +81,7 @@ while [[ $# -gt 0 ]]; do
 		--db-container) DB_CONTAINER="$2"; shift 2 ;;
 		--heavy-pins) HEAVY_PINS="$2"; shift 2 ;;
 		--heavy-labels) HEAVY_LABELS="$2"; shift 2 ;;
+		--heavy-search-relations) HEAVY_SEARCH_RELATIONS="$2"; shift 2 ;;
 		--rate) RATE="$2"; shift 2 ;;
 		--budget-ms) BUDGET_MS="$2"; SKIP_BASELINE=1; shift 2 ;;
 		--baseline-seconds) BASELINE_SECONDS="$2"; shift 2 ;;
@@ -133,12 +139,13 @@ echo "==> results in ${OUT_DIR}"
 # -- seed --------------------------------------------------------------------
 
 if [[ -n "${PROVISION_CONTAINER}" ]]; then
-	echo "==> provisioning and seeding in ${PROVISION_CONTAINER} (${HEAVY_PINS} pins, ${HEAVY_LABELS} bulk labels)"
+	echo "==> provisioning and seeding in ${PROVISION_CONTAINER} (${HEAVY_PINS} pins, ${HEAVY_LABELS} bulk labels, ${HEAVY_SEARCH_RELATIONS} bulk search relations)"
 	REMOTE_MANIFEST="/tmp/ul-perf-manifest.json"
 	docker exec "${PROVISION_CONTAINER}" /app/.venv/bin/python src/urbanlens/manage.py provision_integration_env \
 		--roles primary,secondary,heavy \
 		--heavy-pins "${HEAVY_PINS}" \
 		--heavy-labels "${HEAVY_LABELS}" \
+		--heavy-search-relations "${HEAVY_SEARCH_RELATIONS}" \
 		--out "${REMOTE_MANIFEST}"
 	MANIFEST="${OUT_DIR}/manifest.json"
 	docker cp "${PROVISION_CONTAINER}:${REMOTE_MANIFEST}" "${MANIFEST}"
@@ -196,7 +203,8 @@ STATUS=0
 run_k6 "measured.json" \
 	-e UL_PERF_BUDGET_MS="${BUDGET_MS}" \
 	-e UL_PERF_EXPECTED_PINS="${HEAVY_PINS}" \
-	-e UL_PERF_EXPECTED_LABELS="${HEAVY_LABELS}" || STATUS=$?
+	-e UL_PERF_EXPECTED_LABELS="${HEAVY_LABELS}" \
+	-e UL_PERF_EXPECTED_SEARCH_RELATIONS="${HEAVY_SEARCH_RELATIONS}" || STATUS=$?
 
 POOL_STATUS=0
 if [[ -n "${SAMPLER_PID}" ]]; then

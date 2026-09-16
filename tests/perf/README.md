@@ -43,6 +43,31 @@ Omit the flag (or pass 0) and the two search endpoints still run, they just meas
 target's `dashboard_labels` already holds - useful for confirming the endpoints work before
 committing to a large seed, not for judging the defect.
 
+### The same mechanism, five more relations
+
+`docs/PROBLEMS.md`'s P123 entry generalises the same unscoped semi-join to
+`ArticleSearchProvider`'s `pin__aliases__name`/`wiki__aliases__name`, `TripSearchProvider`'s
+`activities__title`/`activities__notes`/`comments__text`, and `SafetySearchProvider`'s
+`messages__body` - confirmed at the unit level, not yet re-measured at HTTP scale the way labels
+was above. `--heavy-search-relations N` grows all five relations (`PinAlias`, `WikiAlias`,
+`TripActivity`, `TripComment`, `SafetyCheckinMessage`) to `N` rows each, on one dedicated host row
+per relation (a pin, its wiki, a trip, a check-in - each foreign key is NOT NULL, unlike `Label`,
+so a host is unavoidable, but which host is as immaterial to the cost as labels' being unattached):
+
+```
+bin/run_perf_tests.sh --url http://localhost:21810 \
+    --provision-container urbanlens_development_main_app \
+    --db-container urbanlens_development_main_db \
+    --heavy-pins 20000 --heavy-labels 50000 --heavy-search-relations 50000
+```
+
+No new k6 requests were needed: `GlobalSearchEngine.search` already fans one query out across every
+provider, so the same `global_search_match`/`global_search_miss` requests exercise these five
+relations too, once seeded. `SEARCH_MATCH_TERM` changed from `"Perf Bulk Label"` to `"Perf Bulk"` so
+it matches both `seed_bulk_labels`' and `seed_bulk_search_relations`' name/prefix - a strict
+substring of the old term, so an existing `--heavy-labels`-only run measures identically; the change
+only starts to matter once `--heavy-search-relations` is also passed.
+
 ## Three things that are easy to get wrong here
 
 **A load test that measures the sign-in page passes.** k6 resets a VU's cookie

@@ -60,6 +60,12 @@ class Command(BaseCommand):
             help="Grow dashboard_labels to this many rows on the --heavy-role account, for P123's cross-account label-scan load test. Tops up rather than restarting.",
         )
         parser.add_argument(
+            "--heavy-search-relations",
+            type=int,
+            default=0,
+            help="Grow the five other to-many relations P123 generalised to (pin/wiki aliases, trip activities/comments, safety check-in messages) to this many rows each on the --heavy-role account. Tops up rather than restarting.",
+        )
+        parser.add_argument(
             "--population",
             type=int,
             default=0,
@@ -191,18 +197,22 @@ class Command(BaseCommand):
             A mapping of role name to that role's seed report; empty when nothing was seeded.
 
         Raises:
-            CommandError: ``--heavy-pins`` or ``--heavy-labels`` names a role that was not provisioned.
+            CommandError: ``--heavy-pins``, ``--heavy-labels``, or ``--heavy-search-relations`` names
+                a role that was not provisioned.
         """
         wanted_pins = options["heavy_pins"]
         wanted_labels = options["heavy_labels"]
-        if wanted_pins <= 0 and wanted_labels <= 0:
+        wanted_relations = options["heavy_search_relations"]
+        if wanted_pins <= 0 and wanted_labels <= 0 and wanted_relations <= 0:
             return {}
 
         role = options["heavy_role"]
         account = next((candidate for candidate in result.accounts if candidate.role == role), None)
         if account is None:
             provisioned = ", ".join(candidate.role for candidate in result.accounts) or "none"
-            raise CommandError(f"--heavy-pins/--heavy-labels asked to seed the '{role}' account, but only these were provisioned: {provisioned}. Add it to --roles.")
+            raise CommandError(
+                f"--heavy-pins/--heavy-labels/--heavy-search-relations asked to seed the '{role}' account, but only these were provisioned: {provisioned}. Add it to --roles.",
+            )
         profile = Profile.objects.get(user__username=account.username)
         report: dict[str, object] = {}
 
@@ -235,6 +245,20 @@ class Command(BaseCommand):
                     self.style.WARNING("Planner statistics were NOT refreshed. Every timing taken against this account measures the planner's ignorance, not the query."),
                 )
             report["bulk_labels"] = labels_report
+
+        if wanted_relations > 0:
+            from urbanlens.dashboard.services.integration_testing.perf_seed import seed_bulk_search_relations
+
+            self.stderr.write(f"Growing pin/wiki aliases, trip activities/comments, and safety messages to {wanted_relations} rows each on {account.username}. This writes rows in bulk and can take a while at large sizes.")
+            relations_report = seed_bulk_search_relations(profile, count=wanted_relations, analyze=not options["no_analyze"])
+            for key in ("pin_aliases", "wiki_aliases", "trip_activities", "trip_comments", "safety_messages"):
+                sub = relations_report[key]
+                self.stderr.write(f"  {key}: {sub['count']} ({sub['created']} created, {sub['already_present']} already there)")
+            if not relations_report["analyzed"]:
+                self.stderr.write(
+                    self.style.WARNING("Planner statistics were NOT refreshed. Every timing taken against this account measures the planner's ignorance, not the query."),
+                )
+            report["bulk_search_relations"] = relations_report
 
         return {role: report}
 
