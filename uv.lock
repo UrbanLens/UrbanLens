@@ -1632,6 +1632,19 @@ wheels = [
 ]
 
 [[package]]
+name = "jinjax"
+version = "0.66"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "markupsafe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/70/4b/59f421a78145fb7fe997f259cd86adc6b84605b994503260684de17d5353/jinjax-0.66.tar.gz", hash = "sha256:1ccc86d630ec897293f5135d79b882aff31b3f2483c73428eb17f372799de9e3", size = 33512, upload-time = "2026-09-08T21:17:42.802Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/6e/2b72b56f54f5a02a7994f8f98f12c6799d785e73c3fc66402ae693378eb4/jinjax-0.66-py3-none-any.whl", hash = "sha256:fc301a169d8e8451446dd8045ac11ca65ebd358ba6569d4287cb06499002ed09", size = 21017, upload-time = "2026-09-08T21:17:41.849Z" },
+]
+
+[[package]]
 name = "jiter"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4640,6 +4653,7 @@ dependencies = [
     { name = "gunicorn" },
     { name = "humanize" },
     { name = "jinja2" },
+    { name = "jinjax" },
     { name = "linkify-it-py" },
     { name = "lxml" },
     { name = "markdown-it-py" },
@@ -4752,6 +4766,7 @@ requires-dist = [
     { name = "gunicorn", specifier = ">=26.0,<26.3" },
     { name = "humanize", specifier = ">=4.15,<4.17" },
     { name = "jinja2", specifier = "~=3.1.6" },
+    { name = "jinjax", specifier = "~=0.66" },
     { name = "linkify-it-py", specifier = ">=2.1,<2.3" },
     { name = "lxml", specifier = "~=6.1.1" },
     { name = "markdown-it-py", specifier = "~=4.2.0" },

@@ -150,6 +150,29 @@ AUTHENTICATION_BACKENDS = [
 
 ROOT_URLCONF = "urbanlens.UrbanLens.urls"
 
+# Shared by both engines: a processor added to one and not the other is invisible until a ported
+# template reads it and gets nothing.
+CONTEXT_PROCESSORS = [
+    "django.template.context_processors.debug",
+    "django.template.context_processors.request",
+    "django.contrib.auth.context_processors.auth",
+    "django.contrib.messages.context_processors.messages",
+    "urbanlens.dashboard.context_processors.add_page_name",
+    "urbanlens.dashboard.context_processors.add_site_settings",
+    "urbanlens.dashboard.context_processors.add_dev_toolbar",
+    "urbanlens.dashboard.context_processors.add_feature_access",
+    "urbanlens.dashboard.context_processors.add_pending_account_deletion",
+    "urbanlens.dashboard.context_processors.add_environment_indicator",
+    "urbanlens.dashboard.context_processors.add_distance_units",
+    "urbanlens.dashboard.context_processors.add_keyboard_shortcuts",
+    "urbanlens.dashboard.context_processors.add_direct_messages",
+    "urbanlens.dashboard.context_processors.add_unread_messages_badge",
+    "urbanlens.dashboard.context_processors.add_unread_notifications_badge",
+    "urbanlens.dashboard.context_processors.add_active_checkins_banner",
+    "urbanlens.dashboard.context_processors.add_demo_context",
+    "urbanlens.dashboard.context_processors.add_comment_map_config",
+]
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -157,26 +180,18 @@ TEMPLATES = [
         "DIRS": [os.path.join(PROJECT_ROOT, "dashboard", "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.debug",
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-                "urbanlens.dashboard.context_processors.add_page_name",
-                "urbanlens.dashboard.context_processors.add_site_settings",
-                "urbanlens.dashboard.context_processors.add_dev_toolbar",
-                "urbanlens.dashboard.context_processors.add_feature_access",
-                "urbanlens.dashboard.context_processors.add_pending_account_deletion",
-                "urbanlens.dashboard.context_processors.add_environment_indicator",
-                "urbanlens.dashboard.context_processors.add_distance_units",
-                "urbanlens.dashboard.context_processors.add_keyboard_shortcuts",
-                "urbanlens.dashboard.context_processors.add_direct_messages",
-                "urbanlens.dashboard.context_processors.add_unread_messages_badge",
-                "urbanlens.dashboard.context_processors.add_unread_notifications_badge",
-                "urbanlens.dashboard.context_processors.add_active_checkins_banner",
-                "urbanlens.dashboard.context_processors.add_demo_context",
-                "urbanlens.dashboard.context_processors.add_comment_map_config",
-            ],
+            "context_processors": CONTEXT_PROCESSORS,
+        },
+    },
+    {
+        # Ported templates only. A name resolves in exactly one engine, so moving a file between
+        # these two directories is the port.
+        "BACKEND": "django.template.backends.jinja2.Jinja2",
+        "DIRS": [os.path.join(PROJECT_ROOT, "dashboard", "jinja2")],
+        "APP_DIRS": False,
+        "OPTIONS": {
+            "environment": "urbanlens.dashboard.jinja_env.environment",
+            "context_processors": CONTEXT_PROCESSORS,
         },
     },
 ]
