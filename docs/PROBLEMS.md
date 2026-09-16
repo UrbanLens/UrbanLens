@@ -3130,14 +3130,67 @@ pin count. P100's refutation does not transfer here: this is a different stateme
 provider, and unlike P100, this one's subquery is genuinely unscoped in the plan, not just
 apparently so.
 
-### Candidate direction (unverified — do not treat as a fix)
+### Reproduction (2026-09-16, `test_search_does_not_read_another_accounts_labels.py`)
 
-Push the viewer's access scope into the `Exists` subquery itself, so the planner can restrict the
-label scan to rows that could match, instead of scoping only the outer `Pin` queryset. Not
-implemented, not measured. No fix should be claimed for this entry until there is a
-failing-then-passing measurement against the plan cited above.
+Two `xfail(strict=True)` tests, with a five-test `TheMeasurementIsRealTests` companion guarding them
+against measuring nothing. A viewer owning one pin and one matching label searches while a stranger
+holds 400 labels of their own; the axis is rows *read*, summed from
+`EXPLAIN (ANALYZE, FORMAT JSON)` over every statement of the search that mentions the label table.
 
-Not fixed. Not re-measured this session beyond the source read of `_semijoin` and its callers.
+The viewer's search read **165 rows, then 1,356** after the stranger's 400 labels — 1,191 more rows
+for data the viewer cannot see. Per relation after growth: `dashboard_labels` 545,
+`dashboard_user_pins_labels` 403, `dashboard_user_pins` 405, on a fixture with two pins in total.
+
+The two variants exist because they have different fixes: one seeds labels that *match* the search
+term (read, then discarded at the pin join), one seeds labels that do not (read only to be
+rejected). A candidate fix that flips one and not the other has done half the job. Both fail today.
+
+**This axis is invisible to `EndpointScalingMixin`.** Its `rows_fetched` sums `cursor.rowcount`,
+which for a `SELECT` is rows *returned*; the subquery returns almost nothing whatever it scans, so
+objects, body bytes, statement count and rows-fetched all read as flat. That is why this needed a
+plan-level measurement and a new shared helper (`core/tests/explain.py`).
+
+### Mechanism, off the plan rather than the source (2026-09-16)
+
+The labels semi-join (`SubPlan 4`) is a **nested loop whose outer side is a sequential scan of
+`dashboard_labels`**; the pin is reached on the inner side by primary key (`Inner Unique: true`).
+The planner estimates `Plan Rows: 1` from the label scan while it actually feeds 403 rows into the
+loop. `name__icontains` compiles to `upper(name) LIKE '%TERM%'`, a leading-wildcard match no btree
+index serves and whose selectivity Postgres cannot estimate, so starting from the label table looks
+cheap. `dashboard_labels` carries btree indexes on `kind`, `profile_id`, `(profile_id, "order")`
+and `lower(name), profile_id, kind` — and **no trigram index on `name`**. `pg_trgm` is installed.
+
+### Pushing the viewer's scope into the subquery is a measured no-op — do not re-attempt it
+
+The direction this entry previously recommended was implemented and measured on 2026-09-16:
+`scope: Q | None` threaded through `apply_text → term_filter → _semijoin`, with
+`PinSearchProvider` passing `Q(profile=profile)` and the subquery built as
+`model._base_manager.filter(condition, scope, pk=OuterRef("pk"))`.
+
+Rows read went from 165→1,356 to 167→1,358. **Growth was identical at 1,191 rows**; the total moved
+by 2. The predicate *is* applied — `Filter: (profile_id = 1107)` appears on `u0` in the plan — but
+the pin is reached by primary key on the inner side of the loop, so an extra pin-side predicate
+cannot reorder the join that costs the rows. The change was reverted. It was result-preserving (192
+search tests passed with it in place, including `test_search_matches_without_distinct.py`); it was
+simply ineffective. Result-preserving is not evidence of effective, and the argument that the
+predicate is logically implied by the outer filter — which is true — says nothing about join order.
+
+### Candidate directions (unverified — none measured)
+
+- A GIN trigram index on `dashboard_labels.name`. Would make the leading-wildcard scan indexable
+  and fix the selectivity estimate that picks this join order. Expected to address the
+  non-matching variant; it would still return every *matching* label whoever owns it, so it is not
+  expected to fix both tests on its own.
+- Correlating the subquery on the related model instead of the searched one — `Exists(Label.objects
+  .filter(pins=OuterRef("pk"), name__icontains=term))` rather than `Exists(Pin._base_manager...)` —
+  which forces the outer pin to drive the join. Structurally the right shape, but `_semijoin` is
+  generic over arbitrary `__` paths and deriving the related model and reverse accessor for any
+  path is the work.
+
+Measured at test scale (~400 labels), not on the 62,354-label capacity population; the plan shape
+may differ there, and the candidate directions should be measured on both.
+
+Not fixed.
 
 ## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
 
@@ -3199,5 +3252,16 @@ served static JS (`frontend/static/js/map-page.js`) for the code itself, and the
 `#map-page-config` `json_script` block (`MAP_CFG.profileId`) for the value it's keyed on. Also open:
 how many *other* tests across the suite assert inline JS text in rendered HTML and broke the same
 way when `23a861765` and `3c924327e` shipped - not surveyed this session.
+
+**An eighth, found incidentally on 2026-09-16:**
+`test_map_document_head_reads_the_vocabulary.py::TheDocumentHeadTests::test_the_map_page_reads_every_kind_of_line_the_document_sends`
+fails with `sent - read == {'end', 'head', 'labels', 'pin'}` - that is, its `read` set is *empty*. It builds
+`read` by running `re.findall(r"obj\.t === '(\w+)'", MAP_TEMPLATE.read_text())` over
+`templates/dashboard/pages/map/index.html`. That pattern occurs **0 times** in the template and **4 times** in
+`frontend/static/js/map-page.js`, and `git log -S "obj.t === 'pin'"` on the template lands on `23a861765` - the
+same commit. So the test asserts the document and the page agree about line kinds while actually comparing
+against nothing, and would keep passing if they disagreed. It differs from the seven above in shape (a regex
+over a template file on disk, not an `assertIn` against a response body), which is why a search for the
+`assertIn` shape alone will not find the rest of this family.
 
 Not fixed. Not re-measured beyond the 2026-09-16 targeted run and the source read cited above.

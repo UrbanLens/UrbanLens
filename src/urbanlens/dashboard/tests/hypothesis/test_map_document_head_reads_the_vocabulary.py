@@ -10,6 +10,7 @@ import gzip
 import json
 from pathlib import Path
 import re
+from typing import Any
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -17,6 +18,7 @@ from django.db import connection
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.explain import rows_examined
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
 from urbanlens.dashboard.models.labels.model import Label
@@ -32,22 +34,6 @@ MORE_PINS = 25
 
 class _HeadWrittenError(Exception):
     """Raised where the document would read its first batch of pins."""
-
-
-def _scanned(node: dict) -> int:
-    own = 0
-    if "Relation Name" in node:
-        own = (node.get("Actual Rows", 0) + node.get("Rows Removed by Filter", 0)) * node.get("Actual Loops", 1)
-    return own + sum(_scanned(child) for child in node.get("Plans", []))
-
-
-def _rows_examined(sql: str, params: object) -> int:
-    with connection.cursor() as cursor:
-        cursor.execute(f"EXPLAIN (ANALYZE, FORMAT JSON) {sql}", params)
-        row = cursor.fetchone()
-    raw = row[0] if row else "[]"
-    plan = raw if isinstance(raw, list) else json.loads(raw)
-    return _scanned(plan[0]["Plan"])
 
 
 class TheDocumentHeadTests(TestCase):
@@ -79,7 +65,7 @@ class TheDocumentHeadTests(TestCase):
         return [json.loads(line) for line in body.splitlines() if line]
 
     def _head_rows_examined(self) -> int:
-        captured: list[tuple[str, object]] = []
+        captured: list[tuple[str, Any]] = []
 
         def capture(execute, sql, params, many, context):  # noqa: ANN001, ANN202
             captured.append((sql, params))
@@ -93,7 +79,7 @@ class TheDocumentHeadTests(TestCase):
         ):
             next(map_document.stream(self.profile, query, etag="head", total=0))
         self.assertTrue(captured, "the head read nothing, so there was nothing to measure")
-        return sum(_rows_examined(sql, params) for sql, params in captured)
+        return sum(rows_examined(sql, params) for sql, params in captured)
 
     def test_the_head_reads_no_more_rows_for_more_labelled_pins(self) -> None:
         before = self._head_rows_examined()
