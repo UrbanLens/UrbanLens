@@ -85,5 +85,5 @@ class SaveMapPositionViewTests(TestCase):
         self._post(lat="15.5", lng="-25.5", zoom="9")
 
         body = self.client.get(reverse("map.view")).content.decode()
-        self.assertIn("_SERVER_CENTER_LAT = 15.5", body)
-        self.assertIn("_MAP_CENTER_MODE   = 'remember'", body)
+        self.assertIn('"mapCenterLat": 15.5', body)
+        self.assertIn('"mapCenterMode": "remember"', body)

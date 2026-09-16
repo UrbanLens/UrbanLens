@@ -160,13 +160,13 @@ class ViewMapContextTests(TestCase):
         Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=True)
         resp = self.client.get(_MAP_URL)
         self.assertTrue(resp.context["geolocation_tracking_allowed"])
-        self.assertIn(b"_GEOLOCATION_TRACKING_ALLOWED = true;", resp.content)
+        self.assertIn(b'"geolocationTrackingAllowed": true', resp.content)
 
     def test_geolocation_tracking_allowed_false_from_profile(self) -> None:
         Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=False)
         resp = self.client.get(_MAP_URL)
         self.assertFalse(resp.context["geolocation_tracking_allowed"])
-        self.assertIn(b"_GEOLOCATION_TRACKING_ALLOWED = false;", resp.content)
+        self.assertIn(b'"geolocationTrackingAllowed": false', resp.content)
 
     def test_geolocate_button_shown_when_tracking_allowed(self) -> None:
         Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=True)

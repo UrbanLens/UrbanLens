@@ -186,6 +186,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.abstract.choices import SecurityLevel
         from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
         from urbanlens.dashboard.models.pin_list.model import PinList
+        from urbanlens.dashboard.services.map_pins.page_config import map_page_config
 
         pin_lists = list(PinList.objects.for_profile(profile).with_pin_counts().order_by("name"))
 
@@ -204,47 +205,45 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 show_pin_suggestions_intro = True
                 Profile.objects.filter(pk=profile.pk).update(map_pin_suggestions_intro_seen=True)
 
-        return render(
-            request,
-            "dashboard/pages/map/index.html",
-            {
-                "openweathermap_api_key": settings.openweathermap_api_key,
-                "tags": tags,
-                "filter_labels": filter_labels_list,
-                "filter_labels_json": filter_labels_json,
-                "custom_filter_fields": custom_filter_fields,
-                "security_fields": SECURITY_FIELDS,
-                "security_level_choices": SecurityLevel.choices,
-                "saved_filters": saved_filters,
-                "pin_lists": pin_lists,
-                "icon_categories": ICON_CATEGORIES,
-                "color_choices": COLOR_CHOICES,
-                "profile_uuid": profile.uuid,
-                "profile_slug": profile.slug or str(profile.uuid),
-                "app_uuid": str(site.uuid),
-                "cluster_radius": profile.cluster_radius,
-                "pin_count": pin_count,
-                "show_pin_count": show_pin_count,
-                "show_filtered_pin_count": show_filtered_pin_count,
-                "show_places_layer": show_places_layer,
-                "use_pin_cache": profile.use_pin_cache,
-                **profile.get_map_center_template_context(),
-                "map_default_zoom": (profile.remembered_map_zoom if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom else profile.map_default_zoom or 13),
-                "default_map_view": profile.default_map_view,
-                "map_dark_mode": profile.map_dark_mode,
-                # Live-updated by JS as the user switches layers - see the shared
-                # footer partial's `show_map_footer` doc comment.
-                "show_map_footer": True,
-                "show_pin_suggestions_intro": show_pin_suggestions_intro,
-                "pin_bulk_actions": [
-                    {"action": "add_to_list", "icon": "playlist_add", "label": "Add to List"},
-                    {"action": "merge", "icon": "merge", "label": "Merge"},
-                    {"action": "edit", "icon": "edit", "label": "Edit"},
-                    {"action": "export", "icon": "download", "label": "Export"},
-                    {"action": "delete", "icon": "delete", "label": "Delete"},
-                ],
-            },
-        )
+        context = {
+            "openweathermap_api_key": settings.openweathermap_api_key,
+            "tags": tags,
+            "filter_labels": filter_labels_list,
+            "filter_labels_json": filter_labels_json,
+            "custom_filter_fields": custom_filter_fields,
+            "security_fields": SECURITY_FIELDS,
+            "security_level_choices": SecurityLevel.choices,
+            "saved_filters": saved_filters,
+            "pin_lists": pin_lists,
+            "icon_categories": ICON_CATEGORIES,
+            "color_choices": COLOR_CHOICES,
+            "profile_uuid": profile.uuid,
+            "profile_slug": profile.slug or str(profile.uuid),
+            "app_uuid": str(site.uuid),
+            "cluster_radius": profile.cluster_radius,
+            "pin_count": pin_count,
+            "show_pin_count": show_pin_count,
+            "show_filtered_pin_count": show_filtered_pin_count,
+            "show_places_layer": show_places_layer,
+            "use_pin_cache": profile.use_pin_cache,
+            **profile.get_map_center_template_context(),
+            "map_default_zoom": (profile.remembered_map_zoom if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom else profile.map_default_zoom or 13),
+            "default_map_view": profile.default_map_view,
+            "map_dark_mode": profile.map_dark_mode,
+            # Live-updated by JS as the user switches layers - see the shared
+            # footer partial's `show_map_footer` doc comment.
+            "show_map_footer": True,
+            "show_pin_suggestions_intro": show_pin_suggestions_intro,
+            "pin_bulk_actions": [
+                {"action": "add_to_list", "icon": "playlist_add", "label": "Add to List"},
+                {"action": "merge", "icon": "merge", "label": "Merge"},
+                {"action": "edit", "icon": "edit", "label": "Edit"},
+                {"action": "export", "icon": "download", "label": "Export"},
+                {"action": "delete", "icon": "delete", "label": "Delete"},
+            ],
+        }
+        context["map_page_config"] = map_page_config(request, profile, context)
+        return render(request, "dashboard/pages/map/index.html", context)
 
     def infrastructure_features(self, request, *args, **kwargs):
         """Return viewport-scoped active and historic rail/water routes as GeoJSON."""
