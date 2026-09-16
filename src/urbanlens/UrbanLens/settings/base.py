@@ -175,6 +175,7 @@ TEMPLATES = [
                 "urbanlens.dashboard.context_processors.add_unread_notifications_badge",
                 "urbanlens.dashboard.context_processors.add_active_checkins_banner",
                 "urbanlens.dashboard.context_processors.add_demo_context",
+                "urbanlens.dashboard.context_processors.add_comment_map_config",
             ],
         },
     },

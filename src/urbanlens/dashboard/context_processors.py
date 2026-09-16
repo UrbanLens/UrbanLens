@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.models import User
 from django.db import DatabaseError
+from django.urls import reverse
 from django.utils.functional import SimpleLazyObject, empty
 
 if TYPE_CHECKING:
@@ -312,6 +313,39 @@ def add_active_checkins_banner(request: HttpRequest) -> dict[str, list[Any]]:
         except (AttributeError, DatabaseError):
             pass
     return {"nav_active_checkins": []}
+
+
+#: Stands in for the map the composer is about to save, which has no uuid until it is created.
+_MARKUP_MAP_PLACEHOLDER = "11111111-1111-1111-1111-111111111111"
+
+
+@deferred("comment_map_config")
+def add_comment_map_config(request: HttpRequest) -> dict[str, dict[str, Any]]:
+    """What the theme's comment-map composer needs from the server.
+
+    The composer is a static file, so the browser keeps it between pages and only these few request-shaped
+    values travel with the page. An anonymous visitor reaches the theme too, by way of the signed-out page.
+    """
+    profile_uuid = ""
+    if isinstance(request.user, User):
+        try:
+            profile_uuid = str(request.user.profile.uuid)
+        except (AttributeError, DatabaseError):
+            profile_uuid = ""
+    return {
+        "comment_map_config": {
+            "profileUuid": profile_uuid,
+            "urls": {
+                "commentsImagePicker": reverse("comments.image_picker"),
+                "mapAutocompleteLocal": reverse("map.autocomplete.local"),
+                "mapAutocompletePlaces": reverse("map.autocomplete.places"),
+                "mapResolvePlace": reverse("map.resolve_place"),
+                "markupMapCreate": reverse("markup_map.create"),
+                "markupMapSnapshot": reverse("markup_map.snapshot", kwargs={"map_uuid": _MARKUP_MAP_PLACEHOLDER}),
+                "messagesAttachMapPicker": reverse("messages.attach_map.picker"),
+            },
+        }
+    }
 
 
 #: Template flag, and the ``SiteFeature`` member it reports.

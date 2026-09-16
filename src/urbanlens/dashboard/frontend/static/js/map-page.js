@@ -1,6 +1,6 @@
 // The map page's behaviour. Served as a file so the browser caches it: inline, it was 275 KB of every
 // map view. Everything the server knows arrives in the #map-page-config element.
-const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
+const MAP_CFG = JSON.parse(document.getElementById('map-page-config').textContent);
 
     // -- Constants -------------------------------------------------------------
 
@@ -23,11 +23,11 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         const url = String(value == null ? '' : value).trim();
         return /^(?:https?:\/\/|\/(?!\/))/i.test(url) ? url : '';
     }
-    const _PROFILE_UUID = CFG.profileUuid;
-    const _APP_UUID     = CFG.appUuid;   // server instance UUID - changes on DB wipe
-    const _SHOW_FILTERED_PIN_COUNT = CFG.showFilteredPinCount;
-    const _SHOW_PIN_COUNT = CFG.showPinCount;
-    const _USE_CACHE      = CFG.usePinCache;
+    const _PROFILE_UUID = MAP_CFG.profileUuid;
+    const _APP_UUID     = MAP_CFG.appUuid;   // server instance UUID - changes on DB wipe
+    const _SHOW_FILTERED_PIN_COUNT = MAP_CFG.showFilteredPinCount;
+    const _SHOW_PIN_COUNT = MAP_CFG.showPinCount;
+    const _USE_CACHE      = MAP_CFG.usePinCache;
     // v5: uses profile UUID (not PK) in key, and embeds app_uuid for DB-wipe detection.
     const _CACHE_KEY      = `ul_pins_v5_${_PROFILE_UUID}`;
     const _CACHE_MAX      = 180 * 24 * 60 * 60 * 1000;  // 6 months: space reclaim for inactive users
@@ -54,7 +54,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     let   _lastKnownUpdated  = null;   // server last_updated from most recent meta poll
     let   pinsVisible        = true;
     // Server-authoritative total pin count (updated after a full refresh).
-    let   _totalPins         = CFG.pinCount;
+    let   _totalPins         = MAP_CFG.pinCount;
     let   _isOffline         = false;   // true when the meta poll returns an error/network failure
     let   _searchMarker      = null;    // temporary Leaflet marker placed on search-result jump
     let   _userLocationMarker = null;   // persistent "you are here" dot from the most recent GPS fix
@@ -97,21 +97,21 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     }
 
     // -- Map -------------------------------------------------------------------
-    const _MAP_CENTER_MODE   = CFG.mapCenterMode;
-    const _SERVER_CENTER_LAT = CFG.mapCenterLat;
-    const _SERVER_CENTER_LNG = CFG.mapCenterLng;
+    const _MAP_CENTER_MODE   = MAP_CFG.mapCenterMode;
+    const _SERVER_CENTER_LAT = MAP_CFG.mapCenterLat;
+    const _SERVER_CENTER_LNG = MAP_CFG.mapCenterLng;
     // Pin-cluster centroid - used as fallback when GPS permission is denied.
-    const _GPS_FALLBACK_LAT  = CFG.gpsFallbackLat;
-    const _GPS_FALLBACK_LNG  = CFG.gpsFallbackLng;
-    const _defaultZoom       = CFG.mapDefaultZoom;
-    const _DEFAULT_MAP_VIEW  = CFG.defaultMapView;
-    let _MAP_DARK_MODE       = CFG.mapDarkMode;
+    const _GPS_FALLBACK_LAT  = MAP_CFG.gpsFallbackLat;
+    const _GPS_FALLBACK_LNG  = MAP_CFG.gpsFallbackLng;
+    const _defaultZoom       = MAP_CFG.mapDefaultZoom;
+    const _DEFAULT_MAP_VIEW  = MAP_CFG.defaultMapView;
+    let _MAP_DARK_MODE       = MAP_CFG.mapDarkMode;
     // Per-profile key for remembering active layers across sessions.
     const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
-    const _GEOLOCATION_VISIT_URL = CFG.urls["mapGeolocationVisits"];
+    const _GEOLOCATION_VISIT_URL = MAP_CFG.urls["mapGeolocationVisits"];
     // GPS is still used to center the map (client-side only) even when this is
     // false; it just stops that fix from being relayed to the server at all.
-    const _GEOLOCATION_TRACKING_ALLOWED = CFG.geolocationTrackingAllowed;
+    const _GEOLOCATION_TRACKING_ALLOWED = MAP_CFG.geolocationTrackingAllowed;
 
     // -- Browser-side user location cache (never sent to server) --------------
     const _USER_LOC_KEY     = 'ul_user_location_v1';
@@ -137,7 +137,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     function _recordGeolocationVisit(lat, lng) {
         fetch(_GEOLOCATION_VISIT_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CFG.csrfToken },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': MAP_CFG.csrfToken },
             body: JSON.stringify({ latitude: lat, longitude: lng }),
             keepalive: true,
         }).catch(() => {
@@ -339,7 +339,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     }
 
     // -- Cluster layer (replaces plain LayerGroup) -----------------------------
-    var _userClusterRadius = CFG.clusterRadius;
+    var _userClusterRadius = MAP_CFG.clusterRadius;
     var clusterGroup = L.markerClusterGroup({
         maxClusterRadius: _userClusterRadius !== null
             ? _userClusterRadius
@@ -851,7 +851,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
                 await _refreshAllPins();
                 return;
             }
-            const resp = await fetch(CFG.urls["mapPinsMeta"], { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const resp = await fetch(MAP_CFG.urls["mapPinsMeta"], { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) { _setOffline(true); return; }
             _setOffline(false);
             const data = await resp.json();
@@ -1096,7 +1096,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
                     }
                     fetch(`/dashboard/rest/pins/${pin.uuid}/`, {
                         method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CFG.csrfToken },
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': MAP_CFG.csrfToken },
                         body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
                     })
                     .then(r => { if (!r.ok) throw new Error(); return r.json(); })
@@ -1254,7 +1254,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     }
 
     function initMapOnboarding() {
-        if (!CFG.showOnboardingTips) return;
+        if (!MAP_CFG.showOnboardingTips) return;
         _onboardingCards.forEach(_registerAutoDissmiss);
         if (_onboardingLater()) return;
         const card = _onboardingCards.find(c => c.shouldShow() && !_onboardingDismissed(c.id));
@@ -1283,7 +1283,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 120000);
         try {
-            const resp = await fetch(CFG.urls["mapDocument"], {
+            const resp = await fetch(MAP_CFG.urls["mapDocument"], {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
                 signal: controller.signal,
             });
@@ -1349,7 +1349,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
             const params = new URLSearchParams({ limit: '500' });
             if (cursor) params.set('cursor', cursor);
             if (page === 0) params.set('include_total', '1');
-            const data = await _fetchJson(`${CFG.urls["mapPins"]}?${params.toString()}`, {
+            const data = await _fetchJson(`${MAP_CFG.urls["mapPins"]}?${params.toString()}`, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
             }, 45000);
             pins.push(...(data.pins || []));
@@ -1373,7 +1373,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
             const data = (tileKeys.length === 1 && tileKeys[0] === '*')
                 ? await _fetchEveryPin('Loading pins...')
                 : await _fetchJson(
-                    `${CFG.urls["mapPins"]}?bbox=${encodeURIComponent((() => { const b = _bboxFromKeys(tileKeys); return `${b.s},${b.w},${b.n},${b.e}`; })())}`,
+                    `${MAP_CFG.urls["mapPins"]}?bbox=${encodeURIComponent((() => { const b = _bboxFromKeys(tileKeys); return `${b.s},${b.w},${b.n},${b.e}`; })())}`,
                     { headers: { 'X-Requested-With': 'XMLHttpRequest' } },
                     45000,
                 );
@@ -1471,7 +1471,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
             _rememberTid = null;
             _pendingPositionBody = null;
             const body = _positionBody();
-            fetch(CFG.urls["settingsSaveMapPosition"], {
+            fetch(MAP_CFG.urls["settingsSaveMapPosition"], {
                 method: 'POST',
                 headers: { 'X-CSRFToken': body.get('csrfmiddlewaretoken'), 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: body.toString(),
@@ -1495,7 +1495,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         function _flushPendingPosition() {
             if (!_pendingPositionBody || _rememberTid === null) return;
             clearTimeout(_rememberTid);
-            navigator.sendBeacon(CFG.urls["settingsSaveMapPosition"], new Blob([_pendingPositionBody.toString()], { type: 'application/x-www-form-urlencoded' }));
+            navigator.sendBeacon(MAP_CFG.urls["settingsSaveMapPosition"], new Blob([_pendingPositionBody.toString()], { type: 'application/x-www-form-urlencoded' }));
             _rememberTid = null;
             _pendingPositionBody = null;
         }
@@ -1739,7 +1739,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
 
     function _loadChildPins() {
         const qs = _activeFilterQueryString();
-        const url = CFG.urls["mapPinsChildren"] + (qs ? `?${qs}` : '');
+        const url = MAP_CFG.urls["mapPinsChildren"] + (qs ? `?${qs}` : '');
         _setFetching(true, 'Loading child pins...');
         _childPinsFetchPromise = _fetchJson(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }, 30000)
             .then(function (data) {
@@ -1879,7 +1879,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         const requestSerial = ++_infrastructureRequestSerial;
         _setInfrastructureLoading(true);
 
-        fetch(`${CFG.urls["mapInfrastructure"]}?bbox=${encodeURIComponent(bbox)}`, {
+        fetch(`${MAP_CFG.urls["mapInfrastructure"]}?bbox=${encodeURIComponent(bbox)}`, {
             signal: _infrastructureAbortController.signal,
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
         })
@@ -1946,7 +1946,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     // This page only contributes its own custom toggles (pins, places).
     _mapLayers = window.MapLayers.create(map, {
         root: document.getElementById('map-layers-panel'),
-        apiKey: CFG.openweathermapApiKey,
+        apiKey: MAP_CFG.openweathermapApiKey,
         darkMode: _MAP_DARK_MODE,
         defaultBase: _DEFAULT_MAP_VIEW,
         storageKey: _LAYER_CACHE_KEY,
@@ -1962,7 +1962,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         onDarkModeChange: function (mode) {
             _MAP_DARK_MODE = mode;
             const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-            fetch(CFG.urls["settingsSaveMapDarkMode"], {
+            fetch(MAP_CFG.urls["settingsSaveMapDarkMode"], {
                 method: 'POST',
                 headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `mode=${encodeURIComponent(mode)}`,
@@ -2115,7 +2115,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
                         method: 'PATCH',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRFToken': CFG.csrfToken,
+                            'X-CSRFToken': MAP_CFG.csrfToken,
                         },
                         body: JSON.stringify(data),
                     })
@@ -2207,7 +2207,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     });
 
     document.addEventListener('htmx:configRequest', (event) => {
-        event.detail.headers['X-CSRFToken'] = CFG.csrfToken;
+        event.detail.headers['X-CSRFToken'] = MAP_CFG.csrfToken;
     });
 
     document.body.addEventListener('htmx:afterOnLoad', function () {
@@ -2279,7 +2279,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     }
 
     // -- Places layer (VIP only) -----------------------------------------------
-    const _SHOW_PLACES_LAYER = CFG.showPlacesLayer;
+    const _SHOW_PLACES_LAYER = MAP_CFG.showPlacesLayer;
     let _placesFetchTid = null;
 
     const _PLACES_SOURCE_ICONS = {
@@ -2381,7 +2381,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
                 ],
             });
             if (place.source === 'google' && place.place_id) {
-                fetch(`${CFG.urls["mapPlacesDetails"]}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                fetch(`${MAP_CFG.urls["mapPlacesDetails"]}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                     .then(resp => resp.ok ? resp.json() : null)
                     .then(data => {
                         if (data?.place && document.body.contains(detailsWrap)) {
@@ -2420,7 +2420,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         const center = map.getCenter();
         // Pass zoom so the server can apply the minimum zoom restriction per source
         // (Google Places requires zoom ≥ 10; NPS and Wikipedia show at any zoom).
-        const url = `${CFG.urls["mapPlacesNearby"]}?lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}&zoom=${zoom}`;
+        const url = `${MAP_CFG.urls["mapPlacesNearby"]}?lat=${center.lat.toFixed(5)}&lng=${center.lng.toFixed(5)}&zoom=${zoom}`;
         try {
             const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) return;
@@ -2465,7 +2465,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         // Google Places - fetch details from the server.
         if (bodyEl) bodyEl.innerHTML = '<span class="place-info-loading">Loading...</span>';
         try {
-            const resp = await fetch(`${CFG.urls["mapPlacesDetails"]}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const resp = await fetch(`${MAP_CFG.urls["mapPlacesDetails"]}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) throw new Error();
             const data = await resp.json();
             const d = data.place || {};
@@ -2501,8 +2501,8 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
 
     // Update the Leaflet icon URLs
     var newIcon = L.icon({
-        iconUrl: CFG.assets["leafletMarkerIcon"],
-        shadowUrl: CFG.assets["leafletMarkerShadow"],
+        iconUrl: MAP_CFG.assets["leafletMarkerIcon"],
+        shadowUrl: MAP_CFG.assets["leafletMarkerShadow"],
         iconSize: [25, 41],
         shadowSize: [41, 41],
         iconAnchor: [12, 41],
@@ -2514,7 +2514,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     async function _deletePinByUuid(pinUuid, pinName) {
         // Shared flow (base.html): confirm, then ask what to do with child pins
         // when the server reports the pin has some (delete them or keep them).
-        const result = await window.deletePinCascade(pinUuid, pinName, CFG.csrfToken);
+        const result = await window.deletePinCascade(pinUuid, pinName, MAP_CFG.csrfToken);
         if (result === null) {
             toastr.error('Failed to delete pin');
             return false;
@@ -2585,7 +2585,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         if (!confirmed) return;
         fetch('/dashboard/map/pin/' + encodeURIComponent(pinSlug) + '/promote-children/', {
             method: 'POST',
-            headers: { 'X-CSRFToken': CFG.csrfToken },
+            headers: { 'X-CSRFToken': MAP_CFG.csrfToken },
         })
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
         .then(function (data) {
@@ -2819,7 +2819,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         // the bare fetch this replaces threw an empty Error, so a refusal the
         // server had explained (too many pins selected, say) reached the user as
         // an unexplained "Failed to delete pins."
-        window.ulSendJson(CFG.urls["pinBulkDelete"], 'POST', { uuids: uuids })
+        window.ulSendJson(MAP_CFG.urls["pinBulkDelete"], 'POST', { uuids: uuids })
         .then(function (data) {
             document.getElementById('bulk-delete-dialog').close();
             uuids.forEach(function (uuid) {
@@ -2847,9 +2847,9 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
 
     function _undoBulkDelete(token, btn) {
         if (btn) btn.disabled = true;
-        fetch(CFG.urls["pinBulkUndo"], {
+        fetch(MAP_CFG.urls["pinBulkUndo"], {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CFG.csrfToken },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': MAP_CFG.csrfToken },
             body: JSON.stringify({ token: token }),
         })
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
@@ -3023,7 +3023,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         const saved = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging...';
-        window.ulSendJson(CFG.urls["pinBulkMerge"], 'POST', { target_uuid: _bulkMergeTargetUuid, source_uuids: sources })
+        window.ulSendJson(MAP_CFG.urls["pinBulkMerge"], 'POST', { target_uuid: _bulkMergeTargetUuid, source_uuids: sources })
         .then(function () {
             document.getElementById('bulk-merge-dialog').close();
             exitSelectMode();
@@ -3106,7 +3106,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
             debounceTimer = setTimeout(function () {
                 const params = new URLSearchParams({ q: q });
                 _selectedPinUuids.forEach(function (u) { params.append('exclude', u); });
-                fetch('' + CFG.urls["pinParentSearch"] + '?' + params.toString())
+                fetch('' + MAP_CFG.urls["pinParentSearch"] + '?' + params.toString())
                     .then(function (r) { return r.ok ? r.json() : { results: [] }; })
                     .then(function (data) { renderSuggestions(data.results || []); })
                     .catch(function () { suggEl.hidden = true; });
@@ -3134,7 +3134,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         _bulkEditParentPicker.reset();
         const removeHint = document.getElementById('bulk-edit-remove-label-hint');
         removeHint.textContent = 'Loading...';
-        fetch('' + CFG.urls["pinBulkEditLabelOptions"] + '?' + uuids.map(function (u) { return 'uuids=' + encodeURIComponent(u); }).join('&'))
+        fetch('' + MAP_CFG.urls["pinBulkEditLabelOptions"] + '?' + uuids.map(function (u) { return 'uuids=' + encodeURIComponent(u); }).join('&'))
             .then(function (r) { return r.ok ? r.json() : { labels: [] }; })
             .then(function (data) {
                 _bulkEditRemovePicker.setCandidates(data.labels || []);
@@ -3161,7 +3161,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         payload.remove_label_ids = _bulkEditRemovePicker.getSelectedIds();
         const parentUuid = _bulkEditParentPicker.getSelectedUuid();
         if (parentUuid) payload.parent_uuid = parentUuid;
-        window.ulSendJson(CFG.urls["pinBulkEdit"], 'POST', payload)
+        window.ulSendJson(MAP_CFG.urls["pinBulkEdit"], 'POST', payload)
         .then(function (data) {
             document.getElementById('bulk-edit-dialog').close();
             toastr.success('Pins updated.');
@@ -3331,7 +3331,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         const b = map.getBounds();
         params.set('bounds', `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`);
         params.set('page_size', String(_pinListPageSize));
-        htmx.ajax('GET', `${CFG.urls["mapPinsList"]}?${params.toString()}`, { target: '#pin-list-body', swap: 'innerHTML' });
+        htmx.ajax('GET', `${MAP_CFG.urls["mapPinsList"]}?${params.toString()}`, { target: '#pin-list-body', swap: 'innerHTML' });
     }
 
     // Measures the just-rendered page against the body's available height and
@@ -3392,7 +3392,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         const form = document.getElementById('filter-form');
         if (!form) return;
         const params = new URLSearchParams(new FormData(form));
-        fetch(`${CFG.urls["savedFiltersCounts"]}?${params.toString()}`)
+        fetch(`${MAP_CFG.urls["savedFiltersCounts"]}?${params.toString()}`)
             .then((r) => (r.ok ? r.json() : null))
             .then((data) => {
                 if (!data) return;
@@ -3452,7 +3452,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
             params = new URLSearchParams(new FormData(form));
         }
         if (confirmed) params.set('confirmed', 'true');
-        const addUrl = CFG.urls["listsItemsAdd"].replace('00000000-0000-0000-0000-000000000000', listUuid);
+        const addUrl = MAP_CFG.urls["listsItemsAdd"].replace('00000000-0000-0000-0000-000000000000', listUuid);
         fetch(addUrl, {
             method: 'POST',
             headers: { 'X-CSRFToken': _csrfToken() },
@@ -3489,7 +3489,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         // r.json() unconditionally, so that plain-text body threw inside an
         // unhandled promise - the most likely failure of this feature did
         // nothing at all, with no message and no closed dialog.
-        window.ulSendJson(CFG.urls["listsCreate"], 'POST', { name }, { headers: { Accept: 'application/json' } })
+        window.ulSendJson(MAP_CFG.urls["listsCreate"], 'POST', { name }, { headers: { Accept: 'application/json' } })
             .then((data) => {
                 nameInput.value = '';
                 addPinsToList(data.uuid);
@@ -4285,15 +4285,15 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
     try { localStorage.removeItem('ul_addr_history_v1'); } catch (e) {}
 
     const _addrSearch = window.LocationSearchEngine.attach('addr', {
-        historyKey: 'ul_addr_history_v1_' + CFG.profileId + '',
-        recentPinsKey: 'ul_recent_pins_v1_' + CFG.profileId + '',
+        historyKey: 'ul_addr_history_v1_' + MAP_CFG.profileId + '',
+        recentPinsKey: 'ul_recent_pins_v1_' + MAP_CFG.profileId + '',
         sources: {
-            localPins: { url: CFG.urls["mapAutocompleteLocal"] },
+            localPins: { url: MAP_CFG.urls["mapAutocompleteLocal"] },
             osmNominatim: true,
-            googlePlaces: { url: CFG.urls["mapAutocompletePlaces"] },
-            topCities: { url: CFG.urls["mapAutocompleteEmpty"] },
+            googlePlaces: { url: MAP_CFG.urls["mapAutocompletePlaces"] },
+            topCities: { url: MAP_CFG.urls["mapAutocompleteEmpty"] },
         },
-        resolvePlaceUrl: CFG.urls["mapResolvePlace"],
+        resolvePlaceUrl: MAP_CFG.urls["mapResolvePlace"],
         pinCacheProfileUuid: _PROFILE_UUID,
         home: _searchHome,
         enableMyLocation: true,
@@ -5120,16 +5120,16 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
             const fd = new FormData();
             fd.append('name', name);
             const labelCreateUrls = {
-                tag: CFG.urls["labelCreateTag"],
-                category: CFG.urls["labelCreateCategory"],
-                status: CFG.urls["labelCreateStatus"],
+                tag: MAP_CFG.urls["labelCreateTag"],
+                category: MAP_CFG.urls["labelCreateCategory"],
+                status: MAP_CFG.urls["labelCreateStatus"],
             };
             const createUrl = labelCreateUrls[kind.value];
             if (!createUrl) { toastr.warning('Unknown label type.'); submitBtn.disabled = false; return; }
             fetch(createUrl, {
                 method: 'POST',
                 body: fd,
-                headers: { 'X-CSRFToken': CFG.csrfToken, 'Accept': 'application/json' },
+                headers: { 'X-CSRFToken': MAP_CFG.csrfToken, 'Accept': 'application/json' },
             })
             .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
             .then(data => {
@@ -5147,7 +5147,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
 
     // -- Shared helper: fetch updated pin data and refresh map marker ---------
     function _refreshPinInStore(pinSlug, onDone) {
-        fetch(`${CFG.urls["mapPinJson"]}`.replace('placeholder-slug', pinSlug), {
+        fetch(`${MAP_CFG.urls["mapPinJson"]}`.replace('placeholder-slug', pinSlug), {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
         })
         .then(r => r.ok ? r.json() : null)
@@ -5189,7 +5189,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
             fetch(`/dashboard/map/quick-edit/${uuid}/`, {
                 method: 'POST',
                 body: formData,
-                headers: { 'X-CSRFToken': CFG.csrfToken },
+                headers: { 'X-CSRFToken': MAP_CFG.csrfToken },
             })
             .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t || r.statusText)))
             .then(data => {
@@ -5250,10 +5250,10 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
             const pinLat = parseFloat(lat);
             const pinLng = parseFloat(lng);
             const pinName = formData.get('name') || 'New Pin';
-            fetch(CFG.urls["pinAdd"], {
+            fetch(MAP_CFG.urls["pinAdd"], {
                 method: 'POST',
                 body: formData,
-                headers: { 'X-CSRFToken': CFG.csrfToken },
+                headers: { 'X-CSRFToken': MAP_CFG.csrfToken },
             })
             .then(r => r.ok ? r.json().catch(() => ({})) : r.text().then(t => Promise.reject(t || r.statusText)))
             .then(data => {
@@ -5330,7 +5330,7 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
         function _linkPin(locSlug, btn, onSuccess) {
             return fetch('/dashboard/map/pin/' + pinSlug + '/link/' + locSlug + '/', {
                 method: 'POST',
-                headers: { 'X-CSRFToken': CFG.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 'X-CSRFToken': MAP_CFG.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
             })
             .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
             .then(onSuccess)
@@ -5369,9 +5369,9 @@ const CFG = JSON.parse(document.getElementById('map-page-config').textContent);
             cancelBtn.onclick = function () {
                 if (!pinUuid) { dlg.close(); return; }
                 cancelBtn.disabled = true;
-                fetch(CFG.urls["pinBulkDelete"], {
+                fetch(MAP_CFG.urls["pinBulkDelete"], {
                     method: 'POST',
-                    headers: { 'X-CSRFToken': CFG.csrfToken, 'Content-Type': 'application/json' },
+                    headers: { 'X-CSRFToken': MAP_CFG.csrfToken, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ uuids: [pinUuid] }),
                 })
                 .then(function (r) { return r.ok ? Promise.resolve() : Promise.reject(); })
