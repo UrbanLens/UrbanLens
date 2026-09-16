@@ -46,9 +46,9 @@ def _library_markers(gateway: ImmichGateway, account: ImmichAccount) -> list[Map
 
     Returns:
         The markers. A library past ``settings.IMMICH_MARKER_CACHE_MAX_ASSETS``
-        is returned without being stored - it shares one Valkey with sessions
-        and the broker, and refusing to cache must never mean refusing to
-        answer.
+        is returned without being stored - it shares one Dragonfly with
+        sessions and the Channels layer, and refusing to cache must never mean
+        refusing to answer.
 
     Raises:
         GatewayRequestError: On a network error or non-2xx response.

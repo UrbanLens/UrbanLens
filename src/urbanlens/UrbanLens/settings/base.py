@@ -277,9 +277,11 @@ if DRAGONFLY_URL:
 
 DATABASE_ROUTERS = ["urbanlens.dashboard.dbrouters.DBRouter"]
 
-# Celery defaults to Dragonfly/Redis, else local Redis for dev.
-CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or DRAGONFLY_URL or "redis://localhost:6379/0"
-CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or CELERY_BROKER_URL
+RABBITMQ_URL = os.getenv("UL_RABBITMQ_URL")
+# Celery prefers RabbitMQ as the broker, else falls back to Dragonfly/Redis, else local Redis for dev.
+# The result backend stays on Dragonfly regardless - it needs a fast key/value store, not a queue.
+CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or RABBITMQ_URL or DRAGONFLY_URL or "redis://localhost:6379/0"
+CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or DRAGONFLY_URL or CELERY_BROKER_URL
 # Bound result-backend recovery retries to fail fast when the broker is down.
 CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"retry_policy": {"timeout": 5.0}}
 # Keep above max(time_limit, longest countdown) to avoid duplicate delivery.

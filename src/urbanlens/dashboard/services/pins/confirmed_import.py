@@ -3,8 +3,8 @@
 The preview step stops at ``GoogleMapsGateway.MAX_PREVIEW_PINS``, but the confirm
 step gets the selection back from the client, so the ceiling is applied again here
 before anything is stored. The selection waits on the media volume behind a job id
-rather than riding along as a task argument: at the ceiling it is megabytes, and the
-broker shares its Valkey with sessions and the cache.
+rather than riding along as a task argument: at the ceiling it is megabytes, and a
+task argument that size would ride through the broker instead.
 """
 
 from __future__ import annotations

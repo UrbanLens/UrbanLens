@@ -24,6 +24,7 @@ env:
   UL_DB_HOST: localhost
   UL_DB_PORT: "5432"
   UL_DRAGONFLY_URL: redis://localhost:6379/0
+  UL_RABBITMQ_URL: amqp://urbanlens:ci-placeholder@localhost:5672/urbanlens
   UL_UNSAFE_ALLOW_HTTP: "True"
   # Required for the gateway to construct at all. Unroutable on purpose, and the
   # test suite's network guard refuses a real socket regardless - without it,
@@ -59,6 +60,19 @@ jobs:
           - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: urbanlens
+          RABBITMQ_DEFAULT_PASS: ci-placeholder
+          RABBITMQ_DEFAULT_VHOST: urbanlens
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5

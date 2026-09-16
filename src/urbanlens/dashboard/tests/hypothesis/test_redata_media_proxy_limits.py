@@ -2,9 +2,10 @@
 
 `RedataMediaProxyMixin.serve_media` downloads a file from REData and does
 `cache.set(cache_key, original, 3600)` with no size bound, into the same 512MB
-instance that holds sessions, the Channels layer and the Celery broker under
-`volatile-lru` - so a large enough body does not merely waste space, it evicts
-other people's sessions. None of the four views requires a login, and the cache
+instance that holds sessions and the Channels layer - a full store there raises
+rather than evicting to make room, so a large enough body does not merely waste
+space, it can turn an unrelated cache write into a refused one for everyone
+sharing the store. None of the four views requires a login, and the cache
 key is built from path parameters the caller chooses, so the number of distinct
 entries is the caller's to decide as well (N21 H14).
 

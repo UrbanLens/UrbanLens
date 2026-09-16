@@ -2,10 +2,11 @@
 
 Four views proxy bytes from somewhere else and cache them so the next request
 does not re-fetch: Google Photos previews, Immich thumbnails, and the two map
-tile proxies. All four wrote whatever came back into the single 512MB Valkey
-that also holds sessions, the Channels layer and the Celery broker, under
-`volatile-lru` - so a large enough body does not merely waste space, it evicts
-other people's sessions.
+tile proxies. All four wrote whatever came back into the single 512MB Dragonfly
+that also holds sessions and the Channels layer - a full store raises rather
+than evicting to make room (see docker-compose.yml), so a large enough body
+does not merely waste space, it can turn into failed cache writes for everyone
+sharing the store.
 
 Three of the four ask the provider for a thumbnail, so an oversized body means
 the provider ignored the request. That is the case this exists for: serve it,
@@ -13,7 +14,7 @@ decline to store it, and say so once in the log rather than silently filling the
 instance everything else shares.
 
 The three plain wrappers below exist for the other half of that: a bare
-``cache.set`` against a full or unreachable Valkey **raises**, so a cache
+``cache.set`` against a full or unreachable Dragonfly **raises**, so a cache
 problem becomes a 500 on whatever the caller was answering. Every caller here
 can answer without the cache - that is what a cache is - so none of them should
 be able to fail because of it.

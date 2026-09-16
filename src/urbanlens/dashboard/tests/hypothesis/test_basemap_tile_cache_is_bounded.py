@@ -2,9 +2,10 @@
 
 N21 H35/H22/H13. `cache.set(cache_key, (body, resolved_type), _TILE_CACHE_TTL)`
 stores raw tile bytes with no size check, into the same 512MB Dragonfly that holds
-sessions, the Channels layer and the Celery broker. One oversized tile - or a
-vendor answering a tile request with something that is not a tile - evicts other
-people's sessions to make room for itself.
+sessions and the Channels layer - and a full store there raises rather than
+evicting to make room. One oversized tile - or a vendor answering a tile
+request with something that is not a tile - can turn an unrelated cache write
+into a refused one for everyone sharing the store.
 
 `bounded_cache.set_if_small` already exists for exactly this and the Immich
 thumbnail proxy already uses it, so the fix is to stop having two answers to the

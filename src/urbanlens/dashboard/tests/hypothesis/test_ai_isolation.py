@@ -295,6 +295,7 @@ class ComposeTopologyTests(SimpleTestCase):
             "UL_DB_",
             "UL_FIELD_ENCRYPTION_KEY",
             "UL_DRAGONFLY_URL",
+            "UL_RABBITMQ_URL",
             "DJANGO_SECRET_KEY",
             "UL_REDATA_",
             "UL_GOOGLE_",
@@ -309,7 +310,7 @@ class ComposeTopologyTests(SimpleTestCase):
 
     def test_ai_inference_is_not_on_app_network(self) -> None:
         # This is the one that must never regress silently: app_network has a
-        # route to db/dragonfly/REData, and ai-inference must never gain one.
+        # route to db/dragonfly/rabbitmq/REData, and ai-inference must never gain one.
         compose = _compose()
         self.assertNotIn("app_network", compose["services"]["ai-inference"]["networks"])
 
@@ -330,9 +331,9 @@ class ComposeTopologyTests(SimpleTestCase):
     def test_proxy_network_holds_only_the_proxy_and_its_two_clients(self) -> None:
         # The proxy is the one process in this tier that parses bytes from the
         # public internet. It gets a network with exactly the containers that
-        # must call it - not ai_network (db, dragonfly) or inference_network
-        # (app, celery-worker), which would make a proxy bug a foothold with
-        # somewhere to go.
+        # must call it - not ai_network (db, dragonfly, rabbitmq) or
+        # inference_network (app, celery-worker), which would make a proxy bug
+        # a foothold with somewhere to go.
         compose = _compose()
         members = {
             name for name, service in compose["services"].items() if "proxy_network" in (service.get("networks") or {})
@@ -348,7 +349,7 @@ class ComposeTopologyTests(SimpleTestCase):
         # network carries both egress-proxy and a datastore.
         compose = _compose()
         proxy_networks = set(compose["services"]["egress-proxy"]["networks"])
-        for service in ("db", "dragonfly", "app", "celery-worker"):
+        for service in ("db", "dragonfly", "rabbitmq", "app", "celery-worker"):
             shared = proxy_networks & set(compose["services"][service]["networks"])
             self.assertEqual(shared, set(), f"egress-proxy shares {shared} with {service}")
 
@@ -438,11 +439,12 @@ class ComposeTopologyTests(SimpleTestCase):
         self.assertTrue(compose["networks"]["ai_network"]["internal"])
 
     def test_db_and_dragonfly_are_reachable_from_ai_network(self) -> None:
-        # ai-worker needs both without joining app_network (which would give
-        # it a route to the internet, REData, OAuth).
+        # ai-worker needs all three without joining app_network (which would
+        # give it a route to the internet, REData, OAuth).
         compose = _compose()
         self.assertIn("ai_network", compose["services"]["db"]["networks"])
         self.assertIn("ai_network", compose["services"]["dragonfly"]["networks"])
+        self.assertIn("ai_network", compose["services"]["rabbitmq"]["networks"])
 
     def test_ai_worker_has_no_env_file(self) -> None:
         compose = _compose()
@@ -468,6 +470,7 @@ class ComposeTopologyTests(SimpleTestCase):
             "UL_ENVIRONMENT",
             "UL_SITE_URL",
             "UL_DRAGONFLY_URL",
+            "UL_RABBITMQ_URL",
             "DJANGO_SECRET_KEY",
             "UL_FIELD_ENCRYPTION_KEY",
             "UL_FIELD_ENCRYPTION_KEY_FALLBACKS",

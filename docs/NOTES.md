@@ -707,6 +707,11 @@ message *with requeue*, and nothing bounds the redelivery:
 - The Redis/Valkey transport enforces no delivery limit. kombu does stamp
   `redelivered = True` on the restored message, and Celery currently ignores it.
 
+This was traced against the Redis-family transport, whose `visibility_timeout`
+and `_restore` requeue are kombu-emulated rather than broker-native. The broker
+is now RabbitMQ: native AMQP `basic.reject`/`basic.nack` redelivery has not been
+re-traced the same way, so treat the mechanism above as unconfirmed until it is.
+
 The loop is also silent: that branch sets `send_failed_event = False` and skips
 `mark_as_failure`, so a task looping on this stores no result, sends no
 `task_failure` signal, and emits no `task-failed` event. It is invisible to the

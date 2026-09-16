@@ -257,7 +257,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default=20_000,
         description=(
             "Largest matching-pin list a saved filter will cache. The entry holds one uuid per matching pin in the "
-            "Dragonfly that also holds sessions, the Channels layer and the Celery broker, so past this the toolbar "
+            "Dragonfly that also holds sessions and the Channels layer, so past this the toolbar "
             "recomputes from the database rather than making everyone else pay to store one account's answer. "
             "Refusing to cache never changes the answer."
         ),
@@ -353,7 +353,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default=25_000,
         description=(
             "Largest Immich library whose marker list is cached for reuse across pins. The list is the whole "
-            "geolocated library, and it lands in the Dragonfly that also holds sessions and the Celery broker, so a "
+            "geolocated library, and it lands in the Dragonfly that also holds sessions and the Channels layer, so a "
             "library past this is served and not stored - the picker still works, it just re-fetches. Roughly a "
             "hundred bytes per marker."
         ),

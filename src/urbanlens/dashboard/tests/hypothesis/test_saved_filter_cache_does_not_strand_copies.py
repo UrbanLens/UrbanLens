@@ -4,10 +4,11 @@
 every uuid a saved filter matches. The fingerprint changes on every pin create,
 edit and delete, which is what makes a stale entry unreadable - but the stale
 entry is still *there*, holding its bytes for the full day of the TTL, in the
-512MB Dragonfly that also holds sessions, the Channels layer and the Celery broker
-under `volatile-lru`. So an ordinary afternoon of editing pins leaves one dead
-copy of the account's matching-uuid list per edit, per saved filter, and the
-eviction that makes room for them takes other people's sessions.
+512MB Dragonfly that also holds sessions and the Channels layer, where a full
+store raises rather than evicting to make room. So an ordinary afternoon of
+editing pins leaves one dead copy of the account's matching-uuid list per edit,
+per saved filter, and enough of them can turn an unrelated cache write into a
+refused one for everyone sharing the store.
 
 Three properties, and the second and third are a defect class this effort has
 already fixed twice elsewhere:
