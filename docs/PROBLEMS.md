@@ -3324,6 +3324,77 @@ an actor-phase-driven one, the idle-phase result above is a complete answer to t
 question; the full battery would additionally show whether it compounds with `search_storm`'s
 connection pressure, which remains unmeasured.
 
+### The defect generalises to three more providers via three more relations: Article's aliases, Trip's activities/comments, Safety's messages (2026-09-16)
+
+Read all ten search providers this session, specifically to find every `apply_text`/`term_filter`
+call whose field-path list crosses a to-many relation the way `labels__name` does — since `_semijoin`
+is generic over any `__`-separated path, not something specific to labels. `apply_text` always
+passes `model=queryset.model` to `term_filter` (`providers.py:483`), so **any** field path a provider
+hands it that crosses a to-many relation gets the same unscoped `Exists(model._base_manager...)`
+treatment, independent of the labels mechanism specifically.
+
+Three more providers turned out to be exposed, through six more field paths, none of them a labels
+relation at all — Article has no `labels` relation, so `apply_label_clause` is never called for it,
+and this generalisation is unrelated to that code path:
+
+- **`ArticleSearchProvider`** (`"pin__aliases__name"`, `"wiki__aliases__name"`) — both cross
+  `PinAlias`/`WikiAlias`'s reverse FK (`related_name="aliases"`). Reproduced in
+  `test_search_does_not_read_another_accounts_article_aliases.py`: four `xfail(strict=True)` tests
+  (matching + non-matching, for both the pin-hosted and wiki-hosted article shape, since `pin`/`wiki`
+  are separate `OneToOneField`s and a `CheckConstraint` enforces exactly one is set per row, so the
+  two hosts need independent reproductions), ten measurement-is-real guard tests, all passing as
+  expected — the alias semi-join reads the whole `dashboard_pin_aliases`/`dashboard_wiki_aliases`
+  table regardless of a stranger's growing, inaccessible pin/wiki, in both the matching and
+  non-matching case (unlike labels, no trigram-index-shaped fix has been attempted here yet, so
+  neither variant is even partially fixed).
+- **`TripSearchProvider`** (`"activities__title"`, `"activities__notes"`, `"comments__text"`) — the
+  first two cross `TripActivity`'s reverse FK (`related_name="activities"`), the third crosses
+  `TripComment`'s (`related_name="comments"`). `term_filter` builds one `_semijoin` per field path,
+  so title and notes are two separate `Exists` subqueries landing in the same statement against the
+  same `dashboard_trip_activities` table. Reproduced across two files
+  (`test_search_does_not_read_another_accounts_trip_activities.py`,
+  `..._trip_comments.py`): five `xfail(strict=True)` tests (title-match, notes-match and a shared
+  true-negative for activities; matching and non-matching for comments) plus eleven guard tests, all
+  passing as expected.
+- **`SafetySearchProvider`** (`"messages__body"`) — crosses `SafetyCheckinMessage`'s reverse FK
+  (`related_name="messages"`). Unlike Article/Trip, a check-in has exactly one owning profile (no
+  membership model), so this is structurally the closest of the three to the original labels
+  reproduction — just a different to-many relation. Reproduced in
+  `test_search_does_not_read_another_accounts_safety_messages.py`: two `xfail(strict=True)` tests
+  plus five guard tests, all passing as expected.
+
+All nine `xfail(strict=True)` reproductions above (4 + 3 + 2, following the same
+before/during/after-growth pattern and `TheMeasurementIsRealTests` guard convention as the original
+labels file) and their 26 companion guard tests were run against the real `EXPLAIN`-measured row
+count exactly as the labels/Photo/Wiki reproductions were, not merely asserted to fail — see each
+file's own docstring and `_REASON` constant for the exact mechanism per path. Exact before/after row
+counts were not re-extracted into this entry (a `--runxfail` pass to capture them hit this host's
+known memory-watchdog condition twice in a row and was not worth a third attempt); the qualitative
+result — full-table growth on every variant, matching and non-matching alike — is what each file's
+own xfailed run already demonstrates.
+
+**Checked and found NOT exposed** (own `apply_text`/`term_filter` calls read, not assumed): sequence
+of no-many-crossing field paths against every remaining provider's own field list.
+`VisitSearchProvider` (`"notes"`, `"pin__name"`, `"pin__location__official_name"`,
+`"pin__location__wiki__name"`) uses `apply_text`, so `model=PinVisit` is passed automatically, but
+every path is a single-valued FK/OneToOne chain — none crosses a to-many relation, so `_crosses_many`
+is false for all of them and `_semijoin` is a no-op throughout.
+`DirectMessageSearchProvider`/`search_direct_messages` (`services/messaging/direct_messages.py`)
+calls `term_filter(parsed.terms, ["body"])` directly, with no `model=` kwarg, so `_semijoin` never
+activates regardless — moot anyway, since `body` is a plain field on `DirectMessage` itself.
+`MarkupMapSearchProvider` uses `apply_text` for `MarkupMap.title` (plain field, harmless even with
+`model=` passed automatically) but reaches `PinMarkup.label` via a direct, bare `term_filter(parsed.terms,
+["label"])` call with no `model=` — and `label` is the markup's own drawn text, a plain field on
+`PinMarkup`, not a relation to `Label` at all, despite the similar name. `CommentSearchProvider`
+calls `term_filter(parsed.terms, ["text"])` directly (no `model=`) against both `Comment` and
+`TripComment`, and `text` is a plain field on both. None of these four needed a reproduction test,
+since there is nothing to reproduce; recorded here so the survey of all ten providers is complete
+rather than silently partial.
+
+Not fixed: any variant of any of the six new paths above (Article's two, Trip's three, Safety's
+one) — no fix has been attempted for any of them yet, unlike labels' partially-fixed matching
+variant. Confirmed not applicable: Visit, DirectMessage, MarkupMap, Comment.
+
 ## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
 
 `id: P124` · `status: open` · `updated: 2026-09-16`
