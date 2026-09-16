@@ -3077,7 +3077,7 @@ refusals. Audit the 48 production `except GatewayRequestError` sites first, look
 
 Catching refusals site by site is the alternative, and the next view will forget it again.
 
-## P123 — Global search's pins-provider statement scans every account's labels, so one account's search slows as unrelated accounts add matching labels
+## P123 — Global search's pins-provider statement scans every account's labels, so one account's search slows as unrelated accounts add labels that don't even match
 
 `id: P123` · `status: open` · `updated: 2026-09-16`
 
@@ -3181,22 +3181,53 @@ search tests passed with it in place, including `test_search_matches_without_dis
 simply ineffective. Result-preserving is not evidence of effective, and the argument that the
 predicate is logically implied by the outer filter — which is true — says nothing about join order.
 
-### Candidate directions (unverified — none measured)
+### A GIN trigram index fixes the matching variant, not the non-matching one (2026-09-16)
 
-- A GIN trigram index on `dashboard_labels.name`. Would make the leading-wildcard scan indexable
-  and fix the selectivity estimate that picks this join order. Expected to address the
-  non-matching variant; it would still return every *matching* label whoever owns it, so it is not
-  expected to fix both tests on its own.
-- Correlating the subquery on the related model instead of the searched one — `Exists(Label.objects
-  .filter(pins=OuterRef("pk"), name__icontains=term))` rather than `Exists(Pin._base_manager...)` —
-  which forces the outer pin to drive the join. Structurally the right shape, but `_semijoin` is
-  generic over arbitrary `__` paths and deriving the related model and reverse accessor for any
-  path is the work.
+Added `GinIndex(OpClass(Upper(Cast("name", output_field=TextField())), name="gin_trgm_ops"),
+name="idxdb_label_name_upper_trgm")` to `Label.Meta.indexes` (migration 0049) — a functional index
+matching `name__icontains`'s exact compiled form (`UPPER(name::text) LIKE UPPER(%s)`), since a plain
+trigram index on the raw column cannot serve that predicate at all.
 
-Measured at test scale (~400 labels), not on the 62,354-label capacity population; the plan shape
-may differ there, and the candidate directions should be measured on both.
+**Result:** `test_it_does_not_read_a_strangers_matching_labels` now passes;
+`test_it_does_not_read_a_strangers_unrelated_labels` still fails, unchanged. This is the opposite of
+what the previous version of this entry predicted (it expected the index to help the non-matching
+case, via a leading-wildcard scan becoming indexable, and not the matching one). Both predictions
+were wrong in the same way: the index does not change the labels-table scan strategy at all.
 
-Not fixed.
+**The actual mechanism, confirmed by direct causation test** (drop the index in a live test
+database, rerun; recreate it, rerun again): `EXPLAIN` shows a plain `Seq Scan` on `dashboard_labels`
+with `Index Name: None` in every variant, with or without the index — Postgres never chooses an
+index scan here, at this table's size (hundreds of rows; the crossover to a competitive index scan
+is normally in the thousands). What the index changes is `ANALYZE`: a GIN/GiST expression index
+makes Postgres collect real per-expression statistics for `UPPER(name::text)`, so its cardinality
+estimate for the predicate stops being a fixed default and starts tracking the term's true match
+count. That appears to change how the *enclosing* query plans (join order / short-circuiting) even
+though the labels node itself is unchanged — not fully decomposed further, since the causal result
+was already reproducible and cheap to confirm without it.
+
+This also explains why the two variants diverge: a matching term's first hit sits early in
+`dashboard_labels`' physical order (seeded before the growth step), so whatever in the outer plan
+now short-circuits on the accurate estimate finds it without needing to read the added rows. A
+non-matching term has no hit anywhere, so nothing can short-circuit — the full table, growth
+included, is read every time to conclude no match exists. Regression run: 154 passed, 1 xfailed
+across the P123 file plus eight neighbouring search test files, `--fresh-db`.
+
+Measured at test scale (~500 labels after growth), not on the 62,354-label capacity population;
+re-measure there before trusting the ratio, though the mechanism (statistics, not scan strategy)
+should hold regardless of table size.
+
+### Still open: the non-matching variant needs the join reordered, not indexed
+
+A true negative reads the whole table no matter how good the estimate is, because there is nothing
+to short-circuit on. The fix has to make the *pin*, not the label, drive the join — correlating the
+subquery on the related model instead of the searched one (`Exists(Label.objects.filter(pins=OuterRef("pk"),
+name__icontains=term))` rather than `Exists(Pin._base_manager...)`) forces exactly that. Structurally
+the right shape, but `_semijoin` is generic over arbitrary `__` paths, and deriving the related model
+and reverse accessor generically — some search paths put the many-crossing relation after the first
+hop, e.g. `location__wiki__aliases__name`, `pin__aliases__name`, `wiki__aliases__name` — is
+substantial, correctness-risky work spanning all ten search providers. Not attempted here.
+
+Not fixed (non-matching variant); partially fixed (matching variant).
 
 ## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db.models import (
     CASCADE,
     BooleanField,
@@ -20,7 +21,7 @@ from django.db.models import (
     TextField,
     UniqueConstraint,
 )
-from django.db.models.functions import Lower
+from django.db.models.functions import Cast, Lower, Upper
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.held_upload import HeldUploadModel
@@ -325,6 +326,13 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
             # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
             Index(fields=["custom_icon_upload"], name="idxdb_label_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
+            # Matches `name__icontains`'s compiled form exactly (`UPPER(name::text) LIKE ...`) - a plain
+            # index on `name` is not usable for that predicate at all. Measured against P123: this does not
+            # change the scan strategy (Postgres still seq-scans the table at this size either way), but the
+            # expression index gives ANALYZE a real cardinality estimate for the predicate instead of a fixed
+            # default, which changes how the enclosing query plans and removes the growth for a matching term.
+            # See docs/PROBLEMS.md P123 and this migration's test for the measured before/after.
+            GinIndex(OpClass(Upper(Cast("name", output_field=TextField())), name="gin_trgm_ops"), name="idxdb_label_name_upper_trgm"),
         ]
         constraints = [
             # Case-insensitive, matching how PinAlias/WikiAlias already model the same "name

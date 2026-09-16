@@ -7,13 +7,31 @@ the resulting plan walked all 62,354 labels on the site to answer one account's 
 The mechanism, read off ``EXPLAIN (ANALYZE, FORMAT JSON)`` rather than inferred: the labels semi-join runs a
 **sequential scan of the whole label table as the outer side of a nested loop**, probing the pin by primary key
 afterwards. ``name__icontains`` is a leading-wildcard ILIKE, which no btree index serves and whose selectivity
-Postgres estimates at one row while it actually yields hundreds, so starting from the label table looks cheap.
-``dashboard_labels`` has btree indexes on ``kind``, ``profile_id`` and ``lower(name)``, and no trigram index on
-``name``; ``pg_trgm`` is installed.
+Postgres estimated at one row while it actually yielded hundreds, so starting from the label table looked cheap.
 
 Adding the outer query's ``profile`` predicate to the subquery was measured and is a **no-op**: it is applied
 (it appears on ``u0`` in the plan) but the pin is reached by primary key on the inner side, so it cannot
 reorder the join. Row counts moved by 2 of 1,191. Do not re-attempt that without a new measurement.
+
+**A functional GIN trigram index on** ``upper(name::text)`` **(migration 0049) fixes the matching variant, not
+the non-matching one.** Confirmed by direct causation test: dropping the index in a live test database flips
+``test_it_does_not_read_a_strangers_matching_labels`` from passing back to its old failure, and recreating it
+flips it back - the index, not something else, is doing this. The labels-table scan node itself is still a Seq
+Scan with the index dropped or present (``EXPLAIN`` shows no ``Index Scan`` either way at this table's size,
+which is far below where Postgres would consider a bitmap/index scan competitive with a sequential one) - the
+benefit is from better statistics, not a different scan strategy. A GIN/GiST expression index makes ``ANALYZE``
+collect real cardinality statistics for that expression, so Postgres's estimate for ``UPPER(name) LIKE
+UPPER(%s)`` stops being a fixed default and starts tracking the term's real match count; that appears to change
+how the *enclosing* query plans (join order / short-circuiting), not the labels node in isolation. Not fully
+decomposed further - the win was reproducible and cheap enough that finishing that decomposition wasn't
+worth it.
+
+The non-matching variant is unaffected: every added label is a true negative, so nothing short-circuits the
+scan early and the full table (now including all the added noise) is still read to conclude no match exists.
+Fixing that needs the join reordered so the *pin*, not the label, drives the search - see the class docstring
+and ``docs/PROBLEMS.md`` P123 for the untaken direction and why it's out of scope here (it needs generic
+reverse-relation derivation across all ten search providers, some of whose paths put the many-crossing relation
+after the first hop).
 
 The axis here is rows *read*, not rows returned: the subquery returns almost nothing whatever it scans, so a
 query counter, a ``rowcount`` wrapper and a response-size budget all read this as flat. That is why
@@ -58,8 +76,9 @@ SECOND_BATCH = 400
 TOLERANCE = 20
 
 _REASON = (
-    "P123: the labels semi-join seq-scans the whole label table as the outer side of a nested loop. "
-    "Threading the viewer's profile into the subquery was measured and does not move it."
+    "P123: the labels semi-join still reads the whole label table for a non-matching term, because a true "
+    "negative can't short-circuit the scan. The trigram index (migration 0049) fixed the matching variant "
+    "but not this one - fixing it needs the join reordered to drive from the pin, not the label."
 )
 
 
@@ -159,9 +178,11 @@ class _PinSearchCase(TestCase):
 class SearchDoesNotReadAnotherAccountsLabelsTests(_PinSearchCase):
     """P123: one account's labels must not be read to answer another account's search."""
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_matching_labels(self) -> None:
-        """Rows the plan reads and then discards at the pin join, because the pin is not the viewer's."""
+        """Rows the plan reads and then discards at the pin join, because the pin is not the viewer's.
+
+        Fixed by the trigram index in migration 0049 - see the module docstring for the measured mechanism.
+        """
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     @pytest.mark.xfail(strict=True, reason=_REASON)
