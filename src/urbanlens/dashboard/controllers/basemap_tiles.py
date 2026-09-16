@@ -157,7 +157,7 @@ class BasemapTileView(LoginRequiredMixin, View):
         if status == 200:
             resolved_type = content_type or "image/png"
             # Bounded like the Immich thumbnail proxy: these bytes come from a
-            # vendor and land in the same 512MB Dragonfly that holds sessions
+            # vendor and land in the same shared Dragonfly that holds sessions
             # and the Channels layer - and a full store there raises rather
             # than evicting to make room, so one surprise must not turn into
             # failed cache writes for everyone sharing the store.

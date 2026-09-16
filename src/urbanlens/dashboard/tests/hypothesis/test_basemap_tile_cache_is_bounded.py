@@ -1,7 +1,7 @@
 """The basemap tile proxy writes whatever the vendor sent into the shared cache.
 
 N21 H35/H22/H13. `cache.set(cache_key, (body, resolved_type), _TILE_CACHE_TTL)`
-stores raw tile bytes with no size check, into the same 512MB Dragonfly that holds
+stores raw tile bytes with no size check, into the same shared Dragonfly that holds
 sessions and the Channels layer - and a full store there raises rather than
 evicting to make room. One oversized tile - or a vendor answering a tile
 request with something that is not a tile - can turn an unrelated cache write

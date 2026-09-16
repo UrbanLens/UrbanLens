@@ -2,7 +2,7 @@
 
 Four views proxy bytes from somewhere else and cache them so the next request
 does not re-fetch: Google Photos previews, Immich thumbnails, and the two map
-tile proxies. All four wrote whatever came back into the single 512MB Dragonfly
+tile proxies. All four wrote whatever came back into the one shared Dragonfly
 that also holds sessions and the Channels layer - a full store raises rather
 than evicting to make room (see docker-compose.yml), so a large enough body
 does not merely waste space, it can turn into failed cache writes for everyone
