@@ -1,8 +1,10 @@
 import logging
 
 from django.db import transaction
+from django.db.models import Q
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete, pre_save
 from django.dispatch import receiver
+from django.utils import timezone
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
@@ -48,15 +50,34 @@ def refit_child_boundaries_on_delete(sender: type[Pin], instance: Pin, **kwargs)
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_invalidate_map_center")
 def invalidate_profile_map_center(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
-    """Clear the cached map center so it is recomputed on the next map load."""
+    """Queue a recompute of the profile's map centre, leaving the current one in place to serve.
+
+    Clearing it instead would charge the next visitor a read of every pin the account owns - 285 ms on a
+    20,000-pin account - to move an opening map position by less than a pixel.
+
+    The claim is what holds an import to one recompute rather than one per pin: the first new pin takes it and
+    queues the work, and every pin behind it finds it held. ``safely_enqueue_task`` reports an unreachable broker
+    only in the log, so a claim left behind by a lost enqueue is retaken once it has gone stale.
+    """
     if not created or not instance.profile_id:
         return
-    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.profile.model import MAP_CENTRE_RECLAIM_AFTER, Profile
+    from urbanlens.dashboard.services.core.celery import follow_on_queue
 
-    Profile.objects.filter(pk=instance.profile_id).update(
-        map_center_latitude=None,
-        map_center_longitude=None,
-    )
+    profile_id = instance.profile_id
+    now = timezone.now()
+    claimed = Profile.objects.filter(pk=profile_id).filter(Q(map_center_stale_since__isnull=True) | Q(map_center_stale_since__lt=now - MAP_CENTRE_RECLAIM_AFTER)).update(map_center_stale_since=now)
+    if not claimed:
+        return
+    queue = follow_on_queue()
+
+    def _run() -> None:
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import refresh_profile_map_center
+
+        safely_enqueue_task(refresh_profile_map_center, profile_id, queue=queue)
+
+    transaction.on_commit(_run)
 
 
 @receiver(post_delete, sender=Pin, dispatch_uid="pin_record_tombstone")

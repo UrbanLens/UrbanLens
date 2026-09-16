@@ -62,6 +62,15 @@ if TYPE_CHECKING:
 # collections (e.g. US east coast vs Europe, ~5 600 km) in separate clusters.
 _CLUSTER_RADIUS_KM = 1_000.0
 
+# How long a queued map-centre recompute may go unfinished before another new pin is allowed to queue it again.
+# Covers an enqueue lost to an unreachable broker, which `safely_enqueue_task` reports only in the log.
+MAP_CENTRE_RECLAIM_AFTER = datetime.timedelta(hours=1)
+
+# When a page load recomputes the centre itself instead of serving a stale one. Long on purpose: paying for it
+# inside a request is what the queued recompute exists to avoid, so this only has to catch the account whose
+# recompute never ran and which never gains another pin to re-queue it.
+MAP_CENTRE_MAX_STALENESS = datetime.timedelta(days=7)
+
 # How long a soft-deleted account stays recoverable before the hard delete runs.
 ACCOUNT_DELETION_GRACE_PERIOD = datetime.timedelta(days=7)
 # How long before the hard delete the "1 day left" reminder goes out.
@@ -426,10 +435,12 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         choices=MapCenterMode.choices,
         default=MapCenterMode.GPS,
     )
-    # Cached centroid of the user's pins (auto mode). Cleared by post_save signal
-    # on new pin; recomputed lazily on the next map load.
+    # Cached centroid of the user's pins (auto mode, and the fallback when GPS is denied).
     map_center_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     map_center_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # Set by the new-pin signal once the cached centroid stops reflecting every pin, and cleared when one is
+    # recomputed. Holding it is what keeps an import to one queued recompute rather than one per pin.
+    map_center_stale_since = DateTimeField(null=True, blank=True)
     # User-specified center (custom mode).
     map_custom_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     map_custom_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -819,6 +830,32 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         self.map_center_longitude = avg_lng
         return avg_lat, avg_lng
 
+    def refresh_map_center(self) -> tuple[float, float] | None:
+        """Recompute the centre and release the pending-recompute claim.
+
+        The claim is released first: a pin created while the coordinates are being read then finds it clear and
+        queues another pass, rather than being silently absorbed into a recompute that had already read past it.
+
+        Returns:
+            The new (latitude, longitude), or None when the account has no locatable pins.
+        """
+        Profile.objects.filter(pk=self.pk).update(map_center_stale_since=None)
+        self.map_center_stale_since = None
+        return self.compute_map_center()
+
+    def _served_map_center(self) -> tuple[float, float] | None:
+        """The cached centroid, recomputed inline only when there is none or nothing ever refreshed it.
+
+        Returns:
+            The (latitude, longitude) to render, or None when the account has no locatable pins.
+        """
+        if self.map_center_latitude is None or self.map_center_longitude is None:
+            return self.compute_map_center()
+        stale_since = self.map_center_stale_since
+        if stale_since is not None and timezone.now() - stale_since > MAP_CENTRE_MAX_STALENESS:
+            return self.refresh_map_center()
+        return float(self.map_center_latitude), float(self.map_center_longitude)
+
     def get_map_center(self) -> tuple[float, float] | None:
         """Return the map center coordinates to use as the initial view.
         In GPS mode, returns None - the browser handles centering via geolocation.
@@ -837,9 +874,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
                 return float(self.remembered_map_lat), float(self.remembered_map_lng)
             return None
         # AUTO mode
-        if self.map_center_latitude is not None and self.map_center_longitude is not None:
-            return float(self.map_center_latitude), float(self.map_center_longitude)
-        return self.compute_map_center()
+        return self._served_map_center()
 
     def get_map_center_template_context(self) -> dict[str, float | str | None]:
         """Return template variables for client-side map centering.
@@ -853,10 +888,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         map_center = self.get_map_center()
         gps_fallback: tuple[float, float] | None = None
         if self.map_center_mode == MapCenterMode.GPS:
-            if self.map_center_latitude is not None and self.map_center_longitude is not None:
-                gps_fallback = (float(self.map_center_latitude), float(self.map_center_longitude))
-            else:
-                gps_fallback = self.compute_map_center()
+            gps_fallback = self._served_map_center()
         return {
             "map_center_lat": map_center[0] if map_center else None,
             "map_center_lng": map_center[1] if map_center else None,

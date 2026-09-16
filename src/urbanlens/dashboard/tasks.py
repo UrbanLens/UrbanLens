@@ -269,6 +269,24 @@ def warm_saved_filter_cache(profile_id: int) -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def refresh_profile_map_center(profile_id: int) -> bool:
+    """Recompute one profile's cached map centre away from the request that made it stale.
+
+    Args:
+        profile_id: PK of the ``Profile`` whose centre a new pin outdated.
+
+    Returns:
+        True when a centre was computed, False when the profile is gone or owns no locatable pins.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    profile = Profile.objects.filter(pk=profile_id).first()
+    if profile is None:
+        return False
+    return profile.refresh_map_center() is not None
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def push_trip_to_calendar(trip_id: int) -> int:
     """Push a changed trip to its auto-synced calendars.
 
