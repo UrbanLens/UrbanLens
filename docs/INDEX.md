@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P123` · `T4` · `PL8` · `D16` · `X22` · `I5` · `R30` · `N25`
+**Next free id:** `P123` · `T4` · `PL8` · `D16` · `X23` · `I5` · `R30` · `N25`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -185,3 +185,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | X21 | holds | 2026-09-16 | Moving the map page's and every page's inline `<script>` to cached files cut 275 KB and 52 KB off every load; a shared `CFG` name silently broke the map page until each file got its own | [`docs/notes/inline-script-extraction-map-and-theme.md`](notes/inline-script-extraction-map-and-theme.md) |
 | T3 | open | 2026-09-16 | Nothing in the integration suite opens the comment-map composer; a page-error guard is the only thing standing behind it now that it ships as its own file | [`docs/notes/comment-map-composer-test-coverage.md`](notes/comment-map-composer-test-coverage.md) |
 | N24 | current | 2026-09-16 | Playwright's default worker count exhausts `ul_web`'s 54-connection cap and prints as unrelated 500s on unrelated endpoints, not as a connection error | [`docs/notes/browser-testing-development-main-connection-limits.md`](notes/browser-testing-development-main-connection-limits.md) |
+| X22 | holds | 2026-09-16 | Fragment-caching the nav costs more than the rendering it skips; the cost is `reverse()`, not the template | [`docs/notes/nav-fragment-cache-cost-measured.md`](notes/nav-fragment-cache-cost-measured.md) |
