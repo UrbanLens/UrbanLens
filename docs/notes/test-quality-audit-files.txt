@@ -448,7 +448,7 @@ src/urbanlens/dashboard/tests/hypothesis/test_open_historical_map_gateway.py
 src/urbanlens/dashboard/tests/hypothesis/test_ops_tooling_contract.py
 src/urbanlens/dashboard/tests/hypothesis/test_organize_display_order_actions.py
 src/urbanlens/dashboard/tests/hypothesis/test_organize_priority_scoping.py
-src/urbanlens/dashboard/tests/hypothesis/test_organize_stats_defer.py
+src/urbanlens/dashboard/tests/hypothesis/test_organize_stats_are_rendered_inline.py
 src/urbanlens/dashboard/tests/hypothesis/test_outage_not_cached_as_empty.py
 src/urbanlens/dashboard/tests/hypothesis/test_overlapping_pins_filter.py
 src/urbanlens/dashboard/tests/hypothesis/test_overture_building_attributes_budget.py

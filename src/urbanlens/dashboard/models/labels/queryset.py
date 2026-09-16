@@ -127,7 +127,7 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
 
     def with_hierarchy(self) -> Self:
         """Prefetch parents/children without computing pin or location counts.
-        Cheap counterpart to `with_pin_counts()` for a page's first paint: the Organize page renders label cards from this immediately, then a follow-up HTMX request re-fetches the same rows via `with_pin_counts()` to back-fill the stat badges once they're ready, so the DOM shows up before the count queries (including the per-label descendant BFS in `tag_total_pins`) have run at all.
+        For callers that render no stats at all. Deferring the stats of a page that does render them is not worth it: measured at 120 labels, the counts cost ~16ms against ~100ms to render the cards they sit in (X25).
         """
         from urbanlens.dashboard.models.labels.model import Label
 

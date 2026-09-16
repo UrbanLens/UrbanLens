@@ -38,8 +38,8 @@
             <div class="tag-card-meta">
                 {# Compact badges - shown on narrow screens; the same numbers appear as aligned .tag-card-stats columns on wide screens (see below). #}
                 <div class="tag-card-meta-cols">
-                    {% if kind != 'people' and kind != 'media' %}{% if stats_pending %}<span class="tag-stat tag-stat-loading" aria-hidden="true"></span>{% else %}<span class="tag-stat" title="Pins"><i class="material-symbols-outlined">push_pin</i>{{ label.pin_count }}</span>{% endif %}{% endif %}
-                    {% if child_count %}<span class="tag-stat tag-stat--children" title="{{ child_count }} child labels"><i class="material-symbols-outlined">account_tree</i>{{ child_count }}</span>{% if kind != 'people' and kind != 'media' %}{% if stats_pending %}<span class="tag-stat tag-stat--total tag-stat-loading" aria-hidden="true"></span>{% else %}<span class="tag-stat tag-stat--total" title="Total pins including sub-labels"><i class="material-symbols-outlined">functions</i>{{ label|tag_total_pins }}</span>{% endif %}{% endif %}{% endif %}
+                    {% if kind != 'people' and kind != 'media' %}<span class="tag-stat" title="Pins"><i class="material-symbols-outlined">push_pin</i>{{ label.pin_count }}</span>{% endif %}
+                    {% if child_count %}<span class="tag-stat tag-stat--children" title="{{ child_count }} child labels"><i class="material-symbols-outlined">account_tree</i>{{ child_count }}</span>{% if kind != 'people' and kind != 'media' %}<span class="tag-stat tag-stat--total" title="Total pins including sub-labels"><i class="material-symbols-outlined">functions</i>{{ label|tag_total_pins }}</span>{% endif %}{% endif %}
                     {% if display_color %}<span class="tag-color-dot" style="background:{{ display_color }};" title="{{ display_color }}"></span>{% endif %}
                 </div>
                 {% with parents=label.parents.all %}{% if parents %}<span class="tag-parents-summary"><i class="material-icons" style="font-size:.9rem;">subdirectory_arrow_right</i>{% for parent in parents %}{{ parent.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}{% endwith %}
@@ -50,13 +50,13 @@
         {% with child_count=label.children.all|length %}
         <div class="tag-card-stats" aria-hidden="true">
             <div class="tag-card-stat-col tag-card-stat-col--pins">
-                {% if kind != 'people' and kind != 'media' %}{% if stats_pending %}<span class="tag-card-stat-loading" aria-hidden="true"></span>{% else %}<span class="tag-card-stat-value">{{ label.pin_count }}</span>{% endif %}{% else %}<span class="tag-card-stat-value tag-card-stat-value--empty">&mdash;</span>{% endif %}
+                {% if kind != 'people' and kind != 'media' %}<span class="tag-card-stat-value">{{ label.pin_count }}</span>{% else %}<span class="tag-card-stat-value tag-card-stat-value--empty">&mdash;</span>{% endif %}
             </div>
             <div class="tag-card-stat-col tag-card-stat-col--children">
                 <span class="tag-card-stat-value{% if not child_count %} tag-card-stat-value--empty{% endif %}">{% if child_count %}{{ child_count }}{% else %}&mdash;{% endif %}</span>
             </div>
             <div class="tag-card-stat-col tag-card-stat-col--total">
-                {% if kind != 'people' and kind != 'media' %}{% if stats_pending %}<span class="tag-card-stat-loading" aria-hidden="true"></span>{% else %}<span class="tag-card-stat-value">{{ label|tag_total_pins }}</span>{% endif %}{% else %}<span class="tag-card-stat-value tag-card-stat-value--empty">&mdash;</span>{% endif %}
+                {% if kind != 'people' and kind != 'media' %}<span class="tag-card-stat-value">{{ label|tag_total_pins }}</span>{% else %}<span class="tag-card-stat-value tag-card-stat-value--empty">&mdash;</span>{% endif %}
             </div>
             <div class="tag-card-stat-col tag-card-stat-col--color">
                 {% if display_color %}<span class="tag-color-dot" style="background:{{ display_color }};" title="{{ display_color }}"></span>{% else %}<span class="tag-color-dot tag-color-dot--empty" title="No color set"></span>{% endif %}
@@ -66,7 +66,7 @@
 
         <div class="tag-card-actions">
             {% if kind == 'tag' or kind == 'category' or kind == 'status' %}
-                {% if stats_pending or label|tag_total_pins %}<a class="btn btn--icon" title="View on map" href="{{ label.id|label_map_url }}"><i class="material-symbols-outlined">travel_explore</i></a>{% else %}<a class="btn btn--icon" title="No pins in this label or its sub-labels" aria-disabled="true"><i class="material-symbols-outlined">travel_explore</i></a>{% endif %}
+                {% if label|tag_total_pins %}<a class="btn btn--icon" title="View on map" href="{{ label.id|label_map_url }}"><i class="material-symbols-outlined">travel_explore</i></a>{% else %}<a class="btn btn--icon" title="No pins in this label or its sub-labels" aria-disabled="true"><i class="material-symbols-outlined">travel_explore</i></a>{% endif %}
             {% endif %}
             {% if kind != 'people' and label.is_global %}
                 <button type="button" class="btn btn--icon{% if label.is_customized %} btn-icon--active{% endif %}" title="Customize your display of this global label" hx-get="{% url 'label.customize' label_kind=kind label_id=label.id %}" hx-target="#label-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">tune</i></button>

@@ -121,16 +121,29 @@ class LabelRowsEmptyLabelButtonTests(TestCase):
         self.assertNotContains(response, label_map_url(parent.id))
         self.assertNotContains(response, label_map_url(child.id))
 
-    def test_deferred_first_paint_leaves_the_link_live(self) -> None:
-        """Counts aren't computed on the Organize page's first paint, so nothing is greyed out yet.
-
-        The HTMX row backfill (see test_organize_stats_defer) re-renders the
-        button with its real state once the counts are in.
+    def test_the_first_paint_renders_the_same_button_state_as_the_rows_endpoint(self) -> None:
+        """The page computes the real totals, so an empty label is greyed out on the
+        first paint rather than after a backfill. Both halves are asserted because
+        the two render paths draw the same cards and must not disagree.
         """
-        label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Unused")
+        empty = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Unused")
+        used = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Used")
+        self._pin_labelled(used)
+
         response = self.client.get(reverse("organize.index"), {"tab": "tags"})
-        self.assertContains(response, label_map_url(label.id))
-        self.assertNotContains(response, 'aria-disabled="true"')
+
+        empty_card = self._card(response, empty.id)
+        self.assertNotIn(label_map_url(empty.id), empty_card)
+        self.assertIn('aria-disabled="true"', empty_card)
+
+        used_card = self._card(response, used.id)
+        self.assertIn(label_map_url(used.id), used_card)
+        self.assertNotIn('aria-disabled="true"', used_card)
+
+    def _pin_labelled(self, *labels: Label) -> Pin:
+        pin = baker.make(Pin, profile=self.profile)
+        pin.labels.add(*labels)
+        return pin
 
 
 class TagTotalPinsMemoTests(TestCase):

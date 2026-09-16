@@ -62,24 +62,27 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     def _rows_if_active(tab_key: str, queryset: QuerySet[Label]) -> list[Label]:
         """Materialize a label tab's card list only when it's the one on screen.
 
-        `.with_hierarchy()` already dropped the pin-count *query* cost (see
-        ``LabelQuerySet.with_hierarchy``); this drops the remaining Python/ template cost, which query-count
-        fixes never touch and which scales the same way: profiled at 500 tags, the initial page paint alone
+        This drops the Python/template cost of the tabs nobody is looking at, which query-count fixes
+        never touch and which scales the same way: profiled at 500 tags, the initial page paint alone
         (six tabs' worth of cards, all but one invisible) cost ~12s of wall time against ~0.2s of actual
         database time.
         """
         if not on_labels_section or label_tab != tab_key:
             return []
-        return list(queryset)
+        rows = list(queryset)
+        # Primed against the same list the template renders: the memo is seeded per instance, so a
+        # queryset re-evaluated during rendering would discard it and restore the per-label BFS.
+        Label.prime_total_pin_counts(rows)
+        return rows
 
-    # `.with_hierarchy()`, not `.with_pin_counts()` - the pin/location/total-pins stats are the slow part of
-    # this page (a correlated subquery per label plus, for any label with children, a full descendant BFS in
-    # `tag_total_pins`).
-    tags = _rows_if_active("tags", Label.objects.tags().visible_to(profile).in_display_order().with_customizations_for(profile).with_hierarchy())
-    categories = _rows_if_active("categories", Label.objects.categories().for_profile(profile).in_display_order().with_customizations_for(profile).with_hierarchy())
-    statuses = _rows_if_active("status", Label.objects.statuses().for_profile(profile).in_display_order().with_customizations_for(profile).with_hierarchy())
-    user_labels = _rows_if_active("people", Label.objects.user_labels().visible_to(profile).in_display_order().with_customizations_for(profile).with_hierarchy())
-    media_labels = _rows_if_active("media", Label.objects.media().visible_to(profile).in_display_order().with_hierarchy())
+    # `.with_pin_counts()`, not `.with_hierarchy()`: at 120 labels the stats cost ~16ms against ~100ms to
+    # render the cards they sit in, so deferring them to a follow-up request bought a second full render
+    # of every card rather than a cheaper page (X25).
+    tags = _rows_if_active("tags", Label.objects.tags().visible_to(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
+    categories = _rows_if_active("categories", Label.objects.categories().for_profile(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
+    statuses = _rows_if_active("status", Label.objects.statuses().for_profile(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
+    user_labels = _rows_if_active("people", Label.objects.user_labels().visible_to(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
+    media_labels = _rows_if_active("media", Label.objects.media().visible_to(profile).in_display_order().with_pin_counts())
     # Always materialized, unlike the lists above: every tab's "create" dialog needs it as the parent-picker's
     # candidate list, not only the Display Order tab that renders it directly.
     priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).in_display_order()
@@ -110,7 +113,6 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
         "active_section": active_section,
         "can_edit_global": request.user.has_perm(_PERM),
         "standalone_mode": False,
-        "stats_pending": True,
     }
 
 
