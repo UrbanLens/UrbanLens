@@ -371,7 +371,18 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    to a correctly-scoped `recentPinsKey` sibling in the same object literal, which is what made
    the inconsistency obvious once looked for. Fixed with a profile id/uuid suffix on each key
    plus a one-time `removeItem` of the stale unscoped entry so already-leaked history doesn't
-   linger. Verified with `test_search_history_cache_scoping.py`.
+   linger. **Verified only in part — the claim that stood here ("Verified with
+   `test_search_history_cache_scoping.py`") was false; corrected 2026-09-16, see P124.** Of the
+   three keys, only the safety check-in one still has working coverage:
+   `partials/safety/_safety_map_script.html` keeps that script inline (the `removeItem` at line 184
+   and the profile-suffixed `historyKey` at line 186), so both
+   `SafetyDestinationSearchHistoryScopingTests` assertions still match a rendered body. The map
+   address and composer keys moved into `frontend/static/js/map-page.js` and `comment-map.js` in
+   `23a861765`; the four tests asserting them against a response body have failed ever since, and a
+   fifth in the same file (`test_two_profiles_render_different_keys`) still passes only because its
+   `assertNotIn` can no longer match anything. The fix itself looks intact on a source read — the
+   keys are still profile-suffixed, just built in JS now — so what was lost is the evidence, not
+   necessarily the behaviour.
 2. **Map cache at 8k+ pins** (UL-355) — DOWNGRADED 2026-07-18 per Jess's own note in the repo-root `ROADMAP.md`:
    the observed `QuotaExceededError` may have been a stale-cache symptom, not a true 8.5k-pin
    quota problem (clearing the cache fixed it for the reporting user). Don't build an
