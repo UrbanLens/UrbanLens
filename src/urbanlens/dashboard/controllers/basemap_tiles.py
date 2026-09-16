@@ -157,8 +157,10 @@ class BasemapTileView(LoginRequiredMixin, View):
         if status == 200:
             resolved_type = content_type or "image/png"
             # Bounded like the Immich thumbnail proxy: these bytes come from a
-            # vendor and land in the same instance as sessions, the Channels
-            # layer and the broker, so one surprise must not evict the rest.
+            # vendor and land in the same 512MB Dragonfly that holds sessions
+            # and the Channels layer - and a full store there raises rather
+            # than evicting to make room, so one surprise must not turn into
+            # failed cache writes for everyone sharing the store.
             # The helper also swallows a cache failure - a full or unreachable
             # Dragonfly is a degraded cache, not a broken map.
             bounded_cache.set_if_small(cache_key, body, resolved_type, _TILE_CACHE_TTL, label=f"Basemap tile {layer} {z}/{x}/{y}")

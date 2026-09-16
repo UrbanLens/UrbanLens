@@ -344,7 +344,7 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertTrue(compose["networks"]["proxy_network"]["internal"])
 
-    def test_db_and_dragonfly_are_not_reachable_from_the_proxy(self) -> None:
+    def test_db_and_dragonfly_and_rabbitmq_are_not_reachable_from_the_proxy(self) -> None:
         # The other half of the rule above, asserted from the data side: no
         # network carries both egress-proxy and a datastore.
         compose = _compose()
@@ -438,7 +438,7 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertTrue(compose["networks"]["ai_network"]["internal"])
 
-    def test_db_and_dragonfly_are_reachable_from_ai_network(self) -> None:
+    def test_db_and_dragonfly_and_rabbitmq_are_reachable_from_ai_network(self) -> None:
         # ai-worker needs all three without joining app_network (which would
         # give it a route to the internet, REData, OAuth).
         compose = _compose()
