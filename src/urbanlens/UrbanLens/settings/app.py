@@ -257,7 +257,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default=20_000,
         description=(
             "Largest matching-pin list a saved filter will cache. The entry holds one uuid per matching pin in the "
-            "Valkey that also holds sessions, the Channels layer and the Celery broker, so past this the toolbar "
+            "Dragonfly that also holds sessions, the Channels layer and the Celery broker, so past this the toolbar "
             "recomputes from the database rather than making everyone else pay to store one account's answer. "
             "Refusing to cache never changes the answer."
         ),
@@ -353,7 +353,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default=25_000,
         description=(
             "Largest Immich library whose marker list is cached for reuse across pins. The list is the whole "
-            "geolocated library, and it lands in the Valkey that also holds sessions and the Celery broker, so a "
+            "geolocated library, and it lands in the Dragonfly that also holds sessions and the Celery broker, so a "
             "library past this is served and not stored - the picker still works, it just re-fetches. Roughly a "
             "hundred bytes per marker."
         ),
@@ -391,7 +391,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "inbound-volume limits charge it nothing, while it still occupies one of nginx's worker_connections "
             "(shared with every HTTP request) and a slot in the single daphne behind them. Generous enough for many "
             "tabs and several live features at once; far below what exhausting the pool takes. The cap fails open - "
-            "a Valkey outage must not become 'nobody may open a socket'."
+            "a Dragonfly outage must not become 'nobody may open a socket'."
         ),
     )
     external_media_daily_bytes: int = Field(
@@ -407,7 +407,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     map_document_cache_seconds: int = Field(
         default=6 * 60 * 60,
         description=(
-            "How long a built map document stays in Valkey. Entries are keyed by their content's fingerprint, so a "
+            "How long a built map document stays in Dragonfly. Entries are keyed by their content's fingerprint, so a "
             "stale one is never read - this only decides how long an unread entry occupies memory. 0 disables the "
             "cache, which must leave the endpoint correct, only slower."
         ),

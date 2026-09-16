@@ -424,7 +424,7 @@ migration — don't "simplify" it to a literal list.
 
 The generic undo system (`services/undo/`, `models/undo/UndoAction`) stores the serialized
 payload needed to restore or redo an action directly on the `UndoAction` row itself, not in a
-cache: a cache entry can vanish well before its nominal TTL (no shared Redis/Valkey configured,
+cache: a cache entry can vanish well before its nominal TTL (no shared Redis/Dragonfly configured,
 so a locmem cache other workers can't see; or early eviction under memory pressure), which used
 to surface as an undo entry that still listed as recent and un-expired but silently failed the
 moment it was actually restored. A dozen per-model/mutation handlers exist under

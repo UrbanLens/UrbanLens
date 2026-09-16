@@ -18,7 +18,7 @@ _KEY_PREFIX = "wsfreq"
 
 def bump_window_counter(key: str, window_seconds: int) -> int:
     """Increment a fixed-window counter atomically and return its new value.
-    ``incr`` is a single operation on both backends this project runs (Valkey's INCR, LocMemCache under its lock), so parallel frames cannot lose an increment the way a read-then-write would.
+    ``incr`` is a single operation on both backends this project runs (Dragonfly's INCR, LocMemCache under its lock), so parallel frames cannot lose an increment the way a read-then-write would.
 
     Args:
         key: The counter's cache key.

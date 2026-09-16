@@ -1389,7 +1389,7 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         site_settings = SiteSettings.get_current()
 
-        # Service health (Postgres/Valkey/Celery/nginx pings) and the git update check (a `git fetch` against
+        # Service health (Postgres/Dragonfly/Celery/nginx pings) and the git update check (a `git fetch` against
         # the remote, only cached for the life of this worker process) are both real I/O, not DB lookups -
         # fetched by SiteAdminHomeStatusPartialView below instead of blocking this page's initial render, same
         # as the /site-admin/stats/ page already lazy-loads its own system panel.
@@ -1440,7 +1440,7 @@ class SiteAdminHomeStatusPartialView(_AdminPermissionMixin, View):
     GET /site-admin/status/
 
     Split out of ``SiteAdminHomeView`` because ``collect_infrastructure_service_stats`` pings
-    Postgres/Valkey/Celery/nginx and ``get_git_update_status`` runs a ``git fetch`` - real I/O that
+    Postgres/Dragonfly/Celery/nginx and ``get_git_update_status`` runs a ``git fetch`` - real I/O that
     shouldn't block the page's initial render.
     """
 

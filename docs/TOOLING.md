@@ -124,7 +124,7 @@ one.
 
 ### `bin/run_integration_tests.sh`
 
-Drives a **deployed** instance over HTTP - real database, real Valkey, real
+Drives a **deployed** instance over HTTP - real database, real Dragonfly, real
 Celery workers, real WebSocket container, real proxy. Manual only; the config
 refuses to start against production.
 

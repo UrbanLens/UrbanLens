@@ -58,7 +58,7 @@ class BroadcastChannelGroupMessageTaskTests(SimpleTestCase):
 
     def test_delivery_failure_is_logged_not_raised(self) -> None:
         layer = mock.Mock()
-        layer.group_send = AsyncMock(side_effect=RuntimeError("valkey down"))
+        layer.group_send = AsyncMock(side_effect=RuntimeError("dragonfly down"))
         with (
             mock.patch("urbanlens.dashboard.tasks.get_channel_layer", return_value=layer),
             mock.patch("urbanlens.dashboard.tasks.logger") as logger_mock,

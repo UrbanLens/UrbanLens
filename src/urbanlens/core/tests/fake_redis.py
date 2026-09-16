@@ -1,6 +1,6 @@
 """An in-memory stand-in for the Redis commands the map caches issue.
 
-Valkey clients here read their connection URL straight from the environment, so under test they
+Dragonfly clients here read their connection URL straight from the environment, so under test they
 open a real socket the network guard refuses - which is why the cache read paths had no coverage
 at all while every map load went through them. Each cache accepts an injected client, so this
 fills that hole rather than growing a test-only branch.

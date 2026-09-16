@@ -16,7 +16,7 @@ out of the set on their own, so the worst a crash costs is a smaller allowance
 until ``STALE_AFTER_SECONDS`` passes.
 
 **Fails open.** A cap that cannot read its counter must allow, for the same
-reason the request throttle does: a Valkey outage already degrades the site, and
+reason the request throttle does: a Dragonfly outage already degrades the site, and
 turning it into "nobody may open a socket" makes an outage worse rather than
 safer. The asymmetry is deliberate and is the opposite of the single-flight
 guard, where proceeding blind starts a second copy of the most expensive work.
@@ -86,7 +86,7 @@ def _client() -> redis.Redis | None:
     global _shared_client, _client_built  # noqa: PLW0603 # one lazily-built shared pool, as the note above explains
     if _client_built:
         return _shared_client
-    url = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
+    url = os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
     _shared_client = redis.Redis.from_url(url, decode_responses=False, socket_connect_timeout=1, socket_timeout=2) if url else None
     _client_built = True
     return _shared_client

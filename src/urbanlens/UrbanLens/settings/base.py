@@ -224,18 +224,19 @@ DATABASES = {
     },
 }
 UL_DB_APP_PASS = _app_settings.db_app_pass
-# Valkey/Redis for pin payloads and Django cache when configured.
-VALKEY_URL = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
-if VALKEY_URL:
+# Dragonfly/Redis for pin payloads and Django cache when configured. UL_VALKEY_URL is
+# honored too, for anything still pointed at the store this replaced.
+DRAGONFLY_URL = os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
+if DRAGONFLY_URL:
     CACHES = {
         "default": {
-            # Not the stock RedisCache: with Valkey down that raises from the
+            # Not the stock RedisCache: with Dragonfly down that raises from the
             # two paths Django leaves unguarded in cached_db (login and
             # logout), and every request pays socket_timeout once per cache
             # call - measured at 32s per request, readiness probe included.
             # See core/cache_backend.py and P105.
             "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
-            "LOCATION": VALKEY_URL,
+            "LOCATION": DRAGONFLY_URL,
             "KEY_PREFIX": "urbanlens",
             "VERSION": 1,
             "TIMEOUT": 300,
@@ -259,7 +260,7 @@ if VALKEY_URL:
             "CONFIG": {
                 "hosts": [
                     {
-                        "address": VALKEY_URL,
+                        "address": DRAGONFLY_URL,
                         "socket_connect_timeout": 5,
                         "socket_timeout": 20,
                         "retry_on_timeout": True,
@@ -276,8 +277,8 @@ if VALKEY_URL:
 
 DATABASE_ROUTERS = ["urbanlens.dashboard.dbrouters.DBRouter"]
 
-# Celery defaults to Valkey/Redis, else local Redis for dev.
-CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or VALKEY_URL or "redis://localhost:6379/0"
+# Celery defaults to Dragonfly/Redis, else local Redis for dev.
+CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or DRAGONFLY_URL or "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or CELERY_BROKER_URL
 # Bound result-backend recovery retries to fail fast when the broker is down.
 CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"retry_policy": {"timeout": 5.0}}

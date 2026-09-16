@@ -11,7 +11,7 @@ them (N21 H10).
 Two properties matter more than the count itself:
 
 * **it fails open.** A cap that cannot read its counter must allow, exactly as
-  the request throttle does - a Valkey outage already degrades the site, and
+  the request throttle does - a Dragonfly outage already degrades the site, and
   turning it into "nobody may open a socket" makes an outage worse rather than
   safer. This is the opposite of the single-flight guard, where proceeding blind
   starts a second copy of the most expensive work, and the difference is which

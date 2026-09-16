@@ -1,4 +1,4 @@
-"""A socket's allowance lives in Valkey, so checking it has no business on the thread every socket's database work shares.
+"""A socket's allowance lives in Dragonfly, so checking it has no business on the thread every socket's database work shares.
 
 A notification socket opens on every page view and closes on the next, so its claim and release are among the busiest
 calls daphne makes. On asgiref's one thread-sensitive executor they queue behind every other socket's user and profile
@@ -63,5 +63,5 @@ class TheAllowanceIsCheckedOffTheSharedThreadTests(TransactionTestCase):
         shared = async_to_sync(_shared_db_thread)()
 
         self.assertEqual([len(threads["claim"]), len(threads["release"])], [1, 1])
-        self.assertNotIn(shared, threads["claim"] + threads["release"], "a Valkey call queued behind database work")
+        self.assertNotIn(shared, threads["claim"] + threads["release"], "a Dragonfly call queued behind database work")
         self.assertEqual(socket_budget.open_count(f"user:{self.user.pk}"), 0, "the closed socket kept its place")

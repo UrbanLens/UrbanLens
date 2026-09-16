@@ -1,7 +1,7 @@
 """A gateway proxying someone else's media must bound what it reads into memory.
 
 `bounded_cache.set_if_small` already stops an oversized body being *stored* in
-the shared Valkey (H14, H22, H35). Nothing stopped it being *read*: every media
+the shared Dragonfly (H14, H22, H35). Nothing stopped it being *read*: every media
 download in the REData gateways was `response.content`, which buffers the whole
 body into the web worker regardless of size. The throttle in front of these
 endpoints bounds how often that happens, not how big it gets, and a

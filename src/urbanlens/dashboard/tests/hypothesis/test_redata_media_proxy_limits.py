@@ -1,4 +1,4 @@
-"""Four unauthenticated proxies wrote third-party bytes into the shared Valkey.
+"""Four unauthenticated proxies wrote third-party bytes into the shared Dragonfly.
 
 `RedataMediaProxyMixin.serve_media` downloads a file from REData and does
 `cache.set(cache_key, original, 3600)` with no size bound, into the same 512MB

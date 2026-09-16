@@ -44,7 +44,7 @@ class TheCounterTests(TestCase):
     def test_an_unreachable_cache_allows_the_call(self) -> None:
         """P105's lesson: an abuse control must not become an outage."""
         rate = throttle.Rate(limit=1, window_seconds=60)
-        with mock.patch.object(throttle, "_cache_add", side_effect=ConnectionError("valkey is gone")):
+        with mock.patch.object(throttle, "_cache_add", side_effect=ConnectionError("dragonfly is gone")):
             self.assertTrue(throttle.allow("scope", "1.2.3.4", rate))
             self.assertTrue(throttle.allow("scope", "1.2.3.4", rate))
 

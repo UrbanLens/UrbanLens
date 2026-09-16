@@ -149,12 +149,12 @@ def collect_postgres_stats() -> InfrastructureServiceStat:
         )
 
 
-def _valkey_metrics(client: redis.Redis) -> tuple[ServiceMetric, ...]:
-    """Build labeled Valkey metrics from a connected client."""
+def _dragonfly_metrics(client: redis.Redis) -> tuple[ServiceMetric, ...]:
+    """Build labeled Dragonfly metrics from a connected client."""
     info = client.info()
     uptime_seconds = int(info.get("uptime_in_seconds", 0))
-    # Valkey reports its version under "valkey_version"; Redis uses "redis_version".
-    server_version = str(info.get("valkey_version") or info.get("redis_version") or "Unknown")
+    # Dragonfly reports its version under "dragonfly_version"; Valkey uses "valkey_version"; Redis uses "redis_version".
+    server_version = str(info.get("dragonfly_version") or info.get("valkey_version") or info.get("redis_version") or "Unknown")
 
     hits = int(info.get("keyspace_hits", 0))
     misses = int(info.get("keyspace_misses", 0))
@@ -181,20 +181,21 @@ def _valkey_metrics(client: redis.Redis) -> tuple[ServiceMetric, ...]:
     return tuple(metrics)
 
 
-def collect_valkey_stats() -> InfrastructureServiceStat:
-    """Collect Valkey/Redis cache statistics.
+def collect_dragonfly_stats() -> InfrastructureServiceStat:
+    """Collect Dragonfly/Redis cache statistics.
 
     Returns:
-        InfrastructureServiceStat for the configured Valkey instance, or a disabled stat when ``UL_VALKEY_URL``/``UL_REDIS_URL`` is unset."""
-    url = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
+        InfrastructureServiceStat for the configured Dragonfly instance, or a disabled stat when
+        ``UL_DRAGONFLY_URL``/``UL_VALKEY_URL``/``UL_REDIS_URL`` is unset."""
+    url = os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
     if not url:
         return InfrastructureServiceStat(
-            key="valkey",
-            name="Valkey",
+            key="dragonfly",
+            name="Dragonfly",
             icon="memory",
             status="disabled",
             status_label="Not configured",
-            metrics=(ServiceMetric("Status", "UL_VALKEY_URL is not set"),),
+            metrics=(ServiceMetric("Status", "UL_DRAGONFLY_URL is not set"),),
         )
 
     client: redis.Redis | None = None
@@ -207,18 +208,18 @@ def collect_valkey_stats() -> InfrastructureServiceStat:
         )
         client.ping()
         return InfrastructureServiceStat(
-            key="valkey",
-            name="Valkey",
+            key="dragonfly",
+            name="Dragonfly",
             icon="memory",
             status="healthy",
             status_label="Connected",
-            metrics=_valkey_metrics(client),
+            metrics=_dragonfly_metrics(client),
         )
     except RedisError:
-        logger.exception("Failed to collect Valkey infrastructure stats")
+        logger.exception("Failed to collect Dragonfly infrastructure stats")
         return InfrastructureServiceStat(
-            key="valkey",
-            name="Valkey",
+            key="dragonfly",
+            name="Dragonfly",
             icon="memory",
             status="unhealthy",
             status_label="Connection error",
@@ -387,7 +388,7 @@ def collect_nginx_stats() -> InfrastructureServiceStat:
 
 def _collect_or_degrade(key: str, name: str, icon: str, collector: Callable[[], InfrastructureServiceStat]) -> InfrastructureServiceStat:
     """Run one collector, degrading to an "unavailable" stat if it raises.
-    Each collector already handles the failure it expects - Valkey catches ``RedisError``, and so on.
+    Each collector already handles the failure it expects - Dragonfly catches ``RedisError``, and so on.
 
     Args:
         key: The service's stable key, kept stable so the template can style it.
@@ -415,12 +416,12 @@ def collect_infrastructure_service_stats() -> tuple[InfrastructureServiceStat, .
     """Collect health statistics for all UrbanLens infrastructure services.
 
     Returns:
-        Tuple of service stats in display order: PostgreSQL, Valkey, Celery, nginx."""
+        Tuple of service stats in display order: PostgreSQL, Dragonfly, Celery, nginx."""
     # Each collector is named here rather than held in a module-level table, so the
     # reference resolves at call time and stays patchable by tests.
     return (
         _collect_or_degrade("postgres", "PostgreSQL", "storage", collect_postgres_stats),
-        _collect_or_degrade("valkey", "Valkey", "memory", collect_valkey_stats),
+        _collect_or_degrade("dragonfly", "Dragonfly", "memory", collect_dragonfly_stats),
         _collect_or_degrade("celery", "Celery", "conveyor_belt", collect_celery_stats),
         _collect_or_degrade("nginx", "nginx", "dns", collect_nginx_stats),
     )

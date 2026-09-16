@@ -47,7 +47,7 @@ class TheClaimTests(TestCase):
     def test_an_unreadable_cache_refuses(self) -> None:
         """The opposite of the throttle, deliberately: proceeding here would
         start a second copy of the most expensive work in the application."""
-        with mock.patch.object(single_flight.cache, "add", side_effect=ConnectionError("valkey is gone")):
+        with mock.patch.object(single_flight.cache, "add", side_effect=ConnectionError("dragonfly is gone")):
             self.assertFalse(single_flight.claim("job:1", 60))
 
 

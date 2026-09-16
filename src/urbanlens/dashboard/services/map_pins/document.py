@@ -160,19 +160,19 @@ def _line(value: dict[str, Any]) -> bytes:
 
 
 def make_binary_client() -> Any:
-    """A Valkey client that does not decode what it reads.
+    """A Dragonfly client that does not decode what it reads.
     Documents are stored gzipped, so the client must not try to read what it gets back as UTF-8.
 
     Returns:
         The client, or None when no cache is configured."""
-    url = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
+    url = os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
     if not url:
         return None
     return redis.Redis.from_url(url, decode_responses=False, socket_connect_timeout=1, socket_timeout=2)
 
 
 class MapDocumentCache:
-    """Gzipped documents in Valkey, keyed by the content they hold.
+    """Gzipped documents in Dragonfly, keyed by the content they hold.
     The key contains the ETag, and the ETag is a pure function of the content, so two builders racing write identical bytes."""
 
     PREFIX = "ul:map-doc"
@@ -188,7 +188,7 @@ class MapDocumentCache:
             etag: The document's identity.
 
         Returns:
-            The Valkey key.
+            The Dragonfly key.
         """
         return f"{self.PREFIX}:{FORMAT_VERSION}:{self.profile_id}:{etag}"
 

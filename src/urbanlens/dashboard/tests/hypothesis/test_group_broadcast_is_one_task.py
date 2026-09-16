@@ -4,7 +4,7 @@
 deliberately: calling `async_to_sync` inline under gevent can poison an
 unrelated in-flight request (see services/core/channel_broadcast). But the group
 chat calls it once per member, so one message to a fifty-person group enqueues
-fifty tasks, and each one builds its own event loop and its own Valkey
+fifty tasks, and each one builds its own event loop and its own Dragonfly
 connection to deliver a single frame (N21 H41).
 
 The per-member *payload* still has to be built per member - a message carries

@@ -35,7 +35,7 @@ Two answers here are deliberately not "as if empty":
 **The abuse controls fail open, and that is the project's existing decision
 rather than a new one.** `services/security/throttle.py` and
 `services/security/socket_budget.py` both allow when they cannot read their
-counter, on the reasoning that a Valkey outage which also locks everyone out is
+counter, on the reasoning that a Dragonfly outage which also locks everyone out is
 strictly worse than one that merely stops counting. The login lockout in
 `controllers/account.py` now inherits the same behaviour by the same argument.
 The residual is real and worth stating: for the length of an outage, and only
@@ -63,10 +63,11 @@ logger = logging.getLogger(__name__)
 #: Found by pausing Valkey against a real stack.
 _UNREACHABLE: tuple[type[BaseException], ...] = (OSError,)
 
-#: The store answered, and refused. A full Valkey rejects a write with
-#: `OutOfMemoryError`; that is one write not fitting, not the store going away,
-#: so it degrades the call without holding reads off - `volatile-lru` is still
-#: perfectly able to answer them.
+#: The store answered, and refused. A full Dragonfly (run without `cache_mode`,
+#: deliberately - see docker-compose.yml) rejects a write with
+#: `OutOfMemoryError` the same way Valkey's `volatile-lru` did; that is one
+#: write not fitting, not the store going away, so it degrades the call
+#: without holding reads off - reads are still perfectly able to answer.
 _REFUSED: tuple[type[BaseException], ...] = ()
 
 try:  # pragma: no cover - redis is a hard dependency of the backend this extends
@@ -83,7 +84,7 @@ except ImportError:
 _DEGRADES: tuple[type[BaseException], ...] = (*_UNREACHABLE, *_REFUSED)
 
 #: How long one failure keeps the breaker open. Long enough that a request
-#: making a dozen cache calls pays a single timeout; short enough that a Valkey
+#: making a dozen cache calls pays a single timeout; short enough that a Dragonfly
 #: restart is noticed within a page load or two.
 DEFAULT_BREAKER_SECONDS = 10.0
 

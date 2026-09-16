@@ -23,7 +23,7 @@ env:
   UL_DB_PASS: postgres
   UL_DB_HOST: localhost
   UL_DB_PORT: "5432"
-  UL_VALKEY_URL: redis://localhost:6379/0
+  UL_DRAGONFLY_URL: redis://localhost:6379/0
   UL_UNSAFE_ALLOW_HTTP: "True"
   # Required for the gateway to construct at all. Unroutable on purpose, and the
   # test suite's network guard refuses a real socket regardless - without it,
@@ -53,12 +53,12 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      valkey:
-        image: valkey/valkey:7-alpine
+      dragonfly:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
         ports:
           - 6379:6379
         options: >-
-          --health-cmd "valkey-cli ping"
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 #: (lat_min, lat_max, lng_min, lng_max), matching the shape callers already use.
 BBox = tuple[float, float, float, float]
 
-#: How long a fetched state polygon stays cached (Django cache, e.g. Redis/Valkey).
+#: How long a fetched state polygon stays cached (Django cache, e.g. Redis/Dragonfly).
 #: State boundaries are effectively static, so this is long - a process restart
 #: reads from here instead of re-querying TIGERweb.
 _STATE_BOUNDARY_CACHE_SECONDS = 30 * 86400

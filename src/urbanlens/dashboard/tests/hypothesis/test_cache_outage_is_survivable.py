@@ -41,7 +41,7 @@ _SERVER = "redis://127.0.0.1:6379/0"
 #: because every mock raised a builtin. Every degradation case runs against all
 #: of these.
 OUTAGE_ERRORS = (
-    RedisConnectionError("valkey is down"),
+    RedisConnectionError("dragonfly is down"),
     RedisTimeoutError("Timeout reading from socket"),
     ConnectionError("socket refused"),
     TimeoutError("socket timed out"),
@@ -78,7 +78,7 @@ class ADownCacheBehavesLikeAnEmptyOneTests(SimpleTestCase):
         self.cache = _cache()
 
     def _down(self, method: str, error: BaseException | None = None):
-        return mock.patch.object(RedisCache, method, side_effect=error or RedisConnectionError("valkey is down"))
+        return mock.patch.object(RedisCache, method, side_effect=error or RedisConnectionError("dragonfly is down"))
 
     def test_every_error_a_real_outage_raises_is_handled(self) -> None:
         """The one that would have caught the first version of this backend."""
@@ -153,7 +153,7 @@ class TheWholeRequestPaysOneTimeoutTests(SimpleTestCase):
 
     def test_sixteen_calls_reach_the_store_once(self) -> None:
         cache = _cache()
-        with mock.patch.object(RedisCache, "get", side_effect=RedisConnectionError("valkey is down")) as attempted:
+        with mock.patch.object(RedisCache, "get", side_effect=RedisConnectionError("dragonfly is down")) as attempted:
             for _ in range(16):
                 cache.get("k")
 
@@ -169,7 +169,7 @@ class TheWholeRequestPaysOneTimeoutTests(SimpleTestCase):
         blocked.assert_not_called()
 
     def test_one_call_is_let_through_once_the_window_ends(self) -> None:
-        """Recovery needs no signal, so nothing has to notice Valkey came back."""
+        """Recovery needs no signal, so nothing has to notice Dragonfly came back."""
         cache = _cache(BREAKER_SECONDS=0.05)
         with mock.patch.object(RedisCache, "get", side_effect=RedisConnectionError("down")) as attempted:
             cache.get("k")
@@ -235,7 +235,7 @@ class TheDeploymentUsesItTests(SimpleTestCase):
     def test_the_configured_backend_is_the_resilient_one(self) -> None:
         """`settings/test.py` swaps in locmem, so this reads the real module.
 
-        Skipped rather than passed when no Valkey is configured: there is then
+        Skipped rather than passed when no Dragonfly is configured: there is then
         no cache to be down, and asserting on a branch that did not run would
         be a green light for a deployment this never checked.
         """
@@ -243,23 +243,25 @@ class TheDeploymentUsesItTests(SimpleTestCase):
 
         from urbanlens.UrbanLens.settings import base
 
-        if not getattr(base, "VALKEY_URL", ""):
-            self.skipTest("no Valkey configured here, so base.py never took the branch that names a backend")
+        if not getattr(base, "DRAGONFLY_URL", ""):
+            self.skipTest("no Dragonfly configured here, so base.py never took the branch that names a backend")
 
         configured = base.CACHES["default"]["BACKEND"]
         module_name, _, class_name = configured.rpartition(".")
         resolved = getattr(importlib.import_module(module_name), class_name)
 
-        self.assertTrue(issubclass(resolved, ResilientRedisCache), f"{configured} does not degrade when Valkey is down")
+        self.assertTrue(
+            issubclass(resolved, ResilientRedisCache), f"{configured} does not degrade when Dragonfly is down"
+        )
 
     def test_the_breaker_option_does_not_reach_the_redis_client(self) -> None:
         """`RedisCache` forwards every OPTIONS key to the client's constructor."""
         from urbanlens.UrbanLens.settings import base
 
-        if not getattr(base, "VALKEY_URL", ""):
-            self.skipTest("no Valkey configured here")
+        if not getattr(base, "DRAGONFLY_URL", ""):
+            self.skipTest("no Dragonfly configured here")
 
         options = base.CACHES["default"]["OPTIONS"]
         self.assertIn("BREAKER_SECONDS", options, "the setting is not wired, so the breaker runs on its default")
-        built = ResilientRedisCache(base.VALKEY_URL, {"OPTIONS": dict(options)})
+        built = ResilientRedisCache(base.DRAGONFLY_URL, {"OPTIONS": dict(options)})
         self.assertNotIn("BREAKER_SECONDS", built._options)

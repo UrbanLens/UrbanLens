@@ -38,7 +38,7 @@ _API_MIRRORS: tuple[str, ...] = (
 _RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 _RETRY_BACKOFF_SECONDS = 0.5
 # Cache key namespace for the "this endpoint is down" flags. Backed by the
-# shared Django cache (Valkey/Redis in deployed environments) so a down mark set
+# shared Django cache (Dragonfly/Redis in deployed environments) so a down mark set
 # by one worker keeps every other worker off that instance too.
 _DOWN_CACHE_KEY = "overpass:endpoint_down:{}"
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"

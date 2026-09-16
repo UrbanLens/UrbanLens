@@ -85,7 +85,7 @@ class TheDownloadIsSharedAcrossPinsTests(_NearbyCase):
 
 
 class TheSharedCacheIsBoundedTests(_NearbyCase):
-    """It lands in the single Valkey that also holds everyone's sessions."""
+    """It lands in the single Dragonfly that also holds everyone's sessions."""
 
     def test_the_ceiling_is_a_real_setting(self) -> None:
         from django.conf import settings

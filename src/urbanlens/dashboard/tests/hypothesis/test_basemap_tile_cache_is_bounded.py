@@ -1,7 +1,7 @@
 """The basemap tile proxy writes whatever the vendor sent into the shared cache.
 
 N21 H35/H22/H13. `cache.set(cache_key, (body, resolved_type), _TILE_CACHE_TTL)`
-stores raw tile bytes with no size check, into the same 512MB Valkey that holds
+stores raw tile bytes with no size check, into the same 512MB Dragonfly that holds
 sessions, the Channels layer and the Celery broker. One oversized tile - or a
 vendor answering a tile request with something that is not a tile - evicts other
 people's sessions to make room for itself.
@@ -11,7 +11,7 @@ thumbnail proxy already uses it, so the fix is to stop having two answers to the
 same question rather than to invent a third.
 
 It also closes an unhandled failure path that has nothing to do with size: a
-bare `cache.set` against a full or unreachable Valkey *raises*, and here that
+bare `cache.set` against a full or unreachable Dragonfly *raises*, and here that
 raise was inside the request with nothing catching it - so a cache problem
 became a 500 on a map tile. `set_if_small` catches it and serves the tile
 uncached, which is the right answer: refusing to cache must never mean refusing
@@ -82,11 +82,12 @@ class OrdinaryTilesStillCacheTests(_TileCase):
 
 
 class ACacheFailureIsNotA500Tests(_TileCase):
-    """A full or unreachable Valkey is a degraded cache, not a broken map."""
+    """A full or unreachable Dragonfly is a degraded cache, not a broken map."""
 
     def test_a_cache_error_still_serves_the_tile(self) -> None:
         with mock.patch(
-            "urbanlens.dashboard.services.core.bounded_cache.cache.set", side_effect=ConnectionError("valkey is full")
+            "urbanlens.dashboard.services.core.bounded_cache.cache.set",
+            side_effect=ConnectionError("dragonfly is full"),
         ):
             responses, _download = self._fetch(b"PNGDATA")
 

@@ -1857,7 +1857,7 @@ def _confirmed_import_urls(job_id: str) -> dict[str, str]:
 
 _REDATA_MEDIA_CACHE_TTL = 3600
 
-#: Largest proxied REData body worth putting in the shared Valkey. Larger than
+#: Largest proxied REData body worth putting in the shared Dragonfly. Larger than
 #: ``bounded_cache.MAX_CACHED_BODY_BYTES``, deliberately and at the call site:
 #: that ceiling is sized for thumbnails, and these are scanned PDFs and TIFFs, so
 #: inheriting it would refuse to cache almost all of them and turn every view

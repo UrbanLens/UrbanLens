@@ -287,7 +287,7 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
         held = self._held_while_the_broker_was_down(profile)
         down = ResilientRedisCache("redis://127.0.0.1:6379/0", {"OPTIONS": {}})
         outage = [
-            mock.patch.object(RedisCache, method, side_effect=RedisConnectionError("valkey is down"))
+            mock.patch.object(RedisCache, method, side_effect=RedisConnectionError("dragonfly is down"))
             for method in ("get", "set", "add", "delete")
         ]
         with outage[0], outage[1], outage[2], outage[3], mock.patch("django.core.cache.cache", down):

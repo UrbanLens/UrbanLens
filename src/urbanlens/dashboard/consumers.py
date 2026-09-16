@@ -184,7 +184,7 @@ class SocketAllowanceMixin(_CredentialScopeBase):
         identity = self.connection_identity()
         if not identity:
             return True
-        # Valkey only, so kept off the one thread every socket's database work queues on.
+        # Dragonfly only, so kept off the one thread every socket's database work queues on.
         allowed = await sync_to_async(socket_budget.claim, thread_sensitive=False)(identity, self.channel_name)
         if allowed:
             self._socket_slot_identity = identity
@@ -1001,7 +1001,7 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
             await self.channel_layer.group_send(self.group_name, {"type": "chat.message", "message": message})
         except Exception:
             # The message is already saved - only the live broadcast failed (e.g. a transient
-            # channel-layer/Valkey hiccup).
+            # channel-layer/Dragonfly hiccup).
             logger.exception("Safety chat broadcast failed on checkin %s", self.checkin.pk)
             await self.send(text_data=json.dumps({"type": "error", "detail": "Your message was saved but couldn't be delivered live. It'll appear on refresh."}))
 

@@ -160,7 +160,7 @@ class BasemapTileView(LoginRequiredMixin, View):
             # vendor and land in the same instance as sessions, the Channels
             # layer and the broker, so one surprise must not evict the rest.
             # The helper also swallows a cache failure - a full or unreachable
-            # Valkey is a degraded cache, not a broken map.
+            # Dragonfly is a degraded cache, not a broken map.
             bounded_cache.set_if_small(cache_key, body, resolved_type, _TILE_CACHE_TTL, label=f"Basemap tile {layer} {z}/{x}/{y}")
             return HttpResponse(body, content_type=resolved_type)
         if status in (400, 404):

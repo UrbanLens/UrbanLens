@@ -4,7 +4,7 @@
 every uuid a saved filter matches. The fingerprint changes on every pin create,
 edit and delete, which is what makes a stale entry unreadable - but the stale
 entry is still *there*, holding its bytes for the full day of the TTL, in the
-512MB Valkey that also holds sessions, the Channels layer and the Celery broker
+512MB Dragonfly that also holds sessions, the Channels layer and the Celery broker
 under `volatile-lru`. So an ordinary afternoon of editing pins leaves one dead
 copy of the account's matching-uuid list per edit, per saved filter, and the
 eviction that makes room for them takes other people's sessions.
@@ -110,7 +110,7 @@ class SavedFilterCacheTests(TestCase):
     def test_an_unwritable_cache_does_not_break_the_answer(self) -> None:
         expected = {str(pin.uuid) for pin in Pin.objects.filter(profile=self.profile)}
 
-        with mock.patch.object(cache, "set", side_effect=ConnectionError("valkey is full")):
+        with mock.patch.object(cache, "set", side_effect=ConnectionError("dragonfly is full")):
             uuids = get_or_compute_matching_uuids(self.profile, self.saved_filter)
 
         self.assertEqual(set(uuids), expected)
@@ -118,7 +118,7 @@ class SavedFilterCacheTests(TestCase):
     def test_an_unreadable_cache_does_not_break_the_answer(self) -> None:
         expected = {str(pin.uuid) for pin in Pin.objects.filter(profile=self.profile)}
 
-        with mock.patch.object(cache, "get", side_effect=ConnectionError("valkey is down")):
+        with mock.patch.object(cache, "get", side_effect=ConnectionError("dragonfly is down")):
             uuids = get_or_compute_matching_uuids(self.profile, self.saved_filter)
 
         self.assertEqual(set(uuids), expected)
@@ -128,7 +128,7 @@ class SavedFilterCacheTests(TestCase):
         baker.make(Pin, profile=self.profile, location=baker.make(Location))
         expected = {str(pin.uuid) for pin in Pin.objects.filter(profile=self.profile)}
 
-        with mock.patch.object(cache, "delete", side_effect=ConnectionError("valkey is down")):
+        with mock.patch.object(cache, "delete", side_effect=ConnectionError("dragonfly is down")):
             uuids = get_or_compute_matching_uuids(self.profile, self.saved_filter)
 
         self.assertEqual(set(uuids), expected)

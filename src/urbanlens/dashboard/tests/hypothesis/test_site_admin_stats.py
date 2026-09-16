@@ -261,7 +261,7 @@ class SiteAdminStatsViewContextTests(TestCase):
         self.assertIn("infrastructure_services", ctx)
         services = ctx["infrastructure_services"]
         self.assertEqual(len(services), 4)
-        self.assertEqual([service.key for service in services], ["postgres", "valkey", "celery", "nginx"])
+        self.assertEqual([service.key for service in services], ["postgres", "dragonfly", "celery", "nginx"])
         self.assertEqual(services[0].status, "healthy")
 
     def test_context_has_app_software_info(self) -> None:
@@ -293,7 +293,7 @@ class SiteAdminStatsViewContextTests(TestCase):
 class SiteAdminHomeViewTests(TestCase):
     """The admin homepage renders without waiting on infra/git I/O.
 
-    Service health (Postgres/Valkey/Celery/nginx pings) and the git update check (a git fetch) are real I/O -
+    Service health (Postgres/Dragonfly/Celery/nginx pings) and the git update check (a git fetch) are real I/O -
     SiteAdminHomeStatusPartialView fetches them lazily via HTMX instead of SiteAdminHomeView blocking on them."""
 
     def setUp(self) -> None:
@@ -350,7 +350,7 @@ class SiteAdminHomeViewTests(TestCase):
                 metrics=(),
             ),
             InfrastructureServiceStat(
-                key="valkey", name="Valkey", icon="memory", status="unhealthy", status_label="Down", metrics=()
+                key="dragonfly", name="Dragonfly", icon="memory", status="unhealthy", status_label="Down", metrics=()
             ),
         )
         with mock.patch(
