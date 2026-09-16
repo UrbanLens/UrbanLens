@@ -811,15 +811,37 @@ SpotGuessr/Trivia `eligible_locations()`/`eligible_questions()` retry-loop findi
 resolved before this audit even ran, by commit `d02fce8a` (2026-08-06, "Unit 24/25: resolve
 SpotGuessr round eligibility once instead of per retry").
 
-## RESOLVED 2026-09-15: P113's 65-finding availability sweep - all but H54 and H56
+## RESOLVED 2026-09-15: P113's 65-finding availability sweep - all but H56
 
-`refs: P113 (open - H54 and H56 remain, see live entry)` · `resolved: 2026-09-15`
+`refs: P113 (open - H56 remains, see live entry)` · `resolved: 2026-09-15`
 
-The full re-verified findings list and the two still-open rows (H54, H56) and four
+The full re-verified findings list, the still-open row (H56) and four
 parked-by-decision rows (H21, H34, H44, H47) stay on the live P113 entry as its status
 board. What follows is the fix narrative for everything else on that list: what each
 finding actually was, the corrections found while fixing it, and the reasoning behind
 each choice - moved here so the live entry stays a board rather than a log.
+
+**H54 is fixed (2026-09-16).** *"One 512MB Valkey holds sessions, the Channels layer, the Django
+cache and the Celery broker in a single keyspace under `volatile-lru`, and the Celery broker's keys
+are the only ones with no TTL"* — the broker's own task/result traffic had no ceiling and shared a
+maxmemory budget with everyone else's session and cache data. D16
+([`docs/designs/dragonfly-rabbitmq-pgvector-stack-adoption.md`](../designs/dragonfly-rabbitmq-pgvector-stack-adoption.md))
+moved the Celery broker off Dragonfly onto its own RabbitMQ instance, as part of a proactive
+three-technology stack adoption rather than a fix built for this finding alone. This is a removal, not
+a bound: the broker's keys are not merely capped or given a TTL, they are no longer in the same
+keyspace as the cache and sessions at all, so a task backlog can no longer contend with either for
+Dragonfly's 512MB.
+
+**What this does not fix, so the next reader does not assume it did.** H35's key-count half named
+"H54's Valkey split" as its eventual fix, on the theory that splitting the shared instance would
+shrink everyone's exposure. That is only half true: the broker is gone from the shared keyspace, so
+an oversized tile write can no longer starve task delivery, but sessions and the Channels layer are
+still on the same Dragonfly instance as the tile cache and the Immich thumbnail proxy. H35's core
+risk is unchanged: filling the shared 512MB with tile bytes still competes with session and Channels
+writes for the same `maxmemory` budget, and per D16, a full Dragonfly (run without `cache_mode`)
+raises rather than silently evicting to make room — a session write can fail, not merely get evicted.
+Its row is left open on its own terms rather than folded into this closure. H38 is unaffected for the
+same reason.
 
 | finding | the shape | now |
 |---|---|---|

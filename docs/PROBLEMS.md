@@ -2930,9 +2930,9 @@ the current limit was reasoned from.
 
 Found while trying to run the neighbour suite on the real process model.
 
-## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else - 2 still open
+## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else - 1 still open
 
-`id: P113` · `status: open` · `updated: 2026-09-13`
+`id: P113` · `status: open` · `updated: 2026-09-16` · `supersedes the 2026-09-13 "2 still open" count: H54 closed by D16`
 
 A sixteen-dimension sweep of the application, re-judged by hostile reviewers who were given the
 claim but not the finder's evidence, returned **54 real findings**: 10 critical, 41 high, 3 medium.
@@ -2955,18 +2955,24 @@ acting on: this is not 54 unrelated bugs, it is mostly three unbuilt phases, mea
 
 ## The work list
 
-Re-verified against the code on 2026-09-13: of the 65 tracked findings, everything is closed except
-the two rows below and the four parked decisions. The closed items' fix narrative - what each finding
-actually was, the corrections found while fixing it, and the reasoning behind each choice - is in
-`archive/PROBLEMS-ARCHIVE.md` under 2026-09-15 rather than repeated here;
+Re-verified against the code on 2026-09-13; H54 additionally closed 2026-09-16 (see below). Of the
+65 tracked findings, everything is closed except the row below and the four parked decisions. The
+closed items' fix narrative - what each finding actually was, the corrections found while fixing it,
+and the reasoning behind each choice - is in `archive/PROBLEMS-ARCHIVE.md` under 2026-09-15 (H54's
+own narrative is dated 2026-09-16 within that entry) rather than repeated here;
 `notes/availability-audit-2026-09-11.md` (N21) has the original findings and the four downgrades from
 the hostile-review pass.
+
+**H54 closed 2026-09-16**: D16 moved the Celery broker off Dragonfly onto RabbitMQ, which removes the
+broker's unbounded, no-TTL keys from the shared keyspace entirely rather than bounding them in place.
+Narrative moved to `archive/PROBLEMS-ARCHIVE.md`; see
+[`docs/designs/dragonfly-rabbitmq-pgvector-stack-adoption.md`](designs/dragonfly-rabbitmq-pgvector-stack-adoption.md)
+(D16). H35/H38's separate size-limit risk on the same store is unaffected - see D16 for why.
 
 **Open:**
 
 | ref | severity | what remains | why it is not done |
 |---|---|---|---|
-| H54 | high | One 512MB Valkey holds sessions, Channels, the Django cache and the broker in one keyspace under `volatile-lru`, and only the broker's keys have no TTL | PL7 phase 4, designed and unbuilt |
 | H56 | high | Under gevent a request that spends its timeout in non-yielding CPU takes the whole worker down. `--worker-connections 20` bounds the blast radius to 19 requests; it does not remove it. Both requests known to run that long are fixed (P108, P96), so it is latent rather than reachable | D11 phase 3a (gthread), designed and unbuilt |
 
 **Parked by decision, not forgotten:**

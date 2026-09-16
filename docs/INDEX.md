@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P125` · `T4` · `PL8` · `D16` · `X25` · `I5` · `R30` · `N25`
+**Next free id:** `P125` · `T4` · `PL8` · `D17` · `X25` · `I5` · `R30` · `N25`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -89,7 +89,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P109 | open | 2026-09-14 | One import's per-pin task fan-out is unbounded, and drains on the bulk queue behind every other account's jobs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P110 | open | 2026-09-14 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-10 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P113 | open | 2026-09-13 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 2 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P113 | open | 2026-09-16 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 1 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P122 | open | 2026-09-15 | A refused external call returns a 500 from views that catch only `GatewayRequestError` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P123 | open | 2026-09-16 | Global search's pins-provider statement scans every account's labels, so one account's search slows as unrelated accounts add matching labels | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -108,6 +108,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | D13 | accepted | 2026-09-11 | Celery queue classes: one account's big job must not delay everyone's small ones | [`docs/designs/celery-queue-classes.md`](designs/celery-queue-classes.md) |
 | D14 | accepted | 2026-09-12 | A shared service budget is divided by who is actually competing for it, not by the user count | [`docs/designs/external-api-fair-share.md`](designs/external-api-fair-share.md) |
 | D15 | accepted | 2026-09-15 | The site is built for 1,000 concurrent signed-in users now and 10,000 later, and "concurrent" means a person browsing with 30 seconds between pages | [`docs/designs/capacity-target-and-load-model.md`](designs/capacity-target-and-load-model.md) |
+| D16 | accepted | 2026-09-16 | Dragonfly, RabbitMQ and pgvector adopted together: Dragonfly's no-`cache_mode` raise-on-full is deliberate, RabbitMQ is pinned below 4.x or every worker crash-loops, and moving the broker off Dragonfly closes H54 | [`docs/designs/dragonfly-rabbitmq-pgvector-stack-adoption.md`](designs/dragonfly-rabbitmq-pgvector-stack-adoption.md) |
 | X1 | holds | 2026-08-27 | A release merge silently dropped --skip-undecryptable from DATA_ENCRYPTION.md; nothing else had drifted | [`docs/audits/DATA_ENCRYPTION_AUDIT.md`](audits/DATA_ENCRYPTION_AUDIT.md) |
 | X2 | holds | 2026-09-01 | A gate enforced in the web UI is repeatedly missing from the parallel external-API endpoint | [`docs/audits/FEATURES_CODE_AUDIT.md`](audits/FEATURES_CODE_AUDIT.md) |
 | X3 | holds | 2026-08-27 | GOALS.md contradicts the other docs on six points and states ten goals no other doc records at all | [`docs/audits/GOALS_AUDIT.md`](audits/GOALS_AUDIT.md) |
