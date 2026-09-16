@@ -3395,6 +3395,38 @@ Not fixed: any variant of any of the six new paths above (Article's two, Trip's 
 one) — no fix has been attempted for any of them yet, unlike labels' partially-fixed matching
 variant. Confirmed not applicable: Visit, DirectMessage, MarkupMap, Comment.
 
+### Pin's and Photo's own `label:` operator, checked: Photo shares the gap, Pin surprisingly does not (2026-09-17)
+
+The Wiki `label:` entry above flagged this as unchecked: "Whether Pin's and Photo's own `label:`
+operator... has the same gap was not checked; the mechanism (`apply_label_clause`, shared verbatim)
+makes it likely." Reproduced in two new files,
+`test_search_does_not_read_another_accounts_pin_label_operator.py` and
+`..._photo_label_operator.py`, both structured exactly like the Wiki file (a viewer's one exactly-
+named label vs. a stranger's growing, unrelated ones, matching and non-matching `label:"..."`
+variants).
+
+Photo matches the prediction exactly: both variants fail (full-table growth, matching and
+non-matching alike), the same result as Wiki. Pin does not: its non-matching variant fails as
+expected, but **its matching variant does not grow** — measured twice independently (a single-test
+isolated run, and the whole file run alone against a fresh test database) to rule out the test-order
+statistics bias the Wiki/Photo section above already documented for this same test family. Both
+runs agreed, so this is a reproducible property of Pin's plan, not an artifact. The
+`test_it_does_not_read_a_strangers_labels_when_the_term_matches_elsewhere` test in the Pin file is
+therefore a plain (non-`xfail`) regression test, not a reproduction, mirroring how the bare-term
+matching variant is already handled in `test_search_does_not_read_another_accounts_labels.py`.
+
+Not diagnosed further: the plausible mechanism is the same statistics-driven join-reordering effect
+already measured for `icontains` (a precise cardinality estimate on the label predicate changing the
+*enclosing* plan's join order, not the label scan itself) — but that account would have to also
+explain why the identical `apply_label_clause` call does not equally rescue Photo's or Wiki's
+matching variant, on the same `iexact` predicate shape, and that gap was not chased down. Recorded
+as a measured fact, not a diagnosed one; re-measure before relying on it holding at a larger scale,
+per this entry's own established caution about test-scale results.
+
+Updated summary: not fixed — Wiki's `label:` operator (either variant), Photo's `label:` operator
+(either variant), Pin's `label:` operator non-matching variant. Already fine, measured: Pin's
+`label:` operator matching variant (mechanism not diagnosed).
+
 ## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
 
 `id: P124` · `status: open` · `updated: 2026-09-16`
