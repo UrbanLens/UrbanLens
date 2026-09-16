@@ -92,6 +92,18 @@ Tab deferral (`rows_deferred`) is untouched and still worthwhile — an inactive
 at all, which is a real saving rather than a re-render. The reveal path still calls `label.rows`,
 which still returns full cards.
 
+**Correction, same day, caught by adversarial review before push:** the first version of this fix
+moved *every* label tab onto `.with_pin_counts()` plus priming, including people and media —
+neither of which has ever rendered a pin count or a total-pin count
+(`_organize_label_card.html` guards every stat span with
+`{% if kind != 'people' and kind != 'media' %}`). Those two tabs paid for two correlated subqueries,
+a discarded per-child `Count()`, and two priming queries for numbers nothing displays — a pure
+regression, since those tabs had nothing to save by skipping a re-fetch that was never wired up for
+them in the first place. Fixed by adding a `needs_stats` flag to `_rows_if_active`
+(`organize.py`): people and media keep `.with_hierarchy()` and skip priming; tags, categories and
+status are unaffected. Regression test:
+`test_organize_people_media_skip_stats.py`.
+
 ## Two things found on the way, neither fixed here
 
 1. **Nothing reads a child label's `pin_count`.** `with_pin_counts()` prefetches children with
@@ -101,11 +113,18 @@ which still returns full cards.
    stats become free relative to `with_hierarchy`'s 24.10 ms. Not adopted: the method is shared with
    `external_api/views.py` and the label serializer, and ~11 ms did not justify the blast radius
    while the ~540 ms win was available elsewhere.
-2. **The two render paths disagree about customizations.** `organize.py` applies
-   `.with_customizations_for(profile)` to categories and statuses; `labels.py::_queryset_for_kind`
-   applies it only to tags. Both paths render the same cards, so a customized global category or
-   status can show a different name or colour on the first paint than after a tab reveal or any
-   mutation that re-renders rows. Unverified against a browser; found by reading, not measuring.
+2. **The two render paths disagree about customizations, but the gap is currently unreachable.**
+   `organize.py` applies `.with_customizations_for(profile)` to categories and statuses;
+   `labels.py::_queryset_for_kind` applies it only to tags. Adversarial review traced this further
+   than the initial reading here did: no user-visible difference exists today, because three
+   independent guards each separately prevent a profile-owned category, status, or people label from
+   ever acquiring a `LabelCustomization` row — `.for_profile()` scoping excludes global rows from
+   both querysets in the first place, `LabelCustomizeView` redirects to the plain editor whenever
+   `label.profile is not None`, and it 404s outright for `KIND_USER`. Present since `4e5a20011`
+   (2026-09-04), predating this change. It is a landmine, not a live bug: relaxing any one of those
+   three guards without also reconciling the two querysets would make a customization silently
+   vanish on one render path while still showing on the other, with no test on either side to catch
+   it.
 
 A third finding, recorded before the fix chose a different route: `renderTreeView` deep-clones each
 card (`card.cloneNode(true)`) and rewrites only the clone's own `id`, so ids nested inside the clone

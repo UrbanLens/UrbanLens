@@ -59,30 +59,43 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     label_tab = active_tab if active_tab in _LABEL_TABS else "tags"
     on_labels_section = active_section == "labels"
 
-    def _rows_if_active(tab_key: str, queryset: QuerySet[Label]) -> list[Label]:
+    def _rows_if_active(tab_key: str, queryset: QuerySet[Label], *, needs_stats: bool = True) -> list[Label]:
         """Materialize a label tab's card list only when it's the one on screen.
 
         This drops the Python/template cost of the tabs nobody is looking at, which query-count fixes
         never touch and which scales the same way: profiled at 500 tags, the initial page paint alone
         (six tabs' worth of cards, all but one invisible) cost ~12s of wall time against ~0.2s of actual
         database time.
+
+        Args:
+            tab_key: The tab this queryset belongs to.
+            queryset: The queryset to materialize when active.
+            needs_stats: Whether the resulting cards render pin counts. People and media cards never
+                do (`_organize_label_card.html` guards every stat span on the kind), so priming their
+                subtree totals would compute a number nothing displays.
         """
         if not on_labels_section or label_tab != tab_key:
             return []
         rows = list(queryset)
-        # Primed against the same list the template renders: the memo is seeded per instance, so a
-        # queryset re-evaluated during rendering would discard it and restore the per-label BFS.
-        Label.prime_total_pin_counts(rows)
+        if needs_stats:
+            # Primed against the same list the template renders: the memo is seeded per instance, so a
+            # queryset re-evaluated during rendering would discard it and restore the per-label BFS.
+            Label.prime_total_pin_counts(rows)
         return rows
 
     # `.with_pin_counts()`, not `.with_hierarchy()`: at 120 labels the stats cost ~16ms against ~100ms to
     # render the cards they sit in, so deferring them to a follow-up request bought a second full render
-    # of every card rather than a cheaper page (X25).
+    # of every card rather than a cheaper page (X25). Tags/categories/status render those stats;
+    # people/media don't, so they keep `.with_hierarchy()` and skip priming.
     tags = _rows_if_active("tags", Label.objects.tags().visible_to(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
     categories = _rows_if_active("categories", Label.objects.categories().for_profile(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
     statuses = _rows_if_active("status", Label.objects.statuses().for_profile(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
-    user_labels = _rows_if_active("people", Label.objects.user_labels().visible_to(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
-    media_labels = _rows_if_active("media", Label.objects.media().visible_to(profile).in_display_order().with_pin_counts())
+    user_labels = _rows_if_active(
+        "people",
+        Label.objects.user_labels().visible_to(profile).in_display_order().with_customizations_for(profile).with_hierarchy(),
+        needs_stats=False,
+    )
+    media_labels = _rows_if_active("media", Label.objects.media().visible_to(profile).in_display_order().with_hierarchy(), needs_stats=False)
     # Always materialized, unlike the lists above: every tab's "create" dialog needs it as the parent-picker's
     # candidate list, not only the Display Order tab that renders it directly.
     priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).in_display_order()

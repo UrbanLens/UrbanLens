@@ -197,31 +197,6 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// Pin/total-pins stat placeholders shown while the Organize page's initial
-// paint is still waiting on its follow-up HTMX request for real counts.
-@keyframes tag-stat-skeleton-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: .4; }
-}
-
-.tag-stat-loading {
-    display: inline-block;
-    width: 1.6em;
-    height: .95em;
-    border-radius: 999px;
-    background: var(--ul-grey-4);
-    animation: tag-stat-skeleton-pulse 1.4s ease-in-out infinite;
-}
-
-.tag-card-stat-loading {
-    display: inline-block;
-    width: 1.6em;
-    height: .88rem;
-    border-radius: 4px;
-    background: var(--ul-grey-4);
-    animation: tag-stat-skeleton-pulse 1.4s ease-in-out infinite;
-}
-
 .tag-color-dot {
     width: 12px;
     height: 12px;
