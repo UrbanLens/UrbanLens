@@ -3302,3 +3302,103 @@ over a template file on disk, not an `assertIn` against a response body), which 
 `assertIn` shape alone will not find the rest of this family.
 
 Not fixed. Not re-measured beyond the 2026-09-16 targeted run and the source read cited above.
+
+## P125 — The population capacity harness meets D15's budget through 250 concurrent users and collapses between 250 and 500, in every variant run so far
+
+`id: P125` · `status: open` · `updated: 2026-09-16`
+
+**This is a different axis from P113 and P123.** Those are the "neighbour" question - does one
+account's action cost a *different* account anything at all (D11, `tests/perf/k6/neighbour.js`).
+This is D15's question: how many ordinary concurrent users, each just browsing, can the whole site
+serve before it stops meeting its own budget. A design can pass one and fail the other -
+D15 says so explicitly. This entry is about the second one, measured, and still failing.
+
+**The evidence has never been in `docs/` and is not in git.** `tests/perf/results/` is entirely
+gitignored (`tests/perf/.gitignore:3`, "Nothing here is reproducible or safe to commit") because run
+output holds live session cookies. That means every number below exists only on whichever machine
+ran it - this entry is the only durable record of it, so treat the run directories as reproducible
+inputs to redo, not archives to expect being there.
+
+### Harness and population (`tests/perf/README.md`, `bin/run_capacity_tests.sh`, `k6/population.js`)
+
+1,000 accounts, heavy-tailed pin counts (60% at 10-100, 30% at 100-1,000, 9% at 1,000-5,000, 1% at
+10,000-20,000), minted sessions rather than passwords so signing them in doesn't measure PBKDF2.
+`tests/perf/results/capacity-population/manifest.json`: **1,000 accounts, 471,756 pins total**,
+median 62 per account, max 17,720. Each VU browses, polls unread counts and the map's meta, and
+holds a notification socket - modelled on the templates, not guessed (see D15 for the full model).
+Budgets are D15's: page p95 < 1,000 ms, fragment/poll/JSON p95 < 500 ms, requests failed < 0.5%,
+socket handshakes > 99.5%.
+
+### Five runs exist locally, all against the same 471,756-pin population, in this order (2026-09-15)
+
+| run | time | requests failed at u1000 | what it shows |
+|---|---|---|---|
+| `capacity-smoke` | 17:16 | - (only ran to u40) | sanity check, not a capacity result |
+| `capacity-baseline` | 17:39 | 26.14% | fails hard before the day's fix pass |
+| `capacity-fixes` | 18:21 | 24.18% | after a first round of fixes; still fails hard |
+| `capacity-gthread` | 19:09 | 0.00% | gthread worker class instead of gevent; hard failures gone, latency still collapses |
+| `capacity-content` | 22:53 | 0.00% | latest; hard failures gone, latency still collapses |
+
+Between `capacity-baseline` and `capacity-content`, roughly forty fixes landed the same day, driven
+directly by this harness - representative ones: nginx moved from refusing past 500 sockets/worker to
+holding ten thousand (`77b458b2c`), a web request reuses its thread's Postgres connection instead of
+logging in fresh (`534055e5c`), a page's header badges arrive with the page instead of three requests
+after it (`04a2c7cb2`), the wiki-reach check became a subquery instead of shipping every pinned
+location id (`a1ca8c134`), the global-search semi-join replaced a join-and-deduplicate
+(`c354caabe`), and a list's pin count is counted in the database instead of fetched row by row
+(`7835838c2`). `capacity-content` is the state after all of it, and is the number that matters below.
+
+### `capacity-content` (2026-09-15 22:53, the current best-known state) — meets D15 through u250, collapses at u500
+
+| hold | requests failed | ws handshakes ok | fragment p95 (budget 500ms) | page p95 (budget 1000ms) | verdict |
+|---|---:|---:|---:|---:|---|
+| u100 | 0.00% | 100.00% | 19-268 ms | 89-356 ms | **meets every measured D15 ceiling** |
+| u250 | 0.00% | 100.00% | 25-305 ms | 99-469 ms | **meets every measured D15 ceiling** |
+| u500 | 0.00% | 100.00% | 902-4,733 ms | 1,345-5,944 ms | fails both latency budgets, on every endpoint |
+| u1000 | 0.00% | 100.00% | 23,094-23,880 ms | 23,218-24,720 ms | fails both latency budgets, on every endpoint, by ~50x |
+
+(`tests/perf/results/capacity-content/report.md`; full per-endpoint table has 22 rows per hold, all
+consistent with the ranges above - none is an outlier carrying the rest.)
+
+**The bottleneck moved, and moved somewhere a query fix cannot reach.** In `capacity-fixes`, Postgres
+was the constraint: DB CPU throttled 114.58% at u500 and 163.21% at u1000 (`containers.csv`;
+`ul_perf_db` mean cores 1.64-1.70 against its 2-core limit), and the edge proxy logged **9,100×502 +
+1,505×504 out of 16,945 requests at u1000** - over 60% of requests failing outright. In
+`capacity-content`, after that round of fixes, DB CPU is *low* (0.50-0.63 mean cores, 1.36-2.65%
+throttled) and the **app container** is now pegged instead: 2.00 mean cores against its 2-core limit,
+84.41% throttled at u1000. `docker-compose.yml:195` sets that limit -
+`cpus: ${CPU_LIMIT__APP:-${CPU_LIMIT:-2}}` - a repo-wide default, not a perf-environment-only
+setting. Nothing failed outright because nothing timed out hard the way a starved DB connection pool
+does; requests simply queued behind a full CPU allocation and answered 20-50x slower.
+
+**This means the fixes worked and ran out of runway at the same time.** Query-level and N+1 fixes
+made the DB cheap enough that it is no longer the limit; what remains is that one 2-core app
+container cannot serve 500-1,000 concurrent browsers' worth of Python/Django work inside budget, no
+matter how cheap each individual query is. The next lever to test is more app capacity - a higher
+`CPU_LIMIT__APP`, more app replicas behind nginx, or both - not another per-endpoint query fix, since
+the endpoints that are over budget are not the ones with expensive queries; they are all of them,
+uniformly, which is the signature of a shared resource being out of headroom rather than any one
+endpoint being slow.
+
+### What this does not establish
+
+- **Not re-run since 2026-09-15.** Whatever landed in this repository afterward (including this
+  week's P123 work) has not been measured against this harness.
+- **Writes are entirely out of scope**, per D15: nobody in this population imports, uploads, edits a
+  label, or sends a message. A real 1,000-user population does some of that concurrently with the
+  reads measured here; this number is a ceiling on reading alone, and could be worse under a mixed
+  load.
+- **The Postgres-pool and signed-in-session ceilings from D15 were not checked here** - `report.md`
+  doesn't carry connection-pool percentage or session-survival numbers; `pg_activity.csv` has the raw
+  samples but wasn't reduced to that figure for this entry.
+- **Run on chiron's perf environment, load generator beside the target** (`tests/perf/README.md`),
+  not on damballa and not with a dedicated load-generation host. Says where the current design
+  breaks, not what production hardware would do.
+- **10,000 users has not been attempted.** D15 sets it as the eventual target; nothing here speaks to
+  it, and the 1,000-user collapse would need to be understood and fixed first regardless.
+- Neither `capacity-gthread`'s worker-class change nor whatever changed between `capacity-fixes` and
+  `capacity-content` was captured as a design decision or a diffable commit range in this entry - the
+  runs are dated and can be told apart, but "what exactly changed between them" would need
+  reconstructing from the day's full commit list, not just the ones cited above.
+
+Not fixed.

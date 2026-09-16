@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P125` · `T4` · `PL8` · `D17` · `X26` · `I5` · `R30` · `N25`
+**Next free id:** `P126` · `T4` · `PL8` · `D17` · `X26` · `I5` · `R30` · `N25`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -191,4 +191,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | X23 | holds | 2026-09-16 | Template-engine share of a map request is unpinned between ~26% and ~41%, not the 61-66% the Jinja2/JinjaX port was originally justified on; the two conflicting `header.html` figures were still both correct | [`docs/notes/template-engine-share-measured.md`](notes/template-engine-share-measured.md) |
 | X24 | holds | 2026-09-16 | The map request's redundant SQL is app code defeating Django's caches, and one template tag is 28% of it | [`docs/notes/map-request-redundant-sql-measured.md`](notes/map-request-redundant-sql-measured.md) |
 | P124 | open | 2026-09-16 | Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P125 | open | 2026-09-16 | The population capacity harness meets D15's budget through 250 concurrent users and collapses between 250 and 500, in every variant run so far | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | X25 | holds | 2026-09-16 | Organize rendered its label cards twice to deliver three numbers per card: the deferred stats cost ~16 ms against ~100 ms to render the cards, so the deferral was removed | [`docs/notes/organize-label-rows-double-render-measured.md`](notes/organize-label-rows-double-render-measured.md) |
