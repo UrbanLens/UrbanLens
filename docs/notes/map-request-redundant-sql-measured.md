@@ -152,7 +152,11 @@ The `assistant_enabled_flag` fetches were repaired immediately after this measur
 reads `user.profile` and falls back to `get_or_create` only when no profile exists — but that fix is
 verified by its own test, not by this record, and the request was **not** re-measured with it in
 place, so treat the 28% as the cost that was there, not as a saving that has been demonstrated.
-`maps.py:174` is unrepaired.
+
+`maps.py:174` was repaired the same way immediately afterwards, and a test asserts the map request
+now selects the profile row exactly once (it selected it twice at that point, the middleware's read
+plus `view_map`'s own). That test pins the count, not a duration; no re-measurement of the request's
+SQL time has been taken with either fix in place.
 
 The wider scope is untriaged: `Profile.objects.get_or_create(user=...)` appears **286 times across
 59 non-test files** (`controllers/trip.py` 33, `controllers/safety.py` 29,

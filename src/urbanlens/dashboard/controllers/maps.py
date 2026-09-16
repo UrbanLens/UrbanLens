@@ -171,7 +171,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             user_has_feature,
         )
 
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        # The middleware has already loaded this; get_or_create would select the same row again.
+        try:
+            profile = request.user.profile
+        except Profile.DoesNotExist:
+            profile, _ = Profile.objects.get_or_create(user=request.user)
         tags = Label.objects.tags().visible_to(profile).in_display_order()
         filter_labels = Label.objects.exclude(kind=KIND_USER).visible_to(profile).in_display_order()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
