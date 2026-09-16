@@ -3227,7 +3227,42 @@ and reverse accessor generically — some search paths put the many-crossing rel
 hop, e.g. `location__wiki__aliases__name`, `pin__aliases__name`, `wiki__aliases__name` — is
 substantial, correctness-risky work spanning all ten search providers. Not attempted here.
 
-Not fixed (non-matching variant); partially fixed (matching variant).
+### The defect generalises to Photo exactly as predicted; Wiki turned out to reach labels through a different path entirely (2026-09-16)
+
+`PhotoSearchProvider` shares `PinSearchProvider`'s exact shape: `apply_label_clause` (a no-op for a
+bare term) plus `"labels__name"` in the `apply_text` field list, so a bare term reaches labels via
+the same `icontains` semi-join. `test_search_does_not_read_another_accounts_photo_labels.py`
+confirms both halves transfer unchanged: the matching variant passes (the trigram index's
+statistics effect generalises across base models), the non-matching variant still fails the same
+way. No new mechanism here — this is P123's existing analysis holding on a second model, checked
+rather than assumed.
+
+`WikiSearchProvider` does not generalise the same way, because its `apply_text` field list omits
+`"labels__name"` — **a bare search term never reaches the label table for a wiki at all**, matching
+or not. That is a real, separate gap (a user cannot find their own wiki by searching a label's text)
+but it is a missing feature, not this problem, and is not tracked further here.
+
+The path Wiki *does* share with Pin and Photo is `apply_label_clause` itself, reachable from a
+`label:"exact name"` query (all three providers call it identically). That path matches with
+`iexact`, not `icontains` — a different compiled predicate the trigram index was never shown to
+affect. Measured directly (`test_search_does_not_read_another_accounts_wiki_labels.py`): rows read
+grew from 153 to 551 after 400 unrelated stranger labels, **for both the matching and the
+non-matching query** — unlike Photo, the fix does not generalise to either variant of this path,
+because it was never a fix for this predicate shape in the first place. Whether Pin's and Photo's
+own `label:` operator (not their bare-term path, already covered above) has the same gap was not
+checked; the mechanism (`apply_label_clause`, shared verbatim) makes it likely.
+
+**Test-order caution discovered while measuring this:** running the Wiki file's tests before the
+Photo file's, in the same pytest session, made Photo's passing matching-variant test fail — a
+seq-vs-index-scan flip from `ANALYZE`/table-bloat statistics that outlive one test's rolled-back
+transaction and bias a later test's plan for the same table. Reproduced 2/2 combined, absent 4/4
+run alone. Documented at the measurement helper (`core/tests/explain.py`) rather than worked around;
+a result from one of this family of tests should be re-run in isolation before it's trusted as a
+regression.
+
+Not fixed: non-matching bare-term variant (Pin, Photo); either variant of the `label:` operator
+path (Wiki, and likely Pin/Photo too, unchecked). Partially fixed: matching bare-term variant (Pin,
+Photo). Out of scope, not a capacity defect: Wiki's missing bare-term label search.
 
 ## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
 

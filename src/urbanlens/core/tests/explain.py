@@ -3,6 +3,15 @@
 A query counter, a row-count wrapper over ``cursor.rowcount`` and a response-size budget all measure what came
 back. None of them can see a plan that reads a whole table to return one row, which is the shape a correlated
 ``Exists`` takes when its subquery carries no predicate of its own. That is only visible in the plan.
+
+A test built on this reads a real, live plan - so it inherits whatever the planner's cost estimates say, and
+those estimates are not scoped to the test's own transaction. ``ANALYZE`` run inside one test's rolled-back
+transaction, and dead tuples/pages an earlier large insert-then-rollback left behind, can both outlive that
+rollback and skew ``pg_class.reltuples``/``relpages`` for a later test in the same session against the same
+table - observed directly: a matching-labels test asserting a small, stable row count passed in isolation 4/4
+runs, then failed 2/2 times immediately after a *different* file's test inserted and rolled back 400+ rows into
+the same table. Treat a failure of this kind of test as inconclusive, not a confirmed regression, until it
+reproduces with the file run alone.
 """
 
 from __future__ import annotations
