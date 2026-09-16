@@ -85,6 +85,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev postgresql-client
 
+      - name: Install pgvector into the postgres service container
+        # A service container can't take a custom Dockerfile the way docker-compose's
+        # db build can, so the extension is installed into the running container instead.
+        # Package name tracks the service image's major version (16), not docker-compose's (17).
+        run: |
+          docker exec ${{ job.services.postgres.id }} sh -c "apt-get update && apt-get install -y --no-install-recommends postgresql-16-pgvector"
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -d urbanlens_ci -c "CREATE EXTENSION IF NOT EXISTS vector"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
