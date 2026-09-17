@@ -3079,7 +3079,7 @@ Catching refusals site by site is the alternative, and the next view will forget
 
 ## P123 — Global search's pins-provider statement scans every account's labels, so one account's search slows as unrelated accounts add labels that don't even match
 
-`id: P123` · `status: open` · `updated: 2026-09-16`
+`id: P123` · `status: open` · `updated: 2026-09-17`
 
 **This is a capacity problem, not a correctness or privacy one.** Search results are correctly
 access-scoped; nothing here is a data leak. The defect is that the query *plan* for the pins
@@ -3472,6 +3472,82 @@ that they did not compound into a budget failure. The full multi-phase battery (
 especially) was not attempted here, for the same host-memory-watchdog reason the labels-only
 validation's own full battery was abandoned after three kills; not repeated a fourth time on this
 already-successful narrower result.
+
+### A systematic field-path audit of all ten providers finds five more crossing relations, all reproduced (2026-09-17)
+
+Every earlier generalisation in this entry was found by reading one provider's field list and
+noticing it looked like labels'. That leaves the other nine providers unaudited by anything more
+rigorous than "did this one look interesting yet" — so this pass reads every `apply_text`/
+`term_filter`/`apply_label_clause` call site in `providers.py` (ten providers, confirmed by line
+number: 210, 315, 459, 496, 503, 546, 560, 636, 640, 716, 720, 777, 863, 911, 1035, 1056, 1121,
+1162, 1205) and checks each field-list entry's relation cardinality directly against the model
+(`ForeignKey` vs. `OneToOneField`, not inferred from behaviour), rather than reading provider
+docstrings and reproducing whichever one already looked suspicious.
+
+**Result: five previously-untested crossing paths, all confirmed live, none of them look-alikes
+of anything already covered.** `_crosses_many` only needs one segment of a path to be
+`many_to_many` or `one_to_many` - it doesn't matter which segment, or which model the semijoin is
+actually built from - so a path can share a target table with an already-tested path and still be
+a distinct, untested defect if a different provider drives the semijoin from a different base
+model:
+
+| provider | field-list entry | relation | driving model | distinct from |
+|---|---|---|---|---|
+| `PinSearchProvider` | `aliases__name` | `PinAlias` (reverse FK) | `Pin` | Article's `pin__aliases__name` (drives from `Article`) |
+| `PinSearchProvider` | `notes__text` | `PinNote` (reverse FK) | `Pin` | nothing - first time this relation appears anywhere in this entry |
+| `PinSearchProvider` | `location__wiki__aliases__name` | `WikiAlias` (reverse FK, 3rd path segment) | `Pin` | Article's `wiki__aliases__name` (drives from `Article`); Wiki's own `aliases__name` (drives from `Wiki`) |
+| `WikiSearchProvider` | `aliases__name` (bare-term path) | `WikiAlias` (reverse FK) | `Wiki` | the two above; also distinct from this same provider's already-tested `label:` operator, a different clause entirely |
+| `PhotoSearchProvider` | `keywords__keyword` | `ImageKeyword` (reverse FK) | `Image` | nothing - first time this relation appears |
+
+New files, one per relation, all following the established shape (a viewer whose own pin/wiki/photo
+matches through the relation, a stranger's unrelated row on the same relation that grows by 400,
+matching and non-matching variants, a `TheMeasurementIsRealTests` premise-guard class):
+`test_search_does_not_read_another_accounts_pin_aliases.py`, `..._pin_notes.py`,
+`..._pin_wiki_aliases.py`, `..._wiki_own_aliases.py`, `..._photo_keywords.py`.
+
+**All ten reproductions confirmed live** (`--runxfail`, so the assertion actually ran instead of
+being suppressed by the marker): every one of the five relations grew by ~400-1200 rows read on
+both the matching and non-matching variant, matching the Article/Trip/Safety precedent - none of
+these five relations carry anything like `Label.name`'s migration-0049 GIN trigram index, so
+neither variant gets even the partial relief that index gives the original labels path. One file
+(`wiki_own_aliases`) initially failed its own premise guard (`test_the_search_finds_the_viewers_own_wiki`
+returned nothing): `WikiSearchProvider` scopes to `visible_wiki_locations_cached`, which requires
+either a pin at the wiki's location or a domain match - a bare `Wiki` row with no pin is invisible
+to its own creator. Fixed by adding the missing pin (mirroring the pattern the Article-wiki-aliases
+file already used); re-run confirmed both variants reproduce identically to the other four files.
+Final state: **25 passed, 10 xfailed** across the five new files.
+
+**`PinNote` is worth flagging distinctly.** `PinNote`'s own docstring says these rows are "private,"
+visible only to the pin's owner. The unscoped semijoin means Postgres compares a stranger's private
+note *text* against the search term to answer someone else's query - the content is read, never
+returned (results are still correctly access-scoped, so this is not a data leak to the requester),
+but it is a step further than the other four relations, none of which claim any privacy boundary
+narrower than "the owner's account."
+
+**Audit completeness, for whoever picks this up next:** the remaining five providers
+(`ArticleSearchProvider`, `TripSearchProvider`, `VisitSearchProvider`, `DirectMessageSearchProvider`,
+`MarkupMapSearchProvider`, `SafetySearchProvider`, `CommentSearchProvider` - all ten, minus the three
+in the table above) were checked and found clean: `VisitSearchProvider`'s and `CommentSearchProvider`'s
+field lists never cross a to-many relation at all (every hop is a forward FK/O2O); `MarkupMapSearchProvider`
+searches only its own plain fields; `DirectMessageSearchProvider`'s `message_search_queryset` (in
+`services/messaging/direct_messages.py`, outside this file, so outside the original grep) calls
+`term_filter` on a single plain field with no path at all. `ArticleSearchProvider`, `TripSearchProvider`,
+and `SafetySearchProvider` were already covered by this entry's earlier generalisation. This is now a
+complete audit of every field-list entry in every provider, not a sample of the ones that happened to
+look interesting.
+
+**Not yet extended to the HTTP-scale harness.** `--heavy-search-relations` (`tests/perf/README.md`)
+seeds `PinAlias` and `WikiAlias` already (for Article's paths), so those two relations' table-size
+growth is already covered at HTTP scale incidentally - but `PinNote` and `ImageKeyword` are new
+tables the harness does not seed at all. Extending `perf_seed.py`'s `seed_bulk_search_relations` to
+these two was judged out of scope for this pass (unit-level reproduction was the ask; the four
+existing HTTP-scale validations in this entry already established that fanning fifty-thousand-row
+relations through this same mechanism does not blow the budget, and there is no reason to expect
+`PinNote`/`ImageKeyword` to behave differently at that layer).
+
+Updated summary: not fixed - all five relations above, both variants, on top of everything already
+listed. Every field-list entry in every one of the ten global-search providers has now been checked
+against the model's own relation definitions, not just read for a resemblance to labels.
 
 ## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
 
