@@ -62,7 +62,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-09-06 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P56 | open | 2026-09-05 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P56 | open | 2026-09-17 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P57 | open | 2026-09-14 | The test-quality audit's follow-ups: all done but one owner decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P58 | open | 2026-09-06 | A renamed photo's old URL still 404s for the uploader who just uploaded it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P59 | open | 2026-09-06 | A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -87,8 +87,8 @@ still resolves after it is fixed, and the id is never handed out again.
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P105 | open | 2026-09-13 | A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P110 | open | 2026-09-17 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off — the request-rate gap is closed in code and unit-tested, not yet re-verified live | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P111 | open | 2026-09-10 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P113 | open | 2026-09-16 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 1 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P111 | open | 2026-09-17 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P113 | open | 2026-09-17 | 54 verified places where one account's ordinary use can degrade the site for everyone else, all fixed except 4 parked by decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |

@@ -1453,7 +1453,7 @@ five off-tab panels. Laning those would delay the page itself, which is a differ
 
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
-`id: P56` · `status: open` · `updated: 2026-09-05`
+`id: P56` · `status: open` · `updated: 2026-09-17` · `corrects a stale host citation: tile.openstreetmap.org dropped per P126, conclusion unchanged`
 
 Previously titled "`Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed
 to set it does not exist", and before that "Nuclei scan follow-ups (2026-08-28)".
@@ -1467,9 +1467,14 @@ from every host `_CSP_DIRECTIVES` admits and reading the response headers:
 | `maps.googleapis.com` (the JS API itself) | script | `CORP: cross-origin` |
 | `fonts.googleapis.com`, `fonts.gstatic.com` | styles, fonts | `CORP: cross-origin` |
 | `www.google.com` (favicons), `maps.gstatic.com` | images | `CORP: cross-origin` |
-| `tile.openstreetmap.org`, `basemaps.cartocdn.com`, `tile.opentopomap.org`, `server.arcgisonline.com`, `services.arcgisonline.com` | map tiles | no CORP, `ACAO: *` - needs `crossOrigin` on the Leaflet layer |
+| `basemaps.cartocdn.com`, `tile.opentopomap.org`, `server.arcgisonline.com`, `services.arcgisonline.com` | map tiles | no CORP, `ACAO: *` - needs `crossOrigin` on the Leaflet layer |
 | `www.gravatar.com` | avatar preview | no CORP, `ACAO: *` - needs `crossorigin` on the `<img>` |
 | `en.wikipedia.org`, `nominatim.openstreetmap.org` | `fetch()` | no CORP, `ACAO: *` - already fine, `fetch` is CORS-mode by default |
+
+`tile.openstreetmap.org` dropped from this row 2026-09-17: P126 moved every in-app tile reference off
+it onto `basemaps.cartocdn.com`, which already shared this row's identical no-CORP/`ACAO: *` shape -
+the finding is unaffected (`grep -rn "tile.openstreetmap.org" src/` now matches only a comment and a
+regression test in `map-layers.ts`/`map-layers.test.ts`, not a live reference).
 
 So every scripted resource already passes, and the nine that do not are all `ACAO: *` and reachable
 with an attribute change. **That is not the blocker, and the entry was wrong about what was.**
@@ -1495,7 +1500,9 @@ they are now.
 **The nine attribute changes this entry lists are a `require-corp` requirement, not a prerequisite.**
 Under `credentialless` a no-cors tile loads as-is. Measured in a browser against the dev stack on
 2026-09-06 with `Cross-Origin-Embedder-Policy-Report-Only: credentialless` live: the map page loaded
-48 Leaflet tiles from `server.arcgisonline.com` and `*.tile.openstreetmap.org` with `crossorigin`
+48 Leaflet tiles from `server.arcgisonline.com` and `*.tile.openstreetmap.org` (the latter no longer
+one of the app's tile hosts as of P126, 2026-09-17 - its replacement, `basemaps.cartocdn.com`, carries
+the same no-CORP/`ACAO: *` shape, so this measurement's conclusion is unaffected) with `crossorigin`
 **unset**, plus scripts from unpkg/cdnjs/code.jquery.com and fonts from Google, with zero violation
 reports and zero failed requests. Do not spend a batch adding `crossOrigin` attributes for this.
 
@@ -2805,7 +2812,7 @@ bulk-import fan-out rather than just a plausible default carried over from an un
 
 ## P111 — A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back
 
-`id: P111` · `status: open` · `updated: 2026-09-10`
+`id: P111` · `status: open` · `updated: 2026-09-17` · `corrects the 2026-09-10 "worth fixing: the comment" note below - the comment was already gone`
 
 Measured on a `--environment staging` dev environment — the first time this project's real process
 model has been run and looked at.
@@ -2868,11 +2875,22 @@ once the payload is bounded.
 Also worth fixing regardless of any of that: the "~140MB/worker idle" comment, which is the number
 the current limit was reasoned from.
 
+**Correction, checked 2026-09-17: there is no comment left to fix.** `docker-compose.yml`'s app
+service (`docker-compose.yml:190-199`) carries no sizing comment of any kind today - not the wrong
+~140MB one, not a corrected one. History: the ~140MB comment was itself corrected to this entry's
+measured ~347MB figure in commit `cebd6e5a3` (2026-09-10, 20:36 UTC, the same commit that rewrote
+this entry), then removed entirely along with every other comment in the file two hours later by
+commit `8f7772461` (2026-09-10, 22:38 UTC, "most, if not all of the comments were unnecessary...
+If any comments truly are necessary here, reintroduce them individually"). So this entry's "worth
+fixing" line has been stale since the day it was written. Nothing was changed in `docker-compose.yml`
+this session - if a sizing comment is reintroduced, it should cite this entry and ~347MB, not the
+superseded ~140MB figure.
+
 Found while trying to run the neighbour suite on the real process model.
 
-## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else - 1 still open
+## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else, all fixed except 4 parked by decision
 
-`id: P113` · `status: open` · `updated: 2026-09-16` · `supersedes the 2026-09-13 "2 still open" count: H54 closed by D16`
+`id: P113` · `status: open` · `updated: 2026-09-17` · `supersedes the 2026-09-16 "1 still open" count: H56 closed by the D11 phase 3a gthread switch`
 
 A sixteen-dimension sweep of the application, re-judged by hostile reviewers who were given the
 claim but not the finder's evidence, returned **54 real findings**: 10 critical, 41 high, 3 medium.
@@ -2895,11 +2913,11 @@ acting on: this is not 54 unrelated bugs, it is mostly three unbuilt phases, mea
 
 ## The work list
 
-Re-verified against the code on 2026-09-13; H54 additionally closed 2026-09-16 (see below). Of the
-65 tracked findings, everything is closed except the row below and the four parked decisions. The
-closed items' fix narrative - what each finding actually was, the corrections found while fixing it,
-and the reasoning behind each choice - is in `archive/PROBLEMS-ARCHIVE.md` under 2026-09-15 (H54's
-own narrative is dated 2026-09-16 within that entry) rather than repeated here;
+Re-verified against the code on 2026-09-13; H54 closed 2026-09-16, H56 closed 2026-09-17 (both below).
+Of the 65 tracked findings, everything is closed except the four parked decisions. The closed items'
+fix narrative - what each finding actually was, the corrections found while fixing it, and the
+reasoning behind each choice - is in `archive/PROBLEMS-ARCHIVE.md` under 2026-09-15 (H54's own
+narrative is dated 2026-09-16, H56's 2026-09-17, within that entry) rather than repeated here;
 `notes/availability-audit-2026-09-11.md` (N21) has the original findings and the four downgrades from
 the hostile-review pass.
 
@@ -2909,11 +2927,17 @@ Narrative moved to `archive/PROBLEMS-ARCHIVE.md`; see
 [`docs/designs/dragonfly-rabbitmq-pgvector-stack-adoption.md`](designs/dragonfly-rabbitmq-pgvector-stack-adoption.md)
 (D16). H35/H38's separate size-limit risk on the same store is unaffected - see D16 for why.
 
-**Open:**
+**H56 closed 2026-09-17**: *"Under gevent a request that spends its timeout in non-yielding CPU takes
+the whole worker down"* - D11 phase 3a (gthread) is built, not "designed and unbuilt" as this row
+said. `package.json`'s `start` script already runs `-k gthread --threads 4` (landed in commit
+`534055e5c`, 2026-09-15 - one day before this entry's own 2026-09-16 update, so the row was already
+stale the day it was last touched). `bin/run_tests.sh -k "test_connection_budget_wiring"` passes (22
+passed), including `test_the_worker_runs_threads`, which asserts the worker class is gthread. A
+non-yielding request now blocks only its own OS thread, not the whole worker process. Narrative moved
+to `archive/PROBLEMS-ARCHIVE.md`.
 
-| ref | severity | what remains | why it is not done |
-|---|---|---|---|
-| H56 | high | Under gevent a request that spends its timeout in non-yielding CPU takes the whole worker down. `--worker-connections 20` bounds the blast radius to 19 requests; it does not remove it. Both requests known to run that long are fixed (P108, P96), so it is latent rather than reachable | D11 phase 3a (gthread), designed and unbuilt |
+No rows remain in a "still open" table - the only findings left unfixed are the four parked by
+decision below.
 
 **Parked by decision, not forgotten:**
 

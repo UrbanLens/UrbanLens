@@ -885,15 +885,16 @@ SpotGuessr/Trivia `eligible_locations()`/`eligible_questions()` retry-loop findi
 resolved before this audit even ran, by commit `d02fce8a` (2026-08-06, "Unit 24/25: resolve
 SpotGuessr round eligibility once instead of per retry").
 
-## RESOLVED 2026-09-15: P113's 65-finding availability sweep - all but H56
+## RESOLVED 2026-09-15: P113's 65-finding availability sweep - all but the four parked decisions
 
-`refs: P113 (open - H56 remains, see live entry)` · `resolved: 2026-09-15`
+`refs: P113 (open - 4 parked decisions remain, see live entry)` · `resolved: 2026-09-15`
 
-The full re-verified findings list, the still-open row (H56) and four
-parked-by-decision rows (H21, H34, H44, H47) stay on the live P113 entry as its status
-board. What follows is the fix narrative for everything else on that list: what each
-finding actually was, the corrections found while fixing it, and the reasoning behind
-each choice - moved here so the live entry stays a board rather than a log.
+The full re-verified findings list and the four parked-by-decision rows (H21, H34,
+H44, H47) stay on the live P113 entry as its status board; H56, the entry's last
+non-parked open row, closed 2026-09-17 (below). What follows is the fix narrative for
+everything else on that list: what each finding actually was, the corrections found
+while fixing it, and the reasoning behind each choice - moved here so the live entry
+stays a board rather than a log.
 
 **H54 is fixed (2026-09-16).** *"One 512MB Valkey holds sessions, the Channels layer, the Django
 cache and the Celery broker in a single keyspace under `volatile-lru`, and the Celery broker's keys
@@ -916,6 +917,20 @@ writes for the same `maxmemory` budget, and per D16, a full Dragonfly (run witho
 raises rather than silently evicting to make room — a session write can fail, not merely get evicted.
 Its row is left open on its own terms rather than folded into this closure. H38 is unaffected for the
 same reason.
+
+**H56 is fixed (2026-09-17).** *"Under gevent a request that spends its timeout in non-yielding CPU
+takes the whole worker down"* - `--worker-connections 20` bounded the blast radius to 19 requests but
+did not remove it. D11 phase 3a
+([`docs/designs/request-isolation-and-connection-budget.md`](../designs/request-isolation-and-connection-budget.md))
+is built, not "designed and unbuilt" as the live entry said until this closure: `package.json`'s
+gunicorn `start` script already runs `-k gthread --threads 4` (landed in commit `534055e5c`,
+2026-09-15 - one day before the live entry's own 2026-09-16 update, so it was already stale the day it
+was last touched). `bin/run_tests.sh -k "test_connection_budget_wiring"` passes (22 passed), including
+`test_the_worker_runs_threads`, which asserts the worker class is gthread via
+`assertRegex(_start_command(), r"(-k|--worker-class)\s+gthread\b")`. A non-yielding request now blocks
+only its own OS thread, not the whole worker process. Not re-measured beyond that: nothing here
+verifies gthread's actual behaviour under a genuinely non-yielding request live, only that the
+configuration and its wiring test are what the design called for.
 
 | finding | the shape | now |
 |---|---|---|
