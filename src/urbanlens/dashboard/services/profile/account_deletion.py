@@ -142,6 +142,9 @@ def _delete_profile_files(profile: Profile) -> None:
     for comment in profile.comments.all():
         _delete_file_field(comment, "image", label="comment")
 
+    for trip_comment in profile.trip_comments.all():
+        _delete_file_field(trip_comment, "image", label="trip comment")
+
     for label in profile.custom_labels.all():
         _delete_file_field(label, "custom_icon", label="label")
 

@@ -477,9 +477,12 @@ class TripComment(LocationMentioningModel, abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="comments",
     )
+    # CASCADE, matching dashboard.Comment.profile (P25): deleting an account erases the
+    # comments it authored everywhere, trips included - signals.py still tombstones any
+    # reply another member wrote before this row goes.
     author = ForeignKey(
         "dashboard.Profile",
-        on_delete=SET_NULL,
+        on_delete=CASCADE,
         null=True,
         blank=True,
         related_name="trip_comments",
