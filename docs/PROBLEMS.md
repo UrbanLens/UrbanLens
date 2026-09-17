@@ -3203,8 +3203,21 @@ fails if staging's app limit ever rises to meet production's.
 `.env` on damballa and `urbanlens_production_app` recreated - a running container's `--cpus` is
 fixed at creation. **Not yet re-measured.** Nothing here confirms 4 cores actually pushes the
 capacity ceiling past 500 concurrent users; only `capacity-content`'s original measurement exists,
-and it was against 2 cores. Re-running `tests/perf/k6/population.js` after the real deploy is what
-would confirm or refute that.
+and it was against 2 cores, on the perf environment - never on damballa. Re-running
+`tests/perf/k6/population.js` after the real deploy is what would confirm or refute that.
+
+**This is a cap on today's real production, not a raise from it - checked 2026-09-17**:
+`docker inspect urbanlens_production_app` on damballa shows `NanoCpus: 0`, same root cause as
+P114's `CpuShares: 0` - the container predates the `cpus:` key entirely, so it is **currently
+unbounded** on a 16-core host, not sitting at the compose file's 2-core default the way the perf
+environment (and every other environment) is. Applying this fix does not repeat P125's
+2-core-to-4-core story on production itself; it moves production from no cap at all to a 4-core
+cap. That is very likely still an improvement - unbounded means it can be starved by whatever else
+lands on the same host, same complaint as P114 - but it is a different claim than "production gets
+more like the perf environment did," and worth the deployer knowing before they apply it. It also
+means recreating production for P114's fix *without* this file would regress the app container from
+unbounded to the bare 2-core default, which is worse than either state - the two fixes should be
+deployed together.
 
 Found and fixed in passing: `staging.sample.env` was stale against the current
 `docker-compose.yml` - D16's Dragonfly/RabbitMQ broker migration added `CPU_SHARES__DRAGONFLY`,
