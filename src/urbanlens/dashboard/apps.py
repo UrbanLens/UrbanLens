@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 from django.apps import AppConfig
+from django.core.signals import request_finished, request_started
+from django.db.models.signals import post_delete, post_save
+from pillow_heif import register_heif_opener
 
 
 class DashboardConfig(AppConfig):
@@ -9,11 +12,6 @@ class DashboardConfig(AppConfig):
     name = "urbanlens.dashboard"
 
     def ready(self):
-        # Teach Pillow to open HEIC/HEIF before anything reads an upload.
-        # Registered here because every image path needs it - a path that
-        # missed it would keep a file whose GPS the uploader asked to strip.
-        from pillow_heif import register_heif_opener
-
         register_heif_opener()
 
         # Importing the module registers its @register()ed system checks. Media
@@ -29,13 +27,9 @@ class DashboardConfig(AppConfig):
         patch_extension_thread_safety()
 
         # channels_redis's backup-queue script declares no keys, which Dragonfly rejects outright
-        # (P127) - see channels_redis_dragonfly_patch's docstring for why this is safe.
         from urbanlens.dashboard.services.core.channels_redis_dragonfly_patch import patch_backup_queue_script
 
         patch_backup_queue_script()
-
-        from django.core.signals import request_finished, request_started
-        from django.db.models.signals import post_delete, post_save
 
         from urbanlens.dashboard.models.achievements.signals import connect as connect_achievement_signals
         import urbanlens.dashboard.models.aliases.signals
@@ -74,10 +68,20 @@ class DashboardConfig(AppConfig):
 
         request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
         request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")
-        post_save.connect(site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate")
+        post_save.connect(
+            site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate"
+        )
         for sender in (UserSubscription, RoleSubscription, SubscriptionRole):
-            post_save.connect(site_settings_cache.invalidate, sender=sender, dispatch_uid=f"site_settings_cache_invalidate_{sender.__name__}_save")
-            post_delete.connect(site_settings_cache.invalidate, sender=sender, dispatch_uid=f"site_settings_cache_invalidate_{sender.__name__}_delete")
+            post_save.connect(
+                site_settings_cache.invalidate,
+                sender=sender,
+                dispatch_uid=f"site_settings_cache_invalidate_{sender.__name__}_save",
+            )
+            post_delete.connect(
+                site_settings_cache.invalidate,
+                sender=sender,
+                dispatch_uid=f"site_settings_cache_invalidate_{sender.__name__}_delete",
+            )
 
         # Achievements subscribe to a dozen unrelated models, so their receivers
         # are registered from a table rather than one import per sender.
