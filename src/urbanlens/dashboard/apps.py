@@ -28,6 +28,12 @@ class DashboardConfig(AppConfig):
 
         patch_extension_thread_safety()
 
+        # channels_redis's backup-queue script declares no keys, which Dragonfly rejects outright
+        # (P127) - see channels_redis_dragonfly_patch's docstring for why this is safe.
+        from urbanlens.dashboard.services.core.channels_redis_dragonfly_patch import patch_backup_queue_script
+
+        patch_backup_queue_script()
+
         from django.core.signals import request_finished, request_started
         from django.db.models.signals import post_delete, post_save
 
