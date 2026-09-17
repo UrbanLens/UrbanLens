@@ -22,6 +22,24 @@ export const MAP_MAX_ZOOM = 21;
 export const MAP_MIN_ZOOM = 2;
 
 /**
+ * Shown in place of a base tile that failed to load - a burst of requests on
+ * zoom-out (a new zoom level's worth of tiles, all uncached) occasionally
+ * draws a 403/5xx from these free vendor CDNs, most likely rate-limiting
+ * triggered by this site's blanket `Referrer-Policy: no-referrer` (nginx
+ * `django.conf`), which some of them treat as a bot signal. That policy is
+ * deliberate - map page URLs can encode a pin's coordinates, and leaking
+ * those to a third-party tile vendor via Referer is exactly what a site for
+ * "sharing urbex locations responsibly" must not do - so this only smooths
+ * the vendor's own occasional failure over, rather than relaxing it. 256px
+ * to match every vendor's own tile size here.
+ */
+const BASE_ERROR_TILE_URL =
+    "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Crect width='256' height='256' fill='%23999'/%3E%3C/svg%3E";
+
+/** Shown in place of a failed *overlay* tile - transparent, so a flaky boundary/weather tile leaves the base map showing through instead of painting a grey patch over it. */
+const OVERLAY_ERROR_TILE_URL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+
+/**
  * Canonical tile sources. maxNativeZoom caps tile requests at each provider's
  * real depth while maxZoom lets Leaflet upscale beyond it (Google-like) so a
  * layer never drops out when the user zooms past the native depth.
@@ -33,6 +51,7 @@ const TILE_DEFS: Record<string, TileDef> = {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxNativeZoom: 19,
             maxZoom: MAP_MAX_ZOOM,
+            errorTileUrl: BASE_ERROR_TILE_URL,
         },
     },
     dark: {
@@ -41,6 +60,7 @@ const TILE_DEFS: Record<string, TileDef> = {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
             maxNativeZoom: 20,
             maxZoom: MAP_MAX_ZOOM,
+            errorTileUrl: BASE_ERROR_TILE_URL,
         },
     },
     topographic: {
@@ -50,6 +70,7 @@ const TILE_DEFS: Record<string, TileDef> = {
             // OpenTopoMap only renders tiles up to zoom 17; upscale beyond that.
             maxNativeZoom: 17,
             maxZoom: MAP_MAX_ZOOM,
+            errorTileUrl: BASE_ERROR_TILE_URL,
         },
     },
     satellite: {
@@ -58,6 +79,7 @@ const TILE_DEFS: Record<string, TileDef> = {
             attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
             maxNativeZoom: 19,
             maxZoom: MAP_MAX_ZOOM,
+            errorTileUrl: BASE_ERROR_TILE_URL,
         },
     },
     borders: {
@@ -68,6 +90,7 @@ const TILE_DEFS: Record<string, TileDef> = {
             maxZoom: MAP_MAX_ZOOM,
             opacity: 0.6,
             pane: "overlayPane",
+            errorTileUrl: OVERLAY_ERROR_TILE_URL,
         },
     },
 };
@@ -157,7 +180,12 @@ export function bordersOverlay(): L.TileLayer {
 export function weatherLayers(apiKey: string): { rain: L.TileLayer; clouds: L.TileLayer } {
     const attribution = 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>';
     const make = (layer: string, opacity: number) =>
-        L.tileLayer(`https://tile.openweathermap.org/map/${layer}/{z}/{x}/{y}.png?appid=${apiKey}`, { attribution, opacity, maxZoom: MAP_MAX_ZOOM });
+        L.tileLayer(`https://tile.openweathermap.org/map/${layer}/{z}/{x}/{y}.png?appid=${apiKey}`, {
+            attribution,
+            opacity,
+            maxZoom: MAP_MAX_ZOOM,
+            errorTileUrl: OVERLAY_ERROR_TILE_URL,
+        });
     return { rain: make("precipitation_new", 0.7), clouds: make("clouds_new", 0.5) };
 }
 
@@ -413,7 +441,11 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         for (const layer of [streetLayer, topographicLayer, satelliteLayer, darkLayer]) {
             layer.on("loading", onLoading);
             layer.on("load", onLoad);
-            layer.on("error", onLoad);
+            // GridLayer fires "tileerror" per failed tile, never a bare "error" -
+            // the latter is just Evented's generic type surface and Leaflet's own
+            // tile-loading code never emits it, so this previously never ran and a
+            // hard tile failure could leave .tiles-loading stuck indefinitely.
+            layer.on("tileerror", onLoad);
         }
     }
 

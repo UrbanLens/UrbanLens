@@ -423,6 +423,8 @@ div.section {
     .sf-toolbar-btn {
         filter: grayscale(1);
         opacity: .5;
+        border-radius: $radius-sm;
+        transition: filter .15s ease, opacity .15s ease, background-color .15s ease, box-shadow .15s ease;
 
         .sf-toolbar-emoji {
             font-size: 1.2rem;
@@ -439,8 +441,7 @@ div.section {
         }
 
         &:hover,
-        &:focus,
-        &.active {
+        &:focus {
             filter: grayscale(0);
             opacity: 1;
         }
@@ -451,6 +452,27 @@ div.section {
             filter: none;
             opacity: .85;
         }
+    }
+
+    // Hovering anywhere in the strip (not just the one button under the
+    // cursor) lifts every resting button partway out of its dim, so the row
+    // reads as "there's more here" before the pointer settles on one of them.
+    // Active/colored buttons are excluded - their own rules already hold them
+    // at full visibility and must not be pulled back down to this partial one.
+    &:hover .sf-toolbar-btn:not(.active):not(.sf-toolbar-btn--colored),
+    &:focus-within .sf-toolbar-btn:not(.active):not(.sf-toolbar-btn--colored) {
+        opacity: .8;
+        filter: grayscale(.4);
+    }
+
+    // A currently-applied filter needs a marker that survives the pointer
+    // moving away - opacity/grayscale alone look identical to a merely-
+    // hovered button the instant the cursor leaves it.
+    .sf-toolbar-btn.active {
+        filter: grayscale(0);
+        opacity: 1;
+        background: rgba($color-blue-500, .16);
+        box-shadow: inset 0 0 0 1px rgba($color-blue-500, .45);
     }
 }
 

@@ -950,6 +950,16 @@ const MAP_CFG = JSON.parse(document.getElementById('map-page-config').textConten
         return _safePinColor(pin.color);
     }
 
+    // "2026-09-17T00:00:00+00:00" -> "Sep 17, 2026" in the viewer's own locale.
+    // Absolute rather than relative ("3 days ago"): this can sit in the client
+    // pin cache for a while, and a relative phrase read days after it was
+    // fetched would go quietly wrong in a way an absolute date does not.
+    function _humanizeVisitedDate(iso) {
+        const parsed = new Date(iso);
+        if (Number.isNaN(parsed.getTime())) return iso;
+        return parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
     function _buildMarker(pin) {
         if (!pin.latitude || !pin.longitude) return null;
         const coords = [parseFloat(pin.latitude), parseFloat(pin.longitude)];
@@ -1007,9 +1017,9 @@ const MAP_CFG = JSON.parse(document.getElementById('map-page-config').textConten
                 <a class="popup-title" href="${_escHtml(pin.viewLocationUrl)}" title="Open this pin's details">${_escHtml(pin.name || '')}</a>
                 ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${_escHtml(pin.address)}</div>` : ''}
                 ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
-                ${pin.last_visited && pin.last_visited !== 'Never' ? `
+                ${pin.last_visited && pin.last_visited !== 'never' ? `
                 <div class="popup-meta">
-                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${_escHtml(pin.last_visited)}</span>
+                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${_escHtml(_humanizeVisitedDate(pin.last_visited))}</span>
                 </div>` : ''}
                 <div class="popup-stars" data-pin-id="${pin.id || ''}" data-pin-uuid="${pin.uuid}">
                     ${starDisplay}
@@ -3797,8 +3807,8 @@ const MAP_CFG = JSON.parse(document.getElementById('map-page-config').textConten
         const rating = Number(pin.rating || 0);
         if (criteria.min_rating != null && rating < Number(criteria.min_rating)) return false;
         if (criteria.max_rating != null && rating > Number(criteria.max_rating)) return false;
-        if (criteria.has_visits === 'yes' && (!pin.last_visited || pin.last_visited === 'Never')) return false;
-        if (criteria.has_visits === 'no' && pin.last_visited && pin.last_visited !== 'Never') return false;
+        if (criteria.has_visits === 'yes' && (!pin.last_visited || pin.last_visited === 'never')) return false;
+        if (criteria.has_visits === 'no' && pin.last_visited && pin.last_visited !== 'never') return false;
 
         const pinLabelIds = new Set(_pinTagObjects(pin).map(t => String(t.id)).filter(Boolean));
         if (Array.isArray(criteria.label_groups) && criteria.label_groups.length) {
