@@ -1954,55 +1954,6 @@ unrelated commit.
 Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
 parameterized there because their unused model import was the symptom of the missing type argument.
 
-## P92 — `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's cluster layer
-
-`id: P92` · `status: open` · `updated: 2026-09-16` · `citation refreshed 2026-09-16, see X21`
-
-Found 2026-09-08 while closing out the pre-merge audit of `release/v_0_8_0` (the "audit wasn't done yet" tail of
-that pass, not a new sweep - see the audit's own confirmed finding "map-clusters.ts's shared cluster-icon module
-was never wired into the main map it claims to cover").
-
-`shared/map-clusters.ts`'s module docstring used to claim it was shared by "the main map's inline cluster layer,
-and the pin-detail / wiki maps." That was only half true: `entries/map-annotations.ts` (the pin-detail/wiki map
-entry) does import and use `createPinClusterGroup`/`pinClusterIconParts` from it (`detailPinLayer`), but the main
-map page's own cluster layer never imports this module at all - it hand-rolls its own `L.markerClusterGroup` call
-with its own copy of the badge sizing table and `iconCreateFunction`. **Re-cited 2026-09-16:** X21 moved this code
-out of the template - it is no longer `templates/dashboard/pages/map/index.html:979-999`, it is
-`frontend/static/js/map-page.js:343-364` - but it moved as raw text, not as a bundled TypeScript entry, so nothing
-about this problem changed. The duplication below is exactly as unresolved as it was on 2026-09-08:
-
-```js
-var clusterGroup = L.markerClusterGroup({
-    ...
-    iconCreateFunction(cluster) {
-        const n   = cluster.getChildCount();
-        const siz = n < 10 ? 's' : n < 100 ? 'm' : 'l';
-        // Must match the width/height of .pin-cluster--{s,m,l} in _map.scss - a
-        // mismatch here makes the flex-centered wrapper squash into an oval.
-        const px  = { s: 34, m: 42, l: 50 }[siz];
-        return L.divIcon({ html: `<div class="pin-cluster pin-cluster--${siz}"><span>${n}</span></div>`, ... });
-    },
-});
-```
-
-versus `map-clusters.ts`'s `PIN_CLUSTER_PX = { s: 34, m: 42, l: 50 }` and `pinClusterIconParts()`, which produce
-the identical `html`/size. The two are hand-kept in lockstep today (both docstrings separately say "must match
-`.pin-cluster--{s,m,l}` in `_map.scss`"), but nothing enforces that agreement - a future change to either the
-threshold counts (`< 10`/`< 100`) or the pixel sizes in one place silently stops matching the other, and CSS is
-the only place both would visibly disagree (a squashed-oval badge on one map but not the other).
-
-Docstring corrected in the same pass this entry was filed (no longer overclaims shared coverage), but the actual
-duplication is unfixed. Not fixed here because the real fix isn't a one-liner: the main map's clustering code was
-inline template JavaScript, which could not `import` a TS module - unifying it needs either (a) a mechanism for a
-plain script to read shared constants/functions from a bundled entry (no such mechanism exists anywhere else in
-this codebase today, per a search for `window.UL =`/`globalThis.UL =`), or (b) migrating the main map's script into
-a proper bundled TS entry the way `map-annotations.ts` already is for pin-detail/wiki maps.
-
-**2026-09-16: (a) is now the live blocker, not (b).** X21 gave the script a `<script src>` and a cache header, which
-is the part of P83/P34 this entry used to point at, but it is still a hand-written `.js` file fed by a generated
-config element, not a `tsc`-checked bundle - `map-page.js` cannot `import` from `shared/map-clusters.ts` any more
-than the inline block could. Closing this now needs (a) or (b) specifically, not just "finish P83/P34".
-
 ## P95 — One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured
 
 `id: P95` · `status: open` · `updated: 2026-09-14`

@@ -16950,3 +16950,85 @@ message now redacts its notification preview").
 `test_group_chats.py`: confirm `notify(...)` populates the new FK, and that deleting or unsending a
 message redacts the linked notification's stored preview. All passing at the time this landed; not
 re-run by this closure pass.
+
+## RESOLVED 2026-09-17: Migrating `map-page.js` to a TypeScript entry let the main map's cluster layer import `createPinClusterGroup()` instead of hand-rolling its own badge logic
+
+`id: P92` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled "`map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the
+main map's cluster layer".
+
+**What was open.** `shared/map-clusters.ts` exports `createPinClusterGroup()`/`pinClusterIconParts()`,
+which `entries/map-annotations.ts` (the pin-detail/wiki map) already used, but the main map's own
+cluster layer never imported the module at all - it hand-rolled its own `L.markerClusterGroup({...
+iconCreateFunction ...})` with its own copy of the numbered-badge sizing table (`{ s: 34, m: 42, l: 50
+}`) and rendering markup. The two copies were hand-kept in lockstep (both docstrings separately said
+"must match `.pin-cluster--{s,m,l}` in `_map.scss`"), with nothing enforcing the agreement - a future
+edit to either the threshold counts or the pixel sizes would have silently stopped matching the
+other, visible only as a squashed-oval badge on whichever map fell behind.
+
+**Why it stayed open.** The main map's clustering code lived in `frontend/static/js/map-page.js`, a
+plain classic script (5,401 lines, most of it untyped, reached via `<script src>` rather than a
+bundled entry) that could not `import` a TS module. Closing the gap needed either a plain-script
+mechanism for reading shared TS constants (none existed anywhere in the codebase), or migrating the
+whole file into a proper `tsc`-checked entry the way `map-annotations.ts` already was. X21
+(2026-09-16) moved the script's *location* - out of an inline `<script>` block in
+`templates/dashboard/pages/map/index.html` and into its own cacheable file - but it moved as raw
+text, so the import blocker was unchanged.
+
+**The fix**, commit `4f2d494e3` ("fix: P92 - migrate map-page.js to strict TypeScript, dedupe cluster
+badge"). The entire file became `frontend/ts/entries/map-page.ts` (6,512 lines), compiled under the
+project's strict tsconfig (`strict`, `noUncheckedIndexedAccess`, `noUnusedLocals`) with zero
+`any`/`@ts-ignore`/`@ts-expect-error`/`@ts-nocheck` - confirmed by a grep sweep of the finished file,
+not just the diff. The actual duplication fix is `frontend/ts/entries/map-page.ts:587` building
+`clusterGroup` via `createPinClusterGroup(...)` (imported at `map-page.ts:10` from
+`../shared/map-clusters`), replacing the inline `L.markerClusterGroup({...})` call entirely - the
+zoom-based radius fallback it passes (`zoom <= 10 ? 60 : zoom <= 13 ? 30 : 10`) is byte-for-byte
+identical to the deleted original's.
+
+`shared/map-clusters.ts` was extended, not duplicated, to support the main map's larger pin counts:
+its previously-inline options type is now exported as `PinClusterGroupOptions`
+(`frontend/ts/shared/map-clusters.ts:13`), with three new optional fields -
+`chunkedLoading`/`chunkSize`/`chunkInterval` - that the main map passes (`chunkedLoading: true,
+chunkSize: 400, chunkInterval: 60`) and no other map needs. A new text-based regression test,
+`entries/map-page.contract.test.ts`, asserts the shared factory is imported and that no direct
+`L.markerClusterGroup(` call exists anywhere in the file - it reads the entry's source as text
+rather than importing and executing it, because the entry has module-scope side effects (it
+constructs a live Leaflet map and reads `#map-page-config` on import).
+
+**Beyond the cluster fix.** The same migration replaced several other classic-script
+`window.*`-global lookups with direct imports from shared TS modules that already existed (each with
+its own pre-existing test file, used by other already-migrated entries such as
+`map-annotations.ts`): `window.confirmDialog` -> `confirmAction` (`shared/dialogs`),
+`window.ulFetchJson`/`window.ulSendJson` -> `fetchJson`/`sendJson` (`shared/fetch-json`),
+`window.ulPurgeForeignPinCaches` -> `purgeForeignPinCaches` (`shared/pin-cache`),
+`window.UrbanLensLabelPicker.createChipPicker`/`createFilterPicker` -> `createChipPicker`/
+`createFilterPicker` (`shared/label-picker`), `window.deletePinCascade` -> `deletePinCascade`
+(`shared/confirm-dialog`), and `window.MapContextMenu`/`window.MapLayers`/`window.LocationSearchEngine`
+-> direct imports from their respective shared modules. None of those shared modules were themselves
+changed by this migration.
+
+**Verified**, independently of the migration's own commit message (re-run/re-checked this session,
+not trusted from the report alone): `bun run typecheck` clean on both tsconfig projects; `bun run
+build` clean (one 257KB entry point, no unplanned code-split chunks); `bun run test:ts` 981/981
+passing across 75 files; `bun run check` clean except 97 pre-existing stale doc-line-citation
+failures confirmed to predate this change (the touched template's line count is unchanged from
+`HEAD`); `uv run pre-commit run` clean on every file in the commit. Also confirmed independently:
+every `window.*` global the original file set is still reachable, either set directly or reached
+through a proper import; the radius-fallback function above is byte-for-byte identical to the
+original.
+
+**Live browser verification**, against a throwaway test user/pins seeded in the `development_main`
+dev stack and cleaned up afterward: the main map page loaded with zero console errors, zero page
+errors, and zero 5xx responses; a seeded 15-pin cluster rendered with the correct `pin-cluster--m`
+tier at 42x42px, matching the `{s: 34, m: 42, l: 50}` size map in `_map.scss` (non-squashed);
+clicking the cluster zoomed the map in correctly; every marker's popup was bound, and opening one
+showed the real pin name and the correct UUID/ID wired into the popup's add-to-list/edit/delete
+buttons, with properly escaped content; the Add Pin dialog opened and accepted input in its name and
+address fields without error.
+
+**Not re-measured by this docs-closure pass.** The typecheck/build/test/`check`/pre-commit runs and
+the browser pass above were independently re-run and re-checked by the session that did the
+migration and reported closing this entry, not by the session writing this archive entry - which
+only read the commit, the diff, and that session's report before recording them. Re-run before
+relying on a figure here if time has passed.
