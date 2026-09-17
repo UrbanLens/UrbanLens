@@ -32,29 +32,46 @@ describe("normalizeBase", () => {
     });
 });
 
+const realL = (globalThis as Record<string, unknown>).L;
+
+function stubLeaflet(): { calls: Array<{ url: string; options: Record<string, unknown> }> } {
+    const state = { calls: [] as Array<{ url: string; options: Record<string, unknown> }> };
+    (globalThis as Record<string, unknown>).L = {
+        tileLayer: (url: string, options: Record<string, unknown>) => {
+            state.calls.push({ url, options });
+            return { __kind: "tileLayer", url, options };
+        },
+    };
+    return state;
+}
+
+afterEach(() => {
+    (globalThis as Record<string, unknown>).L = realL;
+});
+
+/**
+ * OSM's own tile servers enforce a usage policy (osm.wiki/Blocked) against
+ * unauthorized production hotlinking - a burst of requests on zoom-out (a new
+ * zoom level's worth of tiles, all uncached) trips it and OSM answers with a
+ * rendered "Access blocked" warning tile, at a 200 status, so it isn't caught
+ * by errorTileUrl below (that only fires on an actual load failure). Every
+ * built-in base layer must instead go through a vendor whose terms permit
+ * this, the way "dark" already uses CARTO instead of OSM's own servers.
+ */
+describe("built-in tile sources do not hotlink OSM's own policy-enforced servers", () => {
+    test.each(["street", "dark", "topographic", "satellite"])("%s does not point at tile.openstreetmap.org", (kind) => {
+        const state = stubLeaflet();
+        tileLayer(kind);
+        expect(state.calls[0]?.url).not.toContain("tile.openstreetmap.org");
+    });
+});
+
 /**
  * A failed base tile (a transient 403/5xx from the vendor CDN, most often
  * seen bursting on zoom-out) must render as a neutral placeholder rather
  * than a browser broken-image icon or the vendor's own error graphic.
  */
 describe("tileLayer errorTileUrl", () => {
-    const realL = (globalThis as Record<string, unknown>).L;
-
-    function stubLeaflet(): { calls: Array<{ url: string; options: Record<string, unknown> }> } {
-        const state = { calls: [] as Array<{ url: string; options: Record<string, unknown> }> };
-        (globalThis as Record<string, unknown>).L = {
-            tileLayer: (url: string, options: Record<string, unknown>) => {
-                state.calls.push({ url, options });
-                return { __kind: "tileLayer", url, options };
-            },
-        };
-        return state;
-    }
-
-    afterEach(() => {
-        (globalThis as Record<string, unknown>).L = realL;
-    });
-
     test.each(["street", "dark", "topographic", "satellite"])("%s base layer gets an opaque grey placeholder", (kind) => {
         const state = stubLeaflet();
         tileLayer(kind);

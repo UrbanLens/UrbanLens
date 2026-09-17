@@ -16192,3 +16192,125 @@ they were for the 2026-09-14 one) and are not touched by it.
 Both families are covered by unit tests in the new
 `tests/hypothesis/test_bulk_followup_chunk_tasks.py` (17 tests), plus integration coverage in
 `test_import_fanout_queue.py` and `test_link_models.py`.
+
+## RESOLVED 2026-09-17: Zooming out flashed OSM's own "Access blocked" tile, because the built-in street layer hotlinked `tile.openstreetmap.org` directly
+
+`id: P126` · `status: fixed` · `resolved: 2026-09-17`
+
+**User report.** On the main map, zooming out briefly showed OpenStreetMap's own "Access blocked"
+warning graphic (osm.wiki/Blocked) before the real tiles loaded a moment later. The user assumed
+this meant a self-hosted OSM instance was blocking them.
+
+**That assumption is wrong - checked this session.** UrbanLens has no self-hosted OSM *raster tile*
+server anywhere: `docker-compose.yml` has no tile/osm/martin-named service, and neither nginx config
+(`src/urbanlens/config/nginx/nginx.conf`, `django.conf`) has a tile-proxy route. The only
+self-hosted OSM-*adjacent* infrastructure is the Overpass API (P15, `overpass.osm.urbanlens.org`) -
+a vector query API with its own unrelated problem (a 90s proxy cap), not raster tile serving, and
+not involved here. `controllers/basemap_tiles.py` (`RedataBasemapTilesGateway`) is a second,
+separate dynamic tile-layer catalogue that proxies REData's own tiles to hide an API key; it was
+never wired up as a substitute for the built-in "street" base layer. The tiles the user saw really
+were served by `tile.openstreetmap.org` itself, hotlinked directly from the browser.
+
+**Root cause.** `TILE_DEFS.street` in `dashboard/frontend/ts/shared/map-layers.ts` (line 49, before
+this fix) pointed straight at `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` - OSM's own
+public tile servers, which enforce a usage policy against unauthorized production hotlinking
+(https://osm.wiki/Blocked). A burst of requests on zoom-out - a whole new zoom level, all
+uncached, fetched at once - is exactly the load pattern that trips it. Critically, a policy
+violation is answered with a *rendered* "Access blocked" tile at an ordinary HTTP 200, not a real
+403/5xx, so `commit 3c8ca256d` earlier the same day - which added `errorTileUrl` grey-placeholder
+fallback for "a vendor 403/5xx", on the mistaken assumption that OSM's failures were transient
+rate-limiting rather than a hard policy block - never caught it: that fallback only fires on a
+genuine Leaflet `tileerror`, never on a "successful" load of the wrong image.
+
+A second, independent copy of the same mistake existed in
+`dashboard/frontend/ts/entries/spotguessr.ts` (SpotGuessr's area-search map), a hardcoded
+`L.tileLayer("https://{s}.tile.openstreetmap.org/...")` call that did not go through the shared
+`map-layers.ts` module at all.
+
+**Considered and deliberately not touched:** `src/urbanlens/config/nginx/django.conf:163` sets
+`Referrer-Policy: no-referrer` site-wide, because a map URL can encode a pin's coordinates and
+leaking that to a third-party tile vendor via Referer would violate the site's own "sharing urbex
+locations responsibly" purpose. Some vendors treat a missing referrer as a bot signal, so this was
+considered as a contributing factor, but the fix does not relax it - CARTO's CDN (below) already
+serves the "dark" layer under the same policy with no issue, so it works fine under it too.
+
+**Fixed.**
+1. `map-layers.ts`'s `TILE_DEFS.street.url` (line 55) now points at
+   `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png` - CARTO's raster CDN serving the
+   same OSM-sourced data under terms that permit this, mirroring how `TILE_DEFS.dark` already used
+   `dark_all` on the same CDN. `maxNativeZoom` raised 19→20 to match CARTO's real depth (same as
+   "dark"), and the attribution string now credits both OSM and CARTO.
+2. `attributionText()` (`map-layers.ts:401-411`) collapsed the old separate "street" (`©
+   OpenStreetMap`) and "dark" (`© OSM · CARTO`) branches into one shared `© OSM · CARTO` string,
+   since both base layers are now CARTO-served.
+3. `spotguessr.ts` (line 9, line 377) replaced its own hardcoded direct-OSM `L.tileLayer(...)` call
+   with `tileLayer("street")` imported from `map-layers.ts` - removes the duplicate mistake and
+   gives that map the CARTO fix plus the existing `errorTileUrl` fallback for free.
+4. CSP's `img-src` already allowed `https://*.basemaps.cartocdn.com` (`settings/base.py:686-687`,
+   added earlier for the "dark" layer), so no CSP change was needed for "street" to move to the
+   same host.
+
+**Tests (TDD).** `map-layers.test.ts` gained a
+`describe("built-in tile sources do not hotlink OSM's own policy-enforced servers")` block,
+`test.each(["street", "dark", "topographic", "satellite"])`-asserting no built-in `TILE_DEFS` entry's
+url contains `tile.openstreetmap.org`. Confirmed RED against the pre-fix code (failed on exactly
+"street"), GREEN after.
+
+**Verified this session** (re-run independently, not just taken on the fixing session's word):
+- `bun test src/urbanlens/dashboard/frontend/ts/shared/map-layers.test.ts`: 16 pass, 0 fail.
+- `bun test src/urbanlens/dashboard/frontend/ts` (whole suite, unit=test, n=977): **967 pass, 10
+  fail**, matching the fixing session's own count exactly. All 10 failures are in the unrelated,
+  pre-existing `"the map page's inline copy of the lazy grid fetch"` describe block
+  (`icon-picker.contract.test.ts`) - a template-string assertion mismatch with nothing to do with
+  tiles. This documentation pass did not itself `git stash` the fix and re-run to confirm those 10
+  are pre-existing rather than newly introduced; that comparison is the fixing session's claim
+  (963/973 pass on the pre-fix tree), not independently reproduced here.
+- `bun run typecheck`: clean.
+- `uv run pre-commit run --files` on the three touched files: clean.
+- `curl` against `https://{a,b,c,d}.basemaps.cartocdn.com/light_all/3/4/2.png`: all four
+  subdomains, HTTP 200, `content-type: image/png`.
+- `curl http://localhost:21810/static/dashboard/js/core.js` (the `development_main` slot, freshly
+  rebuilt) contains `cartocdn` and no longer contains `tile.openstreetmap.org` for the base layers -
+  the fix is in the served bundle, not just the source.
+
+**Verified visually, in a real browser, against `development_main` (`http://localhost:21810/`).**
+Logged in as a fresh throwaway user (legacy/non-E2EE, so a plain `curl` login works per
+[[e2ee-login-derives-credential]]), then drove headless Chromium (Playwright) at the live main map
+through the exact reported action - load, then zoom out repeatedly - while recording every network
+request matching the tile hosts involved:
+- First pass (default load + 4x zoom-out): 244 tile requests total, **0** to
+  `tile.openstreetmap.org`, 122 to `basemaps.cartocdn.com` (`light_all`).
+- Second pass (explicit `street` layer selected via the map's own UI, then 5x zoom-out): 146 tile
+  requests, all 146 to `light_all` on CARTO, again 0 to OSM's own servers.
+- No `pageerror` events in either run; the CARTO tiles rendered as ordinary map imagery, not an
+  "Access blocked" graphic.
+
+This closes the gap the documentation pass had flagged: the fix isn't just "the served bundle no
+longer contains the string `tile.openstreetmap.org`" but "a real browser performing the reported
+action never contacts OSM's tile servers at all," which is what actually rules out the reported
+symptom.
+
+**Also fixed in the same batch: three more hardcoded direct-OSM tile URLs**, found by this entry's
+own writing pass and closed immediately rather than left open, since they're the identical mistake
+and the fix pattern was already in hand:
+- `dashboard/templates/dashboard/partials/_photo_lightbox.html:464` (the lightbox's read-only
+  photo-location minimap)
+- `dashboard/templates/dashboard/pages/pin_lists/detail.html:638` (the pin-list boundary-drawing
+  minimap)
+- `dashboard/templates/dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html:270` (the
+  saved-filter region-drawing minimap)
+
+Each opened at a low, multi-tile zoom (`setView(..., 4)` for the two boundary-drawing maps) - the
+same load shape that trips OSM's policy on the main map's zoom-out - via a raw inline
+`L.tileLayer('https://{s}.tile.openstreetmap.org/...')` call that bypassed `map-layers.ts` entirely.
+All three now call `window.MapLayers.tileLayer('street')` instead - the same global the site's
+`core.js` already exposes and that several other templates already call this exact way
+(`settings/index.html`'s map-style preview, `_safety_map_script.html`, etc.), so this isn't a new
+pattern, just extending an existing one to three call sites that had missed it. `grep -rn
+"tile.openstreetmap.org" src/urbanlens/dashboard/templates/ src/urbanlens/dashboard/frontend/ts/`
+now turns up nothing outside `map-layers.ts`'s own explanatory comment and its regression test.
+
+**Compiled bundle note for a future reader diffing `git diff` against a running site:**
+`static/dashboard/js/core.js` (and the SpotGuessr bundle) are gitignored build output regenerated by
+`bun run build` / the Docker image build, not committed - the fix will not appear in a plain `git
+diff` of that file, only in the TS sources above.
