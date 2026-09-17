@@ -486,24 +486,35 @@ than trusted from the original audit text:
 
 All of the above are maintainability/completeness gaps, not active security or correctness bugs.
 
-## P20 — The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone
+## P20 — `GoogleMapsGateway.import_pins_streaming` is ~280 lines of dead code, kept alive only because it's the sole caller of the AI label-style-suggestion feature
 
-`id: P20` · `status: open` · `updated: 2026-09-14`
+`id: P20` · `status: open` · `updated: 2026-09-17`
 
-Previously titled "Residues left by the TEMPORARY legacy-CID coordinate repair (found 2026-07-25)".
+Previously titled "The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()`
+resolves it wrongly for everyone" - and before that "Residues left by the TEMPORARY legacy-CID
+coordinate repair (found 2026-07-25)". Retitled because the CID-misplacement half described under
+that title is now fixed; the decision below, about `import_pins_streaming` itself, is what remains.
 
 `services/apis/locations/legacy_cid_coordinate_fix.py` lets a re-import move a user's
-pre-2026-07-25 pins off the coordinates the old S2-decode guess put them on. Two known gaps
-that it deliberately does *not* close - both should disappear when that module is deleted,
-but re-check them then rather than assuming:
+pre-2026-07-25 pins off the coordinates the old S2-decode guess put them on. It deliberately left
+two gaps open when this module was first written. The first is now closed; the second - what to do
+about `import_pins_streaming` - is not:
 
-1. **The CID stays on the bad `Location`.** `GooglePlace.cid` is `unique=True`, so the repaired
-   pin's new (correct) Location can't claim the CID while the old, wrongly-placed Location still
-   holds it - the backfill in `_create_pin_from_confirmed` is skipped for exactly this case.
-   Consequence: `Location.objects.by_cid()` keeps resolving that CID to the wrong Location for
-   *every* user, and each re-import pays a fresh REData/Places resolution instead of a cache hit.
-   Repointing the CID would fix it globally, but it mutates shared cross-user data off the back of
-   one user's import, which is why it wasn't done here. Deliberate call, not an oversight.
+1. ~~**The CID stays on the bad `Location`.**~~ — **fixed in commit `8c16ffee2`**
+   ("fix: P20 - repairing a legacy pin repoints its Google CID"). `GooglePlace.cid` is
+   `unique=True`, so the repaired pin's new (correct) Location couldn't claim the CID while the
+   old, wrongly-placed Location still held it - the backfill in `_create_pin_from_confirmed` was
+   skipped for exactly this case, leaving `Location.objects.by_cid()` resolving that CID to the
+   wrong Location for *every* user, and each re-import paying a fresh REData/Places resolution
+   instead of a cache hit. The reason it wasn't done originally - repointing the CID mutates
+   shared cross-user data off the back of one user's import - is answered by doing it inside the
+   same transaction as the repair rather than not doing it: `legacy_cid_coordinate_fix.py` gained
+   `repoint_cid_to_corrected_location(legacy_location, correct_location, cid)`, which clears the
+   old `GooglePlace.cid` before setting it on the corrected Location, and
+   `services/apis/locations/google/maps.py`'s `_create_pin_from_confirmed` CID-backfill guard now
+   calls it instead of skipping the backfill when a `legacy_cid_location` exists. Covered by
+   `tests/hypothesis/test_legacy_cid_coordinate_fix.py` (`RepointCidToCorrectedLocationTests`,
+   `CidRepointOnRepairTests`), all passing at the time this landed; not re-run by this edit.
 
 2. **`GoogleMapsGateway.import_pins_streaming` survives its route.** It still places CID pins from
    `extract_coordinates_from_url`'s S2 decode. The `pin.upload.takeout` route that reached it was removed as a superseded
@@ -1098,51 +1109,6 @@ is the same shape against a migration, which must not call a queryset method at 
 dynamic dispatch and no django-filter `method="..."` naming a queryset method (the only `method=`
 strings in `src/` are `"get"` and `"post"`), so the trap that hid `Pin.by_category` from the original
 sweep is not present any more.
-
-## P47 — A deleted message's preview survives in the recipient's notification list
-
-`id: P47` · `status: open` · `updated: 2026-08-16`
-
-Fixed in chunk 572: the *delayed email* and *delayed WhatsApp/SMS alert* for a direct message now
-skip a message the app would show as a tombstone, so unsending inside the 120-second delay window
-stops the out-of-band copy going out.
-
-Not fixed, because it needs a schema decision: the **on-site notification** raised for the same
-message keeps its preview text.
-
-- `services/messaging/direct_messages` stores `message=preview` - up to 120 characters of the body.
-- `services/messaging/group_chats` stores `message=f"{sender}: {preview}"`, likewise 120.
-
-Neither is touched by `delete_message_for_everyone` / `delete_group_message`, so after the sender
-unsends, the thread shows "Message deleted" while the notification row still quotes what was said.
-
-**Two things narrow this, both checked 2026-09-05 and neither stated above.** An encrypted message
-never had a plaintext preview to leak: both services branch on `is_encrypted` first and store
-`"🔒 Encrypted message"` (`direct_messages.py:392`, `group_chats.py:453`), so this is a plaintext-DM
-defect, not an E2EE one. And a DM notification is raised only when there is no *other* unread
-message from the same sender (`already_unread`, `direct_messages.py:388`), so a conversation holds at
-most one stale preview per sender rather than one per deleted message.
-
-That does not make it a non-issue - one quoted sentence is the whole of what "unsend" is supposed to
-undo - but it does mean the fix is smaller and less urgent than "every deleted message leaks".
-
-There is no way to clean it up precisely today: `NotificationLog` has no reference to the message it
-was raised for, and its `url` points at the *thread* (the conversation, or the group), not the
-message. Matching rows heuristically on profile + type + url + timestamp would be fragile and would
-sooner or later delete the wrong notification.
-
-Options:
-
-1. Add a nullable generic reference (or a `message_uuid`) to `NotificationLog`, and clear or redact
-   matching rows when a message is deleted. Cleanest, costs a migration.
-2. Render notification previews through the message at display time rather than storing them, so a
-   tombstone applies everywhere at once. Cleanest conceptually, largest change - and the stored text
-   currently doubles as the push/e-mail body.
-3. Accept it, and say so in the UI: the notification was already delivered when the message was
-   live, which is arguably the same as the recipient having read it.
-
-Worth deciding rather than leaving implicit, because the app currently promises "Message deleted" in
-one surface while quoting the message in another.
 
 ## P49 — Doc citations drift silently, and CI's past-end check is red on 92 citations in dated records
 

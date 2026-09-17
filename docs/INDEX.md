@@ -45,7 +45,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-09-15 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-09-15 | Audit re-verification's residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P20 | open | 2026-09-14 | The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P20 | open | 2026-09-17 | `GoogleMapsGateway.import_pins_streaming` is ~280 lines of dead code, kept alive only because it's the sole caller of the AI label-style-suggestion feature | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-08-05 | A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -56,7 +56,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P36 | open | 2026-09-05 | 50 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-14 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P41 | open | 2026-09-14 | The queryset API's unused half, by call graph: 29 methods deleted, 27 test-only ones left | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P47 | open | 2026-08-16 | A deleted message's preview survives in the recipient's notification list | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P49 | open | 2026-09-14 | Doc citations drift silently, and CI's past-end check is red on 92 citations in dated records | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |

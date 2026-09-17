@@ -16908,3 +16908,45 @@ environment. It has not yet been deployed to staging or production, though both 
 Dragonfly-backed stack (D16) and the same `channels-redis~=4.3.0` pin, so the underlying crash is
 presumably active there too until this lands through the normal deploy path - not confirmed by
 observing production logs this session.
+
+## RESOLVED 2026-09-17: A deleted message's on-site notification preview is redacted now too, once `NotificationLog` gained a reference back to the message it was raised for
+
+`id: P47` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled "A deleted message's preview survives in the recipient's notification list".
+
+**What was open.** The *delayed* email and WhatsApp/SMS alerts for a direct message already skipped
+a message the app would show as a tombstone (fixed in chunk 572), so unsending inside the
+120-second delay window stopped the out-of-band copy going out. The **on-site notification** raised
+for the same message did not: `services/messaging/direct_messages` stored `message=preview` and
+`services/messaging/group_chats` stored `message=f"{sender}: {preview}"`, and neither
+`delete_message_for_everyone` nor `delete_group_message` touched that stored text, so after the
+sender unsent a message the thread showed "Message deleted" while the notification row kept
+quoting what was said. Two things narrowed the blast radius without closing it: an encrypted
+message never had a plaintext preview to leak (`direct_messages.py:392`, `group_chats.py:453`
+store `"🔒 Encrypted message"` instead), and a DM notification is only raised when there is no
+other unread message from the same sender, so a conversation held at most one stale preview per
+sender.
+
+**Why it wasn't fixed sooner.** `NotificationLog` had no reference to the message it was raised
+for - only a `url` pointing at the thread (the conversation or the group), not the message -
+so matching rows heuristically on profile + type + url + timestamp would eventually redact the
+wrong notification. Closing it needed a schema change, which is why this entry stayed open behind
+three options instead of a fix.
+
+**The fix**, option 1 of the three the entry listed, in `a62ebd67b` ("fix: P47 - unsending a
+message now redacts its notification preview").
+
+- `src/urbanlens/dashboard/models/notifications/model.py` - added nullable `direct_message` and
+  `group_message` FKs to `NotificationLog`, both `on_delete=SET_NULL` so deleting the message later
+  can't cascade into deleting the notification that referenced it.
+- `src/urbanlens/dashboard/migrations/0050_notification_log_message_reference.py` - the migration.
+- `src/urbanlens/dashboard/services/messaging/direct_messages.py` and `group_chats.py` -
+  `notify(...)` now passes `direct_message=`/`group_message=` when raising the notification, and
+  `delete_message_for_everyone`/`delete_group_message` redact the linked `NotificationLog`'s stored
+  text to "Message deleted" when the underlying message is deleted or unsent.
+
+**Tests**, `src/urbanlens/dashboard/tests/hypothesis/test_direct_messages.py` and
+`test_group_chats.py`: confirm `notify(...)` populates the new FK, and that deleting or unsending a
+message redacts the linked notification's stored preview. All passing at the time this landed; not
+re-run by this closure pass.
