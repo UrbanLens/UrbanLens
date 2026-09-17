@@ -16687,3 +16687,80 @@ Two cases worth having beyond "the author can delete their own". `TripComment.au
 `can_delete_comment`'s set becomes `{None, creator}` - a bug letting `None` match would hand every
 orphaned comment to any member. And `get_comment(trip, comment_id)` must scope by trip, not just by
 id, which is the same existence-oracle shape `concealment.visible_rows` warns about.
+
+## RESOLVED 2026-09-17: Account deletion now erases trip comments too - the owner chose full erasure over the SET_NULL asymmetry, and the reply-tombstone mechanism it needed already existed
+
+`id: P25` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled "Account deletion and the constraint-recreate class: both clean (2026-08-07)".
+
+Two checks this unit, both negative.
+
+**The "recreate into a changed world" class is exhausted outside undo.** The four undo crashes
+all came from recreating a row whose constraint slot had been taken since. The other creators
+of `db_pin_unique_location_per_profile` handle it: `apply_pin_share_response` re-checks
+`find_profile_pin_near_location` *inside* its `select_for_update` block and only creates when
+nothing is there, and `accept_pin_suggestion` filters on `parent_pin__isnull=True`, matching
+the partial constraint exactly. The undo handlers were the gap, not the pattern.
+
+**Account deletion is deliberately designed, and the catastrophic case is avoided.** Every FK
+pointing at `Profile` was enumerated. The split is coherent rather than accidental:
+
+- **Personal data cascades** - pins, images, direct messages, labels, albums, notification
+  logs, credentials, key material.
+- **Contributions to shared or community space are `SET_NULL`** - wiki edits, wiki creators,
+  aliases, links, owners, property sales, article revisions, trip creators and activities,
+  fact evidence, trivia submissions, group chat creators. A departing user does not erase what
+  other people are still using.
+- **`Pin.source_share` is `SET_NULL`**, which is the one that matters most: a sharer deleting
+  their account would otherwise cascade `PinShare` deletions into *recipients' pins*. It
+  doesn't. `PinShare.parent_share` is `SET_NULL` too, so a provenance chain truncates rather
+  than corrupting - `resolve_origin_share` simply ends its walk early.
+
+### One asymmetry, surfaced rather than changed (was)
+
+`Comment.profile` is `CASCADE` while `TripComment.author` is `SET_NULL`. Both are comments a
+user wrote in a space other people share, and deleting an account therefore erases your pin
+and wiki comments while leaving your trip comments in place, authored by nobody. One of the
+two is probably not what was intended, but which one is a data-policy question - whether
+deletion means "erase what I wrote" or "keep the conversation readable" - and not a call to
+make from inside an audit. Recorded here for the owner.
+
+**Resolved 2026-09-17.** Jess's decision: "All comments should be deleted when the user account is
+deleted, including for trips. One caveat is that this must still allow for nested comments from
+other users to continue existing. CASCADE can't wind up deleting anyone else's data, or making
+their comments no longer display. In those cases, the ui should show something like 'deleted
+comment' in place of the deleted comment, so it can continue showing replies beneath it." Deletion
+means "erase what I wrote", with the caveat that a reply from someone still on the platform must
+survive as a tombstone rather than vanish or lose its own author.
+
+**The fix**, in `0cfd6250e` ("fix: P25 - account deletion now erases trip comments too").
+`TripComment.author` (`src/urbanlens/dashboard/models/trips/model.py:483`) changed from
+`on_delete=SET_NULL` to `on_delete=CASCADE`, matching `Comment.profile` - migration
+`0051_trip_comment_author_cascade.py`. `hard_delete_profile`'s `_delete_profile_files`
+(`src/urbanlens/dashboard/services/profile/account_deletion.py:134`) now also walks
+`profile.trip_comments.all()` to clean up trip comment image files before the cascade fires
+(`account_deletion.py:145-146`), mirroring the existing pin/wiki comment image cleanup.
+
+**The tombstone the caveat asked for was already built, for a different trigger.** Both `Comment`
+and `TripComment` carry a `parent_deleted` boolean and a `pre_delete` signal
+(`src/urbanlens/dashboard/models/comments/signals.py:11`,
+`src/urbanlens/dashboard/models/trips/signals.py:63`) that flags a reply `parent_deleted=True`
+whenever the comment it replies to is deleted - for any reason, including a CASCADE fired by
+account deletion, since Django's delete collector runs `pre_delete` per instance regardless of what
+triggered the collection, and separately nulls the reply's own `parent` FK (`on_delete=SET_NULL`)
+as part of the same collected delete. Built for UL-219 (direct comment deletion), the UI already
+renders "Replying to a comment that was deleted" wherever `parent_was_deleted` is true
+(`_comment_body.html`, `trip_comments_panel.html`). So no new mechanism had to be built - the
+CASCADE/SET_NULL asymmetry above was the only real gap, and closing it made trip comments behave
+exactly like pin/wiki comments already did.
+
+**Tests**, `src/urbanlens/dashboard/tests/hypothesis/test_account_deletion.py`:
+`test_cascades_to_owned_trip_comments` (new, line 285); `test_trip_comment_survives_with_its_image_intact`
+replaced by `test_trip_comment_is_deleted_with_its_image` (line 357); a new
+`HardDeleteProfileCommentTombstoneTests` class (line 378) proves a reply from another user survives
+(`parent_deleted=True`, `parent_id=None`) when the departing user's parent comment or trip comment
+is erased, and that other users' own comments are left completely untouched. Reported by the
+implementing session as a TDD RED->GREEN cycle via `bin/run_tests.sh`, 116 tests passing across
+`test_account_deletion.py` plus the comment/trip-comment `parent_deleted` and visibility test files,
+with ruff/mypy/pre-commit clean - not independently re-run by this closure pass.

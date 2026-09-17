@@ -624,44 +624,6 @@ fan-out with its own paging/rate story, not another field-name correction.
 just `:read` - a read-only key 403s on all three and therefore yields zero attachments no
 matter how correct this code is.
 
-## P25 — `Comment.profile` CASCADEs but `TripComment.author` SET_NULLs, so account deletion erases only some comments
-
-`id: P25` · `status: open` · `updated: 2026-08-07`
-
-Previously titled "Account deletion and the constraint-recreate class: both clean (2026-08-07)".
-
-Two checks this unit, both negative.
-
-**The "recreate into a changed world" class is exhausted outside undo.** The four undo crashes
-all came from recreating a row whose constraint slot had been taken since. The other creators
-of `db_pin_unique_location_per_profile` handle it: `apply_pin_share_response` re-checks
-`find_profile_pin_near_location` *inside* its `select_for_update` block and only creates when
-nothing is there, and `accept_pin_suggestion` filters on `parent_pin__isnull=True`, matching
-the partial constraint exactly. The undo handlers were the gap, not the pattern.
-
-**Account deletion is deliberately designed, and the catastrophic case is avoided.** Every FK
-pointing at `Profile` was enumerated. The split is coherent rather than accidental:
-
-- **Personal data cascades** - pins, images, direct messages, labels, albums, notification
-  logs, credentials, key material.
-- **Contributions to shared or community space are `SET_NULL`** - wiki edits, wiki creators,
-  aliases, links, owners, property sales, article revisions, trip creators and activities,
-  fact evidence, trivia submissions, group chat creators. A departing user does not erase what
-  other people are still using.
-- **`Pin.source_share` is `SET_NULL`**, which is the one that matters most: a sharer deleting
-  their account would otherwise cascade `PinShare` deletions into *recipients' pins*. It
-  doesn't. `PinShare.parent_share` is `SET_NULL` too, so a provenance chain truncates rather
-  than corrupting - `resolve_origin_share` simply ends its walk early.
-
-### One asymmetry, surfaced rather than changed
-
-`Comment.profile` is `CASCADE` while `TripComment.author` is `SET_NULL`. Both are comments a
-user wrote in a space other people share, and deleting an account therefore erases your pin
-and wiki comments while leaving your trip comments in place, authored by nobody. One of the
-two is probably not what was intended, but which one is a data-policy question - whether
-deletion means "erase what I wrote" or "keep the conversation readable" - and not a call to
-make from inside an audit. Recorded here for the owner.
-
 ## P86 — Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction
 
 `id: P86` · `status: open` · `updated: 2026-09-06`
