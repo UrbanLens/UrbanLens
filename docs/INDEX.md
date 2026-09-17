@@ -86,7 +86,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P95 | open | 2026-09-14 | One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P105 | open | 2026-09-13 | A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P109 | open | 2026-09-14 | One import's per-pin task fan-out is unbounded, and drains on the bulk queue behind every other account's jobs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P110 | open | 2026-09-14 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-10 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P113 | open | 2026-09-16 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 1 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
