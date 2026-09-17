@@ -26,16 +26,31 @@ how the *enclosing* query plans (join order / short-circuiting), not the labels 
 decomposed further - the win was reproducible and cheap enough that finishing that decomposition wasn't
 worth it.
 
-The non-matching variant is unaffected: every added label is a true negative, so nothing short-circuits the
-scan early and the full table (now including all the added noise) is still read to conclude no match exists.
-Fixing that needs the join reordered so the *pin*, not the label, drives the search - see the class docstring
-and ``docs/PROBLEMS.md`` P123 for the untaken direction and why it's out of scope here (it needs generic
-reverse-relation derivation across all ten search providers, some of whose paths put the many-crossing relation
-after the first hop).
+The non-matching variant was unaffected by the index: every added label is a true negative, so nothing
+short-circuits the scan early and the full table (now including all the added noise) is still read to conclude
+no match exists. That needed the join reordered so the *pin*, not the label, drives the search.
 
 The axis here is rows *read*, not rows returned: the subquery returns almost nothing whatever it scans, so a
 query counter, a ``rowcount`` wrapper and a response-size budget all read this as flat. That is why
 ``EndpointScalingMixin`` cannot express this defect.
+
+**Fixed 2026-09-17.** ``_semijoin`` now bounds the crossing relation's own filter by the outer queryset's
+candidate primary keys. Measured directly (``EXPLAIN ANALYZE``, 20,000 unrelated labels): adding that same
+restriction as a *nested* subquery is a no-op, because Postgres flattens it straight back into the identical
+unbounded plan - materialising the candidate keys as a concrete Python list first, a genuine extra round trip,
+is what changes the query shape enough for the planner to drive from the small, indexed foreign-key column
+instead of scanning the whole label table (190x faster in that measurement).
+
+That materialised lookup is bracketed with ``SET enable_seqscan = off`` / ``RESET enable_seqscan`` around its
+own execution: at the ~400-row scale this file measures, Postgres's cost-based planner tie-breaks towards a
+sequential scan of the crossing table regardless of how selective the lookup is (legitimate behaviour for a
+tiny table, but one that reintroduces exactly this problem's cost shape for as long as the table stays that
+small) - forcing the index plan for this one, provably bounded, provably high-selectivity statement is safe
+where it would not be generally. Fixing this closed every remaining path this file's own docstring once
+called out as unreached, including the ones where the crossing relation sits after *path*'s first segment
+(articles' ``pin__aliases__name``/``wiki__aliases__name``, pins' own ``location__wiki__aliases__name``) - see
+``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full mechanism and the verification that closed
+every variant across all fourteen files in this family, not just this one.
 """
 
 from __future__ import annotations
@@ -45,9 +60,8 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -74,12 +88,6 @@ SECOND_BATCH = 400
 #: Rows the measurement may drift by without meaning the stranger's labels were read. Small: the viewer's own
 #: side of the search does not change between the two measurements.
 TOLERANCE = 20
-
-_REASON = (
-    "P123: the labels semi-join still reads the whole label table for a non-matching term, because a true "
-    "negative can't short-circuit the scan. The trigram index (migration 0049) fixed the matching variant "
-    "but not this one - fixing it needs the join reordered to drive from the pin, not the label."
-)
 
 
 class _PinSearchCase(TestCase):
@@ -146,17 +154,29 @@ class _PinSearchCase(TestCase):
             results = PinSearchProvider().search(self.viewer, parse_query(TERM), 20)
         return list(results), captured
 
-    def label_reading_statements(self) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
-        """The statements of the viewer's search that read the label table at all."""
+    def label_reading_statements(
+        self,
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the label table at all.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search()
         table = Label._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self) -> int:
         """Rows the viewer's search reads, across every statement touching the label table."""
-        statements = self.label_reading_statements()
+        captured, statements = self.label_reading_statements()
         self.assertTrue(statements, "no statement of the search mentioned the label table, so nothing was measured")
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, count: int, *, matching: bool) -> None:
         """Assert the viewer's search reads no more rows after the stranger gains *count* labels."""
@@ -166,7 +186,10 @@ class _PinSearchCase(TestCase):
 
         after = self.rows_read_searching()
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.label_reading_statements()]
+            captured, statements = self.label_reading_statements()
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's search read {before} rows, then {after} after a stranger added {count} "
@@ -185,13 +208,13 @@ class SearchDoesNotReadAnotherAccountsLabelsTests(_PinSearchCase):
         """
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_unrelated_labels(self) -> None:
         """Rows the plan reads only to reject on the name.
 
-        Separated from the matching case because the two have different fixes: an index on the label name
-        would remove these and leave the matching ones, so a candidate fix that passes one test and not the
-        other has done half the job.
+        Separated from the matching case because the two originally had different fixes: the trigram index
+        alone (migration 0049) helped only the matching case, so a candidate fix that passed one test and
+        not the other had done half the job. Fixed 2026-09-17 by the bounded semi-join - see the module
+        docstring.
         """
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
@@ -244,12 +267,12 @@ class TheMeasurementIsRealTests(_PinSearchCase):
 
     def test_the_measured_statement_reads_the_label_table(self) -> None:
         """Proves the plan being summed actually touches labels, rather than being some other statement."""
-        statements = self.label_reading_statements()
+        captured, statements = self.label_reading_statements()
         self.assertTrue(statements, "the search issued no statement mentioning the label table")
 
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
 
         self.assertIn(
             Label._meta.db_table,

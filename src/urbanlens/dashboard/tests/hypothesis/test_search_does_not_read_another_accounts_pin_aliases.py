@@ -8,8 +8,13 @@ distinct from ``ArticleSearchProvider``'s ``pin__aliases__name``
 from ``Article._base_manager``; this one drives it from ``Pin._base_manager`` directly. Same shape,
 different driving model, and nothing in ``Label.name``'s migration-0049 GIN trigram index applies to
 ``PinAlias.name`` - it was never indexed the same way - so both the matching and non-matching variant
-are expected to reproduce, matching the Article/Trip/Safety precedent for every relation the index
-does not cover.
+reproduced, matching the Article/Trip/Safety precedent for every relation the index does not cover.
+
+**Fixed 2026-09-17.** ``aliases`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
+rather than left as a nested subquery. See
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
+mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
 """
 
 from __future__ import annotations
@@ -19,9 +24,8 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.location.model import Location
@@ -44,13 +48,6 @@ SECOND_BATCH = 400
 
 #: Rows the measurement may drift by without meaning the stranger's aliases were read.
 TOLERANCE = 20
-
-_REASON = (
-    "Same mechanism as P123, over PinSearchProvider's own aliases__name instead of labels__name: the "
-    "alias semi-join reads the whole dashboard_pin_aliases table, because it runs against "
-    "Pin._base_manager with no access scoping and no index gives the planner a real cardinality "
-    "estimate for this column. Fixing it needs the join reordered to drive from the pin, not the alias."
-)
 
 
 class _PinOwnAliasCase(TestCase):
@@ -94,22 +91,38 @@ class _PinOwnAliasCase(TestCase):
             results = PinSearchProvider().search(self.viewer, parse_query(TERM), 20)
         return list(results), captured
 
-    def alias_reading_statements(self) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
+    def alias_reading_statements(
+        self,
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the pin-alias table.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search()
         table = PinAlias._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self) -> int:
-        statements = self.alias_reading_statements()
+        captured, statements = self.alias_reading_statements()
         self.assertTrue(statements, "no statement of the search mentioned the pin-alias table, so nothing was measured")
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, count: int, *, matching: bool) -> None:
         before = self.rows_read_searching()
         self.seed_strangers_aliases(count, matching=matching)
         after = self.rows_read_searching()
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.alias_reading_statements()]
+            captured, statements = self.alias_reading_statements()
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's pin search read {before} rows, then {after} after a stranger added {count} "
@@ -121,12 +134,12 @@ class _PinOwnAliasCase(TestCase):
 class SearchDoesNotReadAnotherAccountsPinOwnAliasesTests(_PinOwnAliasCase):
     """One account's pin aliases must not be read to answer a different account's pin search."""
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_matching_aliases(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_unrelated_aliases(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
@@ -159,11 +172,11 @@ class TheMeasurementIsRealTests(_PinOwnAliasCase):
         self.assertEqual(visible, 0, "the stranger's pin is visible to the viewer, so reading its aliases is correct")
 
     def test_the_measured_statement_reads_the_pin_alias_table(self) -> None:
-        statements = self.alias_reading_statements()
+        captured, statements = self.alias_reading_statements()
         self.assertTrue(statements, "the search issued no statement mentioning the pin-alias table")
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
         self.assertIn(
             PinAlias._meta.db_table, touched, f"no plan read the pin-alias table; relations read were {sorted(touched)}"
         )

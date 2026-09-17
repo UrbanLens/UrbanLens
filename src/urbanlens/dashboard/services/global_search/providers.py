@@ -11,6 +11,7 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.postgres.search import TrigramSimilarity
 from django.core.exceptions import FieldDoesNotExist
+from django.db import connection
 from django.db.models import BooleanField, Case, Count, Exists, F, Model, OuterRef, Q, Value, When
 from django.db.models.functions import Concat
 from django.urls import reverse
@@ -189,32 +190,74 @@ def _crosses_many(model: type[Model], path: str) -> bool:
     return False
 
 
-def _semijoin(model: type[Model] | None, path: str, condition: Q) -> Q:
+def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:  # noqa: UP047
     """*condition* as a semi-join when *path* crosses a to-many relation.
 
     A row matching through several related rows stays one row without DISTINCT, and the statement never joins the
     relation: planning a join across several of them cost more than running it.
 
+    Bounded by *queryset*'s own candidate primary keys rather than left unscoped, and resolved to a
+    concrete list of matching primary keys before it ever reaches the caller. Measured directly
+    (docs/archive/PROBLEMS-ARCHIVE.md, formerly P123): the bound alone is not enough while it stays a nested subquery - inverting
+    the query to drive from the related model still lets Postgres choose to scan that model's whole
+    table once the crossing relation's own table is small (a correct choice at that size, but one
+    that reintroduces growth as the population the *viewer* cannot see grows), and even the *un-inverted*
+    bounded subquery regresses the moment a caller OR-combines it with a sibling condition (as
+    `term_filter` always does): Postgres then plans it as a hashed SubPlan and, inside that plan, drops
+    the crossing table's own index in favour of scanning it whole - a plan it does not choose when the
+    identical subquery runs alone. Resolving it here, as its own statement, fixes that.
+
+    That statement's own plan is a second problem: this query is exactly the shape Postgres's
+    cost-based planner tie-breaks towards a sequential scan of the crossing table once that table is
+    small enough to fit in a handful of pages, regardless of how selective ``pk__in=outer_pks`` actually
+    is - legitimate, documented Postgres behaviour for tiny tables, not a bug, but one that reintroduces
+    exactly the cost P123 is about (a scan whose size tracks the crossing table's total population, not
+    the viewer's own data) for as long as that population stays in the small-table range. Measured
+    directly: at ~400 unrelated rows Postgres chooses `Seq Scan ... filter=(pin_id=1) removed=402`
+    over the available FK index; at 20,000 rows the identical statement chooses `Index Only Scan
+    idx_cond=(pin_id=1) removed=0`. Since the statement is provably bounded (equality on a foreign key
+    against a handful of already-known pks) and provably high-selectivity regardless of table size,
+    forcing the planner away from that tie-break for this one statement is safe where it would not be
+    generally: `enable_seqscan=off` only penalises sequential scans in cost estimation, it does not
+    forbid them, so a table with no usable index still gets scanned, just without artificially
+    preferring to when an index exists. Confirmed directly, not inferred: an ``EXPLAIN`` run inside
+    this same bracket (not after it, which would only see the setting already unwound) shows the
+    index plan at the same ~400-row scale that chooses Seq Scan with the setting on its default.
+
     Args:
-        model: The model being filtered; None leaves *condition* as it is.
+        queryset: The already access-scoped queryset being filtered; None leaves *condition* as it is.
         path: The ORM path *condition* filters through.
-        condition: The predicate, written against *model*.
+        condition: The predicate, written against *queryset*'s model.
 
     Returns:
-        A Q usable in ``filter()`` on *model*."""
-    if model is None or not _crosses_many(model, path):
+        A Q usable in ``filter()`` on *queryset*'s model."""
+    if queryset is None:
         return condition
-    return Q(Exists(model._base_manager.filter(condition, pk=OuterRef("pk"))))  # noqa: SLF001
+    model = queryset.model
+    if not _crosses_many(model, path):
+        return condition
+    outer_pks = list(queryset.values_list("pk", flat=True))
+    if not outer_pks:
+        return Q(pk__in=[])
+    matches = model._base_manager.filter(condition, pk__in=outer_pks)  # noqa: SLF001
+    with connection.cursor() as cursor:
+        cursor.execute("SET enable_seqscan = off")
+    try:
+        matching_pks = list(matches.values_list("pk", flat=True))
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("RESET enable_seqscan")
+    return Q(pk__in=matching_pks)
 
 
-def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q] | None = None, model: type[Model] | None = None) -> Q:
+def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q] | None = None, queryset: _QS | None = None) -> Q:  # noqa: UP047
     """Build the standard text predicate: every term in at least one field.
 
     Args:
         terms: Lowercased search terms (AND-ed together).
         fields: ORM field paths each term may appear in (OR-ed together).
         extra: Optional per-term Q builder, OR-ed alongside the field matches - e.g. tag-equivalence matching, which isn't expressible as a plain ``field__icontains`` lookup.
-        model: The model being searched. Given, a field path through a to-many relation matches as a semi-join.
+        queryset: The already access-scoped queryset being searched. Given, a field path through a to-many relation matches as a semi-join.
 
     Returns:
         The combined Q object; empty Q when ``terms`` is empty."""
@@ -222,7 +265,7 @@ def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q
     for term in terms:
         term_q = Q()
         for field_path in fields:
-            term_q |= _semijoin(model, field_path, Q(**{f"{field_path}__icontains": term}))
+            term_q |= _semijoin(queryset, field_path, Q(**{f"{field_path}__icontains": term}))
         if extra is not None:
             term_q |= extra(term)
         combined &= term_q
@@ -326,7 +369,7 @@ def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labe
         included = Q()
         for name in parsed.labels:
             included |= Q(**{f"{relation}__name__iexact": name})
-        queryset = queryset.filter(_semijoin(queryset.model, relation, included))
+        queryset = queryset.filter(_semijoin(queryset, relation, included))
     if parsed.exclude_labels:
         excluded = Q()
         for name in parsed.exclude_labels:
@@ -481,26 +524,25 @@ class SearchProvider(ABC):
         # ranks everything by distance, it doesn't exclude anything far away.
         has_near = location_path is not None and parsed.near_me and parsed.near_lat is not None and parsed.near_lng is not None
         geo_q = distance_filter(location_path, parsed) if has_near and location_path is not None else Q()
-        model = queryset.model
         extra: Callable[[str], Q] | None = None
         if tag_path is not None:
             from urbanlens.dashboard.services.locations.external_tag_groups import tag_match_q
 
             def tag_semijoin(term: str, path: str = tag_path) -> Q:
-                return _semijoin(model, path, tag_match_q(term, path))
+                return _semijoin(queryset, path, tag_match_q(term, path))
 
             extra = tag_semijoin
 
         if not parsed.terms:
             if has_near:
-                phrase_q = term_filter([parsed.near_phrase], fields, model=model) if parsed.near_phrase else Q()
+                phrase_q = term_filter([parsed.near_phrase], fields, queryset=queryset) if parsed.near_phrase else Q()
                 queryset = queryset.filter(geo_q | phrase_q)
             return queryset.order_by("-created")
 
         if has_near:
             queryset = queryset.annotate(near_hit=Case(When(geo_q, then=Value(value=True)), default=Value(value=False), output_field=BooleanField()))
 
-        text_q = term_filter(parsed.terms, fields, extra=extra, model=model)
+        text_q = term_filter(parsed.terms, fields, extra=extra, queryset=queryset)
         order = (["-near_hit"] if has_near else []) + ["-created"]
         if self.fuzzy_field:
             queryset = queryset.annotate(search_sim=TrigramSimilarity(self.fuzzy_field, parsed.text))

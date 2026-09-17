@@ -290,8 +290,9 @@ BULK_RELATIONS_PREFIX = "Perf Bulk Relation"
 _HOST_NAME_PREFIX = "Perf Search Relations Host"
 
 #: (host attribute on the seeded account, db_table) pairs `seed_bulk_search_relations` grows -
-#: one host row apiece, `count` children apiece. Mirrors P123's docs/PROBLEMS.md entry on
-#: ArticleSearchProvider/TripSearchProvider/SafetySearchProvider's own to-many-crossing paths.
+#: one host row apiece, `count` children apiece. Mirrors docs/archive/PROBLEMS-ARCHIVE.md's
+#: (formerly P123) entry on ArticleSearchProvider/TripSearchProvider/SafetySearchProvider's own
+#: to-many-crossing paths.
 _RELATION_TABLES = (
     "dashboard_pin_aliases",
     "dashboard_wiki_aliases",
@@ -330,7 +331,8 @@ def seed_bulk_search_relations(profile: Profile, *, count: int, analyze: bool = 
     each: `PinAlias`/`WikiAlias` (`ArticleSearchProvider`'s `pin__aliases__name`/`wiki__aliases__name`),
     `TripActivity`/`TripComment` (`TripSearchProvider`'s `activities__title`/`activities__notes`/
     `comments__text`), and `SafetyCheckinMessage` (`SafetySearchProvider`'s `messages__body`). See
-    `docs/PROBLEMS.md`'s P123 entry for the mechanism each shares with the original label semi-join.
+    `docs/archive/PROBLEMS-ARCHIVE.md`'s (formerly P123) entry for the mechanism each shares with the
+    original label semi-join.
 
     Args:
         profile: Whose account the host rows are created under. Immaterial to the defect being

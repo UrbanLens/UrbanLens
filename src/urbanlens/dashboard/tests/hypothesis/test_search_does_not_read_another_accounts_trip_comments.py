@@ -6,6 +6,12 @@ relation (``TripComment`` is a reverse foreign key, ``related_name="comments"``)
 the same unscoped ``_semijoin`` as labels do - an ``Exists(Trip._base_manager.filter(...))``
 subquery built from the *unfiltered* manager, run before the outer membership check
 (``Trip.objects.filter(Q(pk__in=...) | Q(creator=profile))``) narrows anything.
+
+**Fixed 2026-09-17.** ``comments`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
+rather than left as a nested subquery. See
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
+mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
 """
 
 from __future__ import annotations
@@ -16,9 +22,8 @@ from django.contrib.auth.models import User
 from django.db import connection
 from django.db.models import Q
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
 from urbanlens.dashboard.services.global_search.parser import parse_query
@@ -39,13 +44,6 @@ SECOND_BATCH = 400
 
 #: Rows the measurement may drift by without meaning the stranger's comments were read.
 TOLERANCE = 20
-
-_REASON = (
-    "Same mechanism as P123, over comments__text instead of labels__name: the comment semi-join reads "
-    "the whole dashboard_trip_comments table for a non-matching term, because a true negative can't "
-    "short-circuit the scan. Fixing it needs the join reordered to drive from the trip, not the "
-    "comment, same as the pins provider's own labels path."
-)
 
 
 class _TripCommentCase(TestCase):
@@ -88,24 +86,40 @@ class _TripCommentCase(TestCase):
             results = TripSearchProvider().search(self.viewer, parse_query(TERM), 20)
         return list(results), captured
 
-    def comment_reading_statements(self) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
+    def comment_reading_statements(
+        self,
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the trip-comment table.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search()
         table = TripComment._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self) -> int:
-        statements = self.comment_reading_statements()
+        captured, statements = self.comment_reading_statements()
         self.assertTrue(
             statements, "no statement of the search mentioned the trip-comment table, so nothing was measured"
         )
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, count: int, *, matching: bool) -> None:
         before = self.rows_read_searching()
         self.seed_strangers_comments(count, matching=matching)
         after = self.rows_read_searching()
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.comment_reading_statements()]
+            captured, statements = self.comment_reading_statements()
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's trip search read {before} rows, then {after} after a stranger's trip gained "
@@ -117,12 +131,12 @@ class _TripCommentCase(TestCase):
 class SearchDoesNotReadAnotherAccountsTripCommentsTests(_TripCommentCase):
     """One trip's comments must not be read to answer a search for a different, accessible trip."""
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_matching_comments(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_unrelated_comments(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
@@ -158,11 +172,11 @@ class TheMeasurementIsRealTests(_TripCommentCase):
         )
 
     def test_the_measured_statement_reads_the_trip_comment_table(self) -> None:
-        statements = self.comment_reading_statements()
+        captured, statements = self.comment_reading_statements()
         self.assertTrue(statements, "the search issued no statement mentioning the trip-comment table")
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
         self.assertIn(
             TripComment._meta.db_table,
             touched,

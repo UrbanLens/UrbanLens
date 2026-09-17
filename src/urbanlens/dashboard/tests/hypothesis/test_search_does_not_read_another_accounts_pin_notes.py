@@ -6,8 +6,15 @@ private per-pin text (``PinNote``'s own docstring: "only the pin owner can see")
 a capacity concern: the unscoped ``Exists(Pin._base_manager.filter(notes__text__icontains=..., ...))``
 semijoin at the heart of P123 means the *content* of a stranger's private notes is read by Postgres to
 answer the viewer's search, even though it can never appear in a result. No index covers
-``PinNote.text``, so both the matching and non-matching variant are expected to reproduce, matching
-every other relation P123 generalises to that lacks Label.name's migration-0049 GIN trigram index.
+``PinNote.text``, so both the matching and non-matching variant reproduced, matching every other
+relation P123 generalises to that lacks Label.name's migration-0049 GIN trigram index.
+
+**Fixed 2026-09-17.** ``notes`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds its
+filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
+rather than left as a nested subquery - which also means the stranger's private note content is no
+longer read at all to answer the viewer's search. See
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
+mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
 """
 
 from __future__ import annotations
@@ -17,9 +24,8 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -42,14 +48,6 @@ SECOND_BATCH = 400
 
 #: Rows the measurement may drift by without meaning the stranger's notes were read.
 TOLERANCE = 20
-
-_REASON = (
-    "Same mechanism as P123, over PinSearchProvider's notes__text instead of labels__name: the notes "
-    "semi-join reads the whole dashboard_pin_notes table - including the content of another account's "
-    "private notes - because it runs against Pin._base_manager with no access scoping and no index "
-    "gives the planner a real cardinality estimate for this column. Fixing it needs the join reordered "
-    "to drive from the pin, not the note."
-)
 
 
 class _PinNoteCase(TestCase):
@@ -93,22 +91,38 @@ class _PinNoteCase(TestCase):
             results = PinSearchProvider().search(self.viewer, parse_query(TERM), 20)
         return list(results), captured
 
-    def note_reading_statements(self) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
+    def note_reading_statements(
+        self,
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the pin-note table.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search()
         table = PinNote._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self) -> int:
-        statements = self.note_reading_statements()
+        captured, statements = self.note_reading_statements()
         self.assertTrue(statements, "no statement of the search mentioned the pin-note table, so nothing was measured")
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, count: int, *, matching: bool) -> None:
         before = self.rows_read_searching()
         self.seed_strangers_notes(count, matching=matching)
         after = self.rows_read_searching()
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.note_reading_statements()]
+            captured, statements = self.note_reading_statements()
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's pin search read {before} rows, then {after} after a stranger added {count} "
@@ -121,12 +135,12 @@ class _PinNoteCase(TestCase):
 class SearchDoesNotReadAnotherAccountsPinNotesTests(_PinNoteCase):
     """One account's private pin notes must not be read to answer a different account's pin search."""
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_matching_notes(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_unrelated_notes(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
@@ -159,11 +173,11 @@ class TheMeasurementIsRealTests(_PinNoteCase):
         self.assertEqual(visible, 0, "the stranger's pin is visible to the viewer, so reading its notes is correct")
 
     def test_the_measured_statement_reads_the_pin_note_table(self) -> None:
-        statements = self.note_reading_statements()
+        captured, statements = self.note_reading_statements()
         self.assertTrue(statements, "the search issued no statement mentioning the pin-note table")
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
         self.assertIn(
             PinNote._meta.db_table, touched, f"no plan read the pin-note table; relations read were {sorted(touched)}"
         )

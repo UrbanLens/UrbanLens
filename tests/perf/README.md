@@ -20,11 +20,12 @@ bin/run_perf_tests.sh --url http://localhost:21810 \
 | `../../bin/perf/derive_budget.py` | Baseline p95 → the ceiling the measured pass is judged against. |
 | `../../bin/perf/pg_activity_sampler.sh` | 1 Hz `pg_stat_activity` by role, for the failures latency cannot see. |
 
-## P123: does the neighbour's search degrade as the labels table grows?
+## P123 (fixed 2026-09-17): does the neighbour's search degrade as the labels table grows?
 
 The neighbour's rotation includes two `search.panel` requests, `global_search_match` and
-`global_search_miss` (see `docs/PROBLEMS.md`'s P123 for the mechanism: a cross-account label-table
-scan with no access scoping). Neither needs an actor phase to reproduce - the defect is triggered by
+`global_search_miss` (see `docs/archive/PROBLEMS-ARCHIVE.md`'s entry, formerly P123, for the
+mechanism: a cross-account label-table scan with no access scoping - fixed, so this harness is now
+a regression guard rather than an active reproduction). Neither needs an actor phase to reproduce - the defect is triggered by
 total row count in `dashboard_labels`, not by anything happening in real time - so growing that
 table is a seeding step, not a scenario:
 
@@ -45,11 +46,12 @@ committing to a large seed, not for judging the defect.
 
 ### The same mechanism, five more relations
 
-`docs/PROBLEMS.md`'s P123 entry generalises the same unscoped semi-join to
+`docs/archive/PROBLEMS-ARCHIVE.md`'s entry (formerly P123) generalises the same unscoped semi-join to
 `ArticleSearchProvider`'s `pin__aliases__name`/`wiki__aliases__name`, `TripSearchProvider`'s
 `activities__title`/`activities__notes`/`comments__text`, and `SafetySearchProvider`'s
-`messages__body` - confirmed at the unit level, and re-measured at HTTP scale the same way as labels
-(see `docs/PROBLEMS.md`'s "Integration-level reproduction of the five generalised relations" entry:
+`messages__body` - confirmed at the unit level, fixed the same way as labels, and re-measured at
+HTTP scale the same way (see that entry's "Integration-level reproduction of the five generalised
+relations" section:
 60-second idle-phase pass at 50,000 rows each, comfortably inside budget, connection pool untroubled).
 `--heavy-search-relations N` grows all five relations (`PinAlias`, `WikiAlias`,
 `TripActivity`, `TripComment`, `SafetyCheckinMessage`) to `N` rows each, on one dedicated host row

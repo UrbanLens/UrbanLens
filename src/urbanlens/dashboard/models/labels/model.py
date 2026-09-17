@@ -331,7 +331,8 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
             # change the scan strategy (Postgres still seq-scans the table at this size either way), but the
             # expression index gives ANALYZE a real cardinality estimate for the predicate instead of a fixed
             # default, which changes how the enclosing query plans and removes the growth for a matching term.
-            # See docs/PROBLEMS.md P123 and this migration's test for the measured before/after.
+            # See docs/archive/PROBLEMS-ARCHIVE.md (formerly P123) and this migration's test for the measured
+            # before/after.
             GinIndex(OpClass(Upper(Cast("name", output_field=TextField())), name="gin_trgm_ops"), name="idxdb_label_name_upper_trgm"),
         ]
         constraints = [

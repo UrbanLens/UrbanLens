@@ -12,6 +12,12 @@ labels.
 Two independent variants, because ``pin`` and ``wiki`` are separate ``OneToOneField``s and Article's
 ``CheckConstraint`` enforces exactly one is set per row - a pin-hosted article's search never reaches
 ``wiki__aliases__name`` and vice versa, so the two paths need two separate reproductions.
+
+**Fixed 2026-09-17.** Both paths cross two segments in (``pin``/``wiki`` themselves are single-valued;
+``aliases`` is the to-many hop), so this also confirms the bounded, materialised semi-join fixes the
+non-matching variant too, not just the matching one - see
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured mechanism
+and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
 """
 
 from __future__ import annotations
@@ -21,9 +27,8 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
 from urbanlens.dashboard.models.article.model import Article
@@ -48,16 +53,6 @@ SECOND_BATCH = 400
 
 #: Rows the measurement may drift by without meaning the stranger's aliases were read.
 TOLERANCE = 20
-
-_PIN_REASON = (
-    "Same mechanism as P123, over pin__aliases__name instead of labels__name: the alias semi-join reads "
-    "the whole dashboard_pin_aliases table for a non-matching term, because a true negative can't "
-    "short-circuit the scan. Fixing it needs the join reordered to drive from the article/pin, not the "
-    "alias, same as the pins provider's own labels path."
-)
-_WIKI_REASON = _PIN_REASON.replace("pin__aliases__name", "wiki__aliases__name").replace(
-    "dashboard_pin_aliases", "dashboard_wiki_aliases"
-)
 
 
 class _ArticlePinAliasCase(TestCase):
@@ -102,22 +97,38 @@ class _ArticlePinAliasCase(TestCase):
             results = ArticleSearchProvider().search(self.viewer, parse_query(TERM), 20)
         return list(results), captured
 
-    def alias_reading_statements(self) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
+    def alias_reading_statements(
+        self,
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the pin-alias table.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search()
         table = PinAlias._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self) -> int:
-        statements = self.alias_reading_statements()
+        captured, statements = self.alias_reading_statements()
         self.assertTrue(statements, "no statement of the search mentioned the pin-alias table, so nothing was measured")
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, count: int, *, matching: bool) -> None:
         before = self.rows_read_searching()
         self.seed_strangers_aliases(count, matching=matching)
         after = self.rows_read_searching()
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.alias_reading_statements()]
+            captured, statements = self.alias_reading_statements()
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's article search read {before} rows, then {after} after a stranger added {count} "
@@ -129,12 +140,12 @@ class _ArticlePinAliasCase(TestCase):
 class SearchDoesNotReadAnotherAccountsPinArticleAliasesTests(_ArticlePinAliasCase):
     """One account's pin aliases must not be read to answer another account's article search."""
 
-    @pytest.mark.xfail(strict=True, reason=_PIN_REASON)
     def test_it_does_not_read_a_strangers_matching_pin_aliases(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_PIN_REASON)
     def test_it_does_not_read_a_strangers_unrelated_pin_aliases(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
@@ -171,11 +182,11 @@ class ThePinAliasMeasurementIsRealTests(_ArticlePinAliasCase):
         self.assertEqual(visible, 0, "the stranger's pin is visible to the viewer, so reading its aliases is correct")
 
     def test_the_measured_statement_reads_the_pin_alias_table(self) -> None:
-        statements = self.alias_reading_statements()
+        captured, statements = self.alias_reading_statements()
         self.assertTrue(statements, "the search issued no statement mentioning the pin-alias table")
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
         self.assertIn(
             PinAlias._meta.db_table, touched, f"no plan read the pin-alias table; relations read were {sorted(touched)}"
         )
@@ -221,24 +232,40 @@ class _ArticleWikiAliasCase(TestCase):
             results = ArticleSearchProvider().search(self.viewer, parse_query(TERM), 20)
         return list(results), captured
 
-    def alias_reading_statements(self) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
+    def alias_reading_statements(
+        self,
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the wiki-alias table.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search()
         table = WikiAlias._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self) -> int:
-        statements = self.alias_reading_statements()
+        captured, statements = self.alias_reading_statements()
         self.assertTrue(
             statements, "no statement of the search mentioned the wiki-alias table, so nothing was measured"
         )
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, count: int, *, matching: bool) -> None:
         before = self.rows_read_searching()
         self.seed_strangers_aliases(count, matching=matching)
         after = self.rows_read_searching()
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.alias_reading_statements()]
+            captured, statements = self.alias_reading_statements()
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's article search read {before} rows, then {after} after a stranger added {count} "
@@ -250,12 +277,12 @@ class _ArticleWikiAliasCase(TestCase):
 class SearchDoesNotReadAnotherAccountsWikiArticleAliasesTests(_ArticleWikiAliasCase):
     """One account's wiki aliases must not be read to answer another account's article search."""
 
-    @pytest.mark.xfail(strict=True, reason=_WIKI_REASON)
     def test_it_does_not_read_a_strangers_matching_wiki_aliases(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_WIKI_REASON)
     def test_it_does_not_read_a_strangers_unrelated_wiki_aliases(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
@@ -295,11 +322,11 @@ class TheWikiAliasMeasurementIsRealTests(_ArticleWikiAliasCase):
         )
 
     def test_the_measured_statement_reads_the_wiki_alias_table(self) -> None:
-        statements = self.alias_reading_statements()
+        captured, statements = self.alias_reading_statements()
         self.assertTrue(statements, "the search issued no statement mentioning the wiki-alias table")
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
         self.assertIn(
             WikiAlias._meta.db_table,
             touched,

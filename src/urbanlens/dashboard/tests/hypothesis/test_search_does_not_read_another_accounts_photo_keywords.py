@@ -8,7 +8,13 @@ tags, AI vision descriptions, content classifiers). Same shape as labels, a diff
 unscoped ``Exists(Image._base_manager.filter(keywords__keyword__icontains=..., pk=OuterRef("pk")))``
 semijoin reads another account's photo-keyword rows regardless of whether the viewer can see that
 photo. No index covers ``ImageKeyword.keyword`` for this ``icontains`` path, so both the matching and
-non-matching variant are expected to reproduce.
+non-matching variant reproduced.
+
+**Fixed 2026-09-17.** ``keywords`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
+rather than left as a nested subquery. See
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
+mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
 """
 
 from __future__ import annotations
@@ -19,9 +25,8 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.keyword import ImageKeyword
 from urbanlens.dashboard.models.images.model import Image
@@ -44,13 +49,6 @@ SECOND_BATCH = 400
 
 #: Rows the measurement may drift by without meaning the stranger's keywords were read.
 TOLERANCE = 20
-
-_REASON = (
-    "Same mechanism as P123, over PhotoSearchProvider's keywords__keyword instead of labels__name: the "
-    "keyword semi-join reads the whole dashboard_image_keywords table, because it runs against "
-    "Image._base_manager with no access scoping. Fixing it needs the join reordered to drive from the "
-    "photo, not the keyword."
-)
 
 
 class _PhotoKeywordCase(TestCase):
@@ -96,24 +94,40 @@ class _PhotoKeywordCase(TestCase):
             results = PhotoSearchProvider().search(self.viewer, parse_query(TERM), 20)
         return list(results), captured
 
-    def keyword_reading_statements(self) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
+    def keyword_reading_statements(
+        self,
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the keyword table.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search()
         table = ImageKeyword._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self) -> int:
-        statements = self.keyword_reading_statements()
+        captured, statements = self.keyword_reading_statements()
         self.assertTrue(
             statements, "no statement of the search mentioned the image-keyword table, so nothing was measured"
         )
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, count: int, *, matching: bool) -> None:
         before = self.rows_read_searching()
         self.seed_strangers_keywords(count, matching=matching)
         after = self.rows_read_searching()
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.keyword_reading_statements()]
+            captured, statements = self.keyword_reading_statements()
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's photo search read {before} rows, then {after} after a stranger added {count} "
@@ -125,12 +139,12 @@ class _PhotoKeywordCase(TestCase):
 class SearchDoesNotReadAnotherAccountsPhotoKeywordsTests(_PhotoKeywordCase):
     """One account's photo keywords must not be read to answer a different account's photo search."""
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_matching_keywords(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_unrelated_keywords(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
@@ -165,11 +179,11 @@ class TheMeasurementIsRealTests(_PhotoKeywordCase):
         )
 
     def test_the_measured_statement_reads_the_image_keyword_table(self) -> None:
-        statements = self.keyword_reading_statements()
+        captured, statements = self.keyword_reading_statements()
         self.assertTrue(statements, "the search issued no statement mentioning the image-keyword table")
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
         self.assertIn(
             ImageKeyword._meta.db_table,
             touched,

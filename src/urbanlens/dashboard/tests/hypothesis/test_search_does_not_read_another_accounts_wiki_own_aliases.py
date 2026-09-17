@@ -8,7 +8,13 @@ distinct from ``ArticleSearchProvider``'s ``wiki__aliases__name``
 ``PinSearchProvider``'s ``location__wiki__aliases__name``
 (``test_search_does_not_read_another_accounts_pin_wiki_aliases.py``, driven from ``Pin``): here the
 semijoin is built from ``Wiki._base_manager`` directly. No index covers ``WikiAlias.name`` for this
-``icontains`` path, so both the matching and non-matching variant are expected to reproduce.
+``icontains`` path, so both the matching and non-matching variant reproduced.
+
+**Fixed 2026-09-17.** ``aliases`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
+rather than left as a nested subquery. See
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
+mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
 """
 
 from __future__ import annotations
@@ -18,9 +24,8 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import WikiAlias
 from urbanlens.dashboard.models.location.model import Location
@@ -44,13 +49,6 @@ SECOND_BATCH = 400
 
 #: Rows the measurement may drift by without meaning the stranger's wiki aliases were read.
 TOLERANCE = 20
-
-_REASON = (
-    "Same mechanism as P123, over WikiSearchProvider's own aliases__name instead of labels__name: the "
-    "alias semi-join reads the whole dashboard_wiki_aliases table, because it runs against "
-    "Wiki._base_manager with no access scoping. Fixing it needs the join reordered to drive from the "
-    "wiki, not the alias."
-)
 
 
 class _WikiOwnAliasCase(TestCase):
@@ -95,24 +93,40 @@ class _WikiOwnAliasCase(TestCase):
             results = WikiSearchProvider().search(self.viewer, parse_query(TERM), 20)
         return list(results), captured
 
-    def alias_reading_statements(self) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
+    def alias_reading_statements(
+        self,
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the wiki-alias table.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search()
         table = WikiAlias._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self) -> int:
-        statements = self.alias_reading_statements()
+        captured, statements = self.alias_reading_statements()
         self.assertTrue(
             statements, "no statement of the search mentioned the wiki-alias table, so nothing was measured"
         )
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, count: int, *, matching: bool) -> None:
         before = self.rows_read_searching()
         self.seed_strangers_aliases(count, matching=matching)
         after = self.rows_read_searching()
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.alias_reading_statements()]
+            captured, statements = self.alias_reading_statements()
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's wiki search read {before} rows, then {after} after a stranger's wiki gained "
@@ -124,12 +138,12 @@ class _WikiOwnAliasCase(TestCase):
 class SearchDoesNotReadAnotherAccountsWikiOwnAliasesTests(_WikiOwnAliasCase):
     """One wiki's aliases must not be read to answer a search over a different wiki."""
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_matching_aliases(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_unrelated_aliases(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
@@ -167,11 +181,11 @@ class TheMeasurementIsRealTests(_WikiOwnAliasCase):
         )
 
     def test_the_measured_statement_reads_the_wiki_alias_table(self) -> None:
-        statements = self.alias_reading_statements()
+        captured, statements = self.alias_reading_statements()
         self.assertTrue(statements, "the search issued no statement mentioning the wiki-alias table")
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
         self.assertIn(
             WikiAlias._meta.db_table,
             touched,

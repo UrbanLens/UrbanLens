@@ -7,11 +7,15 @@ from the *unfiltered* manager, so it is not scoped to photos the viewer can see.
 never needs to be visible to the viewer for its labels to sit in the same ``dashboard_labels`` table
 the semijoin's inner query scans.
 
-Untested until now: P123's fix (a GIN trigram index on ``Label.name`` matching ``icontains``'s
-compiled form, migration 0049) lives on the ``Label`` model itself, not on ``PinSearchProvider``, so
-it should in principle help every provider that reaches labels through this same clause. Whether it
-actually does, for a different base model and a different join shape, was assumed rather than
-checked - this file checks it.
+P123's fix (a GIN trigram index on ``Label.name`` matching ``icontains``'s compiled form, migration
+0049) lives on the ``Label`` model itself, not on ``PinSearchProvider``, so it should in principle
+help every provider that reaches labels through this same clause - and does, for the matching
+variant. The non-matching variant needed the same bounded-semi-join rewrite as P123's own file.
+
+**Fixed 2026-09-17.** ``_semijoin`` now bounds ``labels``' filter by the outer queryset's own
+candidate primary keys, materialised as a concrete list first rather than left as a nested subquery -
+see ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
+mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
 """
 
 from __future__ import annotations
@@ -22,9 +26,8 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
@@ -48,13 +51,6 @@ SECOND_BATCH = 400
 
 #: Rows the measurement may drift by without meaning the stranger's labels were read.
 TOLERANCE = 20
-
-_REASON = (
-    "Same mechanism as P123: the labels semi-join reads the whole label table for a non-matching term, "
-    "because a true negative can't short-circuit the scan. The fix that helps the matching variant "
-    "(migration 0049's trigram index) does not touch this - fixing it needs the join reordered to drive "
-    "from the photo, not the label, same as the pins provider."
-)
 
 
 class _PhotoSearchCase(TestCase):
@@ -110,17 +106,29 @@ class _PhotoSearchCase(TestCase):
             results = PhotoSearchProvider().search(self.viewer, parse_query(TERM), 20)
         return list(results), captured
 
-    def label_reading_statements(self) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
-        """The statements of the viewer's search that read the label table at all."""
+    def label_reading_statements(
+        self,
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the label table at all.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search()
         table = Label._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self) -> int:
         """Rows the viewer's search reads, across every statement touching the label table."""
-        statements = self.label_reading_statements()
+        captured, statements = self.label_reading_statements()
         self.assertTrue(statements, "no statement of the search mentioned the label table, so nothing was measured")
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, count: int, *, matching: bool) -> None:
         """Assert the viewer's search reads no more rows after the stranger gains *count* photo labels."""
@@ -130,7 +138,10 @@ class _PhotoSearchCase(TestCase):
 
         after = self.rows_read_searching()
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.label_reading_statements()]
+            captured, statements = self.label_reading_statements()
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's photo search read {before} rows, then {after} after a stranger added {count} "
@@ -146,9 +157,8 @@ class SearchDoesNotReadAnotherAccountsPhotoLabelsTests(_PhotoSearchCase):
         """Rows the plan reads and then discards at the photo join, because the photo is not the viewer's."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_unrelated_labels(self) -> None:
-        """Rows the plan reads only to reject on the name."""
+        """Rows the plan reads only to reject on the name. Fixed 2026-09-17 by the bounded semi-join."""
         self.assertDoesNotGrow(SECOND_BATCH, matching=False)
 
 
@@ -200,12 +210,12 @@ class TheMeasurementIsRealTests(_PhotoSearchCase):
 
     def test_the_measured_statement_reads_the_label_table(self) -> None:
         """Proves the plan being summed actually touches labels, rather than being some other statement."""
-        statements = self.label_reading_statements()
+        captured, statements = self.label_reading_statements()
         self.assertTrue(statements, "the search issued no statement mentioning the label table")
 
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
 
         self.assertIn(
             Label._meta.db_table,

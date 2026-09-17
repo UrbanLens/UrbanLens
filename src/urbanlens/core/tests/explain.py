@@ -44,43 +44,94 @@ def scanned(node: dict[str, Any]) -> int:
     return own + sum(scanned(child) for child in node.get("Plans", []))
 
 
-def plan_of(sql: str, params: Sequence[Any] | Mapping[str, Any] | None = None) -> dict[str, Any]:
+def session_preamble(
+    captured: Sequence[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+    index: int,
+) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
+    """The ``SET``/``RESET`` statements *captured* before position *index*.
+
+    A statement's plan depends on session GUCs active when it ran, not just its SQL text - a
+    scan node bracketed by ``SET enable_seqscan = off`` / ``RESET enable_seqscan`` (see
+    ``_semijoin``) plans differently while that bracket is open than it does afterward. Passed as
+    ``plan_of``'s *preamble*, this replays whatever GUC state was active for the statement at
+    *index* when it really ran, rather than whatever the connection's default is by the time a
+    test gets around to re-``EXPLAIN``-ing it.
+
+    Args:
+        captured: Every statement executed while a real search ran, in order.
+        index: The position of the statement being explained.
+
+    Returns:
+        Its preceding ``SET``/``RESET`` statements, in the order they ran.
+    """
+    return [(sql, params) for sql, params in captured[:index] if sql.lstrip().upper().startswith(("SET ", "RESET"))]
+
+
+def plan_of(
+    sql: str,
+    params: Sequence[Any] | Mapping[str, Any] | None = None,
+    *,
+    preamble: Sequence[tuple[str, Sequence[Any] | Mapping[str, Any] | None]] = (),
+) -> dict[str, Any]:
     """The executed plan of *sql*.
 
     Args:
         sql: A statement, with ``%s`` placeholders if it takes parameters.
         params: The parameters, as captured alongside the statement.
+        preamble: ``SET``/``RESET`` statements to replay on the same cursor immediately before the
+            ``EXPLAIN``, so a session GUC scoped around the real statement is active for this one
+            too. See ``session_preamble``. Every touched GUC is ``RESET`` again afterward, so this
+            call does not itself leak session state to whatever runs on this connection next.
 
     Returns:
         The root plan node.
     """
+    touched = {pre_sql.split()[1].rstrip(";").lower() for pre_sql, _ in preamble}
     with connection.cursor() as cursor:
-        cursor.execute(f"EXPLAIN (ANALYZE, FORMAT JSON) {sql}", params)  # noqa: S608 - a captured statement, not built from input
-        row = cursor.fetchone()
+        for pre_sql, pre_params in preamble:
+            cursor.execute(pre_sql, pre_params)
+        try:
+            cursor.execute(f"EXPLAIN (ANALYZE, FORMAT JSON) {sql}", params)  # noqa: S608 - a captured statement, not built from input
+            row = cursor.fetchone()
+        finally:
+            for name in touched:
+                cursor.execute(f"RESET {name}")
     raw = row[0] if row else "[]"
     plan = raw if isinstance(raw, list) else json.loads(raw)
     return dict(plan[0]["Plan"])
 
 
-def rows_examined(sql: str, params: Sequence[Any] | Mapping[str, Any] | None = None) -> int:
+def rows_examined(
+    sql: str,
+    params: Sequence[Any] | Mapping[str, Any] | None = None,
+    *,
+    preamble: Sequence[tuple[str, Sequence[Any] | Mapping[str, Any] | None]] = (),
+) -> int:
     """How many rows Postgres reads to answer *sql*.
 
     Args:
         sql: A statement, with ``%s`` placeholders if it takes parameters.
         params: The parameters, as captured alongside the statement.
+        preamble: See ``plan_of``.
 
     Returns:
         Rows read, including rows a filter then discarded.
     """
-    return scanned(plan_of(sql, params))
+    return scanned(plan_of(sql, params, preamble=preamble))
 
 
-def relations_read(sql: str, params: Sequence[Any] | Mapping[str, Any] | None = None) -> dict[str, int]:
+def relations_read(
+    sql: str,
+    params: Sequence[Any] | Mapping[str, Any] | None = None,
+    *,
+    preamble: Sequence[tuple[str, Sequence[Any] | Mapping[str, Any] | None]] = (),
+) -> dict[str, int]:
     """Rows read per relation, for saying *which* table a statement walked.
 
     Args:
         sql: A statement, with ``%s`` placeholders if it takes parameters.
         params: The parameters, as captured alongside the statement.
+        preamble: See ``plan_of``.
 
     Returns:
         Relation name to rows read, for every relation the plan touched.
@@ -95,5 +146,5 @@ def relations_read(sql: str, params: Sequence[Any] | Mapping[str, Any] | None = 
         for child in node.get("Plans", []):
             walk(child)
 
-    walk(plan_of(sql, params))
+    walk(plan_of(sql, params, preamble=preamble))
     return totals

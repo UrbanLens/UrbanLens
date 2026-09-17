@@ -19,9 +19,15 @@ the same ``dashboard_labels`` table the semijoin's inner query scans.
 The one structural difference from P123/Photo worth flagging: `label:` matches with ``iexact``, not
 ``icontains``. P123's fix (a GIN trigram index on ``Label.name``, migration 0049) targets
 ``icontains``'s compiled form specifically; measured here (not assumed), it says nothing about an
-``iexact`` plan at all - so unlike Photo, where the fix generalised to the matching variant, *both*
-variants stay open for this path. Rows examined grew by the full amount of unrelated stranger
-labels added, whether or not the search term matched anything of the viewer's.
+``iexact`` plan at all - so unlike Photo, where the index alone helped the matching variant, *both*
+variants of this path needed the bounded-semi-join rewrite instead. Rows examined grew by the full
+amount of unrelated stranger labels added, whether or not the search term matched anything of the
+viewer's, before the fix.
+
+**Fixed 2026-09-17.** ``_semijoin`` now bounds ``labels``' filter by the outer queryset's own
+candidate primary keys, materialised as a concrete list first. See
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
+mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
 """
 
 from __future__ import annotations
@@ -31,9 +37,8 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -63,13 +68,6 @@ SECOND_BATCH = 400
 
 #: Rows the measurement may drift by without meaning the stranger's labels were read.
 TOLERANCE = 20
-
-_REASON = (
-    "Same semijoin as P123, over apply_label_clause's iexact match instead of icontains: the whole "
-    "label table is read regardless of a stranger's growing, unrelated labels, because the semijoin "
-    "runs against Wiki._base_manager with no access scoping at all. Fixing it needs the join reordered "
-    "to drive from the wiki, not the label, same as the pins provider."
-)
 
 
 class _WikiLabelOperatorCase(TestCase):
@@ -122,17 +120,29 @@ class _WikiLabelOperatorCase(TestCase):
             results = WikiSearchProvider().search(self.viewer, parse_query(f'label:"{term}"'), 20)
         return list(results), captured
 
-    def label_reading_statements(self, term: str) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
-        """The statements of a `label:"term"` search that read the label table at all."""
+    def label_reading_statements(
+        self, term: str
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the label table at all.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search(term)
         table = Label._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self, term: str) -> int:
         """Rows a `label:"term"` search reads, across every statement touching the label table."""
-        statements = self.label_reading_statements(term)
+        captured, statements = self.label_reading_statements(term)
         self.assertTrue(statements, "no statement of the search mentioned the label table, so nothing was measured")
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, term: str) -> None:
         """Assert a `label:"term"` search reads no more rows after the stranger's wiki gains more unrelated labels."""
@@ -142,7 +152,10 @@ class _WikiLabelOperatorCase(TestCase):
 
         after = self.rows_read_searching(term)
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.label_reading_statements(term)]
+            captured, statements = self.label_reading_statements(term)
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             self.fail(
                 f"the viewer's label:\"{term}\" search read {before} rows, then {after} after a stranger's wiki "
                 f"gained {SECOND_BATCH} unrelated labels - {after - before} more rows for a wiki the viewer has "
@@ -153,19 +166,20 @@ class _WikiLabelOperatorCase(TestCase):
 class SearchDoesNotReadAnotherAccountsWikiLabelsTests(_WikiLabelOperatorCase):
     """One wiki's labels must not be read to answer a `label:` search for a different, accessible wiki."""
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_elsewhere(self) -> None:
         """A `label:` search that DOES match the viewer's own wiki must not also scan the stranger's.
 
-        Unlike Photo's matching variant, this one is not fixed: P123's trigram index targets
-        icontains, and `label:` matches with iexact, a different compiled query the index does not
-        touch.
+        Unlike Photo's matching variant, the trigram index never touched this one: it targets
+        icontains, and `label:` matches with iexact, a different compiled query. Fixed 2026-09-17 by
+        the bounded semi-join instead - see the module docstring.
         """
         self.assertDoesNotGrow(MINE)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_nothing(self) -> None:
-        """A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on."""
+        """A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on.
+
+        Fixed 2026-09-17 by the bounded semi-join - see the module docstring.
+        """
         self.assertDoesNotGrow(NOWHERE)
 
 
@@ -214,12 +228,12 @@ class TheMeasurementIsRealTests(_WikiLabelOperatorCase):
 
     def test_the_measured_statement_reads_the_label_table(self) -> None:
         """Proves the plan being summed actually touches labels, rather than being some other statement."""
-        statements = self.label_reading_statements(MINE)
+        captured, statements = self.label_reading_statements(MINE)
         self.assertTrue(statements, "the search issued no statement mentioning the label table")
 
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
 
         self.assertIn(
             Label._meta.db_table,

@@ -13,6 +13,12 @@ per field path, OR-ed together) but land in the same statement against the same
 ``dashboard_trip_activities`` table, so one search that matches through either column measures both
 at once. The viewer's own activity matches through both columns independently, so the two matching
 variants below are genuinely distinct reproductions, not the same query run twice.
+
+**Fixed 2026-09-17.** ``activities`` crosses at *path*'s own first segment, so ``_semijoin`` now bounds
+its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
+rather than left as a nested subquery. See
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
+mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
 """
 
 from __future__ import annotations
@@ -23,9 +29,8 @@ from django.contrib.auth.models import User
 from django.db import connection
 from django.db.models import Q
 from model_bakery import baker
-import pytest
 
-from urbanlens.core.tests.explain import relations_read, rows_examined
+from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 from urbanlens.dashboard.services.global_search.parser import parse_query
@@ -49,14 +54,6 @@ SECOND_BATCH = 400
 
 #: Rows the measurement may drift by without meaning the stranger's activities were read.
 TOLERANCE = 20
-
-_REASON = (
-    "Same mechanism as P123, over activities__title/activities__notes instead of labels__name: the "
-    "activity semi-join reads the whole dashboard_trip_activities table regardless of a stranger's "
-    "growing, unrelated activities, because it runs against Trip._base_manager with no membership "
-    "scoping at all. Fixing it needs the join reordered to drive from the trip, not the activity, "
-    "same as the pins provider's own labels path."
-)
 
 
 class _TripActivityCase(TestCase):
@@ -102,24 +99,40 @@ class _TripActivityCase(TestCase):
             results = TripSearchProvider().search(self.viewer, parse_query(term), 20)
         return list(results), captured
 
-    def activity_reading_statements(self, term: str) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
+    def activity_reading_statements(
+        self, term: str
+    ) -> tuple[
+        list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
+        list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
+    ]:
+        """The full capture, and the statements in it that read the trip-activity table.
+
+        Returning both, rather than just the filtered statements, lets a caller pass the
+        filtered statements' original positions to ``session_preamble`` - a statement's plan
+        depends on session GUCs active when it ran (see ``_semijoin``'s ``enable_seqscan``
+        bracket), not just its SQL text, and that bracket's position is only meaningful against
+        the one capture it came from.
+        """
         _, captured = self.search(term)
         table = TripActivity._meta.db_table
-        return [(sql, params) for sql, params in captured if table in sql]
+        return captured, [(i, sql, params) for i, (sql, params) in enumerate(captured) if table in sql]
 
     def rows_read_searching(self, term: str) -> int:
-        statements = self.activity_reading_statements(term)
+        captured, statements = self.activity_reading_statements(term)
         self.assertTrue(
             statements, "no statement of the search mentioned the trip-activity table, so nothing was measured"
         )
-        return sum(rows_examined(sql, params) for sql, params in statements)
+        return sum(rows_examined(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements)
 
     def assertDoesNotGrow(self, term: str, *, matching: bool) -> None:
         before = self.rows_read_searching(term)
         self.seed_strangers_activities(SECOND_BATCH, matching=matching)
         after = self.rows_read_searching(term)
         if after > before + TOLERANCE:
-            per_relation = [relations_read(sql, params) for sql, params in self.activity_reading_statements(term)]
+            captured, statements = self.activity_reading_statements(term)
+            per_relation = [
+                relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
+            ]
             self.fail(
                 f"the viewer's trip search for {term!r} read {before} rows, then {after} after a stranger's trip "
                 f"gained {SECOND_BATCH} activities - {after - before} more rows for a trip the viewer isn't on. "
@@ -130,16 +143,16 @@ class _TripActivityCase(TestCase):
 class SearchDoesNotReadAnotherAccountsTripActivitiesTests(_TripActivityCase):
     """One trip's activities must not be read to answer a search for a different, accessible trip."""
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_activities_when_the_term_matches_via_title(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(TERM_TITLE, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_activities_when_the_term_matches_via_notes(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(TERM_NOTES, matching=True)
 
-    @pytest.mark.xfail(strict=True, reason=_REASON)
     def test_it_does_not_read_a_strangers_activities_when_the_term_matches_nothing(self) -> None:
+        """Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""
         self.assertDoesNotGrow(NOWHERE, matching=False)
 
 
@@ -194,11 +207,11 @@ class TheMeasurementIsRealTests(_TripActivityCase):
         )
 
     def test_the_measured_statement_reads_the_trip_activity_table(self) -> None:
-        statements = self.activity_reading_statements(TERM_TITLE)
+        captured, statements = self.activity_reading_statements(TERM_TITLE)
         self.assertTrue(statements, "the search issued no statement mentioning the trip-activity table")
         touched: set[str] = set()
-        for sql, params in statements:
-            touched.update(relations_read(sql, params))
+        for i, sql, params in statements:
+            touched.update(relations_read(sql, params, preamble=session_preamble(captured, i)))
         self.assertIn(
             TripActivity._meta.db_table,
             touched,

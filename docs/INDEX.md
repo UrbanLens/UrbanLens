@@ -92,7 +92,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P113 | open | 2026-09-16 | 54 verified places where one account's ordinary use can degrade the site for everyone else - 1 still open | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P122 | open | 2026-09-15 | A refused external call returns a 500 from views that catch only `GatewayRequestError` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P123 | open | 2026-09-16 | Global search's pins-provider statement scans every account's labels, so one account's search slows as unrelated accounts add labels that don't even match | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |

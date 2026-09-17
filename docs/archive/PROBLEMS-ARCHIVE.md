@@ -15294,3 +15294,612 @@ field, so the field only ever names a file this server encoded. See `docs/MEDIA_
 `test_every_icon_and_avatar_is_hidden_until_reencoded.py` walks media storage after each writer and fails on any
 file carrying the fixture marker that another member could be served. Files stored before these fixes are re-encoded
 by `strip_exif_from_stored_photos`, which Jess runs once on production.
+
+## RESOLVED 2026-09-17: global search's `_semijoin` carried no viewer scope, so its cost tracked total site data across every crossed relation, not the viewer's own
+
+`id: P123` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled: Global search's pins-provider statement scans every account's labels, so one account's search slows as unrelated accounts add labels that don't even match
+
+**This is a capacity problem, not a correctness or privacy one.** Search results are correctly
+access-scoped; nothing here is a data leak. The defect is that the query *plan* for the pins
+provider touches other accounts' label and pin-label rows before any access filter narrows the
+result, so the statement's cost tracks total site data, not the viewer's own data.
+
+### Evidence (X20, `docs/notes/label-cache-and-filter-cost-measured.md` §4 — method and full numbers there, not restated here)
+
+- `search.panel`: 476-530 ms wall, 122-127 ms CPU, 339-397 ms SQL.
+- The pins provider alone: 26-31 ms CPU and 255-332 ms SQL **in one statement**, 75-84% of the
+  panel's SQL.
+- For the query `Bench Tag 1`, the plan runs the `labels__name` semi-join as a hashed subplan with
+  **no profile condition**: a sequential scan of all 62,354 labels on the site, then 116,875
+  pin-label rows from every account whose labels match `bench` — 299 of 575 ms under load.
+- Each per-pin semi-join also joins `dashboard_user_pins` back to itself.
+- At D15's search rate (5% of views, two panel requests each, ~2.5/s) the pins query alone is
+  **0.64-0.83 DB-seconds/s**, against 0.47-0.55 for all of `map.search`.
+- X20's own conclusion already names this: "Search's pins-provider statement is a server fix
+  target independent of any caching decision, and its unscoped label semi-join is a cross-account
+  cost."
+
+### Mechanism (source read this session)
+
+`services/global_search/providers.py`'s `_semijoin` (`providers.py:192-207`):
+
+```python
+def _semijoin(model, path, condition):
+    if model is None or not _crosses_many(model, path):
+        return condition
+    return Q(Exists(model._base_manager.filter(condition, pk=OuterRef("pk"))))
+```
+
+`_base_manager` is the unfiltered default manager, so the `Exists` subquery carries no profile
+predicate. `PinSearchProvider.search` (`providers.py:525`) applies the viewer's own `profile=profile`
+filter only to the *outer* `Pin` queryset (`providers.py:535`), where it cannot restrict the
+subplan the `labels__name` branch of `apply_text` builds through `_semijoin`. The helper's own
+docstring gives the reason it exists — a row matching through several related rows should stay one
+row without `DISTINCT`, and planning a join across several to-many relations costs more than
+running one — and that reasoning is sound; the gap is only that the subquery it builds carries no
+scope of its own.
+
+(Superseded 2026-09-17 — this snippet is the original, unscoped form. See "The bounded semi-join
+closes every remaining variant" below for the fixed code, current on disk.)
+
+**Not the same finding as a prior refutation.** An earlier session hypothesised that search
+providers were unscoped and access-checked and refuted it: every provider *is* access-scoped, and
+there is no leak. That refutation answered the security question only. It does not close this
+capacity question, and the two have already been conflated once.
+
+### Relationship to P100 — distinct code path, does not transfer
+
+P100 covers `services/map_pins/autocomplete.py`'s `search_local` (the map search box, fired per
+keystroke), and was downgraded 2026-09-10: 141-217 ms per keystroke of which ~70 ms is SQL, served
+by an Incremental Sort off the presorted `dashboard_user_pins.id` key under the `Limit` so it never
+materialises the full match set, and `profile=profile`-scoped so its cost tracks the viewer's own
+pin count. P100's refutation does not transfer here: this is a different statement in a different
+provider, and unlike P100, this one's subquery is genuinely unscoped in the plan, not just
+apparently so.
+
+### Reproduction (2026-09-16, `test_search_does_not_read_another_accounts_labels.py`)
+
+Two `xfail(strict=True)` tests, with a five-test `TheMeasurementIsRealTests` companion guarding them
+against measuring nothing. A viewer owning one pin and one matching label searches while a stranger
+holds 400 labels of their own; the axis is rows *read*, summed from
+`EXPLAIN (ANALYZE, FORMAT JSON)` over every statement of the search that mentions the label table.
+
+The viewer's search read **165 rows, then 1,356** after the stranger's 400 labels — 1,191 more rows
+for data the viewer cannot see. Per relation after growth: `dashboard_labels` 545,
+`dashboard_user_pins_labels` 403, `dashboard_user_pins` 405, on a fixture with two pins in total.
+
+The two variants exist because they have different fixes: one seeds labels that *match* the search
+term (read, then discarded at the pin join), one seeds labels that do not (read only to be
+rejected). A candidate fix that flips one and not the other has done half the job. Both fail today.
+
+**This axis is invisible to `EndpointScalingMixin`.** Its `rows_fetched` sums `cursor.rowcount`,
+which for a `SELECT` is rows *returned*; the subquery returns almost nothing whatever it scans, so
+objects, body bytes, statement count and rows-fetched all read as flat. That is why this needed a
+plan-level measurement and a new shared helper (`core/tests/explain.py`).
+
+### Mechanism, off the plan rather than the source (2026-09-16)
+
+The labels semi-join (`SubPlan 4`) is a **nested loop whose outer side is a sequential scan of
+`dashboard_labels`**; the pin is reached on the inner side by primary key (`Inner Unique: true`).
+The planner estimates `Plan Rows: 1` from the label scan while it actually feeds 403 rows into the
+loop. `name__icontains` compiles to `upper(name) LIKE '%TERM%'`, a leading-wildcard match no btree
+index serves and whose selectivity Postgres cannot estimate, so starting from the label table looks
+cheap. `dashboard_labels` carries btree indexes on `kind`, `profile_id`, `(profile_id, "order")`
+and `lower(name), profile_id, kind` — and **no trigram index on `name`**. `pg_trgm` is installed.
+
+### Pushing the viewer's scope into the subquery is a measured no-op — do not re-attempt it
+
+The direction this entry previously recommended was implemented and measured on 2026-09-16:
+`scope: Q | None` threaded through `apply_text → term_filter → _semijoin`, with
+`PinSearchProvider` passing `Q(profile=profile)` and the subquery built as
+`model._base_manager.filter(condition, scope, pk=OuterRef("pk"))`.
+
+Rows read went from 165→1,356 to 167→1,358. **Growth was identical at 1,191 rows**; the total moved
+by 2. The predicate *is* applied — `Filter: (profile_id = 1107)` appears on `u0` in the plan — but
+the pin is reached by primary key on the inner side of the loop, so an extra pin-side predicate
+cannot reorder the join that costs the rows. The change was reverted. It was result-preserving (192
+search tests passed with it in place, including `test_search_matches_without_distinct.py`); it was
+simply ineffective. Result-preserving is not evidence of effective, and the argument that the
+predicate is logically implied by the outer filter — which is true — says nothing about join order.
+
+### A GIN trigram index fixes the matching variant, not the non-matching one (2026-09-16)
+
+Added `GinIndex(OpClass(Upper(Cast("name", output_field=TextField())), name="gin_trgm_ops"),
+name="idxdb_label_name_upper_trgm")` to `Label.Meta.indexes` (migration 0049) — a functional index
+matching `name__icontains`'s exact compiled form (`UPPER(name::text) LIKE UPPER(%s)`), since a plain
+trigram index on the raw column cannot serve that predicate at all.
+
+**Result:** `test_it_does_not_read_a_strangers_matching_labels` now passes;
+`test_it_does_not_read_a_strangers_unrelated_labels` still fails, unchanged. This is the opposite of
+what the previous version of this entry predicted (it expected the index to help the non-matching
+case, via a leading-wildcard scan becoming indexable, and not the matching one). Both predictions
+were wrong in the same way: the index does not change the labels-table scan strategy at all.
+
+(Both variants pass as of 2026-09-17 — see "The bounded semi-join closes every remaining variant"
+above. The non-matching variant's eventual fix came from `_semijoin` itself, not this index.)
+
+**The actual mechanism, confirmed by direct causation test** (drop the index in a live test
+database, rerun; recreate it, rerun again): `EXPLAIN` shows a plain `Seq Scan` on `dashboard_labels`
+with `Index Name: None` in every variant, with or without the index — Postgres never chooses an
+index scan here, at this table's size (hundreds of rows; the crossover to a competitive index scan
+is normally in the thousands). What the index changes is `ANALYZE`: a GIN/GiST expression index
+makes Postgres collect real per-expression statistics for `UPPER(name::text)`, so its cardinality
+estimate for the predicate stops being a fixed default and starts tracking the term's true match
+count. That appears to change how the *enclosing* query plans (join order / short-circuiting) even
+though the labels node itself is unchanged — not fully decomposed further, since the causal result
+was already reproducible and cheap to confirm without it.
+
+This also explains why the two variants diverge: a matching term's first hit sits early in
+`dashboard_labels`' physical order (seeded before the growth step), so whatever in the outer plan
+now short-circuits on the accurate estimate finds it without needing to read the added rows. A
+non-matching term has no hit anywhere, so nothing can short-circuit — the full table, growth
+included, is read every time to conclude no match exists. Regression run: 154 passed, 1 xfailed
+across the P123 file plus eight neighbouring search test files, `--fresh-db`.
+
+Measured at test scale (~500 labels after growth), not on the 62,354-label capacity population;
+re-measure there before trusting the ratio, though the mechanism (statistics, not scan strategy)
+should hold regardless of table size.
+
+### Superseded 2026-09-17: the non-matching variant did not need the join reordered
+
+This section previously predicted that the only fix for the non-matching variant was to make the
+*pin*, not the label, drive the join — correlating the subquery on the related model instead of the
+searched one (`Exists(Label.objects.filter(pins=OuterRef("pk"), name__icontains=term))` rather than
+`Exists(Pin._base_manager...)`) — and judged that "structurally the right shape" but "substantial,
+correctness-risky work spanning all ten search providers," since `_semijoin` is generic over
+arbitrary `__` paths and some of them put the many-crossing relation after the first hop (e.g.
+`location__wiki__aliases__name`).
+
+That was a reasonable diagnosis of the *old* mechanism — an unscoped `Exists()` that had no way to
+conclude "no match anywhere" short of reading the whole table — but it turned out to be wrong about
+what the eventual fix needed, because the fix that actually worked changes what that cost depends on
+instead of reordering anything. See "The bounded semi-join closes every remaining variant" directly
+below. No join reordering was attempted or needed; `_semijoin`'s existing correlation direction
+(`OuterRef` from the crossed table back to the searched model) was kept as-is.
+
+### The bounded semi-join closes every remaining variant, once a measurement-methodology bug in the test helper itself was found and fixed (2026-09-17)
+
+`_semijoin` (`providers.py`) changed from a bare `Exists()` keyed only off the crossed model to one
+that also takes the caller's already access-scoped queryset, so the internal lookup can be bounded to
+the viewer's own candidate rows:
+
+```python
+def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:
+    if queryset is None:
+        return condition
+    model = queryset.model
+    if not _crosses_many(model, path):
+        return condition
+    outer_pks = list(queryset.values_list("pk", flat=True))
+    if not outer_pks:
+        return Q(pk__in=[])
+    matches = model._base_manager.filter(condition, pk__in=outer_pks)
+    with connection.cursor() as cursor:
+        cursor.execute("SET enable_seqscan = off")
+    try:
+        matching_pks = list(matches.values_list("pk", flat=True))
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("RESET enable_seqscan")
+    return Q(pk__in=matching_pks)
+```
+
+The signature changed from `(model, path, condition)` to `(queryset, path, condition)`. Two
+independent problems had to be fixed, both found directly via `EXPLAIN`, not inferred:
+
+1. **A lazy subquery under `OR`.** Bounding by the outer queryset's pks — the "Pushing the viewer's
+   scope into the subquery" attempt above, which threaded `scope: Q` into the *existing* `Exists(...)`
+   shape — is not enough by itself while the internal lookup stays a lazy `QuerySet` embedded via
+   `pk__in=matches`: Postgres OR-combines this with sibling `term_filter` conditions (it always does)
+   and plans it as a hashed SubPlan that, *inside that plan only*, drops the crossing table's own
+   index for a full scan — a choice it does not make running the identical subquery alone.
+   Materializing `matching_pks = list(matches.values_list("pk", flat=True))` into a concrete Python
+   list before it reaches the caller — so the outer query embeds a literal `pk IN (1, 2, 3, ...)`
+   rather than a nested subquery — fixes this.
+2. **A small-table seq-scan tie-break.** Even the materializing query, run as its own statement, is
+   exactly the shape Postgres's cost-based planner tie-breaks toward a sequential scan of the crossing
+   table once that table is small enough to fit a handful of pages — legitimate, documented behaviour,
+   confirmed by testing the identical statement at ~400 rows (`Seq Scan ... removed=402`, FK index
+   available but unused) versus 20,000 rows (`Index Only Scan ... removed=0`, same statement shape) —
+   but one that reintroduces exactly this entry's row-count-tracks-total-population cost for as long
+   as the crossing table's total population stays in the small-table range. Since the statement is
+   provably bounded (equality on a foreign key against a handful of already-known pks) and provably
+   high-selectivity regardless of table size, bracketing it with `SET enable_seqscan = off` /
+   `RESET enable_seqscan` on a raw cursor is safe specifically because `enable_seqscan=off` only
+   penalizes sequential scans in cost estimation — it does not forbid them, so a table with no usable
+   index is still scanned, just without the tie-break artificially preferring one when an index
+   exists.
+
+Confirmed directly, not inferred: logging added temporarily inside `_semijoin`'s own
+`enable_seqscan=off` block ran a live `EXPLAIN` while the setting was genuinely active during real
+search execution (not a later, separate re-`EXPLAIN` after the setting had already been reset), and
+it showed the Index Scan plan. That diagnostic logging has since been removed; the finding is
+recorded here instead.
+
+**A measurement-methodology bug in the test helper itself hid this working while it already was.**
+`core/tests/explain.py`'s `plan_of`/`rows_examined`/`relations_read` capture a statement's SQL text
+during a real search via `connection.execute_wrapper()`, then re-run `EXPLAIN (ANALYZE, FORMAT JSON)`
+on that captured text as a separate statement *after* the real search has fully finished. That is
+structurally blind to any session-GUC-scoped optimization — like the `enable_seqscan` bracket above —
+that the `finally` block has already reset by the time the re-`EXPLAIN` runs later. Practical effect:
+every test in all 14 P123 hypothesis files was capable of reporting a false failure, measuring the
+*unoptimized* plan Postgres would have chosen without the bracket, not the plan actually used when
+the search ran. This is exactly what made three already-fixed files
+(`test_search_does_not_read_another_accounts_labels.py`, `..._photo_labels.py`, `..._wiki_labels.py`)
+start failing again the moment the `enable_seqscan` fix landed, even though the fix was working
+correctly in production.
+
+Fixed by a new `session_preamble(captured, index)` in `core/tests/explain.py`: it extracts the
+`SET`/`RESET` statements the capture recorded before the statement at `index`, so a test can replay
+them on the same cursor immediately before re-`EXPLAIN`ing — reproducing the exact session GUC state
+active when the statement genuinely ran. `plan_of`, `rows_examined` and `relations_read` all gained an
+optional `preamble` kwarg that runs these replay statements first, then `RESET`s every touched GUC
+name in a `finally` block so the helper does not leak state into whatever the test connection runs
+next. Applied uniformly across all 14 P123 hypothesis test files: every `*_reading_statements()`
+helper now returns `(captured, statements)` instead of just `statements`, and every caller passes
+`preamble=session_preamble(captured, i)`.
+
+**Full verification, run for real, not assumed:** a complete run of all 14 files (107 tests total)
+inside the project's test-runner container against a real Postgres database: **101 passed, 6 failed
+— and all 6 failures were `XPASS(strict)`**, pytest's signal that an `xfail(strict=True)`-marked test
+unexpectedly *passed*. Those 6 were the only remaining `xfail(strict=True)` markers left anywhere in
+the P123 test family: `test_search_does_not_read_another_accounts_article_aliases.py` (all 4 —
+`SearchDoesNotReadAnotherAccountsPinArticleAliasesTests::test_it_does_not_read_a_strangers_matching_pin_aliases`
+and `..._unrelated_pin_aliases`,
+`SearchDoesNotReadAnotherAccountsWikiArticleAliasesTests::test_it_does_not_read_a_strangers_matching_wiki_aliases`
+and `..._unrelated_wiki_aliases`) and `test_search_does_not_read_another_accounts_pin_wiki_aliases.py`
+(both `test_it_does_not_read_a_strangers_matching_wiki_aliases` and
+`..._unrelated_wiki_aliases`).
+
+The `xfail(strict=True)` markers — and the now-false `_PIN_REASON`/`_WIKI_REASON`/`_REASON` docstring
+constants asserting "fixing it needs the join reordered" — were removed from both files, converting
+these 6 tests to plain regression tests with a one-line
+`"""Fixed 2026-09-17 by the bounded semi-join - see the module docstring."""` docstring, matching this
+family's existing convention for already-fixed tests. Re-run of just these two files afterward, in
+isolation against the same reused test database: **21 passed, 0 failed, 0 xfail.**
+
+`mypy` on both modified source files (`providers.py`, `core/tests/explain.py`) via the test-runner
+container: clean, no issues. `ruff check --fix` on all touched files: clean.
+
+**Net effect on this entry.** Every path this entry ever found — the original labels semi-join, both
+`icontains` variants of Photo's bare-term labels, both `iexact` variants of Wiki's/Photo's/Pin's
+`label:` operator, all six of Article's/Trip's/Safety's paths, and all five of the systematic
+field-path audit's paths (`PinAlias`, `PinNote`, the three-hop `location__wiki__aliases__name`,
+`WikiAlias`'s own bare-term path, `ImageKeyword`) — is confirmed fixed by this one mechanism, in both
+the matching and non-matching variant, with 0 remaining `xfail` markers anywhere in the P123 test
+family. **Not fixed by this, and not this problem:** Wiki's missing bare-term label search
+(`apply_text` never lists `"labels__name"` for `WikiSearchProvider` at all) is a separate
+missing-feature gap, unrelated to this capacity defect, and remains unaddressed. **Not re-measured
+this session:** the HTTP-scale (`ul_perf`) numbers recorded elsewhere in this entry predate this final
+fix; they were already inside budget before it, so this fix can only improve them further, but that
+has not been re-run.
+
+### The defect generalises to Photo exactly as predicted; Wiki turned out to reach labels through a different path entirely (2026-09-16)
+
+`PhotoSearchProvider` shares `PinSearchProvider`'s exact shape: `apply_label_clause` (a no-op for a
+bare term) plus `"labels__name"` in the `apply_text` field list, so a bare term reaches labels via
+the same `icontains` semi-join. `test_search_does_not_read_another_accounts_photo_labels.py`
+confirms both halves transfer unchanged: the matching variant passes (the trigram index's
+statistics effect generalises across base models), the non-matching variant still fails the same
+way. No new mechanism here — this is P123's existing analysis holding on a second model, checked
+rather than assumed.
+
+`WikiSearchProvider` does not generalise the same way, because its `apply_text` field list omits
+`"labels__name"` — **a bare search term never reaches the label table for a wiki at all**, matching
+or not. That is a real, separate gap (a user cannot find their own wiki by searching a label's text)
+but it is a missing feature, not this problem, and is not tracked further here.
+
+The path Wiki *does* share with Pin and Photo is `apply_label_clause` itself, reachable from a
+`label:"exact name"` query (all three providers call it identically). That path matches with
+`iexact`, not `icontains` — a different compiled predicate the trigram index was never shown to
+affect. Measured directly (`test_search_does_not_read_another_accounts_wiki_labels.py`): rows read
+grew from 153 to 551 after 400 unrelated stranger labels, **for both the matching and the
+non-matching query** — unlike Photo, the fix does not generalise to either variant of this path,
+because it was never a fix for this predicate shape in the first place. Whether Pin's and Photo's
+own `label:` operator (not their bare-term path, already covered above) has the same gap was not
+checked; the mechanism (`apply_label_clause`, shared verbatim) makes it likely.
+
+**Test-order caution discovered while measuring this:** running the Wiki file's tests before the
+Photo file's, in the same pytest session, made Photo's passing matching-variant test fail — a
+seq-vs-index-scan flip from `ANALYZE`/table-bloat statistics that outlive one test's rolled-back
+transaction and bias a later test's plan for the same table. Reproduced 2/2 combined, absent 4/4
+run alone. Documented at the measurement helper (`core/tests/explain.py`) rather than worked around;
+a result from one of this family of tests should be re-run in isolation before it's trusted as a
+regression.
+
+Updated summary (2026-09-17): the non-matching bare-term variant (Pin, Photo) and both variants of
+the `label:` operator path (Wiki, Pin, Photo) are now confirmed fixed — see "The bounded semi-join
+closes every remaining variant" above. Still out of scope, not a capacity defect: Wiki's missing
+bare-term label search.
+
+### Integration-level reproduction: the neighbour harness, at 50,000 labels (2026-09-16)
+
+`tests/perf/k6/neighbour.js`'s `NEIGHBOUR_REQUESTS` gained two entries, `global_search_match` and
+`global_search_miss` (`/dashboard/search/panel/?q=...`), and `perf_seed.py` gained
+`seed_bulk_labels()` — bulk-created, unattached to any pin/photo/wiki, growing `dashboard_labels`
+via a new `--heavy-labels` flag on `provision_integration_env` and `bin/run_perf_tests.sh`.
+Unattached is deliberate, not a shortcut: `_semijoin` scans the label table before any join to
+another model narrows it, so what the rows are attached to has no bearing on the cost (see
+`tests/perf/README.md`'s new P123 section). No actor phase is needed to reproduce this — the defect
+tracks total row count, not real-time action — so growing the table is a seeding step.
+
+Two real bugs surfaced wiring this up, both fixed: the new requests were missing the `/dashboard/`
+prefix every other route in the file carries (`urls.py` mounts `dashboard.urls` under
+`path("dashboard/", include(...))`; the un-prefixed path 404s), and a `SEARCH_ENDPOINTS` constant
+used inside `buildThresholds()` was declared after the module-level `options` block that calls it,
+a temporal-dead-zone `ReferenceError` at load time. The per-phase verdict table also turned out to
+dilute the signal — 2 of 5 rotation slots, blended with health/map traffic into one p95 per phase —
+so `buildThresholds`/`renderVerdict` gained a second table, `http_req_duration{...,endpoint:X}`
+recorded independent of phase, showing each search variant's latency on its own.
+
+The target environment (`ul_perf_*`, a separate checkout normally left running rather than rebuilt)
+had three unrelated, pre-existing problems that blocked any run at all until fixed: its venv was
+missing dependencies added since it was last built (including `jinjax`, this same day), all 237
+tables/235 sequences in `urbanlens_perf` were owned by `postgres` instead of `ul_web` (the app's
+runtime role) because the DB was seeded via the superuser without the usual role-convergence step
+(`bin/init.py --db-only`, which `db-setup` normally runs), and three migrations were pending,
+including **0049 — this problem's own trigram-index fix** — so the very first attempt would have
+measured the unfixed matching variant. None of these are new findings about the application; they
+are the perf environment's own drift, fixed in place so it reflects the checkout under test.
+
+**Result, a validated 60-second idle-phase pass (`--phases idle`, `budget p95 < 705ms` derived from
+this same host and run):**
+
+| endpoint | count | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|
+| `global_search_match` | 60 | 222-230ms | 276-285ms | 372-385ms | 467-535ms |
+| `global_search_miss` | 60 | 139-152ms | 187-205ms | 221-347ms | 225-533ms |
+
+Both variants run well above ordinary map/health traffic on this same host (44-82ms p50/p95,
+from the pre-fix baseline pass) — the labels-table cost is visible at the HTTP level, not just in
+`EXPLAIN` row counts. Notably, `global_search_match` is the **slower** of the two here, not the
+faster one the unit-level "matching variant is partially fixed" result might suggest: the match
+term (`"Perf Bulk Label"`) was deliberately seeded to match all 50,000 bulk rows, so confirming
+*which* rows match likely costs more than confirming *none* do, once the match count is this large.
+The unit-level entry above already flagged this exact gap — "Measured at test scale (~500 labels
+after growth)... re-measure there before trusting the ratio" — and this is that re-measurement, at
+100x the scale, showing the ratio does not hold: the fix's benefit is term-dependent, not just
+variant-dependent, and a term matching a large slice of the table is its own cost shape.
+
+**The full 8-phase, ~15-minute measured pass (`map_init_1/4`, `map_search_1/8`, `label_edit`,
+`search_storm`, `import_confirmed`, `cooldown`) did not complete** — killed three consecutive times
+by the host's memory watchdog (a known condition on this shared host, not a code defect; see the
+repo's own operational notes on perf runs saturating it), each time further in: immediately during
+setup, then 1m06s into `map_init_1`, then 7m04s in, right as `search_storm` ramped to 60 VUs.
+`map_init_1`, `map_init_4`, `map_search_1`, `map_search_8` and `label_edit` all completed cleanly
+across these attempts before each kill. Since P123 is a static, row-count-driven cost rather than
+an actor-phase-driven one, the idle-phase result above is a complete answer to this problem's own
+question; the full battery would additionally show whether it compounds with `search_storm`'s
+connection pressure, which remains unmeasured.
+
+### The defect generalises to three more providers via three more relations: Article's aliases, Trip's activities/comments, Safety's messages (2026-09-16)
+
+Read all ten search providers this session, specifically to find every `apply_text`/`term_filter`
+call whose field-path list crosses a to-many relation the way `labels__name` does — since `_semijoin`
+is generic over any `__`-separated path, not something specific to labels. `apply_text` always
+passes `model=queryset.model` to `term_filter` (`providers.py:483`), so **any** field path a provider
+hands it that crosses a to-many relation gets the same unscoped `Exists(model._base_manager...)`
+treatment, independent of the labels mechanism specifically.
+
+Three more providers turned out to be exposed, through six more field paths, none of them a labels
+relation at all — Article has no `labels` relation, so `apply_label_clause` is never called for it,
+and this generalisation is unrelated to that code path:
+
+- **`ArticleSearchProvider`** (`"pin__aliases__name"`, `"wiki__aliases__name"`) — both cross
+  `PinAlias`/`WikiAlias`'s reverse FK (`related_name="aliases"`). Reproduced in
+  `test_search_does_not_read_another_accounts_article_aliases.py`: four `xfail(strict=True)` tests
+  (matching + non-matching, for both the pin-hosted and wiki-hosted article shape, since `pin`/`wiki`
+  are separate `OneToOneField`s and a `CheckConstraint` enforces exactly one is set per row, so the
+  two hosts need independent reproductions), ten measurement-is-real guard tests, all passing as
+  expected — the alias semi-join reads the whole `dashboard_pin_aliases`/`dashboard_wiki_aliases`
+  table regardless of a stranger's growing, inaccessible pin/wiki, in both the matching and
+  non-matching case (unlike labels, no trigram-index-shaped fix has been attempted here yet, so
+  neither variant is even partially fixed).
+- **`TripSearchProvider`** (`"activities__title"`, `"activities__notes"`, `"comments__text"`) — the
+  first two cross `TripActivity`'s reverse FK (`related_name="activities"`), the third crosses
+  `TripComment`'s (`related_name="comments"`). `term_filter` builds one `_semijoin` per field path,
+  so title and notes are two separate `Exists` subqueries landing in the same statement against the
+  same `dashboard_trip_activities` table. Reproduced across two files
+  (`test_search_does_not_read_another_accounts_trip_activities.py`,
+  `..._trip_comments.py`): five `xfail(strict=True)` tests (title-match, notes-match and a shared
+  true-negative for activities; matching and non-matching for comments) plus eleven guard tests, all
+  passing as expected.
+- **`SafetySearchProvider`** (`"messages__body"`) — crosses `SafetyCheckinMessage`'s reverse FK
+  (`related_name="messages"`). Unlike Article/Trip, a check-in has exactly one owning profile (no
+  membership model), so this is structurally the closest of the three to the original labels
+  reproduction — just a different to-many relation. Reproduced in
+  `test_search_does_not_read_another_accounts_safety_messages.py`: two `xfail(strict=True)` tests
+  plus five guard tests, all passing as expected.
+
+All nine `xfail(strict=True)` reproductions above (4 + 3 + 2, following the same
+before/during/after-growth pattern and `TheMeasurementIsRealTests` guard convention as the original
+labels file) and their 26 companion guard tests were run against the real `EXPLAIN`-measured row
+count exactly as the labels/Photo/Wiki reproductions were, not merely asserted to fail — see each
+file's own docstring and `_REASON` constant for the exact mechanism per path. Exact before/after row
+counts were not re-extracted into this entry (a `--runxfail` pass to capture them hit this host's
+known memory-watchdog condition twice in a row and was not worth a third attempt); the qualitative
+result — full-table growth on every variant, matching and non-matching alike — is what each file's
+own xfailed run already demonstrates.
+
+**Checked and found NOT exposed** (own `apply_text`/`term_filter` calls read, not assumed): sequence
+of no-many-crossing field paths against every remaining provider's own field list.
+`VisitSearchProvider` (`"notes"`, `"pin__name"`, `"pin__location__official_name"`,
+`"pin__location__wiki__name"`) uses `apply_text`, so `model=PinVisit` is passed automatically, but
+every path is a single-valued FK/OneToOne chain — none crosses a to-many relation, so `_crosses_many`
+is false for all of them and `_semijoin` is a no-op throughout.
+`DirectMessageSearchProvider`/`search_direct_messages` (`services/messaging/direct_messages.py`)
+calls `term_filter(parsed.terms, ["body"])` directly, with no `model=` kwarg, so `_semijoin` never
+activates regardless — moot anyway, since `body` is a plain field on `DirectMessage` itself.
+`MarkupMapSearchProvider` uses `apply_text` for `MarkupMap.title` (plain field, harmless even with
+`model=` passed automatically) but reaches `PinMarkup.label` via a direct, bare `term_filter(parsed.terms,
+["label"])` call with no `model=` — and `label` is the markup's own drawn text, a plain field on
+`PinMarkup`, not a relation to `Label` at all, despite the similar name. `CommentSearchProvider`
+calls `term_filter(parsed.terms, ["text"])` directly (no `model=`) against both `Comment` and
+`TripComment`, and `text` is a plain field on both. None of these four needed a reproduction test,
+since there is nothing to reproduce; recorded here so the survey of all ten providers is complete
+rather than silently partial.
+
+Updated summary (2026-09-17): all six new paths above (Article's two, Trip's three, Safety's one),
+both variants, are now confirmed fixed — see "The bounded semi-join closes every remaining variant"
+above. Confirmed not applicable, unchanged: Visit, DirectMessage, MarkupMap, Comment.
+
+### Pin's and Photo's own `label:` operator, checked: Photo shares the gap, Pin surprisingly does not (2026-09-17)
+
+The Wiki `label:` entry above flagged this as unchecked: "Whether Pin's and Photo's own `label:`
+operator... has the same gap was not checked; the mechanism (`apply_label_clause`, shared verbatim)
+makes it likely." Reproduced in two new files,
+`test_search_does_not_read_another_accounts_pin_label_operator.py` and
+`..._photo_label_operator.py`, both structured exactly like the Wiki file (a viewer's one exactly-
+named label vs. a stranger's growing, unrelated ones, matching and non-matching `label:"..."`
+variants).
+
+Photo matches the prediction exactly: both variants fail (full-table growth, matching and
+non-matching alike), the same result as Wiki. Pin does not: its non-matching variant fails as
+expected, but **its matching variant does not grow** — measured twice independently (a single-test
+isolated run, and the whole file run alone against a fresh test database) to rule out the test-order
+statistics bias the Wiki/Photo section above already documented for this same test family. Both
+runs agreed, so this is a reproducible property of Pin's plan, not an artifact. The
+`test_it_does_not_read_a_strangers_labels_when_the_term_matches_elsewhere` test in the Pin file is
+therefore a plain (non-`xfail`) regression test, not a reproduction, mirroring how the bare-term
+matching variant is already handled in `test_search_does_not_read_another_accounts_labels.py`.
+
+Not diagnosed further: the plausible mechanism is the same statistics-driven join-reordering effect
+already measured for `icontains` (a precise cardinality estimate on the label predicate changing the
+*enclosing* plan's join order, not the label scan itself) — but that account would have to also
+explain why the identical `apply_label_clause` call does not equally rescue Photo's or Wiki's
+matching variant, on the same `iexact` predicate shape, and that gap was not chased down. Recorded
+as a measured fact, not a diagnosed one; re-measure before relying on it holding at a larger scale,
+per this entry's own established caution about test-scale results.
+
+Updated summary (2026-09-17): Wiki's `label:` operator (either variant), Photo's `label:` operator
+(either variant), and Pin's `label:` operator non-matching variant are now all confirmed fixed — see
+"The bounded semi-join closes every remaining variant" above. Already fine before that fix, unchanged:
+Pin's `label:` operator matching variant (mechanism still not diagnosed).
+
+### Integration-level reproduction of the five generalised relations, at 50,000 rows each (2026-09-17)
+
+`--heavy-search-relations` (added to `provision_integration_env`/`bin/run_perf_tests.sh` alongside
+this entry's earlier generalisation work) validated live against `ul_perf` — the same environment,
+same `--phases idle` short-run methodology as the original 50,000-label validation above. The
+checkout there was 39 commits behind (it predated this whole generalisation), so bringing it current
+needed a real update, not just a re-run: `git pull`, a rebuild of the `app` image, and
+`docker compose up -d` to pick up services added upstream since the environment was last built
+(RabbitMQ as the Celery broker, Dragonfly renaming Valkey, a `celery-worker-bulk` worker). The
+environment's own machine-generated `docker-compose.agent.yml` (container-naming overlay, "generated
+per environment - do not edit") still referenced the retired `valkey`/`test-valkey` service names,
+which fails the build outright (`service "valkey" has neither an image nor a build context`); fixed
+in place with the equivalent `dragonfly`/`rabbitmq`/`celery-worker-bulk`/`test-dragonfly`/
+`test-rabbitmq` entries, following the naming convention every other entry in that file already
+uses. Migrations were already current and table ownership had not drifted this time - the three
+problems the first labels validation found and fixed in place did not recur.
+
+```
+bin/run_perf_tests.sh --url http://localhost:31000 \
+    --provision-container ul_perf_app --db-container ul_perf_db \
+    --heavy-pins 20000 --heavy-labels 50000 --heavy-search-relations 50000 --phases idle
+```
+
+All five relations grew cleanly to 50,000 rows each on a fresh account (`pin_aliases`,
+`wiki_aliases`, `trip_activities`, `trip_comments`, `safety_messages`: 50,000 created, 0 already
+there per the pre-flight log).
+
+**Result, a validated 60-second idle-phase pass (`budget p95 < 830ms`, derived from this same host
+and run):**
+
+| endpoint | count | p50 | p95 | p99 | max |
+|---|---|---|---|---|---|
+| `global_search_match` | 60 | 255ms | 312ms | 317ms | 320ms |
+| `global_search_miss` | 60 | 179ms | 225ms | 242ms | 253ms |
+
+Both comfortably inside budget; the connection pool peaked at 9/100 backends (89% idle at the peak).
+Roughly the same order of magnitude as the labels-only validation above (222-285ms p50/p95 for
+`global_search_match`, 139-205ms for `global_search_miss`) despite adding 250,000 more rows across
+five more tables on top of the 50,000 labels already there - consistent with `GlobalSearchEngine`
+fanning one query out across every provider rather than paying per-relation, though a 60-request
+sample on a shared host is not precise enough to say the five new relations added zero cost, only
+that they did not compound into a budget failure. The full multi-phase battery (`search_storm`
+especially) was not attempted here, for the same host-memory-watchdog reason the labels-only
+validation's own full battery was abandoned after three kills; not repeated a fourth time on this
+already-successful narrower result.
+
+### A systematic field-path audit of all ten providers finds five more crossing relations, all reproduced (2026-09-17)
+
+Every earlier generalisation in this entry was found by reading one provider's field list and
+noticing it looked like labels'. That leaves the other nine providers unaudited by anything more
+rigorous than "did this one look interesting yet" — so this pass reads every `apply_text`/
+`term_filter`/`apply_label_clause` call site in `providers.py` (ten providers, confirmed by line
+number: 210, 315, 459, 496, 503, 546, 560, 636, 640, 716, 720, 777, 863, 911, 1035, 1056, 1121,
+1162, 1205) and checks each field-list entry's relation cardinality directly against the model
+(`ForeignKey` vs. `OneToOneField`, not inferred from behaviour), rather than reading provider
+docstrings and reproducing whichever one already looked suspicious.
+
+**Result: five previously-untested crossing paths, all confirmed live, none of them look-alikes
+of anything already covered.** `_crosses_many` only needs one segment of a path to be
+`many_to_many` or `one_to_many` - it doesn't matter which segment, or which model the semijoin is
+actually built from - so a path can share a target table with an already-tested path and still be
+a distinct, untested defect if a different provider drives the semijoin from a different base
+model:
+
+| provider | field-list entry | relation | driving model | distinct from |
+|---|---|---|---|---|
+| `PinSearchProvider` | `aliases__name` | `PinAlias` (reverse FK) | `Pin` | Article's `pin__aliases__name` (drives from `Article`) |
+| `PinSearchProvider` | `notes__text` | `PinNote` (reverse FK) | `Pin` | nothing - first time this relation appears anywhere in this entry |
+| `PinSearchProvider` | `location__wiki__aliases__name` | `WikiAlias` (reverse FK, 3rd path segment) | `Pin` | Article's `wiki__aliases__name` (drives from `Article`); Wiki's own `aliases__name` (drives from `Wiki`) |
+| `WikiSearchProvider` | `aliases__name` (bare-term path) | `WikiAlias` (reverse FK) | `Wiki` | the two above; also distinct from this same provider's already-tested `label:` operator, a different clause entirely |
+| `PhotoSearchProvider` | `keywords__keyword` | `ImageKeyword` (reverse FK) | `Image` | nothing - first time this relation appears |
+
+New files, one per relation, all following the established shape (a viewer whose own pin/wiki/photo
+matches through the relation, a stranger's unrelated row on the same relation that grows by 400,
+matching and non-matching variants, a `TheMeasurementIsRealTests` premise-guard class):
+`test_search_does_not_read_another_accounts_pin_aliases.py`, `..._pin_notes.py`,
+`..._pin_wiki_aliases.py`, `..._wiki_own_aliases.py`, `..._photo_keywords.py`.
+
+**All ten reproductions confirmed live** (`--runxfail`, so the assertion actually ran instead of
+being suppressed by the marker): every one of the five relations grew by ~400-1200 rows read on
+both the matching and non-matching variant, matching the Article/Trip/Safety precedent - none of
+these five relations carry anything like `Label.name`'s migration-0049 GIN trigram index, so
+neither variant gets even the partial relief that index gives the original labels path. One file
+(`wiki_own_aliases`) initially failed its own premise guard (`test_the_search_finds_the_viewers_own_wiki`
+returned nothing): `WikiSearchProvider` scopes to `visible_wiki_locations_cached`, which requires
+either a pin at the wiki's location or a domain match - a bare `Wiki` row with no pin is invisible
+to its own creator. Fixed by adding the missing pin (mirroring the pattern the Article-wiki-aliases
+file already used); re-run confirmed both variants reproduce identically to the other four files.
+Final state: **25 passed, 10 xfailed** across the five new files.
+
+**`PinNote` is worth flagging distinctly.** `PinNote`'s own docstring says these rows are "private,"
+visible only to the pin's owner. The unscoped semijoin means Postgres compares a stranger's private
+note *text* against the search term to answer someone else's query - the content is read, never
+returned (results are still correctly access-scoped, so this is not a data leak to the requester),
+but it is a step further than the other four relations, none of which claim any privacy boundary
+narrower than "the owner's account."
+
+**Audit completeness, for whoever picks this up next:** the remaining five providers
+(`ArticleSearchProvider`, `TripSearchProvider`, `VisitSearchProvider`, `DirectMessageSearchProvider`,
+`MarkupMapSearchProvider`, `SafetySearchProvider`, `CommentSearchProvider` - all ten, minus the three
+in the table above) were checked and found clean: `VisitSearchProvider`'s and `CommentSearchProvider`'s
+field lists never cross a to-many relation at all (every hop is a forward FK/O2O); `MarkupMapSearchProvider`
+searches only its own plain fields; `DirectMessageSearchProvider`'s `message_search_queryset` (in
+`services/messaging/direct_messages.py`, outside this file, so outside the original grep) calls
+`term_filter` on a single plain field with no path at all. `ArticleSearchProvider`, `TripSearchProvider`,
+and `SafetySearchProvider` were already covered by this entry's earlier generalisation. This is now a
+complete audit of every field-list entry in every provider, not a sample of the ones that happened to
+look interesting.
+
+**Not yet extended to the HTTP-scale harness.** `--heavy-search-relations` (`tests/perf/README.md`)
+seeds `PinAlias` and `WikiAlias` already (for Article's paths), so those two relations' table-size
+growth is already covered at HTTP scale incidentally - but `PinNote` and `ImageKeyword` are new
+tables the harness does not seed at all. Extending `perf_seed.py`'s `seed_bulk_search_relations` to
+these two was judged out of scope for this pass (unit-level reproduction was the ask; the four
+existing HTTP-scale validations in this entry already established that fanning fifty-thousand-row
+relations through this same mechanism does not blow the budget, and there is no reason to expect
+`PinNote`/`ImageKeyword` to behave differently at that layer).
+
+Updated summary (2026-09-17): all five relations above, both variants, are now confirmed fixed —
+see "The bounded semi-join closes every remaining variant" above — on top of everything else this
+entry ever found. Every field-list entry in every one of the ten global-search providers has now been
+checked against the model's own relation definitions, and every crossing path found is confirmed
+fixed, with 0 remaining `xfail` markers anywhere in the P123 test family. The only thing this entry
+found that is not fixed is Wiki's missing bare-term label search, which was never this problem: a
+missing feature, not a capacity defect.
