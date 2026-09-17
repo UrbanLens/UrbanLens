@@ -200,10 +200,12 @@ def queue_pin_assignment_sync(pin_id: int) -> None:
     if not _redata_configured():
         return
 
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.tasks import sync_redata_pin_assignment
+    from urbanlens.dashboard.services.core.bulk_followup import enqueue_follow_on
+    from urbanlens.dashboard.services.core.celery import follow_on_queue
+    from urbanlens.dashboard.tasks import sync_redata_pin_assignment, sync_redata_pin_assignments
 
-    transaction.on_commit(lambda: safely_enqueue_task(sync_redata_pin_assignment, pin_id))
+    queue = follow_on_queue()
+    transaction.on_commit(lambda: enqueue_follow_on(sync_redata_pin_assignment, sync_redata_pin_assignments, pin_id, queue=queue))
 
 
 def get_suggestions(pin: Pin, *, limit: int | None = None) -> list[tuple[Label, float]] | None:

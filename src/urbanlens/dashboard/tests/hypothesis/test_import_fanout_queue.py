@@ -29,7 +29,12 @@ from urbanlens.dashboard.tasks import (
     suggest_wiki_category,
 )
 
-ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
+#: The three signal handlers (and ensure_wiki_for_location's own enrichment enqueue) now call
+#: enqueue_follow_on (bulk_followup.py), not safely_enqueue_task directly. Outside any
+#: batching_follow_on_work() context - none of these tests open one - it still calls
+#: safely_enqueue_task exactly as before, but the name it calls through lives in bulk_followup's own
+#: namespace, not celery's; patching celery.safely_enqueue_task would patch a name nothing here holds.
+ENQUEUE = "urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task"
 
 
 def _inside_a_bulk_task(during) -> list[object]:
@@ -74,6 +79,7 @@ class _Profile:
 
 
 class _Pin:
+    pk = 12
     location_id = 55
     parent_pin_id = None
     profile_id = 7
@@ -82,6 +88,11 @@ class _Pin:
 
 class _Wiki:
     pk = 20
+
+
+class _PinLink:
+    pk = 42
+    wayback_url = ""
 
 
 class SignalsQueueFollowOnWorkTests(SimpleTestCase):
@@ -132,6 +143,56 @@ class SignalsQueueFollowOnWorkTests(SimpleTestCase):
             enqueue = self._enqueued("urbanlens.dashboard.models.reputation.signals", fire, in_bulk=True)
 
         enqueue.assert_called_once_with(score_reputation_event, 31, queue=Queue.BULK)
+
+    def test_an_imported_pins_extracted_link_is_archived_on_bulk(self) -> None:
+        from urbanlens.dashboard.models.links.signals import archive_pin_link
+        from urbanlens.dashboard.tasks import archive_pin_link_to_wayback
+
+        def fire() -> None:
+            archive_pin_link(sender=object, instance=_PinLink(), created=True)
+
+        enqueue = self._enqueued("urbanlens.dashboard.models.links.signals", fire, in_bulk=True)
+
+        enqueue.assert_called_once_with(archive_pin_link_to_wayback, 42, queue=Queue.BULK)
+
+    def test_a_link_someone_adds_keeps_the_interactive_queue(self) -> None:
+        from urbanlens.dashboard.models.links.signals import archive_pin_link
+        from urbanlens.dashboard.tasks import archive_pin_link_to_wayback
+
+        def fire() -> None:
+            archive_pin_link(sender=object, instance=_PinLink(), created=True)
+
+        enqueue = self._enqueued("urbanlens.dashboard.models.links.signals", fire, in_bulk=False)
+
+        enqueue.assert_called_once_with(archive_pin_link_to_wayback, 42, queue=None)
+
+    def test_an_imported_pins_redata_label_assignment_syncs_on_bulk(self) -> None:
+        from urbanlens.dashboard.models.pin.signals import sync_redata_assignments_for_pin_labels
+        from urbanlens.dashboard.tasks import sync_redata_pin_assignment
+
+        def fire() -> None:
+            sync_redata_assignments_for_pin_labels(
+                sender=object, instance=_Pin(), action="post_add", reverse=False, pk_set={1}
+            )
+
+        with mock.patch("urbanlens.dashboard.services.labels.redata_suggestions._redata_configured", return_value=True):
+            enqueue = self._enqueued("urbanlens.dashboard.services.labels.redata_suggestions", fire, in_bulk=True)
+
+        enqueue.assert_called_once_with(sync_redata_pin_assignment, _Pin.pk, queue=Queue.BULK)
+
+    def test_a_label_someone_adds_keeps_the_interactive_queue(self) -> None:
+        from urbanlens.dashboard.models.pin.signals import sync_redata_assignments_for_pin_labels
+        from urbanlens.dashboard.tasks import sync_redata_pin_assignment
+
+        def fire() -> None:
+            sync_redata_assignments_for_pin_labels(
+                sender=object, instance=_Pin(), action="post_add", reverse=False, pk_set={1}
+            )
+
+        with mock.patch("urbanlens.dashboard.services.labels.redata_suggestions._redata_configured", return_value=True):
+            enqueue = self._enqueued("urbanlens.dashboard.services.labels.redata_suggestions", fire, in_bulk=False)
+
+        enqueue.assert_called_once_with(sync_redata_pin_assignment, _Pin.pk, queue=None)
 
 
 class WikiEnrichmentFollowsTheWikiTests(SimpleTestCase):

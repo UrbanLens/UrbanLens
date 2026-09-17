@@ -295,6 +295,10 @@ class QueuePinAssignmentSyncTests(TestCase):
         on_commit.assert_not_called()
 
     def test_configured_enqueues_with_pin_id_after_commit(self) -> None:
+        # queue_pin_assignment_sync now calls enqueue_follow_on (bulk_followup.py), which - outside
+        # any active batching_follow_on_work() collector, as here - calls through to
+        # safely_enqueue_task exactly as before, but the name it calls through lives in
+        # bulk_followup's own namespace, not celery's (see "patch the name the module holds").
         callbacks: list = []
         with (
             _redata_configured(),
@@ -302,7 +306,7 @@ class QueuePinAssignmentSyncTests(TestCase):
                 "urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit",
                 side_effect=callbacks.append,
             ),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task") as enqueue,
         ):
             redata_suggestions.queue_pin_assignment_sync(42)
             callbacks[0]()

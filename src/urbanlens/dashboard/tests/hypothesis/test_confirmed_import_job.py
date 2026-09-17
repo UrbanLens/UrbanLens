@@ -11,6 +11,7 @@ from unittest import mock
 from celery.exceptions import SoftTimeLimitExceeded
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
 from model_bakery import baker
 
@@ -225,3 +226,167 @@ class ConfirmedImportJobTests(TestCase):
         timeouts = [call.kwargs.get("timeout") for call in cache_set.call_args_list if job_id in str(call.args[0])]
         self.assertTrue(timeouts, "no status was written for the job")
         self.assertTrue(all(timeout >= confirmed_import.TIME_LIMIT_SECONDS for timeout in timeouts), timeouts)
+
+
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
+class ConfirmedImportFollowOnBatchingTests(TransactionTestCase):
+    """A real import's per-pin follow-on work (wiki creation, category suggestion, reputation
+    scoring) coalesces into bounded chunks rather than one broker task per pin (P109).
+
+    ``run_confirmed_import`` wraps its per-pin loop in ``batching_follow_on_work()``, so every pin
+    created inside it - including the reputation event ``Pin``'s own post_save signal records - has
+    its follow-on work buffered and flushed as chunk-shaped batch tasks. Follow-on enqueues are
+    observed by patching ``bulk_followup.safely_enqueue_task`` directly rather than running the
+    downstream batch tasks (which would hit Wiki creation, AI tagging and reputation scoring for
+    real) - this suite is about how many broker messages an import creates and what they carry, not
+    what those messages do once picked up.
+
+    A ``TransactionTestCase``, not the project's usual ``TestCase``, on purpose: ``run_confirmed_import``
+    never wraps its per-pin loop in an explicit transaction, so in production each pin's row commits
+    (and its post_save ``transaction.on_commit`` callback fires) the moment it is created - while the
+    surrounding ``batching_follow_on_work()`` collector is still open. The project ``TestCase`` wraps a
+    whole test in one outer transaction that never really commits, so on_commit callbacks would only
+    ever run (via ``captureOnCommitCallbacks``) after the whole import - and therefore after the
+    collector - had already closed, batching only the one family (category suggestion) that isn't
+    deferred through a signal and silently un-batching the other two. A real, uncommitted-nothing
+    transaction is what makes this suite test what production actually does.
+    """
+
+    FOLLOW_ON_ENQUEUE = "urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task"
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.addCleanup(single_flight.release, guard_key(self.profile.pk))
+
+    def _run_import(self, count: int) -> mock.Mock:
+        """Store and run a confirmed import of *count* pins; return the observed follow-on enqueues."""
+        with mock.patch(ENQUEUE, return_value=mock.Mock()):
+            started = confirmed_import.start_confirmed_import(self.profile, _lists(count), auto_tag=True)
+        with mock.patch(self.FOLLOW_ON_ENQUEUE) as enqueue:
+            run_confirmed_import(self.profile.pk, started.job_id)
+        return enqueue
+
+    def _pins(self) -> int:
+        return Pin.objects.filter(profile=self.profile).count()
+
+    def _pin_ids(self) -> list[int]:
+        return list(Pin.objects.filter(profile=self.profile).order_by("pk").values_list("pk", flat=True))
+
+    def test_before_any_import_the_profile_has_no_follow_on_work_pending(self) -> None:
+        """Baseline: an untouched profile has created nothing for the fan-out to ever act on."""
+        from urbanlens.dashboard.models.reputation.model import ReputationEvent
+
+        self.assertEqual(self._pins(), 0)
+        self.assertEqual(ReputationEvent.objects.filter(profile=self.profile).count(), 0)
+
+    def test_a_small_import_still_queues_its_follow_on_work(self) -> None:
+        """A chunk of one still flushes - the mechanism itself must not silently swallow small imports."""
+        enqueue = self._run_import(3)
+
+        self.assertTrue(enqueue.called, "a 3-pin import queued no follow-on work at all")
+
+    def test_a_large_import_bounds_its_follow_on_enqueue_count_not_one_task_per_pin(self) -> None:
+        """The headline claim: a 120-pin import's follow-on enqueues track pins/chunk_size, not pins."""
+        from urbanlens.dashboard.services.core.bulk_followup import DEFAULT_CHUNK_SIZE
+        from urbanlens.dashboard.tasks import (
+            ensure_wikis_for_locations,
+            score_reputation_events,
+            suggest_pin_categories,
+        )
+
+        pin_count = 120
+        expected_chunks_per_family = -(-pin_count // DEFAULT_CHUNK_SIZE)  # ceil
+
+        enqueue = self._run_import(pin_count)
+
+        self.assertEqual(self._pins(), pin_count)
+        by_task: dict[object, list[list[int]]] = {}
+        for call in enqueue.call_args_list:
+            task, ids = call.args
+            by_task.setdefault(task, []).append(ids)
+
+        for task in (ensure_wikis_for_locations, suggest_pin_categories, score_reputation_events):
+            chunks = by_task.get(task, [])
+            self.assertLessEqual(
+                len(chunks),
+                expected_chunks_per_family,
+                f"{task.name} was enqueued {len(chunks)} times for {pin_count} pins - expected at most {expected_chunks_per_family} chunked calls, not one per pin",
+            )
+            self.assertGreater(len(chunks), 0, f"{task.name} was never enqueued for a {pin_count}-pin import")
+            for chunk in chunks:
+                self.assertLessEqual(
+                    len(chunk), DEFAULT_CHUNK_SIZE, f"{task.name} received an oversized chunk: {chunk}"
+                )
+
+    def test_a_large_imports_follow_on_ids_are_not_lost_or_duplicated(self) -> None:
+        """Every pin's follow-on work must reach a batch task exactly once - none dropped, none doubled."""
+        from urbanlens.dashboard.models.reputation.model import ReputationEvent
+        from urbanlens.dashboard.tasks import (
+            ensure_wikis_for_locations,
+            score_reputation_events,
+            suggest_pin_categories,
+        )
+
+        pin_count = 120
+        enqueue = self._run_import(pin_count)
+
+        flushed: dict[object, list[int]] = {}
+        for call in enqueue.call_args_list:
+            task, ids = call.args
+            flushed.setdefault(task, []).extend(ids)
+
+        pin_ids = self._pin_ids()
+        self.assertEqual(len(pin_ids), pin_count)
+        self.assertEqual(
+            sorted(flushed.get(suggest_pin_categories, [])),
+            pin_ids,
+            "every created pin should have its category suggestion queued exactly once",
+        )
+
+        location_ids = sorted(Pin.objects.filter(pk__in=pin_ids).values_list("location_id", flat=True))
+        self.assertEqual(
+            sorted(flushed.get(ensure_wikis_for_locations, [])),
+            location_ids,
+            "every pin's location should have wiki creation queued exactly once",
+        )
+
+        event_ids = sorted(
+            ReputationEvent.objects.filter(profile=self.profile, rule_key="pin_created").values_list("pk", flat=True)
+        )
+        self.assertEqual(
+            len(event_ids), pin_count, "the premise failed: not every pin recorded a pin_created reputation event"
+        )
+        self.assertEqual(
+            sorted(flushed.get(score_reputation_events, [])),
+            event_ids,
+            "every pin's reputation event should be queued for scoring exactly once",
+        )
+
+    def test_after_a_large_import_a_normal_single_pin_save_is_unaffected(self) -> None:
+        """The collector must not leak across calls: an ordinary save outside any import still enqueues immediately, per-item, on its own queue - not batched, not routed to bulk."""
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.reputation.model import ReputationEvent
+        from urbanlens.dashboard.tasks import ensure_wiki_for_location, score_reputation_event
+
+        self._run_import(5)
+
+        location, _ = Location.objects.get_nearby_or_create(60.0, 60.0)
+        with mock.patch(self.FOLLOW_ON_ENQUEUE) as enqueue:
+            pin = Pin.objects.create(profile=self.profile, location=location, name="Solo add")
+
+        event = ReputationEvent.objects.get(profile=self.profile, rule_key="pin_created", target_id=pin.pk)
+        enqueue.assert_has_calls(
+            [
+                mock.call(ensure_wiki_for_location, location.pk, queue=None),
+                mock.call(score_reputation_event, event.pk, queue=None),
+            ],
+            any_order=True,
+        )
+        self.assertEqual(
+            enqueue.call_count,
+            2,
+            "a single non-batched pin save must enqueue its follow-on work immediately, one call per item - not chunked",
+        )

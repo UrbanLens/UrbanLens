@@ -69,17 +69,21 @@ class PinLinkArchiveSignalTests(SimpleTestCase):
     """A freshly created PinLink enqueues the Wayback archive task after commit."""
 
     def test_enqueues_after_commit_for_new_link(self) -> None:
+        from urbanlens.dashboard.tasks import archive_pin_link_to_wayback
+
         callbacks = []
         with (
             mock.patch("urbanlens.dashboard.models.links.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            # archive_pin_link now calls enqueue_follow_on (bulk_followup.py), which - outside any
+            # active batching_follow_on_work() collector, as here - calls through to
+            # safely_enqueue_task exactly as before, but the name it calls through lives in
+            # bulk_followup's own namespace (see "patch the name the module holds").
+            mock.patch("urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task") as enqueue,
         ):
             archive_pin_link(sender=object, instance=_FakeInstance(pk=7), created=True)
             callbacks[0]()
 
-        enqueue.assert_called_once()
-        self.assertEqual(enqueue.call_args.args[1], "PinLink")
-        self.assertEqual(enqueue.call_args.args[2], 7)
+        enqueue.assert_called_once_with(archive_pin_link_to_wayback, 7, queue=None)
 
     def test_skips_when_not_created(self) -> None:
         with mock.patch("urbanlens.dashboard.models.links.signals.transaction.on_commit") as on_commit:
@@ -97,17 +101,17 @@ class PinLinkArchiveSignalTests(SimpleTestCase):
 
 class WikiLinkArchiveSignalTests(SimpleTestCase):
     def test_enqueues_after_commit_for_new_link(self) -> None:
+        from urbanlens.dashboard.tasks import archive_wiki_link_to_wayback
+
         callbacks = []
         with (
             mock.patch("urbanlens.dashboard.models.links.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task") as enqueue,
         ):
             archive_wiki_link(sender=object, instance=_FakeInstance(pk=9), created=True)
             callbacks[0]()
 
-        enqueue.assert_called_once()
-        self.assertEqual(enqueue.call_args.args[1], "WikiLink")
-        self.assertEqual(enqueue.call_args.args[2], 9)
+        enqueue.assert_called_once_with(archive_wiki_link_to_wayback, 9, queue=None)
 
     def test_skips_when_not_created(self) -> None:
         with mock.patch("urbanlens.dashboard.models.links.signals.transaction.on_commit") as on_commit:

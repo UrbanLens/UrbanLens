@@ -243,6 +243,7 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+    from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
 
     status = ConfirmedImportStatus(job_id)
     directory = job_dir(job_id)
@@ -260,25 +261,29 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
 
         events = GoogleMapsGateway().iter_confirmed_import_events(payload["lists"], profile, auto_tag=bool(payload.get("auto_tag", True)))
         try:
-            for event in events:
-                kind = event["type"]
-                if kind == "start":
-                    counts["total"] = event["total"]
-                    status.write("running", 0, "Importing...", result=counts)
-                elif kind == "progress":
-                    percent = event["percent"]
-                    counts.update({key: event[key] for key in ("current", "created", "exists", "skipped", "name", "outcome")})
-                    if event["current"] % PROGRESS_EVERY and event["current"] != event["total"]:
-                        continue
-                    if get_or_none(_cancel_key(job_id), label=_CANCEL_LABEL):
-                        status.write("cancelled", percent, f"Stopped after {counts['current']:,} of {counts['total']:,} pins.", result=counts)
+            # One import's per-pin signals (wiki creation, category suggestion, reputation scoring)
+            # otherwise queue one broker task each - thousands for a large import, sharing the bulk
+            # queue with every other account's jobs (P109). Coalesced into bounded chunks instead.
+            with batching_follow_on_work():
+                for event in events:
+                    kind = event["type"]
+                    if kind == "start":
+                        counts["total"] = event["total"]
+                        status.write("running", 0, "Importing...", result=counts)
+                    elif kind == "progress":
+                        percent = event["percent"]
+                        counts.update({key: event[key] for key in ("current", "created", "exists", "skipped", "name", "outcome")})
+                        if event["current"] % PROGRESS_EVERY and event["current"] != event["total"]:
+                            continue
+                        if get_or_none(_cancel_key(job_id), label=_CANCEL_LABEL):
+                            status.write("cancelled", percent, f"Stopped after {counts['current']:,} of {counts['total']:,} pins.", result=counts)
+                            return counts
+                        status.write("running", percent, "Importing...", result=counts)
+                    elif kind == "complete":
+                        counts["deferred"] = event["deferred"]
+                    elif kind == "error":
+                        status.write("error", percent, event["message"], result=counts)
                         return counts
-                    status.write("running", percent, "Importing...", result=counts)
-                elif kind == "complete":
-                    counts["deferred"] = event["deferred"]
-                elif kind == "error":
-                    status.write("error", percent, event["message"], result=counts)
-                    return counts
         finally:
             events.close()
         status.write("done", 100, "Import complete.", result=counts)

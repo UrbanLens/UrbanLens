@@ -152,6 +152,13 @@ class LabelTaxonomySignalTests(TestCase):
 
 
 class PinLabelAssignmentSignalTests(TestCase):
+    """queue_pin_assignment_sync now calls enqueue_follow_on (bulk_followup.py), which - outside any
+    active batching_follow_on_work() collector, as in every test below - calls through to
+    safely_enqueue_task exactly as before, but the name it calls through lives in bulk_followup's
+    own namespace, not celery's (see "patch the name the module holds")."""
+
+    ENQUEUE = "urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task"
+
     def setUp(self) -> None:
         self.profile = _profile()
 
@@ -160,7 +167,7 @@ class PinLabelAssignmentSignalTests(TestCase):
         tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
         with (
             _redata_configured(),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch(self.ENQUEUE) as enqueue,
             self.captureOnCommitCallbacks(execute=True),
         ):
             pin.labels.add(tag)
@@ -176,7 +183,7 @@ class PinLabelAssignmentSignalTests(TestCase):
         pin.labels.add(tag)
         with (
             _redata_configured(),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch(self.ENQUEUE) as enqueue,
             self.captureOnCommitCallbacks(execute=True),
         ):
             pin.labels.remove(tag)
@@ -191,7 +198,7 @@ class PinLabelAssignmentSignalTests(TestCase):
         tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
         with (
             _redata_configured(),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch(self.ENQUEUE) as enqueue,
             self.captureOnCommitCallbacks(execute=True),
         ):
             tag.pins.add(pin)
@@ -206,7 +213,7 @@ class PinLabelAssignmentSignalTests(TestCase):
         status = Label.objects.create(profile=self.profile, name="ZzAudit Visited", kind=KIND_STATUS)
         with (
             _redata_configured(),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch(self.ENQUEUE) as enqueue,
             self.captureOnCommitCallbacks(execute=True),
         ):
             status.pins.add(pin)

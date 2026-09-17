@@ -307,9 +307,9 @@ def ensure_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool
     queue = follow_on_queue()
 
     def _run() -> None:
-        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import ensure_wiki_for_location
+        from urbanlens.dashboard.services.core.bulk_followup import enqueue_follow_on
+        from urbanlens.dashboard.tasks import ensure_wiki_for_location, ensure_wikis_for_locations
 
-        safely_enqueue_task(ensure_wiki_for_location, location_id, queue=queue)
+        enqueue_follow_on(ensure_wiki_for_location, ensure_wikis_for_locations, location_id, queue=queue)
 
     transaction.on_commit(_run)

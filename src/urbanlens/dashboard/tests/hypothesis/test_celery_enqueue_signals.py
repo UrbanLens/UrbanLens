@@ -50,7 +50,10 @@ class PinEnsuresWikiSignalTests(SimpleTestCase):
         callbacks = []
         with (
             mock.patch("urbanlens.dashboard.models.pin.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            # The signal now calls enqueue_follow_on (bulk_followup.py), which - outside any active
+            # batching_follow_on_work() collector, as here - calls through to safely_enqueue_task
+            # exactly as before, but the name it calls through lives in bulk_followup's own namespace.
+            mock.patch("urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task") as enqueue,
         ):
             ensure_wiki_for_pin_location(sender=object, instance=_Pin(location_id=55), created=True)
             callbacks[0]()
@@ -91,7 +94,7 @@ class WikiCategorySignalTests(SimpleTestCase):
         callbacks = []
         with (
             mock.patch("urbanlens.dashboard.models.wiki.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task") as enqueue,
         ):
             suggest_and_add_categories(sender=object, instance=_Wiki(), created=True)
             callbacks[0]()

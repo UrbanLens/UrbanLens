@@ -64,7 +64,8 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
     """
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
-    from urbanlens.dashboard.services.core.celery import follow_on_queue, safely_enqueue_task
+    from urbanlens.dashboard.services.core.bulk_followup import enqueue_follow_on
+    from urbanlens.dashboard.services.core.celery import follow_on_queue
 
     location = Location.objects.filter(pk=location_id).first()
     if location is None:
@@ -73,11 +74,47 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
 
     wiki, created = Wiki.objects.get_or_create_for_location(location)
     if created:
-        safely_enqueue_task(enrich_wiki_location, wiki.pk, queue=follow_on_queue())
+        enqueue_follow_on(enrich_wiki_location, enrich_wiki_locations, wiki.pk, queue=follow_on_queue())
         from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
 
         seed_wiki_article_from_wikipedia(location)
     return wiki.pk
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def ensure_wikis_for_locations(location_ids: list[int]) -> list[int]:
+    """Chunk-shaped sibling of :func:`ensure_wiki_for_location`, for a bulk import's fan-out (P109).
+
+    Runs its own :func:`batching_follow_on_work` so the enrichment work a new wiki queues coalesces
+    into :func:`enrich_wiki_locations` chunks too, whether this task was itself reached from inside an
+    importer's own collector (nesting reuses it) or dispatched standalone.
+
+    Args:
+        location_ids: PKs of the Locations to ensure a Wiki for.
+
+    Returns:
+        PKs of the Wikis (new or pre-existing) - one per location that still existed.
+    """
+    from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
+
+    wiki_pks: list[int] = []
+    with batching_follow_on_work():
+        for location_id in location_ids:
+            try:
+                wiki_pk = ensure_wiki_for_location(location_id)
+            except OSError:
+                # ensure_wiki_for_location is called directly, not dispatched, so its own
+                # autoretry_for=(OSError,) can't schedule a delayed retry (Celery raises
+                # immediately when request.called_directly is True) - re-raise so this task's
+                # own autoretry retries the whole chunk instead of silently dropping the item.
+                logger.warning("ensure_wikis_for_locations: transient failure on location %s, retrying chunk", location_id)
+                raise
+            except Exception:
+                logger.exception("ensure_wikis_for_locations: location %s failed", location_id)
+                continue
+            if wiki_pk is not None:
+                wiki_pks.append(wiki_pk)
+    return wiki_pks
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
@@ -130,6 +167,40 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 
     update_task_progress(self, current=2, total=2, message="Wiki ready")
     return True
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def enrich_wiki_locations(self, wiki_ids: list[int]) -> dict[int, bool]:
+    """Chunk-shaped sibling of :func:`enrich_wiki_location`, for a bulk import's fan-out (P109).
+
+    Each wiki keeps its own place-linking/name/boundary failures isolated - autoretry on this task
+    retries the whole chunk, so a wiki that keeps failing must not stop its chunk-mates from ever
+    being enriched.
+
+    Args:
+        wiki_ids: PKs of the Wikis to enrich.
+
+    Returns:
+        Whether enrichment ran, per wiki id.
+    """
+    results: dict[int, bool] = {}
+    total = len(wiki_ids)
+    for index, wiki_id in enumerate(wiki_ids):
+        update_task_progress(self, current=index, total=total, message=f"Enriching wiki {index + 1} of {total}...")
+        try:
+            results[wiki_id] = enrich_wiki_location(wiki_id)
+        except OSError:
+            # enrich_wiki_location is called directly, not dispatched, so its own
+            # autoretry_for=(OSError,) can't schedule a delayed retry (Celery raises
+            # immediately when request.called_directly is True) - re-raise so this task's
+            # own autoretry retries the whole chunk instead of silently dropping the item.
+            logger.warning("enrich_wiki_locations: transient failure on wiki %s, retrying chunk", wiki_id)
+            raise
+        except Exception:
+            logger.exception("enrich_wiki_locations: wiki %s failed", wiki_id)
+            results[wiki_id] = False
+    update_task_progress(self, current=total, total=total, message="Batch enrichment complete")
+    return results
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
@@ -474,6 +545,33 @@ def suggest_wiki_category(self, wiki_id: int) -> list[str]:
     return [b.name for b in labels]
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def suggest_wiki_categories(wiki_ids: list[int]) -> dict[int, list[str]]:
+    """Chunk-shaped sibling of :func:`suggest_wiki_category`, for a bulk import's fan-out (P109).
+
+    Args:
+        wiki_ids: PKs of the Wikis to suggest and attach labels for.
+
+    Returns:
+        The names of the labels attached, per wiki id.
+    """
+    results: dict[int, list[str]] = {}
+    for wiki_id in wiki_ids:
+        try:
+            results[wiki_id] = suggest_wiki_category(wiki_id)
+        except OSError:
+            # suggest_wiki_category is called directly, not dispatched, so its own
+            # autoretry_for=(OSError,) can't schedule a delayed retry (Celery raises
+            # immediately when request.called_directly is True) - re-raise so this task's
+            # own autoretry retries the whole chunk instead of silently dropping the item.
+            logger.warning("suggest_wiki_categories: transient failure on wiki %s, retrying chunk", wiki_id)
+            raise
+        except Exception:
+            logger.exception("suggest_wiki_categories: wiki %s failed", wiki_id)
+            results[wiki_id] = []
+    return results
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def suggest_pin_category(self, pin_id: int) -> list[str]:
     """Suggest and attach labels for a Pin outside request/import loops."""
@@ -488,6 +586,33 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
     labels = AutoTagService().suggest_for_pin(pin, apply=True)
     update_task_progress(self, current=1, total=1, message="Pin auto-tagging complete")
     return [b.name for b in labels]
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def suggest_pin_categories(pin_ids: list[int]) -> dict[int, list[str]]:
+    """Chunk-shaped sibling of :func:`suggest_pin_category`, for a bulk import's fan-out (P109).
+
+    Args:
+        pin_ids: PKs of the Pins to suggest and attach labels for.
+
+    Returns:
+        The names of the labels attached, per pin id.
+    """
+    results: dict[int, list[str]] = {}
+    for pin_id in pin_ids:
+        try:
+            results[pin_id] = suggest_pin_category(pin_id)
+        except OSError:
+            # suggest_pin_category is called directly, not dispatched, so its own
+            # autoretry_for=(OSError,) can't schedule a delayed retry (Celery raises
+            # immediately when request.called_directly is True) - re-raise so this task's
+            # own autoretry retries the whole chunk instead of silently dropping the item.
+            logger.warning("suggest_pin_categories: transient failure on pin %s, retrying chunk", pin_id)
+            raise
+        except Exception:
+            logger.exception("suggest_pin_categories: pin %s failed", pin_id)
+            results[pin_id] = []
+    return results
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
@@ -532,9 +657,14 @@ def backfill_location_address(location_id: int) -> bool:
     return ensure_location_address(location)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
-def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
-    """Best-effort archive a link URL to the Wayback Machine.
+def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
+    """Shared logic for :func:`archive_link_to_wayback` and its per-model chunk-batching siblings.
+
+    A plain function, not a task - the siblings call this directly rather than invoking
+    ``archive_link_to_wayback`` itself, so a transient failure here surfaces as this *caller's*
+    exception rather than being swallowed by ``archive_link_to_wayback``'s own retry wrapper, which
+    would immediately re-raise instead of scheduling a delayed retry (Celery only defers a retry
+    when the task was reached through the broker, not called as a plain function).
 
     Args:
         link_model: ``"PinLink"`` or ``"WikiLink"``.
@@ -577,6 +707,82 @@ def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     link.wayback_url = wayback_url
     link.save(update_fields=["wayback_url", "updated"])
     return True
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
+    """Best-effort archive a link URL to the Wayback Machine.
+
+    Args:
+        link_model: ``"PinLink"`` or ``"WikiLink"``.
+        link_id: PK of the link row to archive.
+
+    Returns:
+        True when a wayback_url was saved, False otherwise.
+    """
+    return _archive_link_to_wayback(link_model, link_id)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def archive_pin_link_to_wayback(link_id: int) -> bool:
+    """Single-id ``PinLink`` entry point, fitting :func:`enqueue_follow_on`'s one-argument contract."""
+    return _archive_link_to_wayback("PinLink", link_id)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def archive_pin_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
+    """Chunk-shaped sibling of :func:`archive_pin_link_to_wayback`, for a bulk import's fan-out (P109).
+
+    A confirmed import that extracts embedded links from each pin's raw description
+    (``maps.py::_attach_description_extras``) creates one ``PinLink`` per link, each of which
+    otherwise queues its own Wayback-archive task.
+
+    Args:
+        link_ids: PKs of the PinLinks to archive.
+
+    Returns:
+        Whether archiving saved a wayback_url, per link id.
+    """
+    results: dict[int, bool] = {}
+    for link_id in link_ids:
+        try:
+            results[link_id] = _archive_link_to_wayback("PinLink", link_id)
+        except OSError:
+            logger.warning("archive_pin_links_to_wayback: transient failure on link %s, retrying chunk", link_id)
+            raise
+        except Exception:
+            logger.exception("archive_pin_links_to_wayback: link %s failed", link_id)
+            results[link_id] = False
+    return results
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def archive_wiki_link_to_wayback(link_id: int) -> bool:
+    """Single-id ``WikiLink`` entry point, fitting :func:`enqueue_follow_on`'s one-argument contract."""
+    return _archive_link_to_wayback("WikiLink", link_id)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
+    """Chunk-shaped sibling of :func:`archive_wiki_link_to_wayback`, for a bulk import's fan-out (P109).
+
+    Args:
+        link_ids: PKs of the WikiLinks to archive.
+
+    Returns:
+        Whether archiving saved a wayback_url, per link id.
+    """
+    results: dict[int, bool] = {}
+    for link_id in link_ids:
+        try:
+            results[link_id] = _archive_link_to_wayback("WikiLink", link_id)
+        except OSError:
+            logger.warning("archive_wiki_links_to_wayback: transient failure on link %s, retrying chunk", link_id)
+            raise
+        except Exception:
+            logger.exception("archive_wiki_links_to_wayback: link %s failed", link_id)
+            results[link_id] = False
+    return results
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
@@ -1798,6 +2004,29 @@ def sync_redata_pin_assignment(pin_id: int) -> bool:
     return True
 
 
+@shared_task(queue=Queue.BULK)
+def sync_redata_pin_assignments(pin_ids: list[int]) -> int:
+    """Chunk-shaped sibling of :func:`sync_redata_pin_assignment`, for a bulk import's fan-out (P109).
+
+    A label added to every pin in an import (a list category, a shared tag) fires the
+    ``Pin.labels`` ``m2m_changed`` signal once per pin - queued here instead of one broker task each.
+
+    Args:
+        pin_ids: PKs of the pins whose label sets changed.
+
+    Returns:
+        How many pins were found and synced.
+    """
+    synced = 0
+    for pin_id in pin_ids:
+        try:
+            if sync_redata_pin_assignment(pin_id):
+                synced += 1
+        except Exception:
+            logger.exception("sync_redata_pin_assignments: pin %s failed", pin_id)
+    return synced
+
+
 @shared_task(bind=True, max_retries=5, queue=SANDBOX_QUEUE)
 def scan_comment_image(self, comment_id: int) -> bool:
     """Background malware-scan a newly-uploaded pin/wiki comment image.
@@ -2339,63 +2568,68 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
     from urbanlens.dashboard.models.location import Location
     from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailureReason
     from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
+    from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
     from urbanlens.dashboard.services.pins.pin_import_failures import auto_resolve_pin_import_failure_for_cid, record_pin_import_failure
 
     created_count = exists_count = skipped_count = 0
-    for lst in deferred_lists:
-        stem = lst.get("stem", "")
-        list_label_ids = lst.get("label_ids") or []
-        create_category = bool(lst.get("create_category", False))
-        list_labels = list(Label.objects.pin_assignable_by(profile).filter(id__in=list_label_ids)) if list_label_ids else []
+    # Coalesces this round's per-pin follow-on work (wiki creation, category suggestion, reputation
+    # scoring) into bounded chunks rather than one broker task each - see confirmed_import.py's own
+    # collector for the fast (non-deferred) path this mirrors (P109).
+    with batching_follow_on_work():
+        for lst in deferred_lists:
+            stem = lst.get("stem", "")
+            list_label_ids = lst.get("label_ids") or []
+            create_category = bool(lst.get("create_category", False))
+            list_labels = list(Label.objects.pin_assignable_by(profile).filter(id__in=list_label_ids)) if list_label_ids else []
 
-        category_label = None
-        if create_category and stem:
-            category_label, _ = Label.objects.get_or_create(
-                profile=profile,
-                name__iexact=stem,
-                # kind belongs in the lookup, not defaults: with it only in defaults, the get half matches any
-                # kind, so a same-named *tag* was returned and used as the list's category (see PROBLEMS.md,
-                # label lookups by name alone).
-                kind=KIND_CATEGORY,
-                defaults={"name": stem},
-            )
+            category_label = None
+            if create_category and stem:
+                category_label, _ = Label.objects.get_or_create(
+                    profile=profile,
+                    name__iexact=stem,
+                    # kind belongs in the lookup, not defaults: with it only in defaults, the get half matches any
+                    # kind, so a same-named *tag* was returned and used as the list's category (see PROBLEMS.md,
+                    # label lookups by name alone).
+                    kind=KIND_CATEGORY,
+                    defaults={"name": stem},
+                )
 
-        for pin_dict in lst.get("pins", []):
-            cid = pin_dict["cid"]
-            coords = result.resolved.get(cid)
-            if coords is None:
-                if cid in result.unresolvable:
-                    record_pin_import_failure(
-                        profile,
-                        cid,
-                        name=pin_dict.get("name", ""),
-                        description=pin_dict.get("description", ""),
-                        reason=PinImportFailureReason.NO_LOCATION_FOUND,
-                    )
-                    skipped_count += 1
-                continue
+            for pin_dict in lst.get("pins", []):
+                cid = pin_dict["cid"]
+                coords = result.resolved.get(cid)
+                if coords is None:
+                    if cid in result.unresolvable:
+                        record_pin_import_failure(
+                            profile,
+                            cid,
+                            name=pin_dict.get("name", ""),
+                            description=pin_dict.get("description", ""),
+                            reason=PinImportFailureReason.NO_LOCATION_FOUND,
+                        )
+                        skipped_count += 1
+                    continue
 
-            # Re-check now, not just at defer time: an earlier pin in this same batch referencing the same cid
-            # (saved to two lists) may have just linked/created its Location.
-            location = Location.objects.by_cid(cid).first()
-            pin, created = _create_pin_from_confirmed(
-                pin_dict,
-                location=location,
-                latitude=coords[0],
-                longitude=coords[1],
-                user_profile=profile,
-                list_labels=list_labels,
-                category_label=category_label,
-                auto_tag=auto_tag,
-            )
-            if pin:
-                auto_resolve_pin_import_failure_for_cid(profile, cid, pin)
-                if created:
-                    created_count += 1
+                # Re-check now, not just at defer time: an earlier pin in this same batch referencing the same cid
+                # (saved to two lists) may have just linked/created its Location.
+                location = Location.objects.by_cid(cid).first()
+                pin, created = _create_pin_from_confirmed(
+                    pin_dict,
+                    location=location,
+                    latitude=coords[0],
+                    longitude=coords[1],
+                    user_profile=profile,
+                    list_labels=list_labels,
+                    category_label=category_label,
+                    auto_tag=auto_tag,
+                )
+                if pin:
+                    auto_resolve_pin_import_failure_for_cid(profile, cid, pin)
+                    if created:
+                        created_count += 1
+                    else:
+                        exists_count += 1
                 else:
-                    exists_count += 1
-            else:
-                skipped_count += 1
+                    skipped_count += 1
 
     return created_count, exists_count, skipped_count
 
@@ -4072,6 +4306,42 @@ def score_reputation_event(event_id: int) -> str:
     value = score_event(event)
     recompute_total(event.profile_id)
     return "unscorable" if value is None else str(value)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def score_reputation_events(event_ids: list[int]) -> int:
+    """Chunk-shaped sibling of :func:`score_reputation_event`, for a bulk import's fan-out (P109).
+
+    ``_decay_multiplier`` is explicitly order-independent (see
+    ``services.reputation.scoring``), so scoring a chunk's events in any order is safe. Each
+    touched profile's total is rebuilt once for the whole chunk rather than once per event -
+    ``recompute_total`` fully rebuilds from the ledger every call, so recomputing it per event here
+    would repeat the same O(n) read for every other event belonging to that profile in the chunk.
+
+    Args:
+        event_ids: PKs of the ledger rows to value.
+
+    Returns:
+        How many events were scored (excludes already-scored and missing rows).
+    """
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.scoring import recompute_total, score_event
+
+    touched: set[int] = set()
+    scored = 0
+    for event in ReputationEvent.objects.filter(pk__in=event_ids, value__isnull=True):
+        try:
+            value = score_event(event)
+        except Exception:
+            logger.exception("score_reputation_events: event %s failed", event.pk)
+            continue
+        if value is not None:
+            scored += 1
+        touched.add(event.profile_id)
+
+    for profile_id in touched:
+        recompute_total(profile_id)
+    return scored
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)

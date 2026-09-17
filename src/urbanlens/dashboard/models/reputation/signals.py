@@ -131,10 +131,10 @@ def _make_handler(subscription: _Subscription) -> Callable[..., None]:
         queue = follow_on_queue()
 
         def _enqueue() -> None:
-            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-            from urbanlens.dashboard.tasks import score_reputation_event
+            from urbanlens.dashboard.services.core.bulk_followup import enqueue_follow_on
+            from urbanlens.dashboard.tasks import score_reputation_event, score_reputation_events
 
-            safely_enqueue_task(score_reputation_event, event.pk, queue=queue)
+            enqueue_follow_on(score_reputation_event, score_reputation_events, event.pk, queue=queue)
 
         transaction.on_commit(_enqueue)
 

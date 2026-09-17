@@ -206,10 +206,11 @@ def _create_pin_from_confirmed(
         if image_urls or link_urls:
             _attach_description_extras(pin, image_urls, link_urls, user_profile)
         if auto_tag:
-            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-            from urbanlens.dashboard.tasks import suggest_pin_category
+            from urbanlens.dashboard.services.core.bulk_followup import enqueue_follow_on
+            from urbanlens.dashboard.services.core.celery import follow_on_queue
+            from urbanlens.dashboard.tasks import suggest_pin_categories, suggest_pin_category
 
-            safely_enqueue_task(suggest_pin_category, pin.pk)
+            enqueue_follow_on(suggest_pin_category, suggest_pin_categories, pin.pk, queue=follow_on_queue())
     # Fill in a still-blank, non-user-provided name from this later import
     # (UL-207) - get_nearby_or_create's `defaults` are only ever applied
     # when creating a new row, never to an existing one it merges into.
