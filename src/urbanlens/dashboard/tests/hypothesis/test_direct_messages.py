@@ -201,10 +201,11 @@ class CreateDirectMessageTests(TestCase):
         self.assertFalse(DirectMessage.objects.exists())
 
     def test_first_message_notifies_recipient(self) -> None:
-        create_direct_message(self.sender, self.recipient, "hello")
+        message = create_direct_message(self.sender, self.recipient, "hello")
         notification = NotificationLog.objects.get(profile=self.recipient)
         self.assertEqual(notification.notification_type, NotificationType.MESSAGE)
         self.assertEqual(notification.source_profile, self.sender)
+        self.assertEqual(notification.direct_message_id, message.pk)
 
     def test_second_unread_message_does_not_renotify(self) -> None:
         create_direct_message(self.sender, self.recipient, "hello")
@@ -925,6 +926,35 @@ class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
         delete_message_for_self(message, self.recipient)
         self.assertNotIn(message, DirectMessage.objects.visible_to(self.recipient))
         self.assertIn(message, DirectMessage.objects.visible_to(self.sender))
+
+
+class DeleteMessageForEveryoneRedactsNotificationTests(TestCase):
+    """P47: unsending a message must not leave its preview in the recipient's notification."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
+
+    def test_redacts_the_stored_preview(self) -> None:
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
+
+        message = create_direct_message(self.sender, self.recipient, "the secret plan is at midnight")
+        delete_message_for_everyone(message, self.sender)
+        notification = NotificationLog.objects.get(profile=self.recipient)
+        self.assertEqual(notification.message, "Message deleted")
+
+    def test_does_not_touch_an_unrelated_notification(self) -> None:
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
+
+        other_sender = _profile()
+        _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
+        untouched = create_direct_message(other_sender, self.recipient, "unrelated")
+        message = create_direct_message(self.sender, self.recipient, "delete me")
+        delete_message_for_everyone(message, self.sender)
+        untouched_notification = NotificationLog.objects.get(profile=self.recipient, source_profile=other_sender)
+        self.assertEqual(untouched_notification.message, untouched.body)
 
 
 class UnreadDropdownScalingTests(TestCase):

@@ -390,6 +390,7 @@ def _notify_recipient(message: DirectMessage) -> None:
         message=preview,
         url=reverse("messages.conversation", kwargs={"profile_slug": message.sender.ensure_slug()}),
         source_profile=message.sender,
+        direct_message=message,
     )
 
 
@@ -842,6 +843,7 @@ def delete_message_for_everyone(message: DirectMessage, actor: Profile) -> Direc
         share = getattr(message, "share", None)
         if share is not None:
             share.revoke()
+        message.notifications.update(message="Message deleted")
         _broadcast_message_update(
             {"type": "message_deleted", "message_id": message.pk, "scope": "everyone"},
             {direct_message_group_name(message.sender_id), direct_message_group_name(message.recipient_id)},
