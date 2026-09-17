@@ -34,6 +34,7 @@ from urbanlens.dashboard.forms.settings_form import (
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.media.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
 
 if TYPE_CHECKING:
@@ -421,7 +422,9 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
                 except (KeyError, TypeError):
                     logger.warning("Google geocoding returned malformed result for %r", address, exc_info=True)
             logger.warning("Google geocoding returned no results for %r (status: %s)", address, result.get("status"))
-    except (ImportError, OSError, ValueError):
+    except (ImportError, OSError, ValueError, GatewayRequestError):
+        # GatewayRequestError also covers a rate-limiter refusal (P122) - routine (dev/demo refuse
+        # most services outright), not grounds to 500 when Nominatim can still answer below.
         logger.warning("Google geocoding unavailable for %r", address, exc_info=True)
 
     # Fall back to Nominatim (OpenStreetMap) - no API key required. Through

@@ -11,6 +11,80 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-17: A refused external call returned a 500 from views that caught only `GatewayRequestError`
+
+`id: P122` · `status: fixed` · `resolved: 2026-09-17`
+
+**The defect.** Every gateway call passes through `rate_limiter._reserve_call`
+(`services/core/rate_limiter.py:697`, before `_RateLimitedSession._do_request`'s try/except), which
+refuses a call by raising `RequestCancelledError` or one of its three subclasses
+(`RateLimitExceededError`, `ServiceDisabledError`, `RateLimiterUnavailableError`). That family
+subclassed only `DashboardError`, not `GatewayRequestError` - the type every other gateway failure
+raises and the type views/services already catch to degrade gracefully. So a refusal escaped as an
+unhandled 500 wherever a handler caught `GatewayRequestError` but not the raw refusal type.
+Refusals are routine, not edge cases: development and the demo refuse most services outright, and
+under R29 `RateLimiterUnavailableError` fires whenever `ul_web` is at its connection limit.
+
+**Fixed by multiple inheritance, not a translation.** `RequestCancelledError` now reads
+`class RequestCancelledError(DashboardError, GatewayRequestError)`
+(`services/core/rate_limiter.py:722`, importing `GatewayRequestError` from `services/core/gateway.py`
+at module level - safe, since `gateway.py` only imports `rate_limiter` inside a function body at
+`gateway.py:68`, not at module level, so no circular import). This changes what the exception *also*
+is an instance of without changing what gets raised, its message, or `.args`: every existing narrow
+catch of the raw type (`external_data.py`, `nominatim.py`, `cid_resolution.py`,
+`places_resolution.py`, `overpass.py`, `import_failure_guess.py`, `enrichment.py`,
+`open_historical_map.py`, `addresses.py`, `geo_bonus.py`, several controllers) keeps seeing the exact
+same type, unaffected.
+
+**One site needed a second, explicit fix.** The hierarchy change alone did not fix
+`geocode_address` (`controllers/settings.py:382`): its `except (ImportError, OSError, ValueError):`
+around `GoogleGeocodingGateway.geocode_place_name` never mentioned `GatewayRequestError`, so a
+refusal still wouldn't have been caught there. `GatewayRequestError` was added to that tuple
+(`controllers/settings.py:425`), falling through to the existing Nominatim fallback. The other three
+sites P122 named needed no source change - Immich `ping()` (`services/apis/immich/gateway.py`), the
+Immich thumbnail proxy (`controllers/pin_suggestions.py`), and the Google Photos picker
+(`controllers/google_photos.py`) already caught `except GatewayRequestError:`, so the hierarchy fix
+alone closes them.
+
+**Audit of all ~50 production `except ... GatewayRequestError` sites**, per this entry's own "Likely
+fix" note, for two patterns: a handler shadowed by a more specific catch, and a handler that treats
+a refusal as grounds to retry or disconnect an account.
+- `external_api/views_trips.py`'s `_gateway_failure` (`views_trips.py:165-191`) catches
+  `(GoogleAuthExpiredError, CalendarNotConfiguredError, GatewayRequestError)` in one tuple and does
+  `account.delete()` only when `isinstance(exc, GoogleAuthExpiredError)`. Verified by reading: that
+  isinstance check is False for a mere refusal (an unrelated exception hierarchy), so it falls
+  through to the generic 502 branch at `views_trips.py:190-191`, not the disconnect branch.
+- `services/apis/locations/cid_resolution.py`'s `except GatewayRequestError:` defers the CID to a
+  later scheduled batch attempt rather than retrying synchronously - judged correct behaviour for a
+  refusal too, not a bug.
+- No other site combines a `GoogleAuthExpiredError`-style disconnect with `GatewayRequestError` in
+  the same `except` tuple; the disconnect patterns in `controllers/calendar_sync.py` and
+  `services/trips/calendar_sync.py` are separate, earlier `except` clauses, unaffected.
+
+**Verified this session, independently of the fixing session's own claims:**
+- `docker exec`-based run inside `urbanlens_development_main_test_runner` of the five touched test
+  files (`test_refusal_errors_are_gateway_request_errors.py`, `test_geocode_address.py`,
+  `test_immich.py`, `test_pin_suggestions.py`, `test_google_photos.py`): **230 passed, 0 failed, in
+  290s**, including all four new `test_a_rate_limit_refusal_*` regression tests and the eight
+  hierarchy/regression-safety unit tests in the new file.
+- `uv run ruff check` on the three touched source files: clean.
+- `docker exec ... mypy` on the same three files: `Success: no issues found in 3 source files`.
+- Read `rate_limiter.py:697` and `gateway.py:68` directly to confirm the reservation-before-catch
+  ordering and the absence of a module-level circular import.
+- Read `views_trips.py:160-191` directly to confirm the disconnect branch is unreachable for a
+  refusal.
+
+**One thing not re-verified this session:** `controllers/pin.py`'s own
+`except (OSError, ValueError, RuntimeError, RequestCancelledError)` handler (~line 832) already
+caught the raw type directly, so it is logically unaffected by the hierarchy change (the MRO change
+does not alter `RequestCancelledError`'s identity, `__init__`, `.args`, or `str()` - confirmed by
+the `ExistingNarrowCatchesStillWorkTests` regression tests above) - but it was not re-run against
+its own roughly 150-file test fan-out this session or the fixing session, for cost reasons. No
+evidence of a problem there; flagged so a reader doesn't mistake silence for a check.
+
+**As of this session, uncommitted.** The fix (`rate_limiter.py`, `settings.py`) and its five test
+files sit as working-tree changes on `release/v_0_8_0`; not yet committed or pushed.
+
 ## RESOLVED 2026-09-15: every container connected as the superuser, so any tier could take every Postgres connection
 
 `id: P104` · `status: fixed` · `resolved: 2026-09-15`

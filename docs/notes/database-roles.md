@@ -99,8 +99,10 @@ would isolate tiers from one another, but not from the owner, and are not done.
   short. A request that has already queried keeps its connection while it waits on an executor thread, and
   that thread's gateway call opens a second one to reserve its `ApiCallLog` row. Past 6 of those at once, the
   connection is refused and `_reserve_call` refuses the call with `RateLimiterUnavailableError`. The pin
-  page's web search and media carousels and the Flickr and Immich pickers show their error card; other views
-  that call out return a 500 on any refused call (P122). Nothing outside the web tier is affected.
+  page's web search and media carousels, the Flickr and Immich pickers, and every other view that calls out
+  now show their error card or degrade gracefully instead of 500ing (P122, fixed 2026-09-17 - not
+  re-verified under an actual connection-limit storm, only under a mocked refusal). Nothing outside the
+  web tier is affected.
 - **The outage has not been reproduced:** its own shape, with slots held as the application's role, has still
   not been run (N20).
 - **Kubernetes:** the infrastructure repo's k8s manifests still connect as the owner (N23).

@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.exceptions import DashboardError
 from urbanlens.dashboard.models.abstract.versioning import current_write_actor
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 logger = logging.getLogger(__name__)
@@ -718,8 +719,18 @@ class _RateLimitedSession:
             raise
 
 
-class RequestCancelledError(DashboardError):
+class RequestCancelledError(DashboardError, GatewayRequestError):
     """Raised when a request is cancelled.
+
+    Also a :class:`GatewayRequestError` (P122): every gateway call passes through
+    ``_reserve_call`` via ``_RateLimitedSession``, and a refusal is routine (development and the
+    demo refuse most services outright; ``RateLimiterUnavailableError`` fires whenever ``ul_web``
+    is at its connection limit). Before this, a caller that degraded gracefully on
+    ``except GatewayRequestError`` - the contract every other gateway failure raises - let a
+    refusal escape as an unhandled 500 instead. Multiple inheritance rather than a translation at
+    the session boundary, so every existing ``except RequestCancelledError``/``RateLimitExceededError``
+    (``external_data.py``, ``nominatim.py``, ``cid_resolution.py``, and others) keeps seeing the
+    exact type it already expects - only what it is also an instance of changes.
 
     Args:
         service: The rate-limiter service key the cancelled request targeted.
