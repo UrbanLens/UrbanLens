@@ -171,11 +171,14 @@ test.describe("staff surfaces stay closed to ordinary accounts", () => {
 });
 
 test.describe("health probes stay boring", () => {
-    test("readiness is the documented four keys, and none of them is a secret", async ({ request }) => {
+    test("readiness is the documented six keys, and none of them is a secret", async ({ request }) => {
         const response = await request.get(publicRoutes.healthReady);
         expect(response.status()).toBe(200);
         const report = (await response.json()) as Record<string, unknown>;
-        expect(Object.keys(report).sort()).toEqual(["cache", "db", "migrations", "role"]);
+        // HealthController._collect's own docstring names db/cache/role/migrations; connections
+        // and degraded were added later (see health.py) without this list ever being updated -
+        // this spec had never run since it was added (P91), so nothing caught the drift.
+        expect(Object.keys(report).sort()).toEqual(["cache", "connections", "db", "degraded", "migrations", "role"]);
         const blob = JSON.stringify(report);
         expect(blob, "readiness includes a connection string").not.toMatch(/postgres(?:ql)?:\/\//i);
         expect(blob, "readiness includes a password").not.toMatch(/password/i);
