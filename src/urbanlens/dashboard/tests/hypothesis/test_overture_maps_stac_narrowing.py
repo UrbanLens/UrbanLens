@@ -17,6 +17,11 @@ class OvertureMapsGatewayStacNarrowingTests(SimpleTestCase):
             patch(
                 "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._overture_geodataframe"
             ) as mock_geodataframe,
+            # The P110 call-budget gate (reserve/finalize) touches the DB (ApiCallLog/ApiRateLimit),
+            # which SimpleTestCase forbids - the budget itself is covered separately in
+            # test_overture_call_budget.py.
+            patch.object(OvertureMapsGateway, "_reserve_call_budget", return_value=1),
+            patch("urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._finalize_call"),
         ):
             gateway.get_buildings((-71.059, 42.36, -71.058, 42.361))
 

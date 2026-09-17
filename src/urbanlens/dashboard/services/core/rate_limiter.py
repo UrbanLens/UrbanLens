@@ -184,6 +184,18 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=500,
         notes="Downloads whole gzip shards of Microsoft's public building footprint dataset during boundary lookups. The dataset has no quota, so this bounds our own bandwidth; the values are the generic fallback's, not tuned. See services.apis.locations.boundaries.microsoft_buildings.",
     ),
+    "overture_maps": ServiceDefaults(
+        display_name="Overture Maps",
+        # Unlike its open-building-footprint siblings above, Overture's own STAC index has been
+        # observed to answer with `HTTP Error 429: Too Many Requests` under enough concurrent
+        # lookups - the values here are a real budget, not just bandwidth hygiene. Still the
+        # generic fallback's numbers, not independently tuned against a documented Overture quota
+        # (it does not publish one).
+        calls_per_minute=20,
+        calls_per_day=500,
+        notes="Building/place/address/land-use GeoParquet themes via services.apis.locations.boundaries.overture_maps. Free public dataset, but its STAC index rate-limits us under load - see P110.",
+        billable=False,
+    ),
     "openweathermap": ServiceDefaults(
         display_name="OpenWeatherMap",
         calls_per_minute=20,

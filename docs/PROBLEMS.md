@@ -2649,9 +2649,9 @@ changed in the same breath, and that is an owner call across two repositories.
 
 See D11 for the Valkey split this sits inside; the chaos scenario is the reproduction.
 
-## P110 — The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off
+## P110 — The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off — the request-rate gap is closed in code and unit-tested, not yet re-verified live
 
-`id: P110` · `status: open` · `updated: 2026-09-14`
+`id: P110` · `status: open` · `updated: 2026-09-17`
 
 A recurrence of
 [the problem resolved 2026-08-31](archive/PROBLEMS-ARCHIVE.md), under a condition that resolution
@@ -2753,10 +2753,55 @@ Note that `stac.overturemaps.org` is not reachable from this box, so the *narrow
 exercised only in tests; what was verified live is that being unable to narrow now costs a fast
 refusal instead of a planet scan.
 
-Still open in this entry, and the reason it is not archived: **the reads remain invisible to the rate limiter and to the outbound-call guard.** The parquet reads still go
-through `pyarrow`/`S3FileSystem` rather than `self.session`, so nothing bounds how often
-enrichment reaches Overture in the first place. The circuit breaker bounds the *damage* of a refusal;
-it does not bound the request rate that earns one.
+**Fixed 2026-09-17: the reads are no longer invisible to the rate limiter.**
+`OvertureMapsGateway._fetch` (`services/apis/locations/boundaries/overture_maps.py:110-138`) now
+calls `_reserve_call_budget(overture_type)` (`overture_maps.py:140-175`) at the very top — before
+`_require_narrowing`'s STAC lookup and before the pyarrow/geopandas read itself. That method calls
+`_reserve_call(service, endpoint=overture_type)` from `services/core/rate_limiter.py`: the same
+atomically-locked (`transaction.atomic()` + `select_for_update()`) reserve-then-finalize pair
+`_RateLimitedSession._do_request` already uses for every ordinary `self.session` call. It returns
+the pk of a reserved `ApiCallLog` row, or raises `RequestCancelledError` — re-raised as
+`GatewayRateLimitedError` — if the service is disabled or its budget is spent for the window,
+mirroring `_require_narrowing`'s existing refusal contract, which callers already catch.
+`_finalize_call(entry_pk, success=..., response_ms=...)` records the outcome afterward on both the
+success and exception paths, so a real Overture/pyarrow failure is logged rather than swallowed. A
+new `SERVICE_REGISTRY["overture_maps"]` entry (`rate_limiter.py:187-198`) gives it a budget —
+`calls_per_minute=20`, `calls_per_day=500`, `billable=False`, the same generic-fallback numbers
+already used by its open-dataset siblings (e.g. Microsoft Building Footprints) since Overture
+publishes no documented quota either; not independently tuned against a real one.
+
+**Deliberately not the codebase's own documented simpler pattern.** `dashboard/CLAUDE.md`'s
+convention for `self.session`-bypassing code is `service_is_enabled()` → `check_rate_limit()` →
+call → `log_api_call()`, and four AI-service files (`vision.py`, `article_expansion.py`,
+`article_safety.py`, `assistant.py`) use it as-is. `_reserve_call_budget`'s own docstring explains
+why Overture instead uses the stronger atomic `_reserve_call`/`_finalize_call` pair: those four
+callers make one call per task, but Overture is reached from concurrent per-pin enrichment fan-out —
+the exact burst this entry is about — and a plain check-then-log gap would let every concurrent
+caller pass the check before any of them logs, defeating the budget precisely when it matters most.
+
+**Verified by unit tests only — not re-run live.** 19 tests pass across the three relevant files
+(`docker exec ... pytest src/urbanlens/dashboard/tests/hypothesis/test_overture_call_budget.py
+src/urbanlens/dashboard/tests/hypothesis/test_overture_maps_stac_narrowing.py
+src/urbanlens/dashboard/tests/hypothesis/test_overture_stac_is_required.py`, confirmed this session:
+19 passed in 214.84s): 7 of them new (`test_overture_call_budget.py`), covering a call within
+budget reaching Overture and being logged successful, a budget-exceeding call refusing *before* the
+STAC lookup runs at all, a refusal logged rate-limited, a failed read logged unsuccessful rather
+than swallowed, and a disabled service refusing without touching Overture at all. `ruff check` and
+`mypy` both pass clean on the two touched source files (confirmed this session).
+
+**Not verified: whether bounding the request rate actually stops Overture from rate-limiting us.**
+Unlike the 2026-09-10 fix above, this has not been run against the load suite — there is no
+before/after neighbour-p95, queue-drain, or 429-count table for it, the way there is for the circuit
+breaker. Nothing here confirms that 20 calls/minute keeps enrichment under whatever threshold
+actually earns Overture's 429, or that a bulk import's fan-out (P109) now produces bounded
+refusals instead of retriggering the loop this entry is named for — only that the code path exists,
+is reachable, and behaves as designed in isolation. That live measurement is what would close this
+entry; it has not been attempted this session.
+
+Still open in this entry, and the reason it is not archived: **live confirmation, under the same
+load-suite shape as the 2026-09-10 table above (import phase + cooldown), that this budget actually
+prevents the 429-triggered fallback loop** — plus whether 20/minute is the right number for a real
+bulk-import fan-out rather than just a plausible default carried over from an unrelated service.
 
 ## P111 — A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back
 

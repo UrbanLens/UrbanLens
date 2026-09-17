@@ -21,6 +21,7 @@ from urbanlens.dashboard.services.apis.locations.base import (
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, _finalize_call, _reserve_call
 from urbanlens.dashboard.services.core.timeout_utils import call_with_deadline
 
 try:
@@ -113,20 +114,65 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             raise ImportError(
                 "OvertureMapsGateway requires the 'overturemaps' package: `pip install overturemaps[geopandas]`.",
             )
+        entry_pk = self._reserve_call_budget(overture_type)
         if bbox is not None:
             self._require_narrowing(overture_type, bbox)
-        return _overture_geodataframe(
-            overture_type,
-            bbox=bbox,
-            release=self.release,
-            connect_timeout=self.connect_timeout,
-            request_timeout=self.request_timeout,
-            # overturemaps-py defaults this to False, which skips the small STAC-geoparquet index
-            # that resolves a bbox to the handful of S3 files that actually intersect it - without
-            # it, every lookup (however small the bbox) opens a pyarrow dataset over the *entire*
-            # global theme (hundreds of multi-gigabyte partition files per theme) and depends on
-            stac=True,
-        )
+        started = time.monotonic()
+        try:
+            result = _overture_geodataframe(
+                overture_type,
+                bbox=bbox,
+                release=self.release,
+                connect_timeout=self.connect_timeout,
+                request_timeout=self.request_timeout,
+                # overturemaps-py defaults this to False, which skips the small STAC-geoparquet index
+                # that resolves a bbox to the handful of S3 files that actually intersect it - without
+                # it, every lookup (however small the bbox) opens a pyarrow dataset over the *entire*
+                # global theme (hundreds of multi-gigabyte partition files per theme) and depends on
+                stac=True,
+            )
+        except Exception:
+            _finalize_call(entry_pk, success=False, response_ms=int((time.monotonic() - started) * 1000))
+            raise
+        _finalize_call(entry_pk, success=True, response_ms=int((time.monotonic() - started) * 1000))
+        return result
+
+    def _reserve_call_budget(self, overture_type: str) -> int:
+        """Refuse the call before it reaches Overture, if this service's own budget is spent.
+
+        `_fetch` reads GeoParquet straight from S3 via `pyarrow`/`geopandas`, bypassing
+        `self.session` entirely - the one place `Gateway` normally wires up rate limiting (see
+        `Gateway.__post_init__`). Without this, nothing bounds how often enrichment reaches
+        Overture in the first place, including the STAC index lookup in `_require_narrowing` -
+        the thing that actually earns the 429 that disables narrowing. See P110.
+
+        Goes through ``_reserve_call``/``_finalize_call`` (the same pair `_RateLimitedSession` uses)
+        rather than the simpler `check_rate_limit`+`log_api_call` pattern the AI services use for
+        their own `self.session` bypass: those are called once per task, but Overture is reached from
+        per-pin enrichment fan-out - the exact concurrent-burst scenario P110 is about - and a plain
+        check-then-log gap there would let concurrent callers all pass the check before any of them
+        logs, defeating the budget precisely when it matters most.
+
+        Args:
+            overture_type: The Overture type being fetched, recorded on the reservation's log entry.
+
+        Returns:
+            The pk of the reserved ``ApiCallLog`` row - pass it to ``_finalize_call`` once the read
+            completes.
+
+        Raises:
+            GatewayRateLimitedError: This service is administratively disabled, this deployment's
+                outbound calls are off (see ``outbound_calls_permitted``), or this service's own
+                request budget (``SERVICE_REGISTRY["overture_maps"]``) is exhausted for the
+                current window.
+        """
+        service = type(self).service_key
+        if service is None:  # pragma: no cover - ServiceMeta always derives one from the class name
+            raise RuntimeError("OvertureMapsGateway has no service_key; ServiceMeta should have derived one")
+        try:
+            return _reserve_call(service, endpoint=overture_type)
+        except RequestCancelledError as exc:
+            raise GatewayRateLimitedError(str(exc)) from exc
 
     def _require_narrowing(self, overture_type: str, bbox: BBox) -> None:
         """Refuse the lookup unless the STAC index can narrow it first.

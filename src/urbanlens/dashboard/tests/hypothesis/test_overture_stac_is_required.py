@@ -70,6 +70,7 @@ class TheGatewayRefusesTests(SimpleTestCase):
         super().setUp()
         _reset_breaker()
         self.addCleanup(_reset_breaker)
+        _patch_rate_limit_gate(self)
 
     def test_it_raises_when_the_stac_index_is_unavailable(self) -> None:
         """Scanning the planet is never what we want, so refusing is the better answer."""
@@ -112,6 +113,7 @@ class TheBreakerStopsTheLoopTests(SimpleTestCase):
         super().setUp()
         _reset_breaker()
         self.addCleanup(_reset_breaker)
+        _patch_rate_limit_gate(self)
 
     def test_the_index_is_not_probed_again_during_the_cooldown(self) -> None:
         gateway = OvertureMapsGateway()
@@ -144,6 +146,22 @@ def _reset_breaker() -> None:
     overture_maps._stac_unavailable_until = 0.0  # noqa: SLF001
 
 
+def _patch_rate_limit_gate(test_case: SimpleTestCase) -> None:
+    """Make the P110 call-budget gate a no-op, so these `SimpleTestCase`s never touch the DB.
+
+    Both halves are stubbed: `_reserve_call_budget` (so no `ApiCallLog` row is reserved) and
+    `_finalize_call` (so `_fetch` has nothing to update afterwards). The gate's own behaviour
+    (an exhausted budget refusing the call) is covered by `test_overture_call_budget.py`; every
+    test here is about the STAC circuit breaker instead.
+    """
+    gate = patch.object(OvertureMapsGateway, "_reserve_call_budget", return_value=1)
+    gate.start()
+    test_case.addCleanup(gate.stop)
+    finalize = patch("urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._finalize_call")
+    finalize.start()
+    test_case.addCleanup(finalize.stop)
+
+
 def _bbox():
     """The library's own bbox type, built the way it builds one."""
     from overturemaps import core
@@ -160,6 +178,7 @@ class TheLookupCannotHangTests(SimpleTestCase):
         super().setUp()
         _reset_breaker()
         self.addCleanup(_reset_breaker)
+        _patch_rate_limit_gate(self)
 
     def test_the_library_still_has_no_timeout_of_its_own(self) -> None:
         """Pinned so an upstream fix is noticed rather than silently duplicated."""
