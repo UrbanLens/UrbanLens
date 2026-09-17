@@ -58,13 +58,21 @@ class AddressPropertyTests(SimpleTestCase):
         loc = _loc(street_number="42")
         self.assertEqual(loc.address, "42")
 
-    def test_route_appends_comma(self) -> None:
+    def test_route_alone_has_no_trailing_comma(self) -> None:
         loc = _loc(route="Elm Ave")
-        self.assertIn("Elm Ave,", loc.address)
+        self.assertEqual(loc.address, "Elm Ave")
 
-    def test_locality_appends_comma(self) -> None:
+    def test_route_followed_by_locality_has_comma(self) -> None:
+        loc = _loc(route="Elm Ave", locality="Boston")
+        self.assertEqual(loc.address, "Elm Ave, Boston")
+
+    def test_locality_alone_has_no_trailing_comma(self) -> None:
         loc = _loc(locality="Boston")
-        self.assertIn("Boston,", loc.address)
+        self.assertEqual(loc.address, "Boston")
+
+    def test_locality_followed_by_state_has_comma(self) -> None:
+        loc = _loc(locality="Boston", administrative_area_level_1="MA")
+        self.assertEqual(loc.address, "Boston, MA")
 
     def test_state_and_zipcode_without_street(self) -> None:
         loc = _loc(administrative_area_level_1="NY", zipcode="10001")
@@ -171,9 +179,9 @@ class AddressExtendedPropertyTests(SimpleTestCase):
         loc = _loc(route="Abbey Rd", locality="London")
         self.assertEqual(loc.address_extended, "Abbey Rd, London")
 
-    def test_street_number_and_route_without_locality(self) -> None:
+    def test_street_number_and_route_without_locality_has_no_trailing_comma(self) -> None:
         loc = _loc(street_number="7", route="Baker St")
-        self.assertEqual(loc.address_extended, "7 Baker St,")
+        self.assertEqual(loc.address_extended, "7 Baker St")
 
     def test_none_when_all_empty(self) -> None:
         loc = _loc()
