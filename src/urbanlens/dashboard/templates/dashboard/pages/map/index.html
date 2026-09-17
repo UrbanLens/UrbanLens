@@ -639,7 +639,7 @@
 
 {% block scripts %}
 {{ map_page_config|json_script:"map-page-config" }}
-<script src="{% static 'js/map-page.js' %}"></script>
+<script type="module" src="{% static 'dashboard/js/map-page.js' %}"></script>
 
 {% include "dashboard/partials/ui/_dual_range_slider_script.html" %}
 

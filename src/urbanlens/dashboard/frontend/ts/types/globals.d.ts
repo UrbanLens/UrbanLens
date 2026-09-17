@@ -7,8 +7,12 @@ import type { LightboxItem } from "../shared/photo-tile";
 
 interface ToastrOptions {
     timeOut?: number;
+    /** How long a hover-paused toast stays after the mouse leaves it. */
+    extendedTimeOut?: number;
     closeButton?: boolean;
     progressBar?: boolean;
+    /** false requires the close button (or timeout) rather than any click dismissing it. */
+    tapToDismiss?: boolean;
 }
 
 interface Toastr {
@@ -16,6 +20,7 @@ interface Toastr {
     error(message: string, title?: string, options?: ToastrOptions): void;
     warning(message: string, title?: string, options?: ToastrOptions): void;
     info(message: string, title?: string, options?: ToastrOptions): void;
+    clear(): void;
 }
 
 interface ConfirmDialogOptions {
@@ -29,7 +34,7 @@ interface ConfirmDialogOptions {
     danger?: boolean;
 }
 
-interface HtmxApi {
+export interface HtmxApi {
     process(element: Element): void;
     /**
  * Dispatch an htmx event on an element - used to fire `ul:unhide` on sections whose hx-get was skipped while they were collapsed.

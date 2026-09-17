@@ -10,7 +10,7 @@ interface ClusterLike {
     getAllChildMarkers(): L.Marker[];
 }
 
-type MarkerClusterFactory = (options: {
+export interface PinClusterGroupOptions {
     maxClusterRadius?: number | ((zoom: number) => number);
     spiderfyOnMaxZoom?: boolean;
     showCoverageOnHover?: boolean;
@@ -18,7 +18,13 @@ type MarkerClusterFactory = (options: {
     animate?: boolean;
     animateAddingMarkers?: boolean;
     iconCreateFunction?: (cluster: ClusterLike) => L.DivIcon;
-}) => L.LayerGroup;
+    /** Renders large initial batches in slices instead of one blocking pass - the main map's pin count needs this; a detail map's handful of children does not. */
+    chunkedLoading?: boolean;
+    chunkSize?: number;
+    chunkInterval?: number;
+}
+
+type MarkerClusterFactory = (options: PinClusterGroupOptions) => L.LayerGroup;
 
 function markerClusterFactory(): MarkerClusterFactory | undefined {
     const fn = (L as unknown as { markerClusterGroup?: MarkerClusterFactory }).markerClusterGroup;
@@ -75,18 +81,7 @@ export function canCluster(map?: L.Map): boolean {
  * @param options - Extra cluster-group options (merged over the defaults).
  * @param map - Map the group will be added to, checked for a usable maxZoom.
  */
-export function createPinClusterGroup(
-    options: {
-        maxClusterRadius?: number | ((zoom: number) => number);
-        spiderfyOnMaxZoom?: boolean;
-        showCoverageOnHover?: boolean;
-        zoomToBoundsOnClick?: boolean;
-        animate?: boolean;
-        animateAddingMarkers?: boolean;
-        iconCreateFunction?: (cluster: ClusterLike) => L.DivIcon;
-    } = {},
-    map?: L.Map,
-): L.LayerGroup {
+export function createPinClusterGroup(options: PinClusterGroupOptions = {}, map?: L.Map): L.LayerGroup {
     const factory = markerClusterFactory();
     if (!factory || !canCluster(map)) return L.layerGroup();
     return factory({

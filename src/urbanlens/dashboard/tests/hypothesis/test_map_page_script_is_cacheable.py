@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-SCRIPT_FILE = Path(__file__).resolve().parents[3] / "dashboard/frontend/static/js/map-page.js"
+SCRIPT_FILE = Path(__file__).resolve().parents[3] / "dashboard/frontend/ts/entries/map-page.ts"
 
 #: A name only the map program declares, so its presence inline means the program itself is still being re-sent.
 _MAP_PROGRAM = b"_SERVER_CENTER_LAT"

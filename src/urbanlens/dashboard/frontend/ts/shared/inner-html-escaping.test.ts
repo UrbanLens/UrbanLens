@@ -55,11 +55,17 @@ const REVIEWED_SAFE = new Map<string, string>([
     // FileReader data: URL of the user's own just-selected file; base64 payload
     // cannot contain a quote, and it never leaves this browser.
     ["e.target?.result", "FileReader data URL"],
+    // entries/map-page.ts: Label.kind is a Django CharField with a fixed
+    // `choices=KIND_CHOICES` (tag/category/status/...), not free user text.
+    ["kindLabel", "server-controlled label-kind enum, not user text"],
 ]);
 
 const INNER_HTML_TEMPLATE = /innerHTML\s*=\s*`([^`]*)`/gs;
 const INTERPOLATION = /\$\{([^}]*)\}/g;
-const ESCAPED = /^esc(Html|ape)\s*\(/;
+// entries/map-page.ts prefixes its page-local helpers with `_` and has both
+// `_escHtml` and `_escapeHtml` (its own long-standing naming, predating the
+// shared modules' plain `escHtml`/`escape`).
+const ESCAPED = /^_?esc(?:Html|ape(?:Html)?)\s*\(/;
 
 function tsFiles(dir: string): string[] {
     const out: string[] = [];

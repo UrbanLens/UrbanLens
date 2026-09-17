@@ -162,4 +162,31 @@ describe("createPinClusterGroup", () => {
         expect(counter.clusterCalls).toBe(1);
         expect(counter.layerGroupCalls).toBe(0);
     });
+
+    /**
+     * P92: the main map (entries/map-page.ts) used to build its own
+     * L.markerClusterGroup by hand instead of calling this shared helper, so
+     * its badge markup could silently drift from every other map's. Its own
+     * chunking options (needed for accounts with thousands of pins, unlike a
+     * detail map's handful of children) must still reach the real factory
+     * call once it goes through the shared helper instead.
+     */
+    test("passes caller overrides (e.g. chunking, radius) through to the factory", () => {
+        stub();
+        const group = createPinClusterGroup({ maxClusterRadius: 60, chunkedLoading: true, chunkSize: 400, chunkInterval: 60 }, mapWithMaxZoom(21));
+        const opts = (group as unknown as { opts: Record<string, unknown> }).opts;
+        expect(opts.maxClusterRadius).toBe(60);
+        expect(opts.chunkedLoading).toBe(true);
+        expect(opts.chunkSize).toBe(400);
+        expect(opts.chunkInterval).toBe(60);
+    });
+
+    test("uses the shared numbered badge as the default iconCreateFunction", () => {
+        stub();
+        const group = createPinClusterGroup({}, mapWithMaxZoom(21));
+        const opts = (group as unknown as { opts: { iconCreateFunction: (c: { getChildCount(): number }) => { html: string } } }).opts;
+        const icon = opts.iconCreateFunction({ getChildCount: () => 12 });
+        expect(icon.html).toContain("pin-cluster");
+        expect(icon.html).toContain(">12<");
+    });
 });
