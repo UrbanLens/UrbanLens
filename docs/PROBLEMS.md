@@ -3091,9 +3091,9 @@ over a template file on disk, not an `assertIn` against a response body), which 
 
 Not fixed. Not re-measured beyond the 2026-09-16 targeted run and the source read cited above.
 
-## P125 — The population capacity harness meets D15's budget through 250 concurrent users and collapses between 250 and 500, in every variant run so far
+## P125 — The population capacity harness collapses at 500 concurrent users on the app container's CPU; production now has a 4-core override to deploy, not yet applied or re-measured
 
-`id: P125` · `status: open` · `updated: 2026-09-16`
+`id: P125` · `status: open` · `updated: 2026-09-17`
 
 **This is a different axis from P113 and P123.** Those are the "neighbour" question - does one
 account's action cost a *different* account anything at all (D11, `tests/perf/k6/neighbour.js`).
@@ -3189,4 +3189,30 @@ endpoint being slow.
   runs are dated and can be told apart, but "what exactly changed between them" would need
   reconstructing from the day's full commit list, not just the ones cited above.
 
-Not fixed.
+### 2026-09-17: production's app tier gets more CPU, on the config side only
+
+`capacity-content`'s bottleneck is the app container's own 2-core allocation, uniform across every
+endpoint - not a query. `src/urbanlens/config/env/production.sample.env` now sets
+`CPU_LIMIT__APP=4`, following the same mechanism `staging.sample.env` already uses for the opposite
+direction (P114): the shared `docker-compose.yml` default stays at 2 cores, so local/dev/testing and
+staging are unaffected, and only production's app tier gets the increase, via its own override.
+`test_production_app_cpu_allocation.py` pins the floor at 4 cores, pins the shared default at 2, and
+fails if staging's app limit ever rises to meet production's.
+
+**Not yet applied anywhere.** Like every `*.sample.env`, this has to be copied into production's
+`.env` on damballa and `urbanlens_production_app` recreated - a running container's `--cpus` is
+fixed at creation. **Not yet re-measured.** Nothing here confirms 4 cores actually pushes the
+capacity ceiling past 500 concurrent users; only `capacity-content`'s original measurement exists,
+and it was against 2 cores. Re-running `tests/perf/k6/population.js` after the real deploy is what
+would confirm or refute that.
+
+Found and fixed in passing: `staging.sample.env` was stale against the current
+`docker-compose.yml` - D16's Dragonfly/RabbitMQ broker migration added `CPU_SHARES__DRAGONFLY`,
+`CPU_LIMIT__DRAGONFLY`, `MEM_LIMIT__DRAGONFLY`, and the three `_RABBITMQ` equivalents, and removed
+the `_VALKEY` ones the sample file still carried. That silently broke
+`test_staging_limits_are_below_production.py`'s own coverage guarantee (P114) - it was failing on
+`main` before this batch touched it, unrelated to CPU_LIMIT__APP. Fixed by removing the three stale
+`_VALKEY` entries and adding the six `_DRAGONFLY`/`_RABBITMQ` ones, each following the file's
+existing halve-the-default convention.
+
+Not fixed: the live measurement. This entry stays open.
