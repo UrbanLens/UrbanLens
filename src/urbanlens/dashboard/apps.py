@@ -26,6 +26,11 @@ class DashboardConfig(AppConfig):
 
         patch_extension_thread_safety()
 
+        # channels_redis's backup-queue script declares no keys, which Dragonfly rejects outright
+        from urbanlens.dashboard.services.core.channels_redis_dragonfly_patch import patch_backup_queue_script
+
+        patch_backup_queue_script()
+
         from urbanlens.dashboard.models.achievements.signals import connect as connect_achievement_signals
         import urbanlens.dashboard.models.aliases.signals
         import urbanlens.dashboard.models.cache.signals

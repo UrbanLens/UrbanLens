@@ -324,6 +324,17 @@ class ImmichSettingsViewTests(TestCase):
         self.client.post(reverse("settings.immich.disconnect"))
         self.assertFalse(ImmichAccount.objects.filter(profile=self.user.profile).exists())
 
+    def test_a_rate_limit_refusal_during_ping_is_a_failed_check_not_a_500(self) -> None:
+        """P122: `post` has no handler of its own around `ping()` - it relies on `ping()` degrading to False."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        with mock.patch.object(ImmichGateway, "_get", side_effect=RateLimitExceededError("immich")):
+            response = self.client.post(
+                reverse("settings.immich"), {"server_url": "https://photos.example.com", "api_key": "some-key"}
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(ImmichAccount.objects.filter(profile=self.user.profile).exists())
+
 
 def _corrupt_api_key(account: ImmichAccount) -> None:
     """Overwrite a stored api_key with ciphertext that will never decrypt.

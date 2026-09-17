@@ -461,10 +461,7 @@
     var editable = !!(item.imageId && typeof window.galleryRepositionImage === 'function');
     if (hint) hint.hidden = !editable;
     _lightboxMap = L.map(mapEl, { attributionControl: false, zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([lat, lng], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(_lightboxMap);
+    window.MapLayers.tileLayer('street').addTo(_lightboxMap);
     var marker = L.marker([lat, lng], { draggable: editable }).addTo(_lightboxMap);
     if (editable) {
       marker.on('dragend', function () {

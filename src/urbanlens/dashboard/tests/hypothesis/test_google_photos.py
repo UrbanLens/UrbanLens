@@ -232,6 +232,17 @@ class PinGooglePhotosSessionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["session_id"], "sess1")
 
+    def test_a_rate_limit_refusal_does_not_500_the_session_create_view(self) -> None:
+        """P122: the view's `except GatewayRequestError` must also catch a refusal, not just a real failure."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        with mock.patch.object(
+            GooglePhotosGateway, "create_session", side_effect=RateLimitExceededError("google_photos")
+        ):
+            response = self.client.post(reverse("pin.google_photos.session.create", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("error", response.context)
+
     def test_session_status_still_waiting(self) -> None:
         cache.set("ul_gphotos_session_owner_sess1", self.profile.id, 600)
         picker_session = PickerSession(

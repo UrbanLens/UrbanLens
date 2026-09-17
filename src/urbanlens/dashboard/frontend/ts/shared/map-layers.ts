@@ -46,10 +46,16 @@ const OVERLAY_ERROR_TILE_URL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///y
  */
 const TILE_DEFS: Record<string, TileDef> = {
     street: {
-        url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        // Not OSM's own tile.openstreetmap.org: that server enforces a usage
+        // policy against unauthorized production hotlinking (osm.wiki/Blocked)
+        // and answers a violation with a rendered "Access blocked" tile at a
+        // 200 status rather than a real error, so it isn't even caught by
+        // errorTileUrl below. CARTO's raster CDN serves the same OSM data
+        // under terms that permit this, same as "dark" already does.
+        url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
         options: {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxNativeZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            maxNativeZoom: 20,
             maxZoom: MAP_MAX_ZOOM,
             errorTileUrl: BASE_ERROR_TILE_URL,
         },
@@ -398,10 +404,9 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
             parts.push("© Esri");
         } else if (map.hasLayer(topographicLayer)) {
             parts.push("© OpenTopoMap");
-        } else if (map.hasLayer(darkLayer)) {
-            parts.push("© OSM · CARTO");
         } else {
-            parts.push("© OpenStreetMap");
+            // Both street and dark are CARTO-served (see TILE_DEFS) - same attribution either way.
+            parts.push("© OSM · CARTO");
         }
         if (weather && (map.hasLayer(weather.rain) || map.hasLayer(weather.clouds))) {
             parts.push("© OpenWeatherMap");

@@ -635,7 +635,7 @@
         const centerLng = {{ map_center_lng|default:-98.5795 }};
         const boundaryMap = L.map(mapEl, { attributionControl: false }).setView([centerLat, centerLng], 4);
         _boundaryMap = boundaryMap;
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(boundaryMap);
+        window.MapLayers.tileLayer('street').addTo(boundaryMap);
         const drawnItems = new L.FeatureGroup().addTo(boundaryMap);
         _boundaryLayers = drawnItems;
 

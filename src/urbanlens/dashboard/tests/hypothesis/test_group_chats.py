@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, Messagin
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
+from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin_share.model import PinShare
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
@@ -264,6 +265,31 @@ class CreateGroupMessageTests(TestCase):
         self.assertIsNotNone(message.deleted_at)
         self.assertEqual(message.tombstone_text_for(self.member.pk), "Message deleted")
         self.assertIsNone(message.tombstone_text_for(self.creator.pk))
+
+    def test_message_notification_references_the_message(self) -> None:
+        NotificationLog.objects.all().delete()
+        message = create_group_message(self.creator, self.group, "hello")
+        notification = NotificationLog.objects.get(profile=self.member)
+        self.assertEqual(notification.group_message_id, message.pk)
+
+    def test_delete_redacts_the_recipients_notification_preview(self) -> None:
+        NotificationLog.objects.all().delete()
+        message = create_group_message(self.creator, self.group, "the secret plan is at midnight")
+        notification = NotificationLog.objects.get(profile=self.member)
+        self.assertIn("secret plan", notification.message)
+        delete_group_message(message, self.creator)
+        notification.refresh_from_db()
+        self.assertEqual(notification.message, "Message deleted")
+
+    def test_delete_redacts_every_members_notification(self) -> None:
+        third = _profile()
+        add_group_members(self.group, self.creator, [third])
+        NotificationLog.objects.all().delete()
+        message = create_group_message(self.creator, self.group, "the secret plan is at midnight")
+        delete_group_message(message, self.creator)
+        for member in (self.member, third):
+            notification = NotificationLog.objects.get(profile=member, group_message=message)
+            self.assertEqual(notification.message, "Message deleted")
 
 
 class GroupMessageLiveIdentityPrivacyTests(TestCase):

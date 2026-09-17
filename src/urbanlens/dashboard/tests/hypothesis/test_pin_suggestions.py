@@ -981,6 +981,17 @@ class PinSuggestionImmichThumbnailViewTests(TestCase):
         response = self.client.get(reverse("memories.locations.immich_thumbnail", args=[suggestion.pk, "a1"]))
         self.assertEqual(response.status_code, 404)
 
+    def test_a_rate_limit_refusal_returns_502_not_a_500(self) -> None:
+        """P122: the handler already degrades `GatewayRequestError` to a 502; a refusal must reach it too."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        with mock.patch(
+            "urbanlens.dashboard.controllers.pin_suggestions.ImmichGateway.get_asset_thumbnail",
+            side_effect=RateLimitExceededError("immich"),
+        ):
+            response = self.client.get(reverse("memories.locations.immich_thumbnail", args=[self.suggestion.pk, "a1"]))
+        self.assertEqual(response.status_code, 502)
+
 
 class PhotoLocationScanPhotoUploadViewTests(TestCase):
     """Opt-in candidate-photo upload endpoint: validation and ownership scoping."""

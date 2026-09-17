@@ -299,6 +299,135 @@ class RepairLegacyPinCoordinatesTests(TestCase):
         self.assertIsNone(self._repair(cid=None, name="Old Tower"))
 
 
+class RepointCidToCorrectedLocationTests(TestCase):
+    """P20: repoint_cid_to_corrected_location moves a CID off the wrongly-placed Location."""
+
+    def _location(self, latitude: float, longitude: float) -> Location:
+        return Location.objects.create(latitude=latitude, longitude=longitude)
+
+    def _set_cid(self, location: Location, cid: int) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+        GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
+
+    def test_moves_the_cid_to_the_corrected_location(self):
+        from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import (
+            repoint_cid_to_corrected_location,
+        )
+
+        legacy = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(legacy, 12345)
+        correct = self._location(RIGHT_LATITUDE, RIGHT_LONGITUDE)
+
+        repoint_cid_to_corrected_location(legacy, correct, 12345)
+
+        legacy.refresh_from_db()
+        correct.refresh_from_db()
+        self.assertIsNone(legacy.cid)
+        self.assertEqual(correct.cid, 12345)
+
+    def test_by_cid_resolves_to_the_corrected_location_afterward(self):
+        from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import (
+            repoint_cid_to_corrected_location,
+        )
+
+        legacy = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(legacy, 12345)
+        correct = self._location(RIGHT_LATITUDE, RIGHT_LONGITUDE)
+
+        repoint_cid_to_corrected_location(legacy, correct, 12345)
+
+        self.assertEqual(Location.objects.by_cid(12345).first().pk, correct.pk)
+
+    def test_does_nothing_when_the_legacy_location_no_longer_holds_this_cid(self):
+        """Must not clear a GooglePlace row that legitimately holds a *different* cid - guards
+        against a stale/reordered caller repointing a cid that never matched this location."""
+        from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import (
+            repoint_cid_to_corrected_location,
+        )
+
+        legacy = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(legacy, 99999)
+        correct = self._location(RIGHT_LATITUDE, RIGHT_LONGITUDE)
+
+        repoint_cid_to_corrected_location(legacy, correct, 12345)
+
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.cid, 99999)
+        self.assertIsNone(Location.objects.by_cid(12345).first())
+
+    def test_does_nothing_when_the_legacy_location_has_no_google_place(self):
+        from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import (
+            repoint_cid_to_corrected_location,
+        )
+
+        legacy = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        correct = self._location(RIGHT_LATITUDE, RIGHT_LONGITUDE)
+
+        repoint_cid_to_corrected_location(legacy, correct, 12345)
+
+        correct.refresh_from_db()
+        self.assertIsNone(correct.cid)
+
+
+class CidRepointOnRepairTests(TestCase):
+    """P20: _create_pin_from_confirmed repoints the cid instead of skipping the backfill."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def _location(self, latitude: float, longitude: float, *, legacy: bool = True) -> Location:
+        location = Location.objects.create(latitude=latitude, longitude=longitude)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
+        Location.objects.filter(pk=location.pk).update(created=stamp)
+        return Location.objects.get(pk=location.pk)
+
+    def _pin(self, location: Location, *, name: str = "", legacy: bool = True) -> Pin:
+        pin = Pin.objects.create(profile=self.profile, location=location, name=name)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
+        Pin.objects.filter(pk=pin.pk).update(created=stamp)
+        return Pin.objects.get(pk=pin.pk)
+
+    def _set_cid(self, location: Location, cid: int) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+        GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
+
+    def test_repairing_a_pin_repoints_the_cid_onto_the_corrected_location(self):
+        from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
+
+        wrong = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(wrong, 12345)
+        self._pin(wrong, name="Old Water Tower")
+
+        pin, created = _create_pin_from_confirmed(
+            {"name": "Old Water Tower", "description": "", "cid": 12345, "label_ids": []},
+            location=wrong,
+            latitude=RIGHT_LATITUDE,
+            longitude=RIGHT_LONGITUDE,
+            user_profile=self.profile,
+            list_labels=[],
+            category_label=None,
+            auto_tag=False,
+        )
+
+        self.assertIsNotNone(pin)
+        self.assertFalse(created)
+        pin.refresh_from_db()
+        self.assertNotEqual(pin.location_id, wrong.pk)
+        self.assertEqual(pin.location.cid, 12345)
+
+        wrong.refresh_from_db()
+        self.assertIsNone(wrong.cid)
+        self.assertEqual(Location.objects.by_cid(12345).first().pk, pin.location_id)
+
+
 class PreviewNeedsLegacyRepairTests(TestCase):
     """preview_needs_legacy_repair - the import preview's "don't dedupe this" flag.
 

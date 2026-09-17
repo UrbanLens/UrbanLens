@@ -282,6 +282,15 @@ class HardDeleteProfileTests(TestCase):
         hard_delete_profile(self.profile)
         self.assertFalse(Pin.objects.filter(pk=pin_pk).exists())
 
+    def test_cascades_to_owned_trip_comments(self):
+        """P25: TripComment.author is CASCADE, matching Comment.profile."""
+        other = baker.make(User)
+        trip = baker.make(Trip, creator=other.profile)
+        comment = baker.make(TripComment, trip=trip, author=self.profile)
+        comment_pk = comment.pk
+        hard_delete_profile(self.profile)
+        self.assertFalse(TripComment.objects.filter(pk=comment_pk).exists())
+
     def test_no_final_email_when_user_has_no_email(self):
         self.profile.user.email = ""
         self.profile.user.save(update_fields=["email"])
@@ -345,18 +354,18 @@ class HardDeleteProfileFileCleanupTests(TestCase):
         hard_delete_profile(self.profile)
         self.assertFalse(storage.exists(name))
 
-    def test_trip_comment_survives_with_its_image_intact(self):
-        """TripComment.author is SET_NULL by design - the row and its image
-        outlive account deletion so other trip members keep the thread; only
-        the author reference is cleared."""
+    def test_trip_comment_is_deleted_with_its_image(self):
+        """TripComment.author is CASCADE, matching Comment.profile (P25) - a
+        trip comment with no replies is erased along with the account, and
+        its image file does not outlive the row."""
         other = baker.make(User)
         trip = baker.make(Trip, creator=other.profile)
         comment = baker.make(TripComment, trip=trip, author=self.profile, image=_fake_image("trip.png"))
+        comment_pk = comment.pk
         storage, name = comment.image.storage, comment.image.name
         hard_delete_profile(self.profile)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.author_id)
-        self.assertTrue(storage.exists(name))
+        self.assertFalse(TripComment.objects.filter(pk=comment_pk).exists())
+        self.assertFalse(storage.exists(name))
 
     def test_missing_file_on_disk_does_not_block_deletion(self):
         """A DB row pointing at an already-missing file must not crash the sweep."""
@@ -364,6 +373,63 @@ class HardDeleteProfileFileCleanupTests(TestCase):
         pin.custom_icon.storage.delete(pin.custom_icon.name)
         hard_delete_profile(self.profile)  # must not raise
         self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+
+
+class HardDeleteProfileCommentTombstoneTests(TestCase):
+    """P25: deleting an account erases its own comments, but a reply another
+    member wrote is never deleted or emptied - the CASCADE reaches exactly as
+    far as the departing profile's own rows, and the existing UL-219
+    parent_deleted signal tombstones the reply the same way a direct
+    comment-delete already does."""
+
+    def setUp(self):
+        self.user = baker.make(User, email="owner@example.com", username="doomed")
+        self.profile = _backdate_request(self.user.profile, ACCOUNT_DELETION_GRACE_PERIOD)
+        self.other = _new_profile()
+
+    def test_own_pin_comment_reply_from_another_user_survives_tombstoned(self):
+        pin = baker.make(Pin, profile=self.other)
+        parent = baker.make(Comment, pin=pin, wiki=None, profile=self.profile, text="original")
+        reply = baker.make(Comment, pin=pin, wiki=None, profile=self.other, parent=parent, text="a reply")
+
+        hard_delete_profile(self.profile)
+
+        reply.refresh_from_db()
+        self.assertEqual(reply.text, "a reply")
+        self.assertIsNone(reply.parent_id)
+        self.assertTrue(reply.parent_deleted)
+
+    def test_own_trip_comment_reply_from_another_user_survives_tombstoned(self):
+        trip = baker.make(Trip, creator=self.other)
+        parent = baker.make(TripComment, trip=trip, author=self.profile, text="original")
+        reply = baker.make(TripComment, trip=trip, author=self.other, parent=parent, text="a reply")
+
+        hard_delete_profile(self.profile)
+
+        reply.refresh_from_db()
+        self.assertEqual(reply.text, "a reply")
+        self.assertIsNone(reply.parent_id)
+        self.assertTrue(reply.parent_deleted)
+
+    def test_other_users_comment_is_left_completely_alone(self):
+        pin = baker.make(Pin, profile=self.other)
+        untouched = baker.make(Comment, pin=pin, wiki=None, profile=self.other, text="not mine")
+
+        hard_delete_profile(self.profile)
+
+        untouched.refresh_from_db()
+        self.assertEqual(untouched.text, "not mine")
+        self.assertEqual(untouched.profile_id, self.other.pk)
+
+    def test_other_users_trip_comment_is_left_completely_alone(self):
+        trip = baker.make(Trip, creator=self.other)
+        untouched = baker.make(TripComment, trip=trip, author=self.other, text="not mine")
+
+        hard_delete_profile(self.profile)
+
+        untouched.refresh_from_db()
+        self.assertEqual(untouched.text, "not mine")
+        self.assertEqual(untouched.author_id, self.other.pk)
 
 
 class RequestAccountDeletionViewTests(TestCase):

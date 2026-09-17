@@ -11,6 +11,80 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-17: A refused external call returned a 500 from views that caught only `GatewayRequestError`
+
+`id: P122` · `status: fixed` · `resolved: 2026-09-17`
+
+**The defect.** Every gateway call passes through `rate_limiter._reserve_call`
+(`services/core/rate_limiter.py:697`, before `_RateLimitedSession._do_request`'s try/except), which
+refuses a call by raising `RequestCancelledError` or one of its three subclasses
+(`RateLimitExceededError`, `ServiceDisabledError`, `RateLimiterUnavailableError`). That family
+subclassed only `DashboardError`, not `GatewayRequestError` - the type every other gateway failure
+raises and the type views/services already catch to degrade gracefully. So a refusal escaped as an
+unhandled 500 wherever a handler caught `GatewayRequestError` but not the raw refusal type.
+Refusals are routine, not edge cases: development and the demo refuse most services outright, and
+under R29 `RateLimiterUnavailableError` fires whenever `ul_web` is at its connection limit.
+
+**Fixed by multiple inheritance, not a translation.** `RequestCancelledError` now reads
+`class RequestCancelledError(DashboardError, GatewayRequestError)`
+(`services/core/rate_limiter.py:722`, importing `GatewayRequestError` from `services/core/gateway.py`
+at module level - safe, since `gateway.py` only imports `rate_limiter` inside a function body at
+`gateway.py:68`, not at module level, so no circular import). This changes what the exception *also*
+is an instance of without changing what gets raised, its message, or `.args`: every existing narrow
+catch of the raw type (`external_data.py`, `nominatim.py`, `cid_resolution.py`,
+`places_resolution.py`, `overpass.py`, `import_failure_guess.py`, `enrichment.py`,
+`open_historical_map.py`, `addresses.py`, `geo_bonus.py`, several controllers) keeps seeing the exact
+same type, unaffected.
+
+**One site needed a second, explicit fix.** The hierarchy change alone did not fix
+`geocode_address` (`controllers/settings.py:382`): its `except (ImportError, OSError, ValueError):`
+around `GoogleGeocodingGateway.geocode_place_name` never mentioned `GatewayRequestError`, so a
+refusal still wouldn't have been caught there. `GatewayRequestError` was added to that tuple
+(`controllers/settings.py:425`), falling through to the existing Nominatim fallback. The other three
+sites P122 named needed no source change - Immich `ping()` (`services/apis/immich/gateway.py`), the
+Immich thumbnail proxy (`controllers/pin_suggestions.py`), and the Google Photos picker
+(`controllers/google_photos.py`) already caught `except GatewayRequestError:`, so the hierarchy fix
+alone closes them.
+
+**Audit of all ~50 production `except ... GatewayRequestError` sites**, per this entry's own "Likely
+fix" note, for two patterns: a handler shadowed by a more specific catch, and a handler that treats
+a refusal as grounds to retry or disconnect an account.
+- `external_api/views_trips.py`'s `_gateway_failure` (`views_trips.py:165-191`) catches
+  `(GoogleAuthExpiredError, CalendarNotConfiguredError, GatewayRequestError)` in one tuple and does
+  `account.delete()` only when `isinstance(exc, GoogleAuthExpiredError)`. Verified by reading: that
+  isinstance check is False for a mere refusal (an unrelated exception hierarchy), so it falls
+  through to the generic 502 branch at `views_trips.py:190-191`, not the disconnect branch.
+- `services/apis/locations/cid_resolution.py`'s `except GatewayRequestError:` defers the CID to a
+  later scheduled batch attempt rather than retrying synchronously - judged correct behaviour for a
+  refusal too, not a bug.
+- No other site combines a `GoogleAuthExpiredError`-style disconnect with `GatewayRequestError` in
+  the same `except` tuple; the disconnect patterns in `controllers/calendar_sync.py` and
+  `services/trips/calendar_sync.py` are separate, earlier `except` clauses, unaffected.
+
+**Verified this session, independently of the fixing session's own claims:**
+- `docker exec`-based run inside `urbanlens_development_main_test_runner` of the five touched test
+  files (`test_refusal_errors_are_gateway_request_errors.py`, `test_geocode_address.py`,
+  `test_immich.py`, `test_pin_suggestions.py`, `test_google_photos.py`): **230 passed, 0 failed, in
+  290s**, including all four new `test_a_rate_limit_refusal_*` regression tests and the eight
+  hierarchy/regression-safety unit tests in the new file.
+- `uv run ruff check` on the three touched source files: clean.
+- `docker exec ... mypy` on the same three files: `Success: no issues found in 3 source files`.
+- Read `rate_limiter.py:697` and `gateway.py:68` directly to confirm the reservation-before-catch
+  ordering and the absence of a module-level circular import.
+- Read `views_trips.py:160-191` directly to confirm the disconnect branch is unreachable for a
+  refusal.
+
+**One thing not re-verified this session:** `controllers/pin.py`'s own
+`except (OSError, ValueError, RuntimeError, RequestCancelledError)` handler (~line 832) already
+caught the raw type directly, so it is logically unaffected by the hierarchy change (the MRO change
+does not alter `RequestCancelledError`'s identity, `__init__`, `.args`, or `str()` - confirmed by
+the `ExistingNarrowCatchesStillWorkTests` regression tests above) - but it was not re-run against
+its own roughly 150-file test fan-out this session or the fixing session, for cost reasons. No
+evidence of a problem there; flagged so a reader doesn't mistake silence for a check.
+
+**As of this session, uncommitted.** The fix (`rate_limiter.py`, `settings.py`) and its five test
+files sit as working-tree changes on `release/v_0_8_0`; not yet committed or pushed.
+
 ## RESOLVED 2026-09-15: every container connected as the superuser, so any tier could take every Postgres connection
 
 `id: P104` · `status: fixed` · `resolved: 2026-09-15`
@@ -811,15 +885,16 @@ SpotGuessr/Trivia `eligible_locations()`/`eligible_questions()` retry-loop findi
 resolved before this audit even ran, by commit `d02fce8a` (2026-08-06, "Unit 24/25: resolve
 SpotGuessr round eligibility once instead of per retry").
 
-## RESOLVED 2026-09-15: P113's 65-finding availability sweep - all but H56
+## RESOLVED 2026-09-15: P113's 65-finding availability sweep - all but the four parked decisions
 
-`refs: P113 (open - H56 remains, see live entry)` · `resolved: 2026-09-15`
+`refs: P113 (open - 4 parked decisions remain, see live entry)` · `resolved: 2026-09-15`
 
-The full re-verified findings list, the still-open row (H56) and four
-parked-by-decision rows (H21, H34, H44, H47) stay on the live P113 entry as its status
-board. What follows is the fix narrative for everything else on that list: what each
-finding actually was, the corrections found while fixing it, and the reasoning behind
-each choice - moved here so the live entry stays a board rather than a log.
+The full re-verified findings list and the four parked-by-decision rows (H21, H34,
+H44, H47) stay on the live P113 entry as its status board; H56, the entry's last
+non-parked open row, closed 2026-09-17 (below). What follows is the fix narrative for
+everything else on that list: what each finding actually was, the corrections found
+while fixing it, and the reasoning behind each choice - moved here so the live entry
+stays a board rather than a log.
 
 **H54 is fixed (2026-09-16).** *"One 512MB Valkey holds sessions, the Channels layer, the Django
 cache and the Celery broker in a single keyspace under `volatile-lru`, and the Celery broker's keys
@@ -842,6 +917,20 @@ writes for the same `maxmemory` budget, and per D16, a full Dragonfly (run witho
 raises rather than silently evicting to make room — a session write can fail, not merely get evicted.
 Its row is left open on its own terms rather than folded into this closure. H38 is unaffected for the
 same reason.
+
+**H56 is fixed (2026-09-17).** *"Under gevent a request that spends its timeout in non-yielding CPU
+takes the whole worker down"* - `--worker-connections 20` bounded the blast radius to 19 requests but
+did not remove it. D11 phase 3a
+([`docs/designs/request-isolation-and-connection-budget.md`](../designs/request-isolation-and-connection-budget.md))
+is built, not "designed and unbuilt" as the live entry said until this closure: `package.json`'s
+gunicorn `start` script already runs `-k gthread --threads 4` (landed in commit `534055e5c`,
+2026-09-15 - one day before the live entry's own 2026-09-16 update, so it was already stale the day it
+was last touched). `bin/run_tests.sh -k "test_connection_budget_wiring"` passes (22 passed), including
+`test_the_worker_runs_threads`, which asserts the worker class is gthread via
+`assertRegex(_start_command(), r"(-k|--worker-class)\s+gthread\b")`. A non-yielding request now blocks
+only its own OS thread, not the whole worker process. Not re-measured beyond that: nothing here
+verifies gthread's actual behaviour under a genuinely non-yielding request live, only that the
+configuration and its wiring test are what the design called for.
 
 | finding | the shape | now |
 |---|---|---|
@@ -16118,3 +16207,746 @@ they were for the 2026-09-14 one) and are not touched by it.
 Both families are covered by unit tests in the new
 `tests/hypothesis/test_bulk_followup_chunk_tasks.py` (17 tests), plus integration coverage in
 `test_import_fanout_queue.py` and `test_link_models.py`.
+
+## RESOLVED 2026-09-17: Zooming out flashed OSM's own "Access blocked" tile, because the built-in street layer hotlinked `tile.openstreetmap.org` directly
+
+`id: P126` · `status: fixed` · `resolved: 2026-09-17`
+
+**User report.** On the main map, zooming out briefly showed OpenStreetMap's own "Access blocked"
+warning graphic (osm.wiki/Blocked) before the real tiles loaded a moment later. The user assumed
+this meant a self-hosted OSM instance was blocking them.
+
+**That assumption is wrong - checked this session.** UrbanLens has no self-hosted OSM *raster tile*
+server anywhere: `docker-compose.yml` has no tile/osm/martin-named service, and neither nginx config
+(`src/urbanlens/config/nginx/nginx.conf`, `django.conf`) has a tile-proxy route. The only
+self-hosted OSM-*adjacent* infrastructure is the Overpass API (P15, `overpass.osm.urbanlens.org`) -
+a vector query API with its own unrelated problem (a 90s proxy cap), not raster tile serving, and
+not involved here. `controllers/basemap_tiles.py` (`RedataBasemapTilesGateway`) is a second,
+separate dynamic tile-layer catalogue that proxies REData's own tiles to hide an API key; it was
+never wired up as a substitute for the built-in "street" base layer. The tiles the user saw really
+were served by `tile.openstreetmap.org` itself, hotlinked directly from the browser.
+
+**Root cause.** `TILE_DEFS.street` in `dashboard/frontend/ts/shared/map-layers.ts` (line 49, before
+this fix) pointed straight at `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` - OSM's own
+public tile servers, which enforce a usage policy against unauthorized production hotlinking
+(https://osm.wiki/Blocked). A burst of requests on zoom-out - a whole new zoom level, all
+uncached, fetched at once - is exactly the load pattern that trips it. Critically, a policy
+violation is answered with a *rendered* "Access blocked" tile at an ordinary HTTP 200, not a real
+403/5xx, so `commit 3c8ca256d` earlier the same day - which added `errorTileUrl` grey-placeholder
+fallback for "a vendor 403/5xx", on the mistaken assumption that OSM's failures were transient
+rate-limiting rather than a hard policy block - never caught it: that fallback only fires on a
+genuine Leaflet `tileerror`, never on a "successful" load of the wrong image.
+
+A second, independent copy of the same mistake existed in
+`dashboard/frontend/ts/entries/spotguessr.ts` (SpotGuessr's area-search map), a hardcoded
+`L.tileLayer("https://{s}.tile.openstreetmap.org/...")` call that did not go through the shared
+`map-layers.ts` module at all.
+
+**Considered and deliberately not touched:** `src/urbanlens/config/nginx/django.conf:163` sets
+`Referrer-Policy: no-referrer` site-wide, because a map URL can encode a pin's coordinates and
+leaking that to a third-party tile vendor via Referer would violate the site's own "sharing urbex
+locations responsibly" purpose. Some vendors treat a missing referrer as a bot signal, so this was
+considered as a contributing factor, but the fix does not relax it - CARTO's CDN (below) already
+serves the "dark" layer under the same policy with no issue, so it works fine under it too.
+
+**Fixed.**
+1. `map-layers.ts`'s `TILE_DEFS.street.url` (line 55) now points at
+   `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png` - CARTO's raster CDN serving the
+   same OSM-sourced data under terms that permit this, mirroring how `TILE_DEFS.dark` already used
+   `dark_all` on the same CDN. `maxNativeZoom` raised 19→20 to match CARTO's real depth (same as
+   "dark"), and the attribution string now credits both OSM and CARTO.
+2. `attributionText()` (`map-layers.ts:401-411`) collapsed the old separate "street" (`©
+   OpenStreetMap`) and "dark" (`© OSM · CARTO`) branches into one shared `© OSM · CARTO` string,
+   since both base layers are now CARTO-served.
+3. `spotguessr.ts` (line 9, line 377) replaced its own hardcoded direct-OSM `L.tileLayer(...)` call
+   with `tileLayer("street")` imported from `map-layers.ts` - removes the duplicate mistake and
+   gives that map the CARTO fix plus the existing `errorTileUrl` fallback for free.
+4. CSP's `img-src` already allowed `https://*.basemaps.cartocdn.com` (`settings/base.py:686-687`,
+   added earlier for the "dark" layer), so no CSP change was needed for "street" to move to the
+   same host.
+
+**Tests (TDD).** `map-layers.test.ts` gained a
+`describe("built-in tile sources do not hotlink OSM's own policy-enforced servers")` block,
+`test.each(["street", "dark", "topographic", "satellite"])`-asserting no built-in `TILE_DEFS` entry's
+url contains `tile.openstreetmap.org`. Confirmed RED against the pre-fix code (failed on exactly
+"street"), GREEN after.
+
+**Verified this session** (re-run independently, not just taken on the fixing session's word):
+- `bun test src/urbanlens/dashboard/frontend/ts/shared/map-layers.test.ts`: 16 pass, 0 fail.
+- `bun test src/urbanlens/dashboard/frontend/ts` (whole suite, unit=test, n=977): **967 pass, 10
+  fail**, matching the fixing session's own count exactly. All 10 failures are in the unrelated,
+  pre-existing `"the map page's inline copy of the lazy grid fetch"` describe block
+  (`icon-picker.contract.test.ts`) - a template-string assertion mismatch with nothing to do with
+  tiles. This documentation pass did not itself `git stash` the fix and re-run to confirm those 10
+  are pre-existing rather than newly introduced; that comparison is the fixing session's claim
+  (963/973 pass on the pre-fix tree), not independently reproduced here.
+- `bun run typecheck`: clean.
+- `uv run pre-commit run --files` on the three touched files: clean.
+- `curl` against `https://{a,b,c,d}.basemaps.cartocdn.com/light_all/3/4/2.png`: all four
+  subdomains, HTTP 200, `content-type: image/png`.
+- `curl http://localhost:21810/static/dashboard/js/core.js` (the `development_main` slot, freshly
+  rebuilt) contains `cartocdn` and no longer contains `tile.openstreetmap.org` for the base layers -
+  the fix is in the served bundle, not just the source.
+
+**Verified visually, in a real browser, against `development_main` (`http://localhost:21810/`).**
+Logged in as a fresh throwaway user (legacy/non-E2EE, so a plain `curl` login works per
+[[e2ee-login-derives-credential]]), then drove headless Chromium (Playwright) at the live main map
+through the exact reported action - load, then zoom out repeatedly - while recording every network
+request matching the tile hosts involved:
+- First pass (default load + 4x zoom-out): 244 tile requests total, **0** to
+  `tile.openstreetmap.org`, 122 to `basemaps.cartocdn.com` (`light_all`).
+- Second pass (explicit `street` layer selected via the map's own UI, then 5x zoom-out): 146 tile
+  requests, all 146 to `light_all` on CARTO, again 0 to OSM's own servers.
+- No `pageerror` events in either run; the CARTO tiles rendered as ordinary map imagery, not an
+  "Access blocked" graphic.
+
+This closes the gap the documentation pass had flagged: the fix isn't just "the served bundle no
+longer contains the string `tile.openstreetmap.org`" but "a real browser performing the reported
+action never contacts OSM's tile servers at all," which is what actually rules out the reported
+symptom.
+
+**Also fixed in the same batch: three more hardcoded direct-OSM tile URLs**, found by this entry's
+own writing pass and closed immediately rather than left open, since they're the identical mistake
+and the fix pattern was already in hand:
+- `dashboard/templates/dashboard/partials/_photo_lightbox.html:464` (the lightbox's read-only
+  photo-location minimap)
+- `dashboard/templates/dashboard/pages/pin_lists/detail.html:638` (the pin-list boundary-drawing
+  minimap)
+- `dashboard/templates/dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html:270` (the
+  saved-filter region-drawing minimap)
+
+Each opened at a low, multi-tile zoom (`setView(..., 4)` for the two boundary-drawing maps) - the
+same load shape that trips OSM's policy on the main map's zoom-out - via a raw inline
+`L.tileLayer('https://{s}.tile.openstreetmap.org/...')` call that bypassed `map-layers.ts` entirely.
+All three now call `window.MapLayers.tileLayer('street')` instead - the same global the site's
+`core.js` already exposes and that several other templates already call this exact way
+(`settings/index.html`'s map-style preview, `_safety_map_script.html`, etc.), so this isn't a new
+pattern, just extending an existing one to three call sites that had missed it. `grep -rn
+"tile.openstreetmap.org" src/urbanlens/dashboard/templates/ src/urbanlens/dashboard/frontend/ts/`
+now turns up nothing outside `map-layers.ts`'s own explanatory comment and its regression test.
+
+**Compiled bundle note for a future reader diffing `git diff` against a running site:**
+`static/dashboard/js/core.js` (and the SpotGuessr bundle) are gitignored build output regenerated by
+`bun run build` / the Docker image build, not committed - the fix will not appear in a plain `git
+diff` of that file, only in the TS sources above.
+
+## RESOLVED 2026-09-17: The test-quality audit's last open item resolved as a real bug - `Location.address` dropped its trailing comma
+
+`id: P57` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled "The test-quality audit's follow-ups: all done but one owner decision", and before
+that "...15 done; one untested surface and two decisions remain", and before that "Test-quality
+audit follow-ups (2026-08-29)".
+
+Found while auditing existing unit tests for real positive/negative coverage (see
+`docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
+convention rather than fixed inline.
+
+**Thirteen were fixed by 2026-09-06** - among them the `connect_ex` guard (which turned out to be two holes), the
+`make_cache_key` collision, the hard-delete overlap lock, the `SubscriptionRole.clean()` gap, and
+`PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found. The
+other two, the webhook-event row lock and the sweep path's ledger lock, were proven under real threads
+on 2026-09-14 and needed no fix.
+
+Three of the "untested surface" entries are covered as of 2026-09-06 too - `WikiBoundaryView`,
+`purge_old_backups`'s count-based retention, and `RedataBasemapTilesGateway.list_sources` - and
+**writing those tests found two live defects neither this entry nor anything else had noticed**:
+
+- **`parse_multipolygon_geojson` turned most malformed GeoJSON into a 500.** Its
+  `except (GEOSException, TypeError, ValueError)` did not name `GDALException`, which is not a
+  `GEOSException` subclass and is what `GEOSGeometry` actually raises for a bare `{}`, an unknown
+  `type`, or a `Polygon` with no `coordinates` - because it parses GeoJSON through OGR. Seven
+  features reach that parser, including `external_api/views_wiki.py` and
+  `external_api/serializers.py`, so this was a 500 on the public API for an ordinary malformed
+  request. Fixed, along with `{"type": "Polygon", "coordinates": []}`, which parses *cleanly* into
+  an empty geometry - the exact trap `dissolve_polygons` documents two functions below, where an
+  empty polygon in a `__within` lookup matches zero rows instead of imposing no restriction.
+- **The AI-gateway guard mocked out the method its own test file exists to test.** `ai_guard.py`
+  (added 2026-09-06 for P78) patches `LLMGateway.send_with_tools` for the whole session, so
+  `test_ai_gateway_tool_calling.py`'s six tests asserted against a call that never happened and had
+  been failing since. `real_ai_chokepoint(target)` restores one named chokepoint for a test whose
+  subject *is* that method, leaving the rest of the guard - and the socket guard and the placeholder
+  credentials - standing. `test_ai_gateway_guarded` still passes, which is what proves it.
+
+`CalendarImportView`, the carousel's "no imagery available" branch and the multi-level nesting prefix
+are covered as of 2026-09-14, and both stale-documentation items are settled; none of it found a defect.
+
+**Resolved 2026-09-17: the one remaining decision went to strip the comma - it was a bug, not
+intentional formatting.** Fixed in `d7d2a1ba5` ("fix: P57 - Location.address/address_extended no
+longer leave a trailing comma") - see the struck-through entry below for the fix and its tests. Every
+other item this entry tracked was already fixed, covered or refuted by 2026-09-14; this was the last
+one, which is why the entry moves here in full rather than staying open in `PROBLEMS.md`.
+
+Worth noting about this entry's own hit rate: it filed the AI trip tools as tidy-up ("duplicated
+business logic ... can silently drift"), and they were a live permission bypass. Two of the five
+"untested surface" items covered so far turned out the same way. An entry that says only "this is untested" is not
+a statement that the code is correct.
+
+~~**`LocalhostOnlyNetwork` (`core/testing_network.py`) doesn't patch `socket.socket.connect_ex`.**~~
+**Fixed 2026-09-06, and it was two holes rather than one.** `connect_ex` is a separate C-level
+method that does not delegate through the patched `connect()` - and a **UDP `sendto` never connects
+at all**, so it was equally invisible to a guard watching `connect`/`create_connection`. Both are
+patched now. Both were reproduced first: against the old guard,
+`test_blocks_external_connect_ex` and `test_blocks_external_udp_sendto` fail while their
+localhost anti-vacuity siblings pass.
+
+~~**`make_cache_key` (`core/cache_keys.py`) joins parts with a bare colon before hashing.**~~
+**Fixed 2026-09-06** with the length-prefixed encoding this entry suggested. It was latent rather
+than live - none of the five call sites (pin lat/lng, location formatting, github repo slug) passes
+a colon-bearing part - so the only cost of the change is that every entry cached under an old key
+misses once.
+
+Worth keeping from the fix: **the first property test written for it passed against the broken
+code.** It drew two independent tuples and asserted their keys differed, which hypothesis has no
+reason to satisfy by drawing `["a:b"]` and `["a", "b"]` in one example. Rewritten to *construct*
+the colliding partner from each draw - joining the parts on each candidate separator - it fails on
+the first example. A property test that searches for a coincidence is not a guard against it.
+
+~~**`tasks.hard_delete_expired_accounts()` has no overlap lock, unlike its sibling
+`send_account_deletion_reminders()`.**~~ **Fixed 2026-09-06**, with the sibling's lock treatment
+verbatim (`_HARD_DELETE_LOCK_CACHE_KEY`, 3300s - both sweeps are on the same hourly beat,
+`crontab(minute=27)` and `crontab(minute=32)`). The original text follows.
+
+**Was:** The reminder sweep acquires
+`_DELETION_REMINDER_LOCK_CACHE_KEY` specifically because two overlapping Celery beat runs could
+both select and email the same profile - the hard-delete sweep is on the same hourly beat
+(`settings/base.py`) and has the identical hazard: two overlapping runs can both select the same
+due profile and both call `hard_delete_profile` on it, sending a duplicate "your account has been
+deleted" email (the second `User.delete()` just affects 0 rows, not a crash - but the duplicate
+final email is a real, avoidable user-facing defect). Worth the same lock treatment as its sibling.
+
+**`PinAliasView.post` did not sanitize before its emptiness check** (`controllers/aliases.py`),
+unlike its wiki-side sibling `LocationAliasView.post`. A name that sanitizes to nothing (emoji-only,
+`"<>"`) passed the raw non-empty check, then `create_pin_alias` raised an uncaught `ValueError`,
+producing a 500 instead of the intended 400. **Fixed same day** while reviewing the audit finding:
+`PinAliasView.post` now sanitizes first, mirroring the wiki view. Guarded by
+`test_create_alias_that_sanitizes_to_empty_is_rejected` in `test_alias_views.py`.
+
+~~**`models/achievements/signals.py`'s `on_achievement_saved` re-queues a full profile-table backfill
+sweep on every save of an already-active achievement.**~~ **Fixed 2026-09-06.** No intent needed
+confirming in the end: the handler's own docstring said "newly defined or re-activated" and the code
+did neither check - it never looked at `created` or at what had changed.
+
+**The fix this entry proposed would have been wrong, though.** "Only on creation or reactivation"
+drops a case that genuinely needs the backfill: `metric` and `threshold` decide *who qualifies*, so
+an admin lowering a threshold from 50 to 3 has to reach the users that newly covers. The gate is a
+change to a **qualifying field** (`metric`, `threshold`, `is_active`), not to creation - tracked
+with the `from_db` idiom `Pin`, `Location` and `Wiki` already use here rather than a new mechanism.
+
+Three tests: a cosmetic edit (name, colour, order, secrecy) enqueues nothing, and two anti-vacuity
+ones - a lowered threshold and a changed metric still do. Only the first fails against the old
+code, which is the point: the other two passed before *and* after, and they are what stops the gate
+being narrowed too far.
+
+**`from_db` alone was not enough**, which the tests caught. It only sets the markers on an instance
+*read from the database*, so a second save of an instance built by `objects.create` compared against
+absent markers and enqueued anyway. `Pin.save` already solves this here - it re-baselines
+`_loaded_name` after saving - and `Achievement.save` now does the same. Ordering matters: `post_save`
+fires inside `super().save()`, so the signal still sees the pre-save values, and the re-baseline
+happens after.
+
+~~**`Location.address` / `Location.address_extended` leave a dangling trailing comma** when the last
+populated component has nothing following it - e.g. a route-only address renders as exactly
+`"Elm Ave,"`.~~ **Fixed 2026-09-17, in `d7d2a1ba5` ("fix: P57 - Location.address/address_extended no
+longer leave a trailing comma").** The decision went to strip the comma - it was a bug, not
+intentional formatting.
+
+**The fix.** `Location.address` / `Location.address_extended`
+(`src/urbanlens/dashboard/models/location/model.py`) now only append the comma after `route`/
+`locality` when a further component actually follows it, checked via a `*_has_more_after_it` boolean
+before choosing `f"{x},"` over the bare value - previously the comma was appended unconditionally, so
+a route-only address rendered as `"Elm Ave,"` instead of `"Elm Ave"`.
+
+**Tests (TDD).** `src/urbanlens/dashboard/tests/hypothesis/test_addressable.py`: the tests that had
+pinned the buggy comma-having behaviour down as correct were rewritten to assert its absence
+(`test_route_appends_comma` → `test_route_alone_has_no_trailing_comma`,
+`test_locality_appends_comma` → `test_locality_alone_has_no_trailing_comma`,
+`test_street_number_and_route_without_locality` →
+`test_street_number_and_route_without_locality_has_no_trailing_comma`), plus two new tests confirming
+the comma still appears when a component *does* follow (`test_route_followed_by_locality_has_comma`,
+`test_locality_followed_by_state_has_comma`). Confirmed RED against the still-buggy model (4
+failures), then GREEN after the fix - 38/38 tests in the file passing (36 before; two added net).
+
+**Checked for fallout.** Grepped every test file referencing `.address`/`address_extended`/
+`address_basic` on `Location`/`Pin`/`AddressableModel` tree-wide - none pin an exact
+comma-dependent string this change would break. `ruff --fix` and `pre-commit` clean on both changed
+files. mypy was checked too; the only errors are pre-existing and unrelated, on the
+`@settings(**_HYP)` hypothesis-decorator pattern used throughout this test file - confirmed the same
+error count exists on the pre-fix tree via `git stash`, so this change did not introduce or worsen
+them.
+
+**Was:** The existing tests correctly pinned down this behavior as current, so it read as
+intentional, but the trailing comma looked like a real address-formatting defect worth a look by
+whoever owns Location/address display.
+
+~~**`services/ai/assistant.py`'s `_tool_create_trip` / `_tool_add_trip_activity` reimplement the
+`SiteSettings` quota checks and their `select_for_update` locking inline.**~~ **Fixed 2026-09-06,
+and "can silently drift out of sync over time" understates it - both had already drifted, in
+opposite directions.** (The code had also moved: it is `services/ai/tools/trips.py` now, not
+`assistant.py`.)
+
+**`_add_trip_activity` was a permission bypass.** It gated on
+`Trip.objects.filter(slug=..., profiles=profile)` - bare membership - where the shared
+`trip_activities.create_activity` gates on
+`require_perform(actor, trip, trip.allow_add_activities, ...)`. Two separate rules the AI path never
+applied:
+
+- **`allow_add_activities`.** A creator sets it to "Organizers" or "No one (creator only)" precisely
+  to stop ordinary members editing the itinerary. Through the assistant, a plain joined member could
+  add anyway.
+- **Joined-ness.** `Trip.profiles` is a `ManyToManyField` through `TripMembership` with no status
+  filter, so it matches members who were *invited and never accepted* - the case `has_joined`'s own
+  docstring says "cannot contribute ... until they accept the invitation".
+
+Both reproduced before the fix: three failing tests, alongside three anti-vacuity ones (an organizer
+*can* add to an organizers-only trip, the creator can always add, a joined member can add to an
+"everyone" trip) that passed throughout.
+
+**`_create_trip` had drifted the other way: it held a lock the shared service did not.** Its
+check-then-create ran under `select_for_update` on the creator's profile row; `trip_crud.create_trip`
+counted upcoming trips with no lock at all, so two concurrent creates through any *other* path could
+both pass a limit only one should have. Consolidating naively onto the shared function would have
+deleted that guard. The lock moved into `create_trip` instead, where every caller gets it, and the
+tool now calls it.
+
+The general lesson for the next consolidation: a duplicate is not automatically the weaker copy.
+Diff both before deleting either.
+
+~~**Wiki-owned albums are untested across the entire album test suite.**~~ **Covered 2026-09-06**
+in `test_wiki_albums.py`: the ownership half (`parent_wiki` exclusive with the other two owners,
+per-owner slug uniqueness, `for_wiki` scoping) and the concealment half.
+
+This entry was right that it needed the rules understood first - two things decide whether the test
+means anything:
+
+- **`concealment_active` is hardcoded False today.** A concealment test that does not force it
+  passes against any implementation, including one with the narrowing deleted. Every concealed
+  assertion patches it True (the idiom `test_concealed_render.py` uses) and has a gate-off
+  counterpart, so the difference is demonstrably caused by the flag rather than by nothing being
+  listed at all.
+- **The actor field is `profile_id`.** `Album` is in `concealment._ACTOR_FIELDS` keyed on it; a test
+  written against a `created_by` that does not exist on this model would have passed while
+  exercising nothing.
+
+The one worth having is the by-slug case: `visible_rows`' docstring records nine call sites once
+scoped to the wiki instead of the viewer - "an existence oracle ... and, on the mutating routes,
+lets it act on one" - so the test POSTs a *rename* of another contributor's album and asserts both
+the 404 and that the name is unchanged. A first version used GET, got 405 from the method check
+before any lookup ran, and had an anti-vacuity assertion loose enough (`in (200, 405)`) to accept
+that 405. Both halves were inert; only the hard `== 404` exposed it.
+
+~~**`purge_old_backups`'s count-based retention has no dedicated test anywhere in the suite.**~~
+**Covered 2026-09-06**, asserting by identity as this entry asked - which of the files survive, not
+how many - so an implementation that kept the oldest and deleted the newest would fail. Includes the
+`len(files) > retention` boundary and a stray non-backup file, which must be neither counted toward
+retention nor deleted. The original text follows.
+
+**Was:** `test_backup_temp_purge.py` only
+exercises the `.tmp`-reaping side effect of `purge_old_backups()` with zero real `.sql` backups on
+disk, so the count-deletion loop (`backup_files[self.backup_retention:]`, sorted by mtime
+descending) never actually runs in any test - nor does `DatabaseBackup.run()`'s success path
+(pg_dump succeeding, `os.replace` to the final name, then `purge_old_backups()` firing). The
+existing "Database backups have no restore path" entry above describes retention as "implemented
+and tested", which overstates it for this specific branch. Worth a dedicated pass verifying that
+with N backups on disk and a lower retention, exactly the oldest excess files are removed (by
+identity, not just resulting count) and the newest `retention` survive.
+
+~~**`RedataBasemapTilesGateway.list_sources()` envelope parsing is untested at the unit level.**~~
+**Covered 2026-09-06** - the bare-list/`sources`/`results` shapes, the fallback order, the empty-
+`sources`-falls-through-to-`results` case, and the id filter. Mocked at `get_json` rather than at
+`session`, which this entry suggested: `get_json` is the seam between "talk to REData" and "make
+sense of the answer", and only the second half was untested. The original text follows.
+
+**Was:**
+`test_basemap_tile_proxy.py` only ever mocks `RedataBasemapTilesGateway.list_sources`/
+`download_tile` at the controller boundary, so the gateway's own body-shape handling (bare list vs
+`{"sources": [...]}` vs `{"results": [...]}` dict envelopes, and the
+`if isinstance(row, dict) and row.get("id")` row filter) has no direct test anywhere in the
+codebase - a regression there (e.g. swapping the `sources`/`results` fallback order, or dropping
+the id-filter) would only be caught if it happened to also break one of the controller-level
+fixtures, which all use the `sources` key and well-formed rows. Worth a dedicated pass that
+instantiates the gateway directly (with `base_url`/`api_key` kwargs and a mocked `session`) rather
+than mocking the gateway's own methods.
+
+~~**Sweep-path locking on `advance_usage_ledger` has no real-concurrency coverage.**~~ **Covered
+2026-09-14** in `test_billing_ledger_sweep_lock.py`. `test_billing_ledger_lock.py` reaches
+`advance_usage_ledger` only through `apply_payment`, whose outer lock already holds the row; the
+daily sweep (`advance_pwyw_usage_ledgers`) calls it directly, where its own lock is the only one.
+The new test pauses the sweep inside the ledger - after its locked read, before its save, by holding
+its first `role_pwyw_threshold_cents` call - while a payment on a second connection tries to land.
+It asserts the payment had not finished when the pause ended, which is the lock holding it off, and
+that coverage ends at 60 days rather than the 30 a stale save would rewind it to. Because the pause
+sits after the read, it would also fail a version that kept the re-read but dropped
+`select_for_update`. That is argued from the ordering, not observed: no mutant was run, per the audit's
+rule against mutating production code. Under correct locking the test always waits out the pause, one
+second.
+
+~~**`SubscriptionRole.clean()` doesn't validate `pwyw_minimum_cents` requires `pay_what_you_want`.**~~
+**Fixed 2026-09-06**, as the symmetric half of the `pwyw_dynamic_threshold` rule beside it. `0`/`None`
+stays valid - that is "unset", not "set to nothing". The original text follows.
+
+**Was:**
+`clean()` (`src/urbanlens/dashboard/models/subscriptions/model.py`) only ties
+`pwyw_dynamic_threshold` back to `pay_what_you_want`; it never checks that a nonzero
+`pwyw_minimum_cents` is meaningless when `pay_what_you_want=False`. An admin can save a role with a
+static minimum pledge set but pay-what-you-want turned off, and `clean()` raises nothing - the
+field is simply inert.
+
+**Webhook-event row lock: covered 2026-09-14.** `StripeWebhookView.post` takes
+`StripeWebhookEvent.objects.select_for_update()` so two concurrent deliveries of one event id cannot both read
+`processed_at` as null and both credit the payment, but every test of the view ran on one connection, where the lock
+never contends. `test_billing_webhook_event_lock.py` posts two deliveries from separate threads and connections, through
+the real handler and ledger, with `handle_event` held until the other delivery arrives: one event credits 1000 once, and
+two distinct events credit 400 and 700 together. The distinct pair is what shows both threads do reach the handler at
+once when nothing stops them. The test was not run against a view with the lock removed, since that means editing
+production code to prove a test; the defect it guards against was never present.
+
+~~**`WikiBoundaryView` has no test coverage at all.**~~ **Covered 2026-09-06** - the area limit,
+the `WikiEdit` audit write on both save and clear, the `just_drawn` concealment bypass, and request
+validation. Writing it found the `parse_multipolygon_geojson` 500 described at the top of this
+entry. The original text follows.
+
+**Was:** `dashboard/controllers/boundary.py`'s
+`WikiBoundaryView` (GET/POST `/location/<slug>/wiki/boundary/`) - the community boundary-editor
+endpoint with its area-limit check against `SiteSettings.max_bbox_area_km2`, its `WikiEdit`
+audit-trail write, and the `just_drawn` concealment-bypass logic documented in
+`_wiki_boundary_payload` - is exercised by no test anywhere in the suite (only its sibling
+`BoundaryController`, the pin-scoped endpoint, is tested in `test_boundary.py`). Worth a dedicated
+test file/class.
+
+**Refuted: a fruitless boundary refresh does NOT leave staleness stuck.** An audit agent
+(2026-08-29) reasoned from reading `generate_location_boundaries` → `ensure_place_for_location` →
+`provision_places_for_coordinate` (`services/places/provisioning.py`) alone that a refresh whose
+provider chain comes back with no polygon might leave `Place.geometry_generated_at` /
+`Location.place_resolved_at` both unstamped, so `boundary_generation_stale()` would keep returning
+`True` forever for that Location - and flagged `test_a_fruitless_refresh_leaves_existing_geometry_alone`
+in `test_boundary_generation_staleness.py` as likely to fail on a real run. It doesn't: the
+consolidated verification pass for this batch ran the real suite against Postgres and the test
+passed cleanly (`2 failed, 277 passed` that run, neither failure this one - see the batch's commit).
+Recorded here so nobody re-derives the same false alarm from a source read alone: this is NOT a
+real problem, a plausible-sounding defect inferred from code reading turned out wrong once actually
+run.
+
+~~**Stale `update_or_create`/`auto_now` rationale in boundary voting docs.**~~ **Already gone,
+checked 2026-09-14.** Neither `services/geo/boundary_voting.py` nor `test_boundary_vote_recency.py`
+still explains the refresh through `update_fields`. The entry's reading of Django holds: 6.0.6's
+`update_or_create` adds every field with a custom `pre_save` to `update_fields` itself, so
+`updated` needs no mention in `defaults`.
+
+~~**Stale "draft wiki" language around the building-mirror path.**~~ **Fixed 2026-09-14.** There is
+no draft state: `Wiki` has no `officially_created` field (it survives only in old migrations), and
+`get_or_create_for_location` is the one creation path. Four places still described the retired
+concept and are rewritten - `pin_restructure.mirror_buildings_to_wiki`'s comment,
+`concealment.py`'s naming comment (which cited two functions that do not exist),
+`docs/LOCATION_DATA_TESTS.md`, and `wiki_share.share_from_pin`'s docstring. That last one was
+wrong about behaviour rather than names: it said chosen fields were ignored once a wiki was
+"official", when they are recorded as the sharer's stat votes on every share. `test_building_wiki_mirror.py`'s
+docstring had already been corrected.
+
+~~**`CalendarImportView` has no test coverage at all.**~~ **Covered 2026-09-14** in
+`test_calendar_import_view.py`: the no-account dialog and 400, blank `event_ids`, the per-event
+`create_activity_<id>`/`invite_<id>`/`auto_sync_<id>` parsing (including the digit-only invite
+filter, which drops `-3`), one real import through a mocked gateway, the toast wording for
+invitations and for one or several skips, and both failure branches - an expired grant deletes the
+account, a gateway failure keeps it, and neither shows the upstream error text. The view was correct.
+
+~~**Map-overlay caption length check is untested even though it's drivable.**~~ **Covered
+2026-09-06**, and this entry was right on both counts: the check is correct, and the docstring
+saying it could not be driven was wrong. That claim is gone, with a note in the module docstring
+recording what it got wrong - it is true of `_image_from_request`'s `media_url`/`image_url`
+branches and not of its direct-upload branch, which reaches `upload_photo` with no network call at
+all.
+
+The shape of the refusal is the part worth knowing, and a first draft of the test got it wrong in
+the opposite direction to the docstring: an over-width caption answers **200**, not 400.
+`map_overlays.fail()` returns 400 only to the JSON caller (the lightbox's "use as floorplan
+overlay"); the HTMX dialog gets 200 with the message swapped into the list partial. Asserting on
+the status alone would have filed a bug against working code, so the test asserts that neither the
+`Image` nor the `MapImageOverlay` is created, and a second one drives the JSON caller to pin the
+400 half.
+
+~~**Missing coverage for the carousel "no imagery available" branch.**~~ **Covered 2026-09-14** in
+`test_carousel_single_slide_arrows.py`: with no slides, both `street_view.html` and
+`satellite_view.html` render `view-unavailable` with the caller's `error`, or their own default
+message without one, and no slide or arrow markup.
+
+~~**Multi-level pin/wiki nesting prefix is undocumented and untested.**~~ **Covered and documented
+2026-09-14.** `test_child_slugs.py` now pins it for pins and wikis: `Boiler Room` under
+`hrsh-powerhouse` is `powerhouse-boiler-room`, and `ph-bldg-boiler-room` when the parent has that
+alias. `docs/NOTES.md` records it. Shallow prefixing follows from the prefix's 3-8 character bound
+rather than being a choice made separately from it - a parent slug that already carries a prefix
+is almost always longer than 8, so chaining would mean dropping the bound.
+
+~~**`TripCommentDeleteView` has zero test coverage.**~~ **Covered 2026-09-06** in
+`test_trip_comment_delete.py`. No defect: the view was already correct, and is now guarded - the
+author's own delete, the trip creator's override, a joined member who is neither, a non-member, and
+the attached `MarkupMap` going with it.
+
+Two cases worth having beyond "the author can delete their own". `TripComment.author` is `SET_NULL`
+(the asymmetry P25 records), so a comment outlives its writer's account and
+`can_delete_comment`'s set becomes `{None, creator}` - a bug letting `None` match would hand every
+orphaned comment to any member. And `get_comment(trip, comment_id)` must scope by trip, not just by
+id, which is the same existence-oracle shape `concealment.visible_rows` warns about.
+
+## RESOLVED 2026-09-17: Account deletion now erases trip comments too - the owner chose full erasure over the SET_NULL asymmetry, and the reply-tombstone mechanism it needed already existed
+
+`id: P25` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled "Account deletion and the constraint-recreate class: both clean (2026-08-07)".
+
+Two checks this unit, both negative.
+
+**The "recreate into a changed world" class is exhausted outside undo.** The four undo crashes
+all came from recreating a row whose constraint slot had been taken since. The other creators
+of `db_pin_unique_location_per_profile` handle it: `apply_pin_share_response` re-checks
+`find_profile_pin_near_location` *inside* its `select_for_update` block and only creates when
+nothing is there, and `accept_pin_suggestion` filters on `parent_pin__isnull=True`, matching
+the partial constraint exactly. The undo handlers were the gap, not the pattern.
+
+**Account deletion is deliberately designed, and the catastrophic case is avoided.** Every FK
+pointing at `Profile` was enumerated. The split is coherent rather than accidental:
+
+- **Personal data cascades** - pins, images, direct messages, labels, albums, notification
+  logs, credentials, key material.
+- **Contributions to shared or community space are `SET_NULL`** - wiki edits, wiki creators,
+  aliases, links, owners, property sales, article revisions, trip creators and activities,
+  fact evidence, trivia submissions, group chat creators. A departing user does not erase what
+  other people are still using.
+- **`Pin.source_share` is `SET_NULL`**, which is the one that matters most: a sharer deleting
+  their account would otherwise cascade `PinShare` deletions into *recipients' pins*. It
+  doesn't. `PinShare.parent_share` is `SET_NULL` too, so a provenance chain truncates rather
+  than corrupting - `resolve_origin_share` simply ends its walk early.
+
+### One asymmetry, surfaced rather than changed (was)
+
+`Comment.profile` is `CASCADE` while `TripComment.author` is `SET_NULL`. Both are comments a
+user wrote in a space other people share, and deleting an account therefore erases your pin
+and wiki comments while leaving your trip comments in place, authored by nobody. One of the
+two is probably not what was intended, but which one is a data-policy question - whether
+deletion means "erase what I wrote" or "keep the conversation readable" - and not a call to
+make from inside an audit. Recorded here for the owner.
+
+**Resolved 2026-09-17.** Jess's decision: "All comments should be deleted when the user account is
+deleted, including for trips. One caveat is that this must still allow for nested comments from
+other users to continue existing. CASCADE can't wind up deleting anyone else's data, or making
+their comments no longer display. In those cases, the ui should show something like 'deleted
+comment' in place of the deleted comment, so it can continue showing replies beneath it." Deletion
+means "erase what I wrote", with the caveat that a reply from someone still on the platform must
+survive as a tombstone rather than vanish or lose its own author.
+
+**The fix**, in `0cfd6250e` ("fix: P25 - account deletion now erases trip comments too").
+`TripComment.author` (`src/urbanlens/dashboard/models/trips/model.py:483`) changed from
+`on_delete=SET_NULL` to `on_delete=CASCADE`, matching `Comment.profile` - migration
+`0051_trip_comment_author_cascade.py`. `hard_delete_profile`'s `_delete_profile_files`
+(`src/urbanlens/dashboard/services/profile/account_deletion.py:134`) now also walks
+`profile.trip_comments.all()` to clean up trip comment image files before the cascade fires
+(`account_deletion.py:145-146`), mirroring the existing pin/wiki comment image cleanup.
+
+**The tombstone the caveat asked for was already built, for a different trigger.** Both `Comment`
+and `TripComment` carry a `parent_deleted` boolean and a `pre_delete` signal
+(`src/urbanlens/dashboard/models/comments/signals.py:11`,
+`src/urbanlens/dashboard/models/trips/signals.py:63`) that flags a reply `parent_deleted=True`
+whenever the comment it replies to is deleted - for any reason, including a CASCADE fired by
+account deletion, since Django's delete collector runs `pre_delete` per instance regardless of what
+triggered the collection, and separately nulls the reply's own `parent` FK (`on_delete=SET_NULL`)
+as part of the same collected delete. Built for UL-219 (direct comment deletion), the UI already
+renders "Replying to a comment that was deleted" wherever `parent_was_deleted` is true
+(`_comment_body.html`, `trip_comments_panel.html`). So no new mechanism had to be built - the
+CASCADE/SET_NULL asymmetry above was the only real gap, and closing it made trip comments behave
+exactly like pin/wiki comments already did.
+
+**Tests**, `src/urbanlens/dashboard/tests/hypothesis/test_account_deletion.py`:
+`test_cascades_to_owned_trip_comments` (new, line 285); `test_trip_comment_survives_with_its_image_intact`
+replaced by `test_trip_comment_is_deleted_with_its_image` (line 357); a new
+`HardDeleteProfileCommentTombstoneTests` class (line 378) proves a reply from another user survives
+(`parent_deleted=True`, `parent_id=None`) when the departing user's parent comment or trip comment
+is erased, and that other users' own comments are left completely untouched. Reported by the
+implementing session as a TDD RED->GREEN cycle via `bin/run_tests.sh`, 116 tests passing across
+`test_account_deletion.py` plus the comment/trip-comment `parent_deleted` and visibility test files,
+with ruff/mypy/pre-commit clean - not independently re-run by this closure pass.
+
+## RESOLVED 2026-09-17: The four never-run security specs had two stale assertions, and the live run surfaced an unrelated, currently-active WebSocket crash (P127)
+
+`id: P91` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled "Four of eight security integration specs have never run against a live
+deployment".
+
+**What this asked for.** `3547deb11` ("security related integration tests, not yet run -- needs
+review and expansion") added eight spec files under `tests/integration/specs/security/`. By
+2026-09-15, `authorization.spec.ts`, `input.spec.ts`, `surfaces.spec.ts` and `isolation.spec.ts` had
+each gotten a live run and a real fix commit off the back of it (a 500-vs-400 bug, a CRLF
+header-injection gap, a media-gate race, and whatever `isolation.spec.ts` found before this entry
+was filed). The remaining four - `assumptions.spec.ts`, `disclosure.spec.ts`, `session.spec.ts`,
+`transport.spec.ts` - were still byte-identical to their initial commit, with no evidence either had
+ever executed against a live deployment. Same risk class as P75 (resolved 2026-09-05): an assertion
+that has never run is not a check, it is a claim nobody has tested.
+
+**Run live 2026-09-17**, against a throwaway dev environment provisioned via `bin/dev_env.py create`
+(sibling `infrastructure` repo; ephemeral slug `a584c78`, `https://a584c78.dev.urbanlens.org`). All
+four now pass, but two needed real fixes to assertions that had simply never met reality - exactly
+the gap this entry existed to name:
+
+1. **`disclosure.spec.ts`'s "readiness is the documented four keys" test asserted a stale key
+   set.** `HealthController._collect` (`src/urbanlens/dashboard/controllers/health.py:94`) returns
+   six keys today - `cache, connections, db, degraded, migrations, role` - not the four (`cache, db,
+   migrations, role`) the spec asserted. `connections` and `degraded` were added to `health.py`
+   after this spec was written; because the spec had never run, nothing caught the drift. Fixed in
+   `tests/integration/specs/security/disclosure.spec.ts` by updating the assertion to the current
+   six-key set, with a comment explaining why and citing this entry.
+
+2. **`transport.spec.ts`'s "an unknown Host is not served as this site" test threw "socket hang up"
+   instead of getting a response.** Root cause, confirmed by direct curl reproduction against the
+   same environment: the TLS-terminating proxy in front of a `bin/dev_env.py`-provisioned
+   environment (a wildcard-cert nginx/NPM router, `CN=*.dev.urbanlens.org`) refuses the connection
+   outright at the TLS layer on an SNI/Host mismatch, before Django - or even the environment's own
+   internal router - ever sees the request. That is at least as protective as an HTTP-level refusal,
+   but it means this class of dev environment cannot exercise `ALLOWED_HOSTS` this way; it is a
+   property of the TLS front door, not a product bug. Fixed in
+   `tests/integration/specs/security/transport.spec.ts` by wrapping the request in try/catch and
+   skipping gracefully on the outright connection refusal, mirroring the spec's existing skip-guard
+   for the *other* form of proxy interference it already handled (a silent 200 from a proxy that
+   overwrites `Host` with its own upstream name).
+
+**Unplanned but valuable side effect: running these specs live surfaced a real,
+previously-unknown, currently-active bug**, unrelated to what either spec was checking - every
+authenticated page load was tripping a WebSocket 403 against Dragonfly, broadly failing the
+integration suite's strict browser-console guard. Documented and fixed as its own entry: **P127**.
+
+**Verified 2026-09-17**, after P127's fix was applied to the `a584c78` environment: a full re-run
+of all four target specs passed cleanly - **53 passed, 1 skipped** (the TLS-mismatch skip from
+finding 2, above). Before P127's fix, the same run produced **9 failures**, all sharing the WS-403
+console-guard signature P127 describes.
+
+**Not measured this session:** `assumptions.spec.ts` and `session.spec.ts` needed no assertion
+fixes - they passed once actually run - so nothing further is recorded about them; they are named
+here only because this entry always grouped all four together. The other four specs `3547deb11`
+originally added were out of scope for this run; they already had live runs and fixes by
+2026-09-15, per this entry's own history above.
+
+## RESOLVED 2026-09-17: Dragonfly's strict Lua key-validation crashed every authenticated page's WebSocket connection, because channels_redis's backup-queue script never declared its two keys
+
+`id: P127` · `status: fixed` · `resolved: 2026-09-17`
+
+**Found by accident, while verifying P91.** Running the four security specs P91 asked for against a
+throwaway `bin/dev_env.py` environment (sibling `infrastructure` repo, slug `a584c78`) tripped the
+integration suite's strict browser-console guard broadly: every authenticated page load logged
+`WebSocket connection to 'wss://.../ws/notifications/' failed: ... 403` (a plain crash, before this
+was diagnosed). Nothing about P91's four specs concerns WebSockets at all - this was incidental, not
+a hole in what any of them check.
+
+**Root cause**, from `docker logs` on the environment's `app_ws` (Channels/Daphne ASGI) container:
+`channels_redis`'s `RedisChannelLayer._brpop_with_clean` - the receive-side cleanup path used by
+every WebSocket consumer, including the notifications bell - runs a Lua script that references its
+two keys through `ARGV[1]`/`ARGV[2]` with `numkeys=0`, instead of declaring them via
+`KEYS[1]`/`KEYS[2]`. Standalone Redis tolerates this outside cluster mode. **Dragonfly - this
+project's Redis-compatible cache/broker (D16) - enforces strict Lua-script key-declaration
+validation unconditionally**, raising `redis.exceptions.ResponseError: ... script tried accessing
+undeclared key, key: asgispecific.<hash>!$inflight` on every call. That crashed the Channels receive
+loop (visible in `daphne.server` logs as "Exception inside application"), which crashed the
+WebSocket connection - client-visible as either a 403 or a dropped connection depending on timing.
+
+Confirmed by web search as a known, unresolved Dragonfly-compatibility issue class, not something
+specific to this codebase: dragonflydb/dragonfly#272, #3066, #3212, a Dragonfly blog post on
+BullMQ, getsentry/sentry#119377 and taskforcesh/bullmq#2463 all hit the identical error class
+against Dragonfly. Upstream tracks this specific incompatibility as django/channels_redis#345,
+unresolved as of channels-redis 4.3.0 (`pyproject.toml:11`, `channels-redis~=4.3.0` - this project's
+pin). channels_redis has no config option to disable the affected reliable-delivery/backup-queue
+mechanism.
+
+**Two remediation paths considered.**
+
+a. The documented, blunt fix - the Dragonfly server flag `--default_lua_flags=allow-undeclared-keys`.
+   **Rejected.** It is global: it relaxes key-declaration validation for every Lua script the
+   Dragonfly server ever runs, not just this one, and Dragonfly's own docs warn it "will slow things
+   down considerably" as a sitewide performance cost, for one script's worth of benefit.
+
+b. **Applied**: a narrow, scoped runtime monkeypatch. `patch_backup_queue_script()` in new file
+   `src/urbanlens/dashboard/services/core/channels_redis_dragonfly_patch.py`, wired into
+   `src/urbanlens/dashboard/apps.py::DashboardConfig.ready()` (line 33) - the same
+   idempotent-monkeypatch precedent already used one call above it in the same file,
+   `patch_extension_thread_safety()` for drf-spectacular. It replaces `_brpop_with_clean` with a
+   version whose Lua script is byte-identical in behavior but declares its two keys via
+   `KEYS[1]`/`KEYS[2]` with `numkeys=2` instead of `ARGV`. `KEYS` vs `ARGV` makes zero functional
+   difference to `redis.call`'s behavior - only to whether a strict server can see which keys a
+   script touches - so this is a no-op under real Redis: no server-side flag, no infrastructure
+   change, no behavior change under standalone Redis, and it fixes Dragonfly compatibility only. The
+   patch is version-guarded (`_VERIFIED_VERSIONS = frozenset({"4.3.0"})`, matching the current pin)
+   and no-ops with a logged warning if the installed channels-redis version doesn't match, rather
+   than silently reinstating a since-changed upstream private method with a stale copy. It is
+   idempotent, checked via a `_urbanlens_dragonfly_safe` marker attribute on the replacement
+   function.
+
+**Tests**, `src/urbanlens/dashboard/tests/hypothesis/test_channels_redis_dragonfly_patch.py` (4
+tests, all passing): the replacement script declares `KEYS` not `ARGV` with `numkeys=2`; the
+reliable-delivery behavior is unchanged (a popped member is still added to the backup queue);
+calling the patch twice is idempotent (installs the same wrapper); an unrecognized channels-redis
+version is left unpatched, with a logged warning.
+
+**Side observation, not a new bug - an existing safety mechanism working as designed.** While
+investigating the WS-403 failures, `src/urbanlens/dashboard/services/security/socket_budget.py`'s
+per-account WebSocket connection ceiling (`WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT`, default 20, tracked
+as a Redis/Dragonfly sorted set `ul_ws_open:<identity>`) had accumulated exactly 20 stale claims for
+one test account, refusing all new connections with "Refused a socket for user:1: 20 already open,
+at a ceiling of 20" (`socket_budget.py:142`) - a downstream side effect of the *pre-fix* crash runs,
+which crashed connections without a clean disconnect/release. Stale entries older than
+`STALE_AFTER_SECONDS` (15 minutes, `socket_budget.py:50`) self-heal on the next `claim()` call
+(`socket_budget.py:125-130`); this was manually cleared on the throwaway test account's Redis key to
+unblock verification immediately rather than wait, since it was disposable test infrastructure, not
+something requiring a code change.
+
+**Verified live 2026-09-17.** After syncing the patched code into the `a584c78` environment's
+`app_ws` and celery containers and restarting them, `app_ws` startup logs showed no version-guard
+warning (confirming the patch actually applied against the container's installed channels-redis
+4.3.0), and a full re-run of all four specs P91 names passed cleanly: **53 passed, 1 skipped** (an
+unrelated TLS-mismatch skip - see P91's closure entry). Before this fix, the same run produced **9
+failures**, all sharing the identical WS-403 console-guard signature described above; after this fix
+and clearing the stale socket-budget key above, **0 failures**.
+
+**Not measured this session.** This patch has been verified only in the `a584c78` throwaway dev
+environment. It has not yet been deployed to staging or production, though both run the same
+Dragonfly-backed stack (D16) and the same `channels-redis~=4.3.0` pin, so the underlying crash is
+presumably active there too until this lands through the normal deploy path - not confirmed by
+observing production logs this session.
+
+## RESOLVED 2026-09-17: A deleted message's on-site notification preview is redacted now too, once `NotificationLog` gained a reference back to the message it was raised for
+
+`id: P47` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled "A deleted message's preview survives in the recipient's notification list".
+
+**What was open.** The *delayed* email and WhatsApp/SMS alerts for a direct message already skipped
+a message the app would show as a tombstone (fixed in chunk 572), so unsending inside the
+120-second delay window stopped the out-of-band copy going out. The **on-site notification** raised
+for the same message did not: `services/messaging/direct_messages` stored `message=preview` and
+`services/messaging/group_chats` stored `message=f"{sender}: {preview}"`, and neither
+`delete_message_for_everyone` nor `delete_group_message` touched that stored text, so after the
+sender unsent a message the thread showed "Message deleted" while the notification row kept
+quoting what was said. Two things narrowed the blast radius without closing it: an encrypted
+message never had a plaintext preview to leak (`direct_messages.py:392`, `group_chats.py:453`
+store `"🔒 Encrypted message"` instead), and a DM notification is only raised when there is no
+other unread message from the same sender, so a conversation held at most one stale preview per
+sender.
+
+**Why it wasn't fixed sooner.** `NotificationLog` had no reference to the message it was raised
+for - only a `url` pointing at the thread (the conversation or the group), not the message -
+so matching rows heuristically on profile + type + url + timestamp would eventually redact the
+wrong notification. Closing it needed a schema change, which is why this entry stayed open behind
+three options instead of a fix.
+
+**The fix**, option 1 of the three the entry listed, in `a62ebd67b` ("fix: P47 - unsending a
+message now redacts its notification preview").
+
+- `src/urbanlens/dashboard/models/notifications/model.py` - added nullable `direct_message` and
+  `group_message` FKs to `NotificationLog`, both `on_delete=SET_NULL` so deleting the message later
+  can't cascade into deleting the notification that referenced it.
+- `src/urbanlens/dashboard/migrations/0050_notification_log_message_reference.py` - the migration.
+- `src/urbanlens/dashboard/services/messaging/direct_messages.py` and `group_chats.py` -
+  `notify(...)` now passes `direct_message=`/`group_message=` when raising the notification, and
+  `delete_message_for_everyone`/`delete_group_message` redact the linked `NotificationLog`'s stored
+  text to "Message deleted" when the underlying message is deleted or unsent.
+
+**Tests**, `src/urbanlens/dashboard/tests/hypothesis/test_direct_messages.py` and
+`test_group_chats.py`: confirm `notify(...)` populates the new FK, and that deleting or unsending a
+message redacts the linked notification's stored preview. All passing at the time this landed; not
+re-run by this closure pass.

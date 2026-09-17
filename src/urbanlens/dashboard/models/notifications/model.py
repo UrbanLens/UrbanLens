@@ -55,9 +55,31 @@ class NotificationLog(abstract.FrontendDashboardModel):
         blank=True,
     )
 
+    # The message this notification previews, if any - lets a later delete find and redact this
+    # row's ``message`` text (see ``delete_message_for_everyone``/``delete_group_message``) instead
+    # of leaving a since-unsent preview sitting in the recipient's notification list. SET_NULL, not
+    # CASCADE: the message tombstones rather than hard-deleting in the ordinary flow, and even where
+    # it doesn't, losing the reference should never take the notification history down with it.
+    direct_message = models.ForeignKey(
+        "dashboard.DirectMessage",
+        on_delete=models.SET_NULL,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
+    group_message = models.ForeignKey(
+        "dashboard.GroupMessage",
+        on_delete=models.SET_NULL,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
+
     if TYPE_CHECKING:
         profile_id: int | None
         source_profile_id: int | None
+        direct_message_id: int | None
+        group_message_id: int | None
 
     objects = NotificationManager()
 

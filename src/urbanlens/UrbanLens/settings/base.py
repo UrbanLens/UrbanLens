@@ -680,9 +680,9 @@ _CSP_DIRECTIVES: dict[str, object] = {
         "blob:",
         # Paste-any-URL overlays need any HTTPS host; images don't execute.
         "https:",
-        # Base map tiles and overlays.
-        "https://*.tile.openstreetmap.org",
-        "https://tile.openstreetmap.org",
+        # Base map tiles and overlays. Not tile.openstreetmap.org (P126) - nothing
+        # loads from OSM's own tile servers anymore, and the "https:" entry above
+        # would cover it anyway if something did.
         "https://*.basemaps.cartocdn.com",
         "https://basemaps.cartocdn.com",
         "https://*.tile.opentopomap.org",

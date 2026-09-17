@@ -6,7 +6,7 @@ import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
-import { createMapLayers } from "../shared/map-layers";
+import { createMapLayers, tileLayer } from "../shared/map-layers";
 import {
     avatarInitial,
     bonusSuffix,
@@ -374,7 +374,7 @@ interface RegionSearchResult {
 function ensureAreaMap(): L.Map {
     if (state.areaMap) return state.areaMap;
     state.areaMap = L.map("sg-area-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(state.areaMap);
+    tileLayer("street").addTo(state.areaMap);
     state.areaDrawnItems = new L.FeatureGroup();
     state.areaMap.addLayer(state.areaDrawnItems);
     const drawControl = new L.Control.Draw({

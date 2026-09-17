@@ -102,10 +102,12 @@ class Location(abstract.PublicDashboardModel):
         parts = []
         if self.street_number:
             parts.append(self.street_number)
+        route_has_more_after_it = bool(self.locality or self.administrative_area_level_1 or self.zipcode)
         if self.route:
-            parts.append(f"{self.route},")
+            parts.append(f"{self.route}," if route_has_more_after_it else self.route)
+        locality_has_more_after_it = bool(self.administrative_area_level_1 or self.zipcode)
         if self.locality:
-            parts.append(f"{self.locality},")
+            parts.append(f"{self.locality}," if locality_has_more_after_it else self.locality)
         if self.administrative_area_level_1:
             parts.append(self.administrative_area_level_1)
         if self.zipcode:
@@ -124,7 +126,7 @@ class Location(abstract.PublicDashboardModel):
         if self.street_number:
             parts.append(self.street_number)
         if self.route:
-            parts.append(f"{self.route},")
+            parts.append(f"{self.route}," if self.locality else self.route)
         if self.locality:
             parts.append(self.locality)
         return " ".join(parts) or None

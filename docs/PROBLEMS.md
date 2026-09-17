@@ -486,24 +486,35 @@ than trusted from the original audit text:
 
 All of the above are maintainability/completeness gaps, not active security or correctness bugs.
 
-## P20 — The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone
+## P20 — `GoogleMapsGateway.import_pins_streaming` is ~280 lines of dead code, kept alive only because it's the sole caller of the AI label-style-suggestion feature
 
-`id: P20` · `status: open` · `updated: 2026-09-14`
+`id: P20` · `status: open` · `updated: 2026-09-17`
 
-Previously titled "Residues left by the TEMPORARY legacy-CID coordinate repair (found 2026-07-25)".
+Previously titled "The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()`
+resolves it wrongly for everyone" - and before that "Residues left by the TEMPORARY legacy-CID
+coordinate repair (found 2026-07-25)". Retitled because the CID-misplacement half described under
+that title is now fixed; the decision below, about `import_pins_streaming` itself, is what remains.
 
 `services/apis/locations/legacy_cid_coordinate_fix.py` lets a re-import move a user's
-pre-2026-07-25 pins off the coordinates the old S2-decode guess put them on. Two known gaps
-that it deliberately does *not* close - both should disappear when that module is deleted,
-but re-check them then rather than assuming:
+pre-2026-07-25 pins off the coordinates the old S2-decode guess put them on. It deliberately left
+two gaps open when this module was first written. The first is now closed; the second - what to do
+about `import_pins_streaming` - is not:
 
-1. **The CID stays on the bad `Location`.** `GooglePlace.cid` is `unique=True`, so the repaired
-   pin's new (correct) Location can't claim the CID while the old, wrongly-placed Location still
-   holds it - the backfill in `_create_pin_from_confirmed` is skipped for exactly this case.
-   Consequence: `Location.objects.by_cid()` keeps resolving that CID to the wrong Location for
-   *every* user, and each re-import pays a fresh REData/Places resolution instead of a cache hit.
-   Repointing the CID would fix it globally, but it mutates shared cross-user data off the back of
-   one user's import, which is why it wasn't done here. Deliberate call, not an oversight.
+1. ~~**The CID stays on the bad `Location`.**~~ — **fixed in commit `8c16ffee2`**
+   ("fix: P20 - repairing a legacy pin repoints its Google CID"). `GooglePlace.cid` is
+   `unique=True`, so the repaired pin's new (correct) Location couldn't claim the CID while the
+   old, wrongly-placed Location still held it - the backfill in `_create_pin_from_confirmed` was
+   skipped for exactly this case, leaving `Location.objects.by_cid()` resolving that CID to the
+   wrong Location for *every* user, and each re-import paying a fresh REData/Places resolution
+   instead of a cache hit. The reason it wasn't done originally - repointing the CID mutates
+   shared cross-user data off the back of one user's import - is answered by doing it inside the
+   same transaction as the repair rather than not doing it: `legacy_cid_coordinate_fix.py` gained
+   `repoint_cid_to_corrected_location(legacy_location, correct_location, cid)`, which clears the
+   old `GooglePlace.cid` before setting it on the corrected Location, and
+   `services/apis/locations/google/maps.py`'s `_create_pin_from_confirmed` CID-backfill guard now
+   calls it instead of skipping the backfill when a `legacy_cid_location` exists. Covered by
+   `tests/hypothesis/test_legacy_cid_coordinate_fix.py` (`RepointCidToCorrectedLocationTests`,
+   `CidRepointOnRepairTests`), all passing at the time this landed; not re-run by this edit.
 
 2. **`GoogleMapsGateway.import_pins_streaming` survives its route.** It still places CID pins from
    `extract_coordinates_from_url`'s S2 decode. The `pin.upload.takeout` route that reached it was removed as a superseded
@@ -623,44 +634,6 @@ fan-out with its own paging/rate story, not another field-name correction.
 `attachments/{id}/extract/` all require an API key holding `cultural_resources:write`, not
 just `:read` - a read-only key 403s on all three and therefore yields zero attachments no
 matter how correct this code is.
-
-## P25 — `Comment.profile` CASCADEs but `TripComment.author` SET_NULLs, so account deletion erases only some comments
-
-`id: P25` · `status: open` · `updated: 2026-08-07`
-
-Previously titled "Account deletion and the constraint-recreate class: both clean (2026-08-07)".
-
-Two checks this unit, both negative.
-
-**The "recreate into a changed world" class is exhausted outside undo.** The four undo crashes
-all came from recreating a row whose constraint slot had been taken since. The other creators
-of `db_pin_unique_location_per_profile` handle it: `apply_pin_share_response` re-checks
-`find_profile_pin_near_location` *inside* its `select_for_update` block and only creates when
-nothing is there, and `accept_pin_suggestion` filters on `parent_pin__isnull=True`, matching
-the partial constraint exactly. The undo handlers were the gap, not the pattern.
-
-**Account deletion is deliberately designed, and the catastrophic case is avoided.** Every FK
-pointing at `Profile` was enumerated. The split is coherent rather than accidental:
-
-- **Personal data cascades** - pins, images, direct messages, labels, albums, notification
-  logs, credentials, key material.
-- **Contributions to shared or community space are `SET_NULL`** - wiki edits, wiki creators,
-  aliases, links, owners, property sales, article revisions, trip creators and activities,
-  fact evidence, trivia submissions, group chat creators. A departing user does not erase what
-  other people are still using.
-- **`Pin.source_share` is `SET_NULL`**, which is the one that matters most: a sharer deleting
-  their account would otherwise cascade `PinShare` deletions into *recipients' pins*. It
-  doesn't. `PinShare.parent_share` is `SET_NULL` too, so a provenance chain truncates rather
-  than corrupting - `resolve_origin_share` simply ends its walk early.
-
-### One asymmetry, surfaced rather than changed
-
-`Comment.profile` is `CASCADE` while `TripComment.author` is `SET_NULL`. Both are comments a
-user wrote in a space other people share, and deleting an account therefore erases your pin
-and wiki comments while leaving your trip comments in place, authored by nobody. One of the
-two is probably not what was intended, but which one is a data-policy question - whether
-deletion means "erase what I wrote" or "keep the conversation readable" - and not a call to
-make from inside an audit. Recorded here for the owner.
 
 ## P86 — Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction
 
@@ -1137,51 +1110,6 @@ dynamic dispatch and no django-filter `method="..."` naming a queryset method (t
 strings in `src/` are `"get"` and `"post"`), so the trap that hid `Pin.by_category` from the original
 sweep is not present any more.
 
-## P47 — A deleted message's preview survives in the recipient's notification list
-
-`id: P47` · `status: open` · `updated: 2026-08-16`
-
-Fixed in chunk 572: the *delayed email* and *delayed WhatsApp/SMS alert* for a direct message now
-skip a message the app would show as a tombstone, so unsending inside the 120-second delay window
-stops the out-of-band copy going out.
-
-Not fixed, because it needs a schema decision: the **on-site notification** raised for the same
-message keeps its preview text.
-
-- `services/messaging/direct_messages` stores `message=preview` - up to 120 characters of the body.
-- `services/messaging/group_chats` stores `message=f"{sender}: {preview}"`, likewise 120.
-
-Neither is touched by `delete_message_for_everyone` / `delete_group_message`, so after the sender
-unsends, the thread shows "Message deleted" while the notification row still quotes what was said.
-
-**Two things narrow this, both checked 2026-09-05 and neither stated above.** An encrypted message
-never had a plaintext preview to leak: both services branch on `is_encrypted` first and store
-`"🔒 Encrypted message"` (`direct_messages.py:392`, `group_chats.py:453`), so this is a plaintext-DM
-defect, not an E2EE one. And a DM notification is raised only when there is no *other* unread
-message from the same sender (`already_unread`, `direct_messages.py:388`), so a conversation holds at
-most one stale preview per sender rather than one per deleted message.
-
-That does not make it a non-issue - one quoted sentence is the whole of what "unsend" is supposed to
-undo - but it does mean the fix is smaller and less urgent than "every deleted message leaks".
-
-There is no way to clean it up precisely today: `NotificationLog` has no reference to the message it
-was raised for, and its `url` points at the *thread* (the conversation, or the group), not the
-message. Matching rows heuristically on profile + type + url + timestamp would be fragile and would
-sooner or later delete the wrong notification.
-
-Options:
-
-1. Add a nullable generic reference (or a `message_uuid`) to `NotificationLog`, and clear or redact
-   matching rows when a message is deleted. Cleanest, costs a migration.
-2. Render notification previews through the message at display time rather than storing them, so a
-   tombstone applies everywhere at once. Cleanest conceptually, largest change - and the stored text
-   currently doubles as the push/e-mail body.
-3. Accept it, and say so in the UI: the notification was already delivered when the message was
-   live, which is arguably the same as the recipient having read it.
-
-Worth deciding rather than leaving implicit, because the app currently promises "Message deleted" in
-one surface while quoting the message in another.
-
 ## P49 — Doc citations drift silently, and CI's past-end check is red on 92 citations in dated records
 
 `id: P49` · `status: open` · `updated: 2026-09-14`
@@ -1453,7 +1381,7 @@ five off-tab panels. Laning those would delay the page itself, which is a differ
 
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
-`id: P56` · `status: open` · `updated: 2026-09-05`
+`id: P56` · `status: open` · `updated: 2026-09-17` · `corrects a stale host citation: tile.openstreetmap.org dropped per P126, conclusion unchanged`
 
 Previously titled "`Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed
 to set it does not exist", and before that "Nuclei scan follow-ups (2026-08-28)".
@@ -1467,9 +1395,14 @@ from every host `_CSP_DIRECTIVES` admits and reading the response headers:
 | `maps.googleapis.com` (the JS API itself) | script | `CORP: cross-origin` |
 | `fonts.googleapis.com`, `fonts.gstatic.com` | styles, fonts | `CORP: cross-origin` |
 | `www.google.com` (favicons), `maps.gstatic.com` | images | `CORP: cross-origin` |
-| `tile.openstreetmap.org`, `basemaps.cartocdn.com`, `tile.opentopomap.org`, `server.arcgisonline.com`, `services.arcgisonline.com` | map tiles | no CORP, `ACAO: *` - needs `crossOrigin` on the Leaflet layer |
+| `basemaps.cartocdn.com`, `tile.opentopomap.org`, `server.arcgisonline.com`, `services.arcgisonline.com` | map tiles | no CORP, `ACAO: *` - needs `crossOrigin` on the Leaflet layer |
 | `www.gravatar.com` | avatar preview | no CORP, `ACAO: *` - needs `crossorigin` on the `<img>` |
 | `en.wikipedia.org`, `nominatim.openstreetmap.org` | `fetch()` | no CORP, `ACAO: *` - already fine, `fetch` is CORS-mode by default |
+
+`tile.openstreetmap.org` dropped from this row 2026-09-17: P126 moved every in-app tile reference off
+it onto `basemaps.cartocdn.com`, which already shared this row's identical no-CORP/`ACAO: *` shape -
+the finding is unaffected (`grep -rn "tile.openstreetmap.org" src/` now matches only a comment and a
+regression test in `map-layers.ts`/`map-layers.test.ts`, not a live reference).
 
 So every scripted resource already passes, and the nine that do not are all `ACAO: *` and reachable
 with an attribute change. **That is not the blocker, and the entry was wrong about what was.**
@@ -1495,7 +1428,9 @@ they are now.
 **The nine attribute changes this entry lists are a `require-corp` requirement, not a prerequisite.**
 Under `credentialless` a no-cors tile loads as-is. Measured in a browser against the dev stack on
 2026-09-06 with `Cross-Origin-Embedder-Policy-Report-Only: credentialless` live: the map page loaded
-48 Leaflet tiles from `server.arcgisonline.com` and `*.tile.openstreetmap.org` with `crossorigin`
+48 Leaflet tiles from `server.arcgisonline.com` and `*.tile.openstreetmap.org` (the latter no longer
+one of the app's tile hosts as of P126, 2026-09-17 - its replacement, `basemaps.cartocdn.com`, carries
+the same no-CORP/`ACAO: *` shape, so this measurement's conclusion is unaffected) with `crossorigin`
 **unset**, plus scripts from unpkg/cdnjs/code.jquery.com and fonts from Google, with zero violation
 reports and zero failed requests. Do not spend a batch adding `crossOrigin` attributes for this.
 
@@ -1516,331 +1451,6 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 `streetviewpixels-pa.googleapis.com` 403). The `img-src` comment already flags that this set is
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
-
-## P57 — The test-quality audit's follow-ups: all done but one owner decision
-
-`id: P57` · `status: open` · `updated: 2026-09-14`
-
-Previously titled "The test-quality audit's follow-ups: 15 done; one untested surface and two decisions remain", and before that "Test-quality audit follow-ups (2026-08-29)".
-
-Found while auditing existing unit tests for real positive/negative coverage (see
-`docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
-convention rather than fixed inline.
-
-**Thirteen were fixed by 2026-09-06** - among them the `connect_ex` guard (which turned out to be two holes), the
-`make_cache_key` collision, the hard-delete overlap lock, the `SubscriptionRole.clean()` gap, and
-`PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found. The
-other two, the webhook-event row lock and the sweep path's ledger lock, were proven under real threads
-on 2026-09-14 and needed no fix.
-
-Three of the "untested surface" entries are covered as of 2026-09-06 too - `WikiBoundaryView`,
-`purge_old_backups`'s count-based retention, and `RedataBasemapTilesGateway.list_sources` - and
-**writing those tests found two live defects neither this entry nor anything else had noticed**:
-
-- **`parse_multipolygon_geojson` turned most malformed GeoJSON into a 500.** Its
-  `except (GEOSException, TypeError, ValueError)` did not name `GDALException`, which is not a
-  `GEOSException` subclass and is what `GEOSGeometry` actually raises for a bare `{}`, an unknown
-  `type`, or a `Polygon` with no `coordinates` - because it parses GeoJSON through OGR. Seven
-  features reach that parser, including `external_api/views_wiki.py` and
-  `external_api/serializers.py`, so this was a 500 on the public API for an ordinary malformed
-  request. Fixed, along with `{"type": "Polygon", "coordinates": []}`, which parses *cleanly* into
-  an empty geometry - the exact trap `dissolve_polygons` documents two functions below, where an
-  empty polygon in a `__within` lookup matches zero rows instead of imposing no restriction.
-- **The AI-gateway guard mocked out the method its own test file exists to test.** `ai_guard.py`
-  (added 2026-09-06 for P78) patches `LLMGateway.send_with_tools` for the whole session, so
-  `test_ai_gateway_tool_calling.py`'s six tests asserted against a call that never happened and had
-  been failing since. `real_ai_chokepoint(target)` restores one named chokepoint for a test whose
-  subject *is* that method, leaving the rest of the guard - and the socket guard and the placeholder
-  credentials - standing. `test_ai_gateway_guarded` still passes, which is what proves it.
-
-`CalendarImportView`, the carousel's "no imagery available" branch and the multi-level nesting prefix
-are covered as of 2026-09-14, and both stale-documentation items are settled; none of it found a defect.
-
-What remains: **one decision** for whoever owns Location/address display - whether the trailing comma
-`Location.address` leaves after a route-only address is intended. Every other item below is fixed, covered or refuted.
-
-Worth noting about this entry's own hit rate: it filed the AI trip tools as tidy-up ("duplicated
-business logic ... can silently drift"), and they were a live permission bypass. Two of the five
-"untested surface" items covered so far turned out the same way. An entry that says only "this is untested" is not
-a statement that the code is correct.
-
-~~**`LocalhostOnlyNetwork` (`core/testing_network.py`) doesn't patch `socket.socket.connect_ex`.**~~
-**Fixed 2026-09-06, and it was two holes rather than one.** `connect_ex` is a separate C-level
-method that does not delegate through the patched `connect()` - and a **UDP `sendto` never connects
-at all**, so it was equally invisible to a guard watching `connect`/`create_connection`. Both are
-patched now. Both were reproduced first: against the old guard,
-`test_blocks_external_connect_ex` and `test_blocks_external_udp_sendto` fail while their
-localhost anti-vacuity siblings pass.
-
-~~**`make_cache_key` (`core/cache_keys.py`) joins parts with a bare colon before hashing.**~~
-**Fixed 2026-09-06** with the length-prefixed encoding this entry suggested. It was latent rather
-than live - none of the five call sites (pin lat/lng, location formatting, github repo slug) passes
-a colon-bearing part - so the only cost of the change is that every entry cached under an old key
-misses once.
-
-Worth keeping from the fix: **the first property test written for it passed against the broken
-code.** It drew two independent tuples and asserted their keys differed, which hypothesis has no
-reason to satisfy by drawing `["a:b"]` and `["a", "b"]` in one example. Rewritten to *construct*
-the colliding partner from each draw - joining the parts on each candidate separator - it fails on
-the first example. A property test that searches for a coincidence is not a guard against it.
-
-~~**`tasks.hard_delete_expired_accounts()` has no overlap lock, unlike its sibling
-`send_account_deletion_reminders()`.**~~ **Fixed 2026-09-06**, with the sibling's lock treatment
-verbatim (`_HARD_DELETE_LOCK_CACHE_KEY`, 3300s - both sweeps are on the same hourly beat,
-`crontab(minute=27)` and `crontab(minute=32)`). The original text follows.
-
-**Was:** The reminder sweep acquires
-`_DELETION_REMINDER_LOCK_CACHE_KEY` specifically because two overlapping Celery beat runs could
-both select and email the same profile - the hard-delete sweep is on the same hourly beat
-(`settings/base.py`) and has the identical hazard: two overlapping runs can both select the same
-due profile and both call `hard_delete_profile` on it, sending a duplicate "your account has been
-deleted" email (the second `User.delete()` just affects 0 rows, not a crash - but the duplicate
-final email is a real, avoidable user-facing defect). Worth the same lock treatment as its sibling.
-
-**`PinAliasView.post` did not sanitize before its emptiness check** (`controllers/aliases.py`),
-unlike its wiki-side sibling `LocationAliasView.post`. A name that sanitizes to nothing (emoji-only,
-`"<>"`) passed the raw non-empty check, then `create_pin_alias` raised an uncaught `ValueError`,
-producing a 500 instead of the intended 400. **Fixed same day** while reviewing the audit finding:
-`PinAliasView.post` now sanitizes first, mirroring the wiki view. Guarded by
-`test_create_alias_that_sanitizes_to_empty_is_rejected` in `test_alias_views.py`.
-
-~~**`models/achievements/signals.py`'s `on_achievement_saved` re-queues a full profile-table backfill
-sweep on every save of an already-active achievement.**~~ **Fixed 2026-09-06.** No intent needed
-confirming in the end: the handler's own docstring said "newly defined or re-activated" and the code
-did neither check - it never looked at `created` or at what had changed.
-
-**The fix this entry proposed would have been wrong, though.** "Only on creation or reactivation"
-drops a case that genuinely needs the backfill: `metric` and `threshold` decide *who qualifies*, so
-an admin lowering a threshold from 50 to 3 has to reach the users that newly covers. The gate is a
-change to a **qualifying field** (`metric`, `threshold`, `is_active`), not to creation - tracked
-with the `from_db` idiom `Pin`, `Location` and `Wiki` already use here rather than a new mechanism.
-
-Three tests: a cosmetic edit (name, colour, order, secrecy) enqueues nothing, and two anti-vacuity
-ones - a lowered threshold and a changed metric still do. Only the first fails against the old
-code, which is the point: the other two passed before *and* after, and they are what stops the gate
-being narrowed too far.
-
-**`from_db` alone was not enough**, which the tests caught. It only sets the markers on an instance
-*read from the database*, so a second save of an instance built by `objects.create` compared against
-absent markers and enqueued anyway. `Pin.save` already solves this here - it re-baselines
-`_loaded_name` after saving - and `Achievement.save` now does the same. Ordering matters: `post_save`
-fires inside `super().save()`, so the signal still sees the pre-save values, and the re-baseline
-happens after.
-
-**`Location.address` / `Location.address_extended` leave a dangling trailing comma** when the last
-populated component has nothing following it - e.g. a route-only address renders as exactly
-`"Elm Ave,"`. The existing tests correctly pin down this behavior as current, so it reads as
-intentional, but the trailing comma looks like a real address-formatting defect worth a look by
-whoever owns Location/address display.
-
-~~**`services/ai/assistant.py`'s `_tool_create_trip` / `_tool_add_trip_activity` reimplement the
-`SiteSettings` quota checks and their `select_for_update` locking inline.**~~ **Fixed 2026-09-06,
-and "can silently drift out of sync over time" understates it - both had already drifted, in
-opposite directions.** (The code had also moved: it is `services/ai/tools/trips.py` now, not
-`assistant.py`.)
-
-**`_add_trip_activity` was a permission bypass.** It gated on
-`Trip.objects.filter(slug=..., profiles=profile)` - bare membership - where the shared
-`trip_activities.create_activity` gates on
-`require_perform(actor, trip, trip.allow_add_activities, ...)`. Two separate rules the AI path never
-applied:
-
-- **`allow_add_activities`.** A creator sets it to "Organizers" or "No one (creator only)" precisely
-  to stop ordinary members editing the itinerary. Through the assistant, a plain joined member could
-  add anyway.
-- **Joined-ness.** `Trip.profiles` is a `ManyToManyField` through `TripMembership` with no status
-  filter, so it matches members who were *invited and never accepted* - the case `has_joined`'s own
-  docstring says "cannot contribute ... until they accept the invitation".
-
-Both reproduced before the fix: three failing tests, alongside three anti-vacuity ones (an organizer
-*can* add to an organizers-only trip, the creator can always add, a joined member can add to an
-"everyone" trip) that passed throughout.
-
-**`_create_trip` had drifted the other way: it held a lock the shared service did not.** Its
-check-then-create ran under `select_for_update` on the creator's profile row; `trip_crud.create_trip`
-counted upcoming trips with no lock at all, so two concurrent creates through any *other* path could
-both pass a limit only one should have. Consolidating naively onto the shared function would have
-deleted that guard. The lock moved into `create_trip` instead, where every caller gets it, and the
-tool now calls it.
-
-The general lesson for the next consolidation: a duplicate is not automatically the weaker copy.
-Diff both before deleting either.
-
-~~**Wiki-owned albums are untested across the entire album test suite.**~~ **Covered 2026-09-06**
-in `test_wiki_albums.py`: the ownership half (`parent_wiki` exclusive with the other two owners,
-per-owner slug uniqueness, `for_wiki` scoping) and the concealment half.
-
-This entry was right that it needed the rules understood first - two things decide whether the test
-means anything:
-
-- **`concealment_active` is hardcoded False today.** A concealment test that does not force it
-  passes against any implementation, including one with the narrowing deleted. Every concealed
-  assertion patches it True (the idiom `test_concealed_render.py` uses) and has a gate-off
-  counterpart, so the difference is demonstrably caused by the flag rather than by nothing being
-  listed at all.
-- **The actor field is `profile_id`.** `Album` is in `concealment._ACTOR_FIELDS` keyed on it; a test
-  written against a `created_by` that does not exist on this model would have passed while
-  exercising nothing.
-
-The one worth having is the by-slug case: `visible_rows`' docstring records nine call sites once
-scoped to the wiki instead of the viewer - "an existence oracle ... and, on the mutating routes,
-lets it act on one" - so the test POSTs a *rename* of another contributor's album and asserts both
-the 404 and that the name is unchanged. A first version used GET, got 405 from the method check
-before any lookup ran, and had an anti-vacuity assertion loose enough (`in (200, 405)`) to accept
-that 405. Both halves were inert; only the hard `== 404` exposed it.
-
-~~**`purge_old_backups`'s count-based retention has no dedicated test anywhere in the suite.**~~
-**Covered 2026-09-06**, asserting by identity as this entry asked - which of the files survive, not
-how many - so an implementation that kept the oldest and deleted the newest would fail. Includes the
-`len(files) > retention` boundary and a stray non-backup file, which must be neither counted toward
-retention nor deleted. The original text follows.
-
-**Was:** `test_backup_temp_purge.py` only
-exercises the `.tmp`-reaping side effect of `purge_old_backups()` with zero real `.sql` backups on
-disk, so the count-deletion loop (`backup_files[self.backup_retention:]`, sorted by mtime
-descending) never actually runs in any test - nor does `DatabaseBackup.run()`'s success path
-(pg_dump succeeding, `os.replace` to the final name, then `purge_old_backups()` firing). The
-existing "Database backups have no restore path" entry above describes retention as "implemented
-and tested", which overstates it for this specific branch. Worth a dedicated pass verifying that
-with N backups on disk and a lower retention, exactly the oldest excess files are removed (by
-identity, not just resulting count) and the newest `retention` survive.
-
-~~**`RedataBasemapTilesGateway.list_sources()` envelope parsing is untested at the unit level.**~~
-**Covered 2026-09-06** - the bare-list/`sources`/`results` shapes, the fallback order, the empty-
-`sources`-falls-through-to-`results` case, and the id filter. Mocked at `get_json` rather than at
-`session`, which this entry suggested: `get_json` is the seam between "talk to REData" and "make
-sense of the answer", and only the second half was untested. The original text follows.
-
-**Was:**
-`test_basemap_tile_proxy.py` only ever mocks `RedataBasemapTilesGateway.list_sources`/
-`download_tile` at the controller boundary, so the gateway's own body-shape handling (bare list vs
-`{"sources": [...]}` vs `{"results": [...]}` dict envelopes, and the
-`if isinstance(row, dict) and row.get("id")` row filter) has no direct test anywhere in the
-codebase - a regression there (e.g. swapping the `sources`/`results` fallback order, or dropping
-the id-filter) would only be caught if it happened to also break one of the controller-level
-fixtures, which all use the `sources` key and well-formed rows. Worth a dedicated pass that
-instantiates the gateway directly (with `base_url`/`api_key` kwargs and a mocked `session`) rather
-than mocking the gateway's own methods.
-
-~~**Sweep-path locking on `advance_usage_ledger` has no real-concurrency coverage.**~~ **Covered
-2026-09-14** in `test_billing_ledger_sweep_lock.py`. `test_billing_ledger_lock.py` reaches
-`advance_usage_ledger` only through `apply_payment`, whose outer lock already holds the row; the
-daily sweep (`advance_pwyw_usage_ledgers`) calls it directly, where its own lock is the only one.
-The new test pauses the sweep inside the ledger - after its locked read, before its save, by holding
-its first `role_pwyw_threshold_cents` call - while a payment on a second connection tries to land.
-It asserts the payment had not finished when the pause ended, which is the lock holding it off, and
-that coverage ends at 60 days rather than the 30 a stale save would rewind it to. Because the pause
-sits after the read, it would also fail a version that kept the re-read but dropped
-`select_for_update`. That is argued from the ordering, not observed: no mutant was run, per the audit's
-rule against mutating production code. Under correct locking the test always waits out the pause, one
-second.
-
-~~**`SubscriptionRole.clean()` doesn't validate `pwyw_minimum_cents` requires `pay_what_you_want`.**~~
-**Fixed 2026-09-06**, as the symmetric half of the `pwyw_dynamic_threshold` rule beside it. `0`/`None`
-stays valid - that is "unset", not "set to nothing". The original text follows.
-
-**Was:**
-`clean()` (`src/urbanlens/dashboard/models/subscriptions/model.py`) only ties
-`pwyw_dynamic_threshold` back to `pay_what_you_want`; it never checks that a nonzero
-`pwyw_minimum_cents` is meaningless when `pay_what_you_want=False`. An admin can save a role with a
-static minimum pledge set but pay-what-you-want turned off, and `clean()` raises nothing - the
-field is simply inert.
-
-**Webhook-event row lock: covered 2026-09-14.** `StripeWebhookView.post` takes
-`StripeWebhookEvent.objects.select_for_update()` so two concurrent deliveries of one event id cannot both read
-`processed_at` as null and both credit the payment, but every test of the view ran on one connection, where the lock
-never contends. `test_billing_webhook_event_lock.py` posts two deliveries from separate threads and connections, through
-the real handler and ledger, with `handle_event` held until the other delivery arrives: one event credits 1000 once, and
-two distinct events credit 400 and 700 together. The distinct pair is what shows both threads do reach the handler at
-once when nothing stops them. The test was not run against a view with the lock removed, since that means editing
-production code to prove a test; the defect it guards against was never present.
-
-~~**`WikiBoundaryView` has no test coverage at all.**~~ **Covered 2026-09-06** - the area limit,
-the `WikiEdit` audit write on both save and clear, the `just_drawn` concealment bypass, and request
-validation. Writing it found the `parse_multipolygon_geojson` 500 described at the top of this
-entry. The original text follows.
-
-**Was:** `dashboard/controllers/boundary.py`'s
-`WikiBoundaryView` (GET/POST `/location/<slug>/wiki/boundary/`) - the community boundary-editor
-endpoint with its area-limit check against `SiteSettings.max_bbox_area_km2`, its `WikiEdit`
-audit-trail write, and the `just_drawn` concealment-bypass logic documented in
-`_wiki_boundary_payload` - is exercised by no test anywhere in the suite (only its sibling
-`BoundaryController`, the pin-scoped endpoint, is tested in `test_boundary.py`). Worth a dedicated
-test file/class.
-
-**Refuted: a fruitless boundary refresh does NOT leave staleness stuck.** An audit agent
-(2026-08-29) reasoned from reading `generate_location_boundaries` → `ensure_place_for_location` →
-`provision_places_for_coordinate` (`services/places/provisioning.py`) alone that a refresh whose
-provider chain comes back with no polygon might leave `Place.geometry_generated_at` /
-`Location.place_resolved_at` both unstamped, so `boundary_generation_stale()` would keep returning
-`True` forever for that Location - and flagged `test_a_fruitless_refresh_leaves_existing_geometry_alone`
-in `test_boundary_generation_staleness.py` as likely to fail on a real run. It doesn't: the
-consolidated verification pass for this batch ran the real suite against Postgres and the test
-passed cleanly (`2 failed, 277 passed` that run, neither failure this one - see the batch's commit).
-Recorded here so nobody re-derives the same false alarm from a source read alone: this is NOT a
-real problem, a plausible-sounding defect inferred from code reading turned out wrong once actually
-run.
-
-~~**Stale `update_or_create`/`auto_now` rationale in boundary voting docs.**~~ **Already gone,
-checked 2026-09-14.** Neither `services/geo/boundary_voting.py` nor `test_boundary_vote_recency.py`
-still explains the refresh through `update_fields`. The entry's reading of Django holds: 6.0.6's
-`update_or_create` adds every field with a custom `pre_save` to `update_fields` itself, so
-`updated` needs no mention in `defaults`.
-
-~~**Stale "draft wiki" language around the building-mirror path.**~~ **Fixed 2026-09-14.** There is
-no draft state: `Wiki` has no `officially_created` field (it survives only in old migrations), and
-`get_or_create_for_location` is the one creation path. Four places still described the retired
-concept and are rewritten - `pin_restructure.mirror_buildings_to_wiki`'s comment,
-`concealment.py`'s naming comment (which cited two functions that do not exist),
-`docs/LOCATION_DATA_TESTS.md`, and `wiki_share.share_from_pin`'s docstring. That last one was
-wrong about behaviour rather than names: it said chosen fields were ignored once a wiki was
-"official", when they are recorded as the sharer's stat votes on every share. `test_building_wiki_mirror.py`'s
-docstring had already been corrected.
-
-~~**`CalendarImportView` has no test coverage at all.**~~ **Covered 2026-09-14** in
-`test_calendar_import_view.py`: the no-account dialog and 400, blank `event_ids`, the per-event
-`create_activity_<id>`/`invite_<id>`/`auto_sync_<id>` parsing (including the digit-only invite
-filter, which drops `-3`), one real import through a mocked gateway, the toast wording for
-invitations and for one or several skips, and both failure branches - an expired grant deletes the
-account, a gateway failure keeps it, and neither shows the upstream error text. The view was correct.
-
-~~**Map-overlay caption length check is untested even though it's drivable.**~~ **Covered
-2026-09-06**, and this entry was right on both counts: the check is correct, and the docstring
-saying it could not be driven was wrong. That claim is gone, with a note in the module docstring
-recording what it got wrong - it is true of `_image_from_request`'s `media_url`/`image_url`
-branches and not of its direct-upload branch, which reaches `upload_photo` with no network call at
-all.
-
-The shape of the refusal is the part worth knowing, and a first draft of the test got it wrong in
-the opposite direction to the docstring: an over-width caption answers **200**, not 400.
-`map_overlays.fail()` returns 400 only to the JSON caller (the lightbox's "use as floorplan
-overlay"); the HTMX dialog gets 200 with the message swapped into the list partial. Asserting on
-the status alone would have filed a bug against working code, so the test asserts that neither the
-`Image` nor the `MapImageOverlay` is created, and a second one drives the JSON caller to pin the
-400 half.
-
-~~**Missing coverage for the carousel "no imagery available" branch.**~~ **Covered 2026-09-14** in
-`test_carousel_single_slide_arrows.py`: with no slides, both `street_view.html` and
-`satellite_view.html` render `view-unavailable` with the caller's `error`, or their own default
-message without one, and no slide or arrow markup.
-
-~~**Multi-level pin/wiki nesting prefix is undocumented and untested.**~~ **Covered and documented
-2026-09-14.** `test_child_slugs.py` now pins it for pins and wikis: `Boiler Room` under
-`hrsh-powerhouse` is `powerhouse-boiler-room`, and `ph-bldg-boiler-room` when the parent has that
-alias. `docs/NOTES.md` records it. Shallow prefixing follows from the prefix's 3-8 character bound
-rather than being a choice made separately from it - a parent slug that already carries a prefix
-is almost always longer than 8, so chaining would mean dropping the bound.
-
-~~**`TripCommentDeleteView` has zero test coverage.**~~ **Covered 2026-09-06** in
-`test_trip_comment_delete.py`. No defect: the view was already correct, and is now guarded - the
-author's own delete, the trip creator's override, a joined member who is neither, a non-member, and
-the attached `MarkupMap` going with it.
-
-Two cases worth having beyond "the author can delete their own". `TripComment.author` is `SET_NULL`
-(the asymmetry P25 records), so a comment outlives its writer's account and
-`can_delete_comment`'s set becomes `{None, creator}` - a bug letting `None` match would hand every
-orphaned comment to any member. And `get_comment(trip, comment_id)` must scope by trip, not just by
-id, which is the same existence-oracle shape `concealment.visible_rows` warns about.
 
 ## P58 — A renamed photo's old URL still 404s for the uploader who just uploaded it
 
@@ -2344,34 +1954,6 @@ unrelated commit.
 Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
 parameterized there because their unused model import was the symptom of the missing type argument.
 
-## P91 — Four of eight security integration specs have never run against a live deployment
-
-`id: P91` · `status: open` · `updated: 2026-09-15`
-
-Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0`; confirmed on an independent
-adversarial pass. Previously titled "seven of eight" - the pending run this entry called for landed
-the same day and moved three more: `authorization.spec.ts` (`70327552c`, fixed a real 500-vs-400
-bug), `input.spec.ts` (`f7a66438d`, "CRLF header-injection test never reached the server... verified
-against the live deployment"), and `surfaces.spec.ts` (`e8aa7daf7`, media-gate race fix) all now
-carry real fix commits from live runs, alongside `isolation.spec.ts`, which already had one before
-this entry was filed.
-
-`3547deb11` ("security related integration tests, not yet run -- needs review and expansion") added
-eight spec files under `tests/integration/specs/security/`. Per-file `git log --oneline`, the four
-still byte-identical to their initial commit - no evidence either has ever executed - are
-`assumptions.spec.ts`, `disclosure.spec.ts`, `session.spec.ts`, `transport.spec.ts`.
-
-Same risk class `docs/archive/PROBLEMS-ARCHIVE.md`'s P75 already documents shipping:
-`disclosure.spec.ts:32` asserted `/dashboard/this-path-does-not-exist-91b2c/` returns 404 while the
-`dashboard/` catch-all answered 200 for an unknown span of time, because - per that entry - "That
-spec has only ever run when someone triggered it by hand - `integration.yml` is `workflow_dispatch`
-only, deliberately, because it drives a deployed instance - so an assertion encoding the correct
-behaviour sat next to code that could not satisfy it, and nothing said so." The underlying 404 bug
-is fixed (P75, resolved 2026-09-05), but it was found by a different investigation (P35's
-hardcoded-URL audit), not by running this file - so `disclosure.spec.ts` remains one of the four
-with no evidence it has ever caught anything by being executed, the exact gap P75 describes. These
-four need the same live run the other four already got.
-
 ## P92 — `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's cluster layer
 
 `id: P92` · `status: open` · `updated: 2026-09-16` · `citation refreshed 2026-09-16, see X21`
@@ -2805,7 +2387,7 @@ bulk-import fan-out rather than just a plausible default carried over from an un
 
 ## P111 — A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back
 
-`id: P111` · `status: open` · `updated: 2026-09-10`
+`id: P111` · `status: open` · `updated: 2026-09-17` · `corrects the 2026-09-10 "worth fixing: the comment" note below - the comment was already gone`
 
 Measured on a `--environment staging` dev environment — the first time this project's real process
 model has been run and looked at.
@@ -2868,11 +2450,22 @@ once the payload is bounded.
 Also worth fixing regardless of any of that: the "~140MB/worker idle" comment, which is the number
 the current limit was reasoned from.
 
+**Correction, checked 2026-09-17: there is no comment left to fix.** `docker-compose.yml`'s app
+service (`docker-compose.yml:190-199`) carries no sizing comment of any kind today - not the wrong
+~140MB one, not a corrected one. History: the ~140MB comment was itself corrected to this entry's
+measured ~347MB figure in commit `cebd6e5a3` (2026-09-10, 20:36 UTC, the same commit that rewrote
+this entry), then removed entirely along with every other comment in the file two hours later by
+commit `8f7772461` (2026-09-10, 22:38 UTC, "most, if not all of the comments were unnecessary...
+If any comments truly are necessary here, reintroduce them individually"). So this entry's "worth
+fixing" line has been stale since the day it was written. Nothing was changed in `docker-compose.yml`
+this session - if a sizing comment is reintroduced, it should cite this entry and ~347MB, not the
+superseded ~140MB figure.
+
 Found while trying to run the neighbour suite on the real process model.
 
-## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else - 1 still open
+## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else, all fixed except 4 parked by decision
 
-`id: P113` · `status: open` · `updated: 2026-09-16` · `supersedes the 2026-09-13 "2 still open" count: H54 closed by D16`
+`id: P113` · `status: open` · `updated: 2026-09-17` · `supersedes the 2026-09-16 "1 still open" count: H56 closed by the D11 phase 3a gthread switch`
 
 A sixteen-dimension sweep of the application, re-judged by hostile reviewers who were given the
 claim but not the finder's evidence, returned **54 real findings**: 10 critical, 41 high, 3 medium.
@@ -2895,11 +2488,11 @@ acting on: this is not 54 unrelated bugs, it is mostly three unbuilt phases, mea
 
 ## The work list
 
-Re-verified against the code on 2026-09-13; H54 additionally closed 2026-09-16 (see below). Of the
-65 tracked findings, everything is closed except the row below and the four parked decisions. The
-closed items' fix narrative - what each finding actually was, the corrections found while fixing it,
-and the reasoning behind each choice - is in `archive/PROBLEMS-ARCHIVE.md` under 2026-09-15 (H54's
-own narrative is dated 2026-09-16 within that entry) rather than repeated here;
+Re-verified against the code on 2026-09-13; H54 closed 2026-09-16, H56 closed 2026-09-17 (both below).
+Of the 65 tracked findings, everything is closed except the four parked decisions. The closed items'
+fix narrative - what each finding actually was, the corrections found while fixing it, and the
+reasoning behind each choice - is in `archive/PROBLEMS-ARCHIVE.md` under 2026-09-15 (H54's own
+narrative is dated 2026-09-16, H56's 2026-09-17, within that entry) rather than repeated here;
 `notes/availability-audit-2026-09-11.md` (N21) has the original findings and the four downgrades from
 the hostile-review pass.
 
@@ -2909,11 +2502,17 @@ Narrative moved to `archive/PROBLEMS-ARCHIVE.md`; see
 [`docs/designs/dragonfly-rabbitmq-pgvector-stack-adoption.md`](designs/dragonfly-rabbitmq-pgvector-stack-adoption.md)
 (D16). H35/H38's separate size-limit risk on the same store is unaffected - see D16 for why.
 
-**Open:**
+**H56 closed 2026-09-17**: *"Under gevent a request that spends its timeout in non-yielding CPU takes
+the whole worker down"* - D11 phase 3a (gthread) is built, not "designed and unbuilt" as this row
+said. `package.json`'s `start` script already runs `-k gthread --threads 4` (landed in commit
+`534055e5c`, 2026-09-15 - one day before this entry's own 2026-09-16 update, so the row was already
+stale the day it was last touched). `bin/run_tests.sh -k "test_connection_budget_wiring"` passes (22
+passed), including `test_the_worker_runs_threads`, which asserts the worker class is gthread. A
+non-yielding request now blocks only its own OS thread, not the whole worker process. Narrative moved
+to `archive/PROBLEMS-ARCHIVE.md`.
 
-| ref | severity | what remains | why it is not done |
-|---|---|---|---|
-| H56 | high | Under gevent a request that spends its timeout in non-yielding CPU takes the whole worker down. `--worker-connections 20` bounds the blast radius to 19 requests; it does not remove it. Both requests known to run that long are fixed (P108, P96), so it is latent rather than reachable | D11 phase 3a (gthread), designed and unbuilt |
+No rows remain in a "still open" table - the only findings left unfixed are the four parked by
+decision below.
 
 **Parked by decision, not forgotten:**
 
@@ -2983,39 +2582,6 @@ fields. It belongs in the `infrastructure` repo beside the other host timers, no
 Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
-
-## P122 — A refused external call returns a 500 from views that catch only `GatewayRequestError`
-
-`id: P122` · `status: open` · `updated: 2026-09-15`
-
-Every gateway call passes through `rate_limiter._reserve_call`, which refuses a call by raising a
-`RequestCancelledError`:
-- `RateLimitExceededError`;
-- `ServiceDisabledError`;
-- `RateLimiterUnavailableError`, when the limit cannot be read.
-
-That family subclasses `DashboardError`, not `GatewayRequestError`. So a view that handles a failed call
-with `except GatewayRequestError` lets a refused one escape as a 500. Refusals are routine:
-- development and the demo refuse most services outright;
-- under R29, `RateLimiterUnavailableError` fires whenever `ul_web` is at its connection limit.
-
-Still a 500 on a refusal, found by review on 2026-09-15 (read, not run):
-- **Settings geocoding:** `controllers/settings.py` `geocode_address` catches `(ImportError, OSError, ValueError)`
-  around `GoogleGeocodingGateway.geocode_place_name`.
-- **Immich connection check:** `controllers/immich.py` `ImmichSettingsView.post` calls `ImmichGateway.ping()`
-  with no handler, and `ping` catches only `GatewayRequestError`.
-- **Immich thumbnails:** `controllers/pin_suggestions.py`'s thumbnail proxy catches only `GatewayRequestError`.
-- **Google Photos picker:** `controllers/google_photos.py`'s session, polling and download steps catch only
-  `GatewayRequestError`.
-
-The Flickr and Immich search pickers catch both (`test_a_refused_call_degrades_its_picker.py`).
-
-**Likely fix:** make `RequestCancelledError` a `GatewayRequestError`, so every existing handler covers
-refusals. Audit the 48 production `except GatewayRequestError` sites first, looking for two things:
-- a handler that shadows a more specific `except RateLimitExceededError` below it;
-- a handler that treats a failure as grounds to retry or to disconnect an account.
-
-Catching refusals site by site is the alternative, and the next view will forget it again.
 
 ## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
 
@@ -3091,9 +2657,9 @@ over a template file on disk, not an `assertIn` against a response body), which 
 
 Not fixed. Not re-measured beyond the 2026-09-16 targeted run and the source read cited above.
 
-## P125 — The population capacity harness meets D15's budget through 250 concurrent users and collapses between 250 and 500, in every variant run so far
+## P125 — The population capacity harness collapses at 500 concurrent users on the app container's CPU; production now has a 4-core override to deploy, not yet applied or re-measured
 
-`id: P125` · `status: open` · `updated: 2026-09-16`
+`id: P125` · `status: open` · `updated: 2026-09-17`
 
 **This is a different axis from P113 and P123.** Those are the "neighbour" question - does one
 account's action cost a *different* account anything at all (D11, `tests/perf/k6/neighbour.js`).
@@ -3189,4 +2755,43 @@ endpoint being slow.
   runs are dated and can be told apart, but "what exactly changed between them" would need
   reconstructing from the day's full commit list, not just the ones cited above.
 
-Not fixed.
+### 2026-09-17: production's app tier gets more CPU, on the config side only
+
+`capacity-content`'s bottleneck is the app container's own 2-core allocation, uniform across every
+endpoint - not a query. `src/urbanlens/config/env/production.sample.env` now sets
+`CPU_LIMIT__APP=4`, following the same mechanism `staging.sample.env` already uses for the opposite
+direction (P114): the shared `docker-compose.yml` default stays at 2 cores, so local/dev/testing and
+staging are unaffected, and only production's app tier gets the increase, via its own override.
+`test_production_app_cpu_allocation.py` pins the floor at 4 cores, pins the shared default at 2, and
+fails if staging's app limit ever rises to meet production's.
+
+**Not yet applied anywhere.** Like every `*.sample.env`, this has to be copied into production's
+`.env` on damballa and `urbanlens_production_app` recreated - a running container's `--cpus` is
+fixed at creation. **Not yet re-measured.** Nothing here confirms 4 cores actually pushes the
+capacity ceiling past 500 concurrent users; only `capacity-content`'s original measurement exists,
+and it was against 2 cores, on the perf environment - never on damballa. Re-running
+`tests/perf/k6/population.js` after the real deploy is what would confirm or refute that.
+
+**This is a cap on today's real production, not a raise from it - checked 2026-09-17**:
+`docker inspect urbanlens_production_app` on damballa shows `NanoCpus: 0`, same root cause as
+P114's `CpuShares: 0` - the container predates the `cpus:` key entirely, so it is **currently
+unbounded** on a 16-core host, not sitting at the compose file's 2-core default the way the perf
+environment (and every other environment) is. Applying this fix does not repeat P125's
+2-core-to-4-core story on production itself; it moves production from no cap at all to a 4-core
+cap. That is very likely still an improvement - unbounded means it can be starved by whatever else
+lands on the same host, same complaint as P114 - but it is a different claim than "production gets
+more like the perf environment did," and worth the deployer knowing before they apply it. It also
+means recreating production for P114's fix *without* this file would regress the app container from
+unbounded to the bare 2-core default, which is worse than either state - the two fixes should be
+deployed together.
+
+Found and fixed in passing: `staging.sample.env` was stale against the current
+`docker-compose.yml` - D16's Dragonfly/RabbitMQ broker migration added `CPU_SHARES__DRAGONFLY`,
+`CPU_LIMIT__DRAGONFLY`, `MEM_LIMIT__DRAGONFLY`, and the three `_RABBITMQ` equivalents, and removed
+the `_VALKEY` ones the sample file still carried. That silently broke
+`test_staging_limits_are_below_production.py`'s own coverage guarantee (P114) - it was failing on
+`main` before this batch touched it, unrelated to CPU_LIMIT__APP. Fixed by removing the three stale
+`_VALKEY` entries and adding the six `_DRAGONFLY`/`_RABBITMQ` ones, each following the file's
+existing halve-the-default convention.
+
+Not fixed: the live measurement. This entry stays open.

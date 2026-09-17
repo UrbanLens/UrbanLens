@@ -508,6 +508,7 @@ def _notify_group_message(message: GroupMessage) -> None:
             title=f"New message in {group.name}",
             message=f"{sender_display_name}: {preview}",
             url=url,
+            group_message=message,
         )
 
 
@@ -674,6 +675,7 @@ def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:
         for share in message.shares.select_related("pin_share"):
             if share.pin_share is not None:
                 _revoke_pin_share(share.pin_share)
+        message.notifications.update(message="Message deleted")
         _broadcast_group_event(
             message.group,
             {"type": "group_message_deleted", "group_uuid": str(message.group.uuid), "message_id": message.pk},
