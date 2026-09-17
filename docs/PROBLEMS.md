@@ -1988,34 +1988,6 @@ unrelated commit.
 Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
 parameterized there because their unused model import was the symptom of the missing type argument.
 
-## P91 — Four of eight security integration specs have never run against a live deployment
-
-`id: P91` · `status: open` · `updated: 2026-09-15`
-
-Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0`; confirmed on an independent
-adversarial pass. Previously titled "seven of eight" - the pending run this entry called for landed
-the same day and moved three more: `authorization.spec.ts` (`70327552c`, fixed a real 500-vs-400
-bug), `input.spec.ts` (`f7a66438d`, "CRLF header-injection test never reached the server... verified
-against the live deployment"), and `surfaces.spec.ts` (`e8aa7daf7`, media-gate race fix) all now
-carry real fix commits from live runs, alongside `isolation.spec.ts`, which already had one before
-this entry was filed.
-
-`3547deb11` ("security related integration tests, not yet run -- needs review and expansion") added
-eight spec files under `tests/integration/specs/security/`. Per-file `git log --oneline`, the four
-still byte-identical to their initial commit - no evidence either has ever executed - are
-`assumptions.spec.ts`, `disclosure.spec.ts`, `session.spec.ts`, `transport.spec.ts`.
-
-Same risk class `docs/archive/PROBLEMS-ARCHIVE.md`'s P75 already documents shipping:
-`disclosure.spec.ts:32` asserted `/dashboard/this-path-does-not-exist-91b2c/` returns 404 while the
-`dashboard/` catch-all answered 200 for an unknown span of time, because - per that entry - "That
-spec has only ever run when someone triggered it by hand - `integration.yml` is `workflow_dispatch`
-only, deliberately, because it drives a deployed instance - so an assertion encoding the correct
-behaviour sat next to code that could not satisfy it, and nothing said so." The underlying 404 bug
-is fixed (P75, resolved 2026-09-05), but it was found by a different investigation (P35's
-hardcoded-URL audit), not by running this file - so `disclosure.spec.ts` remains one of the four
-with no evidence it has ever caught anything by being executed, the exact gap P75 describes. These
-four need the same live run the other four already got.
-
 ## P92 — `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's cluster layer
 
 `id: P92` · `status: open` · `updated: 2026-09-16` · `citation refreshed 2026-09-16, see X21`

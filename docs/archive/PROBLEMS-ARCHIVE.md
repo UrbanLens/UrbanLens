@@ -16764,3 +16764,147 @@ is erased, and that other users' own comments are left completely untouched. Rep
 implementing session as a TDD RED->GREEN cycle via `bin/run_tests.sh`, 116 tests passing across
 `test_account_deletion.py` plus the comment/trip-comment `parent_deleted` and visibility test files,
 with ruff/mypy/pre-commit clean - not independently re-run by this closure pass.
+
+## RESOLVED 2026-09-17: The four never-run security specs had two stale assertions, and the live run surfaced an unrelated, currently-active WebSocket crash (P127)
+
+`id: P91` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled "Four of eight security integration specs have never run against a live
+deployment".
+
+**What this asked for.** `3547deb11` ("security related integration tests, not yet run -- needs
+review and expansion") added eight spec files under `tests/integration/specs/security/`. By
+2026-09-15, `authorization.spec.ts`, `input.spec.ts`, `surfaces.spec.ts` and `isolation.spec.ts` had
+each gotten a live run and a real fix commit off the back of it (a 500-vs-400 bug, a CRLF
+header-injection gap, a media-gate race, and whatever `isolation.spec.ts` found before this entry
+was filed). The remaining four - `assumptions.spec.ts`, `disclosure.spec.ts`, `session.spec.ts`,
+`transport.spec.ts` - were still byte-identical to their initial commit, with no evidence either had
+ever executed against a live deployment. Same risk class as P75 (resolved 2026-09-05): an assertion
+that has never run is not a check, it is a claim nobody has tested.
+
+**Run live 2026-09-17**, against a throwaway dev environment provisioned via `bin/dev_env.py create`
+(sibling `infrastructure` repo; ephemeral slug `a584c78`, `https://a584c78.dev.urbanlens.org`). All
+four now pass, but two needed real fixes to assertions that had simply never met reality - exactly
+the gap this entry existed to name:
+
+1. **`disclosure.spec.ts`'s "readiness is the documented four keys" test asserted a stale key
+   set.** `HealthController._collect` (`src/urbanlens/dashboard/controllers/health.py:94`) returns
+   six keys today - `cache, connections, db, degraded, migrations, role` - not the four (`cache, db,
+   migrations, role`) the spec asserted. `connections` and `degraded` were added to `health.py`
+   after this spec was written; because the spec had never run, nothing caught the drift. Fixed in
+   `tests/integration/specs/security/disclosure.spec.ts` by updating the assertion to the current
+   six-key set, with a comment explaining why and citing this entry.
+
+2. **`transport.spec.ts`'s "an unknown Host is not served as this site" test threw "socket hang up"
+   instead of getting a response.** Root cause, confirmed by direct curl reproduction against the
+   same environment: the TLS-terminating proxy in front of a `bin/dev_env.py`-provisioned
+   environment (a wildcard-cert nginx/NPM router, `CN=*.dev.urbanlens.org`) refuses the connection
+   outright at the TLS layer on an SNI/Host mismatch, before Django - or even the environment's own
+   internal router - ever sees the request. That is at least as protective as an HTTP-level refusal,
+   but it means this class of dev environment cannot exercise `ALLOWED_HOSTS` this way; it is a
+   property of the TLS front door, not a product bug. Fixed in
+   `tests/integration/specs/security/transport.spec.ts` by wrapping the request in try/catch and
+   skipping gracefully on the outright connection refusal, mirroring the spec's existing skip-guard
+   for the *other* form of proxy interference it already handled (a silent 200 from a proxy that
+   overwrites `Host` with its own upstream name).
+
+**Unplanned but valuable side effect: running these specs live surfaced a real,
+previously-unknown, currently-active bug**, unrelated to what either spec was checking - every
+authenticated page load was tripping a WebSocket 403 against Dragonfly, broadly failing the
+integration suite's strict browser-console guard. Documented and fixed as its own entry: **P127**.
+
+**Verified 2026-09-17**, after P127's fix was applied to the `a584c78` environment: a full re-run
+of all four target specs passed cleanly - **53 passed, 1 skipped** (the TLS-mismatch skip from
+finding 2, above). Before P127's fix, the same run produced **9 failures**, all sharing the WS-403
+console-guard signature P127 describes.
+
+**Not measured this session:** `assumptions.spec.ts` and `session.spec.ts` needed no assertion
+fixes - they passed once actually run - so nothing further is recorded about them; they are named
+here only because this entry always grouped all four together. The other four specs `3547deb11`
+originally added were out of scope for this run; they already had live runs and fixes by
+2026-09-15, per this entry's own history above.
+
+## RESOLVED 2026-09-17: Dragonfly's strict Lua key-validation crashed every authenticated page's WebSocket connection, because channels_redis's backup-queue script never declared its two keys
+
+`id: P127` · `status: fixed` · `resolved: 2026-09-17`
+
+**Found by accident, while verifying P91.** Running the four security specs P91 asked for against a
+throwaway `bin/dev_env.py` environment (sibling `infrastructure` repo, slug `a584c78`) tripped the
+integration suite's strict browser-console guard broadly: every authenticated page load logged
+`WebSocket connection to 'wss://.../ws/notifications/' failed: ... 403` (a plain crash, before this
+was diagnosed). Nothing about P91's four specs concerns WebSockets at all - this was incidental, not
+a hole in what any of them check.
+
+**Root cause**, from `docker logs` on the environment's `app_ws` (Channels/Daphne ASGI) container:
+`channels_redis`'s `RedisChannelLayer._brpop_with_clean` - the receive-side cleanup path used by
+every WebSocket consumer, including the notifications bell - runs a Lua script that references its
+two keys through `ARGV[1]`/`ARGV[2]` with `numkeys=0`, instead of declaring them via
+`KEYS[1]`/`KEYS[2]`. Standalone Redis tolerates this outside cluster mode. **Dragonfly - this
+project's Redis-compatible cache/broker (D16) - enforces strict Lua-script key-declaration
+validation unconditionally**, raising `redis.exceptions.ResponseError: ... script tried accessing
+undeclared key, key: asgispecific.<hash>!$inflight` on every call. That crashed the Channels receive
+loop (visible in `daphne.server` logs as "Exception inside application"), which crashed the
+WebSocket connection - client-visible as either a 403 or a dropped connection depending on timing.
+
+Confirmed by web search as a known, unresolved Dragonfly-compatibility issue class, not something
+specific to this codebase: dragonflydb/dragonfly#272, #3066, #3212, a Dragonfly blog post on
+BullMQ, getsentry/sentry#119377 and taskforcesh/bullmq#2463 all hit the identical error class
+against Dragonfly. Upstream tracks this specific incompatibility as django/channels_redis#345,
+unresolved as of channels-redis 4.3.0 (`pyproject.toml:11`, `channels-redis~=4.3.0` - this project's
+pin). channels_redis has no config option to disable the affected reliable-delivery/backup-queue
+mechanism.
+
+**Two remediation paths considered.**
+
+a. The documented, blunt fix - the Dragonfly server flag `--default_lua_flags=allow-undeclared-keys`.
+   **Rejected.** It is global: it relaxes key-declaration validation for every Lua script the
+   Dragonfly server ever runs, not just this one, and Dragonfly's own docs warn it "will slow things
+   down considerably" as a sitewide performance cost, for one script's worth of benefit.
+
+b. **Applied**: a narrow, scoped runtime monkeypatch. `patch_backup_queue_script()` in new file
+   `src/urbanlens/dashboard/services/core/channels_redis_dragonfly_patch.py`, wired into
+   `src/urbanlens/dashboard/apps.py::DashboardConfig.ready()` (line 33) - the same
+   idempotent-monkeypatch precedent already used one call above it in the same file,
+   `patch_extension_thread_safety()` for drf-spectacular. It replaces `_brpop_with_clean` with a
+   version whose Lua script is byte-identical in behavior but declares its two keys via
+   `KEYS[1]`/`KEYS[2]` with `numkeys=2` instead of `ARGV`. `KEYS` vs `ARGV` makes zero functional
+   difference to `redis.call`'s behavior - only to whether a strict server can see which keys a
+   script touches - so this is a no-op under real Redis: no server-side flag, no infrastructure
+   change, no behavior change under standalone Redis, and it fixes Dragonfly compatibility only. The
+   patch is version-guarded (`_VERIFIED_VERSIONS = frozenset({"4.3.0"})`, matching the current pin)
+   and no-ops with a logged warning if the installed channels-redis version doesn't match, rather
+   than silently reinstating a since-changed upstream private method with a stale copy. It is
+   idempotent, checked via a `_urbanlens_dragonfly_safe` marker attribute on the replacement
+   function.
+
+**Tests**, `src/urbanlens/dashboard/tests/hypothesis/test_channels_redis_dragonfly_patch.py` (4
+tests, all passing): the replacement script declares `KEYS` not `ARGV` with `numkeys=2`; the
+reliable-delivery behavior is unchanged (a popped member is still added to the backup queue);
+calling the patch twice is idempotent (installs the same wrapper); an unrecognized channels-redis
+version is left unpatched, with a logged warning.
+
+**Side observation, not a new bug - an existing safety mechanism working as designed.** While
+investigating the WS-403 failures, `src/urbanlens/dashboard/services/security/socket_budget.py`'s
+per-account WebSocket connection ceiling (`WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT`, default 20, tracked
+as a Redis/Dragonfly sorted set `ul_ws_open:<identity>`) had accumulated exactly 20 stale claims for
+one test account, refusing all new connections with "Refused a socket for user:1: 20 already open,
+at a ceiling of 20" (`socket_budget.py:142`) - a downstream side effect of the *pre-fix* crash runs,
+which crashed connections without a clean disconnect/release. Stale entries older than
+`STALE_AFTER_SECONDS` (15 minutes, `socket_budget.py:50`) self-heal on the next `claim()` call
+(`socket_budget.py:125-130`); this was manually cleared on the throwaway test account's Redis key to
+unblock verification immediately rather than wait, since it was disposable test infrastructure, not
+something requiring a code change.
+
+**Verified live 2026-09-17.** After syncing the patched code into the `a584c78` environment's
+`app_ws` and celery containers and restarting them, `app_ws` startup logs showed no version-guard
+warning (confirming the patch actually applied against the container's installed channels-redis
+4.3.0), and a full re-run of all four specs P91 names passed cleanly: **53 passed, 1 skipped** (an
+unrelated TLS-mismatch skip - see P91's closure entry). Before this fix, the same run produced **9
+failures**, all sharing the identical WS-403 console-guard signature described above; after this fix
+and clearing the stale socket-budget key above, **0 failures**.
+
+**Not measured this session.** This patch has been verified only in the `a584c78` throwaway dev
+environment. It has not yet been deployed to staging or production, though both run the same
+Dragonfly-backed stack (D16) and the same `channels-redis~=4.3.0` pin, so the underlying crash is
+presumably active there too until this lands through the normal deploy path - not confirmed by
+observing production logs this session.
