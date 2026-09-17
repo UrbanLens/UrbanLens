@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P129` · `T4` · `PL8` · `D17` · `X26` · `I5` · `R30` · `N25`
+**Next free id:** `P130` · `T4` · `PL8` · `D17` · `X26` · `I5` · `R30` · `N25`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -182,7 +182,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | X22 | holds | 2026-09-16 | Fragment-caching the nav costs more than the rendering it skips; the cost is `reverse()`, not the template | [`docs/notes/nav-fragment-cache-cost-measured.md`](notes/nav-fragment-cache-cost-measured.md) |
 | X23 | holds | 2026-09-16 | Template-engine share of a map request is unpinned between ~26% and ~41%, not the 61-66% the Jinja2/JinjaX port was originally justified on; the two conflicting `header.html` figures were still both correct | [`docs/notes/template-engine-share-measured.md`](notes/template-engine-share-measured.md) |
 | X24 | holds | 2026-09-16 | The map request's redundant SQL is app code defeating Django's caches, and one template tag is 28% of it | [`docs/notes/map-request-redundant-sql-measured.md`](notes/map-request-redundant-sql-measured.md) |
-| P124 | open | 2026-09-16 | Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P125 | open | 2026-09-17 | The population capacity harness collapses at 500 concurrent users on the app container's CPU; production now has a 4-core override to deploy, not yet applied or re-measured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | X25 | holds | 2026-09-16 | Organize rendered its label cards twice to deliver three numbers per card: the deferred stats cost ~16 ms against ~100 ms to render the cards, so the deferral was removed | [`docs/notes/organize-label-rows-double-render-measured.md`](notes/organize-label-rows-double-render-measured.md) |
 | P128 | open | 2026-09-17 | The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P129 | open | 2026-09-17 | A map-document vocabulary test's regex targets a template line `23a861765` moved out and a quoting style the code never used, so it compares against nothing | [`docs/PROBLEMS.md`](PROBLEMS.md) |

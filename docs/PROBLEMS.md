@@ -2534,79 +2534,34 @@ Not recommended: relying on staging's limits alone. Lower limits bound what stag
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
 
-## P124 — Seven tests still assert inline `<script>` text that left the HTML in `23a861765`, and ROADMAP.md cites one of them as proof of a privacy property
+## P129 — A map-document vocabulary test's regex targets a template line `23a861765` moved out and a quoting style the code never used, so it compares against nothing
 
-`id: P124` · `status: open` · `updated: 2026-09-16`
+`id: P129` · `status: open` · `updated: 2026-09-17`
 
-A targeted run of the map-view test set on 2026-09-16 gave **7 failed, 200 passed, 2 subtests
-passed in 139.11s**. The seven, all `AssertionError: ... not found in '<!DOCTYPE html>...'` on an
-`assertIn(<js source string>, body)`:
+Split off from P124 when that entry was closed (2026-09-17): P124's seven named tests are fixed
+(see `archive/PROBLEMS-ARCHIVE.md`), but this eighth one, found incidentally alongside them on
+2026-09-16, was not touched by that fix and remains broken.
 
-- `src/urbanlens/dashboard/tests/hypothesis/test_search_history_cache_scoping.py::MapAddressSearchHistoryScopingTests::test_history_key_is_scoped_to_the_viewing_profile`
-- `...test_search_history_cache_scoping.py::MapAddressSearchHistoryScopingTests::test_stale_unscoped_key_is_cleaned_up`
-- `...test_search_history_cache_scoping.py::ComposerSearchHistoryScopingTests::test_history_key_is_scoped_to_the_viewing_profile`
-- `...test_search_history_cache_scoping.py::ComposerSearchHistoryScopingTests::test_stale_unscoped_key_is_cleaned_up`
-- `src/urbanlens/dashboard/tests/hypothesis/test_map_gps_recenter_flash.py::GpsRecenterGuardRenderedTests::test_geolocation_success_callback_guards_the_live_recenter`
-- `...test_map_gps_recenter_flash.py::GpsRecenterGuardRenderedTests::test_had_cached_location_is_captured_before_the_async_geolocation_call`
-- `src/urbanlens/dashboard/tests/hypothesis/test_bulk_edit_rating_ui.py::BulkEditRatingUiTests::test_confirm_handler_reads_the_rating_select_into_the_payload`
-
-Example: `assertIn("localStorage.removeItem('ul_addr_history_v1')", body)` against a response body
-that no longer contains any inline `<script>` for the map program at all.
-
-**Cause, by commit archaeology, not inference.** `git log -S "ul_addr_history_v1" -- src/urbanlens/dashboard/templates/`
-and the same pickaxe over `src/urbanlens/dashboard/frontend/` both land on **`23a861765`** ("perf:
-the map page's program is a file the browser keeps, not 275 KB re-sent on every visit"): that
-commit is where the string left the templates and entered
-`src/urbanlens/dashboard/frontend/static/js/map-page.js`. The page now loads the script as a
-cacheable static file instead of inlining it, so a `body` string-search can no longer match it. The
-three test files were last touched by `5b9fced01` ("continuation of comment stripping"), not by
-`23a861765` - they were never updated for the move.
-
-**Not the same finding as X21.** `d860d1b9a` recorded "the two defects [`23a861765`] introduced" in
-X21 (`docs/notes/inline-script-extraction-map-and-theme.md`): a template tag sitting inside a
-string quote delimiter, and a global `const CFG` name collision between `map-page.js` and
-`comment-map.js` that briefly broke the map page. Neither of those is this. This is a third
-consequence of the same commit that X21 did not capture: X21 checked the moved *code*, not the
-*tests* asserting against the template it was moved out of. The only other existing mentions of
-these three files in `docs/` are a bare inventory listing in `docs/notes/test-quality-audit-files.txt`
-and generated mirrors under `docs/_build/` - neither is a defect record.
-
-**Why this entry is worth more than "some stale tests": `docs/ROADMAP.md:374` cites dead coverage
-as proof of a privacy property.** UL-239 (per-user localStorage search-history keys) is marked
-resolved there with "Verified with `test_search_history_cache_scoping.py`." That file has been
-failing since `23a861765` on the exact assertions that would demonstrate the scoping. The sentence
-is false as written: it names as verification a test file that cannot currently pass. Not edited
-here - record the problem and let a human correct that line, per house convention for a document
-this task did not ask this entry to rewrite.
-
-**The underlying behaviour still looks correct on a source read - a source read, not a
-verification.** `frontend/static/js/map-page.js:4288` builds the key as
-`'ul_addr_history_v1_' + MAP_CFG.profileId + ''`, and `:4285` does the one-time
-`localStorage.removeItem('ul_addr_history_v1')` cleanup of the old unscoped key. Nothing in this
-session ran that code in a browser or exercised it in a passing test. Do not read this entry as "the
-scoping is broken" - it is specifically "the thing that was supposed to prove the scoping does not
-run", which is a different and narrower claim.
-
-### Candidate direction (unverified, not implemented)
-
-Rewrite the seven assertions against what now carries the behaviour instead of the HTML body: the
-served static JS (`frontend/static/js/map-page.js`) for the code itself, and the per-request
-`#map-page-config` `json_script` block (`MAP_CFG.profileId`) for the value it's keyed on. Also open:
-how many *other* tests across the suite assert inline JS text in rendered HTML and broke the same
-way when `23a861765` and `3c924327e` shipped - not surveyed this session.
-
-**An eighth, found incidentally on 2026-09-16:**
 `test_map_document_head_reads_the_vocabulary.py::TheDocumentHeadTests::test_the_map_page_reads_every_kind_of_line_the_document_sends`
-fails with `sent - read == {'end', 'head', 'labels', 'pin'}` - that is, its `read` set is *empty*. It builds
+fails with `sent - read == {'end', 'head', 'labels', 'pin'}` - its `read` set is *empty*. It builds
 `read` by running `re.findall(r"obj\.t === '(\w+)'", MAP_TEMPLATE.read_text())` over
-`templates/dashboard/pages/map/index.html`. That pattern occurs **0 times** in the template and **4 times** in
-`frontend/static/js/map-page.js`, and `git log -S "obj.t === 'pin'"` on the template lands on `23a861765` - the
-same commit. So the test asserts the document and the page agree about line kinds while actually comparing
-against nothing, and would keep passing if they disagreed. It differs from the seven above in shape (a regex
-over a template file on disk, not an `assertIn` against a response body), which is why a search for the
-`assertIn` shape alone will not find the rest of this family.
+`templates/dashboard/pages/map/index.html`, and that pattern has occurred **0 times** there since
+`23a861765` moved the map program's script out of the template. `git log -S "obj.t === 'pin'"` on
+the template lands on that same commit. So the test asserts the document and the page agree about
+line kinds while actually comparing against nothing, and would keep passing if they disagreed.
 
-Not fixed. Not re-measured beyond the 2026-09-16 targeted run and the source read cited above.
+**Doubly stale as of P92 (2026-09-17), verified directly against the current tree.** The code the
+regex should be reading moved a second time, from `frontend/static/js/map-page.js` (P124's
+originally-suggested target) into `src/urbanlens/dashboard/frontend/ts/entries/map-page.ts` -
+`grep -n 'obj\.t === ' src/urbanlens/dashboard/frontend/ts/entries/map-page.ts` finds it at line
+1764 and three more lines nearby. But repointing `MAP_TEMPLATE` at that file is not enough on its
+own: P92's TypeScript migration also normalised the file's string quoting, so the four
+occurrences are now `obj.t === "head"` (double quotes) - the regex's single-quote literal
+(`'(\w+)'`) would still match zero times even reading the right file. Fixing this needs both the
+path and the quote character updated together, or a quote-agnostic pattern.
+
+Not fixed. Not re-measured beyond the source reads cited above (2026-09-16 test run, 2026-09-17
+grep against current `map-page.ts`).
 
 ## P125 — The population capacity harness collapses at 500 concurrent users on the app container's CPU; production now has a 4-core override to deploy, not yet applied or re-measured
 

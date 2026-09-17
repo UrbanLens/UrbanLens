@@ -17032,3 +17032,93 @@ the browser pass above were independently re-run and re-checked by the session t
 migration and reported closing this entry, not by the session writing this archive entry - which
 only read the commit, the diff, and that session's report before recording them. Re-run before
 relying on a figure here if time has passed.
+
+## RESOLVED 2026-09-17: Three test files asserting inline `<script>` text read the TS source and live responses P92 moved the behavior into, instead of a `<script>` block that has not existed since `23a861765`
+
+`id: P124` · `status: fixed` · `resolved: 2026-09-17`
+
+Previously titled "Seven tests still assert inline `<script>` text that left the HTML in
+`23a861765`, and ROADMAP.md cites one of them as proof of a privacy property".
+
+**What was open.** Seven tests across three files under
+`src/urbanlens/dashboard/tests/hypothesis/` still did `assertIn(<js source string>, body)` against
+the rendered page body, asserting text that left the HTML in `23a861765` ("perf: the map page's
+program is a file the browser keeps, not 275 KB re-sent on every visit") - they had been silently
+failing since that commit, and `docs/ROADMAP.md:374`'s "Verified with
+`test_search_history_cache_scoping.py`" for UL-239 (per-user localStorage search-history scoping)
+was false while the test could not pass.
+
+**Complication: this entry's own suggested fix was stale before it was used.** The
+"Candidate direction" this entry originally recorded - rewrite the assertions against
+`frontend/static/js/map-page.js` - named a file that no longer existed by the time this was
+picked up: this same release's P92 batch ("migrate map-page.js to strict TypeScript, dedupe
+cluster badge") had already deleted it and replaced it with
+`src/urbanlens/dashboard/frontend/ts/entries/map-page.ts`. The fix below was designed against
+current code, not against this entry's own outdated suggestion.
+
+**The fix**, commit `1696f9d0f` ("fix: P124 - restore search-history/GPS/bulk-edit tests broken
+by P92's TS migration"), across the three named files. Each test was split on what it actually
+needs: a static code-presence assertion (handler wiring, guard ordering, a cleanup call) now reads
+the current source directly, while a per-request *value* assertion (which profile's UUID a given
+response actually carries) goes through `rendered_config()`
+(`src/urbanlens/core/tests/inline_scripts.py`) against the live HTTP response body instead of
+grepping response text directly.
+
+- `test_search_history_cache_scoping.py` (fully rewritten): the main map's address-search history
+  (`MapAddressSearchHistoryScopingTests`) and the composer's jump-to search history
+  (`ComposerSearchHistoryScopingTests`) each split this way - the former reads
+  `dashboard/frontend/ts/entries/map-page.ts` (the exact
+  `historyKey: "ul_addr_history_v1_" + _PROFILE_UUID` construction and the stale-key
+  `localStorage.removeItem(...)` cleanup), the latter reads
+  `dashboard/frontend/static/js/comment-map.js` (never migrated to TS by P92, so still checkable
+  as plain static text, unaffected by that migration). The third class in this file,
+  `SafetyDestinationSearchHistoryScopingTests`, was untouched - it renders server-side into the
+  response body directly and was never affected by `23a861765` or P92.
+- `test_map_gps_recenter_flash.py` (fully rewritten): the GPS recenter guard is unconditional
+  static code, not per-viewer, so both tests now read `entries/map-page.ts`'s source directly;
+  the test class changed from `TestCase` to `SimpleTestCase` since nothing in it needs the DB or a
+  login once the assertion no longer reads a rendered response.
+- `test_bulk_edit_rating_ui.py` (partially edited): only
+  `test_confirm_handler_reads_the_rating_select_into_the_payload` changed to read
+  `entries/map-page.ts`'s source directly (the confirm-button click handler and its
+  config-driven POST call); `test_bulk_edit_dialog_has_a_rating_select` was left untouched - it
+  correctly asserts against server-rendered HTML.
+
+**A genuine mypy finding surfaced during verification, not present in the original inline-script
+era.** `rendered_config()` returns `dict[str, Any] | None`, so the new per-request value
+assertions needed an explicit `assert config is not None` narrowing before indexing it - a real
+assertion that fails loudly if the config element is ever missing from the response, not a `cast`.
+
+**A benign behaviour drift, noticed but explicitly not treated as a bug or a new docs entry.**
+P92's migration had already changed `historyKey`/`recentPinsKey` construction in the
+address-search-history feature from `MAP_CFG.profileId` (numeric) to `_PROFILE_UUID`, before this
+fix touched it. Assessed as low-severity/benign: the key is client-side-only localStorage, UUID
+scoping is at least as private as numeric-ID scoping, and it brings this line into consistency
+with the rest of the same file, which already used `_PROFILE_UUID` elsewhere even before P92. The
+new test simply asserts the current, correct value rather than flagging or reverting this.
+
+**Verification.** TDD baseline: the exact three affected files, run via `bin/run_tests.sh --fast`
+before editing, gave a genuine failing baseline of **7 failed, 4 passed**, matching this entry's
+originally-documented failure list exactly (confirmed via traceback inspection showing pre-fix
+code actually ran). After the fix, the same three files gave **11 passed**, zero regressions,
+including a previously-vacuous test (`test_two_profiles_render_different_keys`) that now performs
+a genuine two-profile comparison. Run in the `urbanlens_development_main_test_runner` container,
+not `_app` - `_app` lacks DB-create privilege and errors on any test needing the DB. `uv run ruff
+check --fix` on all three files: clean. `docker exec urbanlens_development_main_app python -m
+mypy` on all three files: clean, but only after `bin/sync_app.sh` was run first - the initial mypy
+run had silently checked stale pre-edit content in the `_app` container (confirmed via an md5sum
+mismatch), so that first "clean" result was discarded as untrustworthy, and mypy was re-run
+against genuinely current content, which is what surfaced the `dict | None` finding above. `uv run
+pre-commit run` on all three files: clean, converging after one auto-fix pass that only
+re-wrapped a long line.
+
+**`docs/ROADMAP.md:374`'s citation is valid again**, now that `test_search_history_cache_scoping.py`
+genuinely passes - not edited as part of this closure, per house convention that this task does
+not rewrite that document.
+
+**Not carried into this fix: an eighth test, found incidentally on 2026-09-16, in a fourth file
+this entry also named but that commit `1696f9d0f` did not touch.**
+`test_map_document_head_reads_the_vocabulary.py::TheDocumentHeadTests::test_the_map_page_reads_every_kind_of_line_the_document_sends`
+still compares against nothing, for a related but distinct reason (a regex over the wrong file,
+not an `assertIn` against a body) - carved out to its own entry, **P129**, rather than silently
+dropped when this one closed.
