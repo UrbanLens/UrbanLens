@@ -16087,3 +16087,34 @@ unbounded (one per pin per family). It still lands on `celery-worker-bulk` behin
 bulk jobs, which is D13's deliberate, correct routing for background work, not a remaining defect.
 `evaluate_achievements_for_profile` and `warm_saved_filter_cache` were out of scope for this fix (as
 they were for the 2026-09-14 one) and are not touched by it.
+
+**Two more unbatched call sites, same commit (`be610ccbc`).**
+
+1. REData per-pin label-assignment sync predates this entry's 2026-09-14 signal migration and was
+   missed by it: `services/labels/redata_suggestions.py::queue_pin_assignment_sync` still called
+   `safely_enqueue_task(sync_redata_pin_assignment, pin_id)` directly, unbatched. Caught by the
+   adversarial review of the initial cut of this fix. Fixed by adding a chunk task
+   `sync_redata_pin_assignments` (`tasks.py`) and routing `queue_pin_assignment_sync` through
+   `enqueue_follow_on`. Unlike the five chunk tasks above, it carries no `autoretry_for` -
+   `sync_redata_pin_assignment` itself has none, so there is no called-directly retry-defeat risk
+   to guard against here.
+
+2. PinLink/WikiLink Wayback-archive fan-out, previously undocumented anywhere - found by a
+   follow-up sweep for the same "call sibling directly" pattern, not by the adversarial review.
+   `models/links/signals.py`'s `archive_pin_link`/`archive_wiki_link` handlers called
+   `safely_enqueue_task(archive_link_to_wayback, "PinLink"/"WikiLink", instance.pk)` directly and
+   unbounded - same defect shape, reachable because a confirmed import extracts one `PinLink` per
+   link found in each pin's description (`maps.py::_attach_description_extras`), so an import with
+   many links in pin descriptions fanned out one Wayback-archive broker task per link. Fixed by
+   extracting the shared logic into a plain function `_archive_link_to_wayback(link_model, link_id)`
+   - not a task, so nothing calls a retry-decorated `Task` object as a bare function, avoiding the
+   same trap the adversarial review found in the other five chunk tasks - then adding four tasks:
+   single-id shims `archive_pin_link_to_wayback`/`archive_wiki_link_to_wayback` fitting
+   `enqueue_follow_on`'s one-argument contract, and chunk siblings
+   `archive_pin_links_to_wayback`/`archive_wiki_links_to_wayback` with the same `OSError`-reraise/
+   chunk-retry guard as the other chunk tasks. Both signal handlers now route through
+   `enqueue_follow_on`.
+
+Both families are covered by unit tests in the new
+`tests/hypothesis/test_bulk_followup_chunk_tasks.py` (17 tests), plus integration coverage in
+`test_import_fanout_queue.py` and `test_link_models.py`.
