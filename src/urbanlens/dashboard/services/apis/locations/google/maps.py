@@ -31,7 +31,7 @@ from urbanlens.dashboard.services.apis.locations.google.place_info import Google
 # TEMPORARY: legacy CID coordinate repair - remove this import together with the
 # blocks it feeds (each marked with a matching TEMPORARY comment below) once
 # every user has re-imported. See legacy_cid_coordinate_fix's module docstring.
-from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, preview_needs_legacy_repair, repair_legacy_pin_coordinates
+from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, preview_needs_legacy_repair, repair_legacy_pin_coordinates, repoint_cid_to_corrected_location
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
@@ -227,14 +227,16 @@ def _create_pin_from_confirmed(
         if extra:
             pin.labels.add(*extra)
 
-    # TEMPORARY: `legacy_cid_location is None` - when a legacy Location was dropped above it still
-    # holds this cid, and GooglePlace.cid is unique, so re-claiming it here for the corrected
-    # Location would raise.
-    # The cid stays with the old row; a later re-import re-resolves it and lands on the corrected
-    if cid and not location and legacy_cid_location is None and pin.location_id and not pin.location.cid:
-        # fetch_if_missing=False: never block the import loop on a live
-        # Places call per pin.
-        GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
+    # TEMPORARY: `legacy_cid_location` still holds this cid on GooglePlace (unique), so the
+    # corrected Location can't just claim it - repoint_cid_to_corrected_location clears the old
+    # row first so by_cid() resolves to the corrected Location for every user going forward.
+    if cid and not location and pin.location_id and not pin.location.cid:
+        if legacy_cid_location is not None:
+            repoint_cid_to_corrected_location(legacy_cid_location, pin.location, cid)
+        else:
+            # fetch_if_missing=False: never block the import loop on a live
+            # Places call per pin.
+            GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
 
     return pin, created
 

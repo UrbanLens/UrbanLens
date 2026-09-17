@@ -8,7 +8,7 @@ import math
 import re
 from typing import TYPE_CHECKING
 
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 from django.db.models import Q
 
 from urbanlens.dashboard.models.location import Location
@@ -175,6 +175,29 @@ def preview_needs_legacy_repair(profile: Profile, *, cid: int | None, name: str)
     Returns:
         True if a matching pre-cutoff pin exists for this profile."""
     return _match_by_cid(profile, cid) is not None or _match_by_coordinate_name(profile, name) is not None
+
+
+def repoint_cid_to_corrected_location(legacy_location: Location, correct_location: Location, cid: int | Decimal) -> None:
+    """Move a Google Maps CID off the wrongly-placed legacy Location and onto the corrected one.
+
+    ``GooglePlace.cid`` is unique, so the corrected Location can't claim this CID while the legacy
+    Location's GooglePlace row still holds it. Clearing that row first, in one transaction, is what
+    lets ``Location.objects.by_cid()`` resolve the CID to the corrected Location for every user from
+    now on instead of leaving it pinned to the wrong one (see docs/PROBLEMS.md P20).
+
+    Args:
+        legacy_location: The Location this CID is currently stuck on.
+        correct_location: The Location the repaired pin now lives at.
+        cid: The Google Maps CID to move. A no-op when ``legacy_location`` no longer actually holds it."""
+    from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+    legacy_place = legacy_location.google_place
+    if legacy_place is None or legacy_place.cid != cid:
+        return
+    with transaction.atomic():
+        legacy_place.cid = None
+        legacy_place.save(update_fields=["cid"])
+        GooglePlaceService().set_cid_for_entity(correct_location, cid, fetch_if_missing=False)
 
 
 def _in_range(latitude: float, longitude: float) -> bool:
