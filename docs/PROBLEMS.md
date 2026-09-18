@@ -2135,7 +2135,7 @@ parameterized there because their unused model import was the symptom of the mis
 
 ## P95 — One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured
 
-`id: P95` · `status: open` · `updated: 2026-09-14`
+`id: P95` · `status: open` · `updated: 2026-09-18`
 
 Previously titled "An import preview can hold 2 GB of extracted bytes in a sandbox worker that has
 3 GB for two jobs", and before that "`ExtractionBudget` cannot bound a single file's decompression,
@@ -2179,12 +2179,51 @@ this entry's old title said no per-file bound existed, and one did.
 
 **Still open: one entry and its parse.** An entry is still read whole, up to `_MAX_SINGLE_FILE_BYTES`
 (1 GB), and the parsers build their own structures from it, so a single preview can still outgrow
-`media-worker` - and the slot keeps a second preview off the worker, not a photo job. What a large
-KML or shapefile costs to parse is unmeasured; the task's time limits bound its wall time, not its
-memory. No adversarial upload has been run, so the risk is by arithmetic, not observation. Lowering
+`media-worker` - and the slot keeps a second preview off the worker, not a photo job. Lowering
 the per-entry cap is a product call - a heavy account's Google Takeout location history is large, and
 nobody has measured how large. With one slot, a preview also waits behind every preview ahead of it,
 each up to its 110-second soft limit.
+
+**Measured 2026-09-18: the KML parse alone can exceed `media-worker`'s entire memory budget.**
+`maps.py::takeout_kml_to_dict` is not streaming - it regex-copies the whole input
+(`_KML_NAMESPACE_RE.sub`), runs a full defusedxml pre-parse purely to reject hostile documents (tree
+discarded), then has fastkml build a complete lxml-backed object tree (`kml.KML.from_string`) before
+a single placemark is read back out. That reading, not a guess from the code, is what the earlier
+"risk is by arithmetic, not observation" line understated.
+
+A synthetic Google-Takeout-shaped KML generator produced two files, and `takeout_kml_to_dict` was
+called directly against each (not through `parse_import_preview_task` - a deliberate deviation,
+noted below, since the point was to isolate the parse's own cost):
+
+- **10 MB / 24,914 placemarks: completed.** `tracemalloc` measured a 45.0 MB peak inside the call -
+  only 4.5x the input, but `tracemalloc` tracks Python's own allocator, not the C-level buffers
+  `lxml` (fastkml's backing library) allocates. The process's own RSS, which does see those buffers,
+  grew by 153.8 MB over the same call - a 15.4x ratio, and the more representative number.
+- **100 MB / 247,959 placemarks: did not complete.** This run was made directly in the `app`
+  container (2 GiB `mem_limit`, not `media-worker`'s 3 GB - see the deviation note below) so its
+  memory could be watched with `docker stats` as it ran. Usage climbed from roughly 615 MB to 1.78
+  GiB - 89% of that container's own limit - within about 30 seconds and was still rising, past what
+  the 10 MB ratio alone would have predicted for completion. It was killed at that point rather than
+  let run further, since this is the live development container, not a disposable one.
+
+Extrapolating from the completed 10 MB point alone - and the 100 MB run already trending past it - a
+full 1 GB entry, the actual `_MAX_SINGLE_FILE_BYTES` cap, plausibly costs on the order of 10-15 GB of
+peak RSS to parse. `media-worker` has a 3 GB `mem_limit` shared across `--concurrency=2` workers,
+several times smaller than that. A single upload anywhere near the 1 GB cap would very likely exceed
+the container's entire memory budget and get OOM-killed by the kernel outright - not a slow parse, a
+crashed worker - and with two concurrency slots sharing one cgroup limit, an unrelated concurrent job
+would be collateral damage.
+
+Two things keep this from being the definitive number: (1) the 1 GB case itself was never run - after
+the 100 MB trajectory, continuing to push a shared, live container toward its limit stopped being a
+reasonable way to get a more precise figure, so the estimate above is an extrapolation from two
+smaller points, not a measurement of the actual cap; (2) both runs called `takeout_kml_to_dict`
+directly, bypassing `parse_import_preview_task` and the sandbox queue entirely, so they measured the
+parse in the `app` container instead of `media-worker` (the guard that enforces this - `guard.py`'s
+`check_untrusted_parse` - is in `warn`, not `deny`, mode, so it logged rather than blocked). The two
+containers differ in memory limit (2 GiB vs. 3 GB) but not in what code runs or how; nothing about the
+parse itself changes between them, so the ratios measured should carry over, but the two data points
+are not from the container this would actually happen in.
 
 ---
 
