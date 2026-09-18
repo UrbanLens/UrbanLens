@@ -225,7 +225,7 @@ than guessing at it.
 
 ## P11 — Frontend TS audit: a few correctness bullets and structural debt found but not fixed
 
-`id: P11` · `status: open` · `updated: 2026-09-15`
+`id: P11` · `status: open` · `updated: 2026-09-18`
 
 Previously titled "84 raw `fetch()` calls bypass `fetch-json.ts`, and 'all the wrappers are gone' was
 a count, not a search", and before that "~40 raw `fetch()` calls bypass `fetch-json.ts` and fail
@@ -269,9 +269,15 @@ left:
 - `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
   through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not just
   at the edit point. Needs round-trip tests over real saved articles before it is trusted.
-- `shared/e2ee-client.ts:238` - the `e2ee-busy` class it sets during login has no CSS rule anywhere,
-  so the ~1s synchronous Argon2id derivation shows no indicator at all; the unlock dialog (:682) has
-  no busy state either, while the reset dialog next to it does it correctly.
+- ~~`shared/e2ee-client.ts:238` - the `e2ee-busy` class it sets during login has no CSS rule
+  anywhere...`~~ **Stale, checked 2026-09-18.** `e2ee-busy` exists only in the built, uncompiled
+  `frontend/static/dashboard/js/e2ee*.js` bundles now - the current `wireLoginForm` (`:237-246`)
+  reuses `shared.btn.is-loading` instead (`:253`'s own comment says so), which does have a rule
+  (`_buttons.scss:211`). Whatever fixed this did so as a byproduct of something else; the login form
+  itself is fine now. **The unlock dialog half is not stale, though**: `showUnlockDialog`'s password/
+  recovery-key path (`:960-984`, the `attempt()` closure) still gives no busy feedback at all during
+  the ~1s Argon2id derivation - the submit button stays enabled and unstyled the whole time. Only the
+  passkey button gets so much as `disabled = true` (`:952`), with no visual change to go with it.
 - `shared/e2ee-client.ts:1326` - retry storm: a thread with an unreadable key re-fetches the same
   conversation/group key once per message (50 sequential identical failing requests on a 50-message
   thread). `:1459 decryptDom` also strips `data-e2ee-*` *before* attempting decryption, so a
@@ -304,8 +310,18 @@ left:
   last-writer-wins handler slots, CustomEvents, an htmx response header), and the kind/ns/tab
   vocabulary is encoded in five separate places. It also runs a private copy of the shared
   `window.ulBulkToolbar` that `static/js/bulk-toolbar.js` says it mirrors.
-- `shared/map-layers.ts:198` has no `destroy()`, so document/matchMedia/map listeners accumulate
-  on per-dialog maps (the comment-map composer). `shared/photo-map.ts:204` is the model.
+- ~~`shared/map-layers.ts:198` has no `destroy()`...`~~ **Fixed 2026-09-18.** The reachable case
+  traced to `shared/album-map.ts`'s show/hide toggle (`album-items.ts:679-680`, plus its filter-swap
+  reload at `:864-865`), not a comment composer: every `initAlbumMap()`/`destroyAlbumMap()` cycle left
+  a `document` click listener (closing the layers flyout) and, in `darkMode: "system"`, a
+  `window.matchMedia` change listener - both rooted on long-lived globals `map.remove()` never
+  touches, so each toggle added one more, forever. `createMapLayers` now names those handlers (plus
+  the `layeradd`/`layerremove` pair and the previously-discarded `bindMapContextMenu` unbind) and
+  exposes them as `MapLayersInstance.destroy()`, modeled on `shared/photo-map.ts:204`'s own
+  `destroy()`; `album-map.ts` captures the return value and calls it in `destroyAlbumMap()`. The
+  other four `createMapLayers` callers (`map-annotations`, `consensus`, `spotguessr`,
+  `floorplan-editor`) build one map per page load rather than repeatedly, so they have nothing to
+  leak and were left as they were.
 - Test coverage is inverted: all test files cover the small shared modules; the four largest files
   (`map-annotations`, `spotguessr`, `e2ee-client`, `consensus`) had zero until this pass added
   `e2ee-client.test.ts`/`e2ee-store.test.ts` (see `ts/testing/fake-indexeddb.ts` - happy-dom has
