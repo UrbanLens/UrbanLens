@@ -1419,7 +1419,7 @@ five off-tab panels. Laning those would delay the page itself, which is a differ
 
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
-`id: P56` · `status: open` · `updated: 2026-09-17` · `corrects a stale host citation: tile.openstreetmap.org dropped per P126, conclusion unchanged`
+`id: P56` · `status: open` · `updated: 2026-09-18` · `corrects a "zero violation reports" claim measured with the wrong browser API`
 
 Previously titled "`Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed
 to set it does not exist", and before that "Nuclei scan follow-ups (2026-08-28)".
@@ -1489,6 +1489,46 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 `streetviewpixels-pa.googleapis.com` 403). The `img-src` comment already flags that this set is
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
+
+**Re-attempted 2026-09-18, on this checkout's `development_main` dev stack: the API key was never
+actually the blocker, and one existing claim in this entry needed correcting.**
+
+A real key is configured (`UL_GOOGLE_PUBLIC_API_KEY`/`UL_GOOGLE_UNRESTRICTED_API_KEY`, both wired
+through `settings.google_public_api_key`/`google_unrestricted_api_key` and confirmed non-empty), so
+the "needs a valid key" framing above is stale for this environment - it has one. What actually
+blocked a full re-measurement of the Street View embed and Maps JS runtime imagery is unrelated to
+COEP or to the key: `pin.street_view`/`pin.satellite_view`
+(`controllers/pin.py::_render_media_carousel`) poll a placeholder until a Celery task warms the
+provider cache for that pin's coordinates (`panel_sources()[service_key].is_ready(pin)`), and this
+checkout's running containers (`docker ps -a`) include none of `docker-compose.yml`'s
+`celery-worker`, `celery-worker-bulk`, `celery-worker-panels`, or `celery-beat` - only
+`celery_metrics` (a metrics exporter, not a task consumer). The task queues and nothing drains it,
+so the panel polls forever - a property of which containers happen to be up on this dev slot right
+now, not a bug in the panel or the COEP work. Left unmeasured again, but for a documented and
+actionable reason instead of a stale one: starting `celery-worker-panels` on this stack (not done
+here - it wasn't this checkout's call to make unprompted) is what the next attempt needs, not a key.
+
+**One thing was measured, and it corrects a specific claim in the "measured in a browser... zero
+violation reports" paragraph above.** That 2026-09-06 measurement listened for
+`securitypolicyviolation` DOM events, which only ever fire for CSP - the browser never dispatches
+one for a COEP/CORP mismatch. The correct listener is the Reporting API
+(`new ReportingObserver(..., {types: ["coep", "coop"]})`), and using it against the same map tiles
+this session (`basemaps.cartocdn.com`, `server.arcgisonline.com`) under the same
+`Cross-Origin-Embedder-Policy-Report-Only: credentialless` shows a `"corp"`-type COEP report fired
+for every single tile load - dozens per page load, not zero. **This does not change the
+recommendation.** Every one of those requests still resolved (confirmed: no failed request, no
+network error, the tile still renders) - `credentialless`'s fail-open behavior for a no-CORP
+resource is exactly what the earlier measurement's "zero failed requests" half already established,
+and that half holds up. What's corrected is narrower: reports are not silent the way "zero
+violation reports" implied. That only becomes practically relevant if this app ever wires up a
+`Reporting-Endpoints` header to actually collect these - whoever does that should expect routine,
+harmless COEP noise from every map-tile load, not silence, so as not to mistake expected volume for
+an incident.
+
+(Unrelated to COEP, found while isolating this measurement and not chased further because it's
+already tracked: loading the full pin-detail page transiently hit `FATAL: too many connections for
+role "ul_web"` against this shared dev Postgres. That's P53's already-open finding - the same page's
+panel fan-out - reproducing again, not a new problem.)
 
 ## P58 — A renamed photo's old URL still 404s for the uploader who just uploaded it
 
