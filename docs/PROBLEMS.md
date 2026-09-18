@@ -320,8 +320,18 @@ left:
   exposes them as `MapLayersInstance.destroy()`, modeled on `shared/photo-map.ts:204`'s own
   `destroy()`; `album-map.ts` captures the return value and calls it in `destroyAlbumMap()`. The
   other four `createMapLayers` callers (`map-annotations`, `consensus`, `spotguessr`,
-  `floorplan-editor`) build one map per page load rather than repeatedly, so they have nothing to
-  leak and were left as they were.
+  `floorplan-editor`) each build their map from a one-shot `DOMContentLoaded`/`readyState` boot, not
+  an HTMX-swappable entry point, confirming (not just assuming) they build one map per page load
+  rather than repeatedly - nothing to leak, left as they were. **Checked and deliberately left
+  uncleaned:** the `opts.loadingTarget` block's `layer.on("loading"/"load"/"tileerror", ...)`
+  registrations sit on the tile-layer objects themselves (`streetLayer`/`topographicLayer`/
+  `satelliteLayer`/`darkLayer`), which `createMapLayers` creates fresh per call and never exposes -
+  once `destroy()` drops this closure and the caller drops the returned `MapLayersInstance`, nothing
+  keeps those layer objects alive, so their listeners die with them. `album-map.ts` doesn't even pass
+  `loadingTarget`, so this is moot for the one caller that calls `destroy()` today regardless. Test
+  coverage was widened past the original 5 cases to also cover the context-menu unbind (all 5
+  originals passed `contextMenu: false`, so that path had zero coverage) and the attribution
+  animation-frame cancellation.
 - Test coverage is inverted: all test files cover the small shared modules; the four largest files
   (`map-annotations`, `spotguessr`, `e2ee-client`, `consensus`) had zero until this pass added
   `e2ee-client.test.ts`/`e2ee-store.test.ts` (see `ts/testing/fake-indexeddb.ts` - happy-dom has

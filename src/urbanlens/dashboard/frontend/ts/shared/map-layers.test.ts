@@ -153,6 +153,10 @@ class FakeMap {
     listenerCount(event: string): number {
         return this.handlers.get(event)?.size ?? 0;
     }
+    /** Invokes every handler registered for `event`, the way real Leaflet's `Evented.fire` would. */
+    fire(event: string, data: Record<string, unknown> = {}): void {
+        for (const handler of this.handlers.get(event) ?? []) (handler as (arg: unknown) => void)(data);
+    }
 }
 
 function stubLeafletForMapLayers(): void {
@@ -190,10 +194,32 @@ function makeToggleRoot(): HTMLElement {
     return root;
 }
 
+const realRAF = window.requestAnimationFrame;
+const realCAF = window.cancelAnimationFrame;
+
+/** Tracks scheduled/cancelled frame ids without ever running a real animation frame. */
+function stubAnimationFrame(): { pendingCount: () => number; cancelledIds: number[] } {
+    let nextId = 1;
+    const pending = new Set<number>();
+    const cancelledIds: number[] = [];
+    (globalThis as Record<string, unknown>).requestAnimationFrame = () => {
+        const id = nextId++;
+        pending.add(id);
+        return id;
+    };
+    (globalThis as Record<string, unknown>).cancelAnimationFrame = (id: number) => {
+        cancelledIds.push(id);
+        pending.delete(id);
+    };
+    return { pendingCount: () => pending.size, cancelledIds };
+}
+
 describe("createMapLayers destroy()", () => {
     afterEach(() => {
         (globalThis as Record<string, unknown>).L = realL;
         delete (globalThis as Record<string, unknown>).matchMedia;
+        window.requestAnimationFrame = realRAF;
+        window.cancelAnimationFrame = realCAF;
         document.body.innerHTML = "";
     });
 
@@ -261,5 +287,50 @@ describe("createMapLayers destroy()", () => {
         }
         expect(tracker.addCalls).toBe(3);
         expect(tracker.removeCalls).toBe(3);
+    });
+
+    test("unbinds the shared context menu on destroy", () => {
+        stubLeafletForMapLayers();
+        const map = new FakeMap();
+        const layers = createMapLayers(map as unknown as L.Map);
+
+        expect(map.listenerCount("contextmenu")).toBeGreaterThan(0);
+        layers.destroy();
+        expect(map.listenerCount("contextmenu")).toBe(0);
+    });
+
+    test("does not bind a context menu at all when contextMenu is false", () => {
+        stubLeafletForMapLayers();
+        const map = new FakeMap();
+        const layers = createMapLayers(map as unknown as L.Map, { contextMenu: false });
+
+        expect(map.listenerCount("contextmenu")).toBe(0);
+        layers.destroy();
+        expect(map.listenerCount("contextmenu")).toBe(0);
+    });
+
+    test("cancels a pending attribution animation frame and stops scheduling new ones after destroy", () => {
+        stubLeafletForMapLayers();
+        const raf = stubAnimationFrame();
+        const map = new FakeMap();
+        const attributions: string[] = [];
+        const layers = createMapLayers(map as unknown as L.Map, {
+            contextMenu: false,
+            onAttribution: (text) => attributions.push(text),
+        });
+
+        // A layer change schedules a frame but does not run it synchronously.
+        map.fire("layeradd");
+        expect(raf.pendingCount()).toBe(1);
+        expect(attributions).toHaveLength(0);
+
+        layers.destroy();
+
+        expect(raf.cancelledIds).toHaveLength(1);
+        expect(raf.pendingCount()).toBe(0);
+
+        // The listener that would have scheduled another frame is gone too.
+        map.fire("layeradd");
+        expect(raf.pendingCount()).toBe(0);
     });
 });
