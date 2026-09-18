@@ -1988,10 +1988,12 @@ the derived class is spelled - and they exist precisely to forward custom querys
 `misc` is a real change to how every model in the tree is typed, and it will surface errors that
 have never been reported here, which is the point. What this did not anticipate: a 2026-09-18
 attempt at exactly this plan (below) found that the conversion itself, with `misc` left untouched,
-already breaks the tree's currently-clean mypy baseline through a different mechanism -
-django-stubs' related-manager resolution, not the dynamic-base diagnostic this entry has been
-measuring throughout. So this should not ride along inside an unrelated commit, and it should not
-be treated as safely separable from the `misc` re-enable either - there is no inert first step here.
+already surfaces new mypy errors against the tree's currently-clean baseline through a different
+mechanism - django-stubs' related-manager resolution, not the dynamic-base diagnostic this entry
+has been measuring throughout. Whether that mechanism is a regression the conversion introduces or
+a pre-existing gap the conversion un-masks is not established (see the caveat below) - either way,
+this should not ride along inside an unrelated commit, and it should not be treated as safely
+separable from the `misc` re-enable either - there is no inert first step here.
 
 **Attempted 2026-09-18 as a diagnostic, not a fix - reverted before commit, and it changes the risk
 picture.** Converted the three abstract managers in `models/abstract/queryset.py`
@@ -2021,34 +2023,53 @@ manager" on reverse-FK relations into `Floorplan`/`FloorplanFloor`/`FloorplanWal
 `FrontendDashboardManager`, one of the three converted here. The *concrete* managers on those
 models were untouched: `class FloorplanManager(FrontendDashboardManager.from_queryset(FloorplanQuerySet)): ...`
 is unchanged, still a class statement. Converting only the abstract base, with no change to any
-concrete manager, is enough to break django-stubs' related-manager resolution for models built on
-top of it.
+concrete manager, is enough to make django-stubs report that it cannot resolve these related
+managers, for models built on top of it.
 
 Extending the conversion to check whether finishing the job (as the mechanical plan above intends
-next) fixes this made it worse, not better: additionally converting `FloorplanManager` and
-`ImageManager` (also docstring-only, diagnostic only, reverted, never committed) grew the
-`[django-manager-missing]` cluster from 8 to 25+, newly hitting `Pin`, `Wiki`, `Place`, `Profile`,
-`Location`, `SafetyCheckin`, `PinVisit`, `PinSuggestion`, `DirectMessage`, plus two new "Could not
-resolve manager type for ..." errors that had not appeared before. One narrow, two-file `mypy
-models/floorplans/model.py models/images/model.py` run against that same state also crashed
-internally (`NotImplementedError: Cannot serialize PlaceholderNode instance`, mypy 2.1.0); the
-full-tree run against the identical code state completed normally with the 25+ errors above, so
-this looks like a partial-invocation/incremental-cache artifact rather than a second confirmed
-blocker - flagged, not chased further.
+next) clears this instead correlated with more, not fewer, occurrences: additionally converting
+`FloorplanManager` and `ImageManager` (also docstring-only, diagnostic only, reverted, never
+committed) took the `[django-manager-missing]` cluster from 8 to 25+, newly reported against `Pin`,
+`Wiki`, `Place`, `Profile`, `Location`, `SafetyCheckin`, `PinVisit`, `PinSuggestion`,
+`DirectMessage`, plus two new "Could not resolve manager type for ..." errors not seen before. One
+narrow, two-file `mypy models/floorplans/model.py models/images/model.py` run against that same
+state also crashed internally (`NotImplementedError: Cannot serialize PlaceholderNode instance`,
+mypy 2.1.0); the full-tree run against the identical code state completed normally with the 25+
+errors above, so this looks like a partial-invocation/incremental-cache artifact rather than a
+second confirmed blocker - flagged, not chased further.
+
+**Open question, flagged rather than answered: revealed or introduced?** Everything above is
+phrased as correlation, deliberately - "the conversion breaks related-manager resolution" is a
+stronger claim than what was actually measured, and this entry should not be read to assert it.
+Two explanations fit the same observation equally well. One: the class-statement form is genuinely
+load-bearing for `mypy_django_plugin`'s related-manager transformer - the plugin's manager
+detection keys off a `ClassDef` AST node, the assignment form doesn't produce one, and the
+transformer silently fails to register the manager, which is a real defect the conversion
+introduces. Two: these reverse relations were never resolvable to begin with - `DashboardManager`
+and its descendants have been `Any` this whole entry's premise, so the plugin may already have been
+falling back to some other, wrong path for `.objects` on every model in this hierarchy, silently
+producing right-looking output for a reason unrelated to the fields it now can't find; converting
+the abstract managers gave the checker enough real type information to notice a gap that was always
+there. The growth from 8 to 25+ occurrences when the concrete managers were also converted is
+consistent with either story - more of the hierarchy losing whatever mechanism worked before, or
+more of the hierarchy finally being checked for real. Nothing measured this session distinguishes
+them, and neither should be assumed pending the investigation below.
 
 **This corrects "why this is filed rather than fixed" above.** That section's risk model was:
 the syntactic conversion is mechanical and inert, and the only real risk arrives later, when `misc`
 is re-enabled and starts reporting genuinely new findings across the tree. That is wrong for the
 three abstract managers, which are the entry's own prerequisite for all 125 concrete ones:
-converting just those three, with `misc` untouched, already breaks the currently-clean tree-wide
-baseline, and through a mechanism this entry had not measured - django-stubs' related-manager
-resolution, not the `[misc]` dynamic-base diagnostic. Read "125... have nothing but a docstring and
-convert this way" as a description of the AST shape, not of the blast radius or the risk level; it
-is not evidence this is safe to batch. Before attempting this again, abstract or concrete, it needs
-its own investigation into `mypy_django_plugin`'s manager/related-manager transformer - specifically
-whether it keys off a `ClassDef` AST node rather than a name-bound assignment, which would explain
-why the class-statement form (dynamic base and all) is what currently makes the reverse relation
-resolvable. Not yet investigated further this session.
+converting just those three, with `misc` untouched, already changes mypy's output against the
+currently-clean tree-wide baseline, and through a mechanism this entry had not measured -
+django-stubs' related-manager resolution, not the `[misc]` dynamic-base diagnostic. Read "125...
+have nothing but a docstring and convert this way" as a description of the AST shape, not of the
+blast radius or the risk level; it is not evidence this is safe to batch. Before attempting this
+again, abstract or concrete, it needs its own investigation into `mypy_django_plugin`'s
+manager/related-manager transformer - specifically whether it keys off a `ClassDef` AST node rather
+than a name-bound assignment (which would explain why the class-statement form, dynamic base and
+all, is what currently makes the reverse relation resolvable), and separately, for each affected
+relation, whether it was ever soundly typed before this session touched anything. Not yet
+investigated further this session.
 
 Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
 parameterized there because their unused model import was the symptom of the missing type argument.
