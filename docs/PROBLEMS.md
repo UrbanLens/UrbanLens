@@ -1108,6 +1108,19 @@ to the acting author's own note about that specific subject, so neither another 
 the same subject nor the same author's note about a *different* subject is reachable through the
 wrong URL.
 
+**2026-09-18, same file, three more:** `ProfileTrustView.post`, `ProfileNicknameView.post` and
+`ProfileLabelToggleView.post` were also zero-coverage - checked directly against the current URLs
+(`profile.trust`, `profile.nickname`, `profile.label_toggle`), not against the stale 2026-08-14
+report, since the report predates September's coverage work on this file.
+`test_profile_trust_nickname_label_toggle.py` now exercises all three: trust rating set/update, a
+zero or out-of-range rating clearing rather than erroring (the widget's own "clear" signal, not a
+rejected value), nickname set/update/clear-on-blank, an over-length nickname refused before it
+reaches the database, and self-annotation refused on all three. The label toggle's two real
+regression tests: a `Label` another author owns is not reachable even by its correct id, because
+`Label.objects.visible_to(author)` excludes it before `get_or_create` ever runs; and a label of the
+wrong `kind` (a category, not a person-label) is refused the same way, so a category or status label
+cannot be attached to a profile as if it were a person annotation.
+
 ---
 
 ## P41 — The queryset API's unused half, by call graph: 29 methods deleted, 27 test-only ones left
