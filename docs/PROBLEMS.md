@@ -2129,7 +2129,7 @@ each up to its 110-second soft limit.
 
 ---
 
-## P100 — Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them
+## P100 — Map search-box autocomplete runs 9 leading-wildcard `ILIKE`s with zero trigram indexes to serve them
 
 `id: P100` · `status: open` · `updated: 2026-09-18`
 
@@ -2175,14 +2175,14 @@ on the join's other side regardless of what the indexed side finds).
 This changes what "adding one now buys a fraction of 70ms" should be weighed against. It is **not**
 being left undone because of migration overhead - a migration is not a cost pre-launch, with
 effectively zero real users, and if this measurably helped it would be worth doing regardless. It's
-being left undone because two independent measurements nine days apart, one against real 2026-09-10
-data at 10x this session's synthetic scale and one a direct before/after `rows_examined` diagnostic
-this session, both show no meaningful scan-cost benefit available at current data volumes for this
-query shape. The missing trigram indexes on the other eight fields are still real and still the
-right fix once pin/wiki volume grows enough to push the planner off the Incremental-Sort-under-Limit
-plan it currently uses - worth revisiting if P100 or a similar autocomplete-latency complaint
-resurfaces at meaningfully larger scale. Left open as an accurate, now twice-measured observation,
-not a hazard.
+being left undone because two independent measurements eight days apart, one against real
+2026-09-10 data at a 10,000-pin profile and one a direct before/after `rows_examined` diagnostic
+this session at a smaller (~3x) 3,001-pin synthetic profile, both show no meaningful scan-cost
+benefit available at current data volumes for this query shape. The missing trigram indexes on the
+other eight fields are still real and still the right fix once pin/wiki volume grows enough to push
+the planner off the Incremental-Sort-under-Limit plan it currently uses - worth revisiting if P100
+or a similar autocomplete-latency complaint resurfaces at meaningfully larger scale. Left open as an
+accurate, now twice-measured observation, not a hazard.
 
 Not fixed. Re-measured 2026-09-18 (diagnostic only, no code or schema change landed).
 
