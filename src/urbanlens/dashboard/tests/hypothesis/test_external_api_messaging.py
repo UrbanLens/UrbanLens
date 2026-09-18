@@ -400,6 +400,73 @@ class TombstoneTests(MessagingBaseTestCase):
         self.assertEqual(rendered["body"], "burn after reading")
 
 
+class MessageDeleteTests(MessagingBaseTestCase):
+    """DELETE messages.detail: ?scope=everyone (sender only) vs ?scope=self (recipient only)."""
+
+    def _url(self, message_id: int) -> str:
+        return reverse(
+            "external_api:messages.detail", kwargs={"peer_slug": self.partner.ensure_slug(), "message_id": message_id}
+        )
+
+    def test_sender_deletes_for_everyone(self) -> None:
+        message = create_direct_message(self.sender, self.partner, "oops")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=everyone", **self.auth)
+
+        self.assertEqual(response.status_code, 204)
+        message.refresh_from_db()
+        self.assertIsNotNone(message.deleted_by_sender_at)
+
+    def test_recipient_deletes_for_self(self) -> None:
+        message = create_direct_message(self.partner, self.sender, "incoming")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=self", **self.auth)
+
+        self.assertEqual(response.status_code, 204)
+        message.refresh_from_db()
+        self.assertIsNotNone(message.deleted_by_recipient_at)
+
+    def test_default_scope_is_self(self) -> None:
+        message = create_direct_message(self.partner, self.sender, "incoming")
+
+        response = self.client.delete(self._url(message.pk), **self.auth)
+
+        self.assertEqual(response.status_code, 204)
+        message.refresh_from_db()
+        self.assertIsNotNone(message.deleted_by_recipient_at)
+        self.assertIsNone(message.deleted_by_sender_at)
+
+    def test_recipient_cannot_delete_for_everyone(self) -> None:
+        message = create_direct_message(self.partner, self.sender, "incoming")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=everyone", **self.auth)
+
+        self.assertEqual(response.status_code, 403)
+        message.refresh_from_db()
+        self.assertIsNone(message.deleted_by_sender_at)
+
+    def test_sender_cannot_delete_for_self_only(self) -> None:
+        message = create_direct_message(self.sender, self.partner, "oops")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=self", **self.auth)
+
+        self.assertEqual(response.status_code, 403)
+        message.refresh_from_db()
+        self.assertIsNone(message.deleted_by_recipient_at)
+
+    def test_invalid_scope_is_refused(self) -> None:
+        message = create_direct_message(self.sender, self.partner, "oops")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=bogus", **self.auth)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_unknown_message_id_is_404(self) -> None:
+        response = self.client.delete(self._url(999999), **self.auth)
+
+        self.assertEqual(response.status_code, 404)
+
+
 class ReservedSlugRoutingTests(MessagingBaseTestCase):
     """Literal routes are never shadowed by a profile with the same slug."""
 
@@ -515,6 +582,59 @@ class GroupMembershipTests(MessagingBaseTestCase):
         for row in dms:
             self.assertIsNone(row["creator_slug"])
             self.assertIsNone(row["member_count"])
+
+
+class GroupMemberRemovalTests(MessagingBaseTestCase):
+    """DELETE messages.groups.members: anyone may leave; only the creator may remove someone else."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.third = _profile()
+        _open_dms(self.sender, self.partner, self.third)
+
+        from urbanlens.dashboard.services.messaging.group_chats import add_group_members, create_group_chat
+
+        self.group = create_group_chat(self.sender, "Crew", [self.partner])
+        add_group_members(self.group, self.sender, [self.third])
+        self.members_url = reverse("external_api:messages.groups.members", kwargs={"group_uuid": self.group.uuid})
+
+    def _remove(self, slugs: list[str], **extra) -> object:
+        return self.client.delete(
+            self.members_url,
+            data=json.dumps({"member_slugs": slugs}),
+            content_type="application/json",
+            **{**self.auth, **extra},
+        )
+
+    def test_creator_can_remove_a_member(self) -> None:
+        response = self._remove([self.partner.ensure_slug()])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["removed"], 1)
+        self.assertIsNone(self.group.membership_for(self.partner))
+
+    def test_a_member_can_remove_themselves(self) -> None:
+        partner_token = _token_for(self.partner.user)
+
+        response = self._remove([self.partner.ensure_slug()], **_bearer(partner_token))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self.group.membership_for(self.partner))
+
+    def test_non_creator_cannot_remove_another_member(self) -> None:
+        partner_token = _token_for(self.partner.user)
+
+        response = self._remove([self.third.ensure_slug()], **_bearer(partner_token))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIsNotNone(self.group.membership_for(self.third))
+
+    def test_removing_a_non_member_is_refused(self) -> None:
+        stranger = _profile()
+
+        response = self._remove([stranger.ensure_slug()])
+
+        self.assertEqual(response.status_code, 400)
 
 
 class GroupMessageTests(MessagingBaseTestCase):

@@ -1121,6 +1121,20 @@ regression tests: a `Label` another author owns is not reachable even by its cor
 wrong `kind` (a category, not a person-label) is refused the same way, so a category or status label
 cannot be attached to a profile as if it were a person annotation.
 
+**2026-09-18, external API this time:** a fresh survey of `docs/reports/2026-08-14-view-coverage.md`
+against the current suite (the report itself is stale - several of its other listed handlers turned
+out already covered by unrelated feature work since) found `external_api/views_messaging.py`'s
+`GroupMembersView.delete` (route `messages.groups.members`) and `MessageDetailView.delete` (route
+`messages.detail`) still genuinely uncovered: `test_external_api_messaging.py` exercised `POST`
+and `GET` on the first but never touched the second at all. Added to that file rather than a
+new one, since its `MessagingBaseTestCase` fixture already fit both. `GroupMemberRemovalTests`
+covers the real permission split - the creator can remove anyone, a member can remove only
+themselves (leaving), a non-creator cannot remove someone else, and removing a non-member is
+refused - and `MessageDeleteTests` covers the sender-only `?scope=everyone` vs. recipient-only
+`?scope=self` split (including the default scope, an invalid `scope` value refused with 400, and
+an unknown message id refused with 404), so a sender cannot hide a message only for themselves
+and a recipient cannot delete it for the sender too.
+
 ---
 
 ## P41 — The queryset API's unused half, by call graph: 29 methods deleted, 27 test-only ones left
