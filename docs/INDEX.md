@@ -53,7 +53,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P29 | open | 2026-08-13 | 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-09-16 | Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P36 | open | 2026-09-05 | 50 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-14 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P41 | open | 2026-09-14 | The queryset API's unused half, by call graph: 29 methods deleted, 27 test-only ones left | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P49 | open | 2026-09-14 | Doc citations drift silently, and CI's past-end check is red on 92 citations in dated records | [`docs/PROBLEMS.md`](PROBLEMS.md) |

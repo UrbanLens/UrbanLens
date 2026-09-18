@@ -943,11 +943,13 @@ the original false positive, because a concatenated URL never contains it. The t
 had a *test* naming them and no caller - a shape that means "reached some other way" far more often
 than "dead".
 
-## P36 — 50 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
+## P36 — 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
 
-`id: P36` · `status: open` · `updated: 2026-09-05`
+`id: P36` · `status: open` · `updated: 2026-09-18`
 
-Previously titled "45 BEM modifiers applied in templates with no CSS rule", and before that "46".
+Previously titled "50 BEM modifiers are applied in templates with no CSS rule, so intended visual
+states never render", before that "45 BEM modifiers applied in templates with no CSS rule", and
+before that "46".
 
 `class="card card--secondary"` where `.card` is styled and `.card--secondary` is not renders as a
 plain card. Each of these was written to create a distinction that does not appear, and nothing
@@ -989,10 +991,46 @@ coloured once read - which makes "three types are missing a rule" a larger quest
 wrong, read off a truncated grep: of 42 selector lines in the compiled CSS, 24 are dark-scoped and 18
 are theme-independent, from `_nav.scss:751`. Light theme does colour them.)
 
-Worth doing first: the three `visit-*--pending` classes (a visit awaiting confirmation is
-indistinguishable from a confirmed one), `ul-game-hud__group--lead` (the leading score, on all three
-game pages), and `btn-icon--primary` - which is applied in `pages/site_admin_ui_components.html`,
-the component gallery whose entire purpose is to show what each variant looks like.
+**Fixed 2026-09-18 (`45b5d7430`), the 5 this entry called "worth doing first"** - the three
+`visit-*--pending` classes (a visit awaiting confirmation was indistinguishable from a confirmed
+one), `ul-game-hud__group--lead`, and `btn-icon--primary`, the one applied in
+`pages/site_admin_ui_components.html`, the component gallery whose entire purpose is to show what
+each variant looks like:
+
+- `visit-item--pending`, `visit-list--pending`, `visit-source--pending`
+  (`_pin-detail.scss`): a pending row now gets an amber left-border and tinted background, and the
+  "Pending" badge text goes amber. The pending list also loses the 15rem adaptive-pagination
+  min-height it was inheriting from the confirmed-visits list - that reserve is for a paginated
+  list, and this one is never paginated, so a single suggestion no longer sits in a mostly-empty
+  box. Colors reuse the `$color-amber-500`/`700` tokens already used by the codebase's other
+  `--pending` states, e.g. `friend-status-badge--pending`.
+- `ul-game-hud__group--lead` (`_game_shell.scss`): given an explicit `justify-content: flex-start`
+  alongside its `--center`/`--trail` siblings. This is a no-op by rendered pixels - flex's own
+  initial value already produces `flex-start` - so nothing looked different before or after; it
+  just stops relying on that coincidence. **Correcting this entry's own earlier gloss**: this
+  modifier is not "the leading score" - checked against the markup, the `--lead` group wraps the
+  game's identity badge (icon + game name), not a score. "Lead" is positional, the leftmost of
+  lead/center/trail, matching its siblings' naming.
+- `btn-icon--primary` (`_buttons.scss`): reuses `var(--ul-primary-color)` /
+  `var(--ul-button-hover-bg)` / `var(--ul-button-hover-text)` - the same custom properties
+  `.btn--primary` itself resolves through - so it inherits the app's one existing definition of
+  "primary" instead of inventing a new color relationship.
+
+Verified by removing all 5 from `bin/check_bem_modifiers.py`'s `_KNOWN_UNSTYLED` first and
+confirming the check failed and flagged exactly those 5 and nothing else, then adding the rules,
+recompiling (`bun node_modules/.bin/sass`), and confirming the check passed clean. Browser-verified
+against the running `development_main` stack with a seeded throwaway pending `VisitSuggestion`:
+computed style for background/border/color on the pending-visit elements matched the written rules
+in both `data-theme="light"` and `data-theme="dark"`; the trivia/spotguessr/consensus HUD pages all
+resolved `--lead`/`--center`/`--trail` to `flex-start`/`center`/`flex-end`; the button gallery's
+`.btn-icon--primary` resolved to the same primary-blue as the page's existing `.btn--primary` and
+swapped to the purple hover accent on `:hover`. `bun run check`'s `bem-modifiers` hook passed; two
+unrelated pre-existing failures in that same run (`doc-line-refs` docs drift, `ruff-format-check` on
+`apps.py`) are untouched by this change.
+
+**45 remain.** This entry has not re-picked a "worth doing first" set for what's left; the next
+session doing so should re-check `_KNOWN_UNSTYLED` rather than trust this sentence's count, since
+the list drifts as other work adds or removes entries.
 
 ---
 
