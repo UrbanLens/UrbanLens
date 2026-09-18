@@ -2131,7 +2131,7 @@ each up to its 110-second soft limit.
 
 ## P100 — Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them
 
-`id: P100` · `status: open` · `updated: 2026-09-10`
+`id: P100` · `status: open` · `updated: 2026-09-18`
 
 `services/map_pins/autocomplete.py:48` `search_local`'s pin branch (`autocomplete.py:87-100`) ORs
 nine `icontains`/leading-wildcard lookups (`name`, `aliases__name`, `description`,
@@ -2140,21 +2140,51 @@ nine `icontains`/leading-wildcard lookups (`name`, `aliases__name`, `description
 spanning `location__wiki`, `parent_pin`, `parent_pin__location`, and finishes with `.distinct()` -
 fired on every keystroke, scoped to `profile=profile` so cost scales with the viewer's own pin
 count. `pg_trgm` is installed (its `CREATE EXTENSION IF NOT EXISTS` appears in every dump per
-`docs/BACKUPS.md`), but no `GinIndex`/trigram index exists anywhere in the migration history
-(confirmed: zero matches for `GinIndex`/`trigram`/`pg_trgm` across
-`dashboard/migrations/*.py`) - a leading-wildcard `icontains` cannot use a plain b-tree index
-regardless, so every one of these OR branches is a sequential scan whether or not `pg_trgm` is
-present. **Measured 2026-09-10, and it is not the next 504.** Against a seeded 10,000-pin profile (with
+`docs/BACKUPS.md`) - a leading-wildcard `icontains` cannot use a plain b-tree index regardless, so
+every one of these OR branches is a sequential scan whether or not `pg_trgm` is present. **The
+"zero trigram indexes anywhere" claim below is now stale for one of the nine fields**:
+`0049_labels_name_upper_trgm_index.py` (2026-09-16, commit `bbc4b3077`) added
+`GinIndex(OpClass(Upper(Cast('name', TextField())), name='gin_trgm_ops'), name='idxdb_label_name_upper_trgm')`
+on `Label.name` - built for the unrelated P123 (cross-account label-scan cost), but it's the exact
+index shape this entry would need for the other eight fields, and it happens to cover one of them.
+
+**Measured 2026-09-10, and it is not the next 504.** Against a seeded 10,000-pin profile (with
 `ANALYZE` run), `search_local` costs 141-217ms per keystroke across four search terms, of which only
 0.070s is SQL across 4 queries; the slowest single query runs in 0.035s and its
 `EXPLAIN (ANALYZE, BUFFERS)` shows 394 buffer hits and 0.794ms actual time. The claim that every OR
 branch is a sequential scan is wrong: the planner serves it with an Incremental Sort off the
 presorted `dashboard_user_pins.id` key under the `Limit`, so it never materialises the full match
-set. The missing trigram index is real and would still be the right thing if this ever grows, but
-adding one now buys a fraction of 70ms at the cost of a migration. Left open as an accurate
-observation, downgraded from a hazard.
+set.
 
-Not fixed. Not measured this session.
+**Re-checked 2026-09-18 with a direct diagnostic, not just re-reading the 2026-09-10 numbers.**
+Seeded a synthetic profile (3,000 non-matching pins + 1 sparse match) in a `TransactionTestCase`
+(plain `TestCase`'s enclosing transaction leaves the seed inserts' row-level trigger events
+pending for the rest of that transaction, and Postgres refuses `CREATE INDEX` on a table with
+pending trigger events - `TransactionTestCase` commits instead of wrapping everything in one
+uncommitted transaction, so this doesn't come up), measured `rows_examined()`
+(`urbanlens.core.tests.explain`, same tool P123's own trigram-index test uses) for a 3-branch
+`name`/`description`/`location__official_name` OR, then added
+`CREATE INDEX ... USING gin (UPPER(name::text) gin_trgm_ops)` on `dashboard_user_pins.name` and
+re-measured against the identical query. Result: **6,002 rows examined before, 6,002 after - no
+change at all.** This isn't a contradiction of the index shape being wrong; it's consistent with
+the 2026-09-10 finding that this query was never sequential-scan-bound to begin with (both figures
+here are explained by a full scan of the two joined tables, 3,001 rows apiece, which an index on
+one filter column inside an OR spanning a join can't shrink - Postgres still has to visit every row
+on the join's other side regardless of what the indexed side finds).
+
+This changes what "adding one now buys a fraction of 70ms" should be weighed against. It is **not**
+being left undone because of migration overhead - a migration is not a cost pre-launch, with
+effectively zero real users, and if this measurably helped it would be worth doing regardless. It's
+being left undone because two independent measurements nine days apart, one against real 2026-09-10
+data at 10x this session's synthetic scale and one a direct before/after `rows_examined` diagnostic
+this session, both show no meaningful scan-cost benefit available at current data volumes for this
+query shape. The missing trigram indexes on the other eight fields are still real and still the
+right fix once pin/wiki volume grows enough to push the planner off the Incremental-Sort-under-Limit
+plan it currently uses - worth revisiting if P100 or a similar autocomplete-latency complaint
+resurfaces at meaningfully larger scale. Left open as an accurate, now twice-measured observation,
+not a hazard.
+
+Not fixed. Re-measured 2026-09-18 (diagnostic only, no code or schema change landed).
 
 ## P105 — A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict
 
