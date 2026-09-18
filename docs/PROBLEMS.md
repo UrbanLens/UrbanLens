@@ -1538,7 +1538,7 @@ media type.
 
 ## P59 — A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing
 
-`id: P59` · `status: open` · `updated: 2026-08-31`
+`id: P59` · `status: open` · `updated: 2026-09-18`
 
 Previously titled "a specific `ae97b86` dev-account thumbnail (`lightbox-associations.webp`) is durably broken, not just racing".
 
@@ -1568,6 +1568,20 @@ backfill (`backfill_image_thumbnails`) or a repointed row to recover.
 
 Didn't chase further (out of scope for Batch 5, and the `e2e-primary` account on this ephemeral dev
 slot is disposable), but worth a look if `vault-photos.spec.ts` keeps failing on this specific test.
+
+**Checked 2026-09-18: the disposable environment is gone, and re-provisioning a fresh one can't
+substitute for it.** `dev_env.py list` no longer shows an `ae97b86` slot - it's been torn down, so
+the specific row this entry names can't be directly re-queried even with the corrected
+`thumbnail__icontains` lookup. Re-provisioning a new ephemeral account and re-running the spec
+wouldn't answer the same question either: the mechanism this entry's leading hypothesis names
+(P58's delete-before-file, then-update-row ordering) was fixed 2026-09-06, so no upload made after
+that date can enter this broken state - only data written before the fix could be, and a fresh
+account has none. A real answer needs a database that actually has pre-2026-09-06 history (staging
+or production), which this diagnostic pass deliberately didn't touch - CLAUDE.local.md treats both
+as production, and a "how many rows are broken" count doesn't justify that on its own for a
+`status: open`, already-explained, low-priority entry. Left open; the concrete next step, if anyone
+wants to spend a production/staging read on it, is a `thumbnail`/`marker_thumbnail`/
+`analysis_thumbnail` sweep cross-checked against whether the named file actually exists in storage.
 
 ## P63 — Adding a third Vault media type means copying ~600 lines for ~90 lines of difference
 
