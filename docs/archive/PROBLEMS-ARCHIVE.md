@@ -17122,3 +17122,49 @@ this entry also named but that commit `1696f9d0f` did not touch.**
 still compares against nothing, for a related but distinct reason (a regex over the wrong file,
 not an `assertIn` against a body) - carved out to its own entry, **P129**, rather than silently
 dropped when this one closed.
+
+## RESOLVED 2026-09-18: The map-document vocabulary test read the template `23a861765` had already emptied, with a quote character P92 had already replaced
+
+`id: P129` · `status: fixed` · `resolved: 2026-09-18`
+
+**What was open.**
+`test_map_document_head_reads_the_vocabulary.py::TheDocumentHeadTests::test_the_map_page_reads_every_kind_of_line_the_document_sends`
+built its `read` vocabulary set with `re.findall(r"obj\.t === '(\w+)'", MAP_TEMPLATE.read_text())`
+against `templates/dashboard/pages/map/index.html`. Commit `23a861765` had moved the map program's
+script out of that template entirely, to
+`src/urbanlens/dashboard/frontend/ts/entries/map-page.ts`, so the pattern matched **0 times** there
+regardless of quoting - the test compared `sent` against an empty `read` and could not have failed
+on a real vocabulary mismatch. P92's TypeScript migration compounded it: even after repointing the
+path, the code's `obj.t === '...'` single-quote literals had become `obj.t === "..."` double
+quotes, so the original single-quote-only regex would still have matched zero times against the
+right file.
+
+**The fix**, commit `8778119a8` ("fix: P129 - repoint map-document vocabulary test at
+map-page.ts"), touches only
+`src/urbanlens/dashboard/tests/hypothesis/test_map_document_head_reads_the_vocabulary.py:30,127`.
+The module constant `MAP_TEMPLATE` (a `Path` to the stale template) was renamed to
+`MAP_PAGE_SCRIPT` and repointed at `map-page.ts`; the regex became the quote-agnostic
+`r"""obj\.t === ['"](\w+)['"]"""`, matching either quote style so it does not go stale again the
+next time the TS source's formatting changes.
+
+**Verification.** The fixing session (per its commit message) took a TDD red baseline before
+editing - `sent - read == {'end', 'head', 'labels', 'pin'}`, matching this entry's own prediction
+exactly - then got green after, with the file's other 4 tests unaffected.
+
+This closing session independently re-ran a subset rather than trusting that report alone: the
+full file in `urbanlens_development_main_test_runner` (the `_app` container has no DB-create
+privilege and errors `psycopg2.errors.InsufficientPrivilege` on any DB-touching test, confirmed
+again here) gives **5 passed in 222.77s**, unit=test file, n=5 - not just the named test, so the
+rename did not break its four siblings. `uv run ruff check` on the file: clean. `docker exec
+urbanlens_development_main_app python -m mypy` on the file (after `bin/sync_app.sh`,
+md5sum-confirmed matching): **one** error, at
+`test_map_document_head_reads_the_vocabulary.py:62`, `"_MonkeyPatchedWSGIResponse" has no
+attribute "streaming_content"` in `_lines()` - unrelated to this fix (which touches only lines 30
+and 127) and out of scope.
+
+Not independently re-run by this closing session: the red-baseline reproduction (would require
+reverting the fix), and pre-commit - both taken from the fixing session's own report rather than
+re-verified here.
+
+`grep -rn MAP_TEMPLATE src/` finds nothing outside this archive entry's own prose - no other file
+cited the old name or the stale template path.

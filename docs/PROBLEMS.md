@@ -2572,35 +2572,6 @@ Not recommended: relying on staging's limits alone. Lower limits bound what stag
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
 
-## P129 — A map-document vocabulary test's regex targets a template line `23a861765` moved out and a quoting style the code never used, so it compares against nothing
-
-`id: P129` · `status: open` · `updated: 2026-09-17`
-
-Split off from P124 when that entry was closed (2026-09-17): P124's seven named tests are fixed
-(see `archive/PROBLEMS-ARCHIVE.md`), but this eighth one, found incidentally alongside them on
-2026-09-16, was not touched by that fix and remains broken.
-
-`test_map_document_head_reads_the_vocabulary.py::TheDocumentHeadTests::test_the_map_page_reads_every_kind_of_line_the_document_sends`
-fails with `sent - read == {'end', 'head', 'labels', 'pin'}` - its `read` set is *empty*. It builds
-`read` by running `re.findall(r"obj\.t === '(\w+)'", MAP_TEMPLATE.read_text())` over
-`templates/dashboard/pages/map/index.html`, and that pattern has occurred **0 times** there since
-`23a861765` moved the map program's script out of the template. `git log -S "obj.t === 'pin'"` on
-the template lands on that same commit. So the test asserts the document and the page agree about
-line kinds while actually comparing against nothing, and would keep passing if they disagreed.
-
-**Doubly stale as of P92 (2026-09-17), verified directly against the current tree.** The code the
-regex should be reading moved a second time, from `frontend/static/js/map-page.js` (P124's
-originally-suggested target) into `src/urbanlens/dashboard/frontend/ts/entries/map-page.ts` -
-`grep -n 'obj\.t === ' src/urbanlens/dashboard/frontend/ts/entries/map-page.ts` finds it at line
-1764 and three more lines nearby. But repointing `MAP_TEMPLATE` at that file is not enough on its
-own: P92's TypeScript migration also normalised the file's string quoting, so the four
-occurrences are now `obj.t === "head"` (double quotes) - the regex's single-quote literal
-(`'(\w+)'`) would still match zero times even reading the right file. Fixing this needs both the
-path and the quote character updated together, or a quote-agnostic pattern.
-
-Not fixed. Not re-measured beyond the source reads cited above (2026-09-16 test run, 2026-09-17
-grep against current `map-page.ts`).
-
 ## P125 — The population capacity harness collapses at 500 concurrent users on the app container's CPU; production now has a 4-core override to deploy, not yet applied or re-measured
 
 `id: P125` · `status: open` · `updated: 2026-09-17`
