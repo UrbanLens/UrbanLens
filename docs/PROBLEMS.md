@@ -2202,17 +2202,20 @@ noted below, since the point was to isolate the parse's own cost):
 - **100 MB / 247,959 placemarks: did not complete.** This run was made directly in the `app`
   container (2 GiB `mem_limit`, not `media-worker`'s 3 GB - see the deviation note below) so its
   memory could be watched with `docker stats` as it ran. Usage climbed from roughly 615 MB to 1.78
-  GiB - 89% of that container's own limit - within about 30 seconds and was still rising, past what
-  the 10 MB ratio alone would have predicted for completion. It was killed at that point rather than
-  let run further, since this is the live development container, not a disposable one.
+  GiB - 89% of that container's own limit - over at least two minutes (the shell call driving it hit
+  its own 120-second foreground timeout before this finished) and was still rising when it was
+  killed. The partial delta by that point - about 1.2 GB for a 100 MB input, a 12x ratio - had not
+  yet caught up to the 10 MB run's 15.4x, but a completed parse at that same ratio would land near
+  2.1 GB total, past this container's entire 2 GiB budget on its own. It was killed at that point
+  rather than let run further, since this is the live development container, not a disposable one.
 
-Extrapolating from the completed 10 MB point alone - and the 100 MB run already trending past it - a
-full 1 GB entry, the actual `_MAX_SINGLE_FILE_BYTES` cap, plausibly costs on the order of 10-15 GB of
-peak RSS to parse. `media-worker` has a 3 GB `mem_limit` shared across `--concurrency=2` workers,
-several times smaller than that. A single upload anywhere near the 1 GB cap would very likely exceed
-the container's entire memory budget and get OOM-killed by the kernel outright - not a slow parse, a
-crashed worker - and with two concurrency slots sharing one cgroup limit, an unrelated concurrent job
-would be collateral damage.
+Extrapolating from the completed 10 MB point - a ratio the unfinished 100 MB run's own trajectory is
+consistent with, not in tension with - a full 1 GB entry, the actual `_MAX_SINGLE_FILE_BYTES` cap,
+plausibly costs on the order of 10-15 GB of peak RSS to parse. `media-worker` has a 3 GB `mem_limit`
+shared across `--concurrency=2` workers, several times smaller than that. A single upload anywhere
+near the 1 GB cap would very likely exceed the container's entire memory budget and get OOM-killed
+by the kernel outright - not a slow parse, a crashed worker - and with two concurrency slots sharing
+one cgroup limit, an unrelated concurrent job would be collateral damage.
 
 Two things keep this from being the definitive number: (1) the 1 GB case itself was never run - after
 the 100 MB trajectory, continuing to push a shared, live container toward its limit stopped being a
