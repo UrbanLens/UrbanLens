@@ -246,6 +246,9 @@ body.page-games {
         gap: $space-sm;
         min-width: 0;
 
+        // Explicit rather than relying on flex's own initial value, so the three
+        // positional groups (lead/center/trail) read as a deliberate, complete set.
+        &--lead { justify-content: flex-start; }
         &--center { justify-content: center; }
         &--trail { justify-content: flex-end; }
     }

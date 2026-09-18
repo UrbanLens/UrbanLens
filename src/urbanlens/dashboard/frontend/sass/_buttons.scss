@@ -247,6 +247,16 @@ input[type="submit"] {
 }
 
 .btn-icon {
+	&--primary {
+		color: var(--ul-primary-color);
+
+		&:hover,
+		&:focus {
+			background-color: var(--ul-button-hover-bg);
+			color: var(--ul-button-hover-text);
+		}
+	}
+
 	&--danger {
 
 		&:hover {

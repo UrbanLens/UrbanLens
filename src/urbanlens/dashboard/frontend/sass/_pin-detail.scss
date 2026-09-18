@@ -336,6 +336,14 @@
     padding: .25rem 0;
     min-height: 15rem;
 
+    // The pending-suggestions list sits above the confirmed one and is never
+    // paginated, so it doesn't want the adaptive-pagination reserve above.
+    &--pending {
+        min-height: 0;
+        margin-bottom: .5rem;
+        border-bottom: 1px solid var(--ul-surface-border);
+    }
+
     .visit-item {
         display: flex;
         align-items: flex-start;
@@ -350,6 +358,12 @@
 
         &:hover {
             background: var(--ul-hover-bg);
+        }
+
+        &--pending {
+            background: color-mix(in srgb, $color-amber-500 8%, transparent);
+            border-left: 3px solid $color-amber-500;
+            padding-left: calc(1rem - 3px);
         }
     }
 
@@ -419,6 +433,11 @@
         display: inline-flex;
         align-items: center;
         gap: 2px;
+
+        &--pending {
+            color: $color-amber-700;
+            font-weight: 600;
+        }
     }
 
     // Rendered from Markdown via the same.article-body typography as the article/wiki editor.
