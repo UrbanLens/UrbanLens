@@ -282,6 +282,8 @@ export interface MapLayersInstance {
     getState: () => MapLayersState;
     /** Currently selected base layer key. */
     baseKey: () => BaseLayerKey;
+    /** Releases every listener this instance registered outside the map itself (document, matchMedia, context menu) - call when tearing down a per-dialog/per-panel map that outlives a single page load. */
+    destroy: () => void;
 }
 
 const PANEL_TRANSITION_MS = 220;
@@ -354,16 +356,21 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // Re-apply the topo filter when the topo layer itself is toggled.
-    map.on("layeradd layerremove", (e: L.LayerEvent) => {
+    const onTopoLayerChange = (e: L.LayerEvent): void => {
         if (e.layer === topographicLayer) applyTopoFilter();
-    });
+    };
+    map.on("layeradd layerremove", onTopoLayerChange);
 
     // In system mode, re-sync whenever the OS preference changes.
+    let colorSchemeQuery: MediaQueryList | null = null;
+    let onColorSchemeChange: (() => void) | null = null;
     if (darkMode === "system") {
-        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+        colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+        onColorSchemeChange = () => {
             syncBaseLayer();
             syncButtons();
-        });
+        };
+        colorSchemeQuery.addEventListener("change", onColorSchemeChange);
     }
 
     // -- State / persistence -------------------------------------------------------
@@ -418,16 +425,17 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         return parts.join(" · ");
     }
 
-    if (opts.onAttribution) {
-        // A vector overlay can add/remove thousands of paths in one turn.
-        let attributionFrame: number | null = null;
-        map.on("layeradd layerremove", () => {
-            if (attributionFrame !== null) return;
-            attributionFrame = window.requestAnimationFrame(() => {
-                attributionFrame = null;
-                opts.onAttribution!(attributionText());
-            });
+    // A vector overlay can add/remove thousands of paths in one turn.
+    let attributionFrame: number | null = null;
+    const onAttributionLayerChange = (): void => {
+        if (attributionFrame !== null) return;
+        attributionFrame = window.requestAnimationFrame(() => {
+            attributionFrame = null;
+            opts.onAttribution!(attributionText());
         });
+    };
+    if (opts.onAttribution) {
+        map.on("layeradd layerremove", onAttributionLayerChange);
     }
 
     // -- Tile loading visual feedback -------------------------------------------------
@@ -616,11 +624,12 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         else openPanel();
     }
 
+    const onDocumentClick = (e: MouseEvent): void => {
+        if (root && !root.contains(e.target as Node)) closePanel();
+    };
     if (toggleBtn) {
         toggleBtn.addEventListener("click", togglePanel);
-        document.addEventListener("click", (e) => {
-            if (root && !root.contains(e.target as Node)) closePanel();
-        });
+        document.addEventListener("click", onDocumentClick);
     }
 
     // -- Button wiring ---------------------------------------------------------------------
@@ -677,9 +686,8 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
 
     // Every map that uses this engine gets the same right-click menu unless
     // the page has already claimed contextmenu for something else.
-    if (opts.contextMenu !== false) {
-        bindMapContextMenu(map, typeof opts.contextMenu === "object" ? opts.contextMenu : {});
-    }
+    const unbindContextMenu =
+        opts.contextMenu !== false ? bindMapContextMenu(map, typeof opts.contextMenu === "object" ? opts.contextMenu : {}) : null;
 
     return {
         setBase,
@@ -699,6 +707,24 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         syncButtons,
         getState,
         baseKey,
+        destroy: () => {
+            map.off("layeradd layerremove", onTopoLayerChange);
+            if (opts.onAttribution) map.off("layeradd layerremove", onAttributionLayerChange);
+            if (attributionFrame !== null) {
+                window.cancelAnimationFrame(attributionFrame);
+                attributionFrame = null;
+            }
+            if (colorSchemeQuery && onColorSchemeChange) colorSchemeQuery.removeEventListener("change", onColorSchemeChange);
+            if (toggleBtn) {
+                toggleBtn.removeEventListener("click", togglePanel);
+                document.removeEventListener("click", onDocumentClick);
+            }
+            if (panelCloseTimer) {
+                clearTimeout(panelCloseTimer);
+                panelCloseTimer = null;
+            }
+            unbindContextMenu?.();
+        },
     };
 }
 

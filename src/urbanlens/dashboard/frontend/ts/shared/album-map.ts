@@ -7,7 +7,7 @@ declare const L: typeof import("leaflet");
 import { sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
 import { showMapContextMenu } from "./map-context-menu";
-import { createMapLayers } from "./map-layers";
+import { createMapLayers, type MapLayersInstance } from "./map-layers";
 import { createPhotoMarkerLayer, type PhotoMapItem, type PhotoMarkerLayer } from "./photo-map";
 import { tilesForImage } from "./photo-tile";
 
@@ -18,6 +18,7 @@ const FALLBACK_ZOOM = 15;
 
 interface AlbumMapHandle {
     map: L.Map;
+    layers: MapLayersInstance;
     markers: PhotoMarkerLayer;
 }
 
@@ -85,6 +86,7 @@ async function hideFromMap(imageId: number): Promise<void> {
 export function destroyAlbumMap(): void {
     if (!current) return;
     current.markers.destroy();
+    current.layers.destroy();
     current.map.remove();
     current = null;
     if (window._albumSyncMapHidden === syncAlbumMapHidden) delete window._albumSyncMapHidden;
@@ -112,7 +114,7 @@ export function initAlbumMap(): void {
 
     const map = L.map(container, { scrollWheelZoom: false, attributionControl: false }).setView(fallback, FALLBACK_ZOOM);
 
-    createMapLayers(map, {
+    const layers = createMapLayers(map, {
         root: document.getElementById("album-map-layers"),
         defaultBase: "remember",
         storageKey: "ul-album-map-layers",
@@ -161,7 +163,7 @@ export function initAlbumMap(): void {
         map.setView(bounds.getCenter(), SINGLE_PHOTO_ZOOM);
     }
 
-    current = { map, markers };
+    current = { map, layers, markers };
     window._albumSyncMapHidden = syncAlbumMapHidden;
     // The section was hidden until the moment this ran; Leaflet measured a
     // zero-height container, so re-measure once the browser has laid it out.
