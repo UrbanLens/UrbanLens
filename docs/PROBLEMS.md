@@ -1709,7 +1709,7 @@ existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
 
 ## P69 — Unbounded lists across the site: 9 of 11 fixed; one argued against by measurement, one group deliberately left
 
-`id: P69` · `status: open` · `updated: 2026-09-08`
+`id: P69` · `status: open` · `updated: 2026-09-18`
 
 Previously titled "unbounded lists with no pagination, found across most of the site".
 
@@ -1857,23 +1857,33 @@ shared with a mutating action whose pagination links would otherwise point at it
   item on the list to serve both the map and one page of rows, behind a comment saying that cost no
   more than the unpaginated render - true only while the map genuinely needed all of them.
 
-- **Undo history, Safety check-ins overview, "view all friends" page, DM conversation list,
-  achievement catalogue, and Organize's Lists/Filters tabs** all follow the identical pattern with
-  lower realistic ceilings or lighter per-row templates today. **Deliberately left, 2026-09-06**:
-  each is bounded by something other than account age - the achievement catalogue by how many awards
-  the *site* defines, undo history by its 7-day window, the friends list and the conversation list
-  by friend count - and paginating a chat sidebar or an awards catalogue trades a theoretical
-  ceiling for worse browsing. Worth revisiting with a `RenderTimeScalingMixin` subclass each, which
-  would answer "is a row cheap next to the page" with a number instead of a guess:
-  `controllers/undo.py:58-112`; `controllers/safety.py:314-431` (no auto-delete by default -
-  `SafetyPreference.auto_delete_after_days` is nullable and defaults to "never"); 
-  `controllers/friendship.py:451-477` (`SiteSettings.max_friends_per_user` defaults to 0/unlimited);
-  `controllers/direct_messages.py:710-734` (query count already proven flat by
+- **Safety check-ins overview, "view all friends" page, DM conversation list, achievement
+  catalogue, and Organize's Lists/Filters tabs** all follow the identical pattern with lower
+  realistic ceilings or lighter per-row templates today. **Deliberately left, 2026-09-06**: each is
+  bounded by something other than account age - the achievement catalogue by how many awards the
+  *site* defines, the friends list and the conversation list by friend count - and paginating a chat
+  sidebar or an awards catalogue trades a theoretical ceiling for worse browsing. Worth revisiting
+  with a `RenderTimeScalingMixin` subclass each, which would answer "is a row cheap next to the
+  page" with a number instead of a guess: `controllers/safety.py:314-431` (no auto-delete by
+  default - `SafetyPreference.auto_delete_after_days` is nullable and defaults to "never");
+  `controllers/friendship.py:451-477` (`SiteSettings.max_friends_per_user` defaults to
+  0/unlimited); `controllers/direct_messages.py:710-734` (query count already proven flat by
   `ConversationListQueryScalingTests`, but that test can't see render-time cost, and the list is
   re-fetched on nearly every DM sent anywhere in the app); `controllers/achievements.py:98-113`; and
   `controllers/pin_lists.py:214-246` (also structurally invisible to `test_route_query_scaling.py`'s
   generic sweep, which hits `lists.list` without an `HX-Request` header and only ever exercises its
   redirect branch).
+
+  ~~`controllers/undo.py:58-112` (undo history, bounded by its 7-day window) was on this list~~
+  **measured 2026-09-18, not just theorized: it's fine.** `test_undo_history_render_scaling.py`'s
+  `UndoHistoryRowCostTests` seeds 3 then 10 more active, undoable `UndoAction` rows on top of a
+  baseline empty render and asserts one row's marginal cost stays under 10% of the page's own
+  zero-row render time - it passed. The panel's per-row template (`undo_history.html`) only touches
+  plain deferred-payload fields (`model_label`, `object_repr`, `kind`, `created`, `expires_at`,
+  `uuid`), matching `test_undo_history_payload.py`'s existing proof that the query itself defers the
+  one expensive column. The pass doesn't hand back exact milliseconds - `assert_row_cost_bounded`
+  only prints numbers when it fails - so what's recorded here is the verified conclusion (bounded,
+  not paginated, and now checked rather than assumed), not invented figures.
 
   **Corrected 2026-09-08:** this bullet previously also listed `controllers/pin_lists.py:155-176`
   (`_items_map_data`) as deliberately left uncapped, contradicting the "...and the pin-list overview
