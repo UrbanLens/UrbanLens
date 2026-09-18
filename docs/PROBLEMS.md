@@ -1862,16 +1862,11 @@ shared with a mutating action whose pagination links would otherwise point at it
   per-row templates today. **Deliberately left, 2026-09-06**: each is bounded by something other
   than account age - the achievement catalogue by how many awards the *site* defines, the
   conversation list by friend count - and paginating a chat sidebar or an awards catalogue trades a
-  theoretical ceiling for worse browsing. Worth revisiting with a `RenderTimeScalingMixin` subclass
-  each, which would answer "is a row cheap next to the page" with a number instead of a guess:
-  `controllers/safety.py:314-431` (no auto-delete by default -
-  `SafetyPreference.auto_delete_after_days` is nullable and defaults to "never");
-  `controllers/direct_messages.py:710-734` (query count already proven flat by
-  `ConversationListQueryScalingTests`, but that test can't see render-time cost, and the list is
-  re-fetched on nearly every DM sent anywhere in the app); `controllers/achievements.py:98-113`;
-  and `controllers/pin_lists.py:214-246` (also structurally invisible to
-  `test_route_query_scaling.py`'s generic sweep, which hits `lists.list` without an `HX-Request`
-  header and only ever exercises its redirect branch).
+  theoretical ceiling for worse browsing. ~~Worth revisiting with a `RenderTimeScalingMixin`
+  subclass each, which would answer "is a row cheap next to the page" with a number instead of a
+  guess: `controllers/safety.py:314-431`, `controllers/direct_messages.py:710-734`,
+  `controllers/achievements.py:98-113`, `controllers/pin_lists.py:214-246`.~~ **All four measured
+  2026-09-18 - see below.**
 
   ~~`controllers/undo.py:58-112` (undo history, bounded by its 7-day window) was on this list~~
   **measured 2026-09-18, not just theorized: it's fine.** `test_undo_history_render_scaling.py`'s
@@ -1892,6 +1887,39 @@ shared with a mutating action whose pagination links would otherwise point at it
   with no N+1, but *decrypting* it is real per-row CPU work a query-count test alone would not
   catch) - worth seeding on purpose rather than leaving it null, since a null field skips the
   decrypt path entirely and would measure nothing.
+
+  ~~`controllers/safety.py:314-431` (no auto-delete by default -
+  `SafetyPreference.auto_delete_after_days` is nullable and defaults to "never") was on this
+  list~~ **measured 2026-09-18, also fine.** `test_safety_home_render_scaling.py`'s
+  `SafetyHomeRowCostTests` seeds 3 then 9 more check-ins, each with two emergency contacts, and
+  passed the same 10%-of-baseline budget. The per-row card (`_checkin_card.html`) only reads plain
+  fields and boolean properties (`status`, `title`, `checkin_by`, `contacts_locked`,
+  `contact.display_name`) - none of it encrypted, unlike the friendship.py row above - so this
+  confirms cheap template work rather than hiding a decrypt cost behind an all-null seed.
+
+  ~~`controllers/direct_messages.py:710-734` (query count already proven flat by
+  `ConversationListQueryScalingTests`, but that test can't see render-time cost) was on this
+  list~~ **measured 2026-09-18, also fine.** `test_conversation_list_render_scaling.py`'s
+  `ConversationListRowCostTests` seeds 3 then 9 more conversations (one message each way) and
+  passed the same budget. Each row's `display_identity_for` -> `resolve_visible_identity` still
+  calls `reverse()` per row even with the viewer's visible-profile set pre-resolved to avoid a
+  query per row - that per-row Python cost is exactly what a query-count test can't see, and it
+  stayed cheap.
+
+  ~~`controllers/achievements.py:98-113` was on this list~~ **measured 2026-09-18, also fine.**
+  `test_achievement_catalogue_render_scaling.py`'s `AchievementCatalogueRowCostTests` seeds 3 then
+  9 more achievements, deliberately all on the same metric (`pins_created`) rather than a random
+  mix - `progress_for_profile`'s `compute_values` computes each *distinct* metric once for the
+  whole catalogue, so holding the metric fixed isolates the per-row list/template cost from the
+  separate, real cost of a brand-new metric, which this test does not claim to measure.
+
+  ~~`controllers/pin_lists.py:214-246` (also structurally invisible to
+  `test_route_query_scaling.py`'s generic sweep, which hits `lists.list` without an `HX-Request`
+  header and only ever exercises its redirect branch) was on this list~~ **measured 2026-09-18,
+  also fine.** `test_pin_lists_panel_render_scaling.py`'s `PinListsPanelRowCostTests` passes
+  `HTTP_HX_REQUEST="true"` through `assert_row_cost_bounded`'s `**extra` to reach the real panel
+  render instead of the redirect branch, seeds 3 then 9 more of the profile's lists, and passed
+  the same budget.
 
   **Corrected 2026-09-08:** this bullet previously also listed `controllers/pin_lists.py:155-176`
   (`_items_map_data`) as deliberately left uncapped, contradicting the "...and the pin-list overview
