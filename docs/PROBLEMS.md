@@ -1062,7 +1062,7 @@ the list drifts as other work adds or removes entries.
 
 ## P37 — A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured
 
-`id: P37` · `status: open` · `updated: 2026-09-14`
+`id: P37` · `status: open` · `updated: 2026-09-18`
 
 Previously titled "A 2026-08-14 coverage run found 100 write handlers no test executed; all but one
 of its top roster are tested now", before that "100 write handlers totalling 1,217 statements never execute under the test suite",
@@ -1098,6 +1098,15 @@ request to its route, not by re-running coverage, so the other ~90 handlers are 
 
 "Exercised" means a test sends a request that reaches the handler. It does not mean every branch is
 asserted. `docs/reports/2026-08-14-view-coverage.md` (X12) stays as the dated measurement.
+
+**2026-09-18, outside the dated roster:** `controllers/userprofile.py`'s `ProfileNoteView.post`,
+`ProfileNoteEditView.post` and `ProfileNoteDeleteView.post` also had zero coverage - a later ad-hoc
+check, not a re-run of the 2026-08-14 measurement. `test_profile_notes.py` now exercises all three:
+content is created only when non-empty, a profile can't annotate itself, and - the real behavior
+worth a regression test - `ProfileNote.objects.for_pair(author, subject)` keeps edit/delete scoped
+to the acting author's own note about that specific subject, so neither another author's note about
+the same subject nor the same author's note about a *different* subject is reachable through the
+wrong URL.
 
 ---
 
