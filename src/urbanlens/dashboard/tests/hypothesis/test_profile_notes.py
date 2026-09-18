@@ -108,3 +108,13 @@ class DeleteTests(_ProfileNoteCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(ProfileNote.objects.filter(pk=others_note.pk).exists())
+
+    def test_cannot_delete_a_note_about_a_different_subject_via_the_wrong_url(self) -> None:
+        other_subject = baker.make(User).profile
+        note_about_other = ProfileNote.objects.create(author=self.author, subject=other_subject, content="Elsewhere.")
+
+        # note_id is real and belongs to this author - but the subject in the URL doesn't match.
+        response = self._delete(note_about_other, subject=self.subject)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(ProfileNote.objects.filter(pk=note_about_other.pk).exists())
