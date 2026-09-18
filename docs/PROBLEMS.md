@@ -1857,22 +1857,21 @@ shared with a mutating action whose pagination links would otherwise point at it
   item on the list to serve both the map and one page of rows, behind a comment saying that cost no
   more than the unpaginated render - true only while the map genuinely needed all of them.
 
-- **Safety check-ins overview, "view all friends" page, DM conversation list, achievement
-  catalogue, and Organize's Lists/Filters tabs** all follow the identical pattern with lower
-  realistic ceilings or lighter per-row templates today. **Deliberately left, 2026-09-06**: each is
-  bounded by something other than account age - the achievement catalogue by how many awards the
-  *site* defines, the friends list and the conversation list by friend count - and paginating a chat
-  sidebar or an awards catalogue trades a theoretical ceiling for worse browsing. Worth revisiting
-  with a `RenderTimeScalingMixin` subclass each, which would answer "is a row cheap next to the
-  page" with a number instead of a guess: `controllers/safety.py:314-431` (no auto-delete by
-  default - `SafetyPreference.auto_delete_after_days` is nullable and defaults to "never");
-  `controllers/friendship.py:451-477` (`SiteSettings.max_friends_per_user` defaults to
-  0/unlimited); `controllers/direct_messages.py:710-734` (query count already proven flat by
+- **Safety check-ins overview, DM conversation list, achievement catalogue, and Organize's
+  Lists/Filters tabs** all follow the identical pattern with lower realistic ceilings or lighter
+  per-row templates today. **Deliberately left, 2026-09-06**: each is bounded by something other
+  than account age - the achievement catalogue by how many awards the *site* defines, the
+  conversation list by friend count - and paginating a chat sidebar or an awards catalogue trades a
+  theoretical ceiling for worse browsing. Worth revisiting with a `RenderTimeScalingMixin` subclass
+  each, which would answer "is a row cheap next to the page" with a number instead of a guess:
+  `controllers/safety.py:314-431` (no auto-delete by default -
+  `SafetyPreference.auto_delete_after_days` is nullable and defaults to "never");
+  `controllers/direct_messages.py:710-734` (query count already proven flat by
   `ConversationListQueryScalingTests`, but that test can't see render-time cost, and the list is
-  re-fetched on nearly every DM sent anywhere in the app); `controllers/achievements.py:98-113`; and
-  `controllers/pin_lists.py:214-246` (also structurally invisible to `test_route_query_scaling.py`'s
-  generic sweep, which hits `lists.list` without an `HX-Request` header and only ever exercises its
-  redirect branch).
+  re-fetched on nearly every DM sent anywhere in the app); `controllers/achievements.py:98-113`;
+  and `controllers/pin_lists.py:214-246` (also structurally invisible to
+  `test_route_query_scaling.py`'s generic sweep, which hits `lists.list` without an `HX-Request`
+  header and only ever exercises its redirect branch).
 
   ~~`controllers/undo.py:58-112` (undo history, bounded by its 7-day window) was on this list~~
   **measured 2026-09-18, not just theorized: it's fine.** `test_undo_history_render_scaling.py`'s
@@ -1884,6 +1883,15 @@ shared with a mutating action whose pagination links would otherwise point at it
   one expensive column. The pass doesn't hand back exact milliseconds - `assert_row_cost_bounded`
   only prints numbers when it fails - so what's recorded here is the verified conclusion (bounded,
   not paginated, and now checked rather than assumed), not invented figures.
+
+  ~~`controllers/friendship.py:451-477` (the "view all friends" page, bounded by friend count) was
+  on this list~~ **measured 2026-09-18, also fine.** `test_friends_page_render_scaling.py`'s
+  `FriendsPageRowCostTests` seeds 3 then 9 more accepted `Friendship` rows, each to a profile with a
+  populated `area` field, and passed the same 10%-of-baseline budget. `area` is an
+  `EncryptedTextField` (`services/social/connections.py`'s `get_connections` selects it in one query
+  with no N+1, but *decrypting* it is real per-row CPU work a query-count test alone would not
+  catch) - worth seeding on purpose rather than leaving it null, since a null field skips the
+  decrypt path entirely and would measure nothing.
 
   **Corrected 2026-09-08:** this bullet previously also listed `controllers/pin_lists.py:155-176`
   (`_items_map_data`) as deliberately left uncapped, contradicting the "...and the pin-list overview
