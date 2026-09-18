@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.map_pins import document as map_document
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 
-MAP_TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "dashboard" / "pages" / "map" / "index.html"
+MAP_PAGE_SCRIPT = Path(__file__).resolve().parents[2] / "frontend" / "ts" / "entries" / "map-page.ts"
 
 MORE_PINS = 25
 
@@ -124,6 +124,6 @@ class TheDocumentHeadTests(TestCase):
         self._pin_with([baker.make(Label, profile=baker.make(User).profile, kind="tag", name="Carried over")])
 
         sent = {line["t"] for line in self._lines()}
-        read = set(re.findall(r"obj\.t === '(\w+)'", MAP_TEMPLATE.read_text()))
+        read = set(re.findall(r"""obj\.t === ['"](\w+)['"]""", MAP_PAGE_SCRIPT.read_text()))
 
         self.assertEqual(sent - read, set())
