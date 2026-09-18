@@ -1490,23 +1490,27 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
 
-**Re-attempted 2026-09-18, on this checkout's `development_main` dev stack: the API key was never
-actually the blocker, and one existing claim in this entry needed correcting.**
+**Re-attempted 2026-09-18, on this checkout's `development_main` dev stack: "no key configured" was
+never actually the blocker, and one existing claim in this entry needed correcting.**
 
-A real key is configured (`UL_GOOGLE_PUBLIC_API_KEY`/`UL_GOOGLE_UNRESTRICTED_API_KEY`, both wired
-through `settings.google_public_api_key`/`google_unrestricted_api_key` and confirmed non-empty), so
-the "needs a valid key" framing above is stale for this environment - it has one. What actually
-blocked a full re-measurement of the Street View embed and Maps JS runtime imagery is unrelated to
-COEP or to the key: `pin.street_view`/`pin.satellite_view`
-(`controllers/pin.py::_render_media_carousel`) poll a placeholder until a Celery task warms the
-provider cache for that pin's coordinates (`panel_sources()[service_key].is_ready(pin)`), and this
-checkout's running containers (`docker ps -a`) include none of `docker-compose.yml`'s
-`celery-worker`, `celery-worker-bulk`, `celery-worker-panels`, or `celery-beat` - only
-`celery_metrics` (a metrics exporter, not a task consumer). The task queues and nothing drains it,
-so the panel polls forever - a property of which containers happen to be up on this dev slot right
-now, not a bug in the panel or the COEP work. Left unmeasured again, but for a documented and
-actionable reason instead of a stale one: starting `celery-worker-panels` on this stack (not done
-here - it wasn't this checkout's call to make unprompted) is what the next attempt needs, not a key.
+A key is configured (`UL_GOOGLE_PUBLIC_API_KEY`/`UL_GOOGLE_UNRESTRICTED_API_KEY`, both wired
+through `settings.google_public_api_key`/`google_unrestricted_api_key`, confirmed non-empty and in
+the right format for a real Google API key - `AIza`-prefixed, 39 characters). Whether it's *valid*
+for these two specific APIs (unexpired, unrestricted to the wrong referrers/APIs) is still untested
+- the attempt below never got far enough to make that call. What it does settle is narrower but
+still useful: this environment isn't missing a key entirely, which the "needs a valid key" framing
+above could be read as implying. What actually blocked a full re-measurement of the Street View
+embed and Maps JS runtime imagery is unrelated to COEP or to the key either way:
+`pin.street_view`/`pin.satellite_view` (`controllers/pin.py::_render_media_carousel`) poll a
+placeholder until a Celery task warms the provider cache for that pin's coordinates
+(`panel_sources()[service_key].is_ready(pin)`), and this checkout's running containers
+(`docker ps -a`) include none of `docker-compose.yml`'s `celery-worker`, `celery-worker-bulk`,
+`celery-worker-panels`, or `celery-beat` - only `celery_metrics` (a metrics exporter, not a task
+consumer). The task queues and nothing drains it, so the panel polls forever - a property of which
+containers happen to be up on this dev slot right now, not a bug in the panel or the COEP work.
+Left unmeasured again, but for a documented and actionable reason instead of a stale one: starting
+`celery-worker-panels` on this stack (not done here - it wasn't this checkout's call to make
+unprompted) is what the next attempt needs first, whatever it then finds about the key.
 
 **One thing was measured, and it corrects a specific claim in the "measured in a browser... zero
 violation reports" paragraph above.** That 2026-09-06 measurement listened for
