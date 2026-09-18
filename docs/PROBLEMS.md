@@ -1876,7 +1876,7 @@ shared with a mutating action whose pagination links would otherwise point at it
 
   ~~`controllers/undo.py:58-112` (undo history, bounded by its 7-day window) was on this list~~
   **measured 2026-09-18, not just theorized: it's fine.** `test_undo_history_render_scaling.py`'s
-  `UndoHistoryRowCostTests` seeds 3 then 10 more active, undoable `UndoAction` rows on top of a
+  `UndoHistoryRowCostTests` seeds 3 then 9 more active, undoable `UndoAction` rows on top of a
   baseline empty render and asserts one row's marginal cost stays under 10% of the page's own
   zero-row render time - it passed. The panel's per-row template (`undo_history.html`) only touches
   plain deferred-payload fields (`model_label`, `object_repr`, `kind`, `created`, `expires_at`,
