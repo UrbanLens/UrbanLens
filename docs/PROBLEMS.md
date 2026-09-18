@@ -1135,6 +1135,21 @@ refused - and `MessageDeleteTests` covers the sender-only `?scope=everyone` vs. 
 an unknown message id refused with 404), so a sender cannot hide a message only for themselves
 and a recipient cannot delete it for the sender too.
 
+**2026-09-18, two more in the same file:** the same survey named `GroupsView.post` (route
+`messages.groups`, create a group) and `GroupDetailView.patch` (route `messages.groups.detail`,
+rename a group) as further candidates - checking the whole test tree, not just
+`test_external_api_messaging.py`, mattered here: a sibling file, `test_external_api_group_controls.py`,
+already covers `GroupMessageReactionView`, `GroupMessageDetailView.delete`, `GroupLeaveView`,
+`GroupMuteView`, and `ConversationMuteView` in full, which a single-file grep would have missed.
+`messages.groups` (POST) and `messages.groups.detail` (PATCH) genuinely had zero coverage anywhere,
+though - `GroupCreateTests` covers creation (a named member is added, an unknown slug is refused,
+naming only yourself is refused since the creator doesn't count as a member, a whitespace-only name
+is refused, and a read-scope-only token is refused with 403), and `GroupRenameTests` covers the
+rename path (any active member may rename, a non-member gets 404 rather than 403 since the view
+checks membership before calling the service, an unknown group uuid is 404, a whitespace-only name
+is refused, and read scope alone cannot write). `GroupPinShareView.post` (route
+`messages.groups.share.pin`) is still uncovered anywhere and was left for a later batch.
+
 ---
 
 ## P41 — The queryset API's unused half, by call graph: 29 methods deleted, 27 test-only ones left

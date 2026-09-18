@@ -6,6 +6,7 @@ import base64
 from datetime import timedelta
 import json
 import os
+from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -635,6 +636,111 @@ class GroupMemberRemovalTests(MessagingBaseTestCase):
         response = self._remove([stranger.ensure_slug()])
 
         self.assertEqual(response.status_code, 400)
+
+
+class GroupCreateTests(MessagingBaseTestCase):
+    """POST messages.groups: start a new group chat."""
+
+    def _post(self, name: str, member_slugs: list[str], **extra) -> object:
+        return self.client.post(
+            reverse("external_api:messages.groups"),
+            data=json.dumps({"name": name, "member_slugs": member_slugs}),
+            content_type="application/json",
+            **{**self.auth, **extra},
+        )
+
+    def test_creates_a_group_with_the_named_members(self) -> None:
+        response = self._post("Crew", [self.partner.ensure_slug()])
+
+        self.assertEqual(response.status_code, 201)
+        from urbanlens.dashboard.models.group_chats.model import GroupChat
+
+        group = GroupChat.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(group.creator_id, self.sender.pk)
+        self.assertIsNotNone(group.membership_for(self.sender))
+        self.assertIsNotNone(group.membership_for(self.partner))
+
+    def test_unknown_member_slug_is_refused(self) -> None:
+        response = self._post("Crew", ["no-such-profile"])
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_naming_only_yourself_is_refused(self) -> None:
+        response = self._post("Just Me", [self.sender.ensure_slug()])
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_whitespace_only_name_is_refused(self) -> None:
+        response = self._post("   ", [self.partner.ensure_slug()])
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_read_scope_alone_cannot_create_a_group(self) -> None:
+        read_only = _bearer(_token_for(self.sender.user, ApiKeyScope.MESSAGES_READ.value))
+
+        response = self._post("Crew", [self.partner.ensure_slug()], **read_only)
+
+        self.assertEqual(response.status_code, 403)
+
+
+class GroupRenameTests(MessagingBaseTestCase):
+    """PATCH messages.groups.detail: any active member may rename the group."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
+
+        self.group = create_group_chat(self.sender, "Old Name", [self.partner])
+        self.url = reverse("external_api:messages.groups.detail", kwargs={"group_uuid": self.group.uuid})
+
+    def _patch(self, name: str, **extra) -> object:
+        return self.client.patch(
+            self.url,
+            data=json.dumps({"name": name}),
+            content_type="application/json",
+            **{**self.auth, **extra},
+        )
+
+    def test_a_member_can_rename_the_group(self) -> None:
+        response = self._patch("New Name")
+
+        self.assertEqual(response.status_code, 200)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.name, "New Name")
+
+    def test_a_non_member_gets_404_not_403(self) -> None:
+        outsider_token = _token_for(_profile().user)
+
+        response = self._patch("New Name", **_bearer(outsider_token))
+
+        self.assertEqual(response.status_code, 404)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.name, "Old Name")
+
+    def test_unknown_group_is_404(self) -> None:
+        url = reverse("external_api:messages.groups.detail", kwargs={"group_uuid": uuid4()})
+
+        response = self.client.patch(
+            url, data=json.dumps({"name": "New Name"}), content_type="application/json", **self.auth
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_whitespace_only_name_is_refused(self) -> None:
+        response = self._patch("   ")
+
+        self.assertEqual(response.status_code, 400)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.name, "Old Name")
+
+    def test_read_scope_alone_cannot_rename(self) -> None:
+        read_only = _bearer(_token_for(self.sender.user, ApiKeyScope.MESSAGES_READ.value))
+
+        response = self._patch("New Name", **read_only)
+
+        self.assertEqual(response.status_code, 403)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.name, "Old Name")
 
 
 class GroupMessageTests(MessagingBaseTestCase):
