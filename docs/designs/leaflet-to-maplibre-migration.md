@@ -118,7 +118,13 @@ already specific and file-accurate, not because it should be treated as this rep
    `map-clusters.ts` (no shared import, no `iconCreateFunction`/`spiderfyOnMaxZoom`/`animate`). This one
    only uses the plain default marker/radius behavior MapLibre's native clustering already offers, so it
    may be a genuine port, not a rebuild - unverified, not yet compared against MapLibre's actual default
-   cluster icon rendering.
+   cluster icon rendering. `map-clusters.ts`'s `createPinClusterGroup()` is the established shared
+   pattern, not just an available one: `map-annotations.ts` already imports it, and `map-page.ts`'s own
+   hand-rolled duplicate (a second, driftable copy of the same badge logic - `.pin-cluster--{s,m,l}`
+   sizing kept in lockstep by hand in two places) was closed out as `P92` on 2026-09-17 specifically
+   because nothing enforced that agreement. `memories/index.html` is the one remaining hand-rolled
+   holdout this scan has found; whoever converts it should treat it as the same class of pre-existing
+   drift `P92` fixed, not just a MapLibre-porting question.
 4. **`map-export.ts` needs a genuinely separate offscreen MapLibre instance**, not a mode switch on the
    live map. It currently rasterizes by reading a private `_tileZoom` and calling `getTileUrl()` per
    tile; MapLibre's equivalent needs `preserveDrawingBuffer`, and that flag's per-frame cost must never
