@@ -197,9 +197,10 @@ already specific and file-accurate, not because it should be treated as this rep
    whose own new content never renders a thumbnail, since group message partials skip
    `_map_view_preview.html` - can still discard a previous 1:1 thread's already-initialized ones.
    `_expandCommentMap`'s own stale-cache check is the one path that already handles this gap, and only
-   for the dialog viewer map's own cache, using the same idempotent disposal helper. A leaked WebGL context (after the port lands) would have been
-   a different order of problem than leaked Leaflet DOM, since Chrome caps a page at 16 contexts total
-   - moot now that the underlying leak is closed regardless of which engine renders the map.
+   for the dialog viewer map's own cache, using the same idempotent disposal helper. A leaked WebGL
+   context (after the port lands) would have been a different order of problem than leaked Leaflet DOM,
+   since Chrome caps a page at 16 contexts total - moot now that the underlying leak is closed regardless
+   of which engine renders the map.
 9. **The CSP shift raster tiles need.** REData's own two internal maps, already converted
    (`feat/scout-campaign`, per `T8`), found that MapLibre fetches tiles via `fetch()`/XHR - governed by
    `connect-src` - where Leaflet loads them as `<img>`, governed by `img-src`. Checked directly against
