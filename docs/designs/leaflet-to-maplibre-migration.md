@@ -103,11 +103,29 @@ already specific and file-accurate, not because it should be treated as this rep
    not a deletion. `leaflet-rotate` itself still gets removed once the floorplan editor's map converts -
    just not for the reason `T8` gave, and not before its replacement exists.
 7. **Leaflet.draw becomes Terra Draw.**
-8. **`comment-map.js:721`'s per-preview map leak gets an actual fix as part of this port, not deferred
-   again.** It creates a fresh `L.map(...)` on every HTMX-swapped thumbnail preview
-   (`htmx:afterSettle`) with no `.remove()` - confirmed this session, still true. Harmless today as
-   leaked Leaflet DOM; a leaked WebGL context is a different order of problem, since Chrome caps a page
-   at 16 contexts total.
+8. **Done ahead of the port, independent of it.** `comment-map.js:721`'s per-preview map leak (a fresh
+   `L.map(...)` on every HTMX-swapped thumbnail preview with no `.remove()`, confirmed this session)
+   is fixed - the leak's cause (a Leaflet map instance discarded when HTMX detaches its container) has
+   nothing to do with which rendering engine draws the tiles, so there was no reason to wait for the
+   port. Both leaks in the file are fixed the same way: `_renderMapThumb` and `_expandCommentMap` tag
+   their Leaflet instance onto its container element, and a delegated `htmx:beforeCleanupElement`
+   listener disposes it the moment HTMX detaches that element - not `htmx:afterSettle` (`_initThumbs`'s
+   own trigger, for rendering *new* thumbnails), which the pinned htmx source confirms fires on the
+   swap's settled target, not on whatever the swap removed. Leaflet's own `Map.remove()`
+   is not safe to call twice (verified against the pinned `leaflet@1.9.4` source: the second call
+   dereferences internal state the first call already deleted and throws), so every disposal in the
+   file is routed through one tag-guarded helper that no-ops on a second attempt, rather than trusting
+   that undocumented behavior. Verified against the real file (not just read) with a scratch harness
+   simulating both Leaflet's actual `remove()` semantics and htmx's actual bubbling
+   `CustomEvent` dispatch (checked against the pinned `htmx@1.9.11` source too) - not committed to the
+   suite, since this file has no established test-harness convention yet and inventing one was out of
+   scope for a bug fix. Still true and unfixed: what this item does not cover is the couple of call
+   sites that replace a pane's innerHTML directly instead of using an HTMX swap - no htmx event fires
+   for those either, so the delegated listener cannot reach them; `_expandCommentMap`'s own
+   stale-cache check is the one path that already handles this gap for the dialog viewer map, using
+   the same idempotent disposal helper. A leaked WebGL context (after the port lands) would have been
+   a different order of problem than leaked Leaflet DOM, since Chrome caps a page at 16 contexts total
+   - moot now that the underlying leak is closed regardless of which engine renders the map.
 9. **The CSP shift raster tiles need.** REData's own two internal maps, already converted
    (`feat/scout-campaign`, per `T8`), found that MapLibre fetches tiles via `fetch()`/XHR - governed by
    `connect-src` - where Leaflet loads them as `<img>`, governed by `img-src`. Any CSP that only allows

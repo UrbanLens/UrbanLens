@@ -648,6 +648,21 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             lmap.fitBounds(bounds.pad(0.15));
         }
 
+        // Disposes the Leaflet map tagged onto `el` (see _renderMapThumb and
+        // _expandCommentMap below), clearing the tag first. Leaflet's own
+        // Map.remove() is not safe to call twice - the second call throws,
+        // because it unconditionally dereferences internal state (_mapPane)
+        // the first call already deleted - so every disposal in this file goes
+        // through here rather than calling `.remove()` directly, making a
+        // second attempt on the same element (the htmx cleanup listener below
+        // racing an explicit removal elsewhere) a safe no-op.
+        function _disposeMapOn(el) {
+            var map = el && el._ulLeafletMap;
+            if (!map) return;
+            delete el._ulLeafletMap;
+            map.remove();
+        }
+
         // -- Comment map viewer ------------------------------------------------
         // commentId → { map }
         var _viewerMaps = {};
@@ -666,6 +681,13 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 cached.map.invalidateSize();
                 return;
             }
+            // The stale instance's own container is gone. Usually the
+            // htmx:beforeCleanupElement listener below already disposed it the
+            // moment HTMX detached it, but that event never fires for the raw
+            // innerHTML swaps a couple of call sites still use (see
+            // _initThumbs's own comment) - _disposeMapOn is the tag-guarded,
+            // safe-to-call-twice path for exactly that gap.
+            if (cached) _disposeMapOn(cached.map.getContainer());
             delete _viewerMaps[commentId];
 
             var script = document.getElementById('comment-map-data-' + commentId);
@@ -704,6 +726,9 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
 
             viewMap.invalidateSize();
             _viewerMaps[commentId] = { map: viewMap, layers: viewLayers, shapes: data.markup || [] };
+            // Tagged for the htmx:beforeCleanupElement listener below, so a leak
+            // is not left sitting until (or unless) this dialog is reopened.
+            el._ulLeafletMap = viewMap;
 
             // Belt-and-suspenders: re-invalidate after any dialog transition finishes.
             dlg.addEventListener('transitionend', function () {
@@ -727,6 +752,12 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             var mg = L.layerGroup().addTo(tmap);
             (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
             if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(tmap);
+            // Tagged for the htmx:beforeCleanupElement listener below, so this
+            // instance (and the window resize listener Leaflet attaches under the
+            // hood) is released the moment HTMX removes `el`, not left leaking for
+            // the rest of the page's life. See the listener's own comment for what
+            // this does not cover.
+            el._ulLeafletMap = tmap;
             return tmap;
         };
 
@@ -787,6 +818,23 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
 
         document.addEventListener('DOMContentLoaded', _initThumbs);
         document.addEventListener('htmx:afterSettle', _initThumbs);
+
+        // Releases a Leaflet map the moment HTMX detaches the element it was
+        // rendered into (a thumbnail preview swapped out, or a dialog's own view
+        // container going with it) - without this, every such map (and the
+        // window resize listener Leaflet attaches under the hood, which keeps
+        // the whole instance reachable) leaks for the rest of the page's life.
+        // htmx fires this event recursively for every element in a removed
+        // subtree, not only the top-level swap target, so a delegated listener
+        // here reaches thumbnails nested arbitrarily deep in whatever HTML
+        // actually got swapped. Does not cover the couple of call sites that
+        // replace a pane's innerHTML directly instead of an HTMX swap (see
+        // _initThumbs's own comment) - no htmx event fires for those either, so
+        // there is nothing here to hook; _expandCommentMap's own stale-cache
+        // check covers that gap for the dialog viewer map specifically.
+        document.addEventListener('htmx:beforeCleanupElement', function (e) {
+            _disposeMapOn(e.target);
+        });
 
         // -- Comment form validation (text optional if photo or map attached) -
         window._validateCommentForm = function (form) {
