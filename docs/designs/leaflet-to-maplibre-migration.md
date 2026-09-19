@@ -127,10 +127,18 @@ already specific and file-accurate, not because it should be treated as this rep
    drift `P92` fixed, not just a MapLibre-porting question.
 4. **`map-export.ts` needs a genuinely separate offscreen MapLibre instance**, not a mode switch on the
    live map. It currently rasterizes by reading a private `_tileZoom` and calling `getTileUrl()` per
-   tile; MapLibre's equivalent needs `preserveDrawingBuffer`, and that flag's per-frame cost must never
-   touch the interactive map.
+   tile - both read directly from `map-export.ts`'s own source, not assumed. MapLibre's equivalent needs
+   `preserveDrawingBuffer`, confirmed as a real `canvasContextAttributes` option (defaulting `false`) in
+   the pinned `maplibre-gl@5.24.0` bundle itself, not taken from MapLibre's public docs; that flag's
+   per-frame cost must never touch the interactive map.
 5. **`map-image-overlays.ts`'s hand-rolled homography (Gaussian elimination) is deleted outright**, in
-   favor of MapLibre's native four-corner `image` source. This is a deletion, not a port.
+   favor of MapLibre's native four-corner `image` source. This is a deletion, not a port - checked
+   directly on reassessment, both halves: the file's own `solve8()` ("Solve an 8x8 linear system by
+   Gaussian elimination with partial pivoting") feeds `matrix3dForCorners()` to warp a plain `<img>` via
+   CSS `transform: matrix3d(...)`, using `map.latLngToLayerPoint()`/`map.containerPointToLatLng()` for
+   coordinate conversion - no `L.ImageOverlay` plugin involved at all; and the pinned style-spec types
+   confirm MapLibre's `ImageSourceSpecification` really is `{type: "image", url, coordinates: [4x
+   [lng,lat]]}`, a genuine native four-corner replacement, not an assumed one.
 6. **`leaflet-rotate` cannot simply be deleted - REData's `T8` was wrong about this repo.** Checked
    2026-09-19, ahead of acting on it: `leaflet-rotate` (GPL-3.0, unmaintained, monkey-patches Leaflet's
    core) is load-bearing, not dead weight. `ts/entries/floorplan-editor.ts` wires it into a real, live
