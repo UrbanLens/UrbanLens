@@ -108,7 +108,16 @@ already specific and file-accurate, not because it should be treated as this rep
    item implied, for temporarily adopting the `maplibre-gl-leaflet` *bridge*: `D12`'s own text cites Home
    Assistant adopting that bridge on 2026-08-27 and abandoning it ten days later as *corroborating evidence
    against* the bridge, one of two such migrations it cites, not a step this port follows. There is no
-   bridge stage here at all - see "Bridge-vs-native is decided, not open" below.
+   bridge stage here at all - see "Bridge-vs-native is decided, not open" below. "Genuine second rendering
+   engine," not a migration crutch, has a document-wide consequence not yet drawn out everywhere: whatever
+   each item below ports to MapLibre, the pre-existing Leaflet implementation needs to keep working for the
+   ~4.27% that stays on Leaflet, not get deleted once its MapLibre replacement lands. Item 4
+   (`map-export.ts`) says this explicitly now; items 3 (`map-clusters.ts`), 6 (`leaflet-rotate`), and 7
+   (`leaflet-draw`/Terra Draw) do not yet, checked on reassessment - and each may resolve differently, not
+   uniformly "keep it forever": item 3's existing Leaflet clustering is this app's own code, cheap to keep
+   running; item 6's `leaflet-rotate` is the unmaintained GPL-3.0 dependency item 6 itself already flagged
+   as undesirable, so a degraded (no-rotate) experience for that 4.27% may be the right call there instead
+   of keeping it forever. Both open, not decided here.
 3. **`map-clusters.ts` is a rebuild, not a port.** It uses an `iconCreateFunction` returning HTML,
    `spiderfyOnMaxZoom`, `animate: true`, and a `maxClusterRadius` that is a function of zoom. MapLibre's
    native clustering has none of those: a scalar radius, no animation, no spiderfy, no HTML icons. There
@@ -131,11 +140,17 @@ already specific and file-accurate, not because it should be treated as this rep
    `preserveDrawingBuffer`, confirmed as a real `canvasContextAttributes` option (defaulting `false`) in
    the pinned `maplibre-gl@5.24.0` bundle itself, not taken from MapLibre's public docs; that flag's
    per-frame cost must never touch the interactive map. Not addressed anywhere yet, caught cross-checking
-   against item 2: an offscreen MapLibre instance needs WebGL2 exactly as much as an onscreen one does, so
-   this only replaces the export path when the interactive map is itself running on MapLibre. For the
-   ~4.27% of traffic item 2 keeps on Leaflet, `map-export.ts` needs its current `getTileUrl()`-per-tile
-   rasterization kept as a permanent second path, not a migration-period stopgap that gets deleted once
-   the MapLibre one exists.
+   against item 2, tightened on reassessment - the coupling isn't simply "needs WebGL2 too," it's what
+   the module's own doc comment says it does: "rasterizes the CURRENTLY VISIBLE view of a Leaflet map,"
+   reading the interactive map's own live state (`layers.baseKey()`, drawn markup) rather than building an
+   independent view from scratch, so a MapLibre replacement needs that same live state and is coupled to
+   whichever engine actually holds it. `supportsWebGL2()` is a plain per-browser capability check, not a
+   page-wide cached decision, so calling it again for an offscreen export instance returns the same answer
+   the interactive map's own call already got - there is no scenario in this plan, as currently described,
+   where WebGL2 is available but the interactive map ends up on Leaflet anyway; that would require some
+   other, currently-undescribed fallback trigger. For the ~4.27% of traffic item 2 keeps on Leaflet (WebGL2
+   genuinely unavailable), `map-export.ts` needs its current `getTileUrl()`-per-tile rasterization kept as
+   a permanent second path, not a migration-period stopgap that gets deleted once the MapLibre one exists.
 5. **`map-image-overlays.ts`'s hand-rolled homography (Gaussian elimination) is deleted outright**, in
    favor of MapLibre's native four-corner `image` source. This is a deletion, not a port - checked
    directly on reassessment, both halves: the file's own `solve8()` ("Solve an 8x8 linear system by
