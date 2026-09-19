@@ -32,7 +32,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views import View
 
 from urbanlens.dashboard.services.core import bounded_cache
-from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, ServiceDisabledError
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 if TYPE_CHECKING:
@@ -151,14 +151,23 @@ class BasemapTileView(LoginRequiredMixin, View):
             if not slot:
                 # Uncached, like every other 503 here: the tile is fine, this process is just
                 # already fetching as many as it is allowed to at once. Retry-After says so - the
-                # client retries these rather than leaving a hole in the map (`retryOwnTiles` in
-                # `frontend/ts/shared/map-layers.ts`), since a viewport-sized burst on a cold cache
-                # asks for far more tiles at once than there are slots to fetch them with.
+                # client paces its requests to this budget and retries what it is still refused
+                # (`frontend/ts/shared/own-tiles.ts`) rather than leaving a hole in the map, since a
+                # viewport-sized burst asks for far more tiles at once than there are slots.
                 return HttpResponse(status=503, headers={"Retry-After": "1"})
             try:
                 status, body, content_type = RedataBasemapTilesGateway().download_tile(layer, z, x, y)
             except (LocationContextUnavailableError, RequestCancelledError, OSError) as exc:
                 logger.warning("Basemap tile fetch failed for %s %s/%s/%s: %s", layer, z, x, y, exc)
+                if isinstance(exc, ServiceDisabledError):
+                    # Switched off rather than busy or unreachable, so it will still be switched off
+                    # for as long as the catalogue advertising these layers stays cached - and a map
+                    # draws what the catalogue named and nothing else. A rate limit deliberately
+                    # does not land here: being over budget for a minute is not worth trading the
+                    # layers, or the REData call that rebuilding the catalogue costs.
+                    from urbanlens.dashboard.services.map.basemap_catalogue import forget_basemap_tile_catalogue
+
+                    forget_basemap_tile_catalogue()
                 return HttpResponse(status=503)
 
         if status == 200:

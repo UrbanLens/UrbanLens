@@ -149,6 +149,18 @@ limiter. Three paths consume it, and a fourth should not rediscover any of this:
 - The PNG exporter, which fetches the bytes itself (`loadOwnTileImage`) rather than assigning an
   `<img src>`, so the canvas it draws into stays untainted and `toDataURL()` keeps working.
 
+**A catalogue outliving the ability to serve it is a grey map, not a slow one.** Seen in a browser
+on `development_main` (2026-09-19): the catalogue was cached with REData's five layers, the slot's
+`allow_outbound_apis` refuses every outbound call, and so every one of ~230 tile requests answered
+503 and the map drew nothing but the grey `errorTileUrl` placeholder - where the vendor layers the
+catalogue had replaced would have drawn fine. A map draws what the catalogue named and nothing
+else, and the catalogue is cached for a day, so any cause that outlasts a page load has the same
+shape. The proxy now drops the cached catalogue when it is refused with `ServiceDisabledError`
+specifically - switched off rather than busy - and the next load falls back to the built-in vendor
+sources (verified: 48 vendor tiles, zero placeholders). A rate limit deliberately does not trigger
+it: being over budget for a minute is worth neither the layers nor the ~1.45s REData call that
+rebuilding the catalogue costs, and dropping it there would flap under the load that caused it.
+
 ## What the vector half will need, read off the real style documents
 
 Nothing here is speculative: `../infrastructure/platform/basemap-tiles/styles/{street,dark,terrain}.json`

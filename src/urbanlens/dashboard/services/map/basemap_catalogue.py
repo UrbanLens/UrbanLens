@@ -47,6 +47,17 @@ def tile_url_template(layer: str) -> str:
     return concrete.replace("900001", "{z}").replace("900002", "{x}").replace("900003", "{y}")
 
 
+def forget_basemap_tile_catalogue() -> None:
+    """Drop the cached catalogue, so the next reader asks REData again rather than keeping a day of
+    layers this deployment has since turned out to be unable to serve.
+
+    A map draws what the catalogue named and nothing else, so a catalogue that outlives the
+    deployment's ability to fetch those tiles is a grey map for as long as it is cached - where the
+    vendor layers it replaced would have drawn. The proxy calls this when it is refused outright.
+    """
+    cache.delete(CATALOGUE_CACHE_KEY)
+
+
 def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
     """REData's layer catalogue, rewritten into what a browser on this deployment can actually use.
 

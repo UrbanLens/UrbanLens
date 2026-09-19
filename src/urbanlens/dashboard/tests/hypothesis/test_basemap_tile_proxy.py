@@ -131,6 +131,45 @@ class BasemapTileProxyTests(TestCase):
 
         self.assertNotEqual(self.client.get(self.url).status_code, 200)
 
+    def test_a_refused_call_stops_the_catalogue_offering_layers_this_deployment_cannot_serve(self) -> None:
+        """The catalogue is cached for a day, and a map that draws only what the catalogue named is
+        entirely grey for that day once this deployment can no longer call REData at all - a
+        disabled service, an exhausted budget, an environment that permits no outbound calls. The
+        vendor layers it replaced were working; dropping the catalogue puts them back."""
+        from urbanlens.dashboard.services.core.rate_limiter import ServiceDisabledError
+        from urbanlens.dashboard.services.map import basemap_catalogue
+
+        cache.set(basemap_catalogue.CATALOGUE_CACHE_KEY, [{"id": "street", "attribution": "REData"}], 60)
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", side_effect=ServiceDisabledError("redata_basemap_tiles")),
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIsNone(cache.get(basemap_catalogue.CATALOGUE_CACHE_KEY))
+        self.assertEqual(basemap_catalogue.basemap_tile_catalogue(allow_fetch=False), [])
+
+    def test_a_busy_minute_keeps_the_catalogue(self) -> None:
+        """Being over budget, or unable to reach the vendor, is not evidence this deployment cannot
+        serve the layer at all - and rebuilding the catalogue costs a ~1.45s REData call (``P131``),
+        so dropping it every time a burst crosses the limit would flap under exactly the load that
+        caused it."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.map import basemap_catalogue
+
+        cached = [{"id": "street", "attribution": "REData"}]
+        for failure in (RateLimitExceededError("redata_basemap_tiles"), OSError("connection reset")):
+            with self.subTest(failure=type(failure).__name__):
+                cache.set(basemap_catalogue.CATALOGUE_CACHE_KEY, cached, 60)
+                with (
+                    mock.patch(_CONFIGURED, return_value=True),
+                    mock.patch(f"{_GATEWAY}.download_tile", side_effect=failure),
+                ):
+                    self.client.get(self.url)
+
+                self.assertEqual(cache.get(basemap_catalogue.CATALOGUE_CACHE_KEY), cached)
+
 
 class BasemapCatalogueTests(TestCase):
     def setUp(self) -> None:
