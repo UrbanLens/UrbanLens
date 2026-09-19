@@ -112,7 +112,13 @@ already specific and file-accurate, not because it should be treated as this rep
 3. **`map-clusters.ts` is a rebuild, not a port.** It uses an `iconCreateFunction` returning HTML,
    `spiderfyOnMaxZoom`, `animate: true`, and a `maxClusterRadius` that is a function of zoom. MapLibre's
    native clustering has none of those: a scalar radius, no animation, no spiderfy, no HTML icons. There
-   is no drop-in equivalent to port.
+   is no drop-in equivalent to port. Not the only clustering consumer, found while scanning the newly
+   discovered template call sites: `memories/index.html`'s inline script builds its own
+   `L.markerClusterGroup({ chunkedLoading: true })` for trip/visit/photo layers, independent of
+   `map-clusters.ts` (no shared import, no `iconCreateFunction`/`spiderfyOnMaxZoom`/`animate`). This one
+   only uses the plain default marker/radius behavior MapLibre's native clustering already offers, so it
+   may be a genuine port, not a rebuild - unverified, not yet compared against MapLibre's actual default
+   cluster icon rendering.
 4. **`map-export.ts` needs a genuinely separate offscreen MapLibre instance**, not a mode switch on the
    live map. It currently rasterizes by reading a private `_tileZoom` and calling `getTileUrl()` per
    tile; MapLibre's equivalent needs `preserveDrawingBuffer`, and that flag's per-frame cost must never
@@ -140,11 +146,20 @@ already specific and file-accurate, not because it should be treated as this rep
    `pin_lists/detail.html` (a pin list's boundary) and `pin_lists/_saved_filter_dialog_scripts.html` (a
    saved filter's include/exclude regions). Two behaviors any port must preserve, not just "swap the
    drawing library," because both were real, fixed production bugs: (1) `leaflet-draw`'s own remove tool
-   only *stages* a deletion, reverted by starting any other draw/edit tool - `P27` ("deleted saved-filter
-   regions and list boundaries came back on the next draw," resolved 2026-09-14) - so both template maps
-   disable it (`edit.remove: false`) and use `ts/shared/region-delete.ts`'s `ImmediateDeleteMode` instead,
-   which commits a deletion on click; `test_region_delete_is_immediate.py` statically scans both
-   templates' source to guard against `remove: false` ever being dropped. (2) `L.geoJSON` collapses a
+   only *stages* a deletion, reverted by starting any other draw/edit tool - `P27` (title: "Saved-filter
+   regions use leaflet-draw's transactional remove tool, so deleted polygons resurrect on the next
+   draw," resolved 2026-09-14; its own body confirms "the pin-list boundary map used the same tool") -
+   so **all four** integrations build their draw control with `edit.remove: false` - not just the two
+   templates, checked fresh on reassessment after an earlier pass here undercounted this too - but land on
+   three different replacements, not one shared one: the two templates use
+   `ts/shared/region-delete.ts`'s `ImmediateDeleteMode` (click a region to delete it at once), guarded by
+   `test_region_delete_is_immediate.py` scanning both templates' source for a dropped `remove: false`;
+   `map-annotations.ts` has its own right-click "Delete boundary" context-menu item with a confirm dialog
+   before `removeLayer`; `spotguessr.ts` has no delete affordance at all, because `setAreaGeometry` calls
+   `clearLayers()` before adding each newly-drawn polygon, so there is never more than one to delete -
+   the bug class doesn't apply there, not because a workaround was built. A port needs to preserve
+   whichever of these three patterns each map actually uses, not assume `region-delete.ts` covers all
+   four. (2) `L.geoJSON` collapses a
    stored `MultiPolygon` into one Leaflet layer, so deleting or editing one part acted on the whole
    region - `P120` (resolved 2026-09-14) - fixed by `region-delete.ts`'s `polygonParts()`, which splits
    any stored geometry into one polygon per part before it loads. Whether Terra Draw's own API can
