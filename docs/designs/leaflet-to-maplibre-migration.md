@@ -130,7 +130,12 @@ already specific and file-accurate, not because it should be treated as this rep
    tile - both read directly from `map-export.ts`'s own source, not assumed. MapLibre's equivalent needs
    `preserveDrawingBuffer`, confirmed as a real `canvasContextAttributes` option (defaulting `false`) in
    the pinned `maplibre-gl@5.24.0` bundle itself, not taken from MapLibre's public docs; that flag's
-   per-frame cost must never touch the interactive map.
+   per-frame cost must never touch the interactive map. Not addressed anywhere yet, caught cross-checking
+   against item 2: an offscreen MapLibre instance needs WebGL2 exactly as much as an onscreen one does, so
+   this only replaces the export path when the interactive map is itself running on MapLibre. For the
+   ~4.27% of traffic item 2 keeps on Leaflet, `map-export.ts` needs its current `getTileUrl()`-per-tile
+   rasterization kept as a permanent second path, not a migration-period stopgap that gets deleted once
+   the MapLibre one exists.
 5. **`map-image-overlays.ts`'s hand-rolled homography (Gaussian elimination) is deleted outright**, in
    favor of MapLibre's native four-corner `image` source. This is a deletion, not a port - checked
    directly on reassessment, both halves: the file's own `solve8()` ("Solve an 8x8 linear system by
