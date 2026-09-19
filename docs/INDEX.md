@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P131` · `T4` · `PL9` · `D17` · `X26` · `I5` · `R30` · `N26`
+**Next free id:** `P131` · `T4` · `PL9` · `D18` · `X26` · `I5` · `R30` · `N26`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -188,3 +188,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P130 | open | 2026-09-19 | `ul_web`'s deliberate `NOCREATEDB` (D11) blocks the exact `docker exec ... pytest` workflow `CLAUDE.local.md` prescribes, on every dev slot that has converged its per-tier roles | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N25 | current | 2026-09-19 | Reply to REData's T8: the tile catalogue is wired and called; the MapLibre migration itself is tracked separately as PL8 | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
 | PL8 | live | 2026-09-19 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |
+| D17 | accepted | 2026-09-19 | Self-hosted instances keep today's free raster vendors as the basemap fallback; MapLibre's style is built client-side, no new third-party dependency for them | [`docs/designs/basemap-self-hosting-fallback.md`](designs/basemap-self-hosting-fallback.md) |

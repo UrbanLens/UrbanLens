@@ -186,6 +186,26 @@ describe("registerRedataLayers", () => {
         expect(await registerRedataLayers()).toEqual([]);
     });
 
+    /**
+     * The self-hosting contract: this project ships to people running their own instance with no
+     * REData configured at all, not only to the hosted deployment. `BasemapTileCatalogueView`
+     * answers `{"layers": []}` for an unconfigured deployment (see `test_unconfigured_redata_yields_no_layers`
+     * in `test_basemap_tile_proxy.py`) - the same shape as a configured-but-empty catalogue - so
+     * this is the one client-side test standing for every self-hosted deployment: every built-in
+     * base layer and the borders overlay must keep resolving to their free, keyless vendor (CARTO,
+     * OpenTopoMap, Esri) exactly as before REData existed, not silently break or go blank.
+     */
+    test("every built-in layer still resolves to its free vendor when REData is unconfigured (self-hosting)", async () => {
+        stubFetch({ body: { layers: [] } });
+        expect(await registerRedataLayers()).toEqual([]);
+
+        for (const kind of ["street", "dark", "topographic", "satellite", "borders"]) {
+            const state = stubLeaflet();
+            tileLayer(kind);
+            expect(state.calls[0]?.url).not.toContain("/dashboard/map/basemap-tiles/");
+        }
+    });
+
     test("memoizes - a second call does not issue a second fetch", async () => {
         const state = stubFetch({ body: { layers: [] } });
         await registerRedataLayers();

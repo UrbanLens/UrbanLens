@@ -18,6 +18,15 @@ built this session - the tile-catalogue wiring, `T8`'s §1, which is separable f
 **done**, not part of it. This document is the remainder: `T8`'s §2, REData's `PL12` item 6, `D12`'s full
 scope.
 
+**Self-hosting fallback is decided, not open.** `D17` (`docs/designs/basemap-self-hosting-fallback.md`)
+settles the question of what a self-hosted instance without a REData deployment falls back to once this
+migration lands: no new third-party dependency, ever - the client constructs its own MapLibre style
+document, wrapping the same free raster vendors (`TILE_DEFS` in `map-layers.ts`) as a `"raster"` source
+for self-hosters and this app's own proxy for the hosted instance, upgrading a layer to a `style_url`-driven
+vector source only once REData actually serves one. Any item below that touches style construction
+(there is no dedicated item for it yet - it falls out of item 1's dependency pin and the general port
+work) should build to `D17`'s shape rather than always fetching a style URL.
+
 **No priority or sequencing decision is made here.** This is a description of the work's shape and size,
 for whoever decides when (or whether) to schedule it.
 
