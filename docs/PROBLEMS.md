@@ -3184,3 +3184,68 @@ privilege it lacked before) and `bin/run_tests.sh`'s own test-db creation may al
 - **Reconciling `CLAUDE.local.md` with R29.** `CLAUDE.local.md` is outside this documentation tree and
   not edited here; its docker-exec pytest instructions should either name `bin/run_tests.sh` (R29's
   existing answer) or note the `CREATEDB`/extension prerequisite, whichever the eventual fix picks.
+
+## P131 — every authenticated REData API call costs ~1.45s in REData's key verification, not in the work requested
+
+`id: P131` · `status: open` · `updated: 2026-09-19`
+
+Measured against `https://redata.urbanlens.org` on 2026-09-19, from this host, each figure the median
+of three curl runs reporting `time_starttransfer`:
+
+| Request | Result | TTFB |
+| --- | --- | --- |
+| `GET /api/v1/tiles/sources/` — no `Authorization` header | 401 | **0.061s** |
+| `GET /api/v1/tiles/sources/` — `Bearer notarealkey` | 401 | **0.055s** |
+| `GET /static/dashboard/style.*.css` — no Django auth at all | 200 | **0.044s** |
+| `GET /api/v1/tiles/sources/` — **valid key** | 200 | **1.52s** |
+| `GET /api/v1/tiles/street/14/4823/6037/` — **valid key**, second fetch of the same tile | 200 | **1.46s** |
+
+The catalogue endpoint returns a five-entry list out of a cache and the tile endpoint returns bytes
+REData has already cached, so neither is doing ~1.4s of work. A *wrong* key is rejected in 55ms. The
+cost is specific to **successfully verifying a key**, and it is the same on every endpoint.
+
+The cause is visible in REData's own source (`src/redata/api/services/api_keys.py`,
+`authenticate_api_key`): keys are stored with Django's `make_password` and checked with
+`check_password`, so every request runs the default password hasher — PBKDF2-SHA256 at ~1.2M
+iterations under Django 6. The prefix lookup short-circuits before that line for an unknown key,
+which is exactly why a bad key is fast and a good one is not.
+
+A slow KDF is the right choice for a low-entropy human password and the wrong one for a
+high-entropy random API key, where a single SHA-256 (or caching the verified key for its lifetime)
+is the standard answer. **The fix is in REData, not here** — one hasher change plus a migration path
+for existing rows — and this record exists because the cost lands on UrbanLens.
+
+**What it costs UrbanLens.** Every REData-backed feature pays it once per call, across ~15 REData
+plugins. It is worst for basemap tiles, because those are the one REData integration that fans a
+single page view out into ~30 requests: a cold map viewport is ~30 × 1.45s of upstream wait. Those
+waits occupy gunicorn request threads (`workers × 4`, capped by `ul_web`'s connection limit of 54),
+so before the bound added in `controllers/basemap_tiles.py` this session, one cold map load could
+hold every request thread in a worker and queue the rest of the site behind it.
+
+Measured consequences already seen, both on the development slot on 2026-09-19:
+
+- `runserver` spawns an unbounded thread per request, so a single map page load opened enough
+  concurrent connections to exhaust `ul_web`'s limit outright: `FATAL: too many connections for
+  role "ul_web"`, surfacing as 500s on tile requests. Production does not have this failure mode —
+  gunicorn's `workers × threads` is capped below the role limit and `test_connection_budget_wiring`
+  enforces it — but it is the same pressure, bounded by a different thing.
+- Once a tile is in UrbanLens's own 7-day cache it serves in 50–120ms, so this is a first-viewer
+  cost per tile per week, not a steady-state one.
+
+**What was done here instead of waiting.** `basemap_tile_upstream_concurrency` (default 2) bounds
+how many tiles one web process may be fetching upstream at once; over it the proxy answers an
+uncached 503 immediately rather than blocking a thread. That protects the rest of the site but does
+not make maps fast — a cold viewport paints partially and fills in on the next pan. It is a
+containment measure, and it is sized to stop mattering once the upstream is quick: at ~60ms per
+tile the cap would essentially never be reached.
+
+**Open:**
+
+- The hasher change in REData, which is the actual fix.
+- Whether `basemap_tile_upstream_concurrency` should be raised (or dropped) once that lands. Re-run
+  the table above before deciding; if TTFB for a valid key matches the 55ms an invalid one gets, the
+  bound is no longer doing useful work.
+- Whether the tile proxy belongs in Django at all. nginx `proxy_pass` with the key injected at that
+  layer and `proxy_cache` in front would take the fan-out off the request threads entirely, at the
+  cost of moving per-user authorization to `auth_request`. Not attempted; it is an infrastructure
+  decision, and it is only worth making if the latency is *not* fixed at the source.

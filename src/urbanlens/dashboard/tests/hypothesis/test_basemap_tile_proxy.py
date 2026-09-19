@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+import contextlib
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -10,6 +12,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.controllers import basemap_tiles
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
 #: Patched at its source module, not in the controller's namespace: the
@@ -274,3 +277,92 @@ class TileLogPrivacyTests(SimpleTestCase):
 
         url = "https://redata.example/api/v1/geocode/?q=poughkeepsie"
         self.assertEqual(Gateway.endpoint_for_log(url), url)
+
+
+class BasemapTileConcurrencyTests(TestCase):
+    """The bound that keeps a cold map load from occupying every request thread in the process.
+
+    A viewport is ~30 tiles requested at once and each uncached one blocks on a slow upstream, so
+    without this the proxy is a site-wide stall waiting for someone to open a map.
+
+    The slot is held directly rather than from a second thread: Django's ``TestCase`` wraps each
+    test in a transaction its own connection owns, so a request served on another thread cannot
+    see the user this one just created and never reaches the code under test.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        basemap_tiles.UpstreamSlots.reset()
+        self.addCleanup(basemap_tiles.UpstreamSlots.reset)
+
+    def _url(self, x: int) -> str:
+        return reverse("map.basemap_tiles", kwargs={"layer": "street", "z": 12, "x": x, "y": 1539})
+
+    @contextlib.contextmanager
+    def _every_slot_taken(self) -> Iterator[None]:
+        """Run the block with the process's only upstream slot already held by someone else."""
+        with mock.patch.object(basemap_tiles.app_settings, "basemap_tile_upstream_concurrency", 1):
+            basemap_tiles.UpstreamSlots.reset()
+            self.assertTrue(basemap_tiles.UpstreamSlots.semaphore().acquire(blocking=False))
+            try:
+                yield
+            finally:
+                basemap_tiles.UpstreamSlots.semaphore().release()
+
+    def test_a_tile_over_the_cap_is_refused_without_reaching_the_upstream(self) -> None:
+        """503 at once, not a wait: a thread blocked waiting for a slot is occupying the very resource the slot rations, so queueing would defend nothing."""
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")) as download,
+            self._every_slot_taken(),
+        ):
+            refused = self.client.get(self._url(1205))
+
+        self.assertEqual(refused.status_code, 503)
+        self.assertEqual(download.call_count, 0, "the request must be refused before it costs an upstream call")
+
+    def test_a_refusal_is_not_cached(self) -> None:
+        """Caching it would turn a momentary burst into a permanently blank square for a week."""
+        url = self._url(1206)
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")),
+        ):
+            with self._every_slot_taken():
+                self.assertEqual(self.client.get(url).status_code, 503)
+            served = self.client.get(url)
+
+        self.assertEqual(served.status_code, 200, "the refusal must have left nothing behind")
+        self.assertEqual(served.content, b"PNGDATA")
+
+    def test_a_cached_tile_never_touches_the_cap(self) -> None:
+        """The bound is on the slow path only; a warm tile must serve no matter how busy the upstream is."""
+        url = self._url(1207)
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")),
+        ):
+            self.assertEqual(self.client.get(url).status_code, 200)
+            with self._every_slot_taken():
+                served = self.client.get(url)
+
+        self.assertEqual(served.status_code, 200, "a cached tile must not be refused")
+        self.assertEqual(served.content, b"PNGDATA")
+
+    def test_the_slot_is_released_when_the_upstream_raises(self) -> None:
+        """A leaked slot would permanently shrink this process's capacity after one network blip."""
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch.object(basemap_tiles.app_settings, "basemap_tile_upstream_concurrency", 1),
+        ):
+            basemap_tiles.UpstreamSlots.reset()
+            with mock.patch(f"{_GATEWAY}.download_tile", side_effect=OSError("boom")):
+                self.assertEqual(self.client.get(self._url(1208)).status_code, 503)
+            with mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")):
+                recovered = self.client.get(self._url(1209))
+
+        self.assertEqual(recovered.status_code, 200, "the failed fetch must have handed its slot back")

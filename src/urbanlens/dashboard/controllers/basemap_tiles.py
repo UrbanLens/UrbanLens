@@ -8,13 +8,23 @@ Caching follows REData's own status contract rather than treating every response
 - ``200`` tiles are cached; a basemap tile is stable for a given z/x/y.
 - ``404`` is definitive - the vendor confirmed no such tile, or the layer id is unknown - and is
   cached so a blank area does not re-ask on every pan.
-- ``503`` means the vendor could not be reached and is never cached. Caching it would turn a vendor
-  outage into a permanently blank map region, which is the sa...
+- ``503`` means the tile could not be fetched - the upstream was unreachable, or this process is
+  already using every upstream slot it is allowed - and is never cached. Caching it would turn a
+  passing outage into a permanently blank map region.
+
+The concurrency bound is not incidental. A viewport is ~30 tiles and the browser asks for all of
+them at once, so on a cold cache the proxy can hold every request thread in the process at once,
+for as long as the upstream takes per tile - measured at ~1.5s against REData in September 2026,
+which is its per-request key-verification cost and not the tiles' (``P131``). Unbounded, one map
+load stalls the whole site.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import threading
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
@@ -23,6 +33,10 @@ from django.views import View
 
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +48,47 @@ _TILE_CACHE_TTL = 7 * 86400
 #: otherwise be stored as bytes identical to the sentinel and read back as "no such tile", turning a transient
 #: empty answer into a permanent hole in the map.
 _NO_TILE = "__ul_no_tile__"
+
+
+class UpstreamSlots:
+    """The process-wide bound on how many tiles may be fetched from REData at once.
+
+    Built on first use rather than at import so a deployment (or a test) can set the cap without
+    the module having already frozen it.
+    """
+
+    _semaphore: threading.BoundedSemaphore | None = None
+    _lock = threading.Lock()
+
+    @classmethod
+    def semaphore(cls) -> threading.BoundedSemaphore:
+        """The shared semaphore, built if this is the first call."""
+        if cls._semaphore is None:
+            with cls._lock:
+                if cls._semaphore is None:
+                    cls._semaphore = threading.BoundedSemaphore(app_settings.basemap_tile_upstream_concurrency)
+        return cls._semaphore
+
+    @classmethod
+    def reset(cls) -> None:
+        """Drop the semaphore so the next call rereads the setting. Test-only."""
+        with cls._lock:
+            cls._semaphore = None
+
+    @classmethod
+    @contextlib.contextmanager
+    def hold(cls) -> Iterator[bool]:
+        """Hold one slot for the block, or yield ``False`` when none is free.
+
+        Never blocks: a request thread waiting for a slot is occupying the resource the slot
+        exists to ration, so over the cap the caller answers immediately instead.
+        """
+        acquired = cls.semaphore().acquire(blocking=False)
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                cls.semaphore().release()
 
 
 class BasemapTileCatalogueView(LoginRequiredMixin, View):
@@ -92,11 +147,16 @@ class BasemapTileView(LoginRequiredMixin, View):
             body, content_type = cached
             return HttpResponse(body, content_type=content_type)
 
-        try:
-            status, body, content_type = RedataBasemapTilesGateway().download_tile(layer, z, x, y)
-        except (LocationContextUnavailableError, RequestCancelledError, OSError) as exc:
-            logger.warning("Basemap tile fetch failed for %s %s/%s/%s: %s", layer, z, x, y, exc)
-            return HttpResponse(status=503)
+        with UpstreamSlots.hold() as slot:
+            if not slot:
+                # Uncached, like every other 503 here: the tile is fine, this process is just
+                # already fetching as many as it is allowed to at once.
+                return HttpResponse(status=503)
+            try:
+                status, body, content_type = RedataBasemapTilesGateway().download_tile(layer, z, x, y)
+            except (LocationContextUnavailableError, RequestCancelledError, OSError) as exc:
+                logger.warning("Basemap tile fetch failed for %s %s/%s/%s: %s", layer, z, x, y, exc)
+                return HttpResponse(status=503)
 
         if status == 200:
             resolved_type = content_type or "image/png"

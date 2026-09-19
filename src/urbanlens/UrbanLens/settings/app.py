@@ -576,6 +576,23 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "passes through."
         ),
     )
+    basemap_tile_upstream_concurrency: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "How many basemap tiles one web process may be fetching from REData at the same time. "
+            "A tile that is already cached never counts against it - this bounds only the slow "
+            "path. A map viewport is ~30 tiles and the browser asks for all of them at once, so "
+            "without a bound a single cold map load occupies every request thread in the process "
+            "for as long as the upstream takes, and the rest of the site queues behind it. "
+            "Gunicorn runs `--threads 4` (gunicorn.conf.py), so the default leaves half of every "
+            "worker's threads free no matter what a map is doing. Over the cap the proxy answers "
+            "503 immediately rather than waiting, because a thread waiting for a slot is the very "
+            "thing being rationed; the client draws its error tile and re-asks on the next pan, by "
+            "which time the tiles that did get through are cached. Raise it once the upstream is "
+            "fast enough that the cap stops being reached - P131 has the measurement and the cause."
+        ),
+    )
     demo_mode: bool = Field(
         default=False,
         description=(

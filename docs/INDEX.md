@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P131` · `T4` · `PL9` · `D18` · `X26` · `I5` · `R30` · `N26`
+**Next free id:** `P132` · `T4` · `PL9` · `D18` · `X26` · `I5` · `R30` · `N26`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -186,6 +186,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | X25 | holds | 2026-09-16 | Organize rendered its label cards twice to deliver three numbers per card: the deferred stats cost ~16 ms against ~100 ms to render the cards, so the deferral was removed | [`docs/notes/organize-label-rows-double-render-measured.md`](notes/organize-label-rows-double-render-measured.md) |
 | P128 | open | 2026-09-17 | The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P130 | open | 2026-09-19 | `ul_web`'s deliberate `NOCREATEDB` (D11) blocks the exact `docker exec ... pytest` workflow `CLAUDE.local.md` prescribes, on every dev slot that has converged its per-tier roles | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| N25 | current | 2026-09-19 | Reply to REData's T8: the tile catalogue is wired and called; the MapLibre migration itself is tracked separately as PL8 | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
+| P131 | open | 2026-09-19 | Every authenticated REData API call costs ~1.45s verifying the key (PBKDF2 per request), not doing the work; worst for basemap tiles, where one page view is ~30 calls | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| N25 | current | 2026-09-19 | Reply to REData's T8: the catalogue is embedded ahead of every map and serving production tiles; T8 §0 is stale, the contract IS deployed | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
 | PL8 | live | 2026-09-19 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |
 | D17 | accepted | 2026-09-19 | Self-hosted instances keep today's free raster vendors as the basemap fallback; MapLibre's style is built client-side, no new third-party dependency for them | [`docs/designs/basemap-self-hosting-fallback.md`](designs/basemap-self-hosting-fallback.md) |
