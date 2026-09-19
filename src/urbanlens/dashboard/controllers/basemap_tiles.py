@@ -26,9 +26,11 @@ import logging
 import threading
 from typing import TYPE_CHECKING
 
+from csp.decorators import csp_exempt
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.utils.decorators import method_decorator
 from django.views import View
 
 from urbanlens.dashboard.services.core import bounded_cache
@@ -114,6 +116,30 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
         return JsonResponse({"layers": catalogue_for_viewer(authenticated=request.user.is_authenticated)})
 
 
+def _keep_for_a_week(response: HttpResponse) -> HttpResponse:
+    """Tell the browser it may keep this answer as long as this deployment does.
+
+    A tile is immutable for a layer and coordinate, so a re-ask gets the answer the browser already
+    has. Without this the proxy is asked again for every tile on every pan back over the same
+    ground, and a tile request is never free - it is an authenticated request through the whole
+    middleware chain, on request threads the rest of the site is sharing.
+
+    Args:
+        response: The response to stamp.
+
+    Returns:
+        The same response.
+    """
+    # private: a tile is served behind a login, so a shared cache must not hold one.
+    response.headers["Cache-Control"] = f"private, max-age={_TILE_CACHE_TTL}, immutable"
+    return response
+
+
+# A Content-Security-Policy governs what a *document* may load, so on a tile it is ~1.2kB of header
+# that can never apply - paid ~30 times per map opened. Both spellings, because the site emits the
+# report-only header until `UL_CSP_ENFORCE` flips it to the enforcing one.
+@method_decorator(csp_exempt(REPORT_ONLY=True), name="dispatch")
+@method_decorator(csp_exempt(REPORT_ONLY=False), name="dispatch")
 class BasemapTileView(LoginRequiredMixin, View):
     """GET map/basemap-tiles/<layer>/<z>/<x>/<y>/ - one basemap tile."""
 
@@ -140,12 +166,12 @@ class BasemapTileView(LoginRequiredMixin, View):
         cached = cache.get(cache_key)
         if cached is not None:
             if cached == _NO_TILE:
-                return HttpResponse(status=404)
+                return _keep_for_a_week(HttpResponse(status=404))
             # The vendor's own content type is cached with the bytes: these layers are not all PNG, and
             # mislabelling a JPEG or WebP on the cache-hit path but not the fresh one is the kind of difference
             # that shows up only once a layer is already in the cache.
             body, content_type = cached
-            return HttpResponse(body, content_type=content_type)
+            return _keep_for_a_week(HttpResponse(body, content_type=content_type))
 
         with UpstreamSlots.hold() as slot:
             if not slot:
@@ -180,11 +206,11 @@ class BasemapTileView(LoginRequiredMixin, View):
             # The helper also swallows a cache failure - a full or unreachable
             # Dragonfly is a degraded cache, not a broken map.
             bounded_cache.set_if_small(cache_key, body, resolved_type, _TILE_CACHE_TTL, label=f"Basemap tile {layer} {z}/{x}/{y}")
-            return HttpResponse(body, content_type=resolved_type)
+            return _keep_for_a_week(HttpResponse(body, content_type=resolved_type))
         if status in (400, 404):
             # A definitive answer about the request: no such tile, unknown
             # layer, or coordinates out of range. Safe to remember.
             cache.set(cache_key, _NO_TILE, _TILE_CACHE_TTL)
-            return HttpResponse(status=404)
+            return _keep_for_a_week(HttpResponse(status=404))
         logger.warning("Basemap tile upstream status %s for %s %s/%s/%s", status, layer, z, x, y)
         return HttpResponse(status=503)

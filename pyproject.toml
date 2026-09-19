@@ -273,6 +273,11 @@ unfixable = ["RUF100"]
     "T201",   # they report to the agent on stdout
     "INP001", # not a package
 ]
+# Cost tests assert a budget and report the measurement behind it, so a run under
+# `-s` says what the number actually is rather than only whether it passed.
+"**/tests/**/test_*_cost.py" = [
+    "T201", # the measurement is the product
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["urbanlens"]
