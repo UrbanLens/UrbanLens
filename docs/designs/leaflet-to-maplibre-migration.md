@@ -117,7 +117,11 @@ already specific and file-accurate, not because it should be treated as this rep
    uniformly "keep it forever": item 3's existing Leaflet clustering is this app's own code, cheap to keep
    running; item 6's `leaflet-rotate` is the unmaintained GPL-3.0 dependency item 6 itself already flagged
    as undesirable, so a degraded (no-rotate) experience for that 4.27% may be the right call there instead
-   of keeping it forever. Both open, not decided here.
+   of keeping it forever - though that tension is real, not dismissed: `D12`'s "genuine second rendering
+   engine," rejecting REData's own staff-only dashboard's plain "unsupported browser" message, is a
+   standard stated about the core mapping experience, not proven to extend to every individual tool at
+   full parity - but nothing in `D12` or this document actually says so either way. Both open, not
+   decided here.
 3. **`map-clusters.ts` is a rebuild, not a port.** It uses an `iconCreateFunction` returning HTML,
    `spiderfyOnMaxZoom`, `animate: true`, and a `maxClusterRadius` that is a function of zoom. MapLibre's
    native clustering has none of those: a scalar radius, no animation, no spiderfy, no HTML icons. There
