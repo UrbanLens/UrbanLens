@@ -12,7 +12,7 @@ import { bindMapContextMenu, type BindMapContextMenuOptions } from "./map-contex
 import { createLayersPanel } from "./map-layers-panel";
 import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import type { RasterSourceInput } from "./maplibre-raster-style";
-import { acquireOwnTileSlot, isOwnTileUrl, ownTileRetryDelayMs } from "./own-tiles";
+import { acquireOwnTileSlot, isOwnTileUrl, ownTileRetriesAreSuspended, ownTileRetryDelayMs, recordOwnTileOutcome } from "./own-tiles";
 
 export type BaseLayerKey = "street" | "topographic" | "satellite";
 export type MapDarkMode = "light" | "dark" | "system";
@@ -229,6 +229,7 @@ const OWN_TILE_LAYER = {
         // it again after a wait would paint a tile of somewhere else into this one.
         const url = this.getTileUrl(coords);
         let attempt = 0;
+        let finished = false;
         let releaseSlot: (() => void) | null = null;
         const release = (): void => {
             releaseSlot?.();
@@ -236,7 +237,13 @@ const OWN_TILE_LAYER = {
         };
 
         const finish = (error?: Error): void => {
+            if (finished) return;
+            finished = true;
             release();
+            // Before the placeholder is painted: assigning it is a load like any other, so a tile
+            // still listening would report a success for the picture of its own failure.
+            tile.onload = null;
+            tile.onerror = null;
             // Always answered, even for a tile nobody is waiting for any more: Leaflet counts
             // outstanding tiles to decide when a layer has finished loading, and one that never
             // reports leaves the map's loading indicator on forever.
@@ -245,21 +252,45 @@ const OWN_TILE_LAYER = {
         };
 
         const request = (): void => {
-            if (!tile.isConnected && attempt > 0) {
+            if (finished) return;
+            if (attempt > 0) {
                 // Panned or zoomed away while queued - the slot is worth more to a tile still on screen.
-                finish(new Error("tile no longer needed"));
-                return;
+                if (!tile.isConnected) {
+                    finish(new Error("tile no longer needed"));
+                    return;
+                }
+                // Asked again when the wait is over rather than when it was scheduled, so a retry
+                // queued before the deployment stopped answering is not still spent afterwards.
+                if (ownTileRetriesAreSuspended()) {
+                    finish(new Error(`Tile ${url} not retried while the deployment is refusing tiles`));
+                    return;
+                }
             }
             void acquireOwnTileSlot().then((releaser) => {
+                // The queue can hand a slot over long after this tile gave up or was told to stop.
+                // Kept, it narrows the queue for every tile still trying; used, it paints the tile
+                // over the placeholder Leaflet was already told about.
+                if (finished) {
+                    releaser();
+                    return;
+                }
                 releaseSlot = releaser;
                 tile.src = url;
             });
         };
 
-        tile.onload = () => finish();
+        tile.onload = () => {
+            recordOwnTileOutcome(true);
+            finish();
+        };
         tile.onerror = () => {
             release();
-            const delay = ownTileRetryDelayMs(attempt);
+            // An <img> error carries no status, so a hole in the layer is counted here the same as a
+            // refusal. Both mean asking again is unlikely to help, and any tile that does load
+            // clears it - which is also the only thing this affects, since a first attempt is
+            // always made.
+            recordOwnTileOutcome(false);
+            const delay = ownTileRetriesAreSuspended() ? null : ownTileRetryDelayMs(attempt);
             if (delay === null) {
                 finish(new Error(`Tile ${url} failed after ${attempt + 1} attempts`));
                 return;

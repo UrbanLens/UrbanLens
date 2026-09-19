@@ -3,7 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createMapLayers, normalizeBase, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer, vectorStyleFor } from "./map-layers";
-import { acquireOwnTileSlot, resetOwnTileGateForTests } from "./own-tiles";
+import { acquireOwnTileSlot, ownTileRetriesAreSuspended, recordOwnTileOutcome, resetOwnTileGateForTests } from "./own-tiles";
 
 describe("normalizeBase", () => {
     test("passes canonical keys through unchanged", () => {
@@ -352,13 +352,26 @@ describe("registerRedataLayers", () => {
      */
     describe("tiles this deployment serves itself are queued and retried", () => {
         const realSetTimeout = globalThis.setTimeout;
-        let pending: Array<() => void>;
+        /** Anything scheduled this far out is the queue's 30s slot watchdog rather than a retry. */
+        const WATCHDOG_FLOOR_MS = 20_000;
+        let pending: Array<{ fn: () => void; ms: number }>;
+
+        /**
+         * Fires the retries that are due, leaving the watchdogs alone - those exist to recover a
+         * slot Leaflet abandoned half an hour of tiles ago, and firing them along with a one-second
+         * retry hands back slots a test is deliberately holding.
+         */
+        function runRetries(): void {
+            const due = pending.filter((timer) => timer.ms < WATCHDOG_FLOOR_MS);
+            pending = pending.filter((timer) => timer.ms >= WATCHDOG_FLOOR_MS);
+            due.forEach((timer) => timer.fn());
+        }
 
         beforeEach(() => {
             resetOwnTileGateForTests();
             pending = [];
-            globalThis.setTimeout = ((fn: () => void) => {
-                pending.push(fn);
+            globalThis.setTimeout = ((fn: () => void, ms: number) => {
+                pending.push({ fn, ms });
                 return 0;
             }) as unknown as typeof setTimeout;
         });
@@ -441,7 +454,7 @@ describe("registerRedataLayers", () => {
             // More than the retry may be scheduled - each slot also arms a watchdog - so run them all.
             expect(pending.length).toBeGreaterThan(0);
             tile.removeAttribute("src");
-            pending.forEach((fn) => fn());
+            runRetries();
             await Promise.resolve();
             await Promise.resolve();
 
@@ -459,7 +472,7 @@ describe("registerRedataLayers", () => {
             const tile = await createTile(state);
 
             tile.onerror?.(new Event("error"));
-            pending.forEach((fn) => fn());
+            runRetries();
             await Promise.resolve();
 
             expect(state.layers[0]?.getTileUrlCalls).toBe(1);
@@ -475,9 +488,7 @@ describe("registerRedataLayers", () => {
 
             for (let attempt = 0; attempt < 12 && reported === "not yet"; attempt++) {
                 tile.onerror?.(new Event("error"));
-                const scheduled = pending;
-                pending = [];
-                scheduled.forEach((fn) => fn());
+                runRetries();
                 await Promise.resolve();
                 await Promise.resolve();
             }
@@ -494,9 +505,7 @@ describe("registerRedataLayers", () => {
             const dying = await createTile(state);
             for (let attempt = 0; attempt < 6; attempt++) {
                 dying.onerror?.(new Event("error"));
-                const scheduled = pending;
-                pending = [];
-                scheduled.forEach((fn) => fn());
+                runRetries();
                 await Promise.resolve();
                 await Promise.resolve();
             }
@@ -506,6 +515,63 @@ describe("registerRedataLayers", () => {
 
             expect(held.every((tile) => tile.getAttribute("src") === URL)).toBe(true);
             [dying, ...held].forEach((tile) => tile.remove());
+        });
+
+        /**
+         * A tile that runs out of attempts while queued is still in line for a slot. Taking it
+         * paints this tile over the placeholder Leaflet has already been told about, and keeping it
+         * narrows the queue for every tile still trying to draw.
+         */
+        test("a slot that arrives after the tile gave up is handed back, not drawn", async () => {
+            const state = await proxyLayer();
+            const held = await Promise.all(Array.from({ length: 6 }, () => acquireOwnTileSlot()));
+            let reported: Error | undefined | "not yet" = "not yet";
+            const tile = await createTile(state, (error) => {
+                reported = error;
+            });
+            for (let attempt = 0; attempt < 12 && reported === "not yet"; attempt++) {
+                tile.onerror?.(new Event("error"));
+                runRetries();
+                await Promise.resolve();
+                await Promise.resolve();
+            }
+            expect(reported).toBeInstanceOf(Error);
+
+            held.forEach((release) => release());
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(tile.getAttribute("src")).toBe(PLACEHOLDER);
+            const wanted = [];
+            for (let i = 0; i < 6; i++) wanted.push(await createTile(state));
+            expect(wanted.every((waiting) => waiting.getAttribute("src") === URL)).toBe(true);
+            [tile, ...wanted].forEach((each) => each.remove());
+        });
+
+        /**
+         * `errorTileUrl` is a data: URI, so painting it succeeds - and a tile still listening would
+         * report the picture of its own failure as a tile the deployment served, clearing the count
+         * that stops a whole viewport retrying into an outage, and telling Leaflet twice that one
+         * tile had finished.
+         */
+        test("the error placeholder loading is not a tile the deployment served", async () => {
+            const state = await proxyLayer();
+            let reports = 0;
+            const tile = await createTile(state, () => {
+                reports++;
+            });
+            for (let refusal = 0; refusal < 12; refusal++) recordOwnTileOutcome(false);
+
+            tile.onerror?.(new Event("error"));
+            await Promise.resolve();
+            // What the browser does once `finish` has pointed the tile at the placeholder.
+            tile.dispatchEvent(new Event("load"));
+            await Promise.resolve();
+
+            expect(tile.getAttribute("src")).toBe(PLACEHOLDER);
+            expect(ownTileRetriesAreSuspended()).toBe(true);
+            expect(reports).toBe(1);
+            tile.remove();
         });
 
         test("a vendor's own layer is left alone, since its failures are usually its rate limiter", () => {

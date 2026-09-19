@@ -49,8 +49,20 @@ const RETRYABLE_STATUSES = new Set([408, 429, 502, 503, 504]);
  */
 const SLOT_WATCHDOG_MS = 30_000;
 
+/**
+ * Refusals in a row, with nothing served in between, after which tiles stop asking again.
+ *
+ * Retrying is worth it when the proxy is busy; it is pure harm when the deployment cannot serve
+ * tiles at all, because every tile spends its whole budget discovering alone what the tile before
+ * it already found out - and each attempt lands on the server least able to answer it. Two full
+ * passes of the queue is enough to tell the two apart: a merely busy proxy serves something in
+ * between, which resets the count.
+ */
+const RETRIES_SUSPEND_AFTER_REFUSALS = 12;
+
 let inFlight = 0;
 const waiting: Array<() => void> = [];
+let consecutiveRefusals = 0;
 
 /** Bumped by the test-only reset, so a slot taken before it cannot hand itself back afterwards. */
 let epoch = 0;
@@ -100,10 +112,39 @@ export function acquireOwnTileSlot(): Promise<() => void> {
 /**
  * The jittered delay before attempt number `attempt`, or `null` once the attempts are spent.
  * @param attempt - How many attempts have already failed.
+ * @param retryAfterMs - What the server asked for, when it said. The proxy knows how long its own
+ * slots are held for, so a longer ask wins over the schedule; a shorter one does not, since the
+ * schedule is also spreading a viewport's worth of tiles apart from each other.
  */
-export function ownTileRetryDelayMs(attempt: number): number | null {
+export function ownTileRetryDelayMs(attempt: number, retryAfterMs = 0): number | null {
     const delay = OWN_TILE_RETRY_DELAYS_MS[attempt];
-    return delay === undefined ? null : delay * (0.5 + Math.random());
+    return delay === undefined ? null : Math.max(delay * (0.5 + Math.random()), retryAfterMs);
+}
+
+/**
+ * Records how the deployment answered one tile, for {@link ownTileRetriesAreSuspended}.
+ * @param served - Whether a tile came back.
+ */
+export function recordOwnTileOutcome(served: boolean): void {
+    consecutiveRefusals = served ? 0 : consecutiveRefusals + 1;
+}
+
+/**
+ * Whether asking again is currently worth anything.
+ *
+ * Only retries are suspended, never a first attempt - so every tile the map still wants is its own
+ * probe, and one answered tile anywhere puts retries straight back. That leaves the cost of an
+ * outage at one request per tile actually wanted, which is the floor for a map that still tries to
+ * draw, and it needs no timer to recover.
+ */
+export function ownTileRetriesAreSuspended(): boolean {
+    return consecutiveRefusals >= RETRIES_SUSPEND_AFTER_REFUSALS;
+}
+
+/** Seconds in a `Retry-After` header, as milliseconds. Only the numeric form; the HTTP-date form is not used here. */
+function retryAfterMs(response: Response): number {
+    const header = Number(response.headers?.get?.("Retry-After"));
+    return Number.isFinite(header) && header > 0 ? header * 1000 : 0;
 }
 
 /** Raised for an answer worth believing - a 404 is a real gap in the layer, not a busy upstream. */
@@ -136,21 +177,33 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
  */
 export async function fetchOwnTile(url: string, signal?: AbortSignal): Promise<ArrayBuffer> {
     let lastError: Error = new Error(`No tile at ${url}`);
+    let askedToWaitMs = 0;
     for (let attempt = 0; ; attempt++) {
         if (attempt > 0) {
-            const delay = ownTileRetryDelayMs(attempt - 1);
+            const delay = ownTileRetryDelayMs(attempt - 1, askedToWaitMs);
             if (delay === null) throw lastError;
             await sleep(delay, signal);
+            // Checked once the wait is over rather than before it: by then the answer other tiles
+            // got in the meantime is the one worth acting on.
+            if (ownTileRetriesAreSuspended()) throw lastError;
         }
         const release = await acquireOwnTileSlot();
         try {
             const response = await fetch(url, { signal, headers: { Accept: "image/*" } });
-            if (response.ok) return await response.arrayBuffer();
+            if (response.ok) {
+                recordOwnTileOutcome(true);
+                return await response.arrayBuffer();
+            }
             const error = new Error(`Tile request for ${url} answered ${response.status}`);
+            // A 404 is the layer's own shape, not the deployment failing to serve it, so it must
+            // not count towards suspending the retries every other layer on the page relies on.
             if (!RETRYABLE_STATUSES.has(response.status)) throw new TerminalTileError(error.message);
+            recordOwnTileOutcome(false);
+            askedToWaitMs = retryAfterMs(response);
             lastError = error;
         } catch (error) {
             if (error instanceof TerminalTileError || signal?.aborted) throw error;
+            recordOwnTileOutcome(false);
             lastError = error instanceof Error ? error : new Error(String(error));
         } finally {
             release();
@@ -180,4 +233,5 @@ export function resetOwnTileGateForTests(): void {
     epoch++;
     inFlight = 0;
     waiting.length = 0;
+    consecutiveRefusals = 0;
 }
