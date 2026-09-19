@@ -221,8 +221,8 @@ const EMBEDDED_CATALOGUE_ID = "ul-basemap-tiles";
 /** Whether the embedded catalogue has been looked for yet (it is read once, on first use). */
 let embeddedCatalogueRead = false;
 
-/** What that element held, or `null` when this page carried none. */
-let embeddedCatalogue: RedataLayer[] | null = null;
+/** What the embed registered, or `null` when this page carried none. */
+let embeddedRegisteredIds: string[] | null = null;
 
 /**
  * Reads the catalogue `themes/base.html` embedded in this document and registers it, once.
@@ -242,14 +242,15 @@ function applyEmbeddedCatalogue(): boolean {
         if (typeof document === "undefined") return false;
         const el = document.getElementById(EMBEDDED_CATALOGUE_ID);
         if (!el?.textContent) return false;
+        let layers: RedataLayer[];
         try {
-            embeddedCatalogue = JSON.parse(el.textContent) as RedataLayer[];
+            layers = JSON.parse(el.textContent) as RedataLayer[];
         } catch {
             return false;
         }
-        registerCatalogue(embeddedCatalogue);
+        embeddedRegisteredIds = registerCatalogue(layers);
     }
-    return embeddedCatalogue !== null;
+    return embeddedRegisteredIds !== null;
 }
 
 /**
@@ -308,16 +309,9 @@ function registerCatalogue(layers: RedataLayer[]): string[] {
  * unconfigured, or unreachable.
  */
 export function registerRedataLayers(): Promise<string[]> {
-    if (applyEmbeddedCatalogue()) return Promise.resolve(registeredIdsOf(embeddedCatalogue ?? []));
+    if (applyEmbeddedCatalogue()) return Promise.resolve(embeddedRegisteredIds ?? []);
     redataLayersPromise ??= fetchAndRegisterRedataLayers();
     return redataLayersPromise;
-}
-
-/** The ids `registerCatalogue` would report for `layers`, without registering them a second time. */
-function registeredIdsOf(layers: RedataLayer[]): string[] {
-    return layers
-        .filter((layer) => layer.id && layer.attribution && (layer.source_type === "vector" ? layer.style_url : layer.url_template))
-        .map((layer) => REDATA_ID_ALIASES[layer.id] ?? layer.id);
 }
 
 /**
@@ -332,7 +326,7 @@ function registeredIdsOf(layers: RedataLayer[]): string[] {
 export function resetRedataLayersCacheForTests(): void {
     redataLayersPromise = null;
     embeddedCatalogueRead = false;
-    embeddedCatalogue = null;
+    embeddedRegisteredIds = null;
     for (const key of Object.keys(TILE_DEFS)) {
         if (!(key in BUILT_IN_TILE_DEFS)) delete TILE_DEFS[key];
     }

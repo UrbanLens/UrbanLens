@@ -42,7 +42,7 @@ def tile_url_template(layer: str) -> str:
     return concrete.replace("900001", "{z}").replace("900002", "{x}").replace("900003", "{y}")
 
 
-def basemap_tile_catalogue() -> list[dict[str, Any]]:
+def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
     """REData's layer catalogue, rewritten into what a browser on this deployment can actually use.
 
     A raster entry's vendor ``url_template`` is deliberately not passed through: it needs REData's
@@ -50,6 +50,14 @@ def basemap_tile_catalogue() -> list[dict[str, Any]]:
     to load. A vector entry's ``style_url`` needs no key (see REData's ``D11``) and is passed
     through unchanged - the client fetches and renders that style document directly, and REData
     never sees a vector tile go by.
+
+    Args:
+        allow_fetch: Whether a cache miss may go to REData. False for anything rendering a page:
+            that call costs ~1.45s (``P131``) and the embed appears on every page built on
+            ``themes/base.html``, so a cold cache would otherwise put a REData round trip inside
+            the render of a profile page that has no map on it at all. A miss simply yields no
+            embed, and the client's own ``registerRedataLayers()`` fetch - which is asynchronous,
+            and which the catalogue view answers - repopulates the cache for every later render.
 
     Returns:
         One entry per offered layer - empty when REData is unconfigured or unreachable, so a map
@@ -64,6 +72,8 @@ def basemap_tile_catalogue() -> list[dict[str, Any]]:
     cached = cache.get(CATALOGUE_CACHE_KEY)
     if cached is not None:
         return list(cached)
+    if not allow_fetch:
+        return []
 
     try:
         sources = RedataBasemapTilesGateway().list_sources()
@@ -103,7 +113,7 @@ def basemap_tile_catalogue() -> list[dict[str, Any]]:
     return layers
 
 
-def catalogue_for_viewer(*, authenticated: bool) -> list[dict[str, Any]]:
+def catalogue_for_viewer(*, authenticated: bool, allow_fetch: bool = True) -> list[dict[str, Any]]:
     """:func:`basemap_tile_catalogue`, filtered to what this viewer can actually fetch.
 
     A raster entry points at :class:`~urbanlens.dashboard.controllers.basemap_tiles.BasemapTileView`,
@@ -113,11 +123,12 @@ def catalogue_for_viewer(*, authenticated: bool) -> list[dict[str, Any]]:
 
     Args:
         authenticated: Whether the viewer is signed in to this deployment.
+        allow_fetch: Passed through; see :func:`basemap_tile_catalogue`.
 
     Returns:
         The entries this viewer can load.
     """
-    layers = basemap_tile_catalogue()
+    layers = basemap_tile_catalogue(allow_fetch=allow_fetch)
     if authenticated:
         return layers
     return [entry for entry in layers if entry.get("source_type") == "vector"]

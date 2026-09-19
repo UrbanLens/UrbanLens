@@ -737,7 +737,9 @@ def basemap_tile_catalogue(context: template.Context) -> SafeString:
     # Rendered without a request on a few fragment paths, where "not signed in" is the safe read:
     # it offers only the keyless layers, rather than proxy URLs the viewer may not be able to fetch.
     user = getattr(context.get("request"), "user", None)
-    layers = catalogue_for_viewer(authenticated=user is not None and bool(user.is_authenticated))
+    # allow_fetch=False: this runs on every page, map or not, and a cold cache must never put a
+    # REData round trip inside a page render. A miss renders nothing and the client asks instead.
+    layers = catalogue_for_viewer(authenticated=user is not None and bool(user.is_authenticated), allow_fetch=False)
     if not layers:
         # No element at all, rather than an empty one: absent means "ask over HTTP if you care",
         # which is what a page rendered outside this base template gets. See map-layers.ts.
