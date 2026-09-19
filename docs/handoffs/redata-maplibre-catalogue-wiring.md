@@ -171,6 +171,18 @@ document's own two earlier "corrections" of it. `PL8`'s count is fixed to match.
 at REData read either earlier version of this section and adjusted their own numbers to match this
 doc's - this doc's count was the one that needed the confidence walked back, not REData's.
 
+## Correction, found on a fourth reassessment: the `comment-map.js:721` leak the table above confirmed is now fixed
+
+Not a mistake in the table, a staleness gap: "confirmed" there described what was true the moment this
+doc was written, before this same session went on to start `PL8`'s work. The leak is fixed now, in
+`PL8` item 8 (`6b117c695`, `504e145d4`) - `_renderMapThumb` and `_expandCommentMap` tag their Leaflet
+instance onto its container element, and a delegated `htmx:beforeCleanupElement` listener disposes it
+through a tag-guarded, safe-to-call-twice helper the moment HTMX detaches that element. Re-verified
+directly against the current file on this reassessment, not assumed from the commit messages: the
+listener, the tagging, and the dispose helper are all present in `comment-map.js` today. The table
+entry above is left as written, describing accurately what was true when this doc was checked - this
+section is the correction, per this doc's own convention, not a silent rewrite of that row.
+
 ## For whoever reads this next
 
 - `T8` §0's check still applies before trusting §1 as deployed on REData's side: `curl -sH
