@@ -130,8 +130,12 @@ there is nothing to reimplement," and that framed it as delete-outright, not por
 floor-plan "rotate" tool - toolbar button, `t` keyboard shortcut, undo/checkpoint integration
 (`floorplan-editor.ts:172-213`, `2351-2456`). `PL8` item 6 is rewritten (not appended-under) to
 reflect this: the item becomes porting the rotate tool to MapLibre's native `bearing`/`setBearing()`,
-not deleting it outright. Flagged here in case REData's own `T8`/`PL12` reasoning about this
-dependency assumed the same thing elsewhere.
+not deleting it outright. Not a hedge, confirmed on later reassessment: this is not just `T8`'s
+claim, it is `D12`'s own - its "Costs accepted" section reads "`leaflet-rotate`... is deleted
+outright. Its only capability MapLibre lacks is device-compass rotation, which nothing here uses,"
+near-verbatim the same claim `T8` §2 restated. `D12` is `status: accepted`; REData's own team may be
+planning against its "deleted outright" framing independent of `T8`/`PL12`, so this correction
+applies to `D12` directly, not only to the handoff doc built on top of it.
 
 ## Correction, found on later reassessment: this doc's own "15 across 10" count was wrong
 
