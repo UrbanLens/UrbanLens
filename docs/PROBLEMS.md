@@ -2908,9 +2908,9 @@ Not recommended: relying on staging's limits alone. Lower limits bound what stag
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
 
-## P125 — The population capacity harness collapses at 500 concurrent users on the app container's CPU; production now has a 4-core override to deploy, not yet applied or re-measured
+## P125 — The population capacity harness collapses on the app container's CPU - at 200 concurrent users once the map's tiles are in the model, 250 without them; production's 4-core override is still undeployed and unmeasured
 
-`id: P125` · `status: open` · `updated: 2026-09-17`
+`id: P125` · `status: open` · `updated: 2026-09-19`
 
 **This is a different axis from P113 and P123.** Those are the "neighbour" question - does one
 account's action cost a *different* account anything at all (D11, `tests/perf/k6/neighbour.js`).
@@ -3046,6 +3046,71 @@ the `_VALKEY` ones the sample file still carried. That silently broke
 existing halve-the-default convention.
 
 Not fixed: the live measurement. This entry stays open.
+
+### 2026-09-19: the map's tiles were never in the model, and they cost a third of the ceiling
+
+Every run above measures a map load that asks for **zero basemap tiles**. `map.view` +
+`map.document` + `map.pins.meta` is the page and its metadata; the ~24 images the viewport actually
+draws were missing, and they are the most numerous request the site has. `tests/perf/k6/population.js`
+now draws them (`drawViewport`, `lib/capacity.js:viewportTiles`/`tilesToFetch`), modelling the
+browser cache the proxy's new `Cache-Control` earns: a tile this VU already holds is not re-asked.
+`bin/run_capacity_tests.sh` seeds the grid first (`manage.py seed_basemap_tile_cache`, grid read out
+of the k6 source so the two cannot drift), and `setup()` refuses to start if the first grid tile is
+not a 200 - a run against an unseeded cache measures the vendor, not this deployment.
+
+Three ladders, same host, same hour, same 471,756-pin population, 2-core app container:
+
+| users | page p95, tiles drawn | page p95, no tiles | tile p95 | app cores (mean) | throttled |
+|---:|---:|---:|---:|---:|---:|
+| 125 | 458 ms | - | 70 ms | 0.59 | 5.1% |
+| 150 | 417 ms | - | 47 ms | 0.56 | 2.1% |
+| 175 | 372 ms | 329 ms | 53 ms | 0.66 | 3.1% |
+| 200 | **2,485 ms** | 774 ms | **779 ms** | 0.91 | 16.6% |
+| 250 | **4,450 ms** | 395 ms | **650 ms** | 1.09 | 25.3% |
+| 500 | **10,641 ms** | - | 8,884 ms | 1.87 | 70.4% |
+| 1000 | **39,536 ms** | - | 34,248 ms | 1.97 | 78.3% |
+
+(`--no-tiles` runs the same journey with the tile leg off, which is how the two columns are one
+difference rather than two dates. Requests failed stays at 0.00% until u1000's 0.03%; socket
+handshakes stay at 100%. Nothing fails - it queues.)
+
+**Tiles move the ceiling from 250 to 175.** The knee is sharp: 175 is comfortable and 200 is already
+2.5x over budget with tiles drawn, while without them 250 still passes - reproducing
+`capacity-content`'s September figure on today's tree, which is what makes the comparison a tile
+result rather than a four-day drift.
+
+**It is burstiness, not average load.** At u200 the app container averages 0.91 of its 2 cores -
+46% - and is throttled 16.6% of the time; the tiles-off run at u250 averages more wall-clock work per
+second and is throttled 3.4%. A viewport asks for its two dozen tiles in one instant, so the
+container hits its quota inside a single 100 ms CFS window and everything behind it - other people's
+pages included - waits out the rest of that window. Mean utilisation says there is headroom; the
+tail says there is not.
+
+**What a tile costs, measured** (`request_costs.txt`, whole 1,000-user run): 31,559 requests, 2.2x
+the next most numerous view, 13.1% of all app CPU, 5.5 ms CPU and 2.0 queries each (`auth_user` for
+the session, `dashboard_profiles` for `WriteSourceMiddleware`). A cold map open is therefore
+~246 ms of app CPU - `map.view` 64.5 + `map.document` 38.6 + `map.pins.meta` 11.3 + 24 tiles at 5.5 -
+against ~114 ms for one whose browser already holds the tiles. On 2 cores that is ~8 cold map opens
+per second against ~17 warm ones, so 1,000 people opening the map in the same instant is ~123
+seconds of queue cold and ~57 warm.
+
+**Still not the database.** `pg_stat_activity` peaked at 16 of 100 backends (14 web), 44% idle, and
+`ul_perf_db` never passed 1.10 mean cores. The 2026-09-15 conclusion holds: the constraint is the app
+container's CPU allocation, and now also how unevenly a map load arrives at it.
+
+### What this does not establish
+
+- **The 4-core production override is still unapplied and unmeasured**, exactly as the 2026-09-17
+  section leaves it. Everything above is 2 cores.
+- **Tiles are served from cache here, never fetched.** The grid is seeded and `UL_REDATA_API_URL`
+  points at a closed port in the perf environment, so no run touches REData. A deployment whose
+  viewers pan onto uncached ground pays an upstream fetch that this says nothing about (`P131`).
+- **The tile grid is one square of 1,024 coordinates** and each VU walks its own patch of it, so the
+  tiles are always a cache hit somewhere warm. A real population spread over a continent has a colder
+  cache than this.
+- **`search_panel` is over its 500 ms fragment budget at every level measured, tiles or no tiles**
+  (589-745 ms), including at 125 users where nothing else is close. That is an endpoint to fix, not a
+  capacity ceiling - 34.9 queries and 997 mean rows, worst case 67 queries.
 
 ## P128 — The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is
 

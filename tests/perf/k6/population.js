@@ -19,6 +19,7 @@ import {
     DEFAULT_THINK_MEDIAN_SECONDS,
     DEFAULT_THINK_SIGMA,
     ENDPOINTS,
+    VIEWPORT_TILES,
     accountIndex,
     autocompleteQueries,
     buildStages,
@@ -33,7 +34,9 @@ import {
     stageAt,
     storeClaim,
     thinkSeconds,
+    tilesToFetch,
     totalSeconds,
+    viewportTiles,
 } from "./lib/capacity.js";
 import { adopt, get, getParams, postForm } from "./lib/session.js";
 
@@ -69,10 +72,18 @@ const SIDEBAR_SHARE = Number(__ENV.UL_CAP_SIDEBAR_SHARE || 0.5);
 const BELL_SHARE = 0.1;
 
 const SOCKETS = (__ENV.UL_CAP_SOCKETS || "1") !== "0";
+
+/**
+ * Whether a map visit draws its tiles. Off measures the same journey without the site's most
+ * numerous request, so what tiles cost the whole deployment is a difference between two runs an
+ * hour apart rather than a comparison across whatever else changed between two dates.
+ */
+const TILES = (__ENV.UL_CAP_TILES || "1") !== "0";
 const BUDGETS = {
     page: Number(__ENV.UL_CAP_PAGE_BUDGET_MS || DEFAULT_BUDGETS_MS.page),
     fragment: Number(__ENV.UL_CAP_FRAGMENT_BUDGET_MS || DEFAULT_BUDGETS_MS.fragment),
     bulk: null,
+    tile: Number(__ENV.UL_CAP_TILE_BUDGET_MS || DEFAULT_BUDGETS_MS.tile),
 };
 const SUMMARY_PATH = __ENV.UL_PERF_SUMMARY || "";
 const STAGES_PATH = __ENV.UL_CAP_STAGES_PATH || "";
@@ -131,7 +142,17 @@ export function setup() {
     if (response.status !== 200) {
         fail(`Pre-flight GET ${ROUTES["map.view"]} as ${account.username} answered ${response.status}; a minted session that is not signed in measures the sign-in page.`);
     }
-    console.log(`pre-flight ok: ${ACCOUNTS.length} accounts, ${MANIFEST.pins} pins, levels ${holds(STAGES).map((stage) => stage.users).join(",")}, ${totalSeconds(STAGES)}s`);
+    // A run that measures 30,000 misses looks like a fast deployment. The first tile of the grid is
+    // checked here so a wrong layer, an unseeded cache or a proxy this deployment cannot serve is a
+    // refusal to start rather than a result.
+    if (TILES) {
+        const tile = get(session, viewportTiles(1)[0], { endpoint: "preflight" }, { redirects: 0 });
+        if (tile.status !== 200) {
+            fail(`Pre-flight GET ${viewportTiles(1)[0]} answered ${tile.status}. Seed the deployment's tile cache for the grid in lib/capacity.js before measuring, or this run measures misses.`);
+        }
+    }
+    const tilesDrawn = TILES ? `${VIEWPORT_TILES} tiles/viewport` : "no tiles (UL_CAP_TILES=0)";
+    console.log(`pre-flight ok: ${ACCOUNTS.length} accounts, ${MANIFEST.pins} pins, ${tilesDrawn}, levels ${holds(STAGES).map((stage) => stage.users).join(",")}, ${totalSeconds(STAGES)}s`);
     return { startedAtMs: Date.now() };
 }
 
@@ -148,7 +169,9 @@ function me() {
     const account = ACCOUNTS[accountIndex(id, ACCOUNTS.length)];
     const session = adopt(BASE_URL, "population", account.cookies);
     session.headers = { "X-Forwarded-For": forwardedFor(id) };
-    person = { account, session, address: forwardedFor(id), mapVisited: false, socketFailures: 0 };
+    // `heldTiles` is this browser's tile cache: the proxy marks a tile immutable, so one it has
+    // already drawn is not asked for again however often the user comes back to that ground.
+    person = { id, account, session, address: forwardedFor(id), mapVisited: false, socketFailures: 0, heldTiles: new Set(), mapVisits: 0 };
     return person;
 }
 
@@ -180,6 +203,31 @@ function fetchTogether(state, requests) {
     return responses;
 }
 
+/**
+ * The tiles the map draws, asked for the way a browser asks: all at once, and only for the ground
+ * this browser is not already holding.
+ *
+ * This is the numerous request on the site - a page is one request and its map is this many more -
+ * and it is the one a deployment's request threads are actually spent on.
+ */
+function drawViewport(state) {
+    if (!TILES) {
+        return;
+    }
+    state.mapVisits += 1;
+    // A different square each visit, so a returning user is panning rather than staring: the visit
+    // number moves the viewport, and the account keeps them away from everyone else's ground.
+    const wanted = viewportTiles(state.id * 7 + state.mapVisits);
+    const missing = tilesToFetch(wanted, state.heldTiles);
+    if (!missing.length) {
+        return;
+    }
+    fetchTogether(
+        state,
+        missing.map((path) => ["basemap_tile", path]),
+    );
+}
+
 /** A full page load, then what that page fetches as it renders. The header's badges arrive with the page. */
 function page(state, endpoint, path, alongside) {
     fetchOne(state, endpoint, path);
@@ -193,6 +241,7 @@ const JOURNEY_STEPS = {
         const cold = !state.mapVisited && Math.random() < COLD_CACHE_SHARE;
         state.mapVisited = true;
         fetchOne(state, "map_view", ROUTES["map.view"]);
+        drawViewport(state);
         let claim = "";
         for (const endpoint of mapLoadEndpoints(cold)) {
             if (endpoint === "map_pins_meta") {
@@ -382,8 +431,8 @@ export function handleSummary(data) {
 }
 
 function renderVerdict(data) {
-    const lines = ["", `capacity run: levels ${holds(STAGES).map((stage) => stage.users).join(" -> ")}, page p95 < ${BUDGETS.page}ms, fragment p95 < ${BUDGETS.fragment}ms`, ""];
-    lines.push("  hold        failed    ws ok   worst page p95            worst fragment p95         map_document p95");
+    const lines = ["", `capacity run: levels ${holds(STAGES).map((stage) => stage.users).join(" -> ")}, page p95 < ${BUDGETS.page}ms, fragment p95 < ${BUDGETS.fragment}ms, tile p95 < ${BUDGETS.tile}ms`, ""];
+    lines.push("  hold        failed    ws ok   worst page p95            worst fragment p95         tile p95   tiles     map_document p95");
     for (const stage of holds(STAGES)) {
         const failed = rate(data, `http_req_failed{stage:${stage.name}}`);
         const ws = rate(data, `ws_handshake_ok{stage:${stage.name}}`);
@@ -398,8 +447,10 @@ function renderVerdict(data) {
             return found ? `${found.p95.toFixed(0)}ms ${found.endpoint}` : "-";
         };
         const documentP95 = value(data, `http_req_duration{endpoint:map_document,stage:${stage.name}}`, "p(95)");
+        const tileP95 = value(data, `http_req_duration{endpoint:basemap_tile,stage:${stage.name}}`, "p(95)");
+        const tileCount = value(data, `http_req_duration{endpoint:basemap_tile,stage:${stage.name}}`, "count");
         lines.push(
-            `  ${stage.name.padEnd(10)} ${percent(failed).padStart(7)} ${percent(ws).padStart(8)}   ${worst("page").padEnd(25)} ${worst("fragment").padEnd(26)} ${documentP95 === undefined ? "-" : `${documentP95.toFixed(0)}ms`}`,
+            `  ${stage.name.padEnd(10)} ${percent(failed).padStart(7)} ${percent(ws).padStart(8)}   ${worst("page").padEnd(25)} ${worst("fragment").padEnd(26)} ${(tileP95 === undefined ? "-" : `${tileP95.toFixed(0)}ms`).padEnd(10)} ${(tileCount === undefined ? "-" : String(tileCount)).padEnd(9)} ${documentP95 === undefined ? "-" : `${documentP95.toFixed(0)}ms`}`,
         );
     }
     const dropped = data.metrics.ws_dropped;

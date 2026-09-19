@@ -20,7 +20,31 @@ export const MIN_THINK_SECONDS = 3;
 export const MAX_THINK_SECONDS = 600;
 
 /** p95 ceilings, in milliseconds, per class of request. A class of `null` is recorded, never asserted. */
-export const DEFAULT_BUDGETS_MS = { page: 1000, fragment: 500, bulk: null };
+export const DEFAULT_BUDGETS_MS = { page: 1000, fragment: 500, bulk: null, tile: 300 };
+
+/**
+ * Basemap tiles one viewport asks for at once.
+ *
+ * A map is not one request, it is a page plus this many - so leaving them out of a capacity run
+ * measures a deployment nobody uses. 24 is what a 1400x900 window actually asked this deployment
+ * for, measured 2026-09-19; a taller window asks for more.
+ */
+export const VIEWPORT_TILES = 24;
+
+/** The layer a capacity run draws, and the zoom it draws it at. Both have to match whatever seeded the cache. */
+export const TILE_LAYER = "street";
+export const TILE_ZOOM = 13;
+
+/**
+ * The square of tile coordinates a run stays inside.
+ *
+ * Bounded so the deployment's own tile cache warms within the first few users rather than every
+ * user paying an upstream fetch: the subject here is what this deployment costs to serve a tile it
+ * already has, not what the vendor costs to fetch one. Wide enough that users are not all asking
+ * for the same 24 tiles, which would measure one cache entry.
+ */
+export const TILE_GRID_ORIGIN = { x: 2400, y: 3072 };
+export const TILE_GRID_SIZE = 32;
 
 /** What a user does next, weighted by how often a page view is that page. */
 export const JOURNEYS = [
@@ -66,6 +90,7 @@ export const ENDPOINTS = {
     messages_unread: "fragment",
     search_panel: "fragment",
     map_document: "bulk",
+    basemap_tile: "tile",
 };
 
 /**
@@ -201,6 +226,50 @@ export function autocompleteQueries(pinNamePrefix) {
 /** What the map page fetches after its HTML, in order: with no pin cache it downloads every pin before polling meta. */
 export function mapLoadEndpoints(cold) {
     return cold ? ["map_document", "map_pins_meta"] : ["map_pins_meta"];
+}
+
+/**
+ * The tiles one viewport asks for, as paths.
+ *
+ * A viewport is a square of tiles around wherever the user is looking, so this walks out from a
+ * centre the same way Leaflet does. Coordinates wrap inside the grid rather than running off it, so
+ * every path a run produces is one the cache was seeded for.
+ *
+ * @param {number} seed Anything stable per user and per visit; decides which ground they look at.
+ * @param {number} count How many tiles the viewport holds.
+ * @returns {string[]} Tile paths, without the deployment's origin.
+ */
+export function viewportTiles(seed, count = VIEWPORT_TILES) {
+    const side = Math.ceil(Math.sqrt(count));
+    const centreX = TILE_GRID_ORIGIN.x + (Math.abs(Math.floor(seed)) % TILE_GRID_SIZE);
+    const centreY = TILE_GRID_ORIGIN.y + (Math.abs(Math.floor(seed / TILE_GRID_SIZE)) % TILE_GRID_SIZE);
+    const paths = [];
+    for (let row = 0; row < side && paths.length < count; row++) {
+        for (let column = 0; column < side && paths.length < count; column++) {
+            const x = TILE_GRID_ORIGIN.x + (((centreX - TILE_GRID_ORIGIN.x + column) % TILE_GRID_SIZE) + TILE_GRID_SIZE) % TILE_GRID_SIZE;
+            const y = TILE_GRID_ORIGIN.y + (((centreY - TILE_GRID_ORIGIN.y + row) % TILE_GRID_SIZE) + TILE_GRID_SIZE) % TILE_GRID_SIZE;
+            paths.push(`/dashboard/map/basemap-tiles/${TILE_LAYER}/${TILE_ZOOM}/${x}/${y}/`);
+        }
+    }
+    return paths;
+}
+
+/**
+ * The tiles a browser would actually go out for, given what it is already holding.
+ *
+ * The proxy sends `Cache-Control: private, max-age, immutable`, so a tile this browser has drawn
+ * before costs the deployment nothing on the next visit. A capacity run that re-asks for all of
+ * them measures a deployment without that header - and one that never re-visits ground measures a
+ * user who never pans back.
+ *
+ * @param {string[]} wanted Every tile in the viewport.
+ * @param {Set<string>} held What this browser has already fetched, added to in place.
+ * @returns {string[]} The subset that reaches the deployment.
+ */
+export function tilesToFetch(wanted, held) {
+    const missing = wanted.filter((path) => !held.has(path));
+    missing.forEach((path) => held.add(path));
+    return missing;
 }
 
 /** The fingerprint a filter sends to claim the page's pin store, read from a meta response. Empty asks for payloads. */

@@ -11,6 +11,11 @@ import {
     MAX_THINK_SECONDS,
     MIN_RAMP_SECONDS,
     MIN_THINK_SECONDS,
+    TILE_GRID_ORIGIN,
+    TILE_GRID_SIZE,
+    TILE_LAYER,
+    TILE_ZOOM,
+    VIEWPORT_TILES,
     accountIndex,
     autocompleteQueries,
     buildStages,
@@ -25,7 +30,9 @@ import {
     stageAt,
     storeClaim,
     thinkSeconds,
+    tilesToFetch,
     totalSeconds,
+    viewportTiles,
 } from "./capacity.js";
 
 /** A seeded uniform source, so a distribution test cannot flake. */
@@ -212,5 +219,62 @@ describe("the thresholds", () => {
 
     test("the sign-in guard is always asserted", () => {
         expect(buildThresholds(stages)["checks{guard:signed_in}"]).toEqual(["rate==1"]);
+    });
+});
+
+describe("the viewport a map asks for", () => {
+    test("is a whole viewport's worth of tiles", () => {
+        expect(viewportTiles(1)).toHaveLength(VIEWPORT_TILES);
+        expect(new Set(viewportTiles(1)).size).toBe(VIEWPORT_TILES);
+    });
+
+    test("stays inside the grid the deployment's cache was seeded for", () => {
+        for (let seed = 0; seed < 5000; seed += 7) {
+            for (const path of viewportTiles(seed)) {
+                const match = /^\/dashboard\/map\/basemap-tiles\/([a-z]+)\/(\d+)\/(\d+)\/(\d+)\/$/.exec(path);
+                expect(match, `${path} is not a tile path the proxy route can carry`).not.toBeNull();
+                const [, layer, zoom, x, y] = match;
+                expect(layer).toBe(TILE_LAYER);
+                expect(Number(zoom)).toBe(TILE_ZOOM);
+                expect(Number(x)).toBeGreaterThanOrEqual(TILE_GRID_ORIGIN.x);
+                expect(Number(x)).toBeLessThan(TILE_GRID_ORIGIN.x + TILE_GRID_SIZE);
+                expect(Number(y)).toBeGreaterThanOrEqual(TILE_GRID_ORIGIN.y);
+                expect(Number(y)).toBeLessThan(TILE_GRID_ORIGIN.y + TILE_GRID_SIZE);
+            }
+        }
+    });
+
+    /** Every user staring at the same 24 tiles measures one cache entry, not a deployment. */
+    test("puts different users on different ground", () => {
+        const ground = new Set(Array.from({ length: 200 }, (_, index) => viewportTiles(index * 7).join("|")));
+
+        expect(ground.size).toBeGreaterThan(50);
+    });
+});
+
+describe("what a browser goes out for", () => {
+    test("is every tile it does not already hold", () => {
+        const held = new Set();
+
+        expect(tilesToFetch(viewportTiles(1), held)).toHaveLength(VIEWPORT_TILES);
+        expect(held.size).toBe(VIEWPORT_TILES);
+    });
+
+    /** The tile proxy marks a tile immutable, so a second look at the same ground costs nothing. */
+    test("is nothing at all on a second look at the same ground", () => {
+        const held = new Set();
+        tilesToFetch(viewportTiles(1), held);
+
+        expect(tilesToFetch(viewportTiles(1), held)).toEqual([]);
+    });
+
+    test("is only the new part of a viewport the user panned into", () => {
+        const held = new Set();
+        tilesToFetch(viewportTiles(1), held);
+
+        const panned = tilesToFetch(viewportTiles(2), held);
+
+        expect(panned.length).toBeGreaterThan(0);
+        expect(panned.length).toBeLessThanOrEqual(VIEWPORT_TILES);
     });
 });
