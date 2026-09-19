@@ -47,15 +47,18 @@ tile-URL template — `{"type": "raster", "tiles": ["https://.../{z}/{x}/{y}.png
 raster layer in MapLibre requires vector data, a hosted style API, or REData.
 
 **Checked, not assumed: CORS is not a blocker.** Unlike Leaflet's `<img>`-tag tile loading, MapLibre
-loads raster tiles via `fetch()` (it needs the response as a blob to upload to a WebGL texture), which
-enforces CORS - a cross-origin fetch a server doesn't explicitly permit fails outright, where an
-`<img src>` load of the same URL would have succeeded regardless. Verified 2026-09-19 with a direct
-`curl -H "Origin: https://example.com"` against all four `TILE_DEFS` vendor endpoints
-(`basemaps.cartocdn.com`, `tile.opentopomap.org`, `server.arcgisonline.com`,
+loads raster tiles via `XMLHttpRequest` with `responseType: "arraybuffer"`, decoding the response
+through `createImageBitmap` to upload it to a WebGL texture - confirmed by grepping the actual
+`maplibre-gl@5.24.0` bundle (the version pinned this session, see `vendor_assets.py`) for its tile
+fetch path, not assumed from general library knowledge. Functionally this is the same CORS category as
+`fetch()`, not `<img src>`: a cross-origin `XMLHttpRequest`/`fetch()` a server doesn't explicitly permit
+fails outright, where an `<img src>` load of the same URL would have succeeded regardless. Verified
+2026-09-19 with a direct `curl -H "Origin: https://example.com"` against all four `TILE_DEFS` vendor
+endpoints (`basemaps.cartocdn.com`, `tile.opentopomap.org`, `server.arcgisonline.com`,
 `services.arcgisonline.com`): every one already answers `Access-Control-Allow-Origin: *`. No vendor
 change is required for the client-built raster style to work. (`PL8` item 9's separate CSP note still
-applies - `connect-src` needs the same origins `img-src` already allows, since `fetch()` is governed by
-the former and `<img>` by the latter - but that's a same-origin-policy header on *this app's* nginx
+applies - `connect-src` governs both `XMLHttpRequest` and `fetch()`, where `img-src` governs `<img>` -
+but that's a same-origin-policy header on *this app's* nginx
 config, unrelated to the vendor CORS question this paragraph checks.)
 
 ## Decision
