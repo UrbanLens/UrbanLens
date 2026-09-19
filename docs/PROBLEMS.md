@@ -3185,7 +3185,7 @@ privilege it lacked before) and `bin/run_tests.sh`'s own test-db creation may al
   not edited here; its docker-exec pytest instructions should either name `bin/run_tests.sh` (R29's
   existing answer) or note the `CREATEDB`/extension prerequisite, whichever the eventual fix picks.
 
-## P131 — every authenticated REData API call costs ~1.45s in REData's key verification, not in the work requested
+## P131 — Every authenticated REData API call costs ~1.45s verifying the key (PBKDF2 per request), not doing the work; worst for basemap tiles, where one page view is ~30 calls
 
 `id: P131` · `status: open` · `updated: 2026-09-19`
 

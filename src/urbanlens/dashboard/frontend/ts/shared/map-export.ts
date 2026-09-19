@@ -5,6 +5,7 @@ import type { MapLayersInstance } from "./map-layers";
 import { MapLayers } from "./map-layers";
 import type { LatLngTuple, ShapeSpec } from "./markup-engine";
 import { MarkupEngine } from "./markup-engine";
+import { isOwnTileUrl, loadOwnTileImage } from "./own-tiles";
 
 // `L` is loaded globally via a CDN <script> tag - see markup-engine.ts for
 // why this is an ambient declaration rather than a bundled import.
@@ -12,6 +13,9 @@ declare const L: typeof import("leaflet");
 
 const TILE_SIZE = 256;
 const TILE_LOAD_TIMEOUT_MS = 8000;
+
+/** Tiles fetched at once while rasterizing. Own tiles are queued more narrowly again by `own-tiles.ts`. */
+const EXPORT_TILE_CONCURRENCY = 8;
 
 export interface MapExportOptions {
     /** The MapLayers engine instance already bound to this map. */
@@ -28,8 +32,16 @@ function activeBaseKey(layers: MapLayersInstance): string {
     return key === "street" && layers.isDarkActive() ? "dark" : key;
 }
 
-/** Loads a tile image, resolving `null` (rather than rejecting) on error or timeout so one bad tile can't hang the export. */
-function loadTileImage(url: string): Promise<HTMLImageElement | null> {
+/**
+ * Loads a tile image, resolving `null` (rather than rejecting) on error or timeout so one bad tile
+ * can't hang the export.
+ *
+ * A tile this deployment serves itself goes through `own-tiles.ts` instead, so an export queues
+ * behind - and retries alongside - the map the user is looking at, rather than racing it for the
+ * proxy's few upstream slots and silently leaving holes in the file it hands back.
+ */
+function loadTileImage(url: string): Promise<CanvasImageSource | null> {
+    if (isOwnTileUrl(url)) return loadOwnTileImage(url);
     return new Promise((resolve) => {
         let settled = false;
         const done = (result: HTMLImageElement | null) => {
@@ -45,6 +57,25 @@ function loadTileImage(url: string): Promise<HTMLImageElement | null> {
         img.onerror = () => done(null);
         img.src = url;
     });
+}
+
+/**
+ * Runs `load` over every job, at most `limit` at a time.
+ *
+ * An export covers the whole visible view at full resolution, which is a bigger grid than the map
+ * itself draws - firing all of it at once is a burst no tile server enjoys, this deployment's own
+ * least of all.
+ */
+async function loadWithLimit<T>(count: number, limit: number, load: (index: number) => Promise<T>): Promise<T[]> {
+    const results = new Array<T>(count);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(limit, count) }, async () => {
+        for (let index = next++; index < count; index = next++) {
+            results[index] = await load(index);
+        }
+    });
+    await Promise.all(workers);
+    return results;
 }
 
 /** Draws every tile of `tileLayer` covering the map's current visible bounds at `zoom` onto `ctx`. */
@@ -72,19 +103,20 @@ async function drawTileLayerGrid(ctx: CanvasRenderingContext2D, map: L.Map, tile
     }
     if (!jobs.length) return;
 
+    // Every URL is resolved before the first await, because getTileUrl() reads the _tileZoom set
+    // above and anything else touching this layer meanwhile would move it.
     // getTileUrl() expects an L.Coords (a real Point plus .z) - build one from
     // an actual L.point() rather than a plain object literal.
-    const images = await Promise.allSettled(
-        jobs.map((job) => {
-            const coords = L.point(job.x, job.y) as L.Coords;
-            coords.z = fetchZoom;
-            return loadTileImage(tileLayer.getTileUrl(coords));
-        }),
-    );
+    const urls = jobs.map((job) => {
+        const coords = L.point(job.x, job.y) as L.Coords;
+        coords.z = fetchZoom;
+        return tileLayer.getTileUrl(coords);
+    });
+
+    const images = await loadWithLimit(jobs.length, EXPORT_TILE_CONCURRENCY, (index) => loadTileImage(urls[index]!).catch(() => null));
 
     jobs.forEach((job, i) => {
-        const result = images[i];
-        const img = result && result.status === "fulfilled" ? result.value : null;
+        const img = images[i];
         if (img) ctx.drawImage(img, job.point.x, job.point.y, drawSize, drawSize);
     });
 }

@@ -12,6 +12,7 @@ import { bindMapContextMenu, type BindMapContextMenuOptions } from "./map-contex
 import { createLayersPanel } from "./map-layers-panel";
 import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import type { RasterSourceInput } from "./maplibre-raster-style";
+import { acquireOwnTileSlot, isOwnTileUrl, ownTileRetryDelayMs } from "./own-tiles";
 
 export type BaseLayerKey = "street" | "topographic" | "satellite";
 export type MapDarkMode = "light" | "dark" | "system";
@@ -181,66 +182,96 @@ export function normalizeBase(key: string | null | undefined): BaseLayerKey {
 export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.TileLayer {
     applyEmbeddedCatalogue();
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
-    const layer = L.tileLayer(def.url, { ...def.options, ...extraOptions });
-    // A relative template means this deployment serves the tiles itself, through the proxy in
-    // `controllers/basemap_tiles.py`. Every other def here is a vendor's absolute URL.
-    return def.url.startsWith("/") ? retryOwnTiles(layer) : layer;
+    const options = { ...def.options, ...extraOptions };
+    // A vendor's tiles are asked for the way Leaflet always has. This deployment's own go through
+    // the queue in `own-tiles.ts`, because the proxy serving them can only fetch a few at a time.
+    return isOwnTileUrl(def.url) ? new (ownTileLayerClass())(def.url, options) : L.tileLayer(def.url, options);
+}
+
+type OwnTileLayerClass = new (url: string, options?: L.TileLayerOptions) => L.TileLayer;
+
+/**
+ * Built on first use rather than at import: this module is bundled into `core.js`, which every page
+ * loads, and `L` is a CDN global that only map pages have. Keyed on what it was derived from, so
+ * there is no stale subclass to reset when something swaps Leaflet out underneath it.
+ */
+let ownTileLayerCache: { base: unknown; cls: OwnTileLayerClass } | null = null;
+
+function ownTileLayerClass(): OwnTileLayerClass {
+    if (!ownTileLayerCache || ownTileLayerCache.base !== L.TileLayer) {
+        ownTileLayerCache = { base: L.TileLayer, cls: L.TileLayer.extend(OWN_TILE_LAYER) };
+    }
+    return ownTileLayerCache.cls;
 }
 
 /**
- * Backoff before each retry of a tile this deployment serves itself, in milliseconds.
+ * A `TileLayer` that queues its requests and asks again when the proxy says it is busy.
  *
- * The tile proxy answers 503 the moment its upstream slots are full, and a first look at an area
- * asks for ~30 tiles against 6 slots across the whole site (3 gunicorn workers x a cap of 2), so
- * most of that burst is refused rather than served. Neither engine retries a refused tile - Leaflet
- * paints `errorTileUrl` and considers it done, MapLibre marks it `errored` and its own `reload()`
- * skips errored tiles - so without this the bound does not make a map slow, it puts holes in it.
+ * Leaflet asks for a whole viewport at once and treats a failed tile as finished - it paints
+ * `errorTileUrl` and never comes back - so against a proxy with a handful of upstream slots, stock
+ * behaviour leaves most of a cold viewport permanently holed. Queueing is what fixes that; the
+ * retry only covers the slots this page does not control (see `own-tiles.ts`).
  *
- * A 30-tile burst against 6 slots needs ~7.5s of slot time at the ~1.5s REData currently takes per
- * fetch (`P131` - which is its per-request key verification, not the tiles), so the schedule has to
- * outlast that; jittered, these span ~9-26s. Nothing here is shorter than the `Retry-After: 1` the
- * proxy sends, since a fetch takes ~1.5s and a retry inside that window is refused for certain and
- * costs one of only four attempts.
+ * Subclassed rather than patched onto an instance because `createTile` is Leaflet's documented
+ * extension point for exactly this, and the alternative reaches past `protected`.
  */
-const OWN_TILE_RETRY_DELAYS_MS = [1000, 2500, 5000, 9000];
+const OWN_TILE_LAYER = {
+    createTile(this: L.TileLayer, coords: L.Coords, done: L.DoneCallback): HTMLElement {
+        const tile = document.createElement("img");
+        tile.alt = "";
+        const options = this.options;
+        // Both mirror Leaflet's own createTile, including its "only when string" note on referrerPolicy.
+        if (options.crossOrigin || options.crossOrigin === "") tile.crossOrigin = options.crossOrigin === true ? "" : options.crossOrigin;
+        if (typeof options.referrerPolicy === "string") tile.referrerPolicy = options.referrerPolicy;
 
-/**
- * Retries failed tiles for a layer this deployment serves itself.
- *
- * Attached per layer rather than to every layer on the map: a vendor CDN's failure is usually its
- * own rate limiter, and retrying into that earns a longer block - which is exactly what
- * `BASE_ERROR_TILE_URL` exists to absorb instead.
- * @returns The same layer, for chaining.
- */
-function retryOwnTiles(layer: L.TileLayer): L.TileLayer {
-    const requested = new WeakMap<HTMLImageElement, string>();
-    const attempts = new WeakMap<HTMLImageElement, number>();
-    // The URL is kept from when the tile was first asked for, rather than rebuilt at retry time:
-    // `getTileUrl()` fills `{z}` from the layer's *current* zoom rather than from the coords it is
-    // handed (and takes wrapped coords, which the event does not carry), so re-asking seconds later
-    // would paint a tile of somewhere else into this one if the user had zoomed meanwhile.
-    layer.on("tileloadstart", (event: L.TileEvent) => {
-        requested.set(event.tile, event.tile.src);
-    });
-    layer.on("tileerror", (event: L.TileErrorEvent) => {
-        // Leaflet has already swapped in errorTileUrl by now, so this is the only copy left.
-        const url = requested.get(event.tile);
-        const attempt = attempts.get(event.tile) ?? 0;
-        const delay = OWN_TILE_RETRY_DELAYS_MS[attempt];
-        if (url === undefined || delay === undefined) return;
-        attempts.set(event.tile, attempt + 1);
-        // Jittered: every tile in a viewport is refused in the same instant, and retrying them all
-        // on the same schedule rebuilds the burst that exhausted the slots in the first place.
-        setTimeout(
-            () => {
-                // Panned or zoomed away while waiting - Leaflet has already dropped this tile.
-                if (event.tile.isConnected) event.tile.src = url;
-            },
-            delay * (0.5 + Math.random()),
-        );
-    });
-    return layer;
-}
+        // Resolved now, while `coords` and the layer's zoom still agree: getTileUrl() fills {z}
+        // from the layer's *current* zoom rather than from the coords it is handed, so asking for
+        // it again after a wait would paint a tile of somewhere else into this one.
+        const url = this.getTileUrl(coords);
+        let attempt = 0;
+        let releaseSlot: (() => void) | null = null;
+        const release = (): void => {
+            releaseSlot?.();
+            releaseSlot = null;
+        };
+
+        const finish = (error?: Error): void => {
+            release();
+            // Always answered, even for a tile nobody is waiting for any more: Leaflet counts
+            // outstanding tiles to decide when a layer has finished loading, and one that never
+            // reports leaves the map's loading indicator on forever.
+            if (error && options.errorTileUrl && tile.getAttribute("src") !== options.errorTileUrl) tile.src = options.errorTileUrl;
+            done(error, tile);
+        };
+
+        const request = (): void => {
+            if (!tile.isConnected && attempt > 0) {
+                // Panned or zoomed away while queued - the slot is worth more to a tile still on screen.
+                finish(new Error("tile no longer needed"));
+                return;
+            }
+            void acquireOwnTileSlot().then((releaser) => {
+                releaseSlot = releaser;
+                tile.src = url;
+            });
+        };
+
+        tile.onload = () => finish();
+        tile.onerror = () => {
+            release();
+            const delay = ownTileRetryDelayMs(attempt);
+            if (delay === null) {
+                finish(new Error(`Tile ${url} failed after ${attempt + 1} attempts`));
+                return;
+            }
+            attempt++;
+            setTimeout(request, delay);
+        };
+
+        request();
+        return tile;
+    },
+};
 
 /**
  * Resolves one of the canonical sources to the shape `buildRasterStyle` (`maplibre-raster-style.ts`)
@@ -878,8 +909,50 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     };
 }
 
+/** The one element on the site that shows which tiles are being drawn (`partials/layout/footer.html`). */
+const FOOTER_ATTRIBUTION_ID = "page-footer-attribution-text";
+
+/** Attribution reported before the footer was parsed, waiting for it. */
+let pendingAttribution: string | null = null;
+
+function writeFooterAttribution(text: string): boolean {
+    const el = document.getElementById(FOOTER_ATTRIBUTION_ID);
+    if (!el) return false;
+    el.textContent = text;
+    return true;
+}
+
+/**
+ * Shows `text` as the footer's tile attribution - the `onAttribution` every map on the site wants.
+ *
+ * Several maps are built by an inline script in the page body, which runs before the footer include
+ * further down it, so a map's first attribution can arrive before there is anywhere to put it.
+ * Writing it when the document finishes parsing is what makes those pages credit their tiles at
+ * all, rather than only from the first layer switch onwards.
+ * @param text - Attribution for the layers currently drawn.
+ */
+export function setAttribution(text: string): void {
+    if (writeFooterAttribution(text)) return;
+    // Parsing is over and there is still no footer, so this page simply has none.
+    if (document.readyState !== "loading") return;
+    const waiting = pendingAttribution !== null;
+    pendingAttribution = text;
+    if (waiting) return;
+    document.addEventListener(
+        "DOMContentLoaded",
+        () => {
+            // The latest wins: a layer switched while the page was still parsing should not be
+            // undone by whatever the map happened to report first.
+            if (pendingAttribution !== null) writeFooterAttribution(pendingAttribution);
+            pendingAttribution = null;
+        },
+        { once: true },
+    );
+}
+
 export const MapLayers = {
     create: createMapLayers,
+    setAttribution,
     tileLayer,
     rasterSourceFor,
     bordersOverlay,

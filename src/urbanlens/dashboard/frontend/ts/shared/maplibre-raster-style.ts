@@ -14,6 +14,11 @@
  * types buy nothing.
  */
 
+import { fetchOwnTile, isOwnTileUrl } from "./own-tiles";
+
+// Loaded via a CDN <script> tag on map pages, like Leaflet - see `maplibre-layers.ts`.
+declare const maplibregl: typeof import("maplibre-gl");
+
 /** A minimal MapLibre "raster" source - the fields this module actually sets. */
 export interface MapLibreRasterSource {
     type: "raster";
@@ -40,6 +45,43 @@ export interface MapLibreRasterStyle {
 
 /** Leaflet's own default `TileLayer` `subdomains` option (leaflet-src.js: `subdomains: 'abc'`) - the fallback when a source doesn't say otherwise. */
 const LEAFLET_DEFAULT_SUBDOMAINS = ["a", "b", "c"];
+
+/**
+ * Scheme under which this deployment's own tiles are handed to MapLibre.
+ *
+ * MapLibre loads a raster tile by handing the URL to its image pipeline, which offers no way in -
+ * `transformRequest` is synchronous, so it can rewrite a URL but cannot queue one or ask again.
+ * A registered protocol handler is the documented way to own the request, and it is an ordinary
+ * async function, so the queue and retry in `own-tiles.ts` apply to MapLibre exactly as they do to
+ * the other two paths. Without it a refused tile is permanent: MapLibre marks it `errored`, and its
+ * own `reload()` skips errored tiles.
+ */
+const OWN_TILE_PROTOCOL = "ultile";
+
+/** Which `maplibregl` the handler was registered on - not just "was it", so there is no stale latch to reset. */
+let protocolRegisteredOn: unknown = null;
+
+/**
+ * Rewrites one of this deployment's own tile URLs into the protocol MapLibre will hand back to us,
+ * registering the handler the first time one is needed.
+ *
+ * Registration is lazy rather than on import because `maplibregl` is a CDN global that only map
+ * pages load, and this module is imported by pages that have no map on them at all.
+ */
+function toOwnTileProtocolUrl(url: string): string {
+    if (typeof maplibregl !== "undefined" && protocolRegisteredOn !== maplibregl) {
+        protocolRegisteredOn = maplibregl;
+        maplibregl.addProtocol(OWN_TILE_PROTOCOL, async (params, abortController) => ({
+            data: await fetchOwnTile(fromOwnTileProtocolUrl(params.url), abortController.signal),
+        }));
+    }
+    return `${OWN_TILE_PROTOCOL}://${url}`;
+}
+
+/** The path a {@link toOwnTileProtocolUrl} URL stands for, as MapLibre hands it back. */
+export function fromOwnTileProtocolUrl(url: string): string {
+    return url.startsWith(`${OWN_TILE_PROTOCOL}://`) ? url.slice(`${OWN_TILE_PROTOCOL}://`.length) : url;
+}
 
 /** What this module needs from one of this app's own tile sources (e.g. a `TILE_DEFS` entry). */
 export interface RasterSourceInput {
@@ -81,6 +123,7 @@ export interface RasterSourceInput {
  */
 export function toMapLibreTileUrls(leafletUrl: string, subdomains?: string | string[]): string[] {
     const withoutRetina = leafletUrl.replace(/\{r\}/g, "");
+    if (isOwnTileUrl(withoutRetina)) return [toOwnTileProtocolUrl(withoutRetina)];
     if (!withoutRetina.includes("{s}")) return [withoutRetina];
     const resolvedSubdomains = subdomains !== undefined ? Array.from(subdomains) : LEAFLET_DEFAULT_SUBDOMAINS;
     return resolvedSubdomains.map((subdomain) => withoutRetina.replace(/\{s\}/g, subdomain));

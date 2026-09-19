@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createMapLayers, normalizeBase, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer, vectorStyleFor } from "./map-layers";
+import { acquireOwnTileSlot, resetOwnTileGateForTests } from "./own-tiles";
 
 describe("normalizeBase", () => {
     test("passes canonical keys through unchanged", () => {
@@ -46,28 +47,46 @@ interface StubTileLayer {
     getTileUrl(coords: { x: number; y: number; z: number }): string;
 }
 
-function stubLeaflet(): { calls: Array<{ url: string; options: Record<string, unknown> }>; layers: StubTileLayer[] } {
-    const state = { calls: [] as Array<{ url: string; options: Record<string, unknown> }>, layers: [] as StubTileLayer[] };
+interface LeafletStub {
+    calls: Array<{ url: string; options: Record<string, unknown> }>;
+    layers: StubTileLayer[];
+    /** The `createTile` Leaflet would have subclassed, for the tiles this deployment serves itself. */
+    createTile: ((this: StubTileLayer, coords: { x: number; y: number; z: number }, done: (error?: Error, tile?: HTMLElement) => void) => HTMLElement) | null;
+}
+
+function stubLeaflet(): LeafletStub {
+    const state: LeafletStub = { calls: [], layers: [], createTile: null };
+    const makeLayer = (url: string, options: Record<string, unknown>): StubTileLayer => {
+        state.calls.push({ url, options });
+        const layer: StubTileLayer = {
+            __kind: "tileLayer",
+            url,
+            options,
+            handlers: {},
+            on(type, fn) {
+                (this.handlers[type] ??= []).push(fn);
+                return this;
+            },
+            getTileUrlCalls: 0,
+            getTileUrl(coords) {
+                this.getTileUrlCalls++;
+                return url.replace("{z}", String(coords.z)).replace("{x}", String(coords.x)).replace("{y}", String(coords.y));
+            },
+        };
+        state.layers.push(layer);
+        return layer;
+    };
     (globalThis as Record<string, unknown>).L = {
-        tileLayer: (url: string, options: Record<string, unknown>) => {
-            state.calls.push({ url, options });
-            const layer: StubTileLayer = {
-                __kind: "tileLayer",
-                url,
-                options,
-                handlers: {},
-                on(type, fn) {
-                    (this.handlers[type] ??= []).push(fn);
-                    return this;
-                },
-                getTileUrlCalls: 0,
-                getTileUrl(coords) {
-                    this.getTileUrlCalls++;
-                    return url.replace("{z}", String(coords.z)).replace("{x}", String(coords.x)).replace("{y}", String(coords.y));
-                },
-            };
-            state.layers.push(layer);
-            return layer;
+        tileLayer: makeLayer,
+        TileLayer: {
+            // Mirrors Leaflet's own Class.extend: the prototype is captured, and constructing the
+            // result yields a layer carrying it.
+            extend: (proto: { createTile: LeafletStub["createTile"] }) => {
+                state.createTile = proto.createTile;
+                return function (this: unknown, url: string, options: Record<string, unknown>) {
+                    return makeLayer(url, options);
+                };
+            },
         },
     };
     return state;
@@ -327,14 +346,16 @@ describe("registerRedataLayers", () => {
     /**
      * The tile proxy refuses a tile with 503 the moment its upstream slots are full, and a first
      * look at an area asks for far more tiles at once than there are slots. Leaflet does not retry
-     * a failed tile - it paints `errorTileUrl` and considers the tile finished - so unless
-     * something retries, the concurrency bound does not make a map slow, it puts holes in it.
+     * a failed tile - it paints `errorTileUrl` and considers the tile finished - so on stock
+     * behaviour the proxy's bound does not make a map slow, it puts holes in it. `tileLayer()`
+     * gives these layers a `createTile` that queues and asks again instead (see `own-tiles.ts`).
      */
-    describe("tiles this deployment serves itself are retried", () => {
+    describe("tiles this deployment serves itself are queued and retried", () => {
         const realSetTimeout = globalThis.setTimeout;
         let pending: Array<() => void>;
 
         beforeEach(() => {
+            resetOwnTileGateForTests();
             pending = [];
             globalThis.setTimeout = ((fn: () => void) => {
                 pending.push(fn);
@@ -344,97 +365,147 @@ describe("registerRedataLayers", () => {
 
         afterEach(() => {
             globalThis.setTimeout = realSetTimeout;
+            resetOwnTileGateForTests();
         });
 
         const COORDS = { x: 1, y: 2, z: 3 };
-        const PLACEHOLDER = "data:image/svg+xml;charset=UTF-8,placeholder";
+        const URL = "/dashboard/map/basemap-tiles/street/3/1/2/";
+        const PLACEHOLDER = "data:image/gif;base64,placeholder";
 
-        /** A tile element that is in the document, as Leaflet's own would be while still in view. */
-        function attachedTile(): HTMLImageElement {
-            const tile = document.createElement("img");
-            document.body.appendChild(tile);
-            return tile;
-        }
-
-        async function proxyLayer(): Promise<StubTileLayer> {
+        async function proxyLayer(): Promise<LeafletStub> {
             stubFetch({
-                body: { layers: [{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }] },
+                body: {
+                    layers: [
+                        { id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" },
+                    ],
+                },
             });
             await registerRedataLayers();
             const state = stubLeaflet();
-            tileLayer("street");
-            return state.layers[0]!;
+            tileLayer("street", { errorTileUrl: PLACEHOLDER });
+            return state;
         }
+
+        /** Creates one tile the way Leaflet does, attached as its own would be while still in view. */
+        async function createTile(state: LeafletStub, done: (error?: Error) => void = () => {}): Promise<HTMLImageElement> {
+            const layer = state.layers[0]!;
+            const tile = state.createTile!.call(layer, COORDS, done) as HTMLImageElement;
+            document.body.appendChild(tile);
+            // The slot is taken through a promise, so the request lands a microtask later.
+            await Promise.resolve();
+            await Promise.resolve();
+            return tile;
+        }
+
+        test("a tile is requested as soon as a slot is free", async () => {
+            const state = await proxyLayer();
+
+            const tile = await createTile(state);
+
+            expect(tile.getAttribute("src")).toBe(URL);
+            tile.remove();
+        });
 
         /**
-         * One tile's life as Leaflet runs it: created with its real URL, announced, then - on
-         * failure - overwritten with `errorTileUrl` *before* `tileerror` is fired. That ordering is
-         * why the retry cannot read the URL back off the element.
-         * @returns The URL the tile was asked for, as the DOM resolved it.
+         * The whole point of the queue: the browser asks for a viewport at once, and everything past
+         * the proxy's own width has to wait rather than be refused. A tile with no `src` yet has not
+         * been requested.
          */
-        function failOnce(layer: StubTileLayer, tile: HTMLImageElement): string {
-            tile.src = "/dashboard/map/basemap-tiles/street/3/1/2/";
-            const requested = tile.src;
-            layer.handlers.tileloadstart?.[0]?.({ tile, coords: COORDS });
-            tile.src = PLACEHOLDER;
-            layer.handlers.tileerror?.[0]?.({ tile, coords: COORDS });
-            return requested;
-        }
+        /**
+         * The queue's own arithmetic is `own-tiles.test.ts`'s subject; what matters here is that a
+         * tile goes through it at all - that it is not requested until a slot is free, and is as
+         * soon as one is. Asserted by holding every slot from outside rather than by making a
+         * viewport's worth of tiles, so it does not depend on whether this DOM decides to load them.
+         */
+        test("a tile is not requested until the queue has room for it", async () => {
+            const state = await proxyLayer();
+            const held = await Promise.all(Array.from({ length: 6 }, () => acquireOwnTileSlot()));
+
+            const tile = await createTile(state);
+            expect(tile.getAttribute("src")).toBeNull();
+
+            held[0]!();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(tile.getAttribute("src")).toBe(URL);
+            held.slice(1).forEach((release) => release());
+            tile.remove();
+        });
 
         test("a refused tile is asked for again, at the URL it was asked for the first time", async () => {
-            const layer = await proxyLayer();
-            const tile = attachedTile();
+            const state = await proxyLayer();
+            const tile = await createTile(state);
 
-            const requested = failOnce(layer, tile);
-            expect(pending).toHaveLength(1);
-            pending[0]!();
+            tile.onerror?.(new Event("error"));
+            // More than the retry may be scheduled - each slot also arms a watchdog - so run them all.
+            expect(pending.length).toBeGreaterThan(0);
+            tile.removeAttribute("src");
+            pending.forEach((fn) => fn());
+            await Promise.resolve();
+            await Promise.resolve();
 
-            expect(tile.src).toBe(requested);
+            expect(tile.getAttribute("src")).toBe(URL);
             tile.remove();
         });
 
         /**
          * `getTileUrl()` fills `{z}` from the layer's current zoom rather than from the coords it is
-         * given, so rebuilding the URL at retry time paints a tile of somewhere else into this one
+         * given, so resolving it again on a retry paints a tile of somewhere else into this one
          * whenever the user has zoomed in the seconds since it failed.
          */
-        test("the URL is not rebuilt at retry time", async () => {
-            const layer = await proxyLayer();
-            const tile = attachedTile();
+        test("the URL is resolved once, not again on each retry", async () => {
+            const state = await proxyLayer();
+            const tile = await createTile(state);
 
-            failOnce(layer, tile);
-            pending[0]!();
+            tile.onerror?.(new Event("error"));
+            pending.forEach((fn) => fn());
+            await Promise.resolve();
 
-            expect(layer.getTileUrlCalls).toBe(0);
+            expect(state.layers[0]?.getTileUrlCalls).toBe(1);
             tile.remove();
         });
 
-        test("retries are bounded, so a genuinely dead tile stops asking", async () => {
-            const layer = await proxyLayer();
-            const tile = attachedTile();
-            let scheduled = 0;
+        test("retries are bounded, and the tile reports itself finished when they run out", async () => {
+            const state = await proxyLayer();
+            let reported: Error | undefined | "not yet" = "not yet";
+            const tile = await createTile(state, (error) => {
+                reported = error;
+            });
 
-            // Every retry fails in turn, the way a layer whose upstream is down would.
-            for (let attempt = 0; attempt < 12; attempt++) {
-                failOnce(layer, tile);
-                scheduled += pending.length;
-                pending.forEach((fn) => fn());
+            for (let attempt = 0; attempt < 12 && reported === "not yet"; attempt++) {
+                tile.onerror?.(new Event("error"));
+                const scheduled = pending;
                 pending = [];
+                scheduled.forEach((fn) => fn());
+                await Promise.resolve();
+                await Promise.resolve();
             }
 
-            expect(scheduled).toBeGreaterThan(0);
-            expect(scheduled).toBeLessThan(12);
+            // Leaflet counts outstanding tiles to decide a layer has finished loading, so a tile
+            // that gives up silently leaves the map's loading indicator on for good.
+            expect(reported).toBeInstanceOf(Error);
+            expect(tile.getAttribute("src")).toBe(PLACEHOLDER);
             tile.remove();
         });
 
-        test("a tile already pruned from the map is not re-requested", async () => {
-            const layer = await proxyLayer();
-            const tile = document.createElement("img"); // never attached: panned away while waiting
+        test("giving up hands the slot back, so one dead tile does not narrow the queue", async () => {
+            const state = await proxyLayer();
+            const dying = await createTile(state);
+            for (let attempt = 0; attempt < 6; attempt++) {
+                dying.onerror?.(new Event("error"));
+                const scheduled = pending;
+                pending = [];
+                scheduled.forEach((fn) => fn());
+                await Promise.resolve();
+                await Promise.resolve();
+            }
 
-            failOnce(layer, tile);
-            pending[0]!();
+            const held = [];
+            for (let i = 0; i < 6; i++) held.push(await createTile(state));
 
-            expect(tile.src).toBe(PLACEHOLDER);
+            expect(held.every((tile) => tile.getAttribute("src") === URL)).toBe(true);
+            [dying, ...held].forEach((tile) => tile.remove());
         });
 
         test("a vendor's own layer is left alone, since its failures are usually its rate limiter", () => {
@@ -442,7 +513,7 @@ describe("registerRedataLayers", () => {
             tileLayer("street");
 
             expect(state.calls[0]?.url).toContain("cartocdn.com");
-            expect(state.layers[0]?.handlers.tileerror).toBeUndefined();
+            expect(state.createTile).toBeNull();
         });
     });
 

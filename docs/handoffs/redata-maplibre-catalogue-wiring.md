@@ -123,22 +123,31 @@ load exhausted `ul_web`'s 54-connection limit outright (`FATAL: too many connect
 containment, not a fix; once REData is quick the cap should essentially never be reached, and is
 worth revisiting then.
 
-**The bound only works because the client retries.** At `WEB_CONCURRENCY=3` the cap is 6 upstream
+**The bound only works because the client cooperates.** At `WEB_CONCURRENCY=3` the cap is 6 upstream
 fetches for the whole site, against a ~30-tile viewport that the browser asks for at once, so most
 of a first look at an area is refused. Neither engine retries a refused tile on its own - Leaflet
 paints `errorTileUrl` and treats the tile as finished, MapLibre sets `state = 'errored'` and its own
 `reload()` explicitly skips errored tiles - so on its own the bound does not make a cold map slow,
-it puts holes in it that stay until the tile is pruned. `retryOwnTiles` (`map-layers.ts`) retries a
-same-origin tile on a jittered backoff spanning ~9-26s, against the ~7.5s of slot time that burst
-needs; vendor layers are deliberately left alone, since a CDN's failure is usually its rate limiter.
-It re-asks for the URL the tile was originally requested at, captured on `tileloadstart`, rather
-than rebuilding one: Leaflet's `getTileUrl()` fills `{z}` from the layer's *current* zoom rather
-than from the coords it is handed, so a rebuilt URL paints a tile of somewhere else into this one
-whenever the user zoomed during the wait.
-**The MapLibre engine has no equivalent yet**, and a `<slug:layer>`-shaped raster proxy under
-MapLibre will need one - a protocol handler registered with `maplibregl.addProtocol`, since
-`transformRequest` is synchronous and cannot delay. Nothing constructs a MapLibre map today, so this
-is a prerequisite for wiring the engine up rather than a live bug.
+it puts holes in it that stay until the tile is pruned.
+
+`own-tiles.ts` holds the policy, since the constraint is a property of the deployment rather than of
+any one renderer: a queue the width of the site's budget, plus a jittered retry schedule
+(`1000, 2500, 5000, 9000` ms) as the safety net for slots this page does not control. Pacing is the
+part that matters - queued, a 30-tile viewport is 30 requests finishing in the ~7.5s of slot time it
+needs; retry-only is ~90 requests over ~17.5s, and whether the map draws at all comes down to the
+attempt budget. Vendor layers are deliberately left alone, since a CDN's failure is usually its rate
+limiter. Three paths consume it, and a fourth should not rediscover any of this:
+
+- Leaflet, via a `createTile` subclass. The URL is resolved once, when the tile is created, rather
+  than rebuilt before each attempt: `getTileUrl()` fills `{z}` from the layer's *current* zoom
+  rather than from the coords it is handed, so a rebuilt URL paints a tile of somewhere else into
+  this one whenever the user zoomed during the wait.
+- MapLibre, via a protocol handler registered with `maplibregl.addProtocol` from
+  `toMapLibreTileUrls` - the one chokepoint every MapLibre tile URL passes through, `comment-map.js`
+  included. A handler is the only way in, because `transformRequest` is synchronous and so can
+  rewrite a URL but cannot queue one or ask again.
+- The PNG exporter, which fetches the bytes itself (`loadOwnTileImage`) rather than assigning an
+  `<img src>`, so the canvas it draws into stays untainted and `toDataURL()` keeps working.
 
 ## What the vector half will need, read off the real style documents
 

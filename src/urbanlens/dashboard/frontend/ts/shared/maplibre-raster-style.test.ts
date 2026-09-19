@@ -1,5 +1,77 @@
-import { describe, expect, test } from "bun:test";
-import { buildRasterStyle, toMapLibreTileUrls } from "./maplibre-raster-style";
+import { afterEach, describe, expect, test } from "bun:test";
+import { buildRasterStyle, fromOwnTileProtocolUrl, toMapLibreTileUrls } from "./maplibre-raster-style";
+
+const realMaplibregl = (globalThis as Record<string, unknown>).maplibregl;
+const realFetch = globalThis.fetch;
+
+afterEach(() => {
+    (globalThis as Record<string, unknown>).maplibregl = realMaplibregl;
+    globalThis.fetch = realFetch;
+});
+
+/**
+ * MapLibre loads a raster tile through its image pipeline, which offers no way to queue a request
+ * or ask again - `transformRequest` is synchronous. A registered protocol handler is the documented
+ * way in, so this deployment's own tiles are handed to MapLibre under one, and get the same pacing
+ * and retry as the Leaflet and export paths. Without it a refused tile is permanent: MapLibre marks
+ * it `errored`, and its own `reload()` skips errored tiles.
+ */
+describe("this deployment's own tiles under MapLibre", () => {
+    function stubMaplibre(): { protocols: Record<string, (params: { url: string }, controller: AbortController) => Promise<{ data: ArrayBuffer }>> } {
+        const state = { protocols: {} as Record<string, (params: { url: string }, controller: AbortController) => Promise<{ data: ArrayBuffer }>> };
+        (globalThis as Record<string, unknown>).maplibregl = {
+            addProtocol: (name: string, load: (params: { url: string }, controller: AbortController) => Promise<{ data: ArrayBuffer }>) => {
+                state.protocols[name] = load;
+            },
+        };
+        return state;
+    }
+
+    test("a proxy template is handed over under a protocol MapLibre will hand back", () => {
+        stubMaplibre();
+
+        expect(toMapLibreTileUrls("/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/")).toEqual([
+            "ultile:///dashboard/map/basemap-tiles/street/{z}/{x}/{y}/",
+        ]);
+    });
+
+    test("the handler is registered, and resolves back to the real path", async () => {
+        const maplibre = stubMaplibre();
+        const requested: string[] = [];
+        globalThis.fetch = ((url: string) => {
+            requested.push(String(url));
+            return Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)) } as Response);
+        }) as unknown as typeof fetch;
+
+        const [url] = toMapLibreTileUrls("/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/");
+        const handler = maplibre.protocols.ultile;
+        expect(handler).toBeDefined();
+
+        const result = await handler!({ url: url!.replace("{z}/{x}/{y}", "3/1/2") }, new AbortController());
+
+        expect(requested).toEqual(["/dashboard/map/basemap-tiles/street/3/1/2/"]);
+        expect(result.data.byteLength).toBe(4);
+    });
+
+    test("a vendor's URL is left on https, so nothing routes a CDN through the proxy's queue", () => {
+        stubMaplibre();
+
+        for (const url of toMapLibreTileUrls("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png")) {
+            expect(url.startsWith("https://")).toBe(true);
+        }
+    });
+
+    test("a URL that never went through the rewrite is returned as-is", () => {
+        expect(fromOwnTileProtocolUrl("https://example.test/3/1/2.png")).toBe("https://example.test/3/1/2.png");
+    });
+
+    /** Map pages load `maplibregl` from a CDN; pages with no map do not, and this module is on both. */
+    test("a page without MapLibre still gets a URL rather than a crash", () => {
+        delete (globalThis as Record<string, unknown>).maplibregl;
+
+        expect(() => toMapLibreTileUrls("/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/")).not.toThrow();
+    });
+});
 
 describe("toMapLibreTileUrls", () => {
     test("expands {s} into one URL per Leaflet's default a/b/c subdomains", () => {
