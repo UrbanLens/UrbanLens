@@ -30,6 +30,23 @@ describe("toMapLibreTileUrls", () => {
             expect(url).toContain("{y}");
         }
     });
+
+    test("a custom subdomains array overrides Leaflet's a/b/c default", () => {
+        expect(toMapLibreTileUrls("https://{s}.tile.example.com/{z}/{x}/{y}.png", ["1", "2", "3", "4"])).toEqual([
+            "https://1.tile.example.com/{z}/{x}/{y}.png",
+            "https://2.tile.example.com/{z}/{x}/{y}.png",
+            "https://3.tile.example.com/{z}/{x}/{y}.png",
+            "https://4.tile.example.com/{z}/{x}/{y}.png",
+        ]);
+    });
+
+    test("a custom subdomains string (Leaflet's own shorthand) is split per-character, same as Leaflet itself", () => {
+        expect(toMapLibreTileUrls("https://{s}.tile.example.com/{z}/{x}/{y}.png", "xyz")).toEqual([
+            "https://x.tile.example.com/{z}/{x}/{y}.png",
+            "https://y.tile.example.com/{z}/{x}/{y}.png",
+            "https://z.tile.example.com/{z}/{x}/{y}.png",
+        ]);
+    });
 });
 
 describe("buildRasterStyle", () => {
@@ -69,5 +86,16 @@ describe("buildRasterStyle", () => {
         expect(source?.attribution).toBeUndefined();
         expect(source?.minzoom).toBeUndefined();
         expect(source?.maxzoom).toBeUndefined();
+    });
+
+    test("a source's custom subdomains reach the built tiles array, not just Leaflet's a/b/c default", () => {
+        const style = buildRasterStyle("custom", {
+            url: "https://{s}.tile.example.com/{z}/{x}/{y}.png",
+            subdomains: ["01", "02"],
+        });
+        expect(style.sources.custom?.tiles).toEqual([
+            "https://01.tile.example.com/{z}/{x}/{y}.png",
+            "https://02.tile.example.com/{z}/{x}/{y}.png",
+        ]);
     });
 });

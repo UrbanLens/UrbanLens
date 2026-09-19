@@ -39,6 +39,9 @@ export interface MapLibreRasterStyle {
     layers: MapLibreRasterLayer[];
 }
 
+/** Leaflet's own default `TileLayer` `subdomains` option (leaflet-src.js: `subdomains: 'abc'`) - the fallback when a source doesn't say otherwise. */
+const LEAFLET_DEFAULT_SUBDOMAINS = ["a", "b", "c"];
+
 /** What this module needs from one of this app's own tile sources (e.g. a `TILE_DEFS` entry). */
 export interface RasterSourceInput {
     /** A Leaflet-style XYZ URL template - may use Leaflet's own `{s}`/`{r}` tokens; see `toMapLibreTileUrls`. */
@@ -46,10 +49,15 @@ export interface RasterSourceInput {
     attribution?: string;
     minZoom?: number;
     maxNativeZoom?: number;
+    /**
+     * Mirrors Leaflet's own `TileLayerOptions.subdomains` (string or array;
+     * `"abc"` and `["a","b","c"]` are equivalent). `TileDef.options` in
+     * `map-layers.ts` is typed as the real `L.TileLayerOptions`, so a future
+     * `TILE_DEFS` entry can set a custom `subdomains` with no compile error;
+     * omit this to fall back to Leaflet's own default of `"abc"`.
+     */
+    subdomains?: string | string[];
 }
-
-/** Leaflet's own default `TileLayer` `subdomains` option - never overridden by any entry in this app's `TILE_DEFS`. */
-const LEAFLET_DEFAULT_SUBDOMAINS = ["a", "b", "c"];
 
 /**
  * Expands a Leaflet-style XYZ template into the one or more literal URLs
@@ -69,12 +77,14 @@ const LEAFLET_DEFAULT_SUBDOMAINS = ["a", "b", "c"];
  * here preserves identical behavior rather than losing a capability this app
  * does not currently use.
  * @param leafletUrl - A URL template as stored in this app's own `TILE_DEFS`.
+ * @param subdomains - Mirrors Leaflet's `TileLayerOptions.subdomains`; defaults to `"abc"` (Leaflet's own default) when omitted.
  * @returns One URL per subdomain if `leafletUrl` contains `{s}`, else a single-entry array.
  */
-export function toMapLibreTileUrls(leafletUrl: string): string[] {
+export function toMapLibreTileUrls(leafletUrl: string, subdomains?: string | string[]): string[] {
     const withoutRetina = leafletUrl.replace(/\{r\}/g, "");
     if (!withoutRetina.includes("{s}")) return [withoutRetina];
-    return LEAFLET_DEFAULT_SUBDOMAINS.map((subdomain) => withoutRetina.replace(/\{s\}/g, subdomain));
+    const resolvedSubdomains = subdomains ? Array.from(subdomains) : LEAFLET_DEFAULT_SUBDOMAINS;
+    return resolvedSubdomains.map((subdomain) => withoutRetina.replace(/\{s\}/g, subdomain));
 }
 
 /**
@@ -88,7 +98,7 @@ export function buildRasterStyle(id: string, source: RasterSourceInput): MapLibr
         sources: {
             [id]: {
                 type: "raster",
-                tiles: toMapLibreTileUrls(source.url),
+                tiles: toMapLibreTileUrls(source.url, source.subdomains),
                 // 256px to match every vendor this app uses - see BASE_ERROR_TILE_URL's own
                 // comment in map-layers.ts, which draws its placeholder at the same size.
                 tileSize: 256,

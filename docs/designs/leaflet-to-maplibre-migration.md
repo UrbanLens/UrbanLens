@@ -29,9 +29,18 @@ a `TILE_DEFS`-shaped source into a minimal MapLibre style document, correcting a
 found while building it - MapLibre's TileJSON-based `tiles` array has no `{s}`/`{r}` token at all
 (verified against the actual `maplibre-gl@5.24.0` bundle's own tile-URL substitution logic), unlike
 Leaflet's template syntax every `TILE_DEFS` entry is written in, so `{s}` is expanded into one literal
-URL per subdomain and `{r}` is dropped. Not wired into any map yet - pure and tested (`maplibre-raster-style.test.ts`)
-against both synthetic URLs and this app's own real vendor URLs, including a live check that every
-expanded subdomain endpoint (CARTO's/OpenTopoMap's `a`/`b`/`c`) actually serves tiles.
+URL per subdomain and `{r}` is dropped. Subdomains are an explicit `RasterSourceInput.subdomains` parameter
+(defaulting to Leaflet's own `"abc"`), not a hardcoded constant - caught on reassessment: `TileDef.options`
+in `map-layers.ts` is typed as the real `L.TileLayerOptions`, which already has a `subdomains` field, so a
+future `TILE_DEFS` entry could set a custom one with no compile error to catch a hardcoded assumption.
+`tileSize: 256` was checked against real tile bytes (not just the pre-existing code comment it was copied
+from) for every current `TILE_DEFS` vendor, Esri's JPEG-served satellite layer included - genuinely 256px
+across the board. The source's `maxzoom` (from `maxNativeZoom`) is MapLibre's *upscale* field ("data from
+tiles at the maxzoom are used... at higher zoom levels", matching Leaflet's own semantics) - this module
+never sets the differently-named, differently-behaved *layer*-level `maxzoom` (a hide/cutoff field), which
+isn't even in its `MapLibreRasterLayer` type. Not wired into any map yet - pure and tested
+(`maplibre-raster-style.test.ts`) against both synthetic URLs and this app's own real vendor URLs, including
+a live check that every expanded subdomain endpoint (CARTO's/OpenTopoMap's `a`/`b`/`c`) actually serves tiles.
 
 **No priority or sequencing decision is made here.** This is a description of the work's shape and size,
 for whoever decides when (or whether) to schedule it.
