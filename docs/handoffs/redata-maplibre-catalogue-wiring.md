@@ -183,6 +183,34 @@ listener, the tagging, and the dispose helper are all present in `comment-map.js
 entry above is left as written, describing accurately what was true when this doc was checked - this
 section is the correction, per this doc's own convention, not a silent rewrite of that row.
 
+## Correction, found on a fifth reassessment: `T8` §0 was rewritten again on `main`, and this doc's line 19 row is now checkable
+
+This doc's own intro (line 11) says `T8` "was written 2026-09-17 and corrected 2026-09-18 (its own
+§0)" and that this reply "re-checked the corrected version, not the original." That was already
+one version behind by the time it was written: REData's `main` carries a further rewrite of §0,
+commit `0ce2eace` ("docs(handoff): correct what UrbanLens can start on now, and what the vector
+half waits for"), dated 2026-09-19 - the same day as this doc. The 2026-09-18 text this doc cites
+said only "It reaches `main` with PR #65... If [`source_type` is] absent, PR #65 has not landed or
+damballa has not been redeployed" - genuinely ambiguous between the two causes. The 2026-09-19
+rewrite resolves that ambiguity: "**It is on `main` and not yet on damballa**... REData's deploy is
+deliberately held until UrbanLens 0.8.0 ships" - which is exactly what this doc's own "For whoever
+reads this next" section (below) already states, so that section was written with the newer
+information even though this doc's intro cites the older correction date.
+
+Found by accident, not by design: `../REData`'s primary checkout on this host sits on
+`feat/scout-campaign` (currently `6fc1ffa9`), not `main` - reading `docs/urbanlens-handoff.md`
+there returns the 2026-09-18 text, not the current one. `D12`/`docs/DECISIONS.md` is byte-identical
+between the two branches (checked directly, `diff` is empty), so this gap is specific to `T8`.
+Anyone re-verifying `T8` fresh against `../REData` should read `main` explicitly (e.g. `git show
+main:docs/urbanlens-handoff.md`, or the `.worktrees/basemap` worktree, which tracks `main`) rather
+than trusting the primary checkout's working tree.
+
+This also answers line 19's "not independently re-checked against REData's production" row: still
+true in the narrow sense - no request was made to a live REData endpoint - but the underlying claim
+(deploy held for 0.8.0) is no longer "taken as given" from an older correction; it is now
+cross-checked against REData's actual current `main`. The row is left as written, per this doc's
+own convention above.
+
 ## For whoever reads this next
 
 - `T8` §0's check still applies before trusting §1 as deployed on REData's side: `curl -sH
