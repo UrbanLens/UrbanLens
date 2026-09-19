@@ -109,8 +109,9 @@ const TILE_DEFS: Record<string, TileDef> = {
 
 /**
  * Snapshot of the built-in sources above, taken before anything can register over them, so
- * `resetRedataLayersCacheForTests` can put `TILE_DEFS` back. Shallow by design:
- * `registerCatalogue` replaces whole entries rather than mutating an entry's `options`.
+ * `resetRedataLayersCacheForTests` can put `TILE_DEFS` back and `registerCatalogue` can keep each
+ * layer's own presentation when it swaps in this deployment's URL. Shallow by design: both read
+ * an entry's `options`, neither mutates one.
  */
 const BUILT_IN_TILE_DEFS: Record<string, TileDef> = { ...TILE_DEFS };
 
@@ -180,7 +181,52 @@ export function normalizeBase(key: string | null | undefined): BaseLayerKey {
 export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.TileLayer {
     applyEmbeddedCatalogue();
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
-    return L.tileLayer(def.url, { ...def.options, ...extraOptions });
+    const layer = L.tileLayer(def.url, { ...def.options, ...extraOptions });
+    // A relative template means this deployment serves the tiles itself, through the proxy in
+    // `controllers/basemap_tiles.py`. Every other def here is a vendor's absolute URL.
+    return def.url.startsWith("/") ? retryOwnTiles(layer) : layer;
+}
+
+/**
+ * Backoff before each retry of a tile this deployment serves itself, in milliseconds.
+ *
+ * The tile proxy answers 503 the moment its upstream slots are full, and a first look at an area
+ * asks for ~30 tiles against 6 slots across the whole site (3 gunicorn workers x a cap of 2), so
+ * most of that burst is refused rather than served. Neither engine retries a refused tile - Leaflet
+ * paints `errorTileUrl` and considers it done, MapLibre marks it `errored` and its own `reload()`
+ * skips errored tiles - so without this the bound does not make a map slow, it puts holes in it.
+ *
+ * Spans ~12s, against the ~7.5s of slot time that burst needs at the ~1.5s REData currently takes
+ * per fetch (`P131` - which is its per-request key verification, not the tiles).
+ */
+const OWN_TILE_RETRY_DELAYS_MS = [500, 1500, 3500, 7000];
+
+/**
+ * Retries failed tiles for a layer this deployment serves itself.
+ *
+ * Attached per layer rather than to every layer on the map: a vendor CDN's failure is usually its
+ * own rate limiter, and retrying into that earns a longer block - which is exactly what
+ * `BASE_ERROR_TILE_URL` exists to absorb instead.
+ * @returns The same layer, for chaining.
+ */
+function retryOwnTiles(layer: L.TileLayer): L.TileLayer {
+    const attempts = new WeakMap<HTMLImageElement, number>();
+    layer.on("tileerror", (event: L.TileErrorEvent) => {
+        const attempt = attempts.get(event.tile) ?? 0;
+        const delay = OWN_TILE_RETRY_DELAYS_MS[attempt];
+        if (delay === undefined) return;
+        attempts.set(event.tile, attempt + 1);
+        // Jittered: every tile in a viewport is refused in the same instant, and retrying them all
+        // on the same schedule rebuilds the burst that exhausted the slots in the first place.
+        setTimeout(
+            () => {
+                // Panned or zoomed away while waiting - Leaflet has already dropped this tile.
+                if (event.tile.isConnected) event.tile.src = layer.getTileUrl(event.coords);
+            },
+            delay * (0.5 + Math.random()),
+        );
+    });
+    return layer;
 }
 
 /**
@@ -284,6 +330,12 @@ function registerCatalogue(layers: RedataLayer[]): string[] {
         TILE_DEFS[key] = {
             url: layer.url_template,
             options: {
+                // The catalogue says where a layer's tiles come from, not how this site draws it.
+                // `borders` is an overlay - its pane, its 0.6 opacity and its *transparent* error
+                // placeholder are this site's, and replacing the whole def dropped all three, so a
+                // REData `borders` layer painted at full opacity in the base layer's own pane.
+                errorTileUrl: BASE_ERROR_TILE_URL,
+                ...BUILT_IN_TILE_DEFS[key]?.options,
                 attribution: layer.attribution,
                 // Leaflet upscales past the vendor's real depth rather than
                 // dropping the layer out, matching the built-in defs above.

@@ -150,8 +150,11 @@ class BasemapTileView(LoginRequiredMixin, View):
         with UpstreamSlots.hold() as slot:
             if not slot:
                 # Uncached, like every other 503 here: the tile is fine, this process is just
-                # already fetching as many as it is allowed to at once.
-                return HttpResponse(status=503)
+                # already fetching as many as it is allowed to at once. Retry-After says so - the
+                # client retries these rather than leaving a hole in the map (`retryOwnTiles` in
+                # `frontend/ts/shared/map-layers.ts`), since a viewport-sized burst on a cold cache
+                # asks for far more tiles at once than there are slots to fetch them with.
+                return HttpResponse(status=503, headers={"Retry-After": "1"})
             try:
                 status, body, content_type = RedataBasemapTilesGateway().download_tile(layer, z, x, y)
             except (LocationContextUnavailableError, RequestCancelledError, OSError) as exc:

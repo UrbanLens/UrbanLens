@@ -137,6 +137,14 @@ class BasemapCatalogueEmbedTests(TestCase):
         self.assertEqual(rendered.strip(), "", "a cold cache must produce no embed")
         self.assertEqual(list_sources.call_count, 0, "rendering a page must never reach REData")
 
+    def test_a_layer_id_the_proxy_route_cannot_carry_is_skipped_rather_than_raising(self) -> None:
+        """The route captures ``<slug:layer>``, so an id outside that alphabet has no URL to build and ``reverse()`` answers with ``NoReverseMatch``. Unhandled, one such entry from REData takes the whole catalogue - and with it every map's layer strip - down with it."""
+        _warm([dict(_RASTER, id="street.v2"), {**_RASTER, "id": "good"}, dict(_RASTER, id=None)])
+
+        layers = _embedded(_render(self.user))
+
+        self.assertEqual([entry["id"] for entry in layers], ["good"], "the usable entry must survive its neighbours")
+
     def test_the_catalogue_view_still_fetches_so_the_cache_heals_itself(self) -> None:
         """The other half of the cold path: the embed goes missing, the client falls back to its own fetch, and that request is the one allowed to pay for the refill - it is an XHR, not a page render."""
         self.client.force_login(self.user)

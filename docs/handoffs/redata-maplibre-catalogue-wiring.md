@@ -120,8 +120,21 @@ process fetches upstream at once, answering an uncached 503 immediately over the
 blocking a request thread. Unbounded, one cold map load holds every thread in the process and queues
 the rest of the site behind it - on `runserver`, which spawns threads without limit, a single map
 load exhausted `ul_web`'s 54-connection limit outright (`FATAL: too many connections`). It is
-containment, not a fix: a cold viewport paints partially and fills in on the next pan. Once REData
-is quick the cap should essentially never be reached, and is worth revisiting then.
+containment, not a fix; once REData is quick the cap should essentially never be reached, and is
+worth revisiting then.
+
+**The bound only works because the client retries.** At `WEB_CONCURRENCY=3` the cap is 6 upstream
+fetches for the whole site, against a ~30-tile viewport that the browser asks for at once, so most
+of a first look at an area is refused. Neither engine retries a refused tile on its own - Leaflet
+paints `errorTileUrl` and treats the tile as finished, MapLibre sets `state = 'errored'` and its own
+`reload()` explicitly skips errored tiles - so on its own the bound does not make a cold map slow,
+it puts holes in it that stay until the tile is pruned. `retryOwnTiles` (`map-layers.ts`) retries a
+same-origin tile on a jittered backoff spanning ~12s, against the ~7.5s of slot time that burst
+needs; vendor layers are deliberately left alone, since a CDN's failure is usually its rate limiter.
+**The MapLibre engine has no equivalent yet**, and a `<slug:layer>`-shaped raster proxy under
+MapLibre will need one - a protocol handler registered with `maplibregl.addProtocol`, since
+`transformRequest` is synchronous and cannot delay. Nothing constructs a MapLibre map today, so this
+is a prerequisite for wiring the engine up rather than a live bug.
 
 ## What the vector half will need, read off the real style documents
 

@@ -34,12 +34,34 @@ describe("normalizeBase", () => {
 
 const realL = (globalThis as Record<string, unknown>).L;
 
-function stubLeaflet(): { calls: Array<{ url: string; options: Record<string, unknown> }> } {
-    const state = { calls: [] as Array<{ url: string; options: Record<string, unknown> }> };
+interface StubTileLayer {
+    __kind: string;
+    url: string;
+    options: Record<string, unknown>;
+    /** Handlers `tileLayer()` attached, by event name - how the retry wiring is observed. */
+    handlers: Record<string, Array<(event: unknown) => void>>;
+    on(type: string, fn: (event: unknown) => void): StubTileLayer;
+    getTileUrl(coords: { x: number; y: number; z: number }): string;
+}
+
+function stubLeaflet(): { calls: Array<{ url: string; options: Record<string, unknown> }>; layers: StubTileLayer[] } {
+    const state = { calls: [] as Array<{ url: string; options: Record<string, unknown> }>, layers: [] as StubTileLayer[] };
     (globalThis as Record<string, unknown>).L = {
         tileLayer: (url: string, options: Record<string, unknown>) => {
             state.calls.push({ url, options });
-            return { __kind: "tileLayer", url, options };
+            const layer: StubTileLayer = {
+                __kind: "tileLayer",
+                url,
+                options,
+                handlers: {},
+                on(type, fn) {
+                    (this.handlers[type] ??= []).push(fn);
+                    return this;
+                },
+                getTileUrl: (coords) => url.replace("{z}", String(coords.z)).replace("{x}", String(coords.x)).replace("{y}", String(coords.y)),
+            };
+            state.layers.push(layer);
+            return layer;
         },
     };
     return state;
@@ -250,6 +272,138 @@ describe("registerRedataLayers", () => {
     test("skips a raster entry with no url_template", async () => {
         stubFetch({ body: { layers: [{ id: "custom", source_type: "raster", attribution: "Attr" }] } });
         expect(await registerRedataLayers()).toEqual([]);
+    });
+
+    /**
+     * The catalogue says where a layer's tiles come from. How this site draws that layer - which
+     * pane it sits in, how opaque it is, what a failed tile looks like - is not REData's to
+     * change, and REData serves a layer called `borders`, so this is not hypothetical.
+     */
+    describe("a registered override keeps the layer's own presentation", () => {
+        test("borders stays a translucent overlay in the overlay pane", async () => {
+            stubFetch({
+                body: { layers: [{ id: "borders", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/borders/{z}/{x}/{y}/", attribution: "Attr" }] },
+            });
+            await registerRedataLayers();
+
+            const state = stubLeaflet();
+            tileLayer("borders");
+            expect(state.calls[0]?.url).toBe("/dashboard/map/basemap-tiles/borders/{z}/{x}/{y}/");
+            expect(state.calls[0]?.options.pane).toBe("overlayPane");
+            expect(state.calls[0]?.options.opacity).toBe(0.6);
+            // Opaque grey over a base map is the one thing an overlay's failure must not paint.
+            expect(state.calls[0]?.options.errorTileUrl).toContain("data:image/gif");
+        });
+
+        test("a base layer keeps its grey error placeholder", async () => {
+            stubFetch({
+                body: { layers: [{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }] },
+            });
+            await registerRedataLayers();
+
+            const state = stubLeaflet();
+            tileLayer("street");
+            expect(state.calls[0]?.options.errorTileUrl).toContain("data:image/svg+xml");
+        });
+
+        test("a layer with no built-in counterpart still gets one", async () => {
+            stubFetch({
+                body: { layers: [{ id: "custom", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] },
+            });
+            await registerRedataLayers();
+
+            const state = stubLeaflet();
+            tileLayer("custom");
+            expect(state.calls[0]?.options.errorTileUrl).toContain("data:image/svg+xml");
+        });
+    });
+
+    /**
+     * The tile proxy refuses a tile with 503 the moment its upstream slots are full, and a first
+     * look at an area asks for far more tiles at once than there are slots. Leaflet does not retry
+     * a failed tile - it paints `errorTileUrl` and considers the tile finished - so unless
+     * something retries, the concurrency bound does not make a map slow, it puts holes in it.
+     */
+    describe("tiles this deployment serves itself are retried", () => {
+        const realSetTimeout = globalThis.setTimeout;
+        let pending: Array<() => void>;
+
+        beforeEach(() => {
+            pending = [];
+            globalThis.setTimeout = ((fn: () => void) => {
+                pending.push(fn);
+                return 0;
+            }) as unknown as typeof setTimeout;
+        });
+
+        afterEach(() => {
+            globalThis.setTimeout = realSetTimeout;
+        });
+
+        /** A tile element that is in the document, as Leaflet's own would be while still in view. */
+        function attachedTile(): HTMLImageElement {
+            const tile = document.createElement("img");
+            document.body.appendChild(tile);
+            return tile;
+        }
+
+        async function proxyLayer(): Promise<StubTileLayer> {
+            stubFetch({
+                body: { layers: [{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }] },
+            });
+            await registerRedataLayers();
+            const state = stubLeaflet();
+            tileLayer("street");
+            return state.layers[0]!;
+        }
+
+        test("a refused tile is requested again", async () => {
+            const layer = await proxyLayer();
+            const tile = attachedTile();
+
+            layer.handlers.tileerror?.[0]?.({ tile, coords: { x: 1, y: 2, z: 3 } });
+            expect(pending).toHaveLength(1);
+            pending[0]!();
+
+            expect(tile.getAttribute("src")).toBe("/dashboard/map/basemap-tiles/street/3/1/2/");
+            tile.remove();
+        });
+
+        test("retries are bounded, so a genuinely dead tile stops asking", async () => {
+            const layer = await proxyLayer();
+            const tile = attachedTile();
+            let scheduled = 0;
+
+            // Every retry fails in turn, the way a layer whose upstream is down would.
+            for (let attempt = 0; attempt < 12; attempt++) {
+                layer.handlers.tileerror?.[0]?.({ tile, coords: { x: 1, y: 2, z: 3 } });
+                scheduled += pending.length;
+                pending.forEach((fn) => fn());
+                pending = [];
+            }
+
+            expect(scheduled).toBeGreaterThan(0);
+            expect(scheduled).toBeLessThan(12);
+            tile.remove();
+        });
+
+        test("a tile already pruned from the map is not re-requested", async () => {
+            const layer = await proxyLayer();
+            const tile = document.createElement("img"); // never attached: panned away while waiting
+
+            layer.handlers.tileerror?.[0]?.({ tile, coords: { x: 1, y: 2, z: 3 } });
+            pending[0]!();
+
+            expect(tile.getAttribute("src")).toBeNull();
+        });
+
+        test("a vendor's own layer is left alone, since its failures are usually its rate limiter", () => {
+            const state = stubLeaflet();
+            tileLayer("street");
+
+            expect(state.calls[0]?.url).toContain("cartocdn.com");
+            expect(state.layers[0]?.handlers.tileerror).toBeUndefined();
+        });
     });
 
     /**

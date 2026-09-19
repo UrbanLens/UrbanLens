@@ -324,6 +324,11 @@ class BasemapTileConcurrencyTests(TestCase):
 
         self.assertEqual(refused.status_code, 503)
         self.assertEqual(download.call_count, 0, "the request must be refused before it costs an upstream call")
+        self.assertIn(
+            "Retry-After",
+            refused.headers,
+            "a refusal is 'ask again shortly', and the client retries it rather than leaving a hole in the map",
+        )
 
     def test_a_refusal_is_not_cached(self) -> None:
         """Caching it would turn a momentary burst into a permanently blank square for a week."""

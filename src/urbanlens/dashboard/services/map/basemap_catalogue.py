@@ -11,6 +11,7 @@ for (see ``frontend/ts/shared/map-layers.ts``'s note on ``Referrer-Policy: no-re
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from django.core.cache import cache
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 #: fresh enough to pick up a new layer without asking on every map load.
 CATALOGUE_CACHE_TTL = 86400
 CATALOGUE_CACHE_KEY = "ul_redata_tile_sources"
+
+#: The proxy route captures ``<slug:layer>``, so this is the alphabet an id has to
+#: be in to have a reachable URL at all.
+_LAYER_ID = re.compile(r"[-a-zA-Z0-9_]+")
 
 
 def tile_url_template(layer: str) -> str:
@@ -85,6 +90,13 @@ def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
 
     layers: list[dict[str, Any]] = []
     for source in sources:
+        source_id = source.get("id")
+        if not isinstance(source_id, str) or not _LAYER_ID.fullmatch(source_id):
+            # An id outside the route's alphabet has no proxy URL to build, and
+            # reverse() answers that with NoReverseMatch rather than a skip - so
+            # one such entry would otherwise 500 the whole catalogue.
+            logger.warning("Skipping REData tile source with unusable id %r", source_id)
+            continue
         if not source.get("attribution"):
             # Attribution is not decorative - every vendor here requires it
             # on the rendered map, so a layer without it is not offered.
@@ -95,8 +107,8 @@ def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
         if is_vector and not source.get("style_url"):
             continue
         entry: dict[str, Any] = {
-            "id": source["id"],
-            "name": source.get("name") or source["id"],
+            "id": source_id,
+            "name": source.get("name") or source_id,
             "source_type": "vector" if is_vector else "raster",
             "attribution": source.get("attribution") or "",
             "min_zoom": source.get("min_zoom"),
@@ -105,7 +117,7 @@ def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
         if is_vector:
             entry["style_url"] = source["style_url"]
         else:
-            entry["url_template"] = tile_url_template(source["id"])
+            entry["url_template"] = tile_url_template(source_id)
         layers.append(entry)
     if layers:
         cache.set(CATALOGUE_CACHE_KEY, layers, CATALOGUE_CACHE_TTL)
