@@ -705,6 +705,12 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             // attributionControl: false - shown in the dialog's own toolbar
             // (#comment-map-attribution-<id>) instead of floating over the map.
             var viewMap = L.map(el, { attributionControl: false });
+            // Tagged immediately - same reasoning as _renderMapThumb's own early
+            // tag: MarkupEngine.renderShape below can throw on malformed markup,
+            // and unlike _renderMapThumb this function has no try/catch around
+            // it at all, so tagging late would leave an already
+            // resize-listener-bound map instance neither cleaned up nor findable.
+            el._ulLeafletMap = viewMap;
             var viewAttributionEl = document.getElementById('comment-map-attribution-' + commentId);
             // The layer strip is server-rendered inside the dialog by the
             // shared _map_view_dialog.html partial ({% map_layers_panel %}).
@@ -726,9 +732,6 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
 
             viewMap.invalidateSize();
             _viewerMaps[commentId] = { map: viewMap, layers: viewLayers, shapes: data.markup || [] };
-            // Tagged for the htmx:beforeCleanupElement listener below, so a leak
-            // is not left sitting until (or unless) this dialog is reopened.
-            el._ulLeafletMap = viewMap;
 
             // Belt-and-suspenders: re-invalidate after any dialog transition finishes.
             dlg.addEventListener('transitionend', function () {
@@ -745,6 +748,15 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             if (typeof L === 'undefined') return null;
             var tmap = L.map(el, { zoomControl: false, attributionControl: false, dragging: false,
                                       scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+            // Tagged immediately, not after the calls below that can throw on
+            // malformed data (_initThumbs's own caller already expects
+            // MarkupEngine.renderShape to do exactly that on a bad shape, per its
+            // comment above) - L.map() has already bound the window resize
+            // listener that leaks this instance by this point, so tagging late
+            // would leave a map that fails to fully construct both un-cleaned-up
+            // (nothing below would have tagged it) and un-retried (_initThumbs's
+            // caller already marked this element dataset.initialized regardless).
+            el._ulLeafletMap = tmap;
             window.MapLayers.tileLayer(data.layer_mode || 'street').addTo(tmap);
             if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
             _fitMapToMarkup(tmap, data);
@@ -752,12 +764,6 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             var mg = L.layerGroup().addTo(tmap);
             (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
             if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(tmap);
-            // Tagged for the htmx:beforeCleanupElement listener below, so this
-            // instance (and the window resize listener Leaflet attaches under the
-            // hood) is released the moment HTMX removes `el`, not left leaking for
-            // the rest of the page's life. See the listener's own comment for what
-            // this does not cover.
-            el._ulLeafletMap = tmap;
             return tmap;
         };
 
