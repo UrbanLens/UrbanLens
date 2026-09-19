@@ -472,7 +472,15 @@ beforeAll(async () => {
                 }
                 return Response.json({ ok: true, floorplan: echoed });
             }
-            return new Response(Bun.file(join(STATIC_DIR, path.replace(/^\//, ""))));
+            // The editor asks this deployment which basemap layers it serves, on every load. A
+            // self-hoster with no REData configured is answered exactly this, and falls back to
+            // the built-in vendor sources - so the harness runs the same path the fallback does.
+            if (path === "/dashboard/map/basemap-tiles/sources/") return Response.json({ layers: [] });
+            const file = Bun.file(join(STATIC_DIR, path.replace(/^\//, "")));
+            // 404 rather than a thrown ENOENT: an unhandled throw in here is attributed to
+            // whichever test happens to be running, which reads as that test failing.
+            if (!(await file.exists())) return new Response("not found", { status: 404 });
+            return new Response(file);
         },
     });
 });
