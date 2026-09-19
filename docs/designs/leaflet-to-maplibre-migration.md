@@ -401,6 +401,40 @@ layer id `terrain` lands on `topographic`), and `resetRedataLayersCacheForTests(
 memoized fetch - so a registration leaked into every later test in the same process. The reset now
 restores `TILE_DEFS` from a snapshot; two regression tests cover it.
 
+### The engine is raster-only, and the browser check exercised the fallback path
+
+Worth stating plainly, because the verification below reads like an endorsement of the vendor CDNs
+and is not: the tiles that loaded came from CARTO and Esri, which is `D17`'s *fallback* - what a
+deployment draws when the REData catalogue gives it nothing. Checked directly rather than inferred:
+this dev deployment has REData configured but its `redata_basemap_tiles` service disabled, so
+`BasemapTileCatalogueView` returns `{"layers": []}` and `TILE_DEFS` keeps its built-in vendor URLs.
+Three separate things follow, none of them fixed here:
+
+1. **The converted page could not have used REData tiles even if they were enabled.**
+   `registerRedataLayers()` is called by exactly six TS entry modules (`map-page.ts`,
+   `album-map.ts`, `spotguessr.ts`, `consensus.ts`, `map-annotations.ts`, `floorplan-editor.ts`) and
+   by **no Django template inline script at all** - including `pin_share/detail.html`. All 13
+   template call sites are in that position. Pre-existing, and orthogonal to which engine renders,
+   but it means "converted to MapLibre" and "draws self-hosted tiles" are independent properties
+   and only the first was demonstrated.
+2. **Vector is the actual point of `D12`/`D11`, and this engine does not consume it.**
+   `registerRedataLayers()` skips `source_type: "vector"` entries, and its stated reason - nothing
+   here can render a MapLibre style document - **is now stale**, because `maplibre-layers.ts` is
+   exactly that. Lifting the skip is not enough on its own: `TILE_DEFS` describes a raster XYZ
+   template and both engines build from it, so a `style_url` entry has nowhere to land. Until a
+   vector source path exists, a REData deployment serving vector tiles is silently downgraded to
+   raster. This is the gap between "MapLibre renders our maps" and "MapLibre renders self-hosted
+   vector tiles", and only the first half is built.
+3. **Item 9's `connect-src` change is a fallback-path requirement, not a self-hosted one.** A
+   REData raster layer's `url_template` points at this app's own proxy
+   (`/dashboard/map/basemap-tiles/<layer>/{z}/{x}/{y}/`), so those tiles are same-origin and need no
+   CSP entry. The vendor origins were added for the case where the catalogue is empty.
+
+REData's own infrastructure side (Martin, PMTiles/Protomaps mirrors - `PL12` items 1-5) stays out of
+scope per "What is explicitly out of scope here" below; nothing in this repo blocks on it, and it
+does not block this repo either. But a self-hosted *vector* basemap needs item 2 above on this side
+regardless of when REData's mirror ships.
+
 ### What blocks the remaining call sites (checked, not assumed)
 
 Taking the pilot's own advice to check each candidate for its own version of the markup-rendering

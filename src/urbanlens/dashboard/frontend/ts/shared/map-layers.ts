@@ -182,8 +182,16 @@ let redataLayersPromise: Promise<string[]> | null = null;
 /**
  * Fetches this deployment's REData tile catalogue and registers each raster entry into
  * `TILE_DEFS` so `tileLayer()` resolves it by id like any other source, replacing the built-in
- * vendor URL for that id. Vector entries (`source_type: "vector"`) are not registered - nothing
- * in this Leaflet-based engine can render a MapLibre style document yet.
+ * vendor URL for that id.
+ *
+ * Vector entries (`source_type: "vector"`) are still not registered, but the reason has changed and
+ * this is now a real gap rather than a bounded one: it used to be that nothing here could render a
+ * MapLibre style document, and as of 2026-09-19 `maplibre-layers.ts` is exactly that. Registering a
+ * `style_url` entry needs more than lifting the skip, though - `TILE_DEFS` describes a raster XYZ
+ * template, and both engines build from it, so a vector entry has nowhere to land yet. Until that
+ * exists, a REData deployment serving vector tiles (`D11`; `D17`'s "hosted instance, REData
+ * configured, vector" case) is silently downgraded to whatever raster the catalogue also offers,
+ * or to the built-in vendors. See PL8.
  *
  * Memoized: every caller awaits the same in-flight/resolved fetch, so registering before
  * constructing a map's layers (required - `createMapLayers()` reads `TILE_DEFS` synchronously)
