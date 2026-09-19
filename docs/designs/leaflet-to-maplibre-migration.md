@@ -89,9 +89,19 @@ already specific and file-accurate, not because it should be treated as this rep
    touch the interactive map.
 5. **`map-image-overlays.ts`'s hand-rolled homography (Gaussian elimination) is deleted outright**, in
    favor of MapLibre's native four-corner `image` source. This is a deletion, not a port.
-6. **`leaflet-rotate` is deleted, not migrated.** GPL-3.0, unmaintained, monkey-patches Leaflet's core.
-   Its only capability - device-compass rotation - is used nowhere in this codebase, so there is nothing
-   to reimplement.
+6. **`leaflet-rotate` cannot simply be deleted - REData's `T8` was wrong about this repo.** Checked
+   2026-09-19, ahead of acting on it: `leaflet-rotate` (GPL-3.0, unmaintained, monkey-patches Leaflet's
+   core) is load-bearing, not dead weight. `ts/entries/floorplan-editor.ts` wires it into a real, live
+   "rotate" tool for the floor-plan editor - a toolbar button, a `t` keyboard shortcut, `map.rotate`/
+   `touchRotate`/`shiftKeyRotate`/`rotateControl` options, and `map.on("rotate", ...)` handlers driving
+   grid rendering and undo checkpoints (`floorplan-editor.ts:172-213`, `2351-2456`). `canRotateView`
+   already feature-detects `L.Map.prototype.setBearing` and hides the button when the CDN script fails
+   to load, so the code is defensive about *absence*, not evidence the feature is unused. This item
+   becomes **port the rotate tool to MapLibre's native `bearing`/`setBearing()`/`dragRotate`** (MapLibre
+   supports rotation and pitch natively, unlike Leaflet - REData's own `D12` cites the *lack* of
+   rotation support as one reason `maplibre-gl-leaflet` is bridge-only scaffolding, not a destination),
+   not a deletion. `leaflet-rotate` itself still gets removed once the floorplan editor's map converts -
+   just not for the reason `T8` gave, and not before its replacement exists.
 7. **Leaflet.draw becomes Terra Draw.**
 8. **`comment-map.js:721`'s per-preview map leak gets an actual fix as part of this port, not deferred
    again.** It creates a fresh `L.map(...)` on every HTMX-swapped thumbnail preview

@@ -120,6 +120,19 @@ catalogue wiring. The full punch list `T8` gives, plus REData's `D12`, is carrie
 (`docs/designs/leaflet-to-maplibre-migration.md`) rather than re-derived by whoever picks it up
 next.
 
+## Correction, found while starting `PL8`'s work: `leaflet-rotate` is not dead weight
+
+This doc's own table above only checked `T8`'s narrow claim ("a dependency, used only by
+`floorplan-editor.ts`") - true, but incomplete. `T8` §2 (restated in `PL8` item 6) separately claimed
+`leaflet-rotate`'s "only capability - device-compass rotation - is used nowhere in this codebase, so
+there is nothing to reimplement," and that framed it as delete-outright, not port. Checked directly
+2026-09-19 before acting on it: false. `floorplan-editor.ts` wires `leaflet-rotate` into a real, live
+floor-plan "rotate" tool - toolbar button, `t` keyboard shortcut, undo/checkpoint integration
+(`floorplan-editor.ts:172-213`, `2351-2456`). `PL8` item 6 is rewritten (not appended-under) to
+reflect this: the item becomes porting the rotate tool to MapLibre's native `bearing`/`setBearing()`,
+not deleting it outright. Flagged here in case REData's own `T8`/`PL12` reasoning about this
+dependency assumed the same thing elsewhere.
+
 ## For whoever reads this next
 
 - `T8` §0's check still applies before trusting §1 as deployed on REData's side: `curl -sH
