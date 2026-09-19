@@ -769,8 +769,42 @@ def allow_media_origin(directives: dict[str, object], base_url: str) -> str | No
     return origin
 
 
+def allow_basemap_style_origin(directives: dict[str, object], base_url: str) -> str | None:
+    """Admit the origin a self-hosted vector basemap is served from.
+
+    A raster basemap needs nothing here: it is proxied, so the browser only ever talks to this
+    origin. A vector one is the opposite - REData publishes a ``style_url`` and the browser fetches
+    the style, its glyphs, its sprite and the tile archive itself directly (REData's ``D11``).
+    MapLibre fetches all four with ``fetch``/XHR rather than as ``<img>``, so ``connect-src`` is
+    the only directive that has to name the origin. Deliberately not the other two it might look
+    like it needs: ``img-src`` already admits ``https:`` wholesale, so the sprite's image half is
+    covered and a host entry would be noise (the same reasoning ``allow_vendor_mirror`` applies),
+    and MapLibre's tile-decoding workers are same-origin, so the style's origin has no bearing on
+    them.
+
+    Args:
+        directives: The CSP directive lists, modified in place.
+        base_url: The configured style origin, or empty when this deployment serves no vector
+            basemap (every self-hoster without one, and the hosted instance until its archive is
+            published).
+
+    Returns:
+        The origin admitted, or None when unconfigured.
+    """
+    if not base_url:
+        return None
+    parsed = urlparse(base_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    for name in ("connect-src",):
+        hosts = directives.get(name)
+        if isinstance(hosts, list) and origin not in hosts:
+            hosts.append(origin)
+    return origin
+
+
 allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
 allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
+allow_basemap_style_origin(_CSP_DIRECTIVES, _app_settings.basemap_style_base_url)
 
 # Report-only default; UL_CSP_ENFORCE flips to blocking once reports are clean.
 CSP_ENFORCE = _app_settings.csp_enforce

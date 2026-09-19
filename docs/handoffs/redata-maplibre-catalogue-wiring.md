@@ -123,6 +123,44 @@ load exhausted `ul_web`'s 54-connection limit outright (`FATAL: too many connect
 containment, not a fix: a cold viewport paints partially and fills in on the next pan. Once REData
 is quick the cap should essentially never be reached, and is worth revisiting then.
 
+## What the vector half will need, read off the real style documents
+
+Nothing here is speculative: `../infrastructure/platform/basemap-tiles/styles/{street,dark,terrain}.json`
+are the documents that will be served, and these are their actual contents as of `79fa75d`. None of
+this is built, because `tiles.urbanlens.org` does not resolve yet - there is nothing to build
+against end to end. It is written down so the size of the job is known rather than discovered.
+
+1. **`pmtiles://` is not a protocol MapLibre speaks.** Every source in all three styles is
+   `"url": "pmtiles://https://tiles.urbanlens.org/pmtiles/…"`. The string `pmtiles` appears **zero**
+   times in `maplibre-gl` 5.24.0; the archives are read through `maplibregl.addProtocol("pmtiles",
+   …)` with the separate `pmtiles` library, which this repo does not have. **Without that
+   dependency a self-hosted style fails completely, not partially** - and neither REData's `T8` nor
+   `D11` mentions it. It belongs in `VENDOR_ASSETS` (CDN URL plus SRI, mirrorable like every other
+   entry) rather than `node_modules`, since `maplibre-gl` itself already reaches the browser that
+   way and the bundler never sees it.
+2. **Load a style on base-layer selection, not on page load.** `street.json` and `dark.json` are
+   **268KB each**. Fetching three of those on every map page to populate a layer strip the user may
+   never open is not worth it. Lazy loading also resolves the awkward part of merging: `glyphs` and
+   `sprite` are style-level, not per-layer, so two vector styles added at once would need
+   `addSprite` with namespaced `icon-image` references - whereas one style at a time is a plain
+   `setGlyphs()`/`setSprite()` pair.
+3. **Namespace on merge.** `map.setStyle()` would wipe the page's own markup and pin layers, so the
+   style's `sources` and `layers` have to be added individually with prefixed ids, each layer's
+   `source` rewritten to match, inserted `beforeId` the first page layer the way
+   `addManagedLayers()` already does. Preserve each layer's own `layout.visibility` rather than
+   forcing it visible - none of the three styles hides a layer today, but a style is free to.
+4. **`terrain.json` is a different shape** - `raster-dem` + `hillshade` + `color-relief`, not vector
+   tiles at all. `color-relief` is in 5.24.0's layer-type enum with its paint properties in the
+   typings (checked directly in the bundle), so the pinned version renders it.
+5. **CSP.** All URLs are absolute on `https://tiles.urbanlens.org` - style, `glyphs`
+   (`/font/{fontstack}/{range}`), `sprite` (`/styles/sprite-street`) and the PMTiles archives, which
+   are read with HTTP range requests. `UL_BASEMAP_STYLE_BASE_URL` (added this session) admits that
+   origin to `connect-src`; `img-src` already allows `https:` wholesale, so the sprite image needs
+   nothing. Unset by default, because no deployment has a style origin yet.
+6. **Leaflet gets none of this.** It cannot render a style document, so on a deployment serving a
+   vector layer the WebGL2-fallback engine draws the built-in vendor raster for that layer. That
+   divergence is inherent to `D12` keeping two engines.
+
 ## What is in progress: `T8` §2
 
 The MapLibre migration is under way as `PL8`. Two maps run on MapLibre GL JS v5 today
@@ -136,8 +174,12 @@ per `D12`. `PL8` carries the punch list.
   paragraph is still accurate.
 - **`P131` is the highest-value thing REData could fix for UrbanLens right now.** It is not specific
   to tiles; every one of the ~15 REData integrations here pays ~1.45s per call.
+- **The `pmtiles` dependency above is worth knowing before the bucket lands**, because it is a
+  UrbanLens-side prerequisite nobody had written down and it does not become visible until a style
+  URL is actually published. Worth a line in REData's own `D11` too - a client cannot consume a
+  `style_url` naming `pmtiles://` with MapLibre alone.
 - Nothing here has been run against a live vector entry, because none exists to run against. The
-  client path for one is written and unit-tested, not browser-verified.
+  catalogue side is written and unit-tested; the rendering side is scoped above, not built.
 - REData's `D11`/`D12` are on their side; this repo's own `D11`/`D12` are unrelated decisions that
   happen to share numbers.
 - `D12`'s `leaflet-draw` → Terra Draw line is thin on both sides. `leaflet-draw` is used in four
