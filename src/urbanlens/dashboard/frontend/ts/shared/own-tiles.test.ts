@@ -10,7 +10,7 @@ import { acquireOwnTileSlot, fetchOwnTile, isOwnTileUrl, loadOwnTileImage, ownTi
 const realFetch = globalThis.fetch;
 
 /** Answers each call with the next status in `statuses`, repeating the last one thereafter. */
-function stubFetch(statuses: Array<number | "network-error">): { calls: string[] } {
+function stubFetch(statuses: Array<number | "network-error">, retryAfterSeconds?: number): { calls: string[] } {
     const state = { calls: [] as string[] };
     globalThis.fetch = ((url: string) => {
         const status = statuses[Math.min(state.calls.length, statuses.length - 1)]!;
@@ -19,8 +19,9 @@ function stubFetch(statuses: Array<number | "network-error">): { calls: string[]
         return Promise.resolve({
             ok: status >= 200 && status < 300,
             status,
+            headers: { get: (name: string) => (name.toLowerCase() === "retry-after" && retryAfterSeconds ? String(retryAfterSeconds) : null) },
             arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
-        } as Response);
+        } as unknown as Response);
     }) as unknown as typeof fetch;
     return state;
 }
@@ -118,6 +119,22 @@ describe("the retry schedule", () => {
     test("never asks again sooner than the Retry-After the proxy sends", () => {
         for (let i = 0; i < 50; i++) expect(ownTileRetryDelayMs(0)!).toBeGreaterThanOrEqual(500);
     });
+
+    /** The proxy knows how long its own slots are held for; this schedule is only guessing. */
+    test("waits as long as the server asked when the server asked for longer", () => {
+        for (let attempt = 0; attempt < 4; attempt++) {
+            expect(ownTileRetryDelayMs(attempt, 30_000)).toBeGreaterThanOrEqual(30_000);
+        }
+    });
+
+    /** The schedule is also spreading a viewport's tiles apart from each other, which a short ask should not undo. */
+    test("does not shorten to a server that asked for less than the schedule", () => {
+        for (let i = 0; i < 20; i++) expect(ownTileRetryDelayMs(3, 100)!).toBeGreaterThan(1000);
+    });
+
+    test("a server asking for a wait does not buy the tile another attempt", () => {
+        expect(ownTileRetryDelayMs(4, 30_000)).toBeNull();
+    });
 });
 
 describe("fetchOwnTile", () => {
@@ -183,6 +200,25 @@ describe("fetchOwnTile", () => {
 
         await expect(pending).rejects.toThrow("503");
         expect(fetched.calls).toHaveLength(5);
+    });
+
+    /**
+     * The refusal carries the only figure anyone actually knows - the proxy's own slot hold time -
+     * so a schedule that ignores it spends attempts on windows the proxy has already said are busy.
+     */
+    test("waits out the Retry-After the refusal carried", async () => {
+        // Longer than any delay the schedule picks for a first retry (1000ms, jittered to at most
+        // 1500), and short enough that `advanceRetries` still recognises it as a retry.
+        stubFetch([503, 200], 5);
+
+        const pending = fetchOwnTile("/tiles/1/2/3");
+        for (let turn = 0; turn < 8; turn++) await Promise.resolve();
+        const waits = scheduled.filter((timer) => timer.ms < 20_000).map((timer) => timer.ms);
+        await advanceRetries();
+        await pending;
+
+        expect(waits.length).toBeGreaterThan(0);
+        expect(Math.max(...waits)).toBeGreaterThanOrEqual(5_000);
     });
 
     test("survives a network error the same way it survives a 503", async () => {

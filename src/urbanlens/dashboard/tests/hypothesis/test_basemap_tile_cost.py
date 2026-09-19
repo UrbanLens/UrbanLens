@@ -25,6 +25,7 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.db import connection
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
@@ -37,6 +38,9 @@ if TYPE_CHECKING:
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
 _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
+
+#: A document response, as the control for anything asserting a tile does not carry a document header.
+_DOCUMENT_URL = "/dashboard/map/"
 
 #: Tiles in one cold viewport - the unit every figure here is really about.
 VIEWPORT_TILES = 30
@@ -167,6 +171,51 @@ class BasemapTileCostTests(TestCase):
         self.assertIn("Cross-Origin-Resource-Policy", response.headers)
         self.assertNotIn("Content-Security-Policy", response.headers)
         self.assertNotIn("Content-Security-Policy-Report-Only", response.headers)
+
+    def test_the_first_viewer_of_an_area_may_keep_the_tile_too(self) -> None:
+        """The freshly-fetched tile is a different return path from the cached one.
+
+        It is also the expensive one - it cost an upstream fetch - so it is the last tile that
+        should have to be asked for twice."""
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNG", "image/png")),
+        ):
+            response = self.client.get(self._url(x=1211))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("max-age=", cache_directives(response))
+        self.assertIn("private", cache_directives(response))
+
+    def test_a_miss_the_server_already_remembers_is_not_re_asked_either(self) -> None:
+        """The cached-sentinel path, which is how a hole in a layer is answered after the first ask."""
+        cache.set("ul_basemap_tile_street_12_1212_1539", "__ul_no_tile__", 60)
+        with mock.patch(_CONFIGURED, return_value=True):
+            response = self.client.get(self._url(x=1212))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("max-age=", cache_directives(response))
+
+    def test_no_content_security_policy_is_sent_in_either_mode(self) -> None:
+        """A tile is exempted from both spellings, because a deployment sends one or the other.
+
+        The site emits the report-only header until ``UL_CSP_ENFORCE`` flips it, so an exemption
+        written for only the header this deployment happens to send today comes back the day that
+        setting changes. The map page under the same settings is the control: it proves the policy
+        really is configured, so the tile's silence is the exemption and not an empty setting."""
+        modes = {
+            "CONTENT_SECURITY_POLICY": "Content-Security-Policy",
+            "CONTENT_SECURITY_POLICY_REPORT_ONLY": "Content-Security-Policy-Report-Only",
+        }
+        for setting, header in modes.items():
+            with (
+                self.subTest(mode=setting),
+                override_settings(**{setting: {"DIRECTIVES": {"default-src": ["'self'"]}}}),
+            ):
+                page = self.client.get(_DOCUMENT_URL)
+                self.assertIn(header, page.headers, f"{setting} is not reaching responses, so this test proves nothing")
+
+                self.assertNotIn(header, self._serve_cached(x=1213).headers)
 
     def test_a_definitive_miss_is_not_re_asked_on_every_pan(self) -> None:
         """The server already remembers this answer for a week; the browser should not have to ask."""
