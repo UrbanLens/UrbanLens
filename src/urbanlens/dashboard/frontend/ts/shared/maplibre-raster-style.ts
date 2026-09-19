@@ -83,7 +83,7 @@ export interface RasterSourceInput {
 export function toMapLibreTileUrls(leafletUrl: string, subdomains?: string | string[]): string[] {
     const withoutRetina = leafletUrl.replace(/\{r\}/g, "");
     if (!withoutRetina.includes("{s}")) return [withoutRetina];
-    const resolvedSubdomains = subdomains ? Array.from(subdomains) : LEAFLET_DEFAULT_SUBDOMAINS;
+    const resolvedSubdomains = subdomains !== undefined ? Array.from(subdomains) : LEAFLET_DEFAULT_SUBDOMAINS;
     return resolvedSubdomains.map((subdomain) => withoutRetina.replace(/\{s\}/g, subdomain));
 }
 

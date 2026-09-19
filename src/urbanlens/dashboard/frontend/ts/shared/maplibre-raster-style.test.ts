@@ -47,6 +47,10 @@ describe("toMapLibreTileUrls", () => {
             "https://z.tile.example.com/{z}/{x}/{y}.png",
         ]);
     });
+
+    test("an explicit empty subdomains array is honored as given, not silently replaced by the a/b/c default", () => {
+        expect(toMapLibreTileUrls("https://{s}.tile.example.com/{z}/{x}/{y}.png", [])).toEqual([]);
+    });
 });
 
 describe("buildRasterStyle", () => {
