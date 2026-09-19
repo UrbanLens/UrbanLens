@@ -47,7 +47,7 @@ import { History } from "../shared/floorplan/history";
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { GRID_SPACING_METERS, PIXEL_TOLERANCES, clampOpening, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
-import { createMapLayers, registerRedataLayers } from "../shared/map-layers";
+import { createMapLayers, registerRedataLayers, setAttribution } from "../shared/map-layers";
 
 // Fired now rather than awaited inside boot(): starting this deployment's REData tile catalogue
 // fetch as early as this module loads gives it a head start on the synchronous DOM/config
@@ -260,10 +260,7 @@ function boot(): void {
         root: document.getElementById("floorplan-layers"),
         defaultBase: "satellite",
         contextMenu: false, // this editor has its own specialised right-click menu
-        onAttribution: (text) => {
-            const el = document.getElementById("page-footer-attribution-text");
-            if (el) el.textContent = text;
-        },
+        onAttribution: setAttribution,
         custom: {
             underlay: {
                 isActive: () => state.showUnderlay,

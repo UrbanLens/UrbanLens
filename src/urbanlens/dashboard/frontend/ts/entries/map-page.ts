@@ -11,7 +11,7 @@ import { createPinClusterGroup, isAdditiveClick as sharedIsAdditiveClick } from 
 import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches } from "../shared/pin-cache";
 import { createChipPicker, createFilterPicker, type ChipPickerApi, type FilterPickerApi, type LabelGroup } from "../shared/label-picker";
 import { MapContextMenu } from "../shared/map-context-menu";
-import { MapLayers, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
+import { MapLayers, setAttribution, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
 import { LocationSearchEngine, type LocationSearchAttachOptions } from "../shared/location-search-engine";
 
 declare const L: typeof import("leaflet");
@@ -2475,9 +2475,7 @@ map.on("moveend", _scheduleInfrastructureFetch);
 
 let _mapBaseAttributionText = "";
 function _renderMapAttribution(): void {
-    const el = document.getElementById("page-footer-attribution-text");
-    if (!el) return;
-    el.textContent = _mapBaseAttributionText + (_infrastructureLayerActive ? " · Infrastructure © OpenStreetMap contributors" : "");
+    setAttribution(_mapBaseAttributionText + (_infrastructureLayerActive ? " · Infrastructure © OpenStreetMap contributors" : ""));
 }
 
 // -- Layers: shared engine (ts/shared/map-layers.ts) ------------------------

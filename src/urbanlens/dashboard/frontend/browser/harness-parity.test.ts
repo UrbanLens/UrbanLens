@@ -33,8 +33,8 @@ function allTemplates(): string {
     return parts.join("\n");
 }
 
-/** Ids the editor reads from the surrounding page rather than its own markup. Both are optional-chained at the call site, so their absence is a no-op rather than a fault, and neither is part of what the fixture is testing. */
-const SITE_CHROME = new Set(["map-overlays-dialog", "page-footer-attribution-text"]);
+/** Ids the editor reads from the surrounding page rather than its own markup. Optional-chained at the call site, so absence is a no-op rather than a fault, and not part of what the fixture is testing. */
+const SITE_CHROME = new Set(["map-overlays-dialog"]);
 
 /** Whether some template declares this id. A partial builds its ids from a parameter - `id="icon-value-{{ picker_id }}"` - so the finished id never appears in any file. */
 function declared(id: string, templates: string): boolean {

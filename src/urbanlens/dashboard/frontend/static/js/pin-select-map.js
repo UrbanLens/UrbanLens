@@ -40,10 +40,7 @@
         var map = L.map(mapEl, { attributionControl: false }).setView([20, 0], 2);
         window.MapLayers.create(map, {
             root: document.getElementById(opts.layersPanelId),
-            onAttribution: function (text) {
-                var el = document.getElementById('page-footer-attribution-text');
-                if (el) el.textContent = text;
-            },
+            onAttribution: window.MapLayers.setAttribution,
         });
 
         var selectedIds = new Set();

@@ -171,10 +171,7 @@
         defaultBase: '{{ default_map_view|default:"street" }}',
         darkMode: '{{ map_dark_mode|default:"light" }}',
         storageKey: 'ul_layers_v1_{{ profile.uuid }}',
-        onAttribution: function (text) {
-            var el = document.getElementById('page-footer-attribution-text');
-            if (el) el.textContent = text;
-        },
+        onAttribution: window.MapLayers.setAttribution,
     });
 
     var routesPane = map.createPane('memoriesRoutesPane');

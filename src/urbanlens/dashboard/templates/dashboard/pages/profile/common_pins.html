@@ -60,10 +60,7 @@
     window.map = map;
     window.MapLayers.create(map, {
         root: document.getElementById('common-pins-map-layers'),
-        onAttribution: function (text) {
-            var el = document.getElementById('page-footer-attribution-text');
-            if (el) el.textContent = text;
-        },
+        onAttribution: window.MapLayers.setAttribution,
     });
     var markers = points.map(function (pt) {
         var marker = L.marker([pt.latitude, pt.longitude]);

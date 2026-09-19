@@ -154,10 +154,7 @@
   // an on-map overlay - attributionControl is disabled above.
   window.MapLayers.create(map, {
     root: document.getElementById('shared-pin-map-layers'),
-    onAttribution: function (text) {
-      const el = document.getElementById('page-footer-attribution-text');
-      if (el) el.textContent = text;
-    },
+    onAttribution: window.MapLayers.setAttribution,
   });
   if (hasCoords) {
     if (useMaplibre) {

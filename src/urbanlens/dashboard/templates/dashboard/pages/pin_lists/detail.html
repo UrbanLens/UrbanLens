@@ -759,10 +759,7 @@
             // Shared layers engine + panel - the exact same component as the main map.
             window.MapLayers.create(_overviewMap, {
                 root: document.getElementById('pin-list-map-layers'),
-                onAttribution: function (text) {
-                    const el = document.getElementById('page-footer-attribution-text');
-                    if (el) el.textContent = text;
-                },
+                onAttribution: window.MapLayers.setAttribution,
             });
             _overviewMarkers = L.layerGroup().addTo(_overviewMap);
         }
