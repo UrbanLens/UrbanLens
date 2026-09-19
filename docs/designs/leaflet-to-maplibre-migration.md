@@ -132,7 +132,24 @@ already specific and file-accurate, not because it should be treated as this rep
    rotation support as one reason `maplibre-gl-leaflet` is bridge-only scaffolding, not a destination),
    not a deletion. `leaflet-rotate` itself still gets removed once the floorplan editor's map converts -
    just not for the reason `T8` gave, and not before its replacement exists.
-7. **Leaflet.draw becomes Terra Draw.**
+7. **`Leaflet.draw` becomes Terra Draw - a bigger item than this one line implied, checked on
+   reassessment.** `leaflet-draw` is a real dependency in four places, not incidentally: the boundary
+   polygon editor in `ts/entries/map-annotations.ts` (create/edit/delete, plus a custom right-click
+   delete-during-edit wired via `attachEditRightClickDelete`), the single-polygon area-guess tool in
+   `ts/entries/spotguessr.ts`, and two Django templates with their own inline draw controls -
+   `pin_lists/detail.html` (a pin list's boundary) and `pin_lists/_saved_filter_dialog_scripts.html` (a
+   saved filter's include/exclude regions). Two behaviors any port must preserve, not just "swap the
+   drawing library," because both were real, fixed production bugs: (1) `leaflet-draw`'s own remove tool
+   only *stages* a deletion, reverted by starting any other draw/edit tool - `P27` ("deleted saved-filter
+   regions and list boundaries came back on the next draw," resolved 2026-09-14) - so both template maps
+   disable it (`edit.remove: false`) and use `ts/shared/region-delete.ts`'s `ImmediateDeleteMode` instead,
+   which commits a deletion on click; `test_region_delete_is_immediate.py` statically scans both
+   templates' source to guard against `remove: false` ever being dropped. (2) `L.geoJSON` collapses a
+   stored `MultiPolygon` into one Leaflet layer, so deleting or editing one part acted on the whole
+   region - `P120` (resolved 2026-09-14) - fixed by `region-delete.ts`'s `polygonParts()`, which splits
+   any stored geometry into one polygon per part before it loads. Whether Terra Draw's own API can
+   express an equivalent "delete commits immediately, no staging" mode and one-layer-per-polygon loading
+   is not verified in this session - flagged as open, not assumed either way.
 8. **Done ahead of the port, independent of it.** `comment-map.js:721`'s per-preview map leak (a fresh
    `L.map(...)` on every HTMX-swapped thumbnail preview with no `.remove()`, confirmed this session)
    is fixed - the leak's cause (a Leaflet map instance discarded when HTMX detaches its container) has

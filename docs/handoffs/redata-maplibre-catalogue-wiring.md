@@ -188,3 +188,10 @@ doc's - this doc's count was the one that needed the confidence walked back, not
 - REData's `docs/urbanlens-handoff.md` (`T8`), `docs/PLANS.md` `PL12`, `docs/DECISIONS.md` `D11`
   and `D12` are on their side (`../REData`), not this repo's own `D11`/`D12` (connection pooling
   and the map-data cache contract), which are unrelated decisions that happen to share numbers.
+- Not wrong this time, just thin, on both sides: `D12`'s "Costs accepted" section covers
+  `leaflet-draw` → Terra Draw in one line, same as `PL8` did before this session expanded it.
+  `leaflet-draw` is a real dependency in four places here (`map-annotations.ts`, `spotguessr.ts`, and
+  two Django templates - see `PL8` item 7), and two of them exist specifically to work around a
+  `leaflet-draw` quirk that caused a real, fixed bug (`P27`: a staged deletion reverted itself on the
+  next draw/edit) - whatever replaces it needs an equivalent to that immediate-delete behavior, not
+  just its drawing tools. Not verified whether Terra Draw has one.
