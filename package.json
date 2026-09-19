@@ -46,6 +46,7 @@
     "@types/sortablejs": "^1.15.9",
     "@types/wicg-file-system-access": "^2023.10.7",
     "bun-types": "latest",
+    "maplibre-gl": "5.24.0",
     "playwright": "^1.62.1",
     "sass": "^1.101.0",
     "typescript": "^6.0.3"

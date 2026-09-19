@@ -60,7 +60,7 @@ describe("core.js install list", () => {
         });
 
         expect(thrown).toBeNull();
-        // The last statement in the entry: reached only if none of the 24 installs
+        // The last statement in the entry: reached only if none of the installs
         // above it threw.
         expect(typeof window.createMarkupToolbar).toBe("function");
     });

@@ -89,8 +89,10 @@ than this document's repeated attempts to correct it.
   separate overview map), `pin_lists/saved_filter_detail.html`, `vault/photos.html`, `trips/detail.html`,
   `profile/common_pins.html`, `memories/index.html`.
 
-**No MapLibre GL JS dependency exists yet anywhere in this codebase** - confirmed this session: no
-`package.json` entry, no vendored/CDN asset, no import.
+**As of 2026-09-19, the pilot conversion below is live** - `maplibre-gl` is a `package.json`
+`devDependency` (types only; the runtime is CDN-loaded via the already-pinned `vendor_assets.py`
+entries), and `_renderMapThumb` genuinely renders through it on WebGL2-capable browsers. See "The
+first real conversion" below for what shipped and what's still Leaflet-only.
 
 ## The work, per REData's `D12` and `T8` §2
 
@@ -265,44 +267,95 @@ already specific and file-accurate, not because it should be treated as this rep
     swapping layers in and out of the map. A real port here still needs this repo's own layer set worked
     out against that shape, not a copy - not attempted this session.
 
-## Where a first real conversion should start
+## The first real conversion: `_renderMapThumb` is done (2026-09-19)
 
-Not code yet - scoped here because the foundational pieces (vendor asset pin, WebGL2 detection,
-`buildRasterStyle`) now exist unwired and the next concrete step is choosing where they land first, not
-building more scaffolding in the abstract. There are 25 distinct `L.map()` call sites across the codebase
-(`comment-map.js` alone has three: composer, dialog viewer, thumbnail) - most of them one-off template
-maps (settings preview, safety check-in, trip detail, and so on) that are simple in a different way than
-`_renderMapThumb`: single-purpose and low-traffic, but not necessarily non-interactive. `_renderMapThumb`
-in
-`comment-map.js` (the `.comment-map-thumb` preview, also reused by the DM composer's attach-preview chip)
-is the strongest pilot candidate among those actually checked - not an exhaustive review of all 25, but
-every candidate compared against it so far loses on the same axis:
+`comment-map.js`'s `_renderMapThumb` (the `.comment-map-thumb` preview, also reused by the DM
+composer's attach-preview chip) is converted, both engines live on `release/v_0_8_0`, not just
+scoped - see "What was actually built" below. The reasoning for picking it as the pilot (zero
+interactivity, no layer-switcher/draggable-marker/context-menu porting problem, a small
+already-hardened blast radius after this session's own leak-fix commits `6b117c695`/`504e145d4`)
+held up. One real gap in that reasoning was found and closed while building this, not before:
+`_renderMapThumb` also renders arbitrary stored `ShapeSpec` markup (`markup-engine.ts`'s
+`renderShape`) onto the map, not just a base tile layer - `L.polyline`/`L.marker`/`L.circle`/
+`L.polygon`/`L.divIcon` calls with no MapLibre equivalent, for a feature ("Attach a Map") where a
+comment/DM's attached map having drawn shapes is the common case, not the exception. Skipping that
+would have shipped a MapLibre path that only actually activated for markup-free maps. This item
+originally scoped only the tile-layer swap; the markup port turned out to be the larger half of the
+actual work, not a footnote to it.
 
-- **Zero interactivity to preserve.** Its own Leaflet options are `zoomControl: false, dragging: false,
-  scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false` - it is a static rendered view, not an
-  interactive map. A MapLibre swap here needs no gesture/control porting at all.
-- **No layer-switcher UI, no draggable markers, no context menu.** Contrast the two next-simplest-looking
-  candidates actually checked: `album-map.ts` (`initAlbumMap`) wires `createMapLayers` (a base-layer
-  switcher control), draggable photo markers with position-save-on-drop, hover sync back to a DOM list,
-  and a context menu; `_photo_lightbox.html`'s map (also `zoomControl`/`dragging`/`scrollWheelZoom` all
-  `false`, so it looked just as promising at a glance) turns out to wire a draggable marker with a
-  `dragend` handler that calls a server-side reposition endpoint. Each of those is its own porting problem
-  (`IControl`, MapLibre's `Marker` drag API, a live network call mid-drag) this thumbnail path has none
-  of. The other 22 call sites are not yet individually checked.
-- **Small, already-hardened, already-understood blast radius.** Two commits this session
-  (`6b117c695` - the leak/dispose fix and htmx cleanup wiring; `504e145d4` - the throw-before-tag ordering
-  fix found on re-review) already put this exact function through adversarial review, so its behavior is
-  fresh and verified, not archaeology.
-- **Every foundational piece it would need already exists, unwired:** `buildRasterStyle`/
-  `toMapLibreTileUrls` (this document, above) for the source, `maplibregl_js`/`maplibregl_css` in
-  `vendor_assets.py` for the library itself, `supportsWebGL2` (`webgl-support.ts`) for the
-  fallback-to-Leaflet decision D17 requires.
+The other 24 `L.map()` call sites are not yet converted or individually re-checked against this
+pilot's specific findings (most are one-off template maps - settings preview, safety check-in, trip
+detail, and so on - simple in a different way than `_renderMapThumb`: single-purpose and
+low-traffic, but not necessarily non-interactive). The two next-simplest-looking candidates checked
+before this pilot both turned out to have their own porting problem the thumbnail path doesn't:
+`album-map.ts` (`initAlbumMap`) wires a base-layer switcher control, draggable photo markers with
+position-save-on-drop, and a context menu; `_photo_lightbox.html`'s map wires a draggable marker
+with a `dragend` handler calling a server-side reposition endpoint. Whoever picks the next call site
+should check it for its own equivalent of `_renderMapThumb`'s markup-rendering gap, not assume
+"static tile layer" covers everything a candidate map draws.
 
-What a real (not scoped-only) first conversion batch still needs, none of which exists yet: the vendor
-asset actually referenced by a template (today it's pinned but consumed nowhere), the CSP `connect-src`
-change item 9 above already specifies, a `WebGL2 → MapLibre / no-WebGL2 → Leaflet` branch actually wired
-into `_renderMapThumb` (not just the pure detector function), and - per this repo's own testing
-convention - verification in a real browser, not just `bun test`, since this is a rendering change.
+### What was actually built
+
+- **`ts/shared/maplibre-markup.ts`** (new) - the MapLibre-native counterpart to `markup-engine.ts`'s
+  `renderShape`, covering all seven `ShapeSpec` types (`line`, `arrow`, `circle`, `rect`, `polygon`,
+  `text`, `pin`) as MapLibre GeoJSON sources/layers (`fill`+`line` layer pairs for filled shapes) and
+  `maplibregl.Marker`s (arrow/text/pin), reusing `markup-engine.ts`'s own `arrowheadSvg`/
+  `textLabelHtml`/`bearing`/`arrowheadSize` (now exported) rather than re-deriving them, so an
+  arrow or text label looks identical on either engine. `circle` has one deliberate, known visual
+  approximation, documented in the module's own header comment: Leaflet's `L.circle` recomputes a
+  screen-space ellipse every frame from the current projection, which MapLibre's layer model has no
+  equivalent of, so this module instead builds a fixed 64-point polygon approximating the true
+  geodesic circle (haversine, `R = 6371000` - matching `L.CRS.Earth.R`, so the radius itself agrees
+  with Leaflet's own `distanceTo`). Visually indistinguishable at the radii/zooms this app's shapes
+  are actually drawn at; not the same algorithm, and the gap grows at extreme radii or high latitude.
+  Not covered by an automated test this session (no browser-DOM MapLibre test harness exists yet in
+  this codebase to assert against, the same gap item 8's own manual-harness note already flagged for
+  Leaflet) - verified instead by a real-browser Playwright check (screenshot + structural assertions:
+  correct engine picked, correct marker/layer counts, zero console errors) against `/dashboard/map/`,
+  covering both the MapLibre path and the forced-no-WebGL2 Leaflet fallback in the same run.
+- **`ts/shared/map-layers.ts`**: new `rasterSourceFor(kind)`, the MapLibre-side counterpart to the
+  existing `tileLayer(kind)` - same `TILE_DEFS` resolution order, returns the `RasterSourceInput`
+  shape `buildRasterStyle` needs instead of an `L.TileLayer`.
+  `webgl-support.ts`/`maplibre-raster-style.ts` each gained an `installGlobalX` publishing their
+  existing pure functions onto `window` (`WebGLSupport`, `MaplibreRasterStyle`), the same pattern
+  `MapLayers`/`MapExport` already use - all three wired into `entries-classic/core.ts`.
+- **`comment-map.js`**: `_renderMapThumb` now branches - `typeof maplibregl !== "undefined" &&
+  window.WebGLSupport.supportsWebGL2()` picks a new `_renderMapThumbMaplibre` path (constructs the
+  map from `buildRasterStyle`, tags `el._ulMaplibreMap` immediately after construction for the same
+  leak-prevention reason item 8's Leaflet tagging does, adds the borders overlay and markup group
+  once `'load'` fires, since MapLibre requires the style to be ready before `addSource`/`addLayer`);
+  everything else falls through to the original, unmodified Leaflet path. `_disposeMapOn` now checks
+  both `_ulLeafletMap` and `_ulMaplibreMap` tags independently. A MapLibre-side `_fitMaplibreToMarkup`/
+  `_computeMarkupLngLatBounds` mirror the Leaflet pair without depending on `L` (the MapLibre path
+  must work even where Leaflet happens not to be loaded on a page), with one deliberate
+  simplification: it always fits to markup bounds when markup exists rather than first checking
+  whether the saved view already covers it, so it can zoom out slightly more than strictly necessary
+  in the case the Leaflet path special-cases - not an attempt at pixel parity.
+- **CSP**: `connect-src` gained the tile-vendor origins (`*.basemaps.cartocdn.com`,
+  `*.tile.opentopomap.org`, `server.arcgisonline.com`/`services.arcgisonline.com`) item 9 above
+  said MapLibre's XHR-based tile fetches need, mirroring `img-src`'s existing entries for the same
+  vendors.
+- **Templates**: `{% vendor_asset "maplibregl_css/js" %}` added alongside every existing
+  `leaflet_css/js` pair (22 templates) - the same set of pages, not a broader rollout, so a page that
+  never loaded Leaflet still never loads MapLibre either.
+- **`maplibre-gl@5.24.0`** added as a `devDependency` (`bun add -D`, matching the version already
+  vendor-pinned in `vendor_assets.py`) for its own shipped TypeScript types only - every reference to
+  it in this codebase's `.ts` files is `import type`, so nothing bundles it; the runtime library is
+  still loaded exclusively via the CDN `<script>` tag, exactly like Leaflet's own `declare const L`
+  pattern. `node_modules/` write permission, blocked as of 2026-09-05, was re-checked this session and
+  is open again.
+
+Verified in a real browser (`bin/sync_app.sh --frontend` into `development_main`, Playwright against
+`/dashboard/map/` with a synthetic `_renderMapThumb` call covering all seven shape types): the
+MapLibre path renders tiles, the borders overlay, all seven shape types, and the reference marker
+(screenshot-confirmed, not just structurally asserted); forcing `supportsWebGL2()` to `false` in the
+same run confirms the Leaflet path still renders correctly, unregressed. Zero console errors either
+way. `bun run typecheck`, `bun run test:ts` (1015 pass), and the frontend build all clean.
+
+What a real next conversion batch still needs: pick another of the 24 remaining call sites, check it
+against this pilot's own markup-rendering lesson specifically, and budget for whichever of the two
+still-open items above (Terra Draw's immediate-delete question, item 7; the clustering rebuild vs.
+port question, item 3) it actually touches.
 
 ## What is explicitly out of scope here
 

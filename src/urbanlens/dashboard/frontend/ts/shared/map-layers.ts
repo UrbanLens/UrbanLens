@@ -6,6 +6,7 @@
 declare const L: typeof import("leaflet");
 
 import { bindMapContextMenu, type BindMapContextMenuOptions } from "./map-context-menu";
+import type { RasterSourceInput } from "./maplibre-raster-style";
 
 export type BaseLayerKey = "street" | "topographic" | "satellite";
 export type MapDarkMode = "light" | "dark" | "system";
@@ -133,6 +134,22 @@ export function normalizeBase(key: string | null | undefined): BaseLayerKey {
 export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.TileLayer {
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
     return L.tileLayer(def.url, { ...def.options, ...extraOptions });
+}
+
+/**
+ * Resolves one of the canonical sources to the shape `buildRasterStyle` (`maplibre-raster-style.ts`)
+ * needs - the MapLibre-side counterpart to `tileLayer()` above. Same resolution order (`kind` as
+ * given, then its normalized base key, then `street`), so a MapLibre and a Leaflet map built from the
+ * same `kind` string draw the same tiles.
+ */
+export function rasterSourceFor(kind: string): RasterSourceInput {
+    const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
+    return {
+        url: def.url,
+        attribution: typeof def.options.attribution === "string" ? def.options.attribution : undefined,
+        maxNativeZoom: def.options.maxNativeZoom,
+        subdomains: def.options.subdomains,
+    };
 }
 
 /**
@@ -768,6 +785,7 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
 export const MapLayers = {
     create: createMapLayers,
     tileLayer,
+    rasterSourceFor,
     bordersOverlay,
     weatherLayers,
     normalizeBase,

@@ -110,3 +110,16 @@ export function buildRasterStyle(id: string, source: RasterSourceInput): MapLibr
         layers: [{ id, type: "raster", source: id }],
     };
 }
+
+export const MaplibreRasterStyle = { buildRasterStyle, toMapLibreTileUrls };
+
+/** Publishes the builder on window for the classic inline template scripts and hand-written vanilla JS (e.g. `comment-map.js`). */
+export function installGlobalMaplibreRasterStyle(): void {
+    window.MaplibreRasterStyle = MaplibreRasterStyle;
+}
+
+declare global {
+    interface Window {
+        MaplibreRasterStyle: typeof MaplibreRasterStyle;
+    }
+}

@@ -6,6 +6,8 @@
 {# Leaflet powers the placement map and the Vault album detail view's photo map. #}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 <script type="module" src="{% static 'dashboard/js/vault-photos.js' %}"></script>
 {# Same album-panel module the pin/wiki Photos tab uses (location/index.html). #}
 <script type="module" src="{% static 'dashboard/js/albums.js' %}"></script>

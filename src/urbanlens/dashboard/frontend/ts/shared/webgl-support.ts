@@ -27,3 +27,16 @@ export function supportsWebGL2(createCanvas: () => WebGL2ProbeCanvas = () => doc
         return false;
     }
 }
+
+export const WebGLSupport = { supportsWebGL2 };
+
+/** Publishes the detector on window for the classic inline template scripts and hand-written vanilla JS (e.g. `comment-map.js`). */
+export function installGlobalWebGLSupport(): void {
+    window.WebGLSupport = WebGLSupport;
+}
+
+declare global {
+    interface Window {
+        WebGLSupport: typeof WebGLSupport;
+    }
+}

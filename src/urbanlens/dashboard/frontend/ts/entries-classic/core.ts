@@ -16,6 +16,8 @@ import { installGlobalLocationSearchEngine } from "../shared/location-search-eng
 import { installGlobalMapContextMenu } from "../shared/map-context-menu";
 import { installGlobalMapExport } from "../shared/map-export";
 import { installGlobalMapLayers } from "../shared/map-layers";
+import { installGlobalMaplibreMarkup } from "../shared/maplibre-markup";
+import { installGlobalMaplibreRasterStyle } from "../shared/maplibre-raster-style";
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
 import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
@@ -27,6 +29,7 @@ import { installGlobalSafetyLiveLocation } from "../shared/safety-live-location"
 import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
 import { installUndoBar } from "../shared/undo-bar";
 import { installGlobalUndoMapRefresh } from "../shared/undo-map-refresh";
+import { installGlobalWebGLSupport } from "../shared/webgl-support";
 
 installGlobalAssistantOverlay();
 installGlobalAutosaveGuard();
@@ -53,6 +56,9 @@ installGlobalLabelPicker();
 installGlobalRegionDelete();
 installGlobalLeaveConfirmation();
 installGlobalPinCachePurge();
+installGlobalWebGLSupport();
+installGlobalMaplibreRasterStyle();
+installGlobalMaplibreMarkup();
 
 window.createMarkupToolbar = createMarkupToolbar;
 

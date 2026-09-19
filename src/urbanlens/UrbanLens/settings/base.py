@@ -706,6 +706,15 @@ _CSP_DIRECTIVES: dict[str, object] = {
         "https://nominatim.openstreetmap.org",
         "https://en.wikipedia.org",
         "https://maps.googleapis.com",
+        # MapLibre tiles: loaded via XHR (connect-src), not <img> (img-src) the
+        # way Leaflet loads the same vendors - PL8 item 9. Mirrors img-src's
+        # tile-vendor entries below.
+        "https://*.basemaps.cartocdn.com",
+        "https://basemaps.cartocdn.com",
+        "https://*.tile.opentopomap.org",
+        "https://tile.opentopomap.org",
+        "https://server.arcgisonline.com",
+        "https://services.arcgisonline.com",
     ],
     # Street View embed.
     "frame-src": ["'self'", "https://www.google.com"],
