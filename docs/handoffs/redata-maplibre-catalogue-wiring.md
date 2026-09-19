@@ -35,13 +35,13 @@ returns 23 call sites across 16 files. Of those, one file
 `frontend/static/dashboard/js/` (`consensus.js`, `floorplan-editor.js`, `map-annotations.js`,
 `map-page.js`, `spotguessr.js`) are the compiled-JS build output of the matching
 `frontend/ts/entries/*.ts` source and duplicate its call sites exactly rather than naming a second
-map. Excluding both leaves **15 `L.map(` call sites across 10 source files**: `ts/entries/`
+map. Excluding both leaves **12 `L.map(` call sites across 8 source files**: `ts/entries/`
 {`consensus.ts`(1), `floorplan-editor.ts`(1), `map-annotations.ts`(2), `map-page.ts`(1),
-`spotguessr.ts`(2)}, `ts/shared/album-map.ts`(1), and four hand-written vanilla-JS files with no
-TS source at all - `static/js/comment-map.js`(3), `static/js/pin-select-map.js`(1),
-`static/dashboard/js/albums.js`(1), `static/dashboard/js/article-wysiwyg.js`(2).
+`spotguessr.ts`(2)}, `ts/shared/album-map.ts`(1), and two hand-written vanilla-JS files with no
+TS source at all - `static/js/comment-map.js`(3), `static/js/pin-select-map.js`(1). (This count is
+itself corrected from an earlier, wrong "15 across 10" - see the correction section below.)
 
-That is roughly half of "27," not a rounding difference. It does not change `PL8`'s shape - every
+That is under half of "27," not a rounding difference. It does not change `PL8`'s shape - every
 file `T8` named by name is real and matches its description - but a written record should carry
 the number actually measured. Not reconciled against REData's own counting method, which is not
 described in `T8` beyond the total.
@@ -132,6 +132,24 @@ floor-plan "rotate" tool - toolbar button, `t` keyboard shortcut, undo/checkpoin
 reflect this: the item becomes porting the rotate tool to MapLibre's native `bearing`/`setBearing()`,
 not deleting it outright. Flagged here in case REData's own `T8`/`PL12` reasoning about this
 dependency assumed the same thing elsewhere.
+
+## Correction, found on later reassessment: this doc's own "15 across 10" count was wrong
+
+Not a `T8` error this time - a bug in this doc's own count, above. Two things wrong with it, both
+checked directly rather than assumed: (1) `static/dashboard/js/albums.js` was listed as a fourth
+"hand-written vanilla-JS file with no TS source," but it has one - `ts/entries/albums.ts` imports
+`ts/shared/album-items.ts`, which imports and calls `initAlbumMap` from `ts/shared/album-map.ts`
+(already counted separately in the same list), so `albums.js`'s `L.map(...)` is that same call
+site's compiled output, not a second one, by the identical reasoning already applied to the other
+five compiled-JS files this count excludes. (2) `static/dashboard/js/article-wysiwyg.js`'s two
+"matches" are `parseHTML.map((parseRule) => ...)` - `Array.prototype.map()` on an unrelated
+variable - not `L.map(` at all; the raw grep command above has no word boundary, so it matches the
+literal substring "L.map(" wherever it falls inside a longer identifier, which is exactly what
+happens inside "parseHTML.map(" - "parseHTML" ends in "L", immediately followed by ".map(".
+Re-run with `grep -rln '\bL\.map(' ...` (word-boundary anchored) and `article-wysiwyg.js` drops out
+of the result entirely. Corrected count, verified this way: **12 call sites across 8 source files**,
+now fixed in place above rather than left wrong under a "verified" heading. `PL8`'s own count and
+file breakdown are corrected to match.
 
 ## For whoever reads this next
 

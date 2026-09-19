@@ -64,17 +64,22 @@ on REData's side, in `../REData`:
 
 ## What already exists to convert from (measured this session, `N25`)
 
-**15 `L.map(` call sites across 10 source files**, not REData's inherited "27" - see `N25` for the exact
-command and the file-by-file breakdown, including why the raw grep returns 23 across 16 (one test file,
-five compiled-JS/TS-source duplicate pairs). The correction does not change this plan's shape: every file
-`T8` named by name is real.
+**12 `L.map(` call sites across 8 source files**, not REData's inherited "27" - see `N25` for the exact
+command, the file-by-file breakdown, and why the raw grep returns 23 across 16 (one test file, six
+compiled-JS/TS-source duplicate pairs, and two `Array.prototype.map()` false positives from an
+unanchored pattern matching inside `parseHTML.map(`). This figure is itself a correction of an earlier
+"15 across 10" in this same document and in `N25` - see `N25`'s own correction section for what was
+wrong with that count. Neither correction changes this plan's shape: every file `T8` named by name is
+real.
 
 - `ts/entries/`: `consensus.ts`, `map-page.ts` (highest traffic), `map-annotations.ts` (2 maps - the main
   editor map and a lightbox preview map), `spotguessr.ts` (2 maps - area guess and round guess),
   `floorplan-editor.ts`.
-- `ts/shared/album-map.ts` (shared, used from the album view).
+- `ts/shared/album-map.ts` (shared, used from the album view - its compiled output, reached via
+  `ts/entries/albums.ts` → `ts/shared/album-items.ts` → `initAlbumMap()`, lands in
+  `static/dashboard/js/albums.js`, not a second source of its own).
 - Hand-written vanilla JS with no TS source: `static/js/comment-map.js` (3 maps - see below),
-  `static/js/pin-select-map.js`, `static/dashboard/js/albums.js`, `static/dashboard/js/article-wysiwyg.js`.
+  `static/js/pin-select-map.js`.
 
 **No MapLibre GL JS dependency exists yet anywhere in this codebase** - confirmed this session: no
 `package.json` entry, no vendored/CDN asset, no import.
@@ -90,10 +95,12 @@ already specific and file-accurate, not because it should be treated as this rep
 2. **A WebGL2 fallback engine is required, not optional, here** - unlike REData's own staff-only
    dashboard, which shipped a plain "unsupported browser" message instead. `D12`'s decision is explicit
    that Leaflet stays on hand as a genuine second rendering engine for the browsers that fail WebGL2 -
-   caniuse put that at 95.73% global support in Aug 2026, so ~4.27% of traffic needs it. The cited
-   precedent is Home Assistant: adopt the `maplibre-gl-leaflet` bridge, remove it days later once the
-   native port lands, keep bare Leaflet only as the WebGL-failure fallback path - the bridge is
-   scaffolding for the migration, not a destination.
+   caniuse put that at 95.73% global support in Aug 2026, so ~4.27% of traffic needs it. Home Assistant is
+   the cited precedent for exactly that permanent dual-engine pattern - not, as an earlier version of this
+   item implied, for temporarily adopting the `maplibre-gl-leaflet` *bridge*: `D12`'s own text cites Home
+   Assistant adopting that bridge on 2026-08-27 and abandoning it ten days later as *corroborating evidence
+   against* the bridge, one of two such migrations it cites, not a step this port follows. There is no
+   bridge stage here at all - see "Bridge-vs-native is decided, not open" below.
 3. **`map-clusters.ts` is a rebuild, not a port.** It uses an `iconCreateFunction` returning HTML,
    `spiderfyOnMaxZoom`, `animate: true`, and a `maxClusterRadius` that is a function of zoom. MapLibre's
    native clustering has none of those: a scalar radius, no animation, no spiderfy, no HTML icons. There
@@ -199,12 +206,27 @@ convention - verification in a real browser, not just `bun test`, since this is 
   `T8` §3.
 - **The tile-catalogue wiring** (`T8` §1) - done, see `N25`.
 
+## Bridge-vs-native is decided, not open (corrected on reassessment)
+
+This document previously listed bridge-then-native sequencing as undecided, under "Not measured, and not
+decided" below. That was stale, and self-contradicted this same document: items 2 and 6 above already cite
+`D12` as binding for this repo's plan, not just REData's own two maps. Checked directly against `D12`'s
+actual text (`status: accepted`, decided 2026-09-17), not the summary: its "Costs accepted" section prices
+out `map-clusters.ts`, `map-export.ts`, `comment-map.js:721`, and `leaflet-rotate` **by name** - all
+UrbanLens files, not REData's - and its "Sequencing" bullet reads "Convert REData's two maps before
+UrbanLens's 27." A decision that costs out this repo's own files by path and orders this repo's own
+conversion relative to REData's is a decision that governs this repo's plan, not merely an
+REData-internal precedent cited for context. `D12`'s verdict: **native, not bridged** -
+`maplibre-gl-leaflet` is Hosted-tier with no active maintainer, has "no rotation / bearing / pitch
+support" by its own README (the same gap item 6 above independently found blocking the floorplan rotate
+tool), throttles updates to ~31fps by construction, and two real migrations (OpenStreetMap, Home
+Assistant) both dropped it within weeks of shipping vector tiles. REData converts its two maps first, as
+the pilot; this repo's port follows, native from the start, no bridge stage of its own.
+
 ## Not measured, and not decided
 
 - No estimate of engineering time is recorded here; REData's own framing ("the real body of this item")
   and the item count above are the only sizing information available.
-- Whether the bridge-then-native sequence (`maplibre-gl-leaflet` adopted temporarily, per the Home
-  Assistant precedent `D12` cites) or a direct native build is used here has not been decided.
 - Whether MapLibre's native clustering can be made to approximate this codebase's spiderfy/animate/HTML-icon
   behavior closely enough, or whether the rebuild in item 3 above ships with visibly different clustering
   behavior, is untested in either direction - REData's own `PL12` records the same gap on its side ("no
