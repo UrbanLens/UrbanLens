@@ -33,9 +33,10 @@ describe("supportsWebGL2", () => {
     });
 
     test("defaults to probing a real <canvas> when no factory is given", () => {
-        // happy-dom (this test harness's DOM) has no WebGL2 backend, so the real default path
-        // always resolves to false here - this only proves the default path runs without throwing,
-        // not that it detects a real browser's support correctly.
-        expect(supportsWebGL2()).toBe(false);
+        // happy-dom (this test harness's DOM) has no WebGL2 backend, so this cannot assert a
+        // specific true/false outcome without coupling the test to that DOM stub's incidental
+        // behavior - it only proves document.createElement("canvas").getContext("webgl2") runs to
+        // completion and answers a boolean, not that it detects a real browser's support correctly.
+        expect(typeof supportsWebGL2()).toBe("boolean");
     });
 });
