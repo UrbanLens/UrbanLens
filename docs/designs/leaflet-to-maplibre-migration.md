@@ -168,9 +168,20 @@ already specific and file-accurate, not because it should be treated as this rep
    four. (2) `L.geoJSON` collapses a
    stored `MultiPolygon` into one Leaflet layer, so deleting or editing one part acted on the whole
    region - `P120` (resolved 2026-09-14) - fixed by `region-delete.ts`'s `polygonParts()`, which splits
-   any stored geometry into one polygon per part before it loads. Whether Terra Draw's own API can
-   express an equivalent "delete commits immediately, no staging" mode and one-layer-per-polygon loading
-   is not verified in this session - flagged as open, not assumed either way.
+   any stored geometry into one polygon per part before it loads. Checked on reassessment, against Terra
+   Draw's own guides (`2.STORE.md`, `4.MODES.md`, `6.EVENTS.md` at `JamesLMilner/terra-draw`) and web
+   search, not its source - it is not an installed dependency here to read directly. The `MultiPolygon`
+   half resolves cleanly: Terra Draw's `addFeatures` only accepts `Point`/`LineString`/`Polygon` -
+   `2.STORE.md` states multi-geometry types "are not supported" and must be split before adding, the
+   same shape `polygonParts()` already produces, so that helper (or its logic) carries over rather than
+   needing a replacement. The immediate-delete half is still open, not resolved: Terra Draw ships
+   undo/redo covering create/update/delete (`6.EVENTS.md`'s delete event plus a documented
+   `Ctrl+Z`/`Ctrl+Shift+Z` stack, on by default per secondary sources - not confirmed against a primary
+   API reference), which is a materially different mechanism from `leaflet-draw`'s bug - an explicit,
+   opt-in undo action rather than an incidental revert triggered by switching tools - but whether
+   starting another draw/edit mode silently discards a pending delete the way `leaflet-draw`'s did is
+   not documented anywhere checked. Still flagged as open, now for a narrower, specific question rather
+   than the whole behavior.
 8. **Done ahead of the port, independent of it.** `comment-map.js:721`'s per-preview map leak (a fresh
    `L.map(...)` on every HTMX-swapped thumbnail preview with no `.remove()`, confirmed this session)
    is fixed - the leak's cause (a Leaflet map instance discarded when HTMX detaches its container) has
