@@ -6,7 +6,7 @@ import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
-import { createMapLayers, tileLayer } from "../shared/map-layers";
+import { createMapLayers, registerRedataLayers, tileLayer } from "../shared/map-layers";
 import {
     avatarInitial,
     bonusSuffix,
@@ -21,6 +21,11 @@ import {
 
 declare const L: typeof import("leaflet");
 import type {} from "leaflet-draw";
+
+// Fired now rather than awaited at ensureAreaMap()/ensureGuessMap()'s first call: both maps are
+// created lazily, well after this module has finished loading, so this deployment's REData tile
+// catalogue fetch has almost always already resolved by then.
+void registerRedataLayers();
 
 declare global {
     interface Window {

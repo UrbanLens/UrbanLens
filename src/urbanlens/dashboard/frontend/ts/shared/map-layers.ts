@@ -136,10 +136,40 @@ export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Ti
 }
 
 /**
- * Layers this deployment's REData offers, registered alongside the built-in ones so `tileLayer()` resolves them by id like any other.
- * @returns The ids registered, in catalogue order - empty when REData offers
+ * REData's layer ids that name a different key than the canonical `TILE_DEFS`/`BaseLayerKey`
+ * entry a map actually looks up (mirrors `BASE_ALIASES`, which normalizes the reverse direction
+ * for user-facing input). REData calls the topographic base layer "terrain"; this site calls it
+ * "topographic" everywhere `tileLayer()` is called from `createMapLayers()`.
  */
-export async function registerRedataLayers(): Promise<string[]> {
+const REDATA_ID_ALIASES: Record<string, string> = {
+    terrain: "topographic",
+};
+
+let redataLayersPromise: Promise<string[]> | null = null;
+
+/**
+ * Fetches this deployment's REData tile catalogue and registers each raster entry into
+ * `TILE_DEFS` so `tileLayer()` resolves it by id like any other source, replacing the built-in
+ * vendor URL for that id. Vector entries (`source_type: "vector"`) are not registered - nothing
+ * in this Leaflet-based engine can render a MapLibre style document yet.
+ *
+ * Memoized: every caller awaits the same in-flight/resolved fetch, so registering before
+ * constructing a map's layers (required - `createMapLayers()` reads `TILE_DEFS` synchronously)
+ * costs one request per page load, not one per map.
+ * @returns The raster ids registered, in catalogue order - empty when REData offers none, is
+ * unconfigured, or unreachable.
+ */
+export function registerRedataLayers(): Promise<string[]> {
+    redataLayersPromise ??= fetchAndRegisterRedataLayers();
+    return redataLayersPromise;
+}
+
+/** Clears the memoized fetch so the next `registerRedataLayers()` call issues a fresh request. Test-only. */
+export function resetRedataLayersCacheForTests(): void {
+    redataLayersPromise = null;
+}
+
+async function fetchAndRegisterRedataLayers(): Promise<string[]> {
     let layers: RedataLayer[];
     try {
         const response = await fetch("/dashboard/map/basemap-tiles/sources/", { headers: { Accept: "application/json" } });
@@ -151,8 +181,12 @@ export async function registerRedataLayers(): Promise<string[]> {
 
     const registered: string[] = [];
     for (const layer of layers) {
-        if (!layer.id || !layer.url_template || !layer.attribution) continue;
-        TILE_DEFS[layer.id] = {
+        if (!layer.id || !layer.attribution) continue;
+        // Absent source_type means a pre-D11 REData deployment, which only ever served raster.
+        if (layer.source_type === "vector") continue;
+        if (!layer.url_template) continue;
+        const key = REDATA_ID_ALIASES[layer.id] ?? layer.id;
+        TILE_DEFS[key] = {
             url: layer.url_template,
             options: {
                 attribution: layer.attribution,
@@ -163,7 +197,7 @@ export async function registerRedataLayers(): Promise<string[]> {
                 minZoom: layer.min_zoom ?? 0,
             },
         };
-        registered.push(layer.id);
+        registered.push(key);
     }
     return registered;
 }
@@ -171,8 +205,11 @@ export async function registerRedataLayers(): Promise<string[]> {
 interface RedataLayer {
     id: string;
     name: string;
+    /** Absent on a REData deployment that predates the `D11` contract - treat as raster. */
+    source_type?: "raster" | "vector";
     attribution: string;
-    url_template: string;
+    url_template?: string;
+    style_url?: string;
     min_zoom?: number | null;
     max_zoom?: number | null;
 }
@@ -734,6 +771,7 @@ export const MapLayers = {
     bordersOverlay,
     weatherLayers,
     normalizeBase,
+    registerRedataLayers,
 };
 
 /** Publishes the engine on window for the classic inline template scripts. */

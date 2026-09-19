@@ -7,9 +7,14 @@ declare const L: typeof import("leaflet");
 import { sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
 import { showMapContextMenu } from "./map-context-menu";
-import { createMapLayers, type MapLayersInstance } from "./map-layers";
+import { createMapLayers, registerRedataLayers, type MapLayersInstance } from "./map-layers";
 import { createPhotoMarkerLayer, type PhotoMapItem, type PhotoMarkerLayer } from "./photo-map";
 import { tilesForImage } from "./photo-tile";
+
+// Fired now rather than awaited at initAlbumMap(): the album map section is expanded lazily by
+// the viewer, well after this module has finished loading, so this deployment's REData tile
+// catalogue fetch has almost always already resolved by then.
+void registerRedataLayers();
 
 /** Zoom used when an album has exactly one placed photo (fitBounds would max out). */
 const SINGLE_PHOTO_ZOOM = 17;

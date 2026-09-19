@@ -196,6 +196,44 @@ class BasemapCatalogueTests(TestCase):
         with mock.patch(_CONFIGURED, return_value=False):
             self.assertEqual(self.client.get(self.url).json()["layers"], [])
 
+    def test_a_raster_entry_without_source_type_is_treated_as_raster(self) -> None:
+        """A REData deployment that predates D11 sends no source_type field at all."""
+        rows = [{"id": "usgs-topo", "name": "USGS Topo", "attribution": "USGS"}]
+
+        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+            layers = self.client.get(self.url).json()["layers"]
+
+        self.assertEqual(len(layers), 1)
+        self.assertEqual(layers[0]["source_type"], "raster")
+        self.assertIn("url_template", layers[0])
+        self.assertNotIn("style_url", layers[0])
+
+    def test_a_vector_entry_passes_through_its_style_url_unproxied(self) -> None:
+        """REData never proxies a single vector tile (D11) - the client fetches style_url directly, so this view must not try to rewrite it into a proxy url_template the way a raster entry gets."""
+        rows = [
+            {
+                "id": "street",
+                "name": "Street",
+                "source_type": "vector",
+                "attribution": "OSM",
+                "style_url": "https://redata.example/styles/street.json",
+            }
+        ]
+
+        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+            layers = self.client.get(self.url).json()["layers"]
+
+        self.assertEqual(len(layers), 1)
+        self.assertEqual(layers[0]["source_type"], "vector")
+        self.assertEqual(layers[0]["style_url"], "https://redata.example/styles/street.json")
+        self.assertNotIn("url_template", layers[0])
+
+    def test_a_vector_entry_with_no_style_url_is_not_offered(self) -> None:
+        rows = [{"id": "street", "name": "Street", "source_type": "vector", "attribution": "OSM"}]
+
+        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+            self.assertEqual(self.client.get(self.url).json()["layers"], [])
+
 
 class TileLogPrivacyTests(SimpleTestCase):
     """A tile URL is a coordinate somebody was looking at.

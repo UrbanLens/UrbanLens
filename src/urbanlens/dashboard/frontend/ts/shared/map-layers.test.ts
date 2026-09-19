@@ -1,8 +1,8 @@
 /**
  * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in dashboard/models/markup/meta.py.
  */
-import { afterEach, describe, expect, test } from "bun:test";
-import { createMapLayers, normalizeBase, tileLayer } from "./map-layers";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createMapLayers, normalizeBase, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer } from "./map-layers";
 
 describe("normalizeBase", () => {
     test("passes canonical keys through unchanged", () => {
@@ -107,6 +107,104 @@ describe("tileLayer errorTileUrl", () => {
         tileLayer("street", { errorTileUrl: "custom.png" });
         expect(state.calls[0]?.options.errorTileUrl).toBe("custom.png");
         expect(state.calls[0]?.options.maxZoom).toBe(21);
+    });
+});
+
+describe("registerRedataLayers", () => {
+    const realFetch = globalThis.fetch;
+
+    function stubFetch(response: { ok?: boolean; body?: unknown } | "reject"): { calls: string[] } {
+        const state = { calls: [] as string[] };
+        globalThis.fetch = ((url: string) => {
+            state.calls.push(String(url));
+            if (response === "reject") return Promise.reject(new Error("network error"));
+            return Promise.resolve({
+                ok: response.ok ?? true,
+                json: () => Promise.resolve(response.body),
+            } as Response);
+        }) as unknown as typeof fetch;
+        return state;
+    }
+
+    beforeEach(() => {
+        resetRedataLayersCacheForTests();
+    });
+
+    afterEach(() => {
+        globalThis.fetch = realFetch;
+        resetRedataLayersCacheForTests();
+    });
+
+    test("registers a raster layer's url_template under its own id", async () => {
+        stubFetch({
+            body: {
+                layers: [{ id: "custom", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr", min_zoom: 1, max_zoom: 18 }],
+            },
+        });
+        expect(await registerRedataLayers()).toEqual(["custom"]);
+
+        const state = stubLeaflet();
+        tileLayer("custom");
+        expect(state.calls[0]?.url).toBe("https://x/{z}/{x}/{y}.png");
+        expect(state.calls[0]?.options.attribution).toBe("Attr");
+    });
+
+    test("aliases REData's terrain id to this site's topographic key", async () => {
+        stubFetch({
+            body: { layers: [{ id: "terrain", source_type: "raster", url_template: "https://terrain/{z}/{x}/{y}.png", attribution: "Attr" }] },
+        });
+        expect(await registerRedataLayers()).toEqual(["topographic"]);
+
+        // tileLayer("topographic") - not tileLayer("terrain") - is what createMapLayers() actually
+        // calls, so the registered override must land under that key to ever take effect.
+        const state = stubLeaflet();
+        tileLayer("topographic");
+        expect(state.calls[0]?.url).toBe("https://terrain/{z}/{x}/{y}.png");
+    });
+
+    test("does not register a vector entry - nothing in this Leaflet-based engine can render a style document", async () => {
+        stubFetch({
+            body: { layers: [{ id: "street", source_type: "vector", style_url: "https://x/style.json", attribution: "Attr" }] },
+        });
+        expect(await registerRedataLayers()).toEqual([]);
+
+        // The built-in CARTO source must still be what "street" resolves to.
+        const state = stubLeaflet();
+        tileLayer("street");
+        expect(state.calls[0]?.url).toContain("cartocdn.com");
+    });
+
+    test("treats a missing source_type as raster, matching a REData deployment that predates D11", async () => {
+        stubFetch({
+            body: { layers: [{ id: "custom", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] },
+        });
+        expect(await registerRedataLayers()).toEqual(["custom"]);
+    });
+
+    test("skips a raster entry with no url_template", async () => {
+        stubFetch({ body: { layers: [{ id: "custom", source_type: "raster", attribution: "Attr" }] } });
+        expect(await registerRedataLayers()).toEqual([]);
+    });
+
+    test("memoizes - a second call does not issue a second fetch", async () => {
+        const state = stubFetch({ body: { layers: [] } });
+        await registerRedataLayers();
+        await registerRedataLayers();
+        expect(state.calls).toHaveLength(1);
+    });
+
+    test("returns [] and leaves built-ins untouched when the fetch rejects", async () => {
+        stubFetch("reject");
+        expect(await registerRedataLayers()).toEqual([]);
+
+        const state = stubLeaflet();
+        tileLayer("street");
+        expect(state.calls[0]?.url).toContain("cartocdn.com");
+    });
+
+    test("returns [] when the response is not ok", async () => {
+        stubFetch({ ok: false, body: { layers: [{ id: "custom", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] } });
+        expect(await registerRedataLayers()).toEqual([]);
     });
 });
 

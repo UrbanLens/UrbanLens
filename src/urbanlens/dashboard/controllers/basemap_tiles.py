@@ -64,8 +64,10 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> JsonResponse:
         """Return REData's layer catalogue, rewritten to point at this proxy.
 
-        The vendor ``url_template`` is deliberately not passed through: it needs REData's key, and handing
-        the browser a template it cannot use would produce a layer that silently fails to load.
+        A raster entry's vendor ``url_template`` is deliberately not passed through: it needs REData's
+        key, and handing the browser a template it cannot use would produce a layer that silently fails
+        to load. A vector entry's ``style_url`` needs no key (see REData's ``D11``) and is passed through
+        unchanged - the client fetches and renders that style document directly.
 
         Args:
             request: The current request.
@@ -92,23 +94,33 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
             logger.warning("REData tile catalogue unavailable: %s", exc)
             return JsonResponse({"layers": []})
 
-        layers = [
-            {
-                "id": source["id"],
-                "name": source.get("name") or source["id"],
+        layers = []
+        for source in sources:
+            if not source.get("attribution"):
                 # Attribution is not decorative - every vendor here requires it
                 # on the rendered map, so a layer without it is not offered.
+                continue
+            # Absent on REData deployments that have not yet rolled out the source_type
+            # contract (D11) - treat as raster, the only shape that ever existed before it.
+            is_vector = source.get("source_type") == "vector"
+            if is_vector and not source.get("style_url"):
+                continue
+            entry = {
+                "id": source["id"],
+                "name": source.get("name") or source["id"],
+                "source_type": "vector" if is_vector else "raster",
                 "attribution": source.get("attribution") or "",
                 "min_zoom": source.get("min_zoom"),
                 "max_zoom": source.get("max_zoom"),
-                # Reversed rather than hardcoded, with the tile coordinates substituted afterwards: reverse()
-                # percent-encodes the literal braces a Leaflet template needs, so they cannot be passed through
-                # it.
-                "url_template": _tile_url_template(source["id"]),
             }
-            for source in sources
-            if source.get("attribution")
-        ]
+            if is_vector:
+                entry["style_url"] = source["style_url"]
+            else:
+                # Reversed rather than hardcoded, with the tile coordinates substituted afterwards:
+                # reverse() percent-encodes the literal braces a Leaflet template needs, so they cannot
+                # be passed through it.
+                entry["url_template"] = _tile_url_template(source["id"])
+            layers.append(entry)
         if layers:
             cache.set(_CATALOGUE_CACHE_KEY, layers, _CATALOGUE_CACHE_TTL)
         # An empty catalogue is not cached.

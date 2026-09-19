@@ -40,7 +40,10 @@ class RedataBasemapTilesGateway(RedataLocationContextGateway):
         Documented as "called once per session by whatever then requests tiles", so callers are expected to cache it rather than ask per map.
 
         Returns:
-            One entry per layer, carrying ``id``, ``url_template``, ``attribution``, ``name``, ``min_zoom``, ``max_zoom`` and ``requires_auth``.
+            One entry per layer, carrying ``id``, ``source_type`` (``"raster"`` or ``"vector"``, absent on
+            a deployment that predates REData's ``D11``), ``attribution``, ``name``, ``min_zoom``,
+            ``max_zoom``, ``requires_auth`` and, depending on ``source_type``, either ``url_template`` or
+            ``style_url``.
 
         Raises:
             LocationContextUnavailableError: The request to REData failed."""

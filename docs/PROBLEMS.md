@@ -3110,3 +3110,77 @@ write a failing exploit test first. Then either escape both interpolations in pl
 (`_escHtml(b.icon)`, matching `_escHtml(b.name)` on the same line - the minimal fix), or, to avoid
 adding net-new duplication per the lesson P92 itself just drew, route this widget through
 `shared/label-picker.ts`'s already-correct implementation if that turns out to be feasible.
+
+## P130 — `ul_web`'s deliberate `NOCREATEDB` (D11) blocks the exact `docker exec ... pytest` workflow `CLAUDE.local.md` prescribes, on every dev slot that has converged its per-tier roles
+
+`id: P130` · `status: open` · `updated: 2026-09-19`
+
+Found while trying to run this session's new tests for the REData catalogue-wiring work (see
+`docs/handoffs/redata-maplibre-catalogue-wiring.md`, N25): `docker exec urbanlens_development_main_app
+/app/.venv/bin/python -m pytest ...` — the exact command `CLAUDE.local.md`'s "MyPy and pytest do NOT
+work directly on this host" section gives for running anything that touches GeoDjango models — failed
+outright before this session's manual fix below. Django's test runner could not create a test database
+at all, for any test file, in that container.
+
+**This is not a new defect.** It is D11's per-tier role rollout (`docs/designs/request-isolation-and-connection-budget.md`,
+built and verified 2026-09-15) working as designed, and R29 already documents the consequence in its own
+"What changes in practice" section: *"Tests in the app container fail: `docker exec <app> pytest` no
+longer works, because `ul_web` cannot create a test database. `bin/run_tests.sh`, which runs as the
+owner against the test-runner's own test-db, is unaffected"* (`docs/notes/database-roles.md:71`). What
+R29 does not record, and what makes this still worth a `P#` four days later, is that nothing propagated
+that consequence to the file that actually tells an agent how to run these tests: `CLAUDE.local.md` still
+gives the broken `docker exec ... pytest` invocation with no mention of `bin/run_tests.sh` or of the
+restriction, and nothing in the repo's tooling refuses to start with a clearer error - it fails as an
+opaque `CREATE DATABASE` permission error, several layers down from the command that was actually typed.
+
+Two separate causes, found together on `development_main`:
+
+1. **`ul_web` has `NOCREATEDB`, by design.** `services/core/database_roles.py:213` sets `NOSUPERUSER
+   NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` on every per-tier login role
+   `apply_database_roles` converges, and the app container logs in as exactly that role - confirmed
+   directly, 2026-09-19: `docker exec urbanlens_development_main_app env` shows `UL_PROCESS_ROLE=web`,
+   `UL_DB_USER=ul_web`. Loosening this is not the fix D11 intends: it was deliberately closed, and
+   `apply_database_roles` already refuses to start if the limits it converges don't fit the server's
+   non-superuser capacity.
+2. **`template1` carried neither `postgis` nor `vector` (pgvector, D16).** A plain `CREATE DATABASE
+   test_xxx` clones whatever `template1` has; `init.py`'s `enable_postgis()`
+   (`src/bin/init.py:168-187`) runs `CREATE EXTENSION IF NOT EXISTS postgis` exactly once, against
+   `self.db_name` - the main app database - and never against `template1`, and never for `vector` at
+   all. Both fixes were applied together (below), not proven independently, so whether `CREATEDB` alone
+   would have been enough - i.e. whether `ul_web`, as owner of a database it created itself, could have
+   run `CREATE EXTENSION` there directly - was not isolated and tested separately.
+
+**First attempted, then reverted, on `development_main` only, 2026-09-19** (a manual superuser
+session against the `urbanlens_development_main_db` container, not committed anywhere):
+
+```sql
+ALTER ROLE ul_web CREATEDB;
+\c template1
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+This did make `docker exec urbanlens_development_main_app /app/.venv/bin/python -m pytest
+src/urbanlens/dashboard/tests/hypothesis/test_basemap_tile_proxy.py -k BasemapCatalogueTests -v`
+(unique `UL_TEST_DB_NAME`) create its test database and run to completion - `8 passed, 14
+deselected in 235.78s`. But `ALTER ROLE ul_web CREATEDB` is exactly the surface R29 says D11
+deliberately closed, not a gap it left open by omission, so loosening it - even locally, even
+temporarily - is the wrong fix rather than a scoped one. `bin/run_tests.sh` (R29's already-existing
+answer, confirmed working this session: same file/selector, `8 passed, 14 deselected in 219.95s`
+against the `test_runner` container's own owner-based role, no role change of any kind) does not
+need it. **`ALTER ROLE ul_web NOCREATEDB` was run afterward, restoring the original grant** - the
+`template1` extensions were left in place, since they only add capability (no role gained a
+privilege it lacked before) and `bin/run_tests.sh`'s own test-db creation may already depend on
+`postgis` being there by whatever path it uses; not verified independently which of the two
+`template1` extensions, if either, `bin/run_tests.sh` actually needed to pass.
+
+**Not done:**
+- **The same check on any other dev slot.** Nothing about `development_main` is special - every slot
+  goes through the same `db-setup` → `apply_database_roles` sequence, so a slot that has converged
+  its roles since 2026-09-15 or was provisioned fresh after that date should hit the identical
+  `docker exec <app> pytest` failure from a clean start, not just an old one catching up. Not
+  verified against a second slot this session. `bin/run_tests.sh` is expected to be unaffected
+  there too, by the same reasoning that held here, but that is inference, not a second measurement.
+- **Reconciling `CLAUDE.local.md` with R29.** `CLAUDE.local.md` is outside this documentation tree and
+  not edited here; its docker-exec pytest instructions should either name `bin/run_tests.sh` (R29's
+  existing answer) or note the `CREATEDB`/extension prerequisite, whichever the eventual fix picks.

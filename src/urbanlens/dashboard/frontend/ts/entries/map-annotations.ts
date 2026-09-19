@@ -6,7 +6,7 @@ import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
-import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, tileLayer } from "../shared/map-layers";
+import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerRedataLayers, tileLayer } from "../shared/map-layers";
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
 import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, reclusterOnDrag, returnToCluster } from "../shared/map-clusters";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
@@ -16,6 +16,11 @@ import { openMediaLightbox } from "../shared/media-lightbox";
 
 // Exposed at module scope, not inside the page-init function below.
 window.mediaOpenLightbox = openMediaLightbox;
+
+// Fired now rather than awaited inside init(): starting this deployment's REData tile catalogue
+// fetch as early as this module loads gives it a head start on the synchronous DOM/config
+// parsing init() does before it ever reaches createMapLayers().
+void registerRedataLayers();
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");

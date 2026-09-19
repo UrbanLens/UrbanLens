@@ -483,6 +483,12 @@ const map = L.map("map", { maxZoom: 21, minZoom: 2, attributionControl: false })
 window.map = map;
 window.pin = null;
 
+// Kicked off now (not awaited until the base layers are actually built, far
+// below) so this deployment's REData tile catalogue fetch runs in parallel
+// with the rest of this module's synchronous setup rather than stalling it -
+// see MapLayers.registerRedataLayers()'s own docstring.
+const _redataLayersPromise = MapLayers.registerRedataLayers();
+
 // Show the "you are here" dot immediately from a cached fix (if any) rather
 // than waiting up to 8s for the live read below to resolve; that live read
 // then relocates this same marker once it comes back.
@@ -2479,6 +2485,7 @@ function _renderMapAttribution(): void {
 // persistence, tile-loading feedback, and footer attribution all live in
 // the shared MapLayers engine - the exact same code every other map on the
 // site runs. This page only contributes its own custom toggles (pins, places).
+await _redataLayersPromise;
 _mapLayers = MapLayers.create(map, {
     root: document.getElementById("map-layers-panel"),
     apiKey: MAP_CFG.openweathermapApiKey,
