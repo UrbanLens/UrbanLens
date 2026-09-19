@@ -307,12 +307,19 @@ convention - verification in a real browser, not just `bun test`, since this is 
 ## What is explicitly out of scope here
 
 - **REData's two internal dashboard maps** (boundary map, Location Explorer) are already converted, on
-  their side, on `feat/scout-campaign` - not this repo's work, cited here only as a working reference
-  for the WebGL2-detection and `IControl` patterns. Checked directly against `../REData`'s actual branch
-  on reassessment, not just taken from `T8`'s framing: `feat/scout-campaign` is a real, current branch
-  (10 commits ahead of `main`, not yet merged), and its `7727ba36` ("feat(dashboard): migrate boundary map
-  and Location Explorer to MapLibre GL JS") is the exact commit that produced `LayerToggleControl` -
-  confirming the conversion is real, not just claimed.
+  their side - not this repo's work, cited here only as a working reference for the WebGL2-detection and
+  `IControl` patterns. Checked directly against `../REData`'s actual git history on reassessment, twice
+  now: the conversion commit is `7727ba36` ("feat(dashboard): migrate boundary map and Location Explorer
+  to MapLibre GL JS," 2026-09-17) - confirmed genuinely the one that introduced `LayerToggleControl`, since
+  `location-explorer-map.ts` had zero `maplibregl`/`LayerToggleControl` references the commit before it,
+  and roughly doubled in size (182 → 318 lines) in this one. First reassessment pass called it "on
+  `feat/scout-campaign`, not yet merged" - re-checked on a second pass and that part was wrong:
+  `git merge-base --is-ancestor 7727ba36 main` confirms it landed in REData's actual `main` via
+  `821941d7` ("Merge pull request #65 from avranu/feat/scout-campaign," 2026-09-18); `feat/scout-campaign`
+  is a long-lived branch that kept accumulating unrelated coverage-scout data commits after that merge,
+  which is what its current "10 ahead of main" count was actually counting, not unmerged map-conversion
+  work. `main`'s copy of `location-explorer-map.ts` is byte-identical to the feature branch's (`git diff`
+  is empty) - REData's conversion is live on their main line, not sitting on a feature branch.
 - **The Flutter app** (`PL12` item 8) is deliberately parked on raster until this item ships, by REData's
   own acceptance line. Nothing is needed from Flutter now.
 - **REData's infrastructure side** (`PL12` items 1-5: DEM chain, Valhalla, PMTiles mirrors, Martin) is
