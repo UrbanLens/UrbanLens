@@ -30,44 +30,22 @@ logger = logging.getLogger(__name__)
 #: can change when a georeference is corrected, these change only when the vendor re-renders.
 _TILE_CACHE_TTL = 7 * 86400
 
-#: The catalogue is documented as "called once per session"; a day keeps it
-#: fresh enough to pick up a new layer without asking on every map load.
-_CATALOGUE_CACHE_TTL = 86400
-_CATALOGUE_CACHE_KEY = "ul_redata_tile_sources"
-
 #: Cache sentinel for a definitive 404. Deliberately not ``b""``: a 200 whose body happens to be empty would
 #: otherwise be stored as bytes identical to the sentinel and read back as "no such tile", turning a transient
 #: empty answer into a permanent hole in the map.
 _NO_TILE = "__ul_no_tile__"
 
 
-def _tile_url_template(layer: str) -> str:
-    """Leaflet-style template for one layer, pointing at this proxy.
-
-    Args:
-        layer: The layer id.
-
-    Returns:
-        A URL with literal ``{z}``/``{x}``/``{y}`` placeholders.
-    """
-    from django.urls import reverse
-
-    # Sentinel coordinates rather than braces: reverse() would encode braces as %7Bz%7D, handing the client a
-    # template it cannot fill in. The values are chosen not to occur in a layer id.
-    concrete = reverse("map.basemap_tiles", kwargs={"layer": layer, "z": 900001, "x": 900002, "y": 900003})
-    return concrete.replace("900001", "{z}").replace("900002", "{x}").replace("900003", "{y}")
-
-
 class BasemapTileCatalogueView(LoginRequiredMixin, View):
-    """GET map/basemap-tiles/sources/ - the layers this deployment can offer."""
+    """GET map/basemap-tiles/sources/ - the layers this deployment can offer.
+
+    A fallback path, not the main one: every page built on ``themes/base.html`` already carries this
+    same catalogue inline (``{% basemap_tile_catalogue %}``), because a map has to know which tiles
+    to draw before it draws any. This answers a client that was rendered without it.
+    """
 
     def get(self, request: HttpRequest) -> JsonResponse:
-        """Return REData's layer catalogue, rewritten to point at this proxy.
-
-        A raster entry's vendor ``url_template`` is deliberately not passed through: it needs REData's
-        key, and handing the browser a template it cannot use would produce a layer that silently fails
-        to load. A vector entry's ``style_url`` needs no key (see REData's ``D11``) and is passed through
-        unchanged - the client fetches and renders that style document directly.
+        """Return the layer catalogue for the signed-in viewer.
 
         Args:
             request: The current request.
@@ -76,55 +54,9 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
             ``{"layers": [...]}`` - empty when REData is unconfigured or unreachable, so the map simply
             keeps its built-in layers.
         """
-        from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+        from urbanlens.dashboard.services.map.basemap_catalogue import catalogue_for_viewer
 
-        if not redata_configured():
-            return JsonResponse({"layers": []})
-
-        cached = cache.get(_CATALOGUE_CACHE_KEY)
-        if cached is not None:
-            return JsonResponse({"layers": cached})
-
-        try:
-            sources = RedataBasemapTilesGateway().list_sources()
-        except (LocationContextUnavailableError, RequestCancelledError, OSError) as exc:
-            # Not cached: an unreachable catalogue must not cost this
-            # deployment its extra layers for a day.
-            logger.warning("REData tile catalogue unavailable: %s", exc)
-            return JsonResponse({"layers": []})
-
-        layers = []
-        for source in sources:
-            if not source.get("attribution"):
-                # Attribution is not decorative - every vendor here requires it
-                # on the rendered map, so a layer without it is not offered.
-                continue
-            # Absent on REData deployments that have not yet rolled out the source_type
-            # contract (D11) - treat as raster, the only shape that ever existed before it.
-            is_vector = source.get("source_type") == "vector"
-            if is_vector and not source.get("style_url"):
-                continue
-            entry = {
-                "id": source["id"],
-                "name": source.get("name") or source["id"],
-                "source_type": "vector" if is_vector else "raster",
-                "attribution": source.get("attribution") or "",
-                "min_zoom": source.get("min_zoom"),
-                "max_zoom": source.get("max_zoom"),
-            }
-            if is_vector:
-                entry["style_url"] = source["style_url"]
-            else:
-                # Reversed rather than hardcoded, with the tile coordinates substituted afterwards:
-                # reverse() percent-encodes the literal braces a Leaflet template needs, so they cannot
-                # be passed through it.
-                entry["url_template"] = _tile_url_template(source["id"])
-            layers.append(entry)
-        if layers:
-            cache.set(_CATALOGUE_CACHE_KEY, layers, _CATALOGUE_CACHE_TTL)
-        # An empty catalogue is not cached.
-        return JsonResponse({"layers": layers})
+        return JsonResponse({"layers": catalogue_for_viewer(authenticated=request.user.is_authenticated)})
 
 
 class BasemapTileView(LoginRequiredMixin, View):

@@ -110,9 +110,43 @@ const TILE_DEFS: Record<string, TileDef> = {
 /**
  * Snapshot of the built-in sources above, taken before anything can register over them, so
  * `resetRedataLayersCacheForTests` can put `TILE_DEFS` back. Shallow by design:
- * `fetchAndRegisterRedataLayers` replaces whole entries rather than mutating an entry's `options`.
+ * `registerCatalogue` replaces whole entries rather than mutating an entry's `options`.
  */
 const BUILT_IN_TILE_DEFS: Record<string, TileDef> = { ...TILE_DEFS };
+
+/**
+ * A base layer this deployment serves as a MapLibre style document rather than an XYZ raster
+ * template (`D11`) - the self-hosted shape, where the browser fetches the style and the vector
+ * tiles it names directly and REData proxies neither.
+ */
+export interface VectorStyleDef {
+    styleUrl: string;
+    attribution: string;
+    minZoom: number;
+    maxZoom: number;
+}
+
+/**
+ * Vector sources registered from the catalogue, by the same key `TILE_DEFS` uses, so a layer
+ * offered in both shapes resolves to one or the other by engine rather than by id.
+ *
+ * Never populated with a built-in: there is no vendor default here. An empty entry means this
+ * deployment has no self-hosted style for that layer and both engines fall back to `TILE_DEFS`.
+ */
+const VECTOR_STYLE_DEFS: Record<string, VectorStyleDef> = {};
+
+/**
+ * The self-hosted style document for one of the canonical sources, if this deployment serves one.
+ *
+ * Only `maplibre-layers.ts` can act on the result - Leaflet has no vector renderer, so a Leaflet
+ * map draws the raster fallback for the same key and the two engines diverge on bytes while
+ * agreeing on which layer is showing.
+ * @param kind - Canonical or legacy source key.
+ */
+export function vectorStyleFor(kind: string): VectorStyleDef | null {
+    applyEmbeddedCatalogue();
+    return VECTOR_STYLE_DEFS[kind] ?? VECTOR_STYLE_DEFS[normalizeBase(kind)] ?? null;
+}
 
 /**
  * Legacy layer-mode aliases accepted defensively (pre-canonical MarkupMap
@@ -144,6 +178,7 @@ export function normalizeBase(key: string | null | undefined): BaseLayerKey {
  * @param extraOptions - Leaflet options merged over the canonical defaults (e.g. pane).
  */
 export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.TileLayer {
+    applyEmbeddedCatalogue();
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
     return L.tileLayer(def.url, { ...def.options, ...extraOptions });
 }
@@ -155,6 +190,7 @@ export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Ti
  * same `kind` string draw the same tiles.
  */
 export function rasterSourceFor(kind: string): RasterSourceInput {
+    applyEmbeddedCatalogue();
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
     return {
         url: def.url,
@@ -179,65 +215,71 @@ const REDATA_ID_ALIASES: Record<string, string> = {
 
 let redataLayersPromise: Promise<string[]> | null = null;
 
+/** `<script type="application/json">` written by `{% basemap_tile_catalogue %}` in `themes/base.html`. */
+const EMBEDDED_CATALOGUE_ID = "ul-basemap-tiles";
+
+/** Whether the embedded catalogue has been looked for yet (it is read once, on first use). */
+let embeddedCatalogueRead = false;
+
+/** What that element held, or `null` when this page carried none. */
+let embeddedCatalogue: RedataLayer[] | null = null;
+
 /**
- * Fetches this deployment's REData tile catalogue and registers each raster entry into
- * `TILE_DEFS` so `tileLayer()` resolves it by id like any other source, replacing the built-in
- * vendor URL for that id.
+ * Reads the catalogue `themes/base.html` embedded in this document and registers it, once.
  *
- * Vector entries (`source_type: "vector"`) are still not registered, but the reason has changed and
- * this is now a real gap rather than a bounded one: it used to be that nothing here could render a
- * MapLibre style document, and as of 2026-09-19 `maplibre-layers.ts` is exactly that. Registering a
- * `style_url` entry needs more than lifting the skip, though - `TILE_DEFS` describes a raster XYZ
- * template, and both engines build from it, so a vector entry has nowhere to land yet. Until that
- * exists, a REData deployment serving vector tiles (`D11`; `D17`'s "hosted instance, REData
- * configured, vector" case) is silently downgraded to whatever raster the catalogue also offers,
- * or to the built-in vendors. See PL8.
- *
- * Memoized: every caller awaits the same in-flight/resolved fetch, so registering before
- * constructing a map's layers (required - `createMapLayers()` reads `TILE_DEFS` synchronously)
- * costs one request per page load, not one per map.
- * @returns The raster ids registered, in catalogue order - empty when REData offers none, is
- * unconfigured, or unreachable.
+ * Every entry point into this module that resolves a tile source calls this first, so the
+ * registration lands before the first tile request rather than one network round trip after it.
+ * A page rendered outside that base template (an htmx fragment, a bare test harness) has no
+ * element here, which is what leaves `registerRedataLayers()` a reason to exist.
+ * @returns Whether an embedded catalogue was present - `true` even when it registered nothing,
+ * since the server saying "no extra layers" is an answer, not a missing one.
  */
-export function registerRedataLayers(): Promise<string[]> {
-    redataLayersPromise ??= fetchAndRegisterRedataLayers();
-    return redataLayersPromise;
+function applyEmbeddedCatalogue(): boolean {
+    if (!embeddedCatalogueRead) {
+        embeddedCatalogueRead = true;
+        // Guarded rather than read at module scope: this module is imported by bundles that run
+        // before the DOM exists, and by tests with no document at all.
+        if (typeof document === "undefined") return false;
+        const el = document.getElementById(EMBEDDED_CATALOGUE_ID);
+        if (!el?.textContent) return false;
+        try {
+            embeddedCatalogue = JSON.parse(el.textContent) as RedataLayer[];
+        } catch {
+            return false;
+        }
+        registerCatalogue(embeddedCatalogue);
+    }
+    return embeddedCatalogue !== null;
 }
 
 /**
- * Clears the memoized fetch so the next `registerRedataLayers()` call issues a fresh request, and
- * restores `TILE_DEFS` to its built-in state. Test-only.
+ * Registers each catalogue entry into `TILE_DEFS` so `tileLayer()` resolves it by id like any
+ * other source, replacing the built-in vendor URL for that id.
  *
- * The restore matters beyond the test that registered: `TILE_DEFS` is module-global and
- * `registerRedataLayers` overwrites built-in entries in place (a catalogue layer id `terrain`
- * lands on `topographic`, per `REDATA_ID_ALIASES`), so without it a registration leaks into every
- * later test in the same process - which is how it was found.
+ * Vector entries (`source_type: "vector"`) carry a `style_url` rather than an XYZ template, so
+ * they land in `VECTOR_STYLE_DEFS` instead - `TILE_DEFS` describes a raster template and Leaflet
+ * can only draw one of those. A vector entry therefore reaches a MapLibre map and not a Leaflet
+ * one; see `maplibre-layers.ts` and `D11`.
+ * @returns The ids registered, in catalogue order.
  */
-export function resetRedataLayersCacheForTests(): void {
-    redataLayersPromise = null;
-    for (const key of Object.keys(TILE_DEFS)) {
-        if (!(key in BUILT_IN_TILE_DEFS)) delete TILE_DEFS[key];
-    }
-    Object.assign(TILE_DEFS, BUILT_IN_TILE_DEFS);
-}
-
-async function fetchAndRegisterRedataLayers(): Promise<string[]> {
-    let layers: RedataLayer[];
-    try {
-        const response = await fetch("/dashboard/map/basemap-tiles/sources/", { headers: { Accept: "application/json" } });
-        if (!response.ok) return [];
-        layers = ((await response.json()) as { layers?: RedataLayer[] }).layers || [];
-    } catch {
-        return [];
-    }
-
+function registerCatalogue(layers: RedataLayer[]): string[] {
     const registered: string[] = [];
     for (const layer of layers) {
         if (!layer.id || !layer.attribution) continue;
-        // Absent source_type means a pre-D11 REData deployment, which only ever served raster.
-        if (layer.source_type === "vector") continue;
-        if (!layer.url_template) continue;
         const key = REDATA_ID_ALIASES[layer.id] ?? layer.id;
+        // Absent source_type means a pre-D11 REData deployment, which only ever served raster.
+        if (layer.source_type === "vector") {
+            if (!layer.style_url) continue;
+            VECTOR_STYLE_DEFS[key] = {
+                styleUrl: layer.style_url,
+                attribution: layer.attribution,
+                minZoom: layer.min_zoom ?? 0,
+                maxZoom: layer.max_zoom ?? MAP_MAX_ZOOM,
+            };
+            registered.push(key);
+            continue;
+        }
+        if (!layer.url_template) continue;
         TILE_DEFS[key] = {
             url: layer.url_template,
             options: {
@@ -252,6 +294,62 @@ async function fetchAndRegisterRedataLayers(): Promise<string[]> {
         registered.push(key);
     }
     return registered;
+}
+
+/**
+ * Ensures this deployment's REData tile catalogue is registered.
+ *
+ * Resolves without a request when `themes/base.html` already embedded it, which is every page
+ * built on that template. The fetch is the fallback for a client rendered without the embed.
+ *
+ * Memoized: every caller awaits the same in-flight/resolved fetch, so registering before
+ * constructing a map's layers costs one request per page load, not one per map.
+ * @returns The ids registered, in catalogue order - empty when REData offers none, is
+ * unconfigured, or unreachable.
+ */
+export function registerRedataLayers(): Promise<string[]> {
+    if (applyEmbeddedCatalogue()) return Promise.resolve(registeredIdsOf(embeddedCatalogue ?? []));
+    redataLayersPromise ??= fetchAndRegisterRedataLayers();
+    return redataLayersPromise;
+}
+
+/** The ids `registerCatalogue` would report for `layers`, without registering them a second time. */
+function registeredIdsOf(layers: RedataLayer[]): string[] {
+    return layers
+        .filter((layer) => layer.id && layer.attribution && (layer.source_type === "vector" ? layer.style_url : layer.url_template))
+        .map((layer) => REDATA_ID_ALIASES[layer.id] ?? layer.id);
+}
+
+/**
+ * Clears the memoized fetch so the next `registerRedataLayers()` call issues a fresh request, and
+ * restores `TILE_DEFS` to its built-in state. Test-only.
+ *
+ * The restore matters beyond the test that registered: `TILE_DEFS` is module-global and
+ * `registerRedataLayers` overwrites built-in entries in place (a catalogue layer id `terrain`
+ * lands on `topographic`, per `REDATA_ID_ALIASES`), so without it a registration leaks into every
+ * later test in the same process - which is how it was found.
+ */
+export function resetRedataLayersCacheForTests(): void {
+    redataLayersPromise = null;
+    embeddedCatalogueRead = false;
+    embeddedCatalogue = null;
+    for (const key of Object.keys(TILE_DEFS)) {
+        if (!(key in BUILT_IN_TILE_DEFS)) delete TILE_DEFS[key];
+    }
+    Object.assign(TILE_DEFS, BUILT_IN_TILE_DEFS);
+    for (const key of Object.keys(VECTOR_STYLE_DEFS)) delete VECTOR_STYLE_DEFS[key];
+}
+
+async function fetchAndRegisterRedataLayers(): Promise<string[]> {
+    let layers: RedataLayer[];
+    try {
+        const response = await fetch("/dashboard/map/basemap-tiles/sources/", { headers: { Accept: "application/json" } });
+        if (!response.ok) return [];
+        layers = ((await response.json()) as { layers?: RedataLayer[] }).layers || [];
+    } catch {
+        return [];
+    }
+    return registerCatalogue(layers);
 }
 
 interface RedataLayer {
@@ -386,6 +484,9 @@ export interface MapLayersInstance {
  * @returns The engine instance driving both the layers and the panel buttons.
  */
 export function createMapLayers(map: L.Map | MaplibreMap, options: MapLayersOptions = {}): MapLayersInstance {
+    // Before either engine reads a source: this deployment's own layers must be registered ahead
+    // of the first tile request, not one round trip after it.
+    applyEmbeddedCatalogue();
     if (isMaplibreMap(map)) return createMaplibreMapLayers(map, options);
     return createLeafletMapLayers(map, options);
 }
@@ -726,6 +827,7 @@ export const MapLayers = {
     weatherLayers,
     normalizeBase,
     registerRedataLayers,
+    vectorStyleFor,
 };
 
 /** Publishes the engine on window for the classic inline template scripts. */

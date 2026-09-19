@@ -20,6 +20,8 @@
     {% vendor_asset "toastr_js" %}
 
     {% load static map_components %}
+    {# Before core.js: a map must know which tiles this deployment serves before it requests the first one. #}
+    {% basemap_tile_catalogue %}
     <script src="{% static 'dashboard/js/core.js' %}"></script>
     {% block header %}{% endblock %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">

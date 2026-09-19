@@ -19,6 +19,8 @@ from typing import Any
 
 from django import template
 from django.urls import reverse
+from django.utils.html import json_script
+from django.utils.safestring import SafeString, mark_safe
 
 register = template.Library()
 
@@ -710,3 +712,34 @@ def map_toolbar(
         "panel_id": panel_id,
         "buttons": buttons,
     }
+
+
+@register.simple_tag(takes_context=True)
+def basemap_tile_catalogue(context: template.Context) -> SafeString:
+    """Embed this deployment's basemap layer catalogue in the document, ahead of any map.
+
+    Rendered in ``themes/base.html`` immediately before ``core.js``, so ``map-layers.ts`` can read
+    it synchronously at the moment it is asked for a tile source - before the first tile request
+    goes out. Fetching the same catalogue over HTTP instead (``registerRedataLayers()``) leaves a
+    window in which a map draws vendor tiles and swaps afterwards, by which point the vendor has
+    already been told which coordinates the user is looking at.
+
+    Args:
+        context: The template context, read for ``request`` to tell a signed-in viewer from a
+            signed-out one - only the former can fetch a proxied raster layer.
+
+    Returns:
+        A ``<script type="application/json">`` block, or empty when this deployment offers nothing
+        beyond its built-in vendor layers.
+    """
+    from urbanlens.dashboard.services.map.basemap_catalogue import catalogue_for_viewer
+
+    # Rendered without a request on a few fragment paths, where "not signed in" is the safe read:
+    # it offers only the keyless layers, rather than proxy URLs the viewer may not be able to fetch.
+    user = getattr(context.get("request"), "user", None)
+    layers = catalogue_for_viewer(authenticated=user is not None and bool(user.is_authenticated))
+    if not layers:
+        # No element at all, rather than an empty one: absent means "ask over HTTP if you care",
+        # which is what a page rendered outside this base template gets. See map-layers.ts.
+        return mark_safe("")
+    return json_script(layers, "ul-basemap-tiles")

@@ -2,7 +2,7 @@
  * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in dashboard/models/markup/meta.py.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createMapLayers, normalizeBase, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer } from "./map-layers";
+import { createMapLayers, normalizeBase, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer, vectorStyleFor } from "./map-layers";
 
 describe("normalizeBase", () => {
     test("passes canonical keys through unchanged", () => {
@@ -199,16 +199,45 @@ describe("registerRedataLayers", () => {
         expect(state.calls[0]?.url).toContain("cartocdn.com");
     });
 
-    test("does not register a vector entry - nothing in this Leaflet-based engine can render a style document", async () => {
+    test("registers a vector entry as a style document, leaving the raster source for Leaflet", async () => {
         stubFetch({
-            body: { layers: [{ id: "street", source_type: "vector", style_url: "https://x/style.json", attribution: "Attr" }] },
+            body: {
+                layers: [{ id: "street", source_type: "vector", style_url: "https://x/style.json", attribution: "Attr", min_zoom: 0, max_zoom: 15 }],
+            },
         });
-        expect(await registerRedataLayers()).toEqual([]);
+        expect(await registerRedataLayers()).toEqual(["street"]);
+        expect(vectorStyleFor("street")).toEqual({ styleUrl: "https://x/style.json", attribution: "Attr", minZoom: 0, maxZoom: 15 });
 
-        // The built-in CARTO source must still be what "street" resolves to.
+        // Leaflet has no vector renderer, so "street" must still resolve to a raster template there
+        // rather than silently producing a map with no tiles at all.
         const state = stubLeaflet();
         tileLayer("street");
         expect(state.calls[0]?.url).toContain("cartocdn.com");
+    });
+
+    test("resolves a vector entry through the same legacy aliases as a raster one", async () => {
+        stubFetch({
+            body: { layers: [{ id: "terrain", source_type: "vector", style_url: "https://x/terrain.json", attribution: "Attr" }] },
+        });
+        expect(await registerRedataLayers()).toEqual(["topographic"]);
+        expect(vectorStyleFor("topo")?.styleUrl).toBe("https://x/terrain.json");
+    });
+
+    test("skips a vector entry with no style_url", async () => {
+        stubFetch({ body: { layers: [{ id: "street", source_type: "vector", attribution: "Attr" }] } });
+        expect(await registerRedataLayers()).toEqual([]);
+        expect(vectorStyleFor("street")).toBeNull();
+    });
+
+    test("resetting drops a registered vector source", async () => {
+        stubFetch({
+            body: { layers: [{ id: "street", source_type: "vector", style_url: "https://x/style.json", attribution: "Attr" }] },
+        });
+        await registerRedataLayers();
+
+        resetRedataLayersCacheForTests();
+
+        expect(vectorStyleFor("street")).toBeNull();
     });
 
     test("treats a missing source_type as raster, matching a REData deployment that predates D11", async () => {
@@ -221,6 +250,76 @@ describe("registerRedataLayers", () => {
     test("skips a raster entry with no url_template", async () => {
         stubFetch({ body: { layers: [{ id: "custom", source_type: "raster", attribution: "Attr" }] } });
         expect(await registerRedataLayers()).toEqual([]);
+    });
+
+    /**
+     * `{% basemap_tile_catalogue %}` (themes/base.html) writes this element ahead of core.js. It is
+     * what keeps a map from drawing a vendor's tiles and swapping afterwards - by which point that
+     * vendor has already been handed the coordinates the proxy exists to keep from it.
+     */
+    describe("the catalogue embedded in the page", () => {
+        function embed(layers: unknown[]): void {
+            const el = document.createElement("script");
+            el.type = "application/json";
+            el.id = "ul-basemap-tiles";
+            el.textContent = JSON.stringify(layers);
+            document.body.appendChild(el);
+        }
+
+        afterEach(() => {
+            document.getElementById("ul-basemap-tiles")?.remove();
+        });
+
+        test("is registered synchronously, before anything can request a tile", () => {
+            embed([{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "REData" }]);
+            const fetched = stubFetch({ body: { layers: [] } });
+
+            // No await anywhere: the very first tileLayer() call already resolves to this
+            // deployment's own proxy rather than the built-in vendor.
+            const state = stubLeaflet();
+            tileLayer("street");
+
+            expect(state.calls[0]?.url).toBe("/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/");
+            expect(fetched.calls).toEqual([]);
+        });
+
+        test("is authoritative when it offers nothing, so no request is made either", async () => {
+            embed([]);
+            const fetched = stubFetch({ body: { layers: [{ id: "street", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] } });
+
+            expect(await registerRedataLayers()).toEqual([]);
+
+            // An empty embed means "this deployment offers no extra layers", which is an answer.
+            // Asking again over HTTP would re-introduce the very round trip the embed removes.
+            expect(fetched.calls).toEqual([]);
+            const state = stubLeaflet();
+            tileLayer("street");
+            expect(state.calls[0]?.url).toContain("cartocdn.com");
+        });
+
+        test("falls back to the fetch when the page carried no embed at all", async () => {
+            const fetched = stubFetch({ body: { layers: [{ id: "custom", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] } });
+            expect(await registerRedataLayers()).toEqual(["custom"]);
+            expect(fetched.calls).toEqual(["/dashboard/map/basemap-tiles/sources/"]);
+        });
+
+        test("survives a malformed embed by falling back to the fetch", async () => {
+            const el = document.createElement("script");
+            el.type = "application/json";
+            el.id = "ul-basemap-tiles";
+            el.textContent = "{not json";
+            document.body.appendChild(el);
+            const fetched = stubFetch({ body: { layers: [] } });
+
+            expect(await registerRedataLayers()).toEqual([]);
+            expect(fetched.calls).toEqual(["/dashboard/map/basemap-tiles/sources/"]);
+        });
+
+        test("registers a vector entry from the embed too", () => {
+            embed([{ id: "terrain", source_type: "vector", style_url: "https://tiles.example/terrain.json", attribution: "Copernicus", max_zoom: 12 }]);
+            expect(vectorStyleFor("topographic")?.styleUrl).toBe("https://tiles.example/terrain.json");
+            expect(vectorStyleFor("topographic")?.maxZoom).toBe(12);
+        });
     });
 
     /**
