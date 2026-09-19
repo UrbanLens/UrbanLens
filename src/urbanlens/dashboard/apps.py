@@ -68,9 +68,7 @@ class DashboardConfig(AppConfig):
 
         request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
         request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")
-        post_save.connect(
-            site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate"
-        )
+        post_save.connect(site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate")
         for sender in (UserSubscription, RoleSubscription, SubscriptionRole):
             post_save.connect(
                 site_settings_cache.invalidate,

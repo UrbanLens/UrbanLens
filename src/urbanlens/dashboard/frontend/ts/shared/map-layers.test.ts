@@ -162,6 +162,43 @@ describe("registerRedataLayers", () => {
         expect(state.calls[0]?.url).toBe("https://terrain/{z}/{x}/{y}.png");
     });
 
+    /**
+     * `TILE_DEFS` is module-global and a registration overwrites a built-in entry in place, so a
+     * test that registers one leaks it into every later test in the same process unless the reset
+     * puts it back. Found exactly that way: an unrelated MapLibre-engine assertion about
+     * OpenTopoMap's native depth started reading a registered override's depth instead.
+     */
+    test("resetting restores a built-in source a registration overwrote", async () => {
+        stubFetch({
+            body: { layers: [{ id: "terrain", source_type: "raster", url_template: "https://terrain/{z}/{x}/{y}.png", attribution: "Attr", max_zoom: 19 }] },
+        });
+        await registerRedataLayers();
+        const overridden = stubLeaflet();
+        tileLayer("topographic");
+        expect(overridden.calls[0]?.url).toBe("https://terrain/{z}/{x}/{y}.png");
+
+        resetRedataLayersCacheForTests();
+
+        const restored = stubLeaflet();
+        tileLayer("topographic");
+        expect(restored.calls[0]?.url).toContain("opentopomap.org");
+        expect(restored.calls[0]?.options.maxNativeZoom).toBe(17);
+    });
+
+    test("resetting drops a source that had no built-in entry to restore", async () => {
+        stubFetch({
+            body: { layers: [{ id: "custom", source_type: "raster", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] },
+        });
+        await registerRedataLayers();
+
+        resetRedataLayersCacheForTests();
+
+        // An unknown key falls back to street, so the registered entry is really gone.
+        const state = stubLeaflet();
+        tileLayer("custom");
+        expect(state.calls[0]?.url).toContain("cartocdn.com");
+    });
+
     test("does not register a vector entry - nothing in this Leaflet-based engine can render a style document", async () => {
         stubFetch({
             body: { layers: [{ id: "street", source_type: "vector", style_url: "https://x/style.json", attribution: "Attr" }] },

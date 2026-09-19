@@ -3,7 +3,10 @@
  * caniuse put global support at 95.73% in Aug 2026, so the remaining ~4.27% needs Leaflet kept on
  * hand as a genuine second rendering engine, not a plain "unsupported browser" message - see `D12`
  * (REData's `../REData/docs/DECISIONS.md`) and `docs/designs/leaflet-to-maplibre-migration.md`
- * item 2 for the reasoning this module exists to serve. Not wired into any map yet.
+ * item 2 for the reasoning this module exists to serve.
+ *
+ * This is the branch point every converted map reads: a false answer here is what keeps the
+ * pre-existing Leaflet path alive for that browser, so it must never throw.
  */
 
 /** The subset of `HTMLCanvasElement` this module actually calls, so a test can inject a fake one. */

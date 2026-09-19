@@ -5,14 +5,13 @@
  * does, so drawing one of this app's existing vendor/proxy URLs needs no
  * vector data, no hosted style API, and (for self-hosters with no REData
  * configured) no third-party dependency beyond what this app already ships.
- * Not wired into any map yet - see docs/designs/leaflet-to-maplibre-migration.md (PL8).
  *
- * Deliberately does not import types from `maplibre-gl` or
- * `@maplibre/maplibre-gl-style-spec` - neither is an installed dependency yet
- * (only a CDN vendor-asset pin exists so far), so the shapes below are a
- * hand-verified subset of the real style spec (checked against
- * @maplibre/maplibre-gl-style-spec@24.8.1, the version maplibre-gl@5.24.0
- * itself depends on), not an import.
+ * The shapes below are a hand-verified subset of the real style spec (checked
+ * against @maplibre/maplibre-gl-style-spec@24.8.1, the version maplibre-gl@5.24.0
+ * itself depends on) rather than an import of it. They predate `maplibre-gl`
+ * being installed for its types, and stay hand-written because this module's
+ * output is consumed from plain JS too (`comment-map.js`), where the real spec
+ * types buy nothing.
  */
 
 /** A minimal MapLibre "raster" source - the fields this module actually sets. */

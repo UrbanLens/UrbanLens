@@ -5,7 +5,12 @@
 // Leaflet is loaded via a CDN <script> tag on map pages, so it must be typed as an ambient global rather than imported.
 declare const L: typeof import("leaflet");
 
+// Type only - this module never touches the MapLibre runtime, it just hands a MapLibre map to the engine in `maplibre-layers.ts`.
+import type { Map as MaplibreMap } from "maplibre-gl";
+
 import { bindMapContextMenu, type BindMapContextMenuOptions } from "./map-context-menu";
+import { createLayersPanel } from "./map-layers-panel";
+import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import type { RasterSourceInput } from "./maplibre-raster-style";
 
 export type BaseLayerKey = "street" | "topographic" | "satellite";
@@ -103,6 +108,13 @@ const TILE_DEFS: Record<string, TileDef> = {
 };
 
 /**
+ * Snapshot of the built-in sources above, taken before anything can register over them, so
+ * `resetRedataLayersCacheForTests` can put `TILE_DEFS` back. Shallow by design:
+ * `fetchAndRegisterRedataLayers` replaces whole entries rather than mutating an entry's `options`.
+ */
+const BUILT_IN_TILE_DEFS: Record<string, TileDef> = { ...TILE_DEFS };
+
+/**
  * Legacy layer-mode aliases accepted defensively (pre-canonical MarkupMap
  * values and old cached snapshots). Mirrors LEGACY_LAYER_MODE_ALIASES in
  * dashboard/models/markup/meta.py.
@@ -181,9 +193,21 @@ export function registerRedataLayers(): Promise<string[]> {
     return redataLayersPromise;
 }
 
-/** Clears the memoized fetch so the next `registerRedataLayers()` call issues a fresh request. Test-only. */
+/**
+ * Clears the memoized fetch so the next `registerRedataLayers()` call issues a fresh request, and
+ * restores `TILE_DEFS` to its built-in state. Test-only.
+ *
+ * The restore matters beyond the test that registered: `TILE_DEFS` is module-global and
+ * `registerRedataLayers` overwrites built-in entries in place (a catalogue layer id `terrain`
+ * lands on `topographic`, per `REDATA_ID_ALIASES`), so without it a registration leaks into every
+ * later test in the same process - which is how it was found.
+ */
 export function resetRedataLayersCacheForTests(): void {
     redataLayersPromise = null;
+    for (const key of Object.keys(TILE_DEFS)) {
+        if (!(key in BUILT_IN_TILE_DEFS)) delete TILE_DEFS[key];
+    }
+    Object.assign(TILE_DEFS, BUILT_IN_TILE_DEFS);
 }
 
 async function fetchAndRegisterRedataLayers(): Promise<string[]> {
@@ -340,15 +364,22 @@ export interface MapLayersInstance {
     destroy: () => void;
 }
 
-const PANEL_TRANSITION_MS = 220;
-
 /**
  * Creates the layers engine for a map and binds it to the rendered panel.
- * @param map - The Leaflet map instance.
+ *
+ * Dispatches on which rendering engine actually holds the map, so a call site
+ * gets the right engine without knowing which one it built (`D12`'s dual-engine
+ * requirement - see PL8 item 2).
+ * @param map - The map instance, Leaflet or MapLibre.
  * @param options - Behavior configuration; see MapLayersOptions.
  * @returns The engine instance driving both the layers and the panel buttons.
  */
-export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): MapLayersInstance {
+export function createMapLayers(map: L.Map | MaplibreMap, options: MapLayersOptions = {}): MapLayersInstance {
+    if (isMaplibreMap(map)) return createMaplibreMapLayers(map, options);
+    return createLeafletMapLayers(map, options);
+}
+
+function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): MapLayersInstance {
     const opts = options;
     const root: HTMLElement | null =
         typeof opts.root === "string" ? document.querySelector<HTMLElement>(opts.root) : (opts.root ?? null);
@@ -517,23 +548,9 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // -- Button syncing ---------------------------------------------------------------
-    function layerButton(key: string): HTMLElement | null {
-        return root?.querySelector<HTMLElement>(`[data-map-layer="${key}"]`) ?? null;
-    }
-
     function syncButtons(): void {
-        if (!root) return;
         const state = getState();
-        layerButton("street")?.classList.toggle("active", state.base === "street");
-        layerButton("terrain")?.classList.toggle("active", state.base === "topographic");
-        layerButton("satellite")?.classList.toggle("active", state.base === "satellite");
-        layerButton("weather")?.classList.toggle("active", state.weather);
-        layerButton("borders")?.classList.toggle("active", state.borders);
-        layerButton("dark")?.classList.toggle("active", isDarkActive());
-        for (const [key, toggle] of Object.entries(custom)) {
-            const active = toggle.activeWhenOff ? !toggle.isActive() : toggle.isActive();
-            layerButton(key)?.classList.toggle("active", active);
-        }
+        panel.sync({ base: state.base, weather: state.weather, borders: state.borders, dark: isDarkActive(), custom });
     }
 
     // -- Base / overlay switching --------------------------------------------------------
@@ -618,93 +635,8 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         persistState();
     }
 
-    // -- Flyout panel open/close -------------------------------------------------------
-    const toggleBtn = root?.querySelector<HTMLElement>("[data-layers-toggle]") ?? null;
-    const menu = root?.querySelector<HTMLElement>("[data-layers-menu]") ?? null;
-    let panelCloseTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function isPanelOpen(): boolean {
-        return root?.classList.contains("is-open") ?? false;
-    }
-
-    function closePanel(): void {
-        if (!root || !root.classList.contains("is-open")) return;
-        root.classList.remove("is-open");
-        if (toggleBtn) {
-            toggleBtn.classList.remove("active");
-            toggleBtn.setAttribute("aria-expanded", "false");
-        }
-        if (menu) {
-            menu.setAttribute("aria-hidden", "true");
-            let closed = false;
-            const finishClose = (e?: Event) => {
-                if (e && e.target !== menu) return;
-                if (closed || root.classList.contains("is-open")) return;
-                closed = true;
-                if (panelCloseTimer) {
-                    clearTimeout(panelCloseTimer);
-                    panelCloseTimer = null;
-                }
-                menu.hidden = true;
-                menu.removeEventListener("transitionend", finishClose);
-            };
-            menu.addEventListener("transitionend", finishClose);
-            panelCloseTimer = setTimeout(finishClose, PANEL_TRANSITION_MS + 40);
-        }
-    }
-
-    function openPanel(): void {
-        if (!root) return;
-        if (panelCloseTimer) {
-            clearTimeout(panelCloseTimer);
-            panelCloseTimer = null;
-        }
-        if (menu) {
-            menu.hidden = false;
-            menu.setAttribute("aria-hidden", "false");
-            // Force a synchronous reflow so the opening transition plays from
-            // the hidden state instead of snapping.
-            void menu.offsetWidth;
-        }
-        root.classList.add("is-open");
-        if (toggleBtn) {
-            toggleBtn.classList.add("active");
-            toggleBtn.setAttribute("aria-expanded", "true");
-        }
-    }
-
-    function togglePanel(): void {
-        if (isPanelOpen()) closePanel();
-        else openPanel();
-    }
-
-    const onDocumentClick = (e: MouseEvent): void => {
-        if (root && !root.contains(e.target as Node)) closePanel();
-    };
-    if (toggleBtn) {
-        toggleBtn.addEventListener("click", togglePanel);
-        document.addEventListener("click", onDocumentClick);
-    }
-
-    // -- Button wiring ---------------------------------------------------------------------
-    if (root) {
-        root.querySelectorAll<HTMLElement>("[data-map-layer]").forEach((btn) => {
-            const key = btn.dataset.mapLayer!;
-            const kind = btn.dataset.layerKind || "custom";
-            if (key === "weather" && !weather) {
-                // No API key configured - the feature can't work, so don't offer it.
-                btn.hidden = true;
-                return;
-            }
-            btn.addEventListener("click", () => {
-                if (kind === "base") toggleBase(key === "terrain" ? "topographic" : key);
-                else if (key === "weather") toggleWeather();
-                else if (key === "borders") toggleBorders();
-                else if (key === "dark") toggleDark();
-                else toggleCustom(key);
-            });
-        });
-    }
+    // -- Flyout panel and button wiring -------------------------------------------------
+    const panel = createLayersPanel(root, !!weather, { toggleBase, toggleWeather, toggleBorders, toggleDark, toggleCustom });
 
     // -- Initial state -------------------------------------------------------------------------
     syncBaseLayer();
@@ -754,10 +686,10 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         toggleDark,
         setDarkMode,
         isDarkActive,
-        openPanel,
-        closePanel,
-        togglePanel,
-        isPanelOpen,
+        openPanel: panel.open,
+        closePanel: panel.close,
+        togglePanel: panel.toggle,
+        isPanelOpen: panel.isOpen,
         syncButtons,
         getState,
         baseKey,
@@ -769,14 +701,7 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
                 attributionFrame = null;
             }
             if (colorSchemeQuery && onColorSchemeChange) colorSchemeQuery.removeEventListener("change", onColorSchemeChange);
-            if (toggleBtn) {
-                toggleBtn.removeEventListener("click", togglePanel);
-                document.removeEventListener("click", onDocumentClick);
-            }
-            if (panelCloseTimer) {
-                clearTimeout(panelCloseTimer);
-                panelCloseTimer = null;
-            }
+            panel.destroy();
             unbindContextMenu?.();
         },
     };

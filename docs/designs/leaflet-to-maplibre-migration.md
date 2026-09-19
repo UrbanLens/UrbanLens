@@ -89,10 +89,12 @@ than this document's repeated attempts to correct it.
   separate overview map), `pin_lists/saved_filter_detail.html`, `vault/photos.html`, `trips/detail.html`,
   `profile/common_pins.html`, `memories/index.html`.
 
-**As of 2026-09-19, the pilot conversion below is live** - `maplibre-gl` is a `package.json`
-`devDependency` (types only; the runtime is CDN-loaded via the already-pinned `vendor_assets.py`
-entries), and `_renderMapThumb` genuinely renders through it on WebGL2-capable browsers. See "The
-first real conversion" below for what shipped and what's still Leaflet-only.
+**As of 2026-09-19, two conversions are live** - `maplibre-gl` is a `package.json` `devDependency`
+(types only; the runtime is CDN-loaded via the already-pinned `vendor_assets.py` entries),
+`_renderMapThumb` genuinely renders through it on WebGL2-capable browsers, and the shared layers
+engine behind `MapLayers.create()` now runs on either engine, with `pin_share/detail.html` as its
+first converted consumer. See "The first real conversion" and "The shared layers engine runs on both
+engines" below for what shipped, what is blocked on what, and what is still Leaflet-only.
 
 ## The work, per REData's `D12` and `T8` §2
 
@@ -264,8 +266,12 @@ already specific and file-accurate, not because it should be treated as this rep
     which has no MapLibre equivalent at all" - independent confirmation of this item's own framing, not
     just this document's assertion. Its shape: one checkbox per layer group plus bulk "Select
     all"/"Deselect all" buttons, driven by `map.setLayoutProperty(layerId, "visibility", ...)` rather than
-    swapping layers in and out of the map. A real port here still needs this repo's own layer set worked
-    out against that shape, not a copy - not attempted this session.
+    swapping layers in and out of the map. **Partly answered as of 2026-09-19, in a different shape:**
+    this repo does not use `L.control.layers` at all - its layer switcher is a server-rendered HTML
+    strip (`map_layers_panel`) driven by `createMapLayers()`, so the MapLibre engine
+    (`maplibre-layers.ts`) drives that same strip rather than adding an `IControl`, and adopts
+    REData's visibility-toggling mechanism without its DOM. An `IControl` is still what a map with no
+    server-rendered strip would need, if one ever turns up.
 
 ## The first real conversion: `_renderMapThumb` is done (2026-09-19)
 
@@ -352,10 +358,90 @@ MapLibre path renders tiles, the borders overlay, all seven shape types, and the
 same run confirms the Leaflet path still renders correctly, unregressed. Zero console errors either
 way. `bun run typecheck`, `bun run test:ts` (1015 pass), and the frontend build all clean.
 
-What a real next conversion batch still needs: pick another of the 24 remaining call sites, check it
-against this pilot's own markup-rendering lesson specifically, and budget for whichever of the two
-still-open items above (Terra Draw's immediate-delete question, item 7; the clustering rebuild vs.
-port question, item 3) it actually touches.
+## The shared layers engine runs on both engines (2026-09-19)
+
+`MapLayers.create()` - the layers strip behind **20 of the 25 call sites** - now dispatches on which
+engine holds the map it was handed, so a converted call site keeps calling it unchanged. This was
+the actual bottleneck: the pilot above only avoided it because `_renderMapThumb` builds a bare tile
+layer and never creates a layers engine at all. Every other candidate hits it immediately.
+
+- **`ts/shared/maplibre-layers.ts`** (new) - `createMaplibreMapLayers`, satisfying the same
+  `MapLayersInstance` contract as the Leaflet engine. Two structural differences, both forced by
+  MapLibre rather than chosen, and both documented in the module header: engine state lives in the
+  module rather than being read back off the map with `hasLayer()` (MapLibre rejects
+  `addSource`/`addLayer` until its style has loaded, so an engine created one line after
+  `new maplibregl.Map(...)` has no map to write to yet, and replays its state in an `onStyleReady`
+  handler), and layers are added once then toggled by `visibility` rather than added to and removed
+  from the map - the shape REData's own `LayerToggleControl` uses (item 10).
+- **`ts/shared/map-layers-panel.ts`** (new) - the strip's DOM half (flyout, button wiring,
+  active-state syncing) extracted out of `map-layers.ts` so both engines drive one copy rather than
+  two kept in lockstep by hand. `createMapLayers` is now a dispatcher over
+  `createLeafletMapLayers` (its former body, otherwise unchanged) and the MapLibre engine.
+- **Dark mode's topo inversion has an exact MapLibre equivalent, not an approximation.** The
+  Leaflet engine inverts topographic tiles with a CSS `invert(100%) hue-rotate(180deg)
+  brightness(90%)` filter on their own pane; MapLibre has no invert. Checked against the pinned
+  `maplibre-gl@5.24.0` bundle's own raster fragment shader rather than the style-spec docs: it ends
+  `mix(vec3(brightness_min), vec3(brightness_max), rgb)`, so `raster-brightness-min: 0.9,
+  raster-brightness-max: 0` is exactly `0.9 * (1 - rgb)`. The hue rotation runs *before* that in the
+  shader and *after* the invert in CSS, which cancels because MapLibre's hue-rotation matrix is
+  luminance-preserving (its rows sum to 1, so it maps white to white): `M(1 - c) = 1 - M(c)`. Unlike
+  the pilot's circle geometry, this one is not a known-lossy approximation.
+- **`pin_share/detail.html` is converted** - the first real consumer, chosen because it uses the
+  strip and has none of the couplings below. Browser-verified end to end (see below).
+- **Tested**, unlike the pilot: `maplibre-layers.test.ts` runs the real engine against a
+  MapLibre stand-in that enforces the constraint the engine exists to work around (its
+  `addSource`/`addLayer` throw until the style loads), covering deferred setup, state applied on
+  load, insertion beneath pre-existing layers, base/overlay switching, the dark-mode paint values
+  above, attribution, the strip, and teardown.
+
+**A real bug in the test suite fell out of this**, found because a new assertion about OpenTopoMap's
+native depth started reading 19 instead of 17 depending on which files ran first:
+`registerRedataLayers()` overwrites entries in the module-global `TILE_DEFS` in place (a catalogue
+layer id `terrain` lands on `topographic`), and `resetRedataLayersCacheForTests()` only cleared the
+memoized fetch - so a registration leaked into every later test in the same process. The reset now
+restores `TILE_DEFS` from a snapshot; two regression tests cover it.
+
+### What blocks the remaining call sites (checked, not assumed)
+
+Taking the pilot's own advice to check each candidate for its own version of the markup-rendering
+gap, rather than assuming "static tile layer" covers it:
+
+- **`comment-map.js`'s `_expandCommentMap`** - the dialog viewer, and the obvious sibling of the
+  converted thumbnail, **is blocked on item 4, not ready to convert**. Its map is handed to
+  `window.MapExport.download()` by the dialog's Download button, and `map-export.ts` rasterizes by
+  reading a Leaflet `TileLayer`'s private `_tileZoom` and calling `getTileUrl()` per tile. Converting
+  the map without porting the exporter would silently break that button. Same for the composer map
+  (two more `MapExport.download` call sites in the same file).
+- **`window.map` is *not* an export coupling**, despite seven templates assigning it with a comment
+  about the toolbar's screenshot tool. Checked directly: `_openMapToolbarScreenshot` only reads
+  `getCenter()`/`getZoom()` to seed a fresh composer dialog, and both engines answer those alike.
+  Those seven maps are available to convert.
+- Still untouched and still gating their own call sites: item 3 (clustering - `memories/index.html`,
+  `map-page.ts`, `map-annotations.ts`), item 6 (`leaflet-rotate` - `floorplan-editor.ts`), item 7
+  (`leaflet-draw` - `map-annotations.ts`, `spotguessr.ts`, `pin_lists/detail.html`,
+  `pin_lists/_saved_filter_dialog_scripts.html`).
+
+Verified in a real browser (`bin/sync_app.sh --frontend` into `development_main`, Playwright against
+a seeded `/dashboard/pin-shares/<id>/`, throwaway data removed afterwards): the MapLibre engine adds
+its five managed layers in the right draw order, tiles genuinely load from all three CARTO
+subdomains (so `{s}` expansion and item 9's `connect-src` change both work in practice), the marker
+and popup render, and `window.map` answers the right centre/zoom. Clicking **Satellite** in the
+shared strip flips the layer, fetches Esri tiles, updates the footer attribution to
+"© Esri · MapLibre" and highlights the button - the strip driving a MapLibre map end to end. With
+WebGL2 genuinely blocked (`getContext("webgl2")` returning null, rather than the detector
+monkey-patched) the same page falls back to Leaflet and renders correctly, unregressed. Zero console
+errors on either path. `bun run typecheck`, `bun run test:ts` (1055 pass) and the frontend build all
+clean.
+
+One thing found and **not** fixed, because it predates this work and behaves identically on both
+engines: the `onAttribution` callback in these templates writes to
+`#page-footer-attribution-text`, which does not exist yet when the page's inline `<script>` runs, so
+the initial attribution never lands - only later changes (a layer switch) update the footer.
+
+What a real next conversion batch still needs: pick from the seven now-unblocked `window.map`
+templates, or take on item 4 (the exporter) to unblock the two `comment-map.js` maps, and budget for
+whichever of the two still-open items above (Terra Draw's immediate-delete question, item 7; the
+clustering rebuild vs. port question, item 3) it actually touches.
 
 ## What is explicitly out of scope here
 
