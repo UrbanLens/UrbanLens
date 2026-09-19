@@ -159,6 +159,9 @@ export function rasterSourceFor(kind: string): RasterSourceInput {
     return {
         url: def.url,
         attribution: typeof def.options.attribution === "string" ? def.options.attribution : undefined,
+        // Only a REData-registered entry currently carries a minZoom; dropping it would let a
+        // MapLibre map request tiles below the depth the catalogue says that layer serves.
+        minZoom: def.options.minZoom,
         maxNativeZoom: def.options.maxNativeZoom,
         subdomains: def.options.subdomains,
     };

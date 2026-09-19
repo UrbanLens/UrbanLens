@@ -136,6 +136,9 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
             }
         }
         base = normalizeBase(requested);
+        // No API key means no weather layers get built at all, so the state must not claim
+        // otherwise - the Leaflet engine derives this from the layers it actually added.
+        weatherOn = weatherOn && !!weatherKey;
     })();
 
     // -- Dark map mode -----------------------------------------------------------
@@ -389,6 +392,9 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
     };
     map.once("load", onStyleReady);
     if (map.isStyleLoaded()) onStyleReady();
+    // Not left to applyToMap(), which no-ops until the style is ready: this only touches the
+    // container's dataset, and SCSS should not see an unstyled map while tiles are still loading.
+    syncStyleAttribute();
     syncButtons();
     opts.onAttribution?.(attributionText());
 

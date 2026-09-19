@@ -388,6 +388,18 @@ describe("overlays", () => {
         expect(layers.getState().weather).toBe(false);
     });
 
+    test("does not claim weather is on when initialOverlays asks for it but no key exists", () => {
+        // The Leaflet engine derives this from the layers it actually added, so it cannot
+        // disagree with the map; this engine tracks its own state and has to clamp it.
+        const map = makeMap();
+        map.finishStyleLoad();
+        const root = makeStrip();
+        const layers = createMaplibreMapLayers(asMaplibre(map), { root, initialOverlays: ["weather"], contextMenu: false });
+
+        expect(layers.getState().weather).toBe(false);
+        expect(button(root, "weather").classList.contains("active")).toBe(false);
+    });
+
     test("an API key adds both weather layers and toggles them together", () => {
         const map = makeMap();
         map.finishStyleLoad();
