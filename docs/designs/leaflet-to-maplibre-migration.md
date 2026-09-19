@@ -308,7 +308,11 @@ convention - verification in a real browser, not just `bun test`, since this is 
 
 - **REData's two internal dashboard maps** (boundary map, Location Explorer) are already converted, on
   their side, on `feat/scout-campaign` - not this repo's work, cited here only as a working reference
-  for the WebGL2-detection and `IControl` patterns.
+  for the WebGL2-detection and `IControl` patterns. Checked directly against `../REData`'s actual branch
+  on reassessment, not just taken from `T8`'s framing: `feat/scout-campaign` is a real, current branch
+  (10 commits ahead of `main`, not yet merged), and its `7727ba36` ("feat(dashboard): migrate boundary map
+  and Location Explorer to MapLibre GL JS") is the exact commit that produced `LayerToggleControl` -
+  confirming the conversion is real, not just claimed.
 - **The Flutter app** (`PL12` item 8) is deliberately parked on raster until this item ships, by REData's
   own acceptance line. Nothing is needed from Flutter now.
 - **REData's infrastructure side** (`PL12` items 1-5: DEM chain, Valhalla, PMTiles mirrors, Martin) is
