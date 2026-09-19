@@ -143,9 +143,13 @@ already specific and file-accurate, not because it should be treated as this rep
    - moot now that the underlying leak is closed regardless of which engine renders the map.
 9. **The CSP shift raster tiles need.** REData's own two internal maps, already converted
    (`feat/scout-campaign`, per `T8`), found that MapLibre fetches tiles via `fetch()`/XHR - governed by
-   `connect-src` - where Leaflet loads them as `<img>`, governed by `img-src`. Any CSP that only allows
-   the vendor/REData origins under `img-src` needs the same origins added under `connect-src` before a
-   converted map can load a single tile.
+   `connect-src` - where Leaflet loads them as `<img>`, governed by `img-src`. Checked directly against
+   this app's own pinned `maplibre-gl@5.24.0` bundle, not just REData's framing: the mechanism is
+   specifically `XMLHttpRequest` (`responseType: "arraybuffer"`, then `createImageBitmap()`d), not
+   `fetch()` - same `connect-src`-governed CSP category either way (see `D17`), so REData's conclusion
+   holds, just via one specific API rather than either-of-two. Any CSP that only allows the vendor/REData
+   origins under `img-src` needs the same origins added under `connect-src` before a converted map can
+   load a single tile.
 10. **A hand-rolled `IControl` replaces `L.control.layers`.** MapLibre has no built-in layer-toggle
     control equivalent; REData's own dashboard conversion is a working reference for the shape of one.
 
