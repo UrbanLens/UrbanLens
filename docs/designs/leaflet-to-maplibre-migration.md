@@ -222,7 +222,16 @@ already specific and file-accurate, not because it should be treated as this rep
    origins under `img-src` needs the same origins added under `connect-src` before a converted map can
    load a single tile.
 10. **A hand-rolled `IControl` replaces `L.control.layers`.** MapLibre has no built-in layer-toggle
-    control equivalent; REData's own dashboard conversion is a working reference for the shape of one.
+    control equivalent; REData's own dashboard conversion is a working reference for the shape of one -
+    checked directly against `../REData`'s actual source this session, not assumed to exist: its
+    `location-explorer-map.ts` (`entries-classic/`) has a complete `LayerToggleControl` class (`onAdd`,
+    `onRemove`, registered via `map.addControl(new LayerToggleControl(map, groupLayers), "top-right")`),
+    whose own doc comment calls itself "the MapLibre-native replacement for Leaflet's `L.Control.Layers`,
+    which has no MapLibre equivalent at all" - independent confirmation of this item's own framing, not
+    just this document's assertion. Its shape: one checkbox per layer group plus bulk "Select
+    all"/"Deselect all" buttons, driven by `map.setLayoutProperty(layerId, "visibility", ...)` rather than
+    swapping layers in and out of the map. A real port here still needs this repo's own layer set worked
+    out against that shape, not a copy - not attempted this session.
 
 ## Where a first real conversion should start
 
