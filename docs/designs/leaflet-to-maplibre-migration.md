@@ -64,13 +64,15 @@ on REData's side, in `../REData`:
 
 ## What already exists to convert from (measured this session, `N25`)
 
-**12 `L.map(` call sites across 8 source files**, not REData's inherited "27" - see `N25` for the exact
-command, the file-by-file breakdown, and why the raw grep returns 23 across 16 (one test file, six
-compiled-JS/TS-source duplicate pairs, and two `Array.prototype.map()` false positives from an
-unanchored pattern matching inside `parseHTML.map(`). This figure is itself a correction of an earlier
-"15 across 10" in this same document and in `N25` - see `N25`'s own correction section for what was
-wrong with that count. Neither correction changes this plan's shape: every file `T8` named by name is
-real.
+**25 `L.map(` call sites across 20 files**, close to REData's "27" - not the "under half of 27" this
+document claimed across two earlier, narrower counts (12 across 8, before that 15 across 10). Both were
+undercounts of the same kind: real call sites in `.ts`/`.js` source were counted correctly, but nothing
+ever searched Django templates, where 13 more real `L.map(...)` calls live in inline `<script>` blocks.
+See `N25`'s own correction sections for the full history and per-file breakdown of both fixes - the
+`.ts`/`.js` miscounts (a compiled-duplicate file wrongly counted twice, two `Array.prototype.map()`
+false positives from an unanchored grep pattern) and the template-search gap. This does not change this
+plan's shape: every file `T8` named by name is real, and REData's own number turns out closer to right
+than this document's repeated attempts to correct it.
 
 - `ts/entries/`: `consensus.ts`, `map-page.ts` (highest traffic), `map-annotations.ts` (2 maps - the main
   editor map and a lightbox preview map), `spotguessr.ts` (2 maps - area guess and round guess),
@@ -80,6 +82,12 @@ real.
   `static/dashboard/js/albums.js`, not a second source of its own).
 - Hand-written vanilla JS with no TS source: `static/js/comment-map.js` (3 maps - see below),
   `static/js/pin-select-map.js`.
+- Django templates with an inline `<script>` block that builds its own map, no TS/JS source at all - 12
+  files, 13 maps: `_photo_lightbox.html`, `wiki/_boundary_vote_dialog.html`,
+  `safety/_safety_map_script.html`, `pin_lists/_saved_filter_dialog_scripts.html`,
+  `pin_share/detail.html`, `settings/index.html`, `pin_lists/detail.html` (2 - a boundary editor and a
+  separate overview map), `pin_lists/saved_filter_detail.html`, `vault/photos.html`, `trips/detail.html`,
+  `profile/common_pins.html`, `memories/index.html`.
 
 **No MapLibre GL JS dependency exists yet anywhere in this codebase** - confirmed this session: no
 `package.json` entry, no vendored/CDN asset, no import.
@@ -164,20 +172,26 @@ already specific and file-accurate, not because it should be treated as this rep
 
 Not code yet - scoped here because the foundational pieces (vendor asset pin, WebGL2 detection,
 `buildRasterStyle`) now exist unwired and the next concrete step is choosing where they land first, not
-building more scaffolding in the abstract. There are 12 distinct `L.map()` call sites across the codebase
-(`comment-map.js` alone has three: composer, dialog viewer, thumbnail). `_renderMapThumb` in
+building more scaffolding in the abstract. There are 25 distinct `L.map()` call sites across the codebase
+(`comment-map.js` alone has three: composer, dialog viewer, thumbnail) - most of them one-off template
+maps (settings preview, safety check-in, trip detail, and so on) that are simple in a different way than
+`_renderMapThumb`: single-purpose and low-traffic, but not necessarily non-interactive. `_renderMapThumb`
+in
 `comment-map.js` (the `.comment-map-thumb` preview, also reused by the DM composer's attach-preview chip)
-is the strongest pilot candidate, by a wide margin over every alternative checked:
+is the strongest pilot candidate among those actually checked - not an exhaustive review of all 25, but
+every candidate compared against it so far loses on the same axis:
 
 - **Zero interactivity to preserve.** Its own Leaflet options are `zoomControl: false, dragging: false,
   scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false` - it is a static rendered view, not an
-  interactive map. A MapLibre swap here needs no gesture/control porting at all, unlike every other call
-  site.
-- **No layer-switcher UI, no draggable markers, no context menu.** Contrast `album-map.ts`
-  (`initAlbumMap`), the next-simplest-looking candidate: it wires `createMapLayers` (a base-layer switcher
-  control), draggable photo markers with position-save-on-drop, hover sync back to a DOM list, and a
-  context menu - each of those is its own porting problem (`IControl`, MapLibre's `Marker` drag API, event
-  wiring) this thumbnail path has none of.
+  interactive map. A MapLibre swap here needs no gesture/control porting at all.
+- **No layer-switcher UI, no draggable markers, no context menu.** Contrast the two next-simplest-looking
+  candidates actually checked: `album-map.ts` (`initAlbumMap`) wires `createMapLayers` (a base-layer
+  switcher control), draggable photo markers with position-save-on-drop, hover sync back to a DOM list,
+  and a context menu; `_photo_lightbox.html`'s map (also `zoomControl`/`dragging`/`scrollWheelZoom` all
+  `false`, so it looked just as promising at a glance) turns out to wire a draggable marker with a
+  `dragend` handler that calls a server-side reposition endpoint. Each of those is its own porting problem
+  (`IControl`, MapLibre's `Marker` drag API, a live network call mid-drag) this thumbnail path has none
+  of. The other 22 call sites are not yet individually checked.
 - **Small, already-hardened, already-understood blast radius.** Two commits this session
   (`6b117c695` - the leak/dispose fix and htmx cleanup wiring; `504e145d4` - the throw-before-tag ordering
   fix found on re-review) already put this exact function through adversarial review, so its behavior is

@@ -21,30 +21,20 @@ corrected 2026-09-18 (its own §0); this reply re-checked the corrected version,
 | `leaflet-rotate@0.2.8` (GPL-3.0) is a dependency, used only by `floorplan-editor.ts` | confirmed - `package.json` entry, single importer |
 | `map-clusters.ts`, `map-export.ts`, `map-image-overlays.ts` exist and match the description | confirmed by reading each file; see `PL8` for the per-file detail |
 | no MapLibre GL JS dependency exists anywhere in this codebase | confirmed - no `package.json` entry, no vendored asset, no import |
-| "27 Leaflet maps" | **does not hold under a direct count - see below** |
+| "27 Leaflet maps" | **close - 25 by this session's own final count, after two earlier undercounts; see the correction section below** |
 
-**The map count.** `T8`'s own title and REData's `PL12` item 6 both say "27." A direct count run
-this session:
-
-```
-grep -rln 'L\.map(' src/urbanlens/dashboard/frontend --include='*.ts' --include='*.js'
-```
-
-returns 23 call sites across 16 files. Of those, one file
-(`frontend/browser/floorplan-editor.test.ts`) is a test, not a page, and five files under
-`frontend/static/dashboard/js/` (`consensus.js`, `floorplan-editor.js`, `map-annotations.js`,
-`map-page.js`, `spotguessr.js`) are the compiled-JS build output of the matching
-`frontend/ts/entries/*.ts` source and duplicate its call sites exactly rather than naming a second
-map. Excluding both leaves **12 `L.map(` call sites across 8 source files**: `ts/entries/`
-{`consensus.ts`(1), `floorplan-editor.ts`(1), `map-annotations.ts`(2), `map-page.ts`(1),
-`spotguessr.ts`(2)}, `ts/shared/album-map.ts`(1), and two hand-written vanilla-JS files with no
-TS source at all - `static/js/comment-map.js`(3), `static/js/pin-select-map.js`(1). (This count is
-itself corrected from an earlier, wrong "15 across 10" - see the correction section below.)
-
-That is under half of "27," not a rounding difference. It does not change `PL8`'s shape - every
-file `T8` named by name is real and matches its description - but a written record should carry
-the number actually measured. Not reconciled against REData's own counting method, which is not
-described in `T8` beyond the total.
+**The map count.** `T8`'s own title and REData's `PL12` item 6 both say "27." This section originally
+searched only `frontend --include='*.ts' --include='*.js'` and reported first 15, then (after a
+correction below) 12 call sites, both times calling that "under half of 27" and treating REData's number
+as effectively refuted. That framing was wrong, and is superseded by a second, later correction (also
+below): the search itself was scoped too narrowly - it never looked in `dashboard/templates/**/*.html`,
+where 13 more real `L.map(...)` calls live in inline `<script>` blocks (boundary editors, region
+pickers, lightboxes, preview maps - see the correction for the full list). **Corrected, final count:
+25 `L.map(` call sites across 20 files** - 12 across 8 `.ts`/`.js` source files (unchanged from the
+first correction) plus 13 across 12 Django templates. 25 is close to REData's "27," not a refutation of
+it - within rounding distance, unlike either of this document's own two earlier numbers. Not reconciled
+against REData's own counting method, which is not described in `T8` beyond the total, so the
+remaining gap of 2 is unexplained, not necessarily an error on either side.
 
 ## What was implemented this session: `T8` §1, the catalogue wiring
 
@@ -151,9 +141,35 @@ variable - not `L.map(` at all; the raw grep command above has no word boundary,
 literal substring "L.map(" wherever it falls inside a longer identifier, which is exactly what
 happens inside "parseHTML.map(" - "parseHTML" ends in "L", immediately followed by ".map(".
 Re-run with `grep -rln '\bL\.map(' ...` (word-boundary anchored) and `article-wysiwyg.js` drops out
-of the result entirely. Corrected count, verified this way: **12 call sites across 8 source files**,
-now fixed in place above rather than left wrong under a "verified" heading. `PL8`'s own count and
-file breakdown are corrected to match.
+of the result entirely. Corrected count at the time, verified this way: **12 call sites across 8
+source files** - itself incomplete, corrected again below.
+
+## Correction, found on a third reassessment: the count only ever searched `.ts`/`.js`, never templates
+
+While checking a different item (`PL8` item 7, `Leaflet.draw` → Terra Draw) this session found that
+two Django templates (`pin_lists/detail.html`, `_saved_filter_dialog_scripts.html`) build their own
+`L.map(...)` directly in an inline `<script>` block - real call sites this doc's grep command
+(`--include='*.ts' --include='*.js'`) structurally could not see, because Django templates are
+`.html`. Widening the search (`grep -rln '\bL\.map(' src/urbanlens/dashboard/templates
+--include='*.html'`) turns up **13 more real call sites across 12 template files**, none of them
+compiled duplicates or false positives (each checked in context, not just grep-matched): the photo
+lightbox (`_photo_lightbox.html`), the boundary-vote dialog (`wiki/_boundary_vote_dialog.html`), the
+safety-check-in map (`safety/_safety_map_script.html`), the saved-filter region picker
+(`_saved_filter_dialog_scripts.html`), the shared-pin page (`pin_share/detail.html`), the
+map-center preview in settings (`settings/index.html`), the pin-list boundary editor *and* its
+separate overview map (`pin_lists/detail.html`, 2), the saved-filter detail preview
+(`pin_lists/saved_filter_detail.html`), the photo location-confirm map (`vault/photos.html`), the
+trip map (`trips/detail.html`), the common-pins map (`profile/common_pins.html`), and the memories
+map (`memories/index.html`). Checked for further gaps before settling on a final number: no
+`new L.Map(` constructor-form calls anywhere, no split-token forms, no template directory outside
+`dashboard/templates`.
+
+**Corrected, final total: 25 `L.map(` call sites across 20 files** (12 across 8 `.ts`/`.js` files,
+unchanged from the correction above, plus these 13 across 12 templates) - not "under half of 27," as
+this doc claimed twice. REData's original number stands much closer to correct than either of this
+document's own two earlier "corrections" of it. `PL8`'s count is fixed to match. Apologies to whoever
+at REData read either earlier version of this section and adjusted their own numbers to match this
+doc's - this doc's count was the one that needed the confidence walked back, not REData's.
 
 ## For whoever reads this next
 
