@@ -41,6 +41,8 @@ interface StubTileLayer {
     /** Handlers `tileLayer()` attached, by event name - how the retry wiring is observed. */
     handlers: Record<string, Array<(event: unknown) => void>>;
     on(type: string, fn: (event: unknown) => void): StubTileLayer;
+    /** Counted, not just answered: rebuilding a tile URL after the fact is the bug, not the feature. */
+    getTileUrlCalls: number;
     getTileUrl(coords: { x: number; y: number; z: number }): string;
 }
 
@@ -58,7 +60,11 @@ function stubLeaflet(): { calls: Array<{ url: string; options: Record<string, un
                     (this.handlers[type] ??= []).push(fn);
                     return this;
                 },
-                getTileUrl: (coords) => url.replace("{z}", String(coords.z)).replace("{x}", String(coords.x)).replace("{y}", String(coords.y)),
+                getTileUrlCalls: 0,
+                getTileUrl(coords) {
+                    this.getTileUrlCalls++;
+                    return url.replace("{z}", String(coords.z)).replace("{x}", String(coords.x)).replace("{y}", String(coords.y));
+                },
             };
             state.layers.push(layer);
             return layer;
@@ -340,6 +346,9 @@ describe("registerRedataLayers", () => {
             globalThis.setTimeout = realSetTimeout;
         });
 
+        const COORDS = { x: 1, y: 2, z: 3 };
+        const PLACEHOLDER = "data:image/svg+xml;charset=UTF-8,placeholder";
+
         /** A tile element that is in the document, as Leaflet's own would be while still in view. */
         function attachedTile(): HTMLImageElement {
             const tile = document.createElement("img");
@@ -357,15 +366,46 @@ describe("registerRedataLayers", () => {
             return state.layers[0]!;
         }
 
-        test("a refused tile is requested again", async () => {
+        /**
+         * One tile's life as Leaflet runs it: created with its real URL, announced, then - on
+         * failure - overwritten with `errorTileUrl` *before* `tileerror` is fired. That ordering is
+         * why the retry cannot read the URL back off the element.
+         * @returns The URL the tile was asked for, as the DOM resolved it.
+         */
+        function failOnce(layer: StubTileLayer, tile: HTMLImageElement): string {
+            tile.src = "/dashboard/map/basemap-tiles/street/3/1/2/";
+            const requested = tile.src;
+            layer.handlers.tileloadstart?.[0]?.({ tile, coords: COORDS });
+            tile.src = PLACEHOLDER;
+            layer.handlers.tileerror?.[0]?.({ tile, coords: COORDS });
+            return requested;
+        }
+
+        test("a refused tile is asked for again, at the URL it was asked for the first time", async () => {
             const layer = await proxyLayer();
             const tile = attachedTile();
 
-            layer.handlers.tileerror?.[0]?.({ tile, coords: { x: 1, y: 2, z: 3 } });
+            const requested = failOnce(layer, tile);
             expect(pending).toHaveLength(1);
             pending[0]!();
 
-            expect(tile.getAttribute("src")).toBe("/dashboard/map/basemap-tiles/street/3/1/2/");
+            expect(tile.src).toBe(requested);
+            tile.remove();
+        });
+
+        /**
+         * `getTileUrl()` fills `{z}` from the layer's current zoom rather than from the coords it is
+         * given, so rebuilding the URL at retry time paints a tile of somewhere else into this one
+         * whenever the user has zoomed in the seconds since it failed.
+         */
+        test("the URL is not rebuilt at retry time", async () => {
+            const layer = await proxyLayer();
+            const tile = attachedTile();
+
+            failOnce(layer, tile);
+            pending[0]!();
+
+            expect(layer.getTileUrlCalls).toBe(0);
             tile.remove();
         });
 
@@ -376,7 +416,7 @@ describe("registerRedataLayers", () => {
 
             // Every retry fails in turn, the way a layer whose upstream is down would.
             for (let attempt = 0; attempt < 12; attempt++) {
-                layer.handlers.tileerror?.[0]?.({ tile, coords: { x: 1, y: 2, z: 3 } });
+                failOnce(layer, tile);
                 scheduled += pending.length;
                 pending.forEach((fn) => fn());
                 pending = [];
@@ -391,10 +431,10 @@ describe("registerRedataLayers", () => {
             const layer = await proxyLayer();
             const tile = document.createElement("img"); // never attached: panned away while waiting
 
-            layer.handlers.tileerror?.[0]?.({ tile, coords: { x: 1, y: 2, z: 3 } });
+            failOnce(layer, tile);
             pending[0]!();
 
-            expect(tile.getAttribute("src")).toBeNull();
+            expect(tile.src).toBe(PLACEHOLDER);
         });
 
         test("a vendor's own layer is left alone, since its failures are usually its rate limiter", () => {

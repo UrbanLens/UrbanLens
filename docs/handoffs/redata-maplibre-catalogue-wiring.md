@@ -129,8 +129,12 @@ of a first look at an area is refused. Neither engine retries a refused tile on 
 paints `errorTileUrl` and treats the tile as finished, MapLibre sets `state = 'errored'` and its own
 `reload()` explicitly skips errored tiles - so on its own the bound does not make a cold map slow,
 it puts holes in it that stay until the tile is pruned. `retryOwnTiles` (`map-layers.ts`) retries a
-same-origin tile on a jittered backoff spanning ~12s, against the ~7.5s of slot time that burst
+same-origin tile on a jittered backoff spanning ~9-26s, against the ~7.5s of slot time that burst
 needs; vendor layers are deliberately left alone, since a CDN's failure is usually its rate limiter.
+It re-asks for the URL the tile was originally requested at, captured on `tileloadstart`, rather
+than rebuilding one: Leaflet's `getTileUrl()` fills `{z}` from the layer's *current* zoom rather
+than from the coords it is handed, so a rebuilt URL paints a tile of somewhere else into this one
+whenever the user zoomed during the wait.
 **The MapLibre engine has no equivalent yet**, and a `<slug:layer>`-shaped raster proxy under
 MapLibre will need one - a protocol handler registered with `maplibregl.addProtocol`, since
 `transformRequest` is synchronous and cannot delay. Nothing constructs a MapLibre map today, so this

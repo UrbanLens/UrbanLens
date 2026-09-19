@@ -196,10 +196,13 @@ export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Ti
  * paints `errorTileUrl` and considers it done, MapLibre marks it `errored` and its own `reload()`
  * skips errored tiles - so without this the bound does not make a map slow, it puts holes in it.
  *
- * Spans ~12s, against the ~7.5s of slot time that burst needs at the ~1.5s REData currently takes
- * per fetch (`P131` - which is its per-request key verification, not the tiles).
+ * A 30-tile burst against 6 slots needs ~7.5s of slot time at the ~1.5s REData currently takes per
+ * fetch (`P131` - which is its per-request key verification, not the tiles), so the schedule has to
+ * outlast that; jittered, these span ~9-26s. Nothing here is shorter than the `Retry-After: 1` the
+ * proxy sends, since a fetch takes ~1.5s and a retry inside that window is refused for certain and
+ * costs one of only four attempts.
  */
-const OWN_TILE_RETRY_DELAYS_MS = [500, 1500, 3500, 7000];
+const OWN_TILE_RETRY_DELAYS_MS = [1000, 2500, 5000, 9000];
 
 /**
  * Retries failed tiles for a layer this deployment serves itself.
@@ -210,18 +213,28 @@ const OWN_TILE_RETRY_DELAYS_MS = [500, 1500, 3500, 7000];
  * @returns The same layer, for chaining.
  */
 function retryOwnTiles(layer: L.TileLayer): L.TileLayer {
+    const requested = new WeakMap<HTMLImageElement, string>();
     const attempts = new WeakMap<HTMLImageElement, number>();
+    // The URL is kept from when the tile was first asked for, rather than rebuilt at retry time:
+    // `getTileUrl()` fills `{z}` from the layer's *current* zoom rather than from the coords it is
+    // handed (and takes wrapped coords, which the event does not carry), so re-asking seconds later
+    // would paint a tile of somewhere else into this one if the user had zoomed meanwhile.
+    layer.on("tileloadstart", (event: L.TileEvent) => {
+        requested.set(event.tile, event.tile.src);
+    });
     layer.on("tileerror", (event: L.TileErrorEvent) => {
+        // Leaflet has already swapped in errorTileUrl by now, so this is the only copy left.
+        const url = requested.get(event.tile);
         const attempt = attempts.get(event.tile) ?? 0;
         const delay = OWN_TILE_RETRY_DELAYS_MS[attempt];
-        if (delay === undefined) return;
+        if (url === undefined || delay === undefined) return;
         attempts.set(event.tile, attempt + 1);
         // Jittered: every tile in a viewport is refused in the same instant, and retrying them all
         // on the same schedule rebuilds the burst that exhausted the slots in the first place.
         setTimeout(
             () => {
                 // Panned or zoomed away while waiting - Leaflet has already dropped this tile.
-                if (event.tile.isConnected) event.tile.src = layer.getTileUrl(event.coords);
+                if (event.tile.isConnected) event.tile.src = url;
             },
             delay * (0.5 + Math.random()),
         );
