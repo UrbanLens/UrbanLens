@@ -181,11 +181,17 @@ already specific and file-accurate, not because it should be treated as this rep
    simulating both Leaflet's actual `remove()` semantics and htmx's actual bubbling
    `CustomEvent` dispatch (checked against the pinned `htmx@1.9.11` source too) - not committed to the
    suite, since this file has no established test-harness convention yet and inventing one was out of
-   scope for a bug fix. Still true and unfixed: what this item does not cover is the couple of call
-   sites that replace a pane's innerHTML directly instead of using an HTMX swap - no htmx event fires
-   for those either, so the delegated listener cannot reach them; `_expandCommentMap`'s own
-   stale-cache check is the one path that already handles this gap for the dialog viewer map, using
-   the same idempotent disposal helper. A leaked WebGL context (after the port lands) would have been
+   scope for a bug fix. Still true and unfixed: what this item does not cover is four raw-innerHTML-swap
+   call sites, not the "couple" `_initThumbs`'s own code comment estimates - reverified directly against
+   `messages/index.html` (all three of its `#dm-thread-pane` fetch fallbacks: the plain-POST send
+   handler, `sendStagedShare`, and `sendStagedGroupShare`) and `pin_share_dialog.html`
+   (`_pinShareNewMap`'s `#pin-share-map-grid` refresh). No htmx event fires for a raw `innerHTML =`
+   assignment, so the delegated listener cannot reach whatever thumbnails the pane held before the
+   swap; `#dm-thread-pane` is shared between 1:1 and group threads, so even `sendStagedGroupShare` -
+   whose own new content never renders a thumbnail, since group message partials skip
+   `_map_view_preview.html` - can still discard a previous 1:1 thread's already-initialized ones.
+   `_expandCommentMap`'s own stale-cache check is the one path that already handles this gap, and only
+   for the dialog viewer map's own cache, using the same idempotent disposal helper. A leaked WebGL context (after the port lands) would have been
    a different order of problem than leaked Leaflet DOM, since Chrome caps a page at 16 contexts total
    - moot now that the underlying leak is closed regardless of which engine renders the map.
 9. **The CSP shift raster tiles need.** REData's own two internal maps, already converted
