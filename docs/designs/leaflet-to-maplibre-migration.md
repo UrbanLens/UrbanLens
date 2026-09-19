@@ -23,9 +23,15 @@ settles the question of what a self-hosted instance without a REData deployment 
 migration lands: no new third-party dependency, ever - the client constructs its own MapLibre style
 document, wrapping the same free raster vendors (`TILE_DEFS` in `map-layers.ts`) as a `"raster"` source
 for self-hosters and this app's own proxy for the hosted instance, upgrading a layer to a `style_url`-driven
-vector source only once REData actually serves one. Any item below that touches style construction
-(there is no dedicated item for it yet - it falls out of item 1's dependency pin and the general port
-work) should build to `D17`'s shape rather than always fetching a style URL.
+vector source only once REData actually serves one. `D17`'s style-construction shape is now code, not
+just decision text: `ts/shared/maplibre-raster-style.ts` (`buildRasterStyle`, `toMapLibreTileUrls`) turns
+a `TILE_DEFS`-shaped source into a minimal MapLibre style document, correcting a real incompatibility
+found while building it - MapLibre's TileJSON-based `tiles` array has no `{s}`/`{r}` token at all
+(verified against the actual `maplibre-gl@5.24.0` bundle's own tile-URL substitution logic), unlike
+Leaflet's template syntax every `TILE_DEFS` entry is written in, so `{s}` is expanded into one literal
+URL per subdomain and `{r}` is dropped. Not wired into any map yet - pure and tested (`maplibre-raster-style.test.ts`)
+against both synthetic URLs and this app's own real vendor URLs, including a live check that every
+expanded subdomain endpoint (CARTO's/OpenTopoMap's `a`/`b`/`c`) actually serves tiles.
 
 **No priority or sequencing decision is made here.** This is a description of the work's shape and size,
 for whoever decides when (or whether) to schedule it.
