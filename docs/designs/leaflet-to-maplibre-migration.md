@@ -290,8 +290,10 @@ REData-internal precedent cited for context. `D12`'s verdict: **native, not brid
 `maplibre-gl-leaflet` is Hosted-tier with no active maintainer, has "no rotation / bearing / pitch
 support" by its own README (the same gap item 6 above independently found blocking the floorplan rotate
 tool), throttles updates to ~31fps by construction, and two real migrations (OpenStreetMap, Home
-Assistant) both dropped it within weeks of shipping vector tiles. REData converts its two maps first, as
-the pilot; this repo's port follows, native from the start, no bridge stage of its own.
+Assistant) both dropped it within weeks of shipping vector tiles - all `D12`'s own findings, re-read from
+its text this session, not independently re-verified here against the bridge's own README/repo or either
+migration's actual history. REData converts its two maps first, as the pilot; this repo's port follows,
+native from the start, no bridge stage of its own.
 
 ## Not measured, and not decided
 
