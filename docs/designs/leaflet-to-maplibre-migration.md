@@ -149,6 +149,39 @@ already specific and file-accurate, not because it should be treated as this rep
 10. **A hand-rolled `IControl` replaces `L.control.layers`.** MapLibre has no built-in layer-toggle
     control equivalent; REData's own dashboard conversion is a working reference for the shape of one.
 
+## Where a first real conversion should start
+
+Not code yet - scoped here because the foundational pieces (vendor asset pin, WebGL2 detection,
+`buildRasterStyle`) now exist unwired and the next concrete step is choosing where they land first, not
+building more scaffolding in the abstract. There are 12 distinct `L.map()` call sites across the codebase
+(`comment-map.js` alone has three: composer, dialog viewer, thumbnail). `_renderMapThumb` in
+`comment-map.js` (the `.comment-map-thumb` preview, also reused by the DM composer's attach-preview chip)
+is the strongest pilot candidate, by a wide margin over every alternative checked:
+
+- **Zero interactivity to preserve.** Its own Leaflet options are `zoomControl: false, dragging: false,
+  scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false` - it is a static rendered view, not an
+  interactive map. A MapLibre swap here needs no gesture/control porting at all, unlike every other call
+  site.
+- **No layer-switcher UI, no draggable markers, no context menu.** Contrast `album-map.ts`
+  (`initAlbumMap`), the next-simplest-looking candidate: it wires `createMapLayers` (a base-layer switcher
+  control), draggable photo markers with position-save-on-drop, hover sync back to a DOM list, and a
+  context menu - each of those is its own porting problem (`IControl`, MapLibre's `Marker` drag API, event
+  wiring) this thumbnail path has none of.
+- **Small, already-hardened, already-understood blast radius.** Two commits this session
+  (`6b117c695` - the leak/dispose fix and htmx cleanup wiring; `504e145d4` - the throw-before-tag ordering
+  fix found on re-review) already put this exact function through adversarial review, so its behavior is
+  fresh and verified, not archaeology.
+- **Every foundational piece it would need already exists, unwired:** `buildRasterStyle`/
+  `toMapLibreTileUrls` (this document, above) for the source, `maplibregl_js`/`maplibregl_css` in
+  `vendor_assets.py` for the library itself, `supportsWebGL2` (`webgl-support.ts`) for the
+  fallback-to-Leaflet decision D17 requires.
+
+What a real (not scoped-only) first conversion batch still needs, none of which exists yet: the vendor
+asset actually referenced by a template (today it's pinned but consumed nowhere), the CSP `connect-src`
+change item 9 above already specifies, a `WebGL2 → MapLibre / no-WebGL2 → Leaflet` branch actually wired
+into `_renderMapThumb` (not just the pure detector function), and - per this repo's own testing
+convention - verification in a real browser, not just `bun test`, since this is a rendering change.
+
 ## What is explicitly out of scope here
 
 - **REData's two internal dashboard maps** (boundary map, Location Explorer) are already converted, on
