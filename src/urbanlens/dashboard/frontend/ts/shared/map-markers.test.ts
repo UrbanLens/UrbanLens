@@ -615,6 +615,17 @@ describe("MapLibre marker", () => {
         expect(clicks).toBe(0);
     });
 
+    test("gives up the old element when moved to another map", () => {
+        // Two live MapLibre markers for one pin, the older on a map nothing references any more.
+        const marker = createMaplibreMarker(AT, { icon: ICON });
+        marker.addTo(fakeMaplibreView() as unknown as MapView);
+        const first = maplibre.markers[0]!;
+        marker.addTo(fakeMaplibreView() as unknown as MapView);
+        expect(first.onMap).toBeNull();
+        expect(marker.getElement()).not.toBe(first.element);
+        expect(marker.isOnMap()).toBe(true);
+    });
+
     test("keeps a popup body bound before it was ever shown", () => {
         const { marker, view } = ENGINES[1]!.create({ icon: ICON });
         marker.bindPopup("<b>early</b>");

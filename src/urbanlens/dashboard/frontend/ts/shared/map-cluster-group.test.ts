@@ -130,6 +130,28 @@ describe("Leaflet cluster group", () => {
         expect(stub.events).toEqual(["animationend spiderfied unspiderfied layeradd"]);
     });
 
+    test("pulls a dragged marker out of the group and onto the map itself", () => {
+        const marker = fakeMarker({ lat: 1, lng: 1 });
+        let addedToMap = 0;
+        (marker as unknown as { addTo: () => void }).addTo = () => (addedToMap += 1);
+        group.addLayer(marker);
+        group.detach(marker);
+        expect(stub.layers).toEqual([]);
+        expect(addedToMap).toBe(1);
+    });
+
+    test("puts a dropped marker back into the group", () => {
+        const marker = fakeMarker({ lat: 1, lng: 1 });
+        let removedFromMap = 0;
+        (marker as unknown as { addTo: () => void; remove: () => void }).addTo = () => undefined;
+        (marker as unknown as { remove: () => void }).remove = () => (removedFromMap += 1);
+        group.addLayer(marker);
+        group.detach(marker);
+        group.reattach(marker);
+        expect(stub.layers).toEqual([marker.native]);
+        expect(removedFromMap).toBe(1);
+    });
+
     test("replays work queued before it was ever put on a map", () => {
         const late = createLeafletClusterGroup({});
         const marker = fakeMarker({ lat: 5, lng: 5 });
@@ -425,6 +447,83 @@ describe("MapLibre cluster group", () => {
         group.remove();
         expect(view.listenerCount()).toBe(0);
         expect(pin.isOnMap()).toBe(false);
+    });
+
+    test("keeps a detached marker drawn even where clustering would hide it", async () => {
+        // Dragging a pin out of a cluster must not let the next regroup take it off the map
+        // while the user is still holding it.
+        const group = createMaplibreClusterGroup();
+        const view = fakeView(2);
+        const near = [marker({ lat: 0, lng: 0 }), marker({ lat: 0.001, lng: 0.001 }), marker({ lat: 0.002, lng: 0.002 })];
+        group.addLayers(near);
+        group.addTo(view);
+        await settle();
+        expect(near[0]!.isOnMap()).toBe(false);
+
+        group.detach(near[0]!);
+        await settle();
+        expect(near[0]!.isOnMap()).toBe(true);
+        expect(badgeCounts(stub)).toEqual([2]);
+    });
+
+    test("re-clusters a marker once it is reattached", async () => {
+        const group = createMaplibreClusterGroup();
+        const view = fakeView(2);
+        const near = [marker({ lat: 0, lng: 0 }), marker({ lat: 0.001, lng: 0.001 }), marker({ lat: 0.002, lng: 0.002 })];
+        group.addLayers(near);
+        group.addTo(view);
+        await settle();
+        group.detach(near[0]!);
+        await settle();
+        group.reattach(near[0]!);
+        await settle();
+        expect(badgeCounts(stub)).toEqual([3]);
+        expect(near[0]!.isOnMap()).toBe(false);
+    });
+
+    test("clusters a reattached marker at wherever the drag left it", async () => {
+        const group = createMaplibreClusterGroup();
+        const view = fakeView(2);
+        const stayed = marker({ lat: 0, lng: 0 });
+        const dragged = marker({ lat: 0.001, lng: 0.001 });
+        group.addLayers([stayed, dragged]);
+        group.addTo(view);
+        await settle();
+        expect(badgeCounts(stub)).toEqual([2]);
+
+        group.detach(dragged);
+        dragged.setLatLng({ lat: 60, lng: 60 });
+        group.reattach(dragged);
+        await settle();
+        expect(badgeCounts(stub)).toEqual([]);
+        expect([stayed.isOnMap(), dragged.isOnMap()]).toEqual([true, true]);
+    });
+
+    test("ignores a detach for a marker it does not hold", async () => {
+        const group = createMaplibreClusterGroup();
+        const view = fakeView(2);
+        group.addTo(view);
+        await settle();
+        const stranger = marker({ lat: 0, lng: 0 });
+        group.detach(stranger);
+        await settle();
+        expect(stranger.isOnMap()).toBe(false);
+    });
+
+    test("restates a badge's count when its cluster loses a member", async () => {
+        // supercluster hands the same cluster_id to a different cluster after any reindex, so a
+        // badge reused by id has to re-read its count rather than keep the one it was built with.
+        const group = createMaplibreClusterGroup();
+        const view = fakeView(2);
+        const near = [marker({ lat: 0, lng: 0 }), marker({ lat: 0.001, lng: 0.001 }), marker({ lat: 0.002, lng: 0.002 })];
+        group.addLayers(near);
+        group.addTo(view);
+        await settle();
+        expect(badgeCounts(stub)).toEqual([3]);
+
+        group.removeLayer(near[2]!);
+        await settle();
+        expect(badgeCounts(stub)).toEqual([2]);
     });
 
     test("holds markers added before it was ever put on a map", () => {

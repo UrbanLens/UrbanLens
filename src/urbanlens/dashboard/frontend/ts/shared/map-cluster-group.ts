@@ -40,6 +40,13 @@ export interface MapClusterGroup {
     /** Every marker in the group, clustered or not - the pin counter reads its length. */
     getLayers(): MapMarker[];
     hasLayer(marker: MapMarker): boolean;
+    /**
+     * Keeps a marker drawn but out of clustering, for the length of a drag: it must stay under the
+     * cursor and must not be swept up by a regroup while the user is still holding it.
+     */
+    detach(marker: MapMarker): void;
+    /** Returns a detached marker to clustering, at wherever it now sits. */
+    reattach(marker: MapMarker): void;
     /** Fired whenever marker elements have been rebuilt and per-element state must be restamped. */
     on(event: "regroup", handler: () => void): void;
     remove(): void;
@@ -65,6 +72,7 @@ export function createLeafletClusterGroup(options: ClusterGroupOptions = {}, map
     /** Kept by façade so `getLayers` can answer in façade terms rather than Leaflet's. */
     const held = new Map<unknown, MapMarker>();
     const pending: (() => void)[] = [];
+    let attachedTo: MapView | null = null;
 
     function ready(run: (group: PinClusterGroup) => void): void {
         if (group) run(group);
@@ -74,6 +82,7 @@ export function createLeafletClusterGroup(options: ClusterGroupOptions = {}, map
     return {
         addTo: (view) => {
             const native = view.native as L.Map;
+            attachedTo = view;
             group ??= createPinClusterGroup(leafletClusterOptions(options), native);
             group.addTo(native);
             for (const run of pending.splice(0)) run();
@@ -100,6 +109,16 @@ export function createLeafletClusterGroup(options: ClusterGroupOptions = {}, map
         },
         getLayers: () => [...held.values()],
         hasLayer: (marker) => held.has(marker.native),
+        detach: (marker) =>
+            ready((live) => {
+                live.removeLayer(marker.native as L.Layer);
+                if (attachedTo) marker.addTo(attachedTo);
+            }),
+        reattach: (marker) =>
+            ready((live) => {
+                marker.remove();
+                live.addLayer(marker.native as L.Layer);
+            }),
         on: (_event, handler) => ready((live) => void live.on(LEAFLET_REGROUP_EVENTS, handler)),
         remove: () => {
             held.clear();

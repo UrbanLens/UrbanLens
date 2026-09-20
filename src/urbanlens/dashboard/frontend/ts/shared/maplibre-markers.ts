@@ -141,6 +141,20 @@ export function createMaplibreMarker(position: LatLng, options: MapMarkerOptions
         });
     }
 
+    function remove(): void {
+        for (const { type, handler } of attached) element?.removeEventListener(type, handler);
+        attached = [];
+        popup?.remove();
+        untrackPopup?.();
+        untrackPopup = null;
+        popup = null;
+        marker?.remove();
+        marker = null;
+        element = null;
+        map = null;
+        view = null;
+    }
+
     return {
         // A getter, not a field: there is no MapLibre marker to hand out until the pin is shown.
         get native(): unknown {
@@ -180,26 +194,16 @@ export function createMaplibreMarker(position: LatLng, options: MapMarkerOptions
             listeners.set(event, forEvent);
         },
         addTo: (target: MapView) => {
-            const maplibreView = asMaplibreView(target);
             const native = target.native as MaplibreMap;
             if (map === native) return;
-            view = maplibreView;
+            // Moving between maps has to give the old element and popup up first; leaving them
+            // behind orphans a live marker on a map nothing holds a reference to any more.
+            if (map !== null) remove();
+            view = asMaplibreView(target);
             map = native;
             materialise(native);
         },
-        remove: () => {
-            for (const { type, handler } of attached) element?.removeEventListener(type, handler);
-            attached = [];
-            popup?.remove();
-            untrackPopup?.();
-            untrackPopup = null;
-            popup = null;
-            marker?.remove();
-            marker = null;
-            element = null;
-            map = null;
-            view = null;
-        },
+        remove,
         isOnMap: () => map !== null,
     };
 }

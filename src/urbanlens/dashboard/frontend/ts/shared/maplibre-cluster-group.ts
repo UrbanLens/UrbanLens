@@ -24,7 +24,7 @@ import Supercluster from "supercluster";
 import { pinClusterIconParts } from "./map-clusters";
 import type { ClusterGroupOptions, MapClusterGroup } from "./map-cluster-group";
 import type { MapMarker } from "./map-markers";
-import type { MapView } from "./map-view";
+import type { LatLng, MapView } from "./map-view";
 
 import type { Marker as MaplibreMarker } from "maplibre-gl";
 
@@ -50,7 +50,9 @@ export function createMaplibreClusterGroup(options: ClusterGroupOptions = {}): M
     let indexed: MapMarker[] = [];
 
     const shown = new Set<MapMarker>();
-    const badges = new Map<number, MaplibreMarker>();
+    /** Drawn, but out of clustering - a marker the user is currently dragging. */
+    const detached = new Set<MapMarker>();
+    const badges = new Map<number, Badge>();
     let scheduled = false;
 
     function radiusAt(zoom: number): number {
@@ -58,7 +60,7 @@ export function createMaplibreClusterGroup(options: ClusterGroupOptions = {}): M
     }
 
     function reindex(radius: number): void {
-        indexed = [...held];
+        indexed = [...held].filter((marker) => !detached.has(marker));
         index = new Supercluster<PointProps>({ radius, maxZoom: CLUSTER_MAX_ZOOM, minPoints: 2 });
         index.load(
             indexed.map((marker, at) => {
@@ -69,24 +71,44 @@ export function createMaplibreClusterGroup(options: ClusterGroupOptions = {}): M
         indexedRadius = radius;
     }
 
-    function badgeFor(count: number, onClick: () => void): MaplibreMarker {
+    function drawBadge(element: HTMLElement, count: number): void {
         const { html, size } = pinClusterIconParts(count);
-        const element = document.createElement("div");
         element.innerHTML = html;
         element.style.width = `${size}px`;
         element.style.height = `${size}px`;
+    }
+
+    /**
+     * A badge kept across passes, with the count and centre it currently stands for.
+     *
+     * supercluster derives `cluster_id` from a point's position in the tree it built, so the same
+     * id means a different cluster after any reindex. Both are therefore re-read on reuse rather
+     * than captured once - a badge that kept its first count would go on claiming it.
+     */
+    interface Badge {
+        marker: MaplibreMarker;
+        element: HTMLElement;
+        count: number;
+        at: LatLng;
+    }
+
+    function badgeFor(id: number, count: number, at: LatLng): Badge {
+        const element = document.createElement("div");
         element.style.cursor = "pointer";
+        drawBadge(element, count);
+        const badge: Badge = { marker: new maplibregl.Marker({ element, anchor: "center" }), element, count, at };
         element.addEventListener("click", (event) => {
             event.stopPropagation();
-            onClick();
+            if (!view || !index) return;
+            view.setView(badge.at, Math.min(index.getClusterExpansionZoom(id), view.getMaxZoom()));
         });
-        return new maplibregl.Marker({ element, anchor: "center" });
+        return badge;
     }
 
     function clearBadges(keep: Set<number>): void {
         for (const [id, badge] of badges) {
             if (keep.has(id)) continue;
-            badge.remove();
+            badge.marker.remove();
             badges.delete(id);
         }
     }
@@ -95,28 +117,34 @@ export function createMaplibreClusterGroup(options: ClusterGroupOptions = {}): M
         if (!view) return;
         const zoom = view.getZoom();
         const radius = radiusAt(zoom);
-        // A membership change invalidates the index as surely as a radius change does.
-        if (!index || indexedRadius !== radius || indexed.length !== held.size) reindex(radius);
+        // Membership changes null the index outright, so only the radius has to be re-checked here.
+        if (!index || indexedRadius !== radius) reindex(radius);
         const bounds = view.getBounds();
         const found = index!.getClusters([bounds.west, bounds.south, bounds.east, bounds.north], Math.floor(zoom));
 
-        const wanted = new Set<MapMarker>();
+        // A marker being dragged stays drawn wherever the viewport now sits - letting a regroup
+        // take it off the map would pull it out from under the cursor mid-drag.
+        const wanted = new Set<MapMarker>(detached);
         const keptBadges = new Set<number>();
         for (const feature of found) {
             const [lng, lat] = feature.geometry.coordinates as [number, number];
             const properties = feature.properties as { cluster?: boolean; cluster_id?: number; point_count?: number; at?: number };
             if (properties.cluster) {
                 const id = properties.cluster_id!;
+                const count = properties.point_count ?? 0;
                 keptBadges.add(id);
-                if (badges.has(id)) {
-                    badges.get(id)!.setLngLat([lng, lat]);
+                const existing = badges.get(id);
+                if (existing) {
+                    existing.at = { lat, lng };
+                    existing.marker.setLngLat([lng, lat]);
+                    if (existing.count !== count) {
+                        existing.count = count;
+                        drawBadge(existing.element, count);
+                    }
                     continue;
                 }
-                const badge = badgeFor(properties.point_count ?? 0, () => {
-                    const expansion = index!.getClusterExpansionZoom(id);
-                    view!.setView({ lat, lng }, Math.min(expansion, view!.getMaxZoom()));
-                });
-                badge.setLngLat([lng, lat]).addTo(view.native as import("maplibre-gl").Map);
+                const badge = badgeFor(id, count, { lat, lng });
+                badge.marker.setLngLat([lng, lat]).addTo(view.native as import("maplibre-gl").Map);
                 badges.set(id, badge);
                 continue;
             }
@@ -164,6 +192,7 @@ export function createMaplibreClusterGroup(options: ClusterGroupOptions = {}): M
         },
         removeLayer: (marker) => {
             held.delete(marker);
+            detached.delete(marker);
             if (shown.delete(marker)) marker.remove();
             index = null;
             schedule();
@@ -176,6 +205,7 @@ export function createMaplibreClusterGroup(options: ClusterGroupOptions = {}): M
         removeLayers: (markers) => {
             for (const marker of markers) {
                 held.delete(marker);
+                detached.delete(marker);
                 if (shown.delete(marker)) marker.remove();
             }
             index = null;
@@ -184,12 +214,28 @@ export function createMaplibreClusterGroup(options: ClusterGroupOptions = {}): M
         clearLayers: () => {
             for (const marker of shown) marker.remove();
             shown.clear();
+            detached.clear();
             held.clear();
             index = null;
             schedule();
         },
         getLayers: () => [...held],
         hasLayer: (marker) => held.has(marker),
+        detach: (marker) => {
+            if (!held.has(marker)) return;
+            detached.add(marker);
+            if (view && !shown.has(marker)) {
+                marker.addTo(view);
+                shown.add(marker);
+            }
+            index = null;
+            schedule();
+        },
+        reattach: (marker) => {
+            if (!detached.delete(marker)) return;
+            index = null;
+            schedule();
+        },
         on: (_event, handler) => void regroupListeners.push(handler),
         remove: () => {
             if (view) {
@@ -198,6 +244,7 @@ export function createMaplibreClusterGroup(options: ClusterGroupOptions = {}): M
             }
             for (const marker of shown) marker.remove();
             shown.clear();
+            detached.clear();
             clearBadges(new Set());
             held.clear();
             index = null;
