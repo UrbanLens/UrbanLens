@@ -2908,9 +2908,9 @@ Not recommended: relying on staging's limits alone. Lower limits bound what stag
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
 
-## P125 — The population capacity harness collapses on the app container's CPU - at 200 concurrent users once the map's tiles are in the model, 250 without them; production's 4-core override is still undeployed and unmeasured
+## P125 — The population capacity harness collapses on the app container's CPU - 175 concurrent users on 2 cores once the map's tiles are in the model, 350 on 4 cores behind 24 request threads, where Postgres' own 2-core limit becomes the wall
 
-`id: P125` · `status: open` · `updated: 2026-09-19`
+`id: P125` · `status: open` · `updated: 2026-09-20`
 
 **This is a different axis from P113 and P123.** Those are the "neighbour" question - does one
 account's action cost a *different* account anything at all (D11, `tests/perf/k6/neighbour.js`).
@@ -3110,7 +3110,59 @@ container's CPU allocation, and now also how unevenly a map load arrives at it.
   cache than this.
 - **`search_panel` is over its 500 ms fragment budget at every level measured, tiles or no tiles**
   (589-745 ms), including at 125 users where nothing else is close. That is an endpoint to fix, not a
-  capacity ceiling - 34.9 queries and 997 mean rows, worst case 67 queries.
+  capacity ceiling - 34.9 queries and 997 mean rows, worst case 67 queries (`P132`).
+
+### 2026-09-20: 4 cores, then a query per tile, then enough threads to use them - 175 to 350
+
+Four changes, each measured on its own against the run before it, same host, same population, same
+seeded grid, tiles drawn throughout. The point of doing them one at a time is that three of the four
+would have been credited to the first.
+
+| users | 2 cores, 12 threads | 4 cores, 12 threads | + deferred write actor | + 24 threads (`WEB_CONCURRENCY=6`) |
+|---:|---:|---:|---:|---:|
+| 175 | 372 ms | - | - | - |
+| 200 | **2,485 ms** | - | - | - |
+| 250 | **4,450 ms** | **2,132 ms** | **1,034 ms** | 391 ms |
+| 350 | - | - | **2,724 ms** | 395 ms |
+
+(Page p95, against D15's 1,000 ms budget. Bold is over it.)
+
+**Cores were necessary and nowhere near sufficient.** The 2-core container was throttled 16.6% at
+u200 and 78.3% at u1000; at 4 cores throttling falls under 1% at every level. It bought u250 from
+4,450 ms to 2,132 ms - still over budget, and now for a different reason: `pg_stat_activity` showed
+14 web backends, which is every one of the 12 request threads busy plus the pool's own. The
+allocation was no longer what the app was waiting on; the number of threads allowed to use it was.
+
+**A tile stopped costing a profile row.** `WriteSourceMiddleware` bound the signed-in profile for
+every request, so each tile paid a `dashboard_profiles` query to name a writer it was never going to
+have. Resolving that lazily (`current_write_actor`, commit `880c73077`) took a 30-tile viewport from
+60 queries to 30 and a tile's SQL from 4.04 ms to 2.48 ms - and page p95 at u250 from 2,132 ms to
+1,034 ms, which is more than the query itself costs, because it is 24 fewer round trips arriving in
+the same instant. DB throttling at u500 fell from 22.68% to 13.60% in the same step.
+
+**Then the threads.** `WEB_CONCURRENCY=6` (24 threads, gunicorn's 4 per worker) took u250 to 391 ms
+and u350 to 395 ms - the first configuration in this entry that meets D15 at 350 concurrent users
+with tiles drawn. Tile p95 is 27-32 ms. Cost: 26 Postgres backends and 1,618 MB resident against the
+2 GB shared default, which is why `production.sample.env` now also raises `MEM_LIMIT__APP`.
+
+**The wall moved to the database.** At 24 threads `ul_perf_db` is throttled 23.79% at u500, 84.78%
+at u750 and 95.53% at u1000, against its own `CPU_LIMIT__DB` of 2 cores. Everything above u350 is now
+a Postgres allocation question, not an app one - the opposite of where this entry started.
+
+### What this does not establish
+
+- **u500 is marginal and u750+ is contaminated.** The measuring host was saturated at those levels
+  (idle 2-14%, load average 19-22) with the load generator beside the target, so those rows say the
+  database is throttled, not by how much. They need a run with a separate generator before any number
+  from them is quoted.
+- **Production still has none of this.** `CPU_LIMIT__APP=4`, `WEB_CONCURRENCY=6` and
+  `MEM_LIMIT__APP=3g` are in `production.sample.env` and deployed to the perf environment only.
+  Production's app container is still uncapped (`NanoCpus: 0`) and on the default 3 workers.
+- **The database's 2-core limit was not raised and not tested.** It is the identified next lever,
+  untried.
+- **A tile still costs one query** - `auth_user`, from `LoginRequiredMixin`. Removing it is a
+  decision about how tiles are authorised rather than an optimisation, and the measured delta above
+  suggests it is worth roughly 1.5 ms of a tile's ~4 ms.
 
 ## P132 — A global search costs ~35 queries and is over its latency budget at every concurrency measured
 
