@@ -467,3 +467,31 @@ def check_every_task_declares_a_queue(app_configs: Sequence[AppConfig] | None = 
             id="dashboard.E010",
         ),
     ]
+
+
+@register()
+def check_a_channel_layer_is_configured(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Warn when no channel layer is configured, which turns off every WebSocket.
+
+    Args:
+        app_configs: Unused; part of Django's check signature.
+        **kwargs: Unused; part of Django's check signature.
+
+    Returns:
+        One warning, or an empty list.
+    """
+    if getattr(settings, "CHANNEL_LAYERS", None):
+        return []
+
+    return [
+        CheckWarning(
+            "No CHANNEL_LAYERS is configured, so every WebSocket connection is refused (close code 4503).",
+            hint=(
+                "settings/base.py defines one only when UL_DRAGONFLY_URL (or UL_VALKEY_URL/UL_REDIS_URL) is set, so a "
+                "deployment without that store has nowhere to carry a broadcast: live notifications, direct messages, "
+                "safety check-in chat and the game sessions all fall back to polling or stop working. Point the store "
+                "variable at a reachable Dragonfly/Redis, or accept that this deployment has no live features."
+            ),
+            id="dashboard.W004",
+        ),
+    ]

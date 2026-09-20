@@ -48,10 +48,11 @@ VIEWPORT_TILES = 30
 #: A 256px basemap tile, near the top of the usual range.
 TILE_BYTES = 12_000
 
-#: Queries one cached tile may cost. Both are the middleware chain's, not this view's: Django's own
-#: auth loads ``auth_user``, and ``WriteSourceMiddleware`` loads ``dashboard_profiles`` to name the
-#: writer of writes this request will never make. Lower is better - tighten this when that changes.
-MAX_QUERIES_PER_CACHED_TILE = 2
+#: Queries one cached tile may cost. The one left is the middleware chain's, not this view's:
+#: Django's own auth loads ``auth_user`` to decide whether the viewer is signed in. Getting below it
+#: means answering a tile without loading the viewer's row at all, which is a decision about how
+#: tiles are authorised rather than an optimisation. Lower is better - tighten this when it changes.
+MAX_QUERIES_PER_CACHED_TILE = 1
 
 #: Bytes of response headers one tile may carry. A tile body is ~12kB, so a page's worth of
 #: document-level headers on it is real bandwidth spent ~30 times per map. Security headers that do

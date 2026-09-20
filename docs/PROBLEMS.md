@@ -3112,6 +3112,46 @@ container's CPU allocation, and now also how unevenly a map load arrives at it.
   (589-745 ms), including at 125 users where nothing else is close. That is an endpoint to fix, not a
   capacity ceiling - 34.9 queries and 997 mean rows, worst case 67 queries.
 
+## P132 — A global search costs ~35 queries and is over its latency budget at every concurrency measured
+
+`id: P132` · `status: open` · `updated: 2026-09-19`
+
+Measured by the capacity harness (P125), not by a synthetic benchmark: `search.panel` is the only
+endpoint over its D15 budget at *every* level the ladder ran, including 125 concurrent users where
+nothing else is close, and including the runs with the map's tiles switched off. It is therefore an
+endpoint cost rather than a symptom of the app tier being saturated.
+
+| what | measured |
+|---|---|
+| queries per request | **34.9 mean, 67 worst** |
+| rows fetched per request | 997 mean |
+| time in SQL | 264.9 ms mean |
+| wall, p50 | 206 ms |
+| wall, p95 at 100-175 concurrent users | 625-745 ms (budget: 500 ms) |
+| share of all app CPU during the 1,000-user run | 6.2%, on 1,014 requests |
+
+**Where the queries come from, structurally.** `GlobalSearchEngine.search` fans one query out to
+ten providers - pins, photos, wikis, articles, trips, visits, direct messages, markup maps, safety,
+comments (`services/global_search/providers.py:1278`) - each of which runs its own lookup, and most
+of which also pay their own access check. A query that finds nothing and `has_structure` runs the
+whole chain a **second** time as the plain-text fallback (`engine.py:105-124`), which is the most
+likely source of the 67-query worst case. Nothing here is obviously an N+1 over results; it is a
+fan-out over domains, so the fix is likely to be about how many providers a query actually needs to
+ask rather than about a `select_related` somewhere.
+
+**Not started, deliberately.** Jess's call on 2026-09-20: fix the app tier's capacity first, then
+take this as its own batch. Filed so the measurement is not lost, and so the next capacity run does
+not rediscover it as a mystery.
+
+### What this does not establish
+
+- **Which provider is expensive.** The 34.9 is an average over the whole chain; nothing here
+  attributes it per provider, and the obvious next step is to do that before changing anything.
+- **Whether the fallback re-run is the worst case.** It is the leading hypothesis for 67 queries,
+  from reading the engine, not from a measurement that caught one.
+- **What a user-visible fix would be.** Fewer providers per query changes what a search finds, which
+  is a product decision, not only a performance one.
+
 ## P128 — The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is
 
 `id: P128` · `status: open` · `updated: 2026-09-17`
