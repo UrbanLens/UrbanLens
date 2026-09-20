@@ -18,7 +18,36 @@
  *    with `addSprite`/`setGlyphs` and unwound on removal.
  */
 
+import { Protocol } from "pmtiles";
+
 import type { LayerSpecification, SourceSpecification, StyleSpecification } from "maplibre-gl";
+
+// Loaded via a CDN <script> tag on map pages, like Leaflet - see `maplibre-layers.ts`.
+declare const maplibregl: typeof import("maplibre-gl");
+
+/**
+ * The scheme a style uses to name a whole tile archive rather than a tile endpoint.
+ *
+ * This deployment's own styles do: `pmtiles://https://.../planet-current.pmtiles`, one file read
+ * by HTTP range request rather than a tile server. MapLibre does not understand the scheme, so
+ * without the handler below a style naming one fails at load with no tiles and no useful error.
+ */
+const PMTILES_SCHEME = "pmtiles://";
+
+/** Which `maplibregl` the handler was registered on, so there is no stale latch to reset. */
+let pmtilesRegisteredOn: unknown = null;
+
+/** Registers the PMTiles protocol handler if this style needs it and it is not already on. */
+function ensurePmtilesProtocol(sources: Record<string, SourceSpecification>): void {
+    if (typeof maplibregl === "undefined" || pmtilesRegisteredOn === maplibregl) return;
+    const needed = Object.values(sources).some((source) => {
+        const { url, tiles } = source as { url?: string; tiles?: string[] };
+        return url?.startsWith(PMTILES_SCHEME) || tiles?.some((tile) => tile.startsWith(PMTILES_SCHEME));
+    });
+    if (!needed) return;
+    pmtilesRegisteredOn = maplibregl;
+    maplibregl.addProtocol("pmtiles", new Protocol().tile);
+}
 
 /** One entry of a style's `sprite`, in the array form; a plain string style is normalised into this. */
 export interface VectorStyleSprite {
@@ -135,6 +164,7 @@ export function namespaceVectorStyle(prefix: string, doc: StyleSpecification, st
         layers.push(renamed);
     }
 
+    ensurePmtilesProtocol(sources);
     return { sources, layers, sprites: normaliseSprites(doc.sprite, styleUrl), glyphs: doc.glyphs ? resolveStyleUrl(doc.glyphs, styleUrl) : null };
 }
 

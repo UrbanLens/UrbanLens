@@ -582,11 +582,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "Origin serving this deployment's self-hosted vector basemap - the style documents, "
             "their glyphs and sprites, and the PMTiles archives they name. Admitted to CSP's "
             "connect-src, and nothing else: it is not where tiles are fetched "
-            "from by this server, it is where the *browser* is allowed to fetch them from. Unset "
-            "on every deployment whose REData offers only raster layers (all of them, as of "
-            "2026-09-19), because a raster layer is proxied same-origin and needs no exception. "
-            "Set it to the origin in REData's published style_url - currently would be "
-            "https://tiles.urbanlens.org - once that archive is actually served."
+            "from by this server, it is where the *browser* is allowed to fetch them from. A "
+            "raster layer is proxied same-origin and needs no exception, so a deployment whose "
+            "REData offers only raster layers can leave this unset. "
+            "Set it to the origin in REData's published style_url. For the hosted instance that "
+            "is https://tiles.urbanlens.org, which serves the style documents, the glyphs and "
+            "sprites they name, and the Protomaps planet archive behind them - measured "
+            "2026-09-20: styles/street.json, styles/dark.json and styles/terrain.json all answer "
+            "anonymously, with access-control-allow-origin: * and Content-Range exposed for the "
+            "archive's range reads. Without this the browser is refused all four."
         ),
     )
     basemap_tile_upstream_concurrency: int = Field(

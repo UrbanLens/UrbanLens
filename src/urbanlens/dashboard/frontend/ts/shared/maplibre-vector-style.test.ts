@@ -208,6 +208,85 @@ describe("namespaceVectorStyle", () => {
     });
 });
 
+describe("pmtiles sources", () => {
+    interface ProtocolStub {
+        addProtocol: (scheme: string, handler: unknown) => void;
+        registered: string[];
+    }
+
+    /** A fresh stand-in per test, so the module's "already registered on this maplibregl" latch resets with it. */
+    function stubMaplibre(): ProtocolStub {
+        const stub: ProtocolStub = { registered: [], addProtocol: (scheme) => stub.registered.push(scheme) };
+        (globalThis as { maplibregl?: unknown }).maplibregl = stub;
+        return stub;
+    }
+
+    afterEach(() => {
+        delete (globalThis as { maplibregl?: unknown }).maplibregl;
+    });
+
+    test("registers the protocol for a style whose source names a PMTiles archive", () => {
+        const stub = stubMaplibre();
+        // The shape this deployment's own street.json actually uses.
+        const doc = styleDocument({
+            sources: { protomaps: { type: "vector", url: "pmtiles://https://tiles.example/pmtiles/planet.pmtiles" } },
+        } as Partial<StyleSpecification>);
+
+        namespaceVectorStyle("ul-vec-", doc, STYLE_URL);
+
+        expect(stub.registered).toEqual(["pmtiles"]);
+    });
+
+    test("registers it for the tiles-array form too", () => {
+        const stub = stubMaplibre();
+        const doc = styleDocument({
+            sources: { p: { type: "vector", tiles: ["pmtiles://https://tiles.example/a.pmtiles/{z}/{x}/{y}"] } },
+        } as Partial<StyleSpecification>);
+
+        namespaceVectorStyle("ul-vec-", doc, STYLE_URL);
+
+        expect(stub.registered).toEqual(["pmtiles"]);
+    });
+
+    test("registers it once, not once per style", () => {
+        const stub = stubMaplibre();
+        const doc = styleDocument({
+            sources: { p: { type: "vector", url: "pmtiles://https://tiles.example/a.pmtiles" } },
+        } as Partial<StyleSpecification>);
+
+        namespaceVectorStyle("ul-vec-", doc, STYLE_URL);
+        namespaceVectorStyle("ul-vec2-", doc, STYLE_URL);
+
+        expect(stub.registered).toEqual(["pmtiles"]);
+    });
+
+    test("leaves the protocol unregistered for a style that names no archive", () => {
+        const stub = stubMaplibre();
+
+        namespaceVectorStyle("ul-vec-", styleDocument(), STYLE_URL);
+
+        expect(stub.registered).toEqual([]);
+    });
+
+    test("leaves a pmtiles:// URL unresolved - it is a scheme, not a relative path", () => {
+        const doc = styleDocument({
+            sources: { p: { type: "vector", url: "pmtiles://https://tiles.example/a.pmtiles" } },
+        } as Partial<StyleSpecification>);
+
+        const style = namespaceVectorStyle("ul-vec-", doc, STYLE_URL);
+
+        expect((style.sources["ul-vec-p"] as { url: string }).url).toBe("pmtiles://https://tiles.example/a.pmtiles");
+    });
+
+    test("does not reach for a maplibregl that is not on the page", () => {
+        const doc = styleDocument({
+            sources: { p: { type: "vector", url: "pmtiles://https://tiles.example/a.pmtiles" } },
+        } as Partial<StyleSpecification>);
+
+        expect(() => namespaceVectorStyle("ul-vec-", doc, STYLE_URL)).not.toThrow();
+    });
+});
+
 describe("fetchVectorStyle", () => {
     afterEach(() => {
         globalThis.fetch = realFetch;
