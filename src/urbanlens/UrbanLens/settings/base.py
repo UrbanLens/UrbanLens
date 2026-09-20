@@ -9,7 +9,7 @@ from celery.schedules import crontab
 from django.core.management.utils import get_random_secret_key
 from dotenv import find_dotenv, load_dotenv
 
-from urbanlens.UrbanLens.settings._env import is_production_environment
+from urbanlens.UrbanLens.settings._env import is_production_environment, persistent_connection_seconds
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -211,7 +211,7 @@ DATABASES = {
         "HOST": os.getenv("UL_DB_HOST", "localhost"),
         "PORT": os.getenv("UL_DB_PORT", "5432"),
         # Persistent connections for deployments reaching the DB over high-latency links.
-        "CONN_MAX_AGE": int(os.getenv("UL_DB_CONN_MAX_AGE", "0")),
+        "CONN_MAX_AGE": persistent_connection_seconds(),
         "CONN_HEALTH_CHECKS": os.getenv("UL_DB_CONN_HEALTH_CHECKS", "").lower() in {"1", "true", "yes"},
         # Fail fast on unreachable DB so a request errors instead of holding a worker.
         "OPTIONS": {
