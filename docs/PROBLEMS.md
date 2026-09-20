@@ -2908,7 +2908,7 @@ Not recommended: relying on staging's limits alone. Lower limits bound what stag
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
 
-## P125 — The population capacity harness collapses on the app container's CPU - 175 concurrent users on 2 cores once the map's tiles are in the model, 350 on 4 cores behind 24 request threads, where Postgres' own 2-core limit becomes the wall
+## P125 — The population capacity harness collapses on the app container's CPU - 175 concurrent users on 2 cores once the map's tiles are in the model; 350 passes on 4 cores, 24 request threads and a tile that costs no query, and 500 fails on Postgres' own 2-core limit
 
 `id: P125` · `status: open` · `updated: 2026-09-20`
 
@@ -3162,7 +3162,69 @@ a Postgres allocation question, not an app one - the opposite of where this entr
   untried.
 - **A tile still costs one query** - `auth_user`, from `LoginRequiredMixin`. Removing it is a
   decision about how tiles are authorised rather than an optimisation, and the measured delta above
-  suggests it is worth roughly 1.5 ms of a tile's ~4 ms.
+  suggests it is worth roughly 1.5 ms of a tile's ~4 ms. *(Done, 2026-09-20 - see below.)*
+
+### 2026-09-20: a tile stopped asking who was asking, and the wall is now unambiguously the database
+
+Two things loaded the viewer's row on every tile, so removing either alone would have measured
+nothing: `LoginRequiredMixin`, and `WriteSourceMiddleware` asking whether there was a user to
+attribute writes to. The middleware now defers the whole decision rather than only the actor, and
+the tile view gates on the session plus a remembered verification
+(`services/map/tile_authorisation.py`, `TILE_AUTH_TTL` 30 minutes).
+
+Two runs 2.5 hours apart, same host, same 1,000-account manifest, same levels, nothing else
+between them:
+
+| per tile, whole run | before | after |
+|---|---:|---:|
+| share of app CPU | 8.3% | 5.6% |
+| mean CPU | 3.1 ms | 2.2 ms |
+| mean SQL | 0.8 ms | 0.1 ms |
+| mean queries | 1.0 | 0.1 |
+| p95 wall | 19 ms | 15 ms |
+
+Mean queries of 0.1 rather than 0 is the shape the change was for: a session establishes its tile
+access once and spends it for the rest of the viewport. The unit budget measures the same thing at
+the other end - a cached tile went from 1 query to 0, and a warm 30-tile viewport from 30 to 1.
+
+**What it bought was headroom, not latency** - tile p95 was already 27-32 ms and stayed there. At
+the same concurrency the same VUs simply got through more:
+
+| level | page views before | after | tiles before | after | app cores (mean) | throttled |
+|---|---:|---:|---:|---:|---|---|
+| u250 | 1,063 | 1,445 | 3,817 | 4,636 | 1.06 -> 1.01 | 0.22% -> 0.38% |
+| u350 | 1,482 | 1,909 | 3,258 | 3,872 | 1.32 -> 1.18 | 1.48% -> 0.50% |
+
+29% more page views at u350 on *less* app CPU and a third of the throttling. `map_view` p95 fell
+167 -> 145 ms and `map_document` p95 494 -> 251 ms. Everything meets D15 at both levels except
+`search_panel` (`P132`).
+
+**u500, measured on its own** so nothing above it saturates the measuring host - which is what
+contaminated the earlier ladder:
+
+| | mean cores | limit | throttled |
+|---|---:|---:|---:|
+| `ul_perf_app` | 1.89 | 4 | 3.25% |
+| `ul_perf_db` | 1.15 | 2 | **32.21%** |
+
+It fails - `map_view` p95 1,622 ms, `basemap_tile` p95 1,144 ms - with nothing erroring (0.00%
+requests failed, 100% socket handshakes) and the app container under half its allocation. The tile
+itself holds up under that load at 0.1 queries and 2.1 ms CPU, so the queueing is not coming from
+it. **The ceiling is between 350 and 500 concurrent users, and the binding resource is Postgres'
+own `CPU_LIMIT__DB` of 2 cores.** Raising it is the next lever and has still not been tried.
+
+### What this does not establish
+
+- **`CPU_LIMIT__DB` was not raised and not tested.** Everything above says the database is the
+  wall; nothing above says what happens when it is given more.
+- **Nothing between 350 and 500 was measured**, so "the ceiling is between them" is exactly as
+  precise as it sounds.
+- **Production has none of this.** The three app-tier values live in `production.sample.env` and
+  are deployed to the perf environment only.
+- **The 30-minute window is a real trade.** A revocation that leaves the session record intact - an
+  admin disabling an account, a password change invalidating other sessions - keeps drawing tiles,
+  and nothing else, until the entry expires. Signing out, a flush or an expiry revokes immediately,
+  because the gate re-reads the session every time.
 
 ## P132 — A global search costs ~35 queries and is over its latency budget at every concurrency measured
 
