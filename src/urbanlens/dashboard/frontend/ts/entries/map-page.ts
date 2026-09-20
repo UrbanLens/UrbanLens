@@ -1050,7 +1050,7 @@ async function _refreshAllPins(): Promise<void> {
             }
         }
 
-        if (batch.length) (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(batch);
+        if (batch.length) clusterGroup.addLayers(batch);
         // Every pin has now been compared against them, so a label edit does
         // not go on rebuilding its markers on every later refresh.
         _changedLabelIds.clear();
@@ -1888,7 +1888,7 @@ async function _fetchTiles(tileKeys: string[]): Promise<number> {
             }
         }
         if (batch.length) {
-            (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(batch);
+            clusterGroup.addLayers(batch);
             updatePinCounter();
             _scheduleCache();
         }
@@ -2090,7 +2090,7 @@ function _exitFilterMode(): void {
             layers.push(m);
         }
     }
-    if (layers.length) (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(layers);
+    if (layers.length) clusterGroup.addLayers(layers);
     updatePinCounter();
     if (_childPinsActive) _loadChildPins();
 }
@@ -2129,7 +2129,7 @@ window._exitFilterMode = _exitFilterMode;
             }
         }
         if (cache.tiles) cache.tiles.forEach((k) => _fetchedTiles.add(k));
-        if (layers.length) (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(layers);
+        if (layers.length) clusterGroup.addLayers(layers);
         // Every marker was just built against this dictionary, so nothing in
         // it is outstanding. Without this the first merge - which sees every
         // entry as new - would make the next refresh rebuild all of them.
@@ -2261,7 +2261,7 @@ function _loadChildPins(): Promise<void> {
     _setFetching(true, "Loading child pins...");
     _childPinsFetchPromise = _fetchJson<{ pins?: PinData[] }>(url, { headers: { "X-Requested-With": "XMLHttpRequest" } }, 30000)
         .then(function (data) {
-            if (_childMarkerMap.size) (clusterGroup as unknown as { removeLayers: (layers: L.Marker[]) => void }).removeLayers(Array.from(_childMarkerMap.values()));
+            if (_childMarkerMap.size) clusterGroup.removeLayers(Array.from(_childMarkerMap.values()));
             _childPinStore.clear();
             _childMarkerMap.clear();
             const newMarkers: L.Marker[] = [];
@@ -2273,7 +2273,7 @@ function _loadChildPins(): Promise<void> {
                     newMarkers.push(m);
                 }
             });
-            if (newMarkers.length) (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(newMarkers);
+            if (newMarkers.length) clusterGroup.addLayers(newMarkers);
         })
         .catch(function (err) {
             console.warn("[UL] Could not load child pins:", err);
@@ -2290,7 +2290,7 @@ function setChildPinsActive(on: boolean): Promise<void> {
     if (on) {
         return _loadChildPins();
     }
-    if (_childMarkerMap.size) (clusterGroup as unknown as { removeLayers: (layers: L.Marker[]) => void }).removeLayers(Array.from(_childMarkerMap.values()));
+    if (_childMarkerMap.size) clusterGroup.removeLayers(Array.from(_childMarkerMap.values()));
     _childPinStore.clear();
     _childMarkerMap.clear();
     return Promise.resolve();
