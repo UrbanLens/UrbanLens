@@ -35,10 +35,12 @@ export const VIEWPORT_TILES = 24;
  * The layer a capacity run draws, and the zoom it draws it at. Both have to match whatever seeded
  * the cache.
  *
- * Not `street`: REData publishes that as vector (`D11`), and answers a tile-by-tile request for a
- * vector layer with 400 `vector_layer_not_served` - so the proxy has no bytes to serve and a run
- * dies at pre-flight. `terrain` is raster, PNG like street was, and goes through the identical view
- * and cache, which is what this measures. Override with `UL_CAP_TILE_LAYER` if that changes too.
+ * Not `street`: REData publishes that as vector (`D11`) and answers a tile-by-tile request for it
+ * with 400 `vector_layer_not_served`, so nothing can fill that cache key from upstream any more. A
+ * seeded run would not notice - `seed_basemap_tile_cache` writes placeholder bytes straight into
+ * the cache, which is the point, so the layer is only a cache key there - but an unseeded or
+ * expired one would measure 404s. `terrain` is still raster and goes through the identical view.
+ * Override with `UL_CAP_TILE_LAYER`.
  */
 // `__ENV` is k6's, and this module is also imported by the unit tests, which run under bun.
 export const TILE_LAYER = (typeof __ENV === "undefined" ? "" : __ENV.UL_CAP_TILE_LAYER) || "terrain";
