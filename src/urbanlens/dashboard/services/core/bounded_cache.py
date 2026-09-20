@@ -53,6 +53,23 @@ def get_or_none(key: str, *, label: str) -> Any | None:
         return None
 
 
+def get_many_or_empty(keys: list[str], *, label: str) -> dict[str, Any]:
+    """Read several keys at once, treating a cache that cannot answer as all-missing.
+
+    Args:
+        keys: Cache keys.
+        label: What is being read, for the log line when the cache is down.
+
+    Returns:
+        The entries that were present, or an empty mapping when the cache is unreachable.
+    """
+    try:
+        return cache.get_many(keys)
+    except _CACHE_ERRORS:
+        logger.warning("%s could not be read from the cache", label, exc_info=True)
+        return {}
+
+
 def set_or_skip(key: str, value: Any, timeout: int, *, label: str) -> bool:
     """Store *value* under *key*, treating a cache that cannot accept it as a skip.
 

@@ -23,7 +23,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth import SESSION_KEY
-from django.core.cache import cache
+
+from urbanlens.dashboard.services.core import bounded_cache
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -77,7 +78,9 @@ def remember_tile_viewer(session_key: str) -> None:
     Args:
         session_key: Django's own session key for the request.
     """
-    cache.set(tile_auth_key(session_key), _GRANTED, timeout=TILE_AUTH_TTL)
+    # A degraded Dragonfly must cost the shortcut, not the map: unwrapped, this raises on the very
+    # first tile of a session and 500s every map load rather than falling back to the database check.
+    bounded_cache.set_or_skip(tile_auth_key(session_key), _GRANTED, TILE_AUTH_TTL, label="Tile authorisation")
 
 
 def forget_tile_viewer(sender: object, request: HttpRequest | None = None, **kwargs: Any) -> None:
@@ -93,4 +96,5 @@ def forget_tile_viewer(sender: object, request: HttpRequest | None = None, **kwa
     """
     session_key = session_key_for(request) if request is not None else None
     if session_key:
-        cache.delete(tile_auth_key(session_key))
+        # Raising here would 500 the sign-out itself, since this runs on `user_logged_out`.
+        bounded_cache.delete_quietly(tile_auth_key(session_key), label="Tile authorisation")

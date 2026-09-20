@@ -28,7 +28,6 @@ from typing import TYPE_CHECKING
 
 from csp.decorators import csp_exempt
 from django.contrib.auth.mixins import AccessMixin, LoginRequiredMixin
-from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -50,6 +49,11 @@ _TILE_CACHE_TTL = 7 * 86400
 #: otherwise be stored as bytes identical to the sentinel and read back as "no such tile", turning a transient
 #: empty answer into a permanent hole in the map.
 _NO_TILE = "__ul_no_tile__"
+
+#: REData's 400 for a layer it publishes as a vector style rather than as tiles (its ``D11``). An
+#: answer about the layer, not the coordinate, so it is neither cacheable per tile nor something the
+#: catalogue that advertised the layer as raster should outlive.
+_VECTOR_LAYER_REFUSAL = b"vector_layer_not_served"
 
 
 class UpstreamSlots:
@@ -175,7 +179,7 @@ class BasemapTileView(AccessMixin, View):
         auth_key = tile_auth_key(session_key) if session_key else None
         # One round trip for both: the tile is useless without the gate and the gate costs nothing
         # to carry alongside it.
-        found = cache.get_many([auth_key, cache_key] if auth_key else [cache_key])
+        found = bounded_cache.get_many_or_empty([auth_key, cache_key] if auth_key else [cache_key], label=f"Basemap tile {layer} {z}/{x}/{y}")
 
         if auth_key is None or auth_key not in found:
             # Nothing remembered about this session, so ask properly - and remember the answer.
@@ -228,10 +232,19 @@ class BasemapTileView(AccessMixin, View):
             # Dragonfly is a degraded cache, not a broken map.
             bounded_cache.set_if_small(cache_key, body, resolved_type, _TILE_CACHE_TTL, label=f"Basemap tile {layer} {z}/{x}/{y}")
             return _keep_for_a_week(HttpResponse(body, content_type=resolved_type))
+        if status == 400 and _VECTOR_LAYER_REFUSAL in body:
+            # Same reasoning as the disabled-service branch above: the catalogue is what named this
+            # layer as raster, so it is the stale thing. Remembering the refusal per coordinate
+            # instead would keep answering 404 for a week after the layer is servable again.
+            from urbanlens.dashboard.services.map.basemap_catalogue import forget_basemap_tile_catalogue
+
+            logger.warning("REData now publishes %s as a vector layer; dropping the cached tile catalogue", layer)
+            forget_basemap_tile_catalogue()
+            return HttpResponse(status=404)
         if status in (400, 404):
             # A definitive answer about the request: no such tile, unknown
             # layer, or coordinates out of range. Safe to remember.
-            cache.set(cache_key, _NO_TILE, _TILE_CACHE_TTL)
+            bounded_cache.set_or_skip(cache_key, _NO_TILE, _TILE_CACHE_TTL, label=f"Basemap tile {layer} {z}/{x}/{y} (absent)")
             return _keep_for_a_week(HttpResponse(status=404))
         logger.warning("Basemap tile upstream status %s for %s %s/%s/%s", status, layer, z, x, y)
         return HttpResponse(status=503)

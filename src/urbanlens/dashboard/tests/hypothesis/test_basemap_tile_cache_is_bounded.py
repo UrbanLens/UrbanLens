@@ -94,3 +94,42 @@ class ACacheFailureIsNotA500Tests(_TileCase):
 
         self.assertEqual(responses[0].status_code, 200)
         self.assertEqual(responses[0].content, b"PNGDATA")
+
+    def test_a_failing_read_still_serves_the_tile(self) -> None:
+        """The read is the first cache call the view makes, so an unreachable store fails here
+        before any of the write paths are even reached."""
+        with mock.patch("django.core.cache.cache.get_many", side_effect=ConnectionError("dragonfly is full")):
+            responses, _download = self._fetch(b"PNGDATA")
+
+        self.assertEqual(responses[0].status_code, 200)
+        self.assertEqual(responses[0].content, b"PNGDATA")
+
+    def test_a_failing_write_still_answers_a_definitive_miss(self) -> None:
+        """The 404 path writes its own sentinel, so it has its own way to 500."""
+        with (
+            mock.patch("django.core.cache.cache.set", side_effect=ConnectionError("dragonfly is full")),
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(404, b"", "")),
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_failing_write_does_not_break_the_authorisation_note(self) -> None:
+        """``remember_tile_viewer`` writes on the first tile of a session, before anything is
+        cached - so a degraded store breaks every map load rather than an unlucky one."""
+        from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer
+
+        with mock.patch("django.core.cache.cache.set", side_effect=ConnectionError("dragonfly is full")):
+            remember_tile_viewer("some-session-key")
+
+    def test_a_failing_delete_does_not_break_signing_out(self) -> None:
+        """``forget_tile_viewer`` is wired to ``user_logged_out``, so raising here 500s the logout
+        itself rather than the map."""
+        from urbanlens.dashboard.services.map.tile_authorisation import forget_tile_viewer
+
+        request = mock.Mock()
+        request.session.get.return_value = "1"
+        request.session.session_key = "some-session-key"
+        with mock.patch("django.core.cache.cache.delete", side_effect=ConnectionError("dragonfly is full")):
+            forget_tile_viewer(sender=None, request=request)

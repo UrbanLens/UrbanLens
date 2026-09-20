@@ -287,6 +287,41 @@ describe("registerRedataLayers", () => {
         expect(vectorStyleFor("street")).toBeNull();
     });
 
+    test("the live catalogue's shape leaves Leaflet's default base layer on a vendor CDN", async () => {
+        // REData's production catalogue as of 2026-09-20, with `url_template` already rewritten to
+        // this deployment's proxy the way `basemap_catalogue.py` hands it to a browser. street and
+        // dark went vector-only that day; the other three stayed raster.
+        stubFetch({
+            body: {
+                layers: [
+                    { id: "street", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/street.json", attribution: "OSM/Protomaps", min_zoom: 0, max_zoom: 15 },
+                    { id: "dark", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/dark.json", attribution: "OSM/Protomaps", min_zoom: 0, max_zoom: 15 },
+                    { id: "terrain", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/terrain/{z}/{x}/{y}/", attribution: "Attr", min_zoom: 0, max_zoom: 17 },
+                    { id: "satellite", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/satellite/{z}/{x}/{y}/", attribution: "Attr", min_zoom: 0, max_zoom: 19 },
+                    { id: "borders", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/borders/{z}/{x}/{y}/", attribution: "Attr", min_zoom: 0, max_zoom: 19 },
+                ],
+            },
+        });
+        await registerRedataLayers();
+
+        expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
+        expect(vectorStyleFor("dark")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/dark.json");
+
+        // A layer REData publishes as vector has no proxied raster left to fall back to, so Leaflet
+        // keeps the built-in vendor template: a direct browser-to-vendor fetch rather than this
+        // deployment's proxy. `street` is the default base layer, so that is what every Leaflet map
+        // draws by default - which is the whole of the main map until it is ported.
+        const base = stubLeaflet();
+        tileLayer("street");
+        expect(base.calls[0]?.url).toContain("cartocdn.com");
+
+        // A layer REData still serves as raster does go through the proxy, so the fallback above is
+        // the vector entries' doing rather than the catalogue failing to register at all.
+        const raster = stubLeaflet();
+        tileLayer("topographic");
+        expect(raster.calls[0]?.url).toBe("/dashboard/map/basemap-tiles/terrain/{z}/{x}/{y}/");
+    });
+
     test("treats a missing source_type as raster, matching a REData deployment that predates D11", async () => {
         stubFetch({
             body: { layers: [{ id: "custom", url_template: "https://x/{z}/{x}/{y}.png", attribution: "Attr" }] },

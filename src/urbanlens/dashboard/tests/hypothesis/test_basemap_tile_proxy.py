@@ -86,6 +86,63 @@ class BasemapTileProxyTests(TestCase):
         self.assertEqual(second.status_code, 404)
         self.assertEqual(download.call_count, 1, "a 400 must be cached too, not just a 404")
 
+    def test_a_layer_switched_to_vector_is_not_remembered_as_a_missing_tile(self) -> None:
+        """``vector_layer_not_served`` answers a question about the layer, not the coordinate.
+
+        REData switched ``street`` and ``dark`` to vector on 2026-09-20, and answers a tile-by-tile
+        request for either with this 400. Remembering that per coordinate for a week means the day
+        the layer is raster again, every coordinate this deployment happened to probe keeps
+        answering 404 until those entries expire - an outage inflicted on the recovery.
+        """
+        refusal = b'{"error":"vector_layer_not_served","message":"\'street\' is a vector layer published at \'https://tiles.urbanlens.org/styles/street.json\'"}'
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(400, refusal, "application/json")) as download,
+        ):
+            first = self.client.get(self.url)
+            second = self.client.get(self.url)
+
+        self.assertEqual(first.status_code, 404)
+        self.assertEqual(second.status_code, 404)
+        self.assertEqual(download.call_count, 2, "a layer-level refusal must not be cached as a per-coordinate miss")
+
+    def test_a_layer_switched_to_vector_drops_the_cached_catalogue(self) -> None:
+        """The catalogue is what told the client this layer was raster, so it is the stale thing.
+
+        Same reasoning as the ``ServiceDisabledError`` branch: a map draws what the catalogue named,
+        so leaving a catalogue that advertises a proxied ``url_template`` for a layer REData now
+        refuses tile-by-tile keeps every client asking for tiles nothing can serve.
+        """
+        from urbanlens.dashboard.services.map.basemap_catalogue import CATALOGUE_CACHE_KEY
+
+        cache.set(
+            CATALOGUE_CACHE_KEY, [{"id": "street", "source_type": "raster", "url_template": "/x/{z}/{x}/{y}/"}], 86400
+        )
+        refusal = b'{"error":"vector_layer_not_served","message":"a vector layer"}'
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(400, refusal, "application/json")),
+        ):
+            self.client.get(self.url)
+
+        self.assertIsNone(
+            cache.get(CATALOGUE_CACHE_KEY), "the catalogue advertising a now-vector layer as raster must be dropped"
+        )
+
+    def test_an_ordinary_400_is_still_cached(self) -> None:
+        """The narrowing above must not cost the common case: an out-of-range coordinate is still
+        a definitive per-coordinate answer and is still worth remembering."""
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(
+                f"{_GATEWAY}.download_tile", return_value=(400, b'{"error":"invalid_parameter"}', "application/json")
+            ) as download,
+        ):
+            self.client.get(self.url)
+            self.client.get(self.url)
+
+        self.assertEqual(download.call_count, 1)
+
     def test_a_vendor_outage_is_never_cached(self) -> None:
         """The whole point: an outage must not become a permanently blank map."""
         with (
