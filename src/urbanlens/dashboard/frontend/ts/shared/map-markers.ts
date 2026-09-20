@@ -45,6 +45,8 @@ export interface MapMarkerOptions {
 }
 
 export interface MapMarker {
+    /** The engine's own marker, for the layer containers that can only take one of those. */
+    readonly native: unknown;
     getLatLng(): LatLng;
     setLatLng(position: LatLng): void;
     setIcon(icon: MarkerIcon): void;
@@ -90,6 +92,7 @@ export function createLeafletMarker(position: LatLng, options: MapMarkerOptions 
     let map: L.Map | null = null;
 
     return {
+        native: marker,
         getLatLng: () => {
             const at = marker.getLatLng();
             return { lat: at.lat, lng: at.lng };

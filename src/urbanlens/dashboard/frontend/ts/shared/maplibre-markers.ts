@@ -142,6 +142,10 @@ export function createMaplibreMarker(position: LatLng, options: MapMarkerOptions
     }
 
     return {
+        // A getter, not a field: there is no MapLibre marker to hand out until the pin is shown.
+        get native(): unknown {
+            return marker;
+        },
         getLatLng: () => ({ ...at }),
         setLatLng: (next) => {
             at = { ...next };
