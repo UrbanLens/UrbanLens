@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createMapLayers } from "./map-layers";
+import { createMapLayers, registerRedataLayers, resetRedataLayersCacheForTests } from "./map-layers";
 import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import type { Map as MaplibreMap } from "maplibre-gl";
 
@@ -27,6 +27,9 @@ class FakeMaplibreMap {
     readonly layers = new Map<string, FakeLayer>();
     /** Style draw order, bottom first - what `addLayer`'s `beforeId` inserts into. */
     readonly order: string[] = [];
+    /** Document-level state a merged vector style has to set and unwind (`maplibre-vector-style.ts`). */
+    readonly sprites = new Map<string, string>();
+    glyphs: string | null = null;
     private styleLoaded = false;
     private readonly handlers = new Map<string, Set<(arg: unknown) => void>>();
     private readonly onceHandlers = new Map<string, Set<(arg: unknown) => void>>();
@@ -66,6 +69,24 @@ class FakeMaplibreMap {
         const at = beforeId ? this.order.indexOf(beforeId) : -1;
         if (at >= 0) this.order.splice(at, 0, layer.id);
         else this.order.push(layer.id);
+    }
+    removeLayer(id: string): void {
+        if (!this.layers.delete(id)) throw new Error(`no layer ${id}`);
+        this.order.splice(this.order.indexOf(id), 1);
+    }
+    removeSource(id: string): void {
+        if (!this.sources.delete(id)) throw new Error(`no source ${id}`);
+    }
+    addSprite(id: string, url: string): void {
+        // MapLibre's own addSprite refuses an id it already holds.
+        if (this.sprites.has(id)) throw new Error(`sprite ${id} already exists`);
+        this.sprites.set(id, url);
+    }
+    removeSprite(id: string): void {
+        this.sprites.delete(id);
+    }
+    setGlyphs(url: string | null): void {
+        this.glyphs = url;
     }
     getStyle(): { layers: Array<{ id: string }> } {
         return { layers: this.order.map((id) => ({ id })) };
@@ -599,5 +620,267 @@ describe("createMapLayers engine dispatch", () => {
 
         expect(map.getLayer(STREET)).toBeTruthy();
         expect(layers.baseKey()).toBe("street");
+    });
+});
+
+describe("vector base layers", () => {
+    const realFetch = globalThis.fetch;
+
+    const STYLE_URL = "https://redata.example/styles/street/style.json";
+    const CATALOGUE_URL = "/dashboard/map/basemap-tiles/sources/";
+
+    const styleDocument = {
+        version: 8,
+        sources: { omt: { type: "vector", tiles: ["../../data/{z}/{x}/{y}.pbf"] } },
+        sprite: "sprites/street",
+        glyphs: "../../fonts/{fontstack}/{range}.pbf",
+        layers: [
+            { id: "background", type: "background" },
+            { id: "water", type: "fill", source: "omt", "source-layer": "water" },
+        ],
+    };
+
+    /** Serves the catalogue and the style document separately, and counts what was asked for. */
+    function stubFetch(options: { layers: unknown[]; style?: unknown; styleOk?: boolean }): { calls: string[] } {
+        const state = { calls: [] as string[] };
+        globalThis.fetch = ((url: string) => {
+            state.calls.push(String(url));
+            if (String(url) === CATALOGUE_URL) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ layers: options.layers }) } as Response);
+            }
+            return Promise.resolve({
+                ok: options.styleOk ?? true,
+                json: () => Promise.resolve(options.style ?? styleDocument),
+            } as Response);
+        }) as unknown as typeof fetch;
+        return state;
+    }
+
+    const vectorEntry = (id: string) => ({ id, source_type: "vector", style_url: STYLE_URL, attribution: "© Our own tiles" });
+
+    /** Lets the engine's fire-and-forget style fetch settle before anything is asserted. */
+    function settle(): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    beforeEach(() => {
+        resetRedataLayersCacheForTests();
+    });
+
+    afterEach(() => {
+        globalThis.fetch = realFetch;
+        resetRedataLayersCacheForTests();
+    });
+
+    test("draws the style's own layers, under everything the page already had", async () => {
+        stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const map = makeMap(["page-pins"]);
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        map.finishStyleLoad();
+        await settle();
+
+        expect(map.order.slice(0, 2)).toEqual(["ul-layers-vector-street-background", "ul-layers-vector-street-water"]);
+        expect(map.order.indexOf("ul-layers-vector-street-water")).toBeLessThan(map.order.indexOf(STREET));
+        expect(map.order[map.order.length - 1]).toBe("page-pins");
+    });
+
+    test("resolves the style's relative tile template against the style's own address", async () => {
+        stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        map.finishStyleLoad();
+        await settle();
+
+        expect(map.sources.get("ul-layers-vector-street-omt")).toMatchObject({
+            tiles: ["https://redata.example/data/{z}/{x}/{y}.pbf"],
+        });
+    });
+
+    test("applies the style's glyphs and sprite, which are document-level and have no layer to carry them", async () => {
+        stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        map.finishStyleLoad();
+        await settle();
+
+        expect(map.glyphs).toBe("https://redata.example/fonts/{fontstack}/{range}.pbf");
+        expect(map.sprites.get("default")).toBe("https://redata.example/styles/street/sprites/street");
+    });
+
+    test("hides every raster base, since a vector style is a whole basemap of its own", async () => {
+        stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        map.finishStyleLoad();
+        await settle();
+
+        expect(map.visibilityOf(STREET)).toBe("none");
+        expect(map.visibilityOf(DARK)).toBe("none");
+        expect(map.visibilityOf(TOPO)).toBe("none");
+        expect(map.visibilityOf(SATELLITE)).toBe("none");
+    });
+
+    test("keeps the borders overlay drawing above the vector basemap", async () => {
+        stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false, initialOverlays: ["borders"] });
+
+        map.finishStyleLoad();
+        await settle();
+
+        expect(map.visibilityOf(BORDERS)).toBe("visible");
+        expect(map.order.indexOf("ul-layers-vector-street-water")).toBeLessThan(map.order.indexOf(BORDERS));
+    });
+
+    test("credits the deployment's own attribution rather than the vendor it replaced", async () => {
+        stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const seen: string[] = [];
+        const map = makeMap();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false, onAttribution: (text) => seen.push(text) });
+
+        map.finishStyleLoad();
+        await settle();
+
+        expect(seen[seen.length - 1]).toBe("© Our own tiles · MapLibre");
+    });
+
+    test("takes the whole style off the map when a raster base is selected", async () => {
+        stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        map.finishStyleLoad();
+        await settle();
+
+        engine.setBase("satellite");
+        await settle();
+
+        expect(map.getLayer("ul-layers-vector-street-water")).toBeUndefined();
+        expect(map.getSource("ul-layers-vector-street-omt")).toBeUndefined();
+        expect(map.sprites.size).toBe(0);
+        expect(map.glyphs).toBeNull();
+        expect(map.visibilityOf(SATELLITE)).toBe("visible");
+    });
+
+    test("puts it back when the vector base is selected again", async () => {
+        stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        map.finishStyleLoad();
+        await settle();
+        engine.setBase("satellite");
+        await settle();
+
+        engine.setBase("street");
+        await settle();
+
+        expect(map.getLayer("ul-layers-vector-street-water")).toBeTruthy();
+        expect(map.visibilityOf(SATELLITE)).toBe("none");
+    });
+
+    test("swaps one vector style for another rather than stacking them", async () => {
+        stubFetch({ layers: [vectorEntry("street"), vectorEntry("terrain")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        map.finishStyleLoad();
+        await settle();
+
+        engine.setBase("topographic");
+        await settle();
+
+        expect(map.getLayer("ul-layers-vector-street-water")).toBeUndefined();
+        expect(map.getLayer("ul-layers-vector-topographic-water")).toBeTruthy();
+        expect(map.sprites.size).toBe(1);
+    });
+
+    test("draws the dark layer's own style when dark mode is on", async () => {
+        stubFetch({ layers: [vectorEntry("dark")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false, darkMode: "light" });
+        map.finishStyleLoad();
+        await settle();
+        expect(map.visibilityOf(STREET)).toBe("visible");
+
+        engine.setDarkMode("dark");
+        await settle();
+
+        expect(map.getLayer("ul-layers-vector-dark-water")).toBeTruthy();
+        expect(map.visibilityOf(DARK)).toBe("none");
+    });
+
+    test("falls back to the raster layer when the style document cannot be had", async () => {
+        const calls = stubFetch({ layers: [vectorEntry("street")], styleOk: false });
+        await registerRedataLayers();
+        const map = makeMap();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        map.finishStyleLoad();
+        await settle();
+
+        // Asserted rather than assumed: a raster-visible map is also what a style that was never
+        // asked for would look like, so the request has to be shown to have happened and failed.
+        expect(calls.calls).toContain(STYLE_URL);
+        expect(map.visibilityOf(STREET)).toBe("visible");
+        expect(map.getLayer("ul-layers-vector-street-water")).toBeUndefined();
+    });
+
+    test("stops asking for a style that could not be had, rather than re-fetching on every toggle", async () => {
+        const calls = stubFetch({ layers: [vectorEntry("street")], styleOk: false });
+        await registerRedataLayers();
+        const map = makeMap();
+        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        map.finishStyleLoad();
+        await settle();
+
+        engine.setBase("satellite");
+        await settle();
+        engine.setBase("street");
+        await settle();
+
+        expect(calls.calls.filter((url) => url === STYLE_URL)).toHaveLength(1);
+        expect(map.visibilityOf(STREET)).toBe("visible");
+    });
+
+    test("asks for nothing at all when this deployment offers only raster", async () => {
+        const calls = stubFetch({
+            layers: [{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }],
+        });
+        await registerRedataLayers();
+        const map = makeMap();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        map.finishStyleLoad();
+        await settle();
+
+        expect(calls.calls).toEqual([CATALOGUE_URL]);
+        expect(map.visibilityOf(STREET)).toBe("visible");
+    });
+
+    test("abandons an in-flight style when the engine is destroyed", async () => {
+        const calls = stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        map.finishStyleLoad();
+        expect(calls.calls).toContain(STYLE_URL);
+
+        engine.destroy();
+        await settle();
+
+        expect(map.getLayer("ul-layers-vector-street-water")).toBeUndefined();
+        expect(map.sprites.size).toBe(0);
     });
 });

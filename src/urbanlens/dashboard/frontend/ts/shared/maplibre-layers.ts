@@ -19,14 +19,19 @@
 
 import { showMapContextMenu } from "./map-context-menu";
 import { createLayersPanel } from "./map-layers-panel";
-import { normalizeBase, rasterSourceFor } from "./map-layers";
+import { normalizeBase, rasterSourceFor, vectorStyleFor } from "./map-layers";
 import type { BaseLayerKey, CustomLayerToggle, MapDarkMode, MapLayersInstance, MapLayersOptions, MapLayersState } from "./map-layers";
 import { toMapLibreTileUrls } from "./maplibre-raster-style";
+import { fetchVectorStyle } from "./maplibre-vector-style";
+import type { NamespacedVectorStyle } from "./maplibre-vector-style";
 
 import type { Map as MaplibreMap, MapMouseEvent, RasterSourceSpecification } from "maplibre-gl";
 
 /** Namespaced so a page's own sources/layers can never collide with the engine's. */
 const LAYER_PREFIX = "ul-layers-";
+
+/** Namespace for everything a fetched vector style contributes, per base layer key. */
+const vectorPrefixFor = (kind: string): string => `${LAYER_PREFIX}vector-${kind}-`;
 
 const BASE_LAYER_IDS = {
     street: `${LAYER_PREFIX}street`,
@@ -116,6 +121,18 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
     let bordersOn = false;
     let styleReady = false;
     let destroyed = false;
+
+    /** The base layer whose vector style is on the map, and what it put there, or null for raster. */
+    let vectorKind: string | null = null;
+    let vectorStyle: NamespacedVectorStyle | null = null;
+    /** What the current base *wants*, which lags `vectorKind` while a style document is in flight. */
+    let wantedVectorKind: string | null = null;
+    let vectorRequest: AbortController | null = null;
+    /**
+     * Styles that could not be fetched or parsed, so a deployment whose style URL is broken draws
+     * its raster fallback once rather than re-asking on every layer toggle.
+     */
+    const unavailableVectorKinds = new Set<string>();
 
     const remember = opts.defaultBase === "remember" && !!opts.storageKey;
 
@@ -207,19 +224,124 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         target.dataset.mapStyle = isDarkActive() ? "dark" : "light";
     }
 
-    /** Replays this engine's state onto the map; a no-op until the style can accept layers. */
-    function applyToMap(): void {
+    // -- Vector base layers ------------------------------------------------------------
+    /**
+     * Which `TILE_DEFS`/`VECTOR_STYLE_DEFS` key is actually drawing the ground right now.
+     *
+     * `street` and `dark` are one layer the dark-mode toggle chooses between; `topographic` and
+     * `satellite` sit above whichever of those is showing, so they win when selected.
+     */
+    function effectiveBaseKind(): string {
+        if (base === "topographic" || base === "satellite") return base;
+        return isDarkActive() ? "dark" : "street";
+    }
+
+    /** The key whose vector style should be on the map, or null when this deployment serves none for it. */
+    function vectorKindWanted(): string | null {
+        const kind = effectiveBaseKind();
+        if (unavailableVectorKinds.has(kind)) return null;
+        return vectorStyleFor(kind) ? kind : null;
+    }
+
+    /** Where a vector style's layers go: under everything, including the raster overlays. */
+    function bottomLayerId(): string | undefined {
+        if (map.getLayer(BASE_LAYER_IDS.street)) return BASE_LAYER_IDS.street;
+        return map.getStyle().layers?.[0]?.id;
+    }
+
+    function addVectorStyle(style: NamespacedVectorStyle): void {
+        // Before the layers that reference them, so a symbol layer never renders a frame with no font.
+        if (style.glyphs) map.setGlyphs(style.glyphs);
+        for (const sprite of style.sprites) map.addSprite(sprite.id, sprite.url);
+
+        const before = bottomLayerId();
+        for (const [id, source] of Object.entries(style.sources)) {
+            if (!map.getSource(id)) map.addSource(id, source);
+        }
+        // Each inserted before the same anchor, so the document's own bottom-to-top order survives.
+        for (const layer of style.layers) {
+            if (!map.getLayer(layer.id)) map.addLayer(layer, before);
+        }
+    }
+
+    function removeVectorStyle(): void {
+        const style = vectorStyle;
+        vectorStyle = null;
+        vectorKind = null;
+        if (!style) return;
+        for (const layer of style.layers) {
+            if (map.getLayer(layer.id)) map.removeLayer(layer.id);
+        }
+        for (const id of Object.keys(style.sources)) {
+            if (map.getSource(id)) map.removeSource(id);
+        }
+        for (const sprite of style.sprites) map.removeSprite(sprite.id);
+        if (style.glyphs) map.setGlyphs(null);
+    }
+
+    /**
+     * Brings the map's vector base into line with what the current selection asks for.
+     *
+     * Asynchronous because the style document is fetched, so every caller is a fire-and-forget: the
+     * raster fallback is already visible while this runs, and a base changed again mid-flight is
+     * settled by `wantedVectorKind` rather than by whichever fetch happens to land last.
+     */
+    async function syncVectorBase(): Promise<void> {
         if (!styleReady || destroyed) return;
+        const wanted = vectorKindWanted();
+        if (wanted === wantedVectorKind) return;
+        wantedVectorKind = wanted;
+
+        vectorRequest?.abort();
+        vectorRequest = null;
+        if (vectorKind !== null && vectorKind !== wanted) removeVectorStyle();
+        if (wanted === null) {
+            applyVisibility();
+            return;
+        }
+
+        const def = vectorStyleFor(wanted);
+        if (!def) return;
+        const request = new AbortController();
+        vectorRequest = request;
+        const style = await fetchVectorStyle(vectorPrefixFor(wanted), def.styleUrl, request.signal);
+        if (destroyed || wantedVectorKind !== wanted) return;
+        vectorRequest = null;
+        if (!style) {
+            // Falls back to raster for the rest of this page rather than retrying per toggle.
+            unavailableVectorKinds.add(wanted);
+            wantedVectorKind = null;
+            applyVisibility();
+            return;
+        }
+        addVectorStyle(style);
+        vectorStyle = style;
+        vectorKind = wanted;
+        applyVisibility();
+        opts.onAttribution?.(attributionText());
+    }
+
+    /** The raster half of replaying this engine's state; a no-op until the style can accept layers. */
+    function applyVisibility(): void {
+        if (!styleReady || destroyed) return;
+        // A vector style is a whole basemap, so nothing raster draws under it.
+        const onVector = vectorKind !== null;
         const dark = isDarkActive();
-        setVisible(BASE_LAYER_IDS.street, !dark);
-        setVisible(BASE_LAYER_IDS.dark, dark);
-        setVisible(BASE_LAYER_IDS.topographic, base === "topographic");
-        setVisible(BASE_LAYER_IDS.satellite, base === "satellite");
+        setVisible(BASE_LAYER_IDS.street, !onVector && !dark);
+        setVisible(BASE_LAYER_IDS.dark, !onVector && dark);
+        setVisible(BASE_LAYER_IDS.topographic, !onVector && base === "topographic");
+        setVisible(BASE_LAYER_IDS.satellite, !onVector && base === "satellite");
         setVisible(BORDERS_LAYER_ID, bordersOn);
         setVisible(RAIN_LAYER_ID, weatherOn);
         setVisible(CLOUDS_LAYER_ID, weatherOn);
         applyTopoPaint();
         syncStyleAttribute();
+    }
+
+    /** Replays this engine's state onto the map; a no-op until the style can accept layers. */
+    function applyToMap(): void {
+        applyVisibility();
+        void syncVectorBase();
     }
 
     // -- State ---------------------------------------------------------------------
@@ -237,7 +359,11 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
      */
     function attributionText(): string {
         const parts: string[] = [];
-        if (base === "satellite") parts.push("© Esri");
+        // What is drawing the ground is what has to be credited, and a vector style is served by
+        // this deployment rather than by the vendor whose raster layer it replaced.
+        const vectorDef = vectorKind ? vectorStyleFor(vectorKind) : null;
+        if (vectorDef) parts.push(vectorDef.attribution);
+        else if (base === "satellite") parts.push("© Esri");
         else if (base === "topographic") parts.push("© OpenTopoMap");
         // Both street and dark are CARTO-served (see TILE_DEFS) - same attribution either way.
         else parts.push("© OSM · CARTO");
@@ -418,6 +544,8 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         baseKey,
         destroy: () => {
             destroyed = true;
+            vectorRequest?.abort();
+            vectorRequest = null;
             map.off("load", onStyleReady);
             if (onDataLoading) map.off("dataloading", onDataLoading);
             if (onIdle) map.off("idle", onIdle);
