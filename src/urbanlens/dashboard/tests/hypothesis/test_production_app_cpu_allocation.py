@@ -29,6 +29,36 @@ _PRODUCTION_APP_CPU_MINIMUM = 4.0
 #: overrides lower) must not exceed.
 _SHARED_APP_CPU_DEFAULT = 2.0
 
+#: Workers, each running gunicorn's 4 gthread threads. At the shared default of 3 the k6 run
+#: measured every one of the 12 threads busy at 250 users, with page p95 at 1,034ms; 6 took that
+#: to 391ms. Below this the cores above cannot be reached, so the two move together.
+_PRODUCTION_WEB_CONCURRENCY_MINIMUM = 6
+
+#: Resident memory measured for those workers was 1,618MB, and a worker recycling on
+#: --max-requests overlaps its replacement, so the limit has to hold more than the shared 2g.
+_PRODUCTION_APP_MEMORY_MINIMUM_GB = 3.0
+
+
+def _gigabytes(value: str) -> float:
+    """A compose memory limit (``3g``, ``512m``, ``2048``) in GB.
+
+    Args:
+        value: The limit as written in an env file.
+
+    Returns:
+        The same limit in gigabytes.
+
+    Raises:
+        AssertionError: If the unit is not one compose accepts.
+    """
+    raw = value.strip().lower()
+    scale = {"g": 1.0, "m": 1 / 1024, "k": 1 / 1024**2, "b": 1 / 1024**3}
+    if raw[-1:].isdigit():
+        return float(raw) / 1024**3
+    if raw[-1] not in scale:
+        raise AssertionError(f"{value!r} is not a memory limit docker compose accepts")
+    return float(raw[:-1]) * scale[raw[-1]]
+
 
 def _sample_values(path: pathlib.Path) -> dict[str, str]:
     """One `key=value` sample env file, parsed.
@@ -91,6 +121,28 @@ class ProductionGetsMoreAppCpuTests(SimpleTestCase):
             _PRODUCTION_APP_CPU_MINIMUM,
             f"production's CPU_LIMIT__APP={production.get('CPU_LIMIT__APP')} is below the P125 floor "
             f"of {_PRODUCTION_APP_CPU_MINIMUM}",
+        )
+
+    def test_production_runs_enough_workers_to_use_those_cores(self) -> None:
+        """Four cores behind 12 request threads queues a map load's tiles behind itself."""
+        production = _sample_values(_PRODUCTION_SAMPLE_PATH)
+        self.assertIn("WEB_CONCURRENCY", production)
+        self.assertGreaterEqual(
+            int(production["WEB_CONCURRENCY"]),
+            _PRODUCTION_WEB_CONCURRENCY_MINIMUM,
+            f"production's WEB_CONCURRENCY={production.get('WEB_CONCURRENCY')} leaves fewer request "
+            f"threads than the {_PRODUCTION_WEB_CONCURRENCY_MINIMUM} workers P125 measured",
+        )
+
+    def test_production_has_memory_for_those_workers(self) -> None:
+        """Workers cost memory each, and the shared default was sized for half as many."""
+        production = _sample_values(_PRODUCTION_SAMPLE_PATH)
+        self.assertIn("MEM_LIMIT__APP", production)
+        self.assertGreaterEqual(
+            _gigabytes(production["MEM_LIMIT__APP"]),
+            _PRODUCTION_APP_MEMORY_MINIMUM_GB,
+            f"production's MEM_LIMIT__APP={production.get('MEM_LIMIT__APP')} is below what "
+            f"{production.get('WEB_CONCURRENCY')} workers measured, so one will be OOM-killed mid-request",
         )
 
     def test_the_shared_default_is_still_two_cores(self) -> None:
