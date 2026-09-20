@@ -48,11 +48,15 @@ VIEWPORT_TILES = 30
 #: A 256px basemap tile, near the top of the usual range.
 TILE_BYTES = 12_000
 
-#: Queries one cached tile may cost. The one left is the middleware chain's, not this view's:
-#: Django's own auth loads ``auth_user`` to decide whether the viewer is signed in. Getting below it
-#: means answering a tile without loading the viewer's row at all, which is a decision about how
-#: tiles are authorised rather than an optimisation. Lower is better - tighten this when it changes.
-MAX_QUERIES_PER_CACHED_TILE = 1
+#: Queries one cached tile may cost on a session that has already drawn one. Zero: the session's
+#: tile access is remembered in the same cache the bytes come from
+#: (``services/map/tile_authorisation.py``), and nothing else in the chain loads the viewer's row
+#: unless the request writes. Raising this is a real regression - it is paid ~30 times per map.
+MAX_QUERIES_PER_CACHED_TILE = 0
+
+#: Queries a whole warm viewport may cost. A session establishes its tile access once, so this is a
+#: per-session cost rather than a per-tile one - which is the entire point of the arrangement.
+MAX_QUERIES_PER_WARM_VIEWPORT = 1
 
 #: Bytes of response headers one tile may carry. A tile body is ~12kB, so a page's worth of
 #: document-level headers on it is real bandwidth spent ~30 times per map. Security headers that do
@@ -88,16 +92,19 @@ class BasemapTileCostTests(TestCase):
         self.client.force_login(self.user)
         basemap_tiles.UpstreamSlots.reset()
         self.addCleanup(basemap_tiles.UpstreamSlots.reset)
-        # One request before anything is measured: the session and its user are read from the
-        # database once per client, and counting that in the first tile would flatter every tile
-        # after it.
+        # One tile before anything is measured. The session and its user are read from the database
+        # once per client, and the session's tile access is established on its first tile - both are
+        # per-session costs, and counting either in a per-tile budget would say a viewport costs
+        # thirty of them when it costs one. `test_the_first_tile_of_a_session_pays_once` is where
+        # that first tile is measured instead.
         self._warm_client()
 
     def _url(self, x: int = 1204, y: int = 1539, layer: str = "street", z: int = 12) -> str:
         return reverse("map.basemap_tiles", kwargs={"layer": layer, "z": z, "x": x, "y": y})
 
     def _warm_client(self) -> None:
-        with mock.patch(_CONFIGURED, return_value=False):
+        cache.set("ul_basemap_tile_street_12_9999_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+        with mock.patch(_CONFIGURED, return_value=True):
             self.client.get(self._url(x=9999))
 
     def _serve_cached(self, x: int = 1204) -> HttpResponse:
@@ -118,6 +125,27 @@ class BasemapTileCostTests(TestCase):
         for query in queries.captured_queries:
             print(f"    {query['sql'][:100]}")
         self.assertLessEqual(len(queries), MAX_QUERIES_PER_CACHED_TILE)
+
+    def test_the_first_tile_of_a_session_pays_once(self) -> None:
+        """Where the cost the rest of the tiles avoid actually goes, so it is bounded rather than moved.
+
+        A budget of zero per tile measured only on a warmed session would say nothing about a
+        session that opens a map for the first time - which every session does.
+        """
+        cache.clear()
+        fresh = self.client_class()
+        fresh.force_login(self.user)
+        cache.set("ul_basemap_tile_street_12_1204_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+
+        with mock.patch(_CONFIGURED, return_value=True), CaptureQueriesContext(connection) as first:
+            response = fresh.get(self._url())
+        with mock.patch(_CONFIGURED, return_value=True), CaptureQueriesContext(connection) as second:
+            fresh.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        print(f"\n  first tile of a session: {len(first)} queries; the next: {len(second)}")
+        self.assertLessEqual(len(first), MAX_QUERIES_PER_WARM_VIEWPORT)
+        self.assertLessEqual(len(second), MAX_QUERIES_PER_CACHED_TILE)
 
     def test_the_tile_view_itself_asks_the_database_for_nothing(self) -> None:
         """Separates this view's own cost from the chain's, so a regression lands on whoever caused it.
@@ -323,7 +351,7 @@ class BasemapViewportCostTests(TestCase):
         print(
             f"    one thread serves ~{1000 / per_tile_ms:.0f} tiles/s; 12 request threads ~{12_000 / per_tile_ms:.0f} tiles/s"
         )
-        self.assertLessEqual(len(queries), VIEWPORT_TILES * MAX_QUERIES_PER_CACHED_TILE)
+        self.assertLessEqual(len(queries), MAX_QUERIES_PER_WARM_VIEWPORT)
 
     def test_a_cold_viewport_never_asks_the_upstream_for_more_than_its_slots(self) -> None:
         """The bound is what keeps one cold map from occupying every request thread in the process.

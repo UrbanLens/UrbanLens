@@ -241,19 +241,22 @@ class WriteSourceMiddleware:
     def __call__(self, request: HttpRequest) -> HttpResponse:
         """Run the request with the write source bound to the signed-in profile.
 
-        The profile row is fetched only if something in the request actually writes. Naming the
-        writer up front cost every authenticated request a ``dashboard_profiles`` query whether or
-        not it wrote anything, which on a basemap tile - two dozen of them per map, each an
-        authenticated request - was half of everything the tile touched the database for.
+        Nothing here is decided unless the request writes. Naming the writer up front cost every
+        authenticated request a ``dashboard_profiles`` query, and asking whether there *was* one
+        cost an ``auth_user`` query - on a basemap tile, two dozen per map, that was everything the
+        tile touched the database for. ``request.user`` resolves once and caches, so a request that
+        does write still pays for it once however many rows it writes.
         """
         from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
 
-        user = getattr(request, "user", None)
-        if user is None or not user.is_authenticated:
-            with writing_as(WriteSource.SYSTEM, actor=None):
-                return self.get_response(request)
+        def signed_in() -> object | None:
+            user = getattr(request, "user", None)
+            return user if user is not None and user.is_authenticated else None
 
-        with writing_as(WriteSource.USER, actor=lambda: getattr(getattr(user, "profile", None), "pk", None)):
+        with writing_as(
+            lambda: WriteSource.USER if signed_in() else WriteSource.SYSTEM,
+            actor=lambda: getattr(getattr(signed_in(), "profile", None), "pk", None),
+        ):
             return self.get_response(request)
 
 

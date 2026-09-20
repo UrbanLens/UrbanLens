@@ -18,6 +18,10 @@ if TYPE_CHECKING:
     #: nothing - a page, a tile, a poll - never has to find out who its writer would have been.
     WriteActor = int | Callable[[], int | None] | None
 
+    #: A :class:`WriteSource` value, or something that produces one if a write ever asks. Deciding
+    #: it costs whatever answering "is anyone signed in" costs, which for a session is a row.
+    WriteOrigin = str | Callable[[], str] | None
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,8 +36,9 @@ class WriteSource(TextChoices):
 
 
 #: The source in force on this thread/task. None means "not inside a context
-#: that declared one", which resolves to SYSTEM.
-_write_source: ContextVar[str | None] = ContextVar("ul_write_source", default=None)
+#: that declared one", which resolves to SYSTEM. May hold a callable instead, resolved at the first
+#: write and kept for the rest of the context.
+_write_source: ContextVar[WriteOrigin] = ContextVar("ul_write_source", default=None)
 
 #: The profile a write is attributable to, when there is one. May hold a callable instead, resolved
 #: at the first write and kept for the rest of the context.
@@ -43,8 +48,19 @@ _unversioned: ContextVar[bool] = ContextVar("ul_unversioned", default=False)
 
 
 def current_write_source() -> str:
-    """Return the write source in force, defaulting to SYSTEM."""
-    return _write_source.get() or WriteSource.SYSTEM
+    """Return the write source in force, defaulting to SYSTEM.
+
+    Resolves a deferred source on the first call and keeps the answer, the same way
+    :func:`current_write_actor` does - a request that writes nothing never has to decide.
+
+    Returns:
+        A :class:`WriteSource` value.
+    """
+    source = _write_source.get()
+    if callable(source):
+        source = source()
+        _write_source.set(source)
+    return source or WriteSource.SYSTEM
 
 
 def current_write_actor() -> int | None:
@@ -69,12 +85,13 @@ def is_unversioned() -> bool:
     return _unversioned.get()
 
 
-def bind_write_source(source: str, *, actor: WriteActor = None) -> None:
+def bind_write_source(source: WriteOrigin, *, actor: WriteActor = None) -> None:
     """Set the write source for the rest of this context, without a block.
     For entry points that own their whole context and have no natural place to wrap - a Celery task, which gets a fresh context per run.
 
     Args:
-        source: A :class:`WriteSource` value.
+        source: A :class:`WriteSource` value, or a callable returning one - called at the first
+            write rather than here.
         actor: Profile pk to attribute writes to, when the source is USER, or a callable
             returning one - called at the first write rather than here.
     """
@@ -83,11 +100,12 @@ def bind_write_source(source: str, *, actor: WriteActor = None) -> None:
 
 
 @contextlib.contextmanager
-def writing_as(source: str, *, actor: WriteActor = None) -> Iterator[None]:
+def writing_as(source: WriteOrigin, *, actor: WriteActor = None) -> Iterator[None]:
     """Declare the write source for the enclosed block.
 
     Args:
-        source: A :class:`WriteSource` value.
+        source: A :class:`WriteSource` value, or a callable returning one - called at the first
+            write rather than here.
         actor: Profile pk to attribute writes to, when the source is USER, or a callable
             returning one - called at the first write rather than here.
 

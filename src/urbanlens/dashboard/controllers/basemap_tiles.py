@@ -27,7 +27,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from csp.decorators import csp_exempt
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import AccessMixin, LoginRequiredMixin
 from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
@@ -140,8 +140,14 @@ def _keep_for_a_week(response: HttpResponse) -> HttpResponse:
 # report-only header until `UL_CSP_ENFORCE` flips it to the enforcing one.
 @method_decorator(csp_exempt(REPORT_ONLY=True), name="dispatch")
 @method_decorator(csp_exempt(REPORT_ONLY=False), name="dispatch")
-class BasemapTileView(LoginRequiredMixin, View):
-    """GET map/basemap-tiles/<layer>/<z>/<x>/<y>/ - one basemap tile."""
+class BasemapTileView(AccessMixin, View):
+    """GET map/basemap-tiles/<layer>/<z>/<x>/<y>/ - one basemap tile.
+
+    Not ``LoginRequiredMixin``: the gate is the same, but it is answered from the cache the tile
+    itself comes out of, so a viewport does not spend a query per tile re-establishing that the
+    same person is still signed in. See ``services/map/tile_authorisation.py`` for what that
+    trades away; the catalogue view above keeps the ordinary check.
+    """
 
     def get(self, request: HttpRequest, layer: str, z: int, x: int, y: int) -> HttpResponse:
         """Serve one tile from cache or REData.
@@ -154,16 +160,31 @@ class BasemapTileView(LoginRequiredMixin, View):
             y: Tile row.
 
         Returns:
-            The tile bytes, a definitive 404, or an uncached 503 when the vendor could not be reached.
+            The tile bytes, a definitive 404, an uncached 503 when the vendor could not be reached,
+            or whatever a login-required view answers a signed-out visitor with.
         """
         from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+        from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer, session_key_for, tile_auth_key
 
         if not redata_configured():
             return HttpResponse(status=404)
 
         cache_key = f"ul_basemap_tile_{layer}_{z}_{x}_{y}"
-        cached = cache.get(cache_key)
+        session_key = session_key_for(request)
+        auth_key = tile_auth_key(session_key) if session_key else None
+        # One round trip for both: the tile is useless without the gate and the gate costs nothing
+        # to carry alongside it.
+        found = cache.get_many([auth_key, cache_key] if auth_key else [cache_key])
+
+        if auth_key is None or auth_key not in found:
+            # Nothing remembered about this session, so ask properly - and remember the answer.
+            if not request.user.is_authenticated:
+                return self.handle_no_permission()
+            if session_key:
+                remember_tile_viewer(session_key)
+
+        cached = found.get(cache_key)
         if cached is not None:
             if cached == _NO_TILE:
                 return _keep_for_a_week(HttpResponse(status=404))
