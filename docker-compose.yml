@@ -347,8 +347,30 @@ services:
     build:
       context: ./src/urbanlens/config/postgres
     restart: unless-stopped
-    # JIT's compile time outweighs the short statements a web request runs.
-    command: ["postgres", "-c", "jit=off"]
+    command:
+      - postgres
+      # JIT's compile time outweighs the short statements a web request runs.
+      - "-c"
+      - "jit=off"
+      # Where the time goes is not answerable after the fact without this, and it was reached for
+      # by hand on the perf deployment rather than configured (X27). Preloading costs a little
+      # shared memory whether or not any database has run CREATE EXTENSION (migration 0052).
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      # Postgres's own default is off, and measuring its cost here was defeated by host noise.
+      # X27's planning figures need it, so a deployment doing that measurement turns it on.
+      - "-c"
+      - "pg_stat_statements.track_planning=${UL_DB_TRACK_PLANNING:-off}"
+      # Stock is 128MB, which is smaller than the database. Sized against MEM_LIMIT__DB, not the host.
+      - "-c"
+      - "shared_buffers=${UL_DB_SHARED_BUFFERS:-512MB}"
+      - "-c"
+      - "effective_cache_size=${UL_DB_EFFECTIVE_CACHE_SIZE:-1536MB}"
+      # Stock 4.0 prices a seek at four sequential reads, which is a spinning disk.
+      - "-c"
+      - "random_page_cost=${UL_DB_RANDOM_PAGE_COST:-1.1}"
+    # Parallel workers pass tuples through /dev/shm, which Docker leaves at 64MB.
+    shm_size: ${UL_DB_SHM_SIZE:-256mb}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
