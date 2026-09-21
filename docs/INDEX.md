@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P133` · `T4` · `PL9` · `D18` · `X26` · `I5` · `R30` · `N26`
+**Next free id:** `P133` · `T4` · `PL9` · `D18` · `X28` · `I5` · `R30` · `N26`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -185,6 +185,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P125 | open | 2026-09-20 | The population capacity harness collapses on the app container's CPU - 175 concurrent users on 2 cores once the map's tiles are in the model; 350 passes on 4 cores, 24 request threads and a tile that costs no query, and 500 fails on Postgres' own 2-core limit | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | X25 | holds | 2026-09-16 | Organize rendered its label cards twice to deliver three numbers per card: the deferred stats cost ~16 ms against ~100 ms to render the cards, so the deferral was removed | [`docs/notes/organize-label-rows-double-render-measured.md`](notes/organize-label-rows-double-render-measured.md) |
 | X26 | holds | 2026-09-20 | Basemap tiles are still ~52% of every request a 500-user hold makes, so that is what a vector basemap removes; the rest of the run's across-the-board improvement is database CPU throttling halving between runs, not a change to any endpoint | [`docs/notes/capacity-after-vector-basemap-measured.md`](notes/capacity-after-vector-basemap-measured.md) |
+| X27 | holds | 2026-09-21 | Planning, not execution, is most of this database's time: 79% of it for the short SELECTs that are 92% of all calls, and preparing them measures 2.9x on pgbench - but one query is 55% of all planning and `plan_cache_mode` alone can fix it | [`docs/notes/query-planning-overhead-measured.md`](notes/query-planning-overhead-measured.md) |
 | P128 | open | 2026-09-17 | The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P130 | open | 2026-09-19 | `ul_web`'s deliberate `NOCREATEDB` (D11) blocks the exact `docker exec ... pytest` workflow `CLAUDE.local.md` prescribes, on every dev slot that has converged its per-tier roles | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P131 | open | 2026-09-19 | Every authenticated REData API call costs ~1.45s verifying the key (PBKDF2 per request), not doing the work; worst for basemap tiles, where one page view is ~30 calls | [`docs/PROBLEMS.md`](PROBLEMS.md) |
