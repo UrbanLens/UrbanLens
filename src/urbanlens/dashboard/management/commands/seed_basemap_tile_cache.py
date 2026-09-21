@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import base64
 
-from django.core.cache import cache
+from django.conf import settings
+from django.core.cache import cache, caches
 from django.core.management.base import BaseCommand, CommandError
 
 from urbanlens.dashboard.services.integration_testing.guards import is_production, production_unlocked
 from urbanlens.dashboard.services.map.basemap_catalogue import CATALOGUE_CACHE_KEY, CATALOGUE_CACHE_TTL, tile_url_template
+from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
 
 #: A 1x1 grey PNG. Tile bytes decide bandwidth, not the per-request cost this exists to measure, and
 #: a run is judged on latency at the proxy rather than on how long a picture takes to paint.
@@ -64,10 +66,13 @@ class Command(BaseCommand):
         if size < 1:
             raise CommandError("--size must be at least 1.")
 
+        # Through the proxy's own store rather than the default cache: proxied bytes live apart from
+        # sessions, and a seeder writing to the wrong one leaves a run measuring upstream fetches.
+        store = caches[settings.PROXIED_BYTES_CACHE]
         written = 0
         for x in range(origin_x, origin_x + size):
             for y in range(origin_y, origin_y + size):
-                cache.set(f"ul_basemap_tile_{layer}_{zoom}_{x}_{y}", (_PLACEHOLDER_TILE, "image/png"), _SEED_TTL)
+                store.set(basemap_tile_cache_key(layer, zoom, x, y), (_PLACEHOLDER_TILE, "image/png"), _SEED_TTL)
                 written += 1
 
         if options["catalogue"]:

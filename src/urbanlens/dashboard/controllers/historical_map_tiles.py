@@ -90,12 +90,13 @@ class HistoricalMapTileView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
         from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
         from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+        from urbanlens.dashboard.services.map.tile_cache_keys import historical_tile_cache_key
 
         if not redata_configured():
             return HttpResponse(status=404)
 
         label = f"Historical-map tile {georeference_uuid} {z}/{x}/{y}"
-        cache_key = f"ul_histmap_tile_{georeference_uuid}_{z}_{x}_{y}"
+        cache_key = historical_tile_cache_key(georeference_uuid, z, x, y)
         cached = bounded_cache.get_or_none(cache_key, label=label)
         if cached is not None:
             if cached == _NO_COVERAGE:

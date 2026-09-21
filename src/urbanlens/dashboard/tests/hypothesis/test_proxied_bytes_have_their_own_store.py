@@ -5,26 +5,34 @@ anyone looked at in a week. The store holding them is 1 GiB and refuses writes r
 evicting once full, and it also holds every session and the Channels layer - so at the scale this
 deployment is being sized for, panning around a map decides whether anyone can log in.
 
-These cover the wiring, because that is where the property lives: `settings/test.py` deliberately
-points both aliases at one locmem instance (what separates them in a deployment is which Dragonfly
-they connect to and whether it may evict, neither of which locmem has), so no behavioural test can
-tell the two apart.
+Most of these cover the wiring, because that is where the rest of the property lives: what
+separates the two stores in a deployment is which Dragonfly they connect to and whether it may
+evict, neither of which locmem has. The aliases do get their own locmem instance under
+`settings/test.py`, though, so anything that writes proxied bytes to the wrong one is visible here.
 """
 
 from __future__ import annotations
 
 import ast
 import pathlib
+from unittest import mock
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.cache import caches
+from django.core.management import call_command
+from model_bakery import baker
 import yaml
 
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
 from urbanlens.dashboard.services.core import bounded_cache
+from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 COMPOSE = REPO_ROOT / "docker-compose.yml"
+
+_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 
 def _tile_cache_service() -> dict:
@@ -66,6 +74,23 @@ class ProxiedBytesGoToTheirOwnAliasTests(SimpleTestCase):
                 )
 
         self.assertNotIn("from django.core.cache import cache\n", source, "the module-level default cache is back")
+
+    def test_nothing_spells_a_tile_key_by_hand(self) -> None:
+        """Anti-drift for the seeder tests below: one writer building the f-string itself is how
+        the seeder and the proxy came apart, and a second store makes that silent rather than loud."""
+        owner = pathlib.Path(REPO_ROOT / "src/urbanlens/dashboard/services/map/tile_cache_keys.py")
+        sources = [
+            path
+            for path in (REPO_ROOT / "src/urbanlens").rglob("*.py")
+            if path != owner and "/tests/" not in str(path) and "/migrations/" not in str(path)
+        ]
+        self.assertTrue(sources)
+
+        for path in sources:
+            text = path.read_text()
+            for prefix in ('f"ul_basemap_tile_', 'f"ul_histmap_tile_'):
+                with self.subTest(module=str(path.relative_to(REPO_ROOT)), prefix=prefix):
+                    self.assertNotIn(prefix, text, "builds a tile cache key instead of importing one")
 
     def test_the_tile_authorisation_grant_stays_in_the_same_store_as_the_tile(self) -> None:
         """The proxy reads the grant and the tile in one round trip, which stops being one the
@@ -124,6 +149,59 @@ class TheProxiedBytesStoreIsProvisionedTests(SimpleTestCase):
         for name, networks in told.items():
             with self.subTest(service=name):
                 self.assertTrue(networks & joined, f"{name} is pointed at it on none of {sorted(networks)}")
+
+
+class WhatSeedsATileWritesWhereTheProxyReadsTests(TestCase):
+    """The load run's seeder addresses the same bytes the proxy does, from a different process.
+
+    It wrote them to the default cache while the proxy had moved to its own store, and nothing
+    failed: a miss simply goes upstream, so the map still drew and the capacity run silently
+    measured the fetch path it exists to avoid. The pre-flight check in `tests/perf/k6` caught it;
+    these make it a test failure instead.
+    """
+
+    def _seed(self, size: int = 1) -> None:
+        call_command(
+            "seed_basemap_tile_cache",
+            "--layer",
+            "terrain",
+            "--zoom",
+            "13",
+            "--origin-x",
+            "2400",
+            "--origin-y",
+            "3072",
+            "--size",
+            str(size),
+        )
+
+    def test_the_seeder_writes_where_the_proxy_looks(self) -> None:
+        self._seed(size=2)
+
+        for x, y in ((2400, 3072), (2401, 3073)):
+            key = basemap_tile_cache_key("terrain", 13, x, y)
+            with self.subTest(tile=(x, y)):
+                self.assertIsNotNone(
+                    bounded_cache.get_or_none(key, label="seeded tile"), f"{key} is not in the store the proxy reads"
+                )
+
+    def test_a_seeded_tile_is_served_without_reaching_upstream(self) -> None:
+        """The property the run actually depends on, end to end."""
+        self.client.force_login(baker.make(get_user_model()))
+        self._seed()
+
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch.object(
+                RedataBasemapTilesGateway,
+                "download_tile",
+                side_effect=AssertionError("went upstream for a seeded tile"),
+            ),
+        ):
+            response = self.client.get("/dashboard/map/basemap-tiles/terrain/13/2400/3072/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/png")
 
 
 class TheDefaultsStayInStepTests(SimpleTestCase):

@@ -28,6 +28,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.map.basemap_catalogue import CATALOGUE_CACHE_KEY
 from urbanlens.dashboard.services.map.tile_authorisation import TILE_AUTH_TTL, tile_auth_key
+from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
 
 if TYPE_CHECKING:
     from django.test import Client
@@ -47,7 +48,9 @@ class TileAuthorisationTests(TestCase):
         self.user = baker.make(User)
         basemap_tiles.UpstreamSlots.reset()
         self.addCleanup(basemap_tiles.UpstreamSlots.reset)
-        cache.set("ul_basemap_tile_street_12_1204_1539", (TILE_BYTES, "image/png"), 60)
+        caches[settings.PROXIED_BYTES_CACHE].set(
+            basemap_tile_cache_key("street", 12, 1204, 1539), (TILE_BYTES, "image/png"), 60
+        )
 
     @property
     def url(self) -> str:
@@ -91,11 +94,15 @@ class TileAuthorisationTests(TestCase):
 
         self.client.logout()
 
-        self.assertIsNone(cache.get(tile_auth_key(str(session_key))))
+        self.assertIsNone(caches[settings.PROXIED_BYTES_CACHE].get(tile_auth_key(str(session_key))))
         self.assertNotEqual(self._fetch(self.client), 200)
 
     def test_the_remembered_answer_expires(self) -> None:
-        """The revocation window is whatever this timeout is, so it is written down and asserted."""
+        """How long a revoked session keeps *fetching* tiles is this timeout, so it is asserted.
+
+        Not how long it keeps seeing them: a tile already in the browser's cache outlives this by
+        the ``Cache-Control`` lifetime, which the module docstring covers.
+        """
         self.client.force_login(self.user)
 
         store = caches[settings.PROXIED_BYTES_CACHE]
@@ -109,7 +116,7 @@ class TileAuthorisationTests(TestCase):
         ]
         self.assertEqual(timeouts, [TILE_AUTH_TTL])
         self.assertLessEqual(
-            TILE_AUTH_TTL, 3600, "a revocation window longer than an hour is not what this was agreed at"
+            TILE_AUTH_TTL, 3600, "a revoked session fetching new tiles for over an hour is not what this was agreed at"
         )
 
     def test_the_answer_buys_tiles_and_nothing_else(self) -> None:
@@ -160,7 +167,7 @@ class TileAuthorisationTests(TestCase):
         remembered = tile_auth_key(str(self.client.session.session_key))
 
         self.client.logout()
-        cache.set(remembered, True, timeout=TILE_AUTH_TTL)
+        caches[settings.PROXIED_BYTES_CACHE].set(remembered, True, timeout=TILE_AUTH_TTL)
 
         attacker = self.client_class()
         attacker.cookies.update(stolen)

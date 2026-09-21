@@ -32,9 +32,11 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "urbanlens-tests",
     },
+    # Its own LOCATION, not the default's: LocMemCache shares storage by LOCATION, and one shared
+    # between them hides every place production writes proxied bytes to the wrong store.
     PROXIED_BYTES_CACHE: {  # noqa: F405
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "urbanlens-tests",
+        "LOCATION": "urbanlens-tests-proxied",
     },
 }
 

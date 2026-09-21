@@ -16,6 +16,15 @@ by an admin, or a password change that invalidates a session other than the one 
 draws tiles until the entry expires. For that window those sessions can fetch map tiles, and
 nothing else. Anything that ends the session itself takes the tiles with it immediately, because
 the gate re-reads the session every time: signing out, a flush, an expiry.
+
+``TILE_AUTH_TTL`` bounds a *fetch*, not a pixel. ``BasemapTileView`` hands the browser
+``Cache-Control: private, max-age=604800, immutable`` (``_keep_for_a_week``), and a revocation
+does not change the session cookie the response varies on, so tiles that browser already holds
+keep rendering from its own disk for up to a week with no request reaching this deployment. That
+is accepted rather than overlooked: the bytes are public vendor imagery, proxied so the vendor
+never learns which coordinates a viewer is looking at, and they carry nothing about the account
+that fetched them. A shorter header would re-fetch every tile a viewer has already seen, which is
+the cost this module exists to remove.
 """
 
 from __future__ import annotations

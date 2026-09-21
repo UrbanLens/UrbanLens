@@ -49,6 +49,9 @@ _NO_TILE = "__ul_no_tile__"
 #: REData's 400 for a layer it publishes as a vector style rather than as tiles (its ``D11``). An
 #: answer about the layer, not the coordinate, so it is neither cacheable per tile nor something the
 #: catalogue that advertised the layer as raster should outlive.
+#: Live, not defensive: ``redata.urbanlens.org`` answers ``street`` and ``dark`` this way today,
+#: whatever REData's ``D15`` and ``T9`` say about every layer carrying both shapes. Without this
+#: branch such an answer falls through to the definitive-404 one and holds a week-long hole.
 _VECTOR_LAYER_REFUSAL = b"vector_layer_not_served"
 
 
@@ -142,11 +145,12 @@ class BasemapTileView(AccessMixin, View):
         from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
         from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer, session_key_for, tile_auth_key
+        from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
 
         if not redata_configured():
             return HttpResponse(status=404)
 
-        cache_key = f"ul_basemap_tile_{layer}_{z}_{x}_{y}"
+        cache_key = basemap_tile_cache_key(layer, z, x, y)
         session_key = session_key_for(request)
         auth_key = tile_auth_key(session_key) if session_key else None
         # One round trip for both: the tile is useless without the gate and the gate costs nothing
