@@ -356,6 +356,7 @@ export function rasterSourceFor(kind: string): RasterSourceInput {
         minZoom: def.options.minZoom,
         maxNativeZoom: def.options.maxNativeZoom,
         subdomains: def.options.subdomains,
+        opacity: def.options.opacity,
     };
 }
 

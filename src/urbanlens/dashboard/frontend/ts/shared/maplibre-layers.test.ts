@@ -397,6 +397,17 @@ describe("overlays", () => {
         expect(map.getLayer(BORDERS)!.paint["raster-opacity"]).toBe(0.6);
     });
 
+    test("base layers stay fully opaque - TILE_DEFS gives them no opacity of their own", () => {
+        const map = makeMap();
+        map.finishStyleLoad();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        expect(map.getLayer(STREET)!.paint["raster-opacity"]).toBe(1);
+        expect(map.getLayer(DARK)!.paint["raster-opacity"]).toBe(1);
+        expect(map.getLayer(TOPO)!.paint["raster-opacity"]).toBe(1);
+        expect(map.getLayer(SATELLITE)!.paint["raster-opacity"]).toBe(1);
+    });
+
     test("no weather layers exist at all without an API key", () => {
         const map = makeMap();
         map.finishStyleLoad();

@@ -2,7 +2,7 @@
  * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in dashboard/models/markup/meta.py.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createMapLayers, normalizeBase, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer, vectorStyleFor } from "./map-layers";
+import { createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer, vectorStyleFor } from "./map-layers";
 import { acquireOwnTileSlot, ownTileRetriesAreSuspended, recordOwnTileOutcome, resetOwnTileGateForTests } from "./own-tiles";
 
 describe("normalizeBase", () => {
@@ -154,6 +154,16 @@ describe("tileLayer errorTileUrl", () => {
         tileLayer("street", { errorTileUrl: "custom.png" });
         expect(state.calls[0]?.options.errorTileUrl).toBe("custom.png");
         expect(state.calls[0]?.options.maxZoom).toBe(21);
+    });
+});
+
+describe("rasterSourceFor opacity", () => {
+    test("carries the borders overlay's opacity through for the MapLibre engine to draw with", () => {
+        expect(rasterSourceFor("borders").opacity).toBe(0.6);
+    });
+
+    test("omits opacity for a base layer TILE_DEFS gives none, so callers default to opaque", () => {
+        expect(rasterSourceFor("street").opacity).toBeUndefined();
     });
 });
 

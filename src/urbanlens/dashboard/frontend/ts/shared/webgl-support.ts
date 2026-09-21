@@ -16,8 +16,24 @@ export interface WebGL2ProbeCanvas {
     getContext(contextId: "webgl2"): unknown;
 }
 
+/** Memoized result of probing the default canvas - never touched by a call that injects its own `createCanvas`. */
+let cachedDefaultSupport: boolean | null = null;
+
+function probe(createCanvas: () => WebGL2ProbeCanvas): boolean {
+    try {
+        return createCanvas().getContext("webgl2") != null;
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Whether this browser can render a WebGL2 context.
+ *
+ * The default probe's result is cached for the page's lifetime: creating a WebGL2 context is
+ * expensive and briefly consumes one of the browser's limited contexts, and call sites like
+ * `comment-map.js`'s thumbnail scroll handler ask on every thumbnail. A caller supplying its own
+ * `createCanvas` always gets a fresh, uncached probe.
  * @param createCanvas - Returns the canvas to probe. Defaults to a throwaway, never-attached
  *   `<canvas>` - overridden in tests, since the codebase's own DOM test harness (happy-dom) has no
  *   real WebGL2 backend and always answers `null`, indistinguishable from a genuinely unsupported browser.
@@ -25,12 +41,10 @@ export interface WebGL2ProbeCanvas {
  *   WebGL2 is disabled by policy) as well as on a `null` context - never lets a probe failure
  *   propagate into an engine-selection crash.
  */
-export function supportsWebGL2(createCanvas: () => WebGL2ProbeCanvas = () => document.createElement("canvas")): boolean {
-    try {
-        return createCanvas().getContext("webgl2") != null;
-    } catch {
-        return false;
-    }
+export function supportsWebGL2(createCanvas?: () => WebGL2ProbeCanvas): boolean {
+    if (createCanvas) return probe(createCanvas);
+    if (cachedDefaultSupport === null) cachedDefaultSupport = probe(() => document.createElement("canvas"));
+    return cachedDefaultSupport;
 }
 
 export const WebGLSupport = { supportsWebGL2 };

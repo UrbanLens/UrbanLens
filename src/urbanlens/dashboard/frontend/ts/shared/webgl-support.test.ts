@@ -39,4 +39,32 @@ describe("supportsWebGL2", () => {
         // completion and answers a boolean, not that it detects a real browser's support correctly.
         expect(typeof supportsWebGL2()).toBe("boolean");
     });
+
+    test("caches the default probe - a second no-argument call creates no further canvas", () => {
+        let canvasesCreated = 0;
+        const original = document.createElement.bind(document);
+        document.createElement = ((tagName: string, options?: unknown) => {
+            if (tagName === "canvas") canvasesCreated++;
+            return original(tagName, options as never);
+        }) as typeof document.createElement;
+        try {
+            supportsWebGL2();
+            const createdAfterFirstCall = canvasesCreated;
+            supportsWebGL2();
+            expect(canvasesCreated).toBe(createdAfterFirstCall);
+        } finally {
+            document.createElement = original;
+        }
+    });
+
+    test("never caches an injected factory - each call gets its own fresh probe", () => {
+        let invocations = 0;
+        const createCanvas = (): WebGL2ProbeCanvas => {
+            invocations++;
+            return { getContext: () => ({ __fake: "gl2-context" }) };
+        };
+        supportsWebGL2(createCanvas);
+        supportsWebGL2(createCanvas);
+        expect(invocations).toBe(2);
+    });
 });

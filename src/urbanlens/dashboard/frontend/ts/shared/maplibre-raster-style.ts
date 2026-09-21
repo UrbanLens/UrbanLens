@@ -98,6 +98,8 @@ export interface RasterSourceInput {
      * omit this to fall back to Leaflet's own default of `"abc"`.
      */
     subdomains?: string | string[];
+    /** Mirrors Leaflet's own `TileLayerOptions.opacity`; omit for a fully opaque layer. */
+    opacity?: number;
 }
 
 /**

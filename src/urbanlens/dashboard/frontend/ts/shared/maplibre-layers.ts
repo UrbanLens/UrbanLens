@@ -70,31 +70,22 @@ const TOPO_LIGHT_PAINT: Record<string, number> = {
     "raster-brightness-max": 1,
 };
 
-/**
- * Whether `map` is a MapLibre map rather than a Leaflet one.
- *
- * Duck-typed on a MapLibre-only method rather than `instanceof maplibregl.Map`, because
- * `maplibregl` is a CDN global that is simply absent on pages that never load it.
- */
-export function isMaplibreMap(map: object): map is MaplibreMap {
-    return typeof (map as Partial<MaplibreMap>).setLayoutProperty === "function";
-}
+/** Re-exported so this engine's own callers need not know the test lives in the lighter module. */
+export { isMaplibreMap } from "./map-view";
 
 interface ManagedRasterLayer {
     id: string;
-    /** `TILE_DEFS` key this layer resolves its tiles from. */
+    /** `TILE_DEFS` key this layer resolves its tiles, and its opacity, from. */
     kind: string;
-    opacity: number;
 }
 
 /** Bottom-to-top draw order; `street`/`dark` are the mutually exclusive bottom base, the rest stack above it. */
 const MANAGED_LAYERS: ManagedRasterLayer[] = [
-    { id: BASE_LAYER_IDS.street, kind: "street", opacity: 1 },
-    { id: BASE_LAYER_IDS.dark, kind: "dark", opacity: 1 },
-    { id: BASE_LAYER_IDS.topographic, kind: "topographic", opacity: 1 },
-    { id: BASE_LAYER_IDS.satellite, kind: "satellite", opacity: 1 },
-    // Matches the 0.6 the Leaflet borders overlay already uses (`TILE_DEFS.borders`).
-    { id: BORDERS_LAYER_ID, kind: "borders", opacity: 0.6 },
+    { id: BASE_LAYER_IDS.street, kind: "street" },
+    { id: BASE_LAYER_IDS.dark, kind: "dark" },
+    { id: BASE_LAYER_IDS.topographic, kind: "topographic" },
+    { id: BASE_LAYER_IDS.satellite, kind: "satellite" },
+    { id: BORDERS_LAYER_ID, kind: "borders" },
 ];
 
 /**
@@ -166,16 +157,20 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
     }
 
     // -- Layer setup ---------------------------------------------------------------
-    function rasterSource(kind: string): RasterSourceSpecification {
-        const source = rasterSourceFor(kind);
+    /** A managed layer's source plus the opacity `rasterSourceFor` resolves for it, defaulting to fully opaque. */
+    function rasterSource(kind: string): { source: RasterSourceSpecification; opacity: number } {
+        const resolved = rasterSourceFor(kind);
         return {
-            type: "raster",
-            tiles: toMapLibreTileUrls(source.url, source.subdomains),
-            // 256px across every vendor this app uses - see BASE_ERROR_TILE_URL's comment in map-layers.ts.
-            tileSize: 256,
-            minzoom: source.minZoom,
-            maxzoom: source.maxNativeZoom,
-            attribution: source.attribution,
+            source: {
+                type: "raster",
+                tiles: toMapLibreTileUrls(resolved.url, resolved.subdomains),
+                // 256px across every vendor this app uses - see BASE_ERROR_TILE_URL's comment in map-layers.ts.
+                tileSize: 256,
+                minzoom: resolved.minZoom,
+                maxzoom: resolved.maxNativeZoom,
+                attribution: resolved.attribution,
+            },
+            opacity: resolved.opacity ?? 1,
         };
     }
 
@@ -192,7 +187,13 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
             );
         };
 
-        for (const layer of MANAGED_LAYERS) add(layer.id, rasterSource(layer.kind), layer.opacity);
+        // Resolved here rather than from a module-level literal: `rasterSourceFor` calls
+        // `applyEmbeddedCatalogue()`, which cannot run at module scope, so this is the only point
+        // this deployment's own opacity (as opposed to the built-in vendor default) is known.
+        for (const layer of MANAGED_LAYERS) {
+            const { source, opacity } = rasterSource(layer.kind);
+            add(layer.id, source, opacity);
+        }
 
         if (weatherKey) {
             const weatherSource = (layer: string): RasterSourceSpecification => ({

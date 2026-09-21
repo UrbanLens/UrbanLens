@@ -17,6 +17,20 @@ declare const L: typeof import("leaflet");
 
 export type MapEngineKind = "leaflet" | "maplibre";
 
+/**
+ * Whether `map` is a MapLibre map rather than a Leaflet one.
+ *
+ * Duck-typed on a MapLibre-only method rather than `instanceof maplibregl.Map`, because
+ * `maplibregl` is a CDN global that is simply absent on pages that never load it.
+ *
+ * Lives in this module, which imports nothing, so the engine test costs a caller no bundle: the
+ * marker and cluster facades need it and have no other reason to reach the layers engine.
+ * @param map - The map to test.
+ */
+export function isMaplibreMap(map: object): map is MaplibreMap {
+    return typeof (map as Partial<MaplibreMap>).setLayoutProperty === "function";
+}
+
 export interface LatLng {
     lat: number;
     lng: number;
@@ -106,11 +120,6 @@ export function boundsOf(positions: LatLng[]): MapViewBounds | null {
     const lats = positions.map((position) => position.lat);
     const lngs = positions.map((position) => position.lng);
     return { south: Math.min(...lats), north: Math.max(...lats), west: Math.min(...lngs), east: Math.max(...lngs) };
-}
-
-/** Whether `map` is a MapLibre map rather than a Leaflet one - see `maplibre-layers.ts`'s note on duck-typing. */
-export function isMaplibreMap(map: object): map is MaplibreMap {
-    return typeof (map as Partial<MaplibreMap>).setLayoutProperty === "function";
 }
 
 // -- Leaflet ---------------------------------------------------------------------------------
