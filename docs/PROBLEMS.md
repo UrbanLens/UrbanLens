@@ -2408,7 +2408,24 @@ the planner off the Incremental-Sort-under-Limit plan it currently uses - worth 
 or a similar autocomplete-latency complaint resurfaces at meaningfully larger scale. Left open as an
 accurate, now twice-measured observation, not a hazard.
 
-Not fixed. Re-measured 2026-09-18 (diagnostic only, no code or schema change landed).
+**2026-09-21, from the capacity ladder (X28): the population this was dismissed at was too small,
+and the SQL share disagrees with the 2026-09-10 split.** Against 1,000 accounts and 471,756 pins,
+`map_autocomplete` is the slowest fragment on the site at *every* level of the ladder, including
+100 concurrent users where nothing is saturated: p50 197 ms / p95 369 ms at u100, 233 / 449 at
+u500. For scale, `map_search` at the same holds is 31 / 77 ms. Over the whole run
+`request_costs.txt` attributes 266.2 ms of `map.autocomplete.local`'s 311 ms p50 to SQL across 8.8
+queries - the largest SQL-per-call figure on the site, above `search_panel`'s 238 ms.
+
+That last figure is a whole-run mean, so the saturated u1000 hold inflates it, and it flatly
+disagrees with 2026-09-10's "141-217 ms per keystroke of which 0.070 s is SQL". One of the two is
+measuring something the other is not, and which one is right decides whether this entry's
+conclusion still stands. **The next step is the same diagnostic as 2026-09-18 run against the
+capacity population rather than a 3,001-pin synthetic profile** - the two measurements this entry
+rests on were taken at 10,000 and 3,001 pins, and the planner choice they turn on (Incremental Sort
+under a Limit) is exactly the kind that changes with volume.
+
+Not fixed. Re-measured 2026-09-18 (diagnostic only, no code or schema change landed) and
+2026-09-21 (capacity ladder, no change landed).
 
 ## P105 — A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict
 
@@ -2908,7 +2925,7 @@ Not recommended: relying on staging's limits alone. Lower limits bound what stag
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
 
-## P125 — The population capacity harness collapses on the app container's CPU - 175 concurrent users on 2 cores once the map's tiles are in the model; 350 passes on 4 cores, 24 request threads and a tile that costs no query, and 500 fails on Postgres' own 2-core limit
+## P125 — This deployment's ceiling is between 500 and 1,000 concurrent users, and every wall it has hit so far was a container CPU limit: 175 on 2 app cores, 350 on 4, 500 on a 2-core database, and 1,000 on the same 4 app cores once the database was given 4 of its own
 
 `id: P125` · `status: open` · `updated: 2026-09-20`
 
@@ -2984,6 +3001,35 @@ matter how cheap each individual query is. The next lever to test is more app ca
 the endpoints that are over budget are not the ones with expensive queries; they are all of them,
 uniformly, which is the signature of a shared resource being out of headroom rather than any one
 endpoint being slow.
+
+
+### 2026-09-21: the database got four cores, and the wall went back to the app tier
+
+`CPU_LIMIT__DB` was raised to 4 and `c46b0c9f5` gave Postgres a configuration (`shared_buffers`,
+`effective_cache_size`, `random_page_cost`, all env-driven). A full ladder then ran 100 → 250 →
+500 → 1,000 concurrent users against the same 1,000-account, 471,756-pin population. **X28 has the
+measurement and the arithmetic**; the part that changes this entry:
+
+| hold | app mean cores (of 4) | app throttled | db mean cores (of 4) | db throttled | worst page p95 |
+|---|---:|---:|---:|---:|---:|
+| u250 | 1.04 | 0.54% | 0.55 | 0.00% | 179 ms |
+| u500 | 2.01 | 2.92% | 1.13 | 0.08% | 505 ms |
+| u1000 | 3.68 | 32.89% | 1.75 | 0.16% | 8,613 ms |
+
+**500 concurrent users now pass**, with `search_panel` (P132) the only endpoint over any budget.
+The sentence above this section - "the binding resource is Postgres' own `CPU_LIMIT__DB` of 2
+cores" - was right about the cause and is now spent as a limit: at *twice* that load the database
+is at 1.75 of 4 cores and throttles 0.16%.
+
+**1,000 users fail on the app tier's 4 cores.** App CPU is linear at ~0.40 cores per 100 users
+through the whole measured range, so 1,000 users demand ~4.0 cores against a 4-core limit; the 3.68
+above is the ceiling with the bursts shaved off, not the demand. Nothing errored - 0.00% requests
+failed, 100% socket handshakes at every level - it is entirely queueing.
+
+So the lever is `CPU_LIMIT__APP=8` / `WEB_CONCURRENCY=12` / `MEM_LIMIT__APP=4g` (peak memory is
+~290 MB a worker and flat in users), with `CPU_LIMIT__DB=6` alongside it: database CPU tracks app
+CPU at about 0.48:1, so an 8-core app tier implies ~3.5 database cores against a peak that is
+already 3.39. None of that has been measured - it is an extrapolation from a linear region.
 
 ### What this does not establish
 
@@ -3215,10 +3261,9 @@ own `CPU_LIMIT__DB` of 2 cores.** Raising it is the next lever and has still not
 
 ### What this does not establish
 
-- **`CPU_LIMIT__DB` was not raised and not tested.** Everything above says the database is the
-  wall; nothing above says what happens when it is given more.
 - **Nothing between 350 and 500 was measured**, so "the ceiling is between them" is exactly as
-  precise as it sounds.
+  precise as it sounds. The 2026-09-21 ladder below measures 500 as passing on a 4-core database,
+  which supersedes that reading.
 - **Production has none of this.** The three app-tier values live in `production.sample.env` and
   are deployed to the perf environment only.
 - **The 30-minute window is a real trade.** A revocation that leaves the session record intact - an
@@ -3235,14 +3280,18 @@ endpoint over its D15 budget at *every* level the ladder ran, including 125 conc
 nothing else is close, and including the runs with the map's tiles switched off. It is therefore an
 endpoint cost rather than a symptom of the app tier being saturated.
 
-| what | measured |
-|---|---|
-| queries per request | **34.9 mean, 67 worst** |
-| rows fetched per request | 997 mean |
-| time in SQL | 264.9 ms mean |
-| wall, p50 | 206 ms |
-| wall, p95 at 100-175 concurrent users | 625-745 ms (budget: 500 ms) |
-| share of all app CPU during the 1,000-user run | 6.2%, on 1,014 requests |
+| what | measured 2026-09-19 | re-measured 2026-09-21 (X28) |
+|---|---|---|
+| queries per request | **34.9 mean, 67 worst** | 34.0 mean, 67 worst |
+| rows fetched per request | 997 mean | 1,268 mean |
+| time in SQL | 264.9 ms mean | 238.1 ms mean |
+| wall, p50 | 206 ms | 220 ms |
+| wall, p95 | 625-745 ms at 100-175 users | 554 ms at 500 users (budget: 500 ms) |
+| share of all app CPU | 6.2%, on 1,014 requests | 7.3%, on 1,366 requests |
+
+Two days and the audit's fixes later, the shape is unchanged and it is still the only endpoint over
+budget at 500 concurrent users - now the *only* endpoint over any budget there at all, which makes
+it the next thing worth fixing rather than one of several.
 
 **Where the queries come from, structurally.** `GlobalSearchEngine.search` fans one query out to
 ten providers - pins, photos, wikis, articles, trips, visits, direct messages, markup maps, safety,
