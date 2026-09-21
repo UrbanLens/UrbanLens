@@ -9,6 +9,7 @@ negotiable, so what is tested here is that deferring the lookup changes only whe
 from __future__ import annotations
 
 from datetime import timedelta
+import pathlib
 from unittest import mock
 
 from django.contrib.auth.models import AnonymousUser, User
@@ -26,6 +27,7 @@ from urbanlens.dashboard.models.abstract.versioning import (
     WriteSource,
     current_write_actor,
     current_write_source,
+    request_writer,
     writing_as,
 )
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
@@ -35,6 +37,14 @@ from urbanlens.dashboard.models.wiki.revision import WikiFieldRevision
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 AccessToken = get_access_token_model()
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
+
+
+def _picks_a_source_from_auth(path: pathlib.Path) -> bool:
+    """Whether a module decides a :class:`WriteSource` from the request's own authentication."""
+    text = path.read_text()
+    return "WriteSource.USER" in text and "is_authenticated" in text
 
 
 class DeferredActorTests(TestCase):
@@ -210,3 +220,65 @@ class ExternalApiAttributionTests(TestCase):
         self.assertTrue(callable(actor))
         self.assertEqual(source(), WriteSource.USER)  # type: ignore[operator]
         self.assertEqual(actor(), self.user.profile.pk)  # type: ignore[operator]
+
+
+class OneRuleDecidesTheWriterTests(TestCase):
+    """The rule naming a request's writer has one definition, and every binder reaches for it.
+
+    N26 #10: the site and the API each held their own copy, they drifted apart once, and nothing
+    failed when they did - a write attributed to SYSTEM that a user actually made is a row that
+    looks correct everywhere except in what it means. No test of either path catches that, because
+    each path is self-consistent; what catches it is there being one rule to test.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        self.user = baker.make(User)
+
+    def test_nothing_outside_versioning_decides_whether_a_request_has_a_writer(self) -> None:
+        """A new entry point spelling the rule out again is the failure this exists to name."""
+        versioning = REPO_ROOT / "src/urbanlens/dashboard/models/abstract/versioning.py"
+        forked = [
+            path.relative_to(REPO_ROOT).as_posix()
+            for path in (REPO_ROOT / "src/urbanlens").rglob("*.py")
+            if path != versioning and "/tests/" not in path.as_posix() and _picks_a_source_from_auth(path)
+        ]
+        self.assertEqual(
+            forked,
+            [],
+            f"{forked} decide a WriteSource from is_authenticated themselves; call request_writer() instead",
+        )
+
+    def test_it_names_the_signed_in_profile(self) -> None:
+        request = RequestFactory().get("/anything/")
+        request.user = self.user
+
+        source, actor = request_writer(request)
+
+        self.assertEqual(source(), WriteSource.USER)
+        self.assertEqual(actor(), self.user.profile.pk)
+
+    def test_an_anonymous_request_is_the_system_with_nobody_to_name(self) -> None:
+        request = RequestFactory().get("/anything/")
+        request.user = AnonymousUser()
+
+        source, actor = request_writer(request)
+
+        self.assertEqual(source(), WriteSource.SYSTEM)
+        self.assertIsNone(actor())
+
+    def test_a_request_that_never_authenticated_is_the_system_rather_than_an_error(self) -> None:
+        """Both binders run before some of the stack that sets `user`, and a 500 here is a 500 everywhere."""
+        source, actor = request_writer(RequestFactory().get("/anything/"))
+
+        self.assertEqual(source(), WriteSource.SYSTEM)
+        self.assertIsNone(actor())
+
+    def test_it_reads_nothing_until_asked(self) -> None:
+        """The deferral is the point; building the pair must not touch the database."""
+        request = RequestFactory().get("/anything/")
+        request.user = self.user
+
+        with self.assertNumQueries(0):
+            request_writer(request)

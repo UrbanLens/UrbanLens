@@ -582,16 +582,10 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
         """
         super().initial(request, *args, **kwargs)
 
-        from urbanlens.dashboard.models.abstract.versioning import WriteSource, bind_write_source
+        from urbanlens.dashboard.models.abstract.versioning import bind_write_source, request_writer
 
-        def signed_in() -> object | None:
-            user = getattr(request, "user", None)
-            return user if user is not None and user.is_authenticated else None
-
-        bind_write_source(
-            lambda: WriteSource.USER if signed_in() else WriteSource.SYSTEM,
-            actor=lambda: getattr(getattr(signed_in(), "profile", None), "pk", None),
-        )
+        source, actor = request_writer(request)
+        bind_write_source(source, actor=actor)
 
     @property
     def required_scopes(self) -> frozenset[ApiKeyScope]:

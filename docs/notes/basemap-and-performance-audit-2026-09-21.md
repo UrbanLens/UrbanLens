@@ -13,9 +13,10 @@ MapLibre engine, the tile client, the write-source deferral, the capacity harnes
 deployment config, written across 2026-09-19..21 by several Sonnet sessions.
 
 A review sweep over eleven areas produced 30 findings. Every one was checked against the code, and
-several against a live system, before anything was changed. One was refuted outright, one had its reason refuted
-after the change had been made, two were declined with numbers, and one agent's fix pointed the
-wrong way. What follows is the disposition, then the parts worth carrying forward.
+several against a live system, before anything was changed. 23 became changes; five were closed
+with a number or a decision instead; one was refuted outright and one had its reason refuted after
+the change had been made; one agent's fix pointed the wrong way; one is open. What follows is the
+disposition, then the parts worth carrying forward.
 
 ## Disposition
 
@@ -30,7 +31,7 @@ wrong way. What follows is the disposition, then the parts worth carrying forwar
 | 7 | tile cache shares a 1 GB Dragonfly with sessions and Channels | fixed, `da3f6c885` (own store) |
 | 8 | sentinel coordinates corrupt a layer id containing them | fixed, `f8d208de4` |
 | 9 | the external API still resolves the profile on every request | **changed, saving refuted** - see below |
-| 10 | no invariant check would catch a write-source misattribution | **open** |
+| 10 | no invariant check would catch a write-source misattribution | fixed, this session — one rule, plus a check for a second copy of it |
 | 11 | `Retry-After` clamp collapses jitter | fixed, `6888837d4` (47% of first retries fired at exactly 1000 ms) |
 | 12 | a queued tile is not re-checked against the viewport | fixed, `f8d208de4` |
 | 13 | `sleep()`'s abort listener leaks | fixed, `f8d208de4` |
@@ -123,10 +124,19 @@ tiers ever stop sharing a Docker bridge.
   P125; the worker-class half was not recorded anywhere. **Every capacity figure in P125, X26 and
   X28 describes the `ul_perf_*` stack, not a deployment that exists.** Closing this is a rebuild and
   a recreate on a production host, so it is written down rather than done.
-- **#10, #21** — no invariant check for write-source misattribution; no live consumer of the
-  engine-neutral marker contract.
+- **#21** — no live consumer of the engine-neutral marker contract, same cause as #20.
 
 ## Closed after the audit
+
+**#10 — the rule naming a request's writer now has one definition.** The site's middleware and
+`ExternalApiView.initial()` each held their own copy of "USER if signed in, else SYSTEM, actor is
+the profile pk". They had drifted apart once (#9), and nothing failed when they did: a write
+attributed to SYSTEM that a user actually made is a row that looks correct everywhere except in
+what it means, and each path's own tests pass because each path is self-consistent. Both now call
+`versioning.request_writer()`, and a test walks `src/urbanlens` for any other module deciding a
+`WriteSource` from `is_authenticated` — verified non-vacuous by adding a third forked entry point
+and watching it name the file. Consumers were checked for the same gap: `consumers.py` performs no
+writes, so daphne's not running Django's HTTP middleware costs nothing here.
 
 **#25 — `production.sample.env` now sizes the database.** X28 supplied the numbers the sizing was
 waiting on: `CPU_LIMIT__DB=6`, `MEM_LIMIT__DB=4g`, `UL_DB_SHARED_BUFFERS=1GB`,

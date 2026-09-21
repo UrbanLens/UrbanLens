@@ -247,16 +247,10 @@ class WriteSourceMiddleware:
         tile touched the database for. ``request.user`` resolves once and caches, so a request that
         does write still pays for it once however many rows it writes.
         """
-        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+        from urbanlens.dashboard.models.abstract.versioning import request_writer, writing_as
 
-        def signed_in() -> object | None:
-            user = getattr(request, "user", None)
-            return user if user is not None and user.is_authenticated else None
-
-        with writing_as(
-            lambda: WriteSource.USER if signed_in() else WriteSource.SYSTEM,
-            actor=lambda: getattr(getattr(signed_in(), "profile", None), "pk", None),
-        ):
+        source, actor = request_writer(request)
+        with writing_as(source, actor=actor):
             return self.get_response(request)
 
 

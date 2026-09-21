@@ -99,6 +99,34 @@ def bind_write_source(source: WriteOrigin, *, actor: WriteActor = None) -> None:
     _write_actor.set(actor)
 
 
+def request_writer(request: object) -> tuple[Callable[[], str], Callable[[], int | None]]:
+    """The deferred source and actor for a request, for whoever is binding it.
+
+    One definition for the two entry points that bind a request - ``WriteSourceMiddleware`` for the
+    site, and ``ExternalApiView.initial`` for the API, which cannot use the middleware because it
+    needs DRF's authenticated user rather than the session's. Held together here because they
+    drifted apart once, and a request attributed to SYSTEM when a user made it is not visible
+    anywhere until someone reads the provenance and believes it.
+
+    Args:
+        request: The request being handled. Nothing is read from it here; both callables read it
+            if and when a write asks.
+
+    Returns:
+        A source callable and an actor callable, either of which may be handed to
+        :func:`bind_write_source` or :func:`writing_as`.
+    """
+
+    def signed_in() -> object | None:
+        user = getattr(request, "user", None)
+        return user if user is not None and user.is_authenticated else None
+
+    return (
+        lambda: WriteSource.USER if signed_in() else WriteSource.SYSTEM,
+        lambda: getattr(getattr(signed_in(), "profile", None), "pk", None),
+    )
+
+
 @contextlib.contextmanager
 def writing_as(source: WriteOrigin, *, actor: WriteActor = None) -> Iterator[None]:
     """Declare the write source for the enclosed block.
