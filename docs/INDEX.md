@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P133` · `T4` · `PL9` · `D18` · `X29` · `I5` · `R30` · `N27`
+**Next free id:** `P134` · `T4` · `PL9` · `D18` · `X29` · `I5` · `R30` · `N27`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -188,6 +188,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P128 | open | 2026-09-17 | The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P130 | open | 2026-09-19 | `ul_web`'s deliberate `NOCREATEDB` (D11) blocks the exact `docker exec ... pytest` workflow `CLAUDE.local.md` prescribes, on every dev slot that has converged its per-tier roles | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P131 | open | 2026-09-21 | REData's ~1.45s PBKDF2 key-check is fixed upstream (confirmed 2026-09-21); basemap tiles now pay 0.43–0.98s for cold-tile rendering instead, and the concurrency bound's own trigger condition is met for auth but not for that | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P133 | open | 2026-09-21 | Every page inlines its JavaScript, so half the compressed bytes a logged-in user downloads are re-sent on every navigation and can never be cached | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P132 | open | 2026-09-21 | A global search is over its latency budget at every concurrency measured, and two of its ten providers are 78% of the cost | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N25 | current | 2026-09-19 | Reply to REData's T8: the catalogue is embedded ahead of every map and serving production tiles; T8 §0 is stale, the contract IS deployed | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
 | PL8 | live | 2026-09-19 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |

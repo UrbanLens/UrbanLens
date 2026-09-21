@@ -3308,6 +3308,60 @@ connection occupancy at 1,000 users; not a latency fix, and the remaining duplic
 - **Whether the ladder's p95 has moved.** The per-fragment figures above the fold predate
   `d581f2c9e`; the ladder has not been re-run.
 
+## P133 — Every page inlines its JavaScript, so half the compressed bytes a logged-in user downloads are re-sent on every navigation and can never be cached
+
+`id: P133` · `status: open` · `updated: 2026-09-21`
+
+Measured 2026-09-21 against the capacity population, rendering as production would (the site's
+`environment_override` flipped to `production` for the probe and restored after, because the dev
+toolbar alone is 27.5 KB of any other measurement):
+
+| page | raw | gzipped | inline `<script>`/`<style>`, raw | the same, gzipped | share of the gzipped page |
+|---|---:|---:|---:|---:|---:|
+| map | 238,374 | 39,687 | 72,420 | 19,559 | **49%** |
+| pin detail | 261,865 | 51,075 | 121,824 | 31,740 | **62%** |
+| home | 103,487 | 23,810 | 61,701 | 17,186 | **72%** |
+| organize | 431,477 | 42,623 | 54,022 | 15,193 | 36% |
+
+The templates hold 793,722 bytes of inline script across 129 `<script>` bodies. 148,668 of those
+bytes are in bodies containing no template tag at all - static JavaScript, movable to a file
+verbatim - and another 122,885 in bodies with one to three, movable behind a data attribute or a
+JSON island. `dashboard/partials/ui/_page_explainer_script.html` is 10,354 bytes with zero
+interpolation and is included on every page; `_notification_push.html` is 9,260 with one
+(`{% static "favicon.ico" %}`).
+
+**Why this is a per-user cost and not just a page-weight one.** Inline script is part of the HTML,
+so it is re-sent, re-compressed and re-parsed on every navigation. The same bytes as an external
+file are fetched once and then served from cache - whitenoise already hashes and far-futures
+`/static/`. A user clicking through five pages currently downloads roughly five copies.
+
+**What this does and does not cost the server.** gzip of one page measured 2.7-6.0 ms of CPU
+(Python's gzip at level 6; nginx's will be the same order), and nginx does compress `text/html` -
+confirmed by response header, not assumed, since `gzip_types` in
+`config/nginx/nginx.conf:111` does not list it and relies on nginx's implicit inclusion.
+Template rendering is 56% of `map.view`'s CPU under cProfile (0.089 s of 0.160 s). **Not measured:
+how much of that render is these blocks specifically.** They are `TextNode`s, which are cheap per
+byte, so the render share is probably small and the honest claim here is bytes and client-side
+parsing rather than server CPU.
+
+**Dialogs are a second, different cost.** 15 to 20 `<dialog>` elements render fully into every
+page for interactions most users never start: 58,593 bytes on map (24% of it), 199,292 on organize
+(46%). They compress well - organize is 431 KB raw to 43 KB gzipped, 10.1x, because twenty dialogs
+are repetitive - so unlike the scripts this is not mainly a wire cost. It is template render time
+and DOM the browser builds and never shows. `#add-pin-dialog` alone is 21,524 bytes. The project
+already prefers HTMX partials for exactly this shape (`dashboard/CLAUDE.md`), so fetching a dialog
+on open is the house pattern rather than a new one.
+
+### What this does not establish
+
+- **That extraction is safe as a mechanical change.** 129 bodies is a large diff, ordering and CSP
+  both matter, and the bodies with 4+ template tags (522,169 bytes, the majority) need real work
+  rather than a move.
+- **How much server CPU it would actually return.** See above - the bytes are measured, the render
+  attribution is not.
+- **Whether any of this shows up in the capacity ladder.** X28 measured wall time per fragment, not
+  payload; nothing has been re-run to see whether a lighter page moves p95.
+
 ## P128 — The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is
 
 `id: P128` · `status: open` · `updated: 2026-09-17`
