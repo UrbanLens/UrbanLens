@@ -69,10 +69,11 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     # with OR across all relevant text fields.
     # Deliberately not restricted to root pins: jumping to a child (sub) pin must always work, even
     # though the map hides child pins unless their layer is on - the map turns the layer on when the
-    pin_qs = (
+    # Two statements: the match runs against ids alone, then those rows are fetched by primary
+    # key. Carrying `select_related` through the matching query costs ~210ms of planning per
+    # keystroke at capacity scale - ten relations and two hundred columns to de-duplicate (X28).
+    matching_ids = list(
         Pin.objects.filter(profile=profile)
-        .select_related("location__wiki", "parent_pin", "parent_pin__location")
-        .prefetch_related("labels", "aliases", "location__wiki__aliases")
         .filter(
             Q(name__icontains=q)
             | Q(aliases__name__icontains=q)
@@ -84,8 +85,11 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
             | Q(location__wiki__description__icontains=q)
             | tag_match_q(q, "location__place__external_tags"),
         )
-        .distinct()[:12]
+        .order_by("id")
+        .values_list("id", flat=True)
+        .distinct()[:12],
     )
+    pin_qs = Pin.objects.filter(id__in=matching_ids).select_related("location__wiki", "parent_pin", "parent_pin__location").prefetch_related("labels", "aliases", "location__wiki__aliases").order_by("id")
 
     for pin in pin_qs:
         if pin.id in seen_pin_ids:
