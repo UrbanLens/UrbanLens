@@ -50,16 +50,30 @@ if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
 fi
 
 # Crash-looping containers only accept exec in brief windows; wait for one.
+#
+# Where there is a healthcheck, wait for it rather than for the first window: a container part way
+# through its entrypoint accepts exec while its workers are still spawning, and syncing into that
+# swaps the tree out from under a worker that then reads a file it does not own yet. The chown
+# lands a moment later and the container is already crash-looping, which reads as a bad sync
+# rather than a badly timed one. Unhealthy after the wait is still synced - that is the case the
+# brief-window handling exists for.
 wait_for_exec() {
-    local container="$1" attempt
+    local container="$1" attempt health
     for attempt in $(seq 1 60); do
         if docker exec "$container" true 2>/dev/null; then
             [ "$attempt" -gt 1 ] && echo "    caught it on attempt $attempt"
-            return 0
+            health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container" 2>/dev/null)
+            [ "$health" = "starting" ] || return 0
+            [ "$attempt" -eq 1 ] && echo "==> '$container' is still starting - waiting rather than syncing under its workers"
+        elif [ "$attempt" -eq 1 ]; then
+            echo "==> '$container' is not accepting exec (restarting?) - waiting for a window"
         fi
-        [ "$attempt" -eq 1 ] && echo "==> '$container' is not accepting exec (restarting?) - waiting for a window"
         sleep 2
     done
+    if docker exec "$container" true 2>/dev/null; then
+        echo "    '$container' never reported healthy; syncing anyway"
+        return 0
+    fi
     echo "error: '$container' never accepted a command. Check 'docker logs $container'." >&2
     return 1
 }
