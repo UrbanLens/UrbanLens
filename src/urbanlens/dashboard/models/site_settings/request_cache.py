@@ -1,7 +1,7 @@
-"""Request-scoped memoisation for the ``SiteSettings`` singleton and each user's feature set.
+"""Request-scoped memoisation for the ``SiteSettings`` singleton and each account's standing.
 ``SiteSettings.get_current()`` is called ~80 places, and several of them run on every single page: three separate context processors each fetch it, then the controller fetches it again, then every ``user_has_feature()`` check fetches it once more.
 Each call was its own ``get_or_create(pk=1)`` round-trip for a row that cannot change mid-request, so an ordinary map render spent a handful of identical queries on one singleton.
-A feature set is the settings row plus the user's subscriptions, and a page asks about it from its views and its template alike, so it is remembered alongside.
+What an account may see is the settings row plus its subscriptions, and a page asks about it from its views and its template alike, so it is remembered alongside - as an ``AccessState``, which is also cached across requests (see ``models.subscriptions.access_state``).
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ def begin_scope(**_kwargs: object) -> None:
     """Arm the memo for the scope that is starting (a ``request_started`` receiver)."""
     _state.enabled = True
     _state.value = None
-    _state.features = {}
     _state.access = {}
     _state.access_changed = False
 
@@ -32,19 +31,17 @@ def end_scope(**_kwargs: object) -> None:
     """Disarm the memo and drop everything remembered (a ``request_finished`` receiver)."""
     _state.enabled = False
     _state.value = None
-    _state.features = {}
     _state.access = {}
     _state.access_changed = False
 
 
 def invalidate(**_kwargs: object) -> None:
-    """Forget the memoised row and every feature set, without disarming the scope.
+    """Forget the memoised row and every account's standing, without disarming the scope.
 
-    Connected to the ``post_save`` of the rows a feature set is built from, so a change made during a request is seen
+    Connected to the ``post_save`` of the rows these are built from, so a change made during a request is seen
     by the rest of it.
     """
     _state.value = None
-    _state.features = {}
     _state.access = {}
 
 
@@ -81,19 +78,6 @@ def set_cached(value: SiteSettings) -> None:
         _state.value = value
 
 
-def get_features(user_id: int) -> frozenset[str] | None:
-    """Return the user's memoised feature set, or None if unset or not in an armed scope."""
-    if not getattr(_state, "enabled", False):
-        return None
-    return getattr(_state, "features", {}).get(user_id)
-
-
-def set_features(user_id: int, features: frozenset[str]) -> None:
-    """Memoise the user's feature set for the rest of this scope, if one is armed."""
-    if getattr(_state, "enabled", False):
-        _state.features = {**getattr(_state, "features", {}), user_id: features}
-
-
 def get_access(user_id: int) -> AccessState | None:
     """Return the user's memoised access state, or None if unset or not in an armed scope."""
     if not getattr(_state, "enabled", False):
@@ -104,8 +88,8 @@ def get_access(user_id: int) -> AccessState | None:
 def set_access(user_id: int, state: AccessState) -> None:
     """Memoise the user's access state for the rest of this scope, if one is armed.
 
-    Kept separate from the feature memo because the two answer different questions: an admin's
-    feature set is every feature, which says nothing about whether they are an admin.
+    The state, not the feature set it implies: an admin's features are every feature, which says
+    nothing about whether they are an admin, and the dev toolbar asks the second question.
     """
     if getattr(_state, "enabled", False):
         _state.access = {**getattr(_state, "access", {}), user_id: state}
