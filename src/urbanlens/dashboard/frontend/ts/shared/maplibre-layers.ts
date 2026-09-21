@@ -19,7 +19,7 @@
 
 import { showMapContextMenu } from "./map-context-menu";
 import { createLayersPanel } from "./map-layers-panel";
-import { attributionAsText, normalizeBase, rasterSourceFor, vectorStyleFor } from "./map-layers";
+import { attributionAsText, BASE_ERROR_TILE_COLOR, normalizeBase, rasterSourceFor, vectorStyleFor } from "./map-layers";
 import type { BaseLayerKey, CustomLayerToggle, MapDarkMode, MapLayersInstance, MapLayersOptions, MapLayersState } from "./map-layers";
 import { toMapLibreTileUrls } from "./maplibre-raster-style";
 import { fetchVectorStyle } from "./maplibre-vector-style";
@@ -39,6 +39,8 @@ const BASE_LAYER_IDS = {
     topographic: `${LAYER_PREFIX}topographic`,
     satellite: `${LAYER_PREFIX}satellite`,
 } as const;
+/** MapLibre's `errorTileUrl` equivalent: painted beneath every managed layer, so a raster tile that fails to load reveals this instead of whatever the page sits on. */
+const BACKGROUND_LAYER_ID = `${LAYER_PREFIX}background`;
 const BORDERS_LAYER_ID = `${LAYER_PREFIX}borders`;
 const RAIN_LAYER_ID = `${LAYER_PREFIX}weather-rain`;
 const CLOUDS_LAYER_ID = `${LAYER_PREFIX}weather-clouds`;
@@ -178,6 +180,15 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         // Insert beneath whatever the page has already drawn (markup shapes, pin markers) -
         // MapLibre appends to the top of the style by default, which would bury them under tiles.
         const firstExistingLayerId = map.getStyle().layers?.[0]?.id;
+
+        // Added first so it lands beneath every layer inserted before the same anchor below,
+        // including a vector base's own layers (`addVectorStyle`) - MapLibre's raster layers have no
+        // `errorTileUrl`; a tile that fails to load simply doesn't paint, so without this a hole in
+        // the base opens onto whatever the page sits on instead of the grey Leaflet shows.
+        if (!map.getLayer(BACKGROUND_LAYER_ID)) {
+            map.addLayer({ id: BACKGROUND_LAYER_ID, type: "background", paint: { "background-color": BASE_ERROR_TILE_COLOR } }, firstExistingLayerId);
+        }
+
         const add = (id: string, source: RasterSourceSpecification, opacity: number): void => {
             if (map.getLayer(id)) return;
             if (!map.getSource(id)) map.addSource(id, source);

@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createMapLayers, registerRedataLayers, resetRedataLayersCacheForTests } from "./map-layers";
+import { BASE_ERROR_TILE_COLOR, createMapLayers, registerRedataLayers, resetRedataLayersCacheForTests } from "./map-layers";
 import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import type { Map as MaplibreMap } from "maplibre-gl";
 
@@ -148,6 +148,7 @@ const SATELLITE = "ul-layers-satellite";
 const BORDERS = "ul-layers-borders";
 const RAIN = "ul-layers-weather-rain";
 const CLOUDS = "ul-layers-weather-clouds";
+const BACKGROUND = "ul-layers-background";
 
 function makeStrip(): HTMLElement {
     const root = document.createElement("div");
@@ -199,7 +200,7 @@ describe("deferred style setup", () => {
 
         map.finishStyleLoad();
 
-        expect([...map.layers.keys()].sort()).toEqual([BORDERS, DARK, SATELLITE, STREET, TOPO].sort());
+        expect([...map.layers.keys()].sort()).toEqual([BACKGROUND, BORDERS, DARK, SATELLITE, STREET, TOPO].sort());
     });
 
     test("sets up immediately when the style is already loaded", () => {
@@ -220,7 +221,20 @@ describe("deferred style setup", () => {
 
         map.finishStyleLoad();
 
-        expect(map.order).toEqual([STREET, DARK, TOPO, SATELLITE, BORDERS, "markup-fill-0", "markup-line-0"]);
+        expect(map.order).toEqual([BACKGROUND, STREET, DARK, TOPO, SATELLITE, BORDERS, "markup-fill-0", "markup-line-0"]);
+    });
+
+    test("adds the error-background layer beneath every managed raster layer", () => {
+        const map = makeMap();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        map.finishStyleLoad();
+
+        expect(map.getLayer(BACKGROUND)).toBeTruthy();
+        expect(map.getLayer(BACKGROUND)!.paint["background-color"]).toBe(BASE_ERROR_TILE_COLOR);
+        for (const id of [STREET, DARK, TOPO, SATELLITE, BORDERS]) {
+            expect(map.order.indexOf(BACKGROUND)).toBeLessThan(map.order.indexOf(id));
+        }
     });
 
     test("state chosen before the style loads is applied when it does", () => {
@@ -748,9 +762,23 @@ describe("vector base layers", () => {
         map.finishStyleLoad();
         await settle();
 
-        expect(map.order.slice(0, 2)).toEqual(["ul-layers-vector-street-background", "ul-layers-vector-street-water"]);
+        expect(map.order[0]).toBe(BACKGROUND);
+        expect(map.order.slice(1, 3)).toEqual(["ul-layers-vector-street-background", "ul-layers-vector-street-water"]);
         expect(map.order.indexOf("ul-layers-vector-street-water")).toBeLessThan(map.order.indexOf(STREET));
         expect(map.order[map.order.length - 1]).toBe("page-pins");
+    });
+
+    test("keeps the error-background layer beneath the vector style's own layers too", async () => {
+        stubFetch({ layers: [vectorEntry("street")] });
+        await registerRedataLayers();
+        const map = makeMap();
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        map.finishStyleLoad();
+        await settle();
+
+        expect(map.order.indexOf(BACKGROUND)).toBeLessThan(map.order.indexOf("ul-layers-vector-street-background"));
+        expect(map.order.indexOf(BACKGROUND)).toBeLessThan(map.order.indexOf("ul-layers-vector-street-water"));
     });
 
     test("resolves the style's relative tile template against the style's own address", async () => {

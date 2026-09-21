@@ -29,6 +29,14 @@ export const MAP_MAX_ZOOM = 21;
 export const MAP_MIN_ZOOM = 2;
 
 /**
+ * The grey a failed base tile is replaced with. Shared with the MapLibre engine
+ * (`maplibre-layers.ts`), which has no `errorTileUrl` equivalent and instead paints a background
+ * layer this colour beneath its managed raster layers - one literal so the two engines cannot draw
+ * a different placeholder.
+ */
+export const BASE_ERROR_TILE_COLOR = "#999";
+
+/**
  * Shown in place of a base tile that failed to load - a burst of requests on
  * zoom-out (a new zoom level's worth of tiles, all uncached) occasionally
  * draws a 403/5xx from these free vendor CDNs, most likely rate-limiting
@@ -41,7 +49,7 @@ export const MAP_MIN_ZOOM = 2;
  * to match every vendor's own tile size here.
  */
 const BASE_ERROR_TILE_URL =
-    "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Crect width='256' height='256' fill='%23999'/%3E%3C/svg%3E";
+    `data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Crect width='256' height='256' fill='${encodeURIComponent(BASE_ERROR_TILE_COLOR)}'/%3E%3C/svg%3E`;
 
 /** Shown in place of a failed *overlay* tile - transparent, so a flaky boundary/weather tile leaves the base map showing through instead of painting a grey patch over it. */
 const OVERLAY_ERROR_TILE_URL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";

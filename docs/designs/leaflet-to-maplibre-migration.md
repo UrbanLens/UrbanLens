@@ -458,6 +458,14 @@ gap, rather than assuming "static tile layer" covers it:
   `map-page.ts`, `map-annotations.ts`), item 6 (`leaflet-rotate` - `floorplan-editor.ts`), item 7
   (`leaflet-draw` - `map-annotations.ts`, `spotguessr.ts`, `pin_lists/detail.html`,
   `pin_lists/_saved_filter_dialog_scripts.html`).
+- **Item 3's rebuild exists but is unwired**, checked 2026-09-21 by grepping every static and
+  dynamic import: `map-view.ts`, `map-markers.ts`, `map-cluster-group.ts` and their three
+  `maplibre-*` counterparts are imported by nothing outside each other and their own tests. The
+  supercluster engine and the engine-neutral contract are written and tested; `map-page.ts` and
+  `map-annotations.ts` still call `createPinClusterGroup()` from `map-clusters.ts` against a raw
+  `L.Map`, so none of it runs in a browser. A bug fixed there changes nothing a reader sees, and
+  the 20,000-pin questions below cannot be answered against a real page until a consumer is wired.
+  Their doc comments say so now; they previously read as though the main map already used them.
 
 Verified in a real browser (`bin/sync_app.sh --frontend` into `development_main`, Playwright against
 a seeded `/dashboard/pin-shares/<id>/`, throwaway data removed afterwards): the MapLibre engine adds

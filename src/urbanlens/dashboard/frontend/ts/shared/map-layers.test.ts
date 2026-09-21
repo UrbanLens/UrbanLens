@@ -2,7 +2,7 @@
  * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in dashboard/models/markup/meta.py.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer, vectorStyleFor } from "./map-layers";
+import { BASE_ERROR_TILE_COLOR, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer, vectorStyleFor } from "./map-layers";
 import { acquireOwnTileSlot, ownTileRetriesAreSuspended, recordOwnTileOutcome, resetOwnTileGateForTests } from "./own-tiles";
 
 describe("normalizeBase", () => {
@@ -154,6 +154,14 @@ describe("tileLayer errorTileUrl", () => {
         tileLayer("street", { errorTileUrl: "custom.png" });
         expect(state.calls[0]?.options.errorTileUrl).toBe("custom.png");
         expect(state.calls[0]?.options.maxZoom).toBe(21);
+    });
+
+    /** The MapLibre engine's background layer (`maplibre-layers.ts`) paints this same exported colour, so the two placeholders cannot drift apart. */
+    test("the base placeholder's fill is built from the exported BASE_ERROR_TILE_COLOR", () => {
+        const state = stubLeaflet();
+        tileLayer("street");
+        const errorTileUrl = state.calls[0]?.options.errorTileUrl as string;
+        expect(errorTileUrl).toContain(`fill='${encodeURIComponent(BASE_ERROR_TILE_COLOR)}'`);
     });
 });
 

@@ -1,5 +1,8 @@
 /**
- * The map surface a page uses, independent of which engine draws it.
+ * The map surface a page will use, independent of which engine draws it.
+ *
+ * Only `isMaplibreMap` below has a live caller. The camera, viewport and event contract is the
+ * unwired facade `map-cluster-group.ts` describes - every page still drives Leaflet directly.
  *
  * `map-layers.ts` already dual-engines the *basemap*; this is the rest of what a page does with a
  * map - camera, viewport, pointer geometry and events - so a call site can be written once and run

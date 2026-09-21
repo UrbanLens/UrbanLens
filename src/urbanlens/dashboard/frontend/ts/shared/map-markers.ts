@@ -1,6 +1,8 @@
 /**
  * A pin on the map, independent of which engine draws it - the marker half of `map-view.ts`.
  *
+ * Part of the same unwired facade as `map-cluster-group.ts`: no page builds one of these yet.
+ *
  * Both engines anchor an HTML element at a coordinate, so this is a thin contract rather than an
  * abstraction over two different ideas. The one structural difference worth knowing: a marker's
  * element is created when it is first shown, not when it is built. Leaflet already works that way
