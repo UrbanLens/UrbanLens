@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import contextmanager, nullcontext
 import logging
 import math
+import threading
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
 from django.contrib.gis.db.models.functions import Distance
@@ -19,7 +21,7 @@ from django.urls import reverse
 from urbanlens.dashboard.services.global_search.results import SearchResult, excerpt
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from django.db.models import QuerySet
 
@@ -190,6 +192,66 @@ def _crosses_many(model: type[Model], path: str) -> bool:
     return False
 
 
+#: Per thread, because both the connection the scope sets and the querysets it memoises are.
+_probe_state = threading.local()
+
+
+class _ProbeScope:
+    """What every semi-join probe in one search shares: the setting, and the viewer's own pks."""
+
+    def __init__(self) -> None:
+        #: Keyed by id, holding the queryset too so the id cannot be reused while the entry lives.
+        self._outer_pks: dict[int, tuple[object, list[Any]]] = {}
+
+    def outer_pks_of(self, queryset: QuerySet[Any, Any]) -> list[Any]:
+        """The primary keys *queryset* selects, fetched once per scope.
+
+        `term_filter` probes once per term per field path against the same access-scoped
+        queryset, and each probe needs the same list to bound itself by. Fetching it per probe
+        was a dozen identical round trips per search for a list that cannot change inside one.
+
+        Args:
+            queryset: The access-scoped queryset being searched.
+
+        Returns:
+            Its primary keys, in whatever order the database returned them.
+        """
+        cached = self._outer_pks.get(id(queryset))
+        if cached is not None:
+            return cached[1]
+        pks = list(queryset.values_list("pk", flat=True))
+        self._outer_pks[id(queryset)] = (queryset, pks)
+        return pks
+
+
+@contextmanager
+def _probe_scope() -> Iterator[_ProbeScope]:
+    """Hold ``enable_seqscan = off`` and one pk cache for the block, entering once however nested.
+
+    A search issues a semi-join probe per term per field path. Setting and resetting the session
+    around each made two thirds of one search's statements session settings rather than queries,
+    and re-fetching the viewer's pks for each made a dozen more. Both are identical across one
+    search, so both belong to the scope rather than to the probe. Why the setting is wanted at
+    all is :func:`_semijoin`'s business; this only decides how often it is applied.
+
+    Yields:
+        The scope, with the setting in force.
+    """
+    scope = getattr(_probe_state, "scope", None)
+    if scope is not None:
+        yield scope
+        return
+    scope = _probe_state.scope = _ProbeScope()
+    with connection.cursor() as cursor:
+        cursor.execute("SET enable_seqscan = off")
+    try:
+        yield scope
+    finally:
+        _probe_state.scope = None
+        with connection.cursor() as cursor:
+            cursor.execute("RESET enable_seqscan")
+
+
 def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:  # noqa: UP047
     """*condition* as a semi-join when *path* crosses a to-many relation.
 
@@ -206,6 +268,15 @@ def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:  # noqa: UP04
     `term_filter` always does): Postgres then plans it as a hashed SubPlan and, inside that plan, drops
     the crossing table's own index in favour of scanning it whole - a plan it does not choose when the
     identical subquery runs alone. Resolving it here, as its own statement, fixes that.
+
+    ``outer_pks`` has to be a literal list and not ``queryset.values("pk")``, even though the
+    subquery form is far cheaper to send and to plan: 17,010 bytes and 6.97 ms of planning become
+    361 bytes and 0.61 ms on the capacity population. Tried, and it fails the regression net this
+    entry left behind - `test_search_does_not_read_another_accounts_*`, nine of them. Given a
+    subquery the planner is free to drive from the far side of the join instead, filtering
+    `dashboard_labels` by name and joining back, which reads every label on the site: 545 rows
+    where the literal list reads 5. The crossing table stays fine either way; it is the table the
+    *condition* names that gets scanned. Cheaper to plan, and the wrong plan.
 
     That statement's own plan is a second problem: this query is exactly the shape Postgres's
     cost-based planner tie-breaks towards a sequential scan of the crossing table once that table is
@@ -236,17 +307,12 @@ def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:  # noqa: UP04
     model = queryset.model
     if not _crosses_many(model, path):
         return condition
-    outer_pks = list(queryset.values_list("pk", flat=True))
-    if not outer_pks:
-        return Q(pk__in=[])
-    matches = model._base_manager.filter(condition, pk__in=outer_pks)  # noqa: SLF001
-    with connection.cursor() as cursor:
-        cursor.execute("SET enable_seqscan = off")
-    try:
+    with _probe_scope() as scope:
+        outer_pks = scope.outer_pks_of(queryset)
+        if not outer_pks:
+            return Q(pk__in=[])
+        matches = model._base_manager.filter(condition, pk__in=outer_pks)  # noqa: SLF001
         matching_pks = list(matches.values_list("pk", flat=True))
-    finally:
-        with connection.cursor() as cursor:
-            cursor.execute("RESET enable_seqscan")
     return Q(pk__in=matching_pks)
 
 
@@ -262,13 +328,16 @@ def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q
     Returns:
         The combined Q object; empty Q when ``terms`` is empty."""
     combined = Q()
-    for term in terms:
-        term_q = Q()
-        for field_path in fields:
-            term_q |= _semijoin(queryset, field_path, Q(**{f"{field_path}__icontains": term}))
-        if extra is not None:
-            term_q |= extra(term)
-        combined &= term_q
+    # Without a queryset no path below crosses a to-many, so nothing here touches the database and
+    # holding the setting would be two round trips for nothing.
+    with _probe_scope() if queryset is not None and terms else nullcontext():
+        for term in terms:
+            term_q = Q()
+            for field_path in fields:
+                term_q |= _semijoin(queryset, field_path, Q(**{f"{field_path}__icontains": term}))
+            if extra is not None:
+                term_q |= extra(term)
+            combined &= term_q
     return combined
 
 
