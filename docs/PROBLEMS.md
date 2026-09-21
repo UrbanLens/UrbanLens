@@ -3376,7 +3376,7 @@ on open is the house pattern rather than a new one.
 
 ## P134 — At 1,000 users the app tier is CPU-throttled a third of the time while the database uses a quarter of its cores
 
-`id: P134` · `status: open` · `updated: 2026-09-21`
+`id: P134` · `status: partial` · `updated: 2026-09-21`
 
 Every capacity problem recorded before this one was written as a database problem, and the fixes
 were database fixes. The container figures from the 1,000-user ladder
@@ -3457,16 +3457,76 @@ shared by three context processors and the controller, and caching the *row* acr
 mean serialising a model instance whose fields change with the schema - a deploy-shaped failure
 in exchange for one indexed single-row read. Not attempted.
 
+### What the after-ladder says
+
+Re-run at the identical configuration and population
+(`tests/perf/results/after-20260921T233000Z`, same 1,000-account manifest, same 6 workers, same
+4+4 cores, dev stack stopped for both). The run measures P133 and this entry together; the search
+work of P132 was already in the before2 container.
+
+**Five hundred concurrent users now fit inside budget, and did not before.** That is the result;
+everything else is detail.
+
+| hold | endpoints over budget, before | after |
+|---|---:|---:|
+| u100 | 0 of 25 | 0 of 25 |
+| u250 | 0 of 25 | 0 of 25 |
+| u500 | **6 of 25** | **0 of 25** |
+| u1000 | 24 of 25 | 24 of 25 |
+
+The six that cleared at u500 were `search_panel`, `pin_nearby`, `messages_unread`, `conversation`,
+`organize_index` and `pin_details`. Proxy p95 at that hold went 0.441 s to 0.159 s.
+
+At u1000 the tier is saturated in both runs, so its mean core count cannot move - what moves is
+how much gets through it:
+
+| hold | metric | before | after |
+|---|---|---:|---:|
+| u1000 | page views | 4,856 | **5,298** |
+| u1000 | proxy requests | 29,273 | **31,616** |
+| u1000 | proxy p95 | 6.272 s | **5.251 s** |
+| u1000 | app mean cores | 3.71 | 3.74 |
+| u1000 | app throttled | 31.61% | **42.63%** |
+| u1000 | db mean cores | 0.91 | **0.82** |
+
+The throttle figure going *up* while everything else improves is what a capped tier doing more
+work looks like: 8% more requests are being served through the same four cores, so more
+accounting periods end pinned at the quota. Read it with the rest of the row, not alone - 8% more
+requests, 16% lower p95, and 10% less database CPU for them.
+
+Per view, from `request_costs.txt` (whole run, both):
+
+| view | mean CPU ms | mean statements | p50 wall ms |
+|---|---|---|---|
+| `map.view` | 67.2 → **58.6** | 18.0 → **14.4** | 235 → **121** |
+| `home.view` | 81.7 → **71.1** | 34.0 → **31.4** | 388 → **186** |
+| `pin.details` | 97.8 → **90.8** | 27.2 → **25.3** | 380 → **180** |
+| `search.panel` | 91.2 → **77.6** | 27.5 → 31.0 | 218 → **150** |
+| `organize.index` | 147.9 → **143.1** | 21.0 → **19.2** | 553 → **367** |
+
+`search.panel` is the one statement count that rose, and it is not a regression by any measure of
+time - its CPU fell 15% and its SQL time 37%. Two things account for it. The chrome saving applies
+to it as it does to everything, but the search work of P132 was synced into the before2 container
+from a working tree 47 minutes before it was committed, so the two runs did not run quite the same
+search code; and the final form probes by matching ids and then fetching them, which reads the id
+list as rows and issues a statement per provider to do it. That trade - more statements, less
+planning - is the point of `match_ids`, and it is what the dedicated measurement in P132 priced.
+The two runs are therefore a clean A/B for the chrome and not for search.
+
 ### What this does not establish
 
-- **How much of the 31.6% throttle this removes.** The after-ladder run is the only thing that
-  answers it; the per-page measurement above is the unit the change removes, not the whole.
 - **What to do about the other 7.9 ms.** Caching the navbar's *markup* would take it, but the
   markup varies by page (`nav_section`, active states) and by badge counts, so the key would have
   to carry the very values that are cheap to read.
 - **Whether the badges should be cached too.** They are the values a stale answer is most visible
   in, and `nav_active_checkins` is safety-critical: a banner that hides an active check-in because
-  a cache was warm is a worse failure than the CPU it saves. Not attempted deliberately.
+  a cache was warm is a worse failure than the CPU it saves. Not attempted deliberately. What they
+  could have without a cache is one statement instead of four: the three badge processors and
+  `add_direct_messages` each count rows for the same viewer, and every page renders all of them.
+  Not attempted.
+- **Whether prewarming would help.** Measured and mostly declined - see I6. The one case that
+  would is the herd after a global bump, which costs each active viewer four extra statements
+  once.
 - **Whether `map.basemap_tiles` at 2.1 ms CPU × 46,040 requests is reducible.** It is 5.9% of the
   tier for something that issues no queries at all, so the cost is authorisation and framing. Not
   investigated.
