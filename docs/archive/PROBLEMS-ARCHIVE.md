@@ -17168,3 +17168,97 @@ re-verified here.
 
 `grep -rn MAP_TEMPLATE src/` finds nothing outside this archive entry's own prose - no other file
 cited the old name or the stale template path.
+
+## RESOLVED 2026-09-21: Map autocomplete read every pin on the site to answer one account, and then spent 160ms planning the query that did it
+
+`id: P100` · `status: fixed` · `resolved: 2026-09-21`
+
+Supersedes this entry's 2026-09-10 and 2026-09-18 conclusion that "no meaningful scan-cost benefit
+is available at current data volumes". Both of those measurements were correct about what they
+measured and both drew the wrong conclusion, for the same reason: 10,000 and 3,001 pins are far
+below the volume at which the planner changes its mind. The entry's own last line named the fix -
+"the next step is the same diagnostic run against the capacity population" - and running it found
+two defects, the second hidden behind the first.
+
+**The original hypothesis was wrong, and it is worth saying why.** The title blamed nine
+leading-wildcard `ILIKE`s with no trigram index to serve them. Trigram indexes were never the
+problem. The 2026-09-18 diagnostic added exactly the right index shape on `name` and measured
+6,002 rows examined before and 6,002 after - a true no-op - and concluded the query was not
+scan-bound. It was scan-bound, just not on a column any single-column index could help.
+
+### What was actually wrong
+
+**First: the cost belonged to the site, not to the viewer.** On the capacity population (1,000
+accounts, 471,756 pins) one keystroke cost 405 ms of SQL, and `EXPLAIN (ANALYZE, BUFFERS)` put
+197 ms of it in one node:
+
+    Index Scan using dashboard_user_pins_pkey on dashboard_user_pins
+      (actual time=20.942..197.009 rows=1859 loops=1)
+      Filter: (profile_id = 4)
+      Rows Removed by Filter: 500199
+
+The viewer owned 1,859 pins and the plan read 502,058. `search_local` ends in `.distinct()`, whose
+`Unique` node wants input sorted by the pin's primary key; the cheapest presorted source available
+was the primary key itself, so the planner walked the whole table in id order and discarded
+everyone else's rows. Every existing `(profile_id, ...)` index sorted by something the `Unique`
+could not use. That is why an index on a *filter* column changed nothing: the scan was not being
+chosen to satisfy the filter.
+
+The axis is rows *read*, which is why three earlier sessions missed it. The query returns at most
+12 rows either way, so a query counter, a row-count wrapper and a latency budget all read this as
+one slow query rather than as a plan whose cost is set by how many pins *other people* have.
+
+`Index(fields=["profile", "id"], name="idxdb_pin_pfile_id")` (migration `0053`, commit
+`a9264814f`) gives the `Unique` a presorted source already scoped to one account. Rows read fell
+from 502,058 to 1,859.
+
+**Second, revealed by the first: planning cost more than execution.** With the index in place the
+same keystroke cost 233 ms to plan and 52 ms to run. `select_related` sat on the *matching* query,
+so the statement applying eight OR'd `ILIKE`s also returned four joined tables' columns - ten
+relations, roughly two hundred output columns to search a join order for, and a `DISTINCT` over
+all of them. Dropping it took planning from 215.7 ms to 6.7 ms.
+
+Commit `e8485f72b` splits it: the filter selects ids, and those ids are fetched by primary key
+with the `select_related`/`prefetch_related` intact. Measured on the same population with the
+index present in both arms, so this is the split's own contribution and not the index's:
+
+| term | one statement | two-step |
+|---|---:|---:|
+| `Perf Pin`, 12 matches | 161.6 ms plan + 13.9 ms run | 2.9+0.4 then 1.0+0.2 = **4.4 ms** |
+| `riv`, 0 matches | 164.0 ms plan + 49.8 ms run | 3.1+26.6 then 2.3+0.2 = **32.2 ms** |
+
+End to end on the same endpoint and population: a warm keystroke was 426-585 ms wall / 404-566 ms
+SQL, and is now 40 ms wall / 16 ms SQL when the term matches, 62-102 / 39-78 when it does not.
+
+**Plan caching does not rescue the one-statement shape.** At `prepare_threshold=5` Postgres builds
+five custom plans before considering a generic one, so a statement is only cheap from roughly its
+eleventh execution; psycopg's `prepared_max=100` LRU evicts it long before a real mixed workload
+gets there. Measured as a warm-up curve on this stack, not assumed.
+
+### What is left
+
+The remaining cost is execution on a miss: 26.6 ms scanning the viewer's own pins across the
+joined alias, label and wiki tables. **That is where a trigram index would finally bite** - the
+question this entry originally asked, now answerable because planning no longer dominates. Not
+attempted here. Note that the same measurement shows a filter restricted to the pin's own columns
+runs in 1.2 ms, so the cost is the joined branches rather than `name`, and a single-column index
+on `name` would again be a no-op.
+
+The wiki half of `search_local` (`autocomplete.py:142-149`) has the same `select_related` +
+`distinct()` shape at 8-17 ms. Not changed.
+
+### Verification
+
+`src/urbanlens/dashboard/tests/hypothesis/test_autocomplete_does_not_walk_every_pin.py` holds both
+halves as regressions: one asserts the pin table is not walked, one asserts the scanning statement
+does not carry the joined tables in its select list. Both were confirmed non-vacuous by causation
+rather than by inspection - dropping `idxdb_pin_pfile_id` flipped rows read from 200 to 30,200 and
+recreating it flipped it back; the select-list test fails against the one-statement shape and
+passes against the two-step. The plan test needs `SET enable_sort = off` to reproduce at a scale a
+test can seed, which is the same technique the labels test uses with `enable_seqscan`.
+
+112 passed: that file plus the five behavioural files covering `search_local` (child pins,
+external tags, wiki domain access, concealment, wiki reach).
+
+Not measured here: any effect on `map_autocomplete`'s place in a full capacity ladder. X28's
+figures for that fragment predate both commits.

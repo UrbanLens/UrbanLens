@@ -75,8 +75,15 @@ the server is really holding one rather than trusting the settings dict.
 That is 0.32% of the calls and **55.0% of every millisecond this database has spent planning**. The
 statement is the pin search in `services/map_pins/autocomplete.py:72-87`, which serves
 `map.autocomplete.local`: nine joined relations, `SELECT DISTINCT` over ~180 columns, and eight
-`icontains` predicates ORed together. It is the reason [P100](../PROBLEMS.md) reads 198.9 ms of SQL
-for that endpoint — most of that is the planner, not the search.
+`icontains` predicates ORed together. It is the reason P100 read 198.9 ms of SQL for that endpoint
+— most of that is the planner, not the search.
+
+**Fixed 2026-09-21 in `e8485f72b`, by removing the shape rather than by tuning the planner.** The
+`select_related` moved off the matching query onto a second statement keyed by primary key, which
+took planning for this statement from 161.6 ms to 2.9 + 1.0 ms. `force_generic_plan` below is
+therefore no longer the only lever, and it was never the better one: it makes the planner stop
+re-deciding a bad shape, where the split makes the shape cheap to decide. See P100 in
+[`archive/PROBLEMS-ARCHIVE.md`](../archive/PROBLEMS-ARCHIVE.md).
 
 Prepared statements do not fix it. Measured directly, 12 `EXECUTE`s of the prepared statement on
 one session:

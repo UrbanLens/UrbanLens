@@ -147,10 +147,21 @@ bound. What this establishes is that a *served* tile costs nothing worth countin
 traffic is free for a population that has not already drawn the tiles.
 
 **What is left is ordinary query cost on the pages.** `map.autocomplete.local` spends 266 of its
-311 ms in SQL for 8.8 queries — that is P100, the nine leading-wildcard `ILIKE`s with no trigram
-index, and it is now the worst SQL-per-call on the site. `search.panel` is 238 ms of SQL over 34
-queries returning 1,268 rows (P132). `messages.conversation` and `home.view` are 40 and 34 queries.
-Nothing here is a cache problem any more; it is query counts and query plans.
+311 ms in SQL for 8.8 queries — the worst SQL-per-call on the site when this ladder was run.
+`search.panel` is 238 ms of SQL over 34 queries returning 1,268 rows (P132). `messages.conversation`
+and `home.view` are 40 and 34 queries. Nothing here is a cache problem any more; it is query counts
+and query plans.
+
+**`map.autocomplete.local` was fixed after this ladder ran, and these figures predate the fix.**
+Not by the trigram indexes P100 blamed. Two defects: the `.distinct()` made the planner walk the
+whole pin table in primary-key order to get presorted input, reading 502,058 rows to return 12 for
+an account that owned 1,859 of them; and with that fixed, `select_related` on the matching query
+cost 161.6 ms of *planning* per keystroke against 13.9 ms of execution. A composite
+`(profile_id, id)` index (`a9264814f`) and splitting the match from the fetch (`e8485f72b`) take a
+warm keystroke from 426–585 ms wall to 40 ms. See P100 in `archive/PROBLEMS-ARCHIVE.md`. **The
+ladder has not been re-run since**, so every per-fragment figure above still describes the
+pre-fix code, and the u1000 holds in particular were measured with an endpoint whose cost grew
+with the *site's* pin count rather than the viewer's.
 
 ## What to do with this
 
@@ -162,11 +173,12 @@ Nothing here is a cache problem any more; it is query counts and query plans.
    tier. The worker count has a ceiling this measurement did not find: 12 workers × 4 gthread
    threads hold 48 connections against `ul_web`'s limit of 54, so 13 is the most the role budget
    accepts whatever the CPU says.
-2. **P100 and P132 are the next real work** — they are the two biggest SQL costs per call, and
-   neither is fixed by more CPU.
+2. **P132 is the next real work** — the biggest remaining SQL cost per call, and not fixed by
+   more CPU. P100, the other one, is resolved (above); re-running the ladder is what would say
+   how much of the u1000 saturation it was responsible for.
 3. **None of this describes damballa.** Production still runs `-k gevent`, `WEB_CONCURRENCY=3` and
    no cgroup limits at all (N26, #23). Every figure here is the `ul_perf_*` stack.
 
 ## Related
 
-P100, P125, P131, P132, X26, X27, N26.
+P125, P131, P132, X26, X27, N26, and P100 in `archive/PROBLEMS-ARCHIVE.md`.
