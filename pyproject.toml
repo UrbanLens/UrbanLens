@@ -860,7 +860,7 @@ dev = [
     # Coverage of the lines a branch actually changed, rather than a whole-tree
     # percentage that moves too slowly to mean anything on any one commit.
     "diff-cover~=10.5.1",
-    "django-debug-toolbar~=7.0.0",
+    "django-debug-toolbar>=7.0,<8.1",
     # Records each covered view's query *fingerprint* to a checked-in .perf.yml,
     # so an N+1 arrives as a reviewable diff. Chosen over a runtime detector
     # (`nplusone`) because that one has not shipped since 2019, and because
