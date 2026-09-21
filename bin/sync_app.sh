@@ -6,7 +6,9 @@
 #
 # Every service built from the app image runs that baked copy - the WSGI app, daphne, the Celery
 # workers and beat - so syncing only the one named here leaves the rest running whatever the image
-# was built from. They are found by image and compose project and synced too.
+# was built from. They are found by compose project and synced too, by asking each container
+# whether it carries the app image's interpreter - so a sibling that is crash-looping is skipped
+# rather than synced, and the printed target list is what says which ones were reached.
 #
 # Waits out a crash-looping container and rebuilds frontend assets on request.
 #

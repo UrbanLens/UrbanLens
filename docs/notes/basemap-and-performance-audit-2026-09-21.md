@@ -12,8 +12,8 @@ Status: `current` · 2026-09-21. Range audited: `e71e4dde6..615041aa1` — the b
 MapLibre engine, the tile client, the write-source deferral, the capacity harness and the
 deployment config, written across 2026-09-19..21 by several Sonnet sessions.
 
-Eight review agents produced 30 findings. Every one was checked against the code, and six against a
-live system, before anything was changed. One was refuted outright, one had its reason refuted
+A review sweep over eleven areas produced 30 findings. Every one was checked against the code, and
+several against a live system, before anything was changed. One was refuted outright, one had its reason refuted
 after the change had been made, two were declined with numbers, and one agent's fix pointed the
 wrong way. What follows is the disposition, then the parts worth carrying forward.
 

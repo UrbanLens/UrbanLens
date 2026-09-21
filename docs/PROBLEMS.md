@@ -3027,9 +3027,10 @@ above is the ceiling with the bursts shaved off, not the demand. Nothing errored
 failed, 100% socket handshakes at every level - it is entirely queueing.
 
 So the lever is `CPU_LIMIT__APP=8` / `WEB_CONCURRENCY=12` / `MEM_LIMIT__APP=4g` (peak memory is
-~290 MB a worker and flat in users), with `CPU_LIMIT__DB=6` alongside it: database CPU tracks app
-CPU at about 0.48:1, so an 8-core app tier implies ~3.5 database cores against a peak that is
-already 3.39. None of that has been measured - it is an extrapolation from a linear region.
+~290 MB a worker and flat in users), with `CPU_LIMIT__DB=6` alongside it: database CPU is linear at
+0.226 cores per 100 users, so 1,000 users actually served want ~2.3 mean database cores - fine
+against 4 - but peak/mean is 1.9, which puts the bursts near 4.3. None of that has been measured;
+it is an extrapolation from a linear region.
 
 ### What this does not establish
 

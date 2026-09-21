@@ -69,10 +69,14 @@ P125 concluded that 500 users failed on Postgres' own 2-core limit. With `CPU_LI
 tuning `c46b0c9f5` added, Postgres at **1,000** users is at 1.75 mean / 3.39 peak cores and
 throttles 0.16% of its periods. It is not what 1,000 users are waiting for.
 
-It is what the *next* configuration will wait for. Database CPU tracks app CPU at roughly 0.48:1
-(1.13:2.01 at u500, and the same ratio at u250), so an 8-core app tier implies ~3.5 cores of
-database — at the 4-core limit, with the peak already at 3.39. Raising the app tier without raising
-`CPU_LIMIT__DB` to 6 moves the wall rather than removing it.
+It is close to being what the *next* configuration waits for. Database CPU is linear in users the
+same way app CPU is, at **0.226 cores per 100** (0.26 at u100, 0.55 at u250, 1.13 at u500), so
+1,000 users actually served — rather than queued behind a throttled app tier — want about **2.3
+mean database cores of 4**. That is comfortable on the mean and not on the bursts: peak/mean is
+1.9 at u500 (2.14 against 1.13), which puts the peak at 1,000 users near 4.3 cores, over the limit.
+`CPU_LIMIT__DB=6` is headroom for that, not a second wall being cleared. The 1.75 mean measured at
+u1000 is below the 2.26 this predicts precisely because the app tier was throttled and could not
+drive the database that hard.
 
 ## Where the CPU goes
 
@@ -90,9 +94,10 @@ From `request_costs.txt` (whole run, all four levels):
 | `messages.conversation` | 705 | 5.4% | 124.5 | 221.6 | 40.0 | 42 |
 | `home.view` | 1,084 | 5.2% | 77.6 | 197.4 | 34.0 | 36 |
 
-**The basemap tile work is done.** Tiles are 46,314 of ~80,000 application requests — 58% of
-everything the deployment serves — and **6.0% of its CPU**, at 2.1 ms and zero queries each. X26
-measured the same share of requests when they were the most expensive thing on the site. The share
+**The basemap tile work is done.** Tiles are 46,314 of the run's 82,852 application requests —
+**55.9%** of everything the deployment serves — and **6.0% of its CPU**, at 2.1 ms and zero queries
+each. X26 measured the same share of requests when they were the most expensive thing on the
+site. The share
 of traffic a vector basemap would remove has not changed; the cost it would remove has almost gone.
 
 **What is left is ordinary query cost on the pages.** `map.autocomplete.local` spends 266 of its

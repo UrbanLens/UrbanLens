@@ -28,8 +28,8 @@ and then reads the PMTiles archive directly, so none of those 8,524 requests rea
 the reason the tile path got its own proxy, cache and concurrency bound in the first place.
 
 **It stopped being a share of cost on 2026-09-21.** X28 re-measured the same endpoint after the
-tile work landed: still 58% of all requests, and **6.0% of app CPU**, at 2.1 ms and zero queries
-each. A vector basemap still removes 58% of the requests this deployment answers; it no longer
+tile work landed: still 55.9% of all requests, and **6.0% of app CPU**, at 2.1 ms and zero queries
+each. A vector basemap still removes 56% of the requests this deployment answers; it no longer
 removes a comparable share of what answering them costs, and it is not what stands between this
 deployment and 1,000 concurrent users.
 
