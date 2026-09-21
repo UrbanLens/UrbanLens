@@ -188,7 +188,7 @@ class TripQuerySet(abstract.DashboardQuerySet):
         """
         from urbanlens.dashboard.models.trips.model import TripComment
 
-        trip_ids = TripComment.objects.filter(trip__profiles=profile, created__gte=since).values_list("trip_id", flat=True).distinct()
+        trip_ids = TripComment.objects.for_member(profile).filter(created__gte=since).values_list("trip_id", flat=True).distinct()
         last_comment_by_trip: dict[int, datetime.datetime] = dict(
             TripComment.objects.filter(trip_id__in=trip_ids, created__gte=since).values("trip_id").annotate(last=Max("created")).values_list("trip_id", "last"),
         )
@@ -328,6 +328,25 @@ class TripCommentQuerySet(abstract.DashboardQuerySet):
         author_permits = ProfileModel.visibility_permits_q(profile, author_path="author", visibility_field="comment_visibility", permit_null_author=True)
         unscanned_and_not_mine = Q(pending_scan=True) & ~Q(author_id=profile.pk)
         return self.filter(author_permits).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
+
+    def for_member(self, profile: Profile) -> TripCommentQuerySet:
+        """Comments on the trips *profile* belongs to.
+
+        The trip ids are resolved to a literal list first rather than left as ``trip__profiles=``
+        for the planner to join. Given the join, Postgres is free to drive it from the comment
+        table and filter afterwards, which costs the site's comment count rather than the
+        viewer's: 30 ms and a sequential scan of 50,000 rows for a viewer belonging to a handful
+        of trips, measured on the capacity population (docs/PROBLEMS.md P132).
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            Comments on trips they are a member of.
+        """
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        return self.filter(trip__pk__anyof=list(TripMembership.objects.trip_ids_for(profile)))
 
     def by_author(self, profile: Profile) -> TripCommentQuerySet:
         """Comments a profile has left across any of their trips, most recent first.

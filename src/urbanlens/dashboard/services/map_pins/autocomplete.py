@@ -69,10 +69,10 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     # with OR across all relevant text fields.
     # Deliberately not restricted to root pins: jumping to a child (sub) pin must always work, even
     # though the map hides child pins unless their layer is on - the map turns the layer on when the
-    # Two statements: the match runs against ids alone, then those rows are fetched by primary
-    # key. Carrying `select_related` through the matching query costs ~210ms of planning per
-    # keystroke at capacity scale - ten relations and two hundred columns to de-duplicate (X28).
-    matching_ids = list(
+    # Match-then-fetch: the predicate runs against ids alone, then those rows are fetched by
+    # primary key. Carrying `select_related` through the matching query costs ~210ms of planning
+    # per keystroke at capacity scale - ten relations and two hundred columns to de-duplicate (X28).
+    matching_ids = (
         Pin.objects.filter(profile=profile)
         .filter(
             Q(name__icontains=q)
@@ -85,11 +85,9 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
             | Q(location__wiki__description__icontains=q)
             | tag_match_q(q, "location__place__external_tags"),
         )
-        .order_by("id")
-        .values_list("id", flat=True)
-        .distinct()[:12],
+        .match_ids(12)
     )
-    pin_qs = Pin.objects.filter(id__in=matching_ids).select_related("location__wiki", "parent_pin", "parent_pin__location").prefetch_related("labels", "aliases", "location__wiki__aliases").order_by("id")
+    pin_qs = Pin.objects.by_ids(matching_ids).select_related("location__wiki", "parent_pin", "parent_pin__location").prefetch_related("labels", "aliases", "location__wiki__aliases").order_by("id")
 
     for pin in pin_qs:
         if pin.id in seen_pin_ids:
@@ -132,14 +130,17 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         )
 
     seen_wiki_ids: set[int] = set()
-    wiki_qs = (
-        Wiki.objects.filter(
+    # Match-then-fetch again, for the reason the pin half above does it. The order is the
+    # primary key's because the single-statement form it replaces had none of its own, so which
+    # five a match of more than five returned was whatever the plan happened to emit.
+    wiki_ids = (
+        Wiki.objects.filter(location_id__in=visible_wiki_locations_cached(profile))
+        .filter(
             Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q) | tag_match_q(q, "location__place__external_tags"),
         )
-        .filter(location_id__in=visible_wiki_locations_cached(profile))
-        .select_related("location")
-        .distinct()[:5]
+        .match_ids(5)
     )
+    wiki_qs = Wiki.objects.by_ids(wiki_ids).select_related("location").order_by("id")
 
     for wiki in wiki_qs:
         if wiki.id in seen_wiki_ids:
