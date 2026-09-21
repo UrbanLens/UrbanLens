@@ -28,6 +28,7 @@ import {
     filterQueries,
     forwardedFor,
     gridProbeTiles,
+    mapVisitSeed,
     holds,
     k6Stages,
     mapLoadEndpoints,
@@ -63,6 +64,13 @@ const COLD_CACHE_SHARE = Number(__ENV.UL_CAP_COLD_CACHE_SHARE || 0.3);
 
 /** Share of map visits that go on to type into the name filter. */
 const FILTER_SHARE = Number(__ENV.UL_CAP_FILTER_SHARE || 0.4);
+
+/**
+ * Share of map visits that return to ground this browser has already drawn, and so cost the
+ * deployment no tiles at all. Assumed, not observed - and the single largest lever on how many
+ * tile requests a run makes, which is the numerous request here.
+ */
+const MAP_REVISIT_SHARE = Number(__ENV.UL_CAP_MAP_REVISIT_SHARE ?? 0.5);
 
 /** Share of map visits that type a pin's name into the search box. Assumed, not observed. */
 const SEARCH_BOX_SHARE = Number(__ENV.UL_CAP_SEARCH_BOX_SHARE || 0.25);
@@ -223,9 +231,11 @@ function drawViewport(state) {
         return;
     }
     state.mapVisits += 1;
-    // A different square each visit, so a returning user is panning rather than staring: the visit
-    // number moves the viewport, and the account keeps them away from everyone else's ground.
-    const wanted = viewportTiles(state.id * 7 + state.mapVisits);
+    // Ground this browser has not drawn, except on the share of visits that return to ground it
+    // has. Stepping the viewport by one column instead - which is what this did - left four fifths
+    // of every revisit answered by the browser, so a capacity run measured a deployment that was
+    // barely asked for tiles: 73% of a twelve-visit session suppressed, against 50% here.
+    const wanted = viewportTiles(mapVisitSeed(state.id, state.mapVisits, MAP_REVISIT_SHARE));
     const missing = tilesToFetch(wanted, state.heldTiles);
     if (!missing.length) {
         return;

@@ -30,6 +30,7 @@ import {
     parseLevels,
     pickJourney,
     stageAt,
+    mapVisitSeed,
     storeClaim,
     thinkSeconds,
     tilesToFetch,
@@ -251,6 +252,59 @@ describe("the viewport a map asks for", () => {
         const ground = new Set(Array.from({ length: 200 }, (_, index) => viewportTiles(index * 7).join("|")));
 
         expect(ground.size).toBeGreaterThan(50);
+    });
+});
+
+describe("where a person's next map view lands", () => {
+    /** How much of a session's tile load the browser absorbs, at a given revisit share. */
+    function suppressed(revisitShare, visits = 12) {
+        const held = new Set();
+        let wanted = 0;
+        let fetched = 0;
+        for (let visit = 1; visit <= visits; visit++) {
+            const tiles = viewportTiles(mapVisitSeed(1, visit, revisitShare));
+            wanted += tiles.length;
+            fetched += tilesToFetch(tiles, held).length;
+        }
+        return 1 - fetched / wanted;
+    }
+
+    /**
+     * The defect this replaced: seeds one apart shift the viewport by a single column, so four
+     * fifths of every revisit came out of the browser and the deployment was barely asked for
+     * tiles - on the request a capacity run exists to count.
+     */
+    test("steps a whole viewport, so fresh ground is fresh", () => {
+        const first = new Set(viewportTiles(mapVisitSeed(1, 1, 0)));
+        const second = viewportTiles(mapVisitSeed(1, 2, 0));
+
+        expect(second.filter((path) => first.has(path))).toHaveLength(0);
+    });
+
+    test("returns to ground already drawn on the share asked for, and the browser answers all of it", () => {
+        expect(suppressed(1)).toBeGreaterThan(0.9);
+        expect(suppressed(0.5)).toBeGreaterThan(suppressed(0));
+        expect(suppressed(0.5)).toBeLessThan(suppressed(1));
+    });
+
+    /** A run is judged against another run; a revisit pattern that differed between them would move the tile count for no measured reason. */
+    test("is the same sequence every run", () => {
+        const once = Array.from({ length: 10 }, (_, visit) => mapVisitSeed(3, visit + 1, 0.5));
+        const again = Array.from({ length: 10 }, (_, visit) => mapVisitSeed(3, visit + 1, 0.5));
+
+        expect(once).toEqual(again);
+    });
+
+    /**
+     * Not disjoint, and cannot be: the grid is 32x32 so the cache can be warmed before a run, and
+     * a thousand people asking for 24 tiles each want more ground than that holds. What matters is
+     * that they are not all staring at one square, which would measure one cache entry.
+     */
+    test("spreads accounts across the grid", () => {
+        const first = new Set(viewportTiles(mapVisitSeed(1, 1, 0.5)));
+        const second = viewportTiles(mapVisitSeed(2, 1, 0.5));
+
+        expect(second.filter((path) => first.has(path)).length).toBeLessThan(second.length / 2);
     });
 });
 

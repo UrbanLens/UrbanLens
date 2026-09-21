@@ -256,8 +256,46 @@ export function mapLoadEndpoints(cold) {
  * @param {number} count How many tiles the viewport holds.
  * @returns {string[]} Tile paths, without the deployment's origin.
  */
+/**
+ * How many tiles wide a viewport of *count* tiles is.
+ *
+ * The number that decides how much a revisit costs: two viewports whose seeds differ by less than
+ * this overlap, and everything in the overlap is already in the browser.
+ *
+ * @param {number} count Tiles in the viewport.
+ * @returns {number} The side length.
+ */
+export function viewportSide(count = VIEWPORT_TILES) {
+    return Math.ceil(Math.sqrt(count));
+}
+
+/**
+ * Where one person's *visit*-th map view is centred.
+ *
+ * Seeds one apart shift the viewport by a single column, so a 5-wide viewport reuses four fifths
+ * of the ground it just drew - which models a user nudging the map, and only that. A capacity run
+ * whose every revisit is 80% browser-cached is measuring a deployment that is barely asked for
+ * tiles, which is the opposite of the question. New ground therefore steps a full viewport, and a
+ * share of visits return to ground already drawn, where the browser genuinely answers everything.
+ *
+ * @param {number} person A stable per-person number, keeping accounts off each other's ground.
+ * @param {number} visit Which map view this is, from 1.
+ * @param {number} revisitShare Share of visits that return to ground already drawn.
+ * @param {number} count Tiles in the viewport.
+ * @returns {number} A seed for {@link viewportTiles}.
+ */
+export function mapVisitSeed(person, visit, revisitShare, count = VIEWPORT_TILES) {
+    const side = viewportSide(count);
+    // Deterministic rather than random: one run is judged against another, and a revisit pattern
+    // that differs between them moves the tile count for a reason nothing measured. At a share of
+    // r, the place advances every 1/(1-r) visits, so the visits in between are ground this browser
+    // already holds and cost the deployment nothing - which is what the header promises.
+    const place = Math.max(1, Math.floor(visit * (1 - revisitShare)));
+    return person * 7 * side + place * side;
+}
+
 export function viewportTiles(seed, count = VIEWPORT_TILES) {
-    const side = Math.ceil(Math.sqrt(count));
+    const side = viewportSide(count);
     const centreX = TILE_GRID_ORIGIN.x + (Math.abs(Math.floor(seed)) % TILE_GRID_SIZE);
     const centreY = TILE_GRID_ORIGIN.y + (Math.abs(Math.floor(seed / TILE_GRID_SIZE)) % TILE_GRID_SIZE);
     const paths = [];
