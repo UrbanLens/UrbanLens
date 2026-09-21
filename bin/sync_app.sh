@@ -102,11 +102,35 @@ if [ "$ONLY" -eq 0 ]; then
 fi
 echo "==> syncing ${#TARGETS[@]} container(s): ${TARGETS[*]}"
 
+# Every target is attempted even after one fails. Aborting on the first leaves the rest running
+# whatever the image was built from, which is the failure this script exists to prevent, and the
+# printed target list then names containers it never reached.
+FAILED=()
+SKIPPED=()
 for target in "${TARGETS[@]}"; do
-    wait_for_exec "$target"
-    sync_tree_into "$target"
-    verify_parity_with "$target"
+    # A read-only root filesystem cannot be synced at all. That is a property of the service, not
+    # a fault, but it does mean the container keeps running its baked copy - so it is named here
+    # rather than passed over, because "synced" would otherwise cover a container that was not.
+    if [ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$target")" = "true" ]; then
+        echo "==> skipping $target (read-only root filesystem - it runs its baked copy)"
+        SKIPPED+=("$target")
+        continue
+    fi
+    if wait_for_exec "$target" && sync_tree_into "$target" && verify_parity_with "$target"; then
+        continue
+    fi
+    echo "error: sync into '$target' failed - it is still running its baked copy." >&2
+    FAILED+=("$target")
 done
+
+if [ "${#SKIPPED[@]}" -gt 0 ]; then
+    echo "==> ${#SKIPPED[@]} read-only container(s) left on their baked copy: ${SKIPPED[*]}"
+fi
+
+if [ "${#FAILED[@]}" -gt 0 ]; then
+    echo "error: ${#FAILED[@]} of ${#TARGETS[@]} container(s) not synced: ${FAILED[*]}" >&2
+    exit 1
+fi
 
 if [ "$FRONTEND" -eq 1 ]; then
     # Build as appuser; root-owned output breaks the next boot.

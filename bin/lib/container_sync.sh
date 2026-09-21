@@ -41,6 +41,9 @@ SYNC_EXCLUDES=()
 #   $1: container name.
 sync_tree_into() {
     local container="$1"
+    # Callers test this function so that one failed container does not abort the others, and
+    # `set -e` is suspended inside a condition - re-setting it here would not restore it. Every
+    # step that must not be skipped therefore returns explicitly.
     echo "==> syncing working tree into $container"
     # tar rather than `docker cp src/.`, only because docker cp cannot exclude a
     # path and some containers mount volumes inside the tree being copied. With
@@ -50,19 +53,29 @@ sync_tree_into() {
         tar_args+=(--exclude="./$path")
         echo "    leaving $path alone (mounted volume)"
     done
-    tar -C src -cf - "${tar_args[@]}" . | docker exec -i "$container" tar -xf - -C /app/src
+    # Extracted as appuser, who owns every directory written into here, with --no-same-owner so
+    # the host's uid is not carried in. Neither is cosmetic: the sandbox services exec as appuser
+    # and drop CAP_ALL, so root there has neither DAC override on an appuser-owned directory nor
+    # CAP_CHOWN to put ownership back afterwards. Files land correctly owned instead.
+    tar -C src -cf - "${tar_args[@]}" . | docker exec -i -u appuser "$container" tar -xf - --no-same-owner -C /app/src || return 1
     # bin/ is synced too: tests resolve checkers by path off the repo root, so
     # without this they error against the image's stale copy.
-    docker cp bin/. "$container":/app/bin/
+    docker cp bin/. "$container":/app/bin/ || return 1
 
     # Deployment files, for the same reason: tests assert on the topology
     # (compose files, Dockerfile) by path, and they are baked into the image,
     # not bind-mounted. Sync every tracked root file rather than a list - a
     # list silently goes stale when a test starts reading a new one.
+    #
+    # These sit directly in /app, which is root's, so this is the one step appuser cannot do.
+    # Ownership is then restored where the container still has CAP_CHOWN; where it does not they
+    # stay root-owned and world-readable, which is all a test that reads them needs.
     local root_files
     root_files=$(git ls-files 2>/dev/null | grep -v "/" || true)
     if [ -n "$root_files" ]; then
-        printf '%s\n' "$root_files" | tar -C . -T - -cf - | docker exec -i "$container" tar -xf - -C /app/
+        printf '%s\n' "$root_files" | tar -C . -T - -cf - | docker exec -i -u root "$container" tar -xf - --no-same-owner -C /app/ || return 1
+        printf '%s\n' "$root_files" | sed 's|^|/app/|' | tr '\n' '\0' \
+            | xargs -0 -r docker exec -u root "$container" chown appuser:appuser 2>/dev/null || true
     else
         # No git (a tarball checkout, a stripped image): fall back to the files
         # tests are known to read today.
@@ -72,6 +85,9 @@ sync_tree_into() {
             [ -e "$f" ] && docker cp "$f" "$container":/app/"$f"
         done
     fi
+    # `docker cp` for the two below, not tar: the daemon writes these, so they land whatever the
+    # container's own user could do, and neither is source the run imports - a stale copy of
+    # either is a bad fixture, not the wrong code under test.
     docker cp sample_data/. "$container":/app/sample_data/ 2>/dev/null || true
 
     # The workflow files, for the same reason and by the same argument as the
@@ -82,9 +98,11 @@ sync_tree_into() {
     # future test will read is the judgement that keeps being got wrong.
     docker cp .github/. "$container":/app/.github/ 2>/dev/null || true
 
-    # Not optional - see the header. /app/src recursively, which is what covers
-    # both the logs directory and the compiled frontend output underneath it.
-    docker exec -u root "$container" chown -R appuser:appuser /app/src /app/bin
+    # Belt and braces: extracting as appuser already leaves the tree owned correctly, and this
+    # only has an effect where something else in the container has not. Where CAP_CHOWN is
+    # dropped it cannot run at all, so a failure here is not on its own a bad sync - parity is
+    # what says whether the copy took.
+    docker exec -u root "$container" chown -R appuser:appuser /app/src /app/bin 2>/dev/null || true
 
     prune_deleted_from "$container"
 }
@@ -107,7 +125,7 @@ prune_deleted_from() {
     if [ -n "$stale" ]; then
         echo "    pruning $(echo "$stale" | wc -l) stale source file(s) the host no longer has:"
         echo "$stale" | sed 's|^|      |'
-        echo "$stale" | sed 's|^|/app/src/|' | tr '\n' '\0' | xargs -0 -r docker exec -u root "$container" rm -f
+        echo "$stale" | sed 's|^|/app/src/|' | tr '\n' '\0' | xargs -0 -r docker exec -u appuser "$container" rm -f
     fi
 }
 
