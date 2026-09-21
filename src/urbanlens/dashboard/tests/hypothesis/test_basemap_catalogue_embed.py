@@ -19,7 +19,9 @@ from django.test import RequestFactory
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.services.core import single_flight
 
+_MODULE = "urbanlens.dashboard.services.map.basemap_catalogue"
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
 _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
@@ -162,3 +164,120 @@ class BasemapCatalogueEmbedTests(TestCase):
 
         self.assertEqual([entry["id"] for entry in layers], ["street"])
         self.assertEqual(list_sources.call_count, 1, "the render must have come from the cache the view filled")
+
+
+class TheCatalogueIsFetchedOncePerColdWindowTests(TestCase):
+    """The catalogue is cached for a day with no jitter, so it goes cold at one moment for
+    everybody. Every authenticated page load's `registerRedataLayers()` XHR misses in the ~1.5s
+    that refill takes (P131), and each miss holds a request thread for the whole of it: production
+    runs 6 workers x 4 threads, so 24 concurrent misses is the whole site. The tile proxy got a
+    concurrency bound for exactly this shape; the catalogue it advertises did not."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.services.map import basemap_catalogue
+
+        cache.delete(basemap_catalogue.CATALOGUE_CACHE_KEY)
+        cache.delete(basemap_catalogue.CATALOGUE_FETCH_KEY)
+
+    def test_a_second_caller_arriving_mid_fetch_does_not_ask_redata_too(self) -> None:
+        from urbanlens.dashboard.services.map.basemap_catalogue import basemap_tile_catalogue
+
+        second: list[list[dict]] = []
+
+        def answer_slowly(_self) -> list[dict]:
+            if not second:
+                # A second request lands while this one is still waiting on REData. It cannot be
+                # served here - nothing else runs until this returns - so it waits and degrades,
+                # which is the point: it does not make a second call.
+                second.append(basemap_tile_catalogue())
+            return [_RASTER]
+
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            # Nothing can publish while the winner is blocked on this very call, so the wait only
+            # costs the test time.
+            mock.patch(f"{_MODULE}.CATALOGUE_WAIT_SECONDS", 0.05),
+            mock.patch(f"{_GATEWAY}.list_sources", autospec=True, side_effect=answer_slowly) as list_sources,
+        ):
+            first = basemap_tile_catalogue()
+
+        self.assertEqual(list_sources.call_count, 1, "the second caller made its own REData call")
+        self.assertEqual([entry["id"] for entry in first], ["street"])
+        self.assertEqual(second, [[]], "a caller that did not fetch must degrade, not invent layers")
+
+    def test_a_waiting_caller_is_served_the_answer_the_holder_published(self) -> None:
+        """Degrading is the fallback, not the behaviour: a map that drops back to vendor tiles has
+        told that vendor the coordinates the proxy exists to keep from it."""
+        from urbanlens.dashboard.services.map import basemap_catalogue
+        from urbanlens.dashboard.services.map.basemap_catalogue import _await_catalogue, basemap_tile_catalogue
+
+        single_flight.claim(basemap_catalogue.CATALOGUE_FETCH_KEY, 30)
+        published: list[list[dict]] = []
+
+        def publish_midway(_name: str) -> None:
+            """Stands in for the holder finishing while this caller is asleep."""
+            if not published:
+                with (
+                    mock.patch(_CONFIGURED, return_value=True),
+                    mock.patch(f"{_GATEWAY}.list_sources", return_value=[_RASTER]),
+                ):
+                    single_flight.release(basemap_catalogue.CATALOGUE_FETCH_KEY)
+                    published.append(basemap_tile_catalogue())
+                single_flight.claim(basemap_catalogue.CATALOGUE_FETCH_KEY, 30)
+
+        with mock.patch(f"{_MODULE}.time.sleep", side_effect=publish_midway):
+            waited = _await_catalogue()
+
+        single_flight.release(basemap_catalogue.CATALOGUE_FETCH_KEY)
+        self.assertEqual([entry["id"] for entry in waited], ["street"])
+
+    def test_a_waiting_caller_stops_as_soon_as_the_holder_gives_up(self) -> None:
+        """A failed refill releases the key without publishing; waiting out the rest of the budget
+        after that only holds a request thread for nothing."""
+        from urbanlens.dashboard.services.map import basemap_catalogue
+        from urbanlens.dashboard.services.map.basemap_catalogue import _await_catalogue
+
+        single_flight.claim(basemap_catalogue.CATALOGUE_FETCH_KEY, 30)
+        naps = 0
+
+        def give_up_after_one(_name: str) -> None:
+            nonlocal naps
+            naps += 1
+            single_flight.release(basemap_catalogue.CATALOGUE_FETCH_KEY)
+
+        with mock.patch(f"{_MODULE}.time.sleep", side_effect=give_up_after_one):
+            self.assertEqual(_await_catalogue(), [])
+
+        self.assertEqual(naps, 1, "it kept sleeping after the holder was gone")
+
+    def test_the_next_cold_window_fetches_again(self) -> None:
+        """Anti-vacuity: a reservation that is never released would make the catalogue
+        unrefreshable for as long as its own TTL, which is the failure it is meant to prevent."""
+        from urbanlens.dashboard.services.map import basemap_catalogue
+        from urbanlens.dashboard.services.map.basemap_catalogue import basemap_tile_catalogue
+
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.list_sources", return_value=[_RASTER]) as list_sources,
+        ):
+            basemap_tile_catalogue()
+            cache.delete(basemap_catalogue.CATALOGUE_CACHE_KEY)
+            basemap_tile_catalogue()
+
+        self.assertEqual(list_sources.call_count, 2)
+
+    def test_a_failed_fetch_releases_the_reservation(self) -> None:
+        """An outage must not lock the catalogue cold for the reservation's whole lifetime."""
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+        from urbanlens.dashboard.services.map.basemap_catalogue import basemap_tile_catalogue
+
+        with mock.patch(_CONFIGURED, return_value=True):
+            with mock.patch(
+                f"{_GATEWAY}.list_sources", side_effect=LocationContextUnavailableError("source_error", "down")
+            ):
+                self.assertEqual(basemap_tile_catalogue(), [])
+            with mock.patch(f"{_GATEWAY}.list_sources", return_value=[_RASTER]) as recovered:
+                self.assertEqual([entry["id"] for entry in basemap_tile_catalogue()], ["street"])
+
+        self.assertEqual(recovered.call_count, 1)

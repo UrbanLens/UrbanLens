@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from typing import Any
 
 from django.core.cache import cache
 
+from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,16 @@ logger = logging.getLogger(__name__)
 #: fresh enough to pick up a new layer without asking on every map load.
 CATALOGUE_CACHE_TTL = 86400
 CATALOGUE_CACHE_KEY = "ul_redata_tile_sources"
+
+#: Held for the length of one refill. Its TTL only has to outlive a gateway call that has
+#: already spent the rate limiter's patience; the reservation is released on every exit.
+CATALOGUE_FETCH_KEY = "ul_redata_tile_sources:fetching"
+CATALOGUE_FETCH_TTL = 30
+
+#: How long a caller that lost the reservation waits for the winner's answer before giving up
+#: and rendering vendor layers. One call costs ~1.45s (``P131``).
+CATALOGUE_WAIT_SECONDS = 3.0
+_WAIT_POLL_SECONDS = 0.05
 
 #: The proxy route captures ``<slug:layer>``, so this is the alphabet an id has to
 #: be in to have a reachable URL at all.
@@ -58,51 +70,33 @@ def forget_basemap_tile_catalogue() -> None:
     cache.delete(CATALOGUE_CACHE_KEY)
 
 
-def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
-    """REData's layer catalogue, rewritten into what a browser on this deployment can actually use.
-
-    A vendor ``url_template`` is deliberately not passed through: it needs REData's key, and handing
-    the browser a template it cannot use would produce a layer that silently fails to load. What is
-    published instead is this deployment's own proxy URL for that layer. A ``style_url`` needs no
-    key (REData's ``D11``) and is passed through unchanged - the client fetches and renders that
-    style document directly, and REData never sees a vector tile go by.
-
-    Since REData's ``D15`` an entry can carry both, and both are kept: ``style_url`` is what a
-    MapLibre map draws, ``url_template`` is what a Leaflet map draws, and a layer that publishes
-    only the first leaves every Leaflet map falling back to a hardcoded vendor CDN.
-
-    Args:
-        allow_fetch: Whether a cache miss may go to REData. False for anything rendering a page:
-            that call costs ~1.45s (``P131``) and the embed appears on every page built on
-            ``themes/base.html``, so a cold cache would otherwise put a REData round trip inside
-            the render of a profile page that has no map on it at all. A miss simply yields no
-            embed, and the client's own ``registerRedataLayers()`` fetch - which is asynchronous,
-            and which the catalogue view answers - repopulates the cache for every later render.
+def _await_catalogue() -> list[dict[str, Any]]:
+    """Wait out whoever holds the refill, rather than making a second identical call.
 
     Returns:
-        One entry per offered layer - empty when REData is unconfigured or unreachable, so a map
-        simply keeps its built-in vendor layers.
+        The catalogue the holder published, or empty if it gave up or is still going.
     """
-    from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+    deadline = time.monotonic() + CATALOGUE_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        time.sleep(_WAIT_POLL_SECONDS)
+        cached = cache.get(CATALOGUE_CACHE_KEY)
+        if cached is not None:
+            return list(cached)
+        if single_flight.holder(CATALOGUE_FETCH_KEY) is None:
+            # The holder finished without publishing, so it failed or REData offers nothing.
+            break
+    return []
 
-    if not redata_configured():
-        return []
 
-    cached = cache.get(CATALOGUE_CACHE_KEY)
-    if cached is not None:
-        return list(cached)
-    if not allow_fetch:
-        return []
+def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rewrite REData's sources into the entries a browser on this deployment can use.
 
-    try:
-        sources = RedataBasemapTilesGateway().list_sources()
-    except (LocationContextUnavailableError, RequestCancelledError, OSError) as exc:
-        # Not cached: an unreachable catalogue must not cost this
-        # deployment its extra layers for a day.
-        logger.warning("REData tile catalogue unavailable: %s", exc)
-        return []
+    Args:
+        sources: REData's catalogue, as returned by the gateway.
 
+    Returns:
+        One entry per layer this deployment will offer.
+    """
     layers: list[dict[str, Any]] = []
     for source in sources:
         source_id = source.get("id")
@@ -144,10 +138,70 @@ def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
         if not is_vector or source.get("url_template"):
             entry["url_template"] = tile_url_template(source_id)
         layers.append(entry)
-    if layers:
-        cache.set(CATALOGUE_CACHE_KEY, layers, CATALOGUE_CACHE_TTL)
-    # An empty catalogue is not cached.
     return layers
+
+
+def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
+    """REData's layer catalogue, rewritten into what a browser on this deployment can actually use.
+
+    A vendor ``url_template`` is deliberately not passed through: it needs REData's key, and handing
+    the browser a template it cannot use would produce a layer that silently fails to load. What is
+    published instead is this deployment's own proxy URL for that layer. A ``style_url`` needs no
+    key (REData's ``D11``) and is passed through unchanged - the client fetches and renders that
+    style document directly, and REData never sees a vector tile go by.
+
+    Since REData's ``D15`` an entry can carry both, and both are kept: ``style_url`` is what a
+    MapLibre map draws, ``url_template`` is what a Leaflet map draws, and a layer that publishes
+    only the first leaves every Leaflet map falling back to a hardcoded vendor CDN.
+
+    One refill at a time, deployment-wide. The cache has no jitter, so it goes cold for every
+    client at the same moment, and each miss holds a request thread for the ~1.45s the call costs
+    (``P131``) - the whole thread pool, on a deployment whose worker count is smaller than its
+    concurrent page loads. Callers that lose the reservation wait for the winner's answer and
+    degrade to the vendor layers if it does not arrive.
+
+    Args:
+        allow_fetch: Whether a cache miss may go to REData. False for anything rendering a page:
+            that call costs ~1.45s (``P131``) and the embed appears on every page built on
+            ``themes/base.html``, so a cold cache would otherwise put a REData round trip inside
+            the render of a profile page that has no map on it at all. A miss simply yields no
+            embed, and the client's own ``registerRedataLayers()`` fetch - which is asynchronous,
+            and which the catalogue view answers - repopulates the cache for every later render.
+
+    Returns:
+        One entry per offered layer - empty when REData is unconfigured or unreachable, so a map
+        simply keeps its built-in vendor layers.
+    """
+    from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+
+    if not redata_configured():
+        return []
+
+    cached = cache.get(CATALOGUE_CACHE_KEY)
+    if cached is not None:
+        return list(cached)
+    if not allow_fetch:
+        return []
+
+    if not single_flight.claim(CATALOGUE_FETCH_KEY, CATALOGUE_FETCH_TTL):
+        return _await_catalogue()
+    try:
+        try:
+            sources = RedataBasemapTilesGateway().list_sources()
+        except (LocationContextUnavailableError, RequestCancelledError, OSError) as exc:
+            # Not cached: an unreachable catalogue must not cost this
+            # deployment its extra layers for a day.
+            logger.warning("REData tile catalogue unavailable: %s", exc)
+            return []
+
+        layers = _offered_layers(sources)
+        if layers:
+            cache.set(CATALOGUE_CACHE_KEY, layers, CATALOGUE_CACHE_TTL)
+        # An empty catalogue is not cached.
+        return layers
+    finally:
+        single_flight.release(CATALOGUE_FETCH_KEY)
 
 
 def catalogue_for_viewer(*, authenticated: bool, allow_fetch: bool = True) -> list[dict[str, Any]]:
