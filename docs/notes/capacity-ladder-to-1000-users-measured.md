@@ -100,6 +100,12 @@ each. X26 measured the same share of requests when they were the most expensive 
 site. The share
 of traffic a vector basemap would remove has not changed; the cost it would remove has almost gone.
 
+**That 2.1 ms is a cache hit, and this harness only ever hits.** The grid is 1,024 seeded tiles and
+a viewport asks for 24 of them, so every tile in this run was warm. A real population spread over a
+continent misses, and a miss is an upstream fetch of 0.43–0.98 s (P131) held under a concurrency
+bound. What this establishes is that a *served* tile costs nothing worth counting — not that tile
+traffic is free for a population that has not already drawn the tiles.
+
 **What is left is ordinary query cost on the pages.** `map.autocomplete.local` spends 266 of its
 311 ms in SQL for 8.8 queries — that is P100, the nine leading-wildcard `ILIKE`s with no trigram
 index, and it is now the worst SQL-per-call on the site. `search.panel` is 238 ms of SQL over 34
