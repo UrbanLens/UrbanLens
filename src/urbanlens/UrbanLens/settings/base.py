@@ -9,7 +9,7 @@ from celery.schedules import crontab
 from django.core.management.utils import get_random_secret_key
 from dotenv import find_dotenv, load_dotenv
 
-from urbanlens.UrbanLens.settings._env import is_production_environment, persistent_connection_seconds
+from urbanlens.UrbanLens.settings._env import is_production_environment, persistent_connection_seconds, prepare_threshold
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -218,6 +218,11 @@ DATABASES = {
             "connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10")),
             # Labels this tier in pg_stat_activity for pool attribution.
             "application_name": f"urbanlens-{os.getenv('UL_PROCESS_ROLE', 'unknown')}",
+            # Parameters go to the server rather than into the SQL text, which is what lets one
+            # statement be prepared once and reused. Both keys are needed: without the threshold
+            # Django leaves preparation off and this buys nothing (X27).
+            "server_side_binding": True,
+            "prepare_threshold": prepare_threshold(),
         },
         # UL_TEST_DB_NAME isolates concurrent test runs to separate databases.
         "TEST": {"NAME": os.getenv("UL_TEST_DB_NAME") or None},

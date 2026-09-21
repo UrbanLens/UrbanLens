@@ -206,12 +206,11 @@ from django.db import connection
 name = sys.argv[1]
 force = sys.argv[2] == "1"
 params = connection.get_connection_params()
-# psycopg2 spells it "dbname"; Django's params carry the test database, and
-# a session cannot drop the database it is connected to.
-params.pop("database", None)
+# Django's params carry the test database, and a session cannot drop the
+# database it is connected to.
 params["dbname"] = "postgres"
-# Not `with connection.Database.connect(...)`: in psycopg2 that context
-# manager opens a *transaction*, and DROP DATABASE cannot run inside one.
+# Not `with connection.Database.connect(...)`: that context manager leaves the
+# connection in a *transaction*, and DROP DATABASE cannot run inside one.
 maintenance = connection.Database.connect(**params)
 try:
     maintenance.autocommit = True

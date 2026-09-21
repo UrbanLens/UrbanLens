@@ -73,3 +73,31 @@ def persistent_connection_seconds(default: int = 0, argv: list[str] | None = Non
         return int(raw)
     except ValueError:
         return default
+
+
+#: Executions of one statement on one connection before psycopg prepares it server-side. Django's
+#: own default is ``None`` - prepared statements off - so that a transaction-pooling proxy in front
+#: of Postgres keeps working. There is none here. See X27.
+DEFAULT_PREPARE_THRESHOLD = 5
+
+
+def prepare_threshold(default: int | None = DEFAULT_PREPARE_THRESHOLD) -> int | None:
+    """Read ``UL_DB_PREPARE_THRESHOLD``, where blank or ``none`` means "never prepare".
+
+    Args:
+        default: Value to use when the variable is unset or unreadable.
+
+    Returns:
+        Executions before a statement is prepared, or None to leave every one re-planned - which
+        is what a deployment that puts a transaction-pooling proxy in front of Postgres needs.
+    """
+    raw = os.getenv("UL_DB_PREPARE_THRESHOLD")
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"", "none", "off"}:
+        return None
+    try:
+        return max(0, int(normalized))
+    except ValueError:
+        return default
