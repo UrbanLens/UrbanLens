@@ -57,6 +57,12 @@ export const TILE_ZOOM = 13;
 export const TILE_GRID_ORIGIN = { x: 2400, y: 3072 };
 export const TILE_GRID_SIZE = 32;
 
+/** Cells the pre-flight check samples before believing the grid is seeded. */
+export const PREFLIGHT_PROBE_TILES = 12;
+
+/** Coprime to {@link PREFLIGHT_PROBE_TILES}, so the probe's rows are a permutation of its columns. */
+const PROBE_ROW_STRIDE = 7;
+
 /** What a user does next, weighted by how often a page view is that page. */
 export const JOURNEYS = [
     { name: "map", weight: 30 },
@@ -261,6 +267,29 @@ export function viewportTiles(seed, count = VIEWPORT_TILES) {
             const y = TILE_GRID_ORIGIN.y + (((centreY - TILE_GRID_ORIGIN.y + row) % TILE_GRID_SIZE) + TILE_GRID_SIZE) % TILE_GRID_SIZE;
             paths.push(`/dashboard/map/basemap-tiles/${TILE_LAYER}/${TILE_ZOOM}/${x}/${y}/`);
         }
+    }
+    return paths;
+}
+
+/**
+ * Coordinates spread across the whole grid, for the pre-flight check.
+ *
+ * One coordinate does not establish that the cache is warm. X26 records a run where a single cell
+ * had been hand-seeded earlier while testing, so the one-tile guard passed and the other 1,020
+ * were cold: 8,360 of 8,352 tile requests answered 503 and the report still rendered a full table
+ * of plausible latencies. Both axes are walked with a stride coprime to *count*, so the sample is
+ * spread over the grid rather than clustered in the rows the first few cells happen to fall in.
+ *
+ * @param {number} count How many cells to probe.
+ * @returns {string[]} Distinct tile paths, without the deployment's origin.
+ */
+export function gridProbeTiles(count = PREFLIGHT_PROBE_TILES) {
+    const probes = Math.max(1, Math.min(Math.floor(count), TILE_GRID_SIZE));
+    const paths = [];
+    for (let index = 0; index < probes; index += 1) {
+        const column = Math.floor((index * TILE_GRID_SIZE) / probes);
+        const row = Math.floor((((index * PROBE_ROW_STRIDE) % probes) * TILE_GRID_SIZE) / probes);
+        paths.push(`/dashboard/map/basemap-tiles/${TILE_LAYER}/${TILE_ZOOM}/${TILE_GRID_ORIGIN.x + column}/${TILE_GRID_ORIGIN.y + row}/`);
     }
     return paths;
 }

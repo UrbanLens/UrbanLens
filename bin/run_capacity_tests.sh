@@ -52,13 +52,12 @@ usage() {
 		  --app-container NAME       Follow this app's log for the run and rank
 		                             what each view costs from its slow-request
 		                             lines (every request, at UL_SLOW_REQUEST_MS=1).
+		                             Also where the tile cache is seeded, unless
+		                             --provision-container names one.
 		  --levels A,B,C             Concurrent users at each hold (default: 100,250,500,1000).
 		  --hold-seconds N           Seconds per hold (default: 240).
 		  --think-median N           Median seconds on a page (default: 30).
 		  --no-sockets               Leave out the notification socket.
-		  --no-tiles                 Leave the map's tiles undrawn, and skip seeding them:
-		                             the same journey without the site's most numerous
-		                             request, so tiles can be priced as a difference.
 		  --no-tiles                 Leave the map's basemap tiles undrawn, and skip
 		                             seeding them - the same journey without the site's
 		                             most numerous request, to price it as a difference.
@@ -145,16 +144,6 @@ if [[ -n "${PROVISION_CONTAINER}" ]]; then
 	# Live sessions for every account; one copy, owner-only.
 	chmod 600 "${MANIFEST}"
 	docker exec "${PROVISION_CONTAINER}" rm -f "${REMOTE_MANIFEST}"
-
-	# The map's tiles are most of its requests, and a run against a cold tile cache measures the
-	# vendor (and a burst of 503s from the proxy's own slot bound) rather than this deployment. The
-	# grid comes out of the k6 side so the two cannot drift apart.
-	if [[ "${TILES}" == "1" ]]; then
-		echo "==> seeding the basemap tile cache in ${PROVISION_CONTAINER}"
-		TILE_GRID="$(cd "${REPO_ROOT}" && bun -e 'import { TILE_GRID_ORIGIN, TILE_GRID_SIZE, TILE_LAYER, TILE_ZOOM } from "./tests/perf/k6/lib/capacity.js"; console.log(`--layer ${TILE_LAYER} --zoom ${TILE_ZOOM} --origin-x ${TILE_GRID_ORIGIN.x} --origin-y ${TILE_GRID_ORIGIN.y} --size ${TILE_GRID_SIZE}`);')"
-		# shellcheck disable=SC2086
-		docker exec "${PROVISION_CONTAINER}" /app/.venv/bin/python src/urbanlens/manage.py seed_basemap_tile_cache ${TILE_GRID} --catalogue
-	fi
 fi
 
 if [[ ! -f "${MANIFEST}" ]]; then
@@ -162,6 +151,26 @@ if [[ ! -f "${MANIFEST}" ]]; then
 	exit 1
 fi
 MANIFEST="$(cd "$(dirname "${MANIFEST}")" && pwd)/$(basename "${MANIFEST}")"
+
+# -- tiles -------------------------------------------------------------------
+
+# The map's tiles are most of its requests, and a run against a cold tile cache measures the
+# vendor (and a burst of 503s from the proxy's own slot bound) rather than this deployment. Seeded
+# for whichever population is about to be measured rather than only one just provisioned: reusing
+# a manifest is the cheap way to re-measure, and that path used to seed nothing and report the
+# refusals as latency (X26). The grid comes out of the k6 side so the two cannot drift apart.
+if [[ "${TILES}" == "1" ]]; then
+	SEED_CONTAINER="${PROVISION_CONTAINER:-${APP_CONTAINER}}"
+	if [[ -z "${SEED_CONTAINER}" ]]; then
+		echo "error: the journey draws tiles but no container was given to seed them in." >&2
+		echo "Pass --app-container (or --provision-container), or --no-tiles to price the journey without them." >&2
+		exit 2
+	fi
+	echo "==> seeding the basemap tile cache in ${SEED_CONTAINER}"
+	TILE_GRID="$(cd "${REPO_ROOT}" && bun -e 'import { TILE_GRID_ORIGIN, TILE_GRID_SIZE, TILE_LAYER, TILE_ZOOM } from "./tests/perf/k6/lib/capacity.js"; console.log(`--layer ${TILE_LAYER} --zoom ${TILE_ZOOM} --origin-x ${TILE_GRID_ORIGIN.x} --origin-y ${TILE_GRID_ORIGIN.y} --size ${TILE_GRID_SIZE}`);')"
+	# shellcheck disable=SC2086
+	docker exec "${SEED_CONTAINER}" /app/.venv/bin/python src/urbanlens/manage.py seed_basemap_tile_cache ${TILE_GRID} --catalogue
+fi
 
 # -- samplers ----------------------------------------------------------------
 

@@ -11,6 +11,7 @@ import {
     MAX_THINK_SECONDS,
     MIN_RAMP_SECONDS,
     MIN_THINK_SECONDS,
+    PREFLIGHT_PROBE_TILES,
     TILE_GRID_ORIGIN,
     TILE_GRID_SIZE,
     TILE_LAYER,
@@ -22,6 +23,7 @@ import {
     buildThresholds,
     filterQueries,
     forwardedFor,
+    gridProbeTiles,
     holds,
     k6Stages,
     mapLoadEndpoints,
@@ -276,5 +278,35 @@ describe("what a browser goes out for", () => {
 
         expect(panned.length).toBeGreaterThan(0);
         expect(panned.length).toBeLessThanOrEqual(VIEWPORT_TILES);
+    });
+});
+
+describe("the pre-flight probe", () => {
+    /** One seeded cell passing for 1,024 is how X26's run measured 8,360 refusals as latency. */
+    test("samples many distinct cells, not one", () => {
+        const probes = gridProbeTiles();
+
+        expect(probes).toHaveLength(PREFLIGHT_PROBE_TILES);
+        expect(new Set(probes).size).toBe(PREFLIGHT_PROBE_TILES);
+    });
+
+    test("spreads over both axes rather than one row", () => {
+        const coordinates = gridProbeTiles().map((path) => path.split("/").filter(Boolean).slice(-2).map(Number));
+        const columns = new Set(coordinates.map(([x]) => x));
+        const rows = new Set(coordinates.map(([, y]) => y));
+
+        expect(columns.size).toBe(PREFLIGHT_PROBE_TILES);
+        expect(rows.size).toBe(PREFLIGHT_PROBE_TILES);
+    });
+
+    test("stays inside the grid the runner seeds", () => {
+        for (const path of gridProbeTiles(TILE_GRID_SIZE * 4)) {
+            const [x, y] = path.split("/").filter(Boolean).slice(-2).map(Number);
+
+            expect(x).toBeGreaterThanOrEqual(TILE_GRID_ORIGIN.x);
+            expect(x).toBeLessThan(TILE_GRID_ORIGIN.x + TILE_GRID_SIZE);
+            expect(y).toBeGreaterThanOrEqual(TILE_GRID_ORIGIN.y);
+            expect(y).toBeLessThan(TILE_GRID_ORIGIN.y + TILE_GRID_SIZE);
+        }
     });
 });

@@ -19,6 +19,7 @@ import {
     DEFAULT_THINK_MEDIAN_SECONDS,
     DEFAULT_THINK_SIGMA,
     ENDPOINTS,
+    PREFLIGHT_PROBE_TILES,
     VIEWPORT_TILES,
     accountIndex,
     autocompleteQueries,
@@ -26,6 +27,7 @@ import {
     buildThresholds,
     filterQueries,
     forwardedFor,
+    gridProbeTiles,
     holds,
     k6Stages,
     mapLoadEndpoints,
@@ -142,13 +144,19 @@ export function setup() {
     if (response.status !== 200) {
         fail(`Pre-flight GET ${ROUTES["map.view"]} as ${account.username} answered ${response.status}; a minted session that is not signed in measures the sign-in page.`);
     }
-    // A run that measures 30,000 misses looks like a fast deployment. The first tile of the grid is
-    // checked here so a wrong layer, an unseeded cache or a proxy this deployment cannot serve is a
-    // refusal to start rather than a result.
+    // A run that measures 30,000 misses looks like a fast deployment, so a wrong layer, an unseeded
+    // cache or a proxy this deployment cannot serve has to be a refusal to start rather than a
+    // result. Sampled across the grid rather than at one coordinate: X26's run had exactly one cell
+    // hand-seeded, so a single-tile guard passed and the other 1,020 answered 503.
     if (TILES) {
-        const tile = get(session, viewportTiles(1)[0], { endpoint: "preflight" }, { redirects: 0 });
-        if (tile.status !== 200) {
-            fail(`Pre-flight GET ${viewportTiles(1)[0]} answered ${tile.status}. Seed the deployment's tile cache for the grid in lib/capacity.js before measuring, or this run measures misses.`);
+        const cold = gridProbeTiles()
+            .map((path) => ({ path, status: get(session, path, { endpoint: "preflight" }, { redirects: 0 }).status }))
+            .filter((probe) => probe.status !== 200);
+        if (cold.length) {
+            fail(
+                `Pre-flight: ${cold.length} of ${PREFLIGHT_PROBE_TILES} sampled tiles are not served (e.g. ${cold[0].path} answered ${cold[0].status}). ` +
+                    "Seed the deployment's tile cache for the grid in lib/capacity.js before measuring, or this run measures misses.",
+            );
         }
     }
     const tilesDrawn = TILES ? `${VIEWPORT_TILES} tiles/viewport` : "no tiles (UL_CAP_TILES=0)";
