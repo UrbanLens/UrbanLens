@@ -37,7 +37,7 @@ from urbanlens.dashboard.services.core import bounded_cache
 
 if TYPE_CHECKING:
     from django.core.cache.backends.base import BaseCache
-    from django.http import HttpResponse
+    from django.http.response import HttpResponseBase
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
 _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
@@ -106,7 +106,7 @@ class CountingStore:
         return getattr(self._wrapped, name)
 
 
-def header_bytes(response: HttpResponse) -> int:
+def header_bytes(response: HttpResponseBase) -> int:
     """Roughly what this response's headers cost on the wire.
 
     Args:
@@ -118,7 +118,7 @@ def header_bytes(response: HttpResponse) -> int:
     return sum(len(name) + len(str(value)) + 4 for name, value in response.headers.items())
 
 
-def cache_directives(response: HttpResponse) -> str:
+def cache_directives(response: HttpResponseBase) -> str:
     """The response's ``Cache-Control`` value, or ``""`` when it has none."""
     return response.headers.get("Cache-Control", "")
 
@@ -149,7 +149,7 @@ class BasemapTileCostTests(TestCase):
         with mock.patch(_CONFIGURED, return_value=True):
             self.client.get(self._url(x=9999))
 
-    def _serve_cached(self, x: int = 1204) -> HttpResponse:
+    def _serve_cached(self, x: int = 1204) -> HttpResponseBase:
         """Answer one tile from the cache, the way the second viewer of an area is answered."""
         _tile_store().set(f"ul_basemap_tile_street_12_{x}_1539", (b"x" * TILE_BYTES, "image/png"), 60)
         with mock.patch(_CONFIGURED, return_value=True):
