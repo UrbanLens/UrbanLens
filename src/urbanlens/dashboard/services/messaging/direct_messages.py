@@ -19,8 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from uuid import UUID
 
-    from django.db.models import QuerySet
-
+    from urbanlens.dashboard.models.direct_messages.queryset import DirectMessageQuerySet
     from urbanlens.dashboard.models.group_chats.model import GroupMessage
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
@@ -1234,7 +1233,7 @@ def unread_conversation_total(profile: Profile) -> int:
 DIRECT_MESSAGE_SEARCH_LIMIT = 25
 
 
-def message_search_queryset(profile: Profile, parsed: ParsedQuery, *, partner: Profile | None = None) -> QuerySet[DirectMessage]:
+def message_search_queryset(profile: Profile, parsed: ParsedQuery, *, partner: Profile | None = None) -> DirectMessageQuerySet:
     """Build the filtered, ordered DirectMessage queryset for a parsed search query.
 
     Args:

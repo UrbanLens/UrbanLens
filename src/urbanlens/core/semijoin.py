@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import FieldDoesNotExist
 from django.db import connection
 from django.db.models import Q
+from django.db.models.fields.reverse_related import ForeignObjectRel
 
 import urbanlens.core.lookups  # noqa: F401  - registers the __anyof every bound below uses
 
@@ -115,14 +116,11 @@ def resolve_crossing(model: type[Model], path: str) -> Crossing | None:
             return None
         if field.many_to_many:
             return _many_to_many_crossing(walked, part, field)
-        if field.one_to_many:
-            related = field.related_model
-            if not isinstance(related, type):
-                return None
-            return Crossing(prefix="__".join(walked), related_model=related, back_field=field.field.name, strip="__".join([*walked, part]) + "__")
         related = field.related_model
         if not isinstance(related, type):
             return None
+        if field.one_to_many and isinstance(field, ForeignObjectRel):
+            return Crossing(prefix="__".join(walked), related_model=related, back_field=field.field.name, strip="__".join([*walked, part]) + "__")
         walked.append(part)
         model = related
     return None

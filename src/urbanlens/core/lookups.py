@@ -59,7 +59,7 @@ class AnyOf(Lookup):
             return values
         return [prepare(value) for value in values]
 
-    def as_sql(self, compiler: SQLCompiler, connection: BaseDatabaseWrapper) -> tuple[str, list[Any]]:
+    def as_sql(self, compiler: SQLCompiler, connection: BaseDatabaseWrapper) -> tuple[str, tuple[Any, ...]]:
         """The portable form, for backends without array parameters.
 
         Args:
@@ -75,9 +75,9 @@ class AnyOf(Lookup):
             raise EmptyResultSet
         lhs, lhs_params = self.process_lhs(compiler, connection)
         placeholders = ", ".join(["%s"] * len(self.rhs))
-        return f"{lhs} IN ({placeholders})", [*lhs_params, *self.rhs]
+        return f"{lhs} IN ({placeholders})", (*lhs_params, *self.rhs)
 
-    def as_postgresql(self, compiler: SQLCompiler, connection: BaseDatabaseWrapper) -> tuple[str, list[Any]]:
+    def as_postgresql(self, compiler: SQLCompiler, connection: BaseDatabaseWrapper) -> tuple[str, tuple[Any, ...]]:
         """The array form, with the values written into the statement so the planner can see them.
 
         Args:
@@ -96,4 +96,4 @@ class AnyOf(Lookup):
             return self.as_sql(compiler, connection)
         lhs, lhs_params = self.process_lhs(compiler, connection)
         values = ",".join(str(int(value)) for value in self.rhs)
-        return f"{lhs} = ANY('{{{values}}}'::bigint[])", list(lhs_params)
+        return f"{lhs} = ANY('{{{values}}}'::bigint[])", tuple(lhs_params)
