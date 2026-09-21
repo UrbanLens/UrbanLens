@@ -29,6 +29,7 @@ import { installGlobalSafetyLiveLocation } from "../shared/safety-live-location"
 import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
 import { installUndoBar } from "../shared/undo-bar";
 import { installGlobalUndoMapRefresh } from "../shared/undo-map-refresh";
+import { installGlobalThumbMapBudget } from "../shared/thumb-map-budget";
 import { installGlobalWebGLSupport } from "../shared/webgl-support";
 
 installGlobalAssistantOverlay();
@@ -59,6 +60,7 @@ installGlobalPinCachePurge();
 installGlobalWebGLSupport();
 installGlobalMaplibreRasterStyle();
 installGlobalMaplibreMarkup();
+installGlobalThumbMapBudget();
 
 window.createMarkupToolbar = createMarkupToolbar;
 

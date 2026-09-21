@@ -774,6 +774,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         // this stays correct if that ever changes.
         function _disposeMapOn(el) {
             if (!el) return;
+            if (window.ThumbMapBudget) window.ThumbMapBudget.forget(el);
             var lmap = el._ulLeafletMap;
             if (lmap) { delete el._ulLeafletMap; lmap.remove(); }
             var mmap = el._ulMaplibreMap;
@@ -896,6 +897,52 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         // window: a couple of call sites replace a pane's innerHTML directly
         // (fetch-based fallbacks that predate htmx.ajax) and need to re-run
         // this manually since a raw innerHTML assignment fires no htmx events.
+        // -- Thumbnail budget -------------------------------------------------
+        // A thread renders one map per comment that has one, and a browser will
+        // not hold that many WebGL contexts: Chrome allows 16 per page and
+        // silently loses the oldest past that, so the earliest thumbnails go
+        // blank with nothing in the console. Two halves: build a thumbnail only
+        // once it is near the viewport, and keep at most ThumbMapBudget's limit
+        // alive, releasing the least recently seen. An evicted thumbnail is
+        // rebuilt if the reader scrolls back to it. See thumb-map-budget.ts.
+        var _observer = null;
+        function _thumbObserver() {
+            if (_observer) return _observer;
+            if (typeof IntersectionObserver === 'undefined') return null;
+            _observer = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (entry.isIntersecting) _buildThumb(entry.target);
+                });
+            // Built before it is scrolled to, so the reader sees a map rather than it appearing.
+            }, { rootMargin: '300px' });
+            return _observer;
+        }
+
+        function _buildThumb(thumb) {
+            if (thumb.dataset.rendered) {
+                if (window.ThumbMapBudget) window.ThumbMapBudget.touch(thumb);
+                return;
+            }
+            var id = thumb.dataset.commentId;
+            var script = document.getElementById('comment-map-data-' + id);
+            if (!script) return;
+            var data;
+            try { data = JSON.parse(script.textContent); } catch (_) { return; }
+            thumb.dataset.rendered = '1';
+            try {
+                window._renderMapThumb(thumb, data, _readMarkerLatLng(thumb.closest('.comment-map-preview') || thumb));
+            } catch (err) {
+                console.error('Failed to render map thumbnail', id, err);
+                return;
+            }
+            if (!window.ThumbMapBudget) return;
+            window.ThumbMapBudget.admit(thumb, function (el) {
+                _disposeMapOn(el);
+                // Evicted, not finished with: the observer rebuilds it on the way back.
+                delete el.dataset.rendered;
+            });
+        }
+
         window._initThumbs = _initThumbs;
         function _initThumbs() {
             if (typeof L === 'undefined') return;  // Leaflet not loaded on this page
@@ -921,14 +968,14 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 var id = preview.dataset.commentId;
                 var thumb = preview.querySelector('.comment-map-thumb');
                 if (!thumb || thumb.dataset.initialized) return;
-                var script = document.getElementById('comment-map-data-' + id);
-                if (!script) return;
-                var data;
-                try { data = JSON.parse(script.textContent); } catch (_) { return; }
+                if (!document.getElementById('comment-map-data-' + id)) return;
 
                 thumb.dataset.initialized = '1';
+                thumb.dataset.commentId = id;
                 // Set height inline - guarantees Leaflet reads a non-zero size
-                // regardless of whether the compiled CSS has loaded yet.
+                // regardless of whether the compiled CSS has loaded yet. Also
+                // gives the observer below something to intersect before any
+                // map exists, which an empty div would not.
                 thumb.style.height = '180px';
                 thumb.style.width = '100%';
                 // Leaflet calls L.DomEvent.disableClickPropagation() on the map
@@ -938,11 +985,9 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 thumb.addEventListener('click', function () {
                     if (id) window._expandCommentMap(id);
                 });
-                try {
-                    window._renderMapThumb(thumb, data, _readMarkerLatLng(preview));
-                } catch (err) {
-                    console.error('Failed to render map thumbnail', id, err);
-                }
+                var observer = _thumbObserver();
+                if (observer) observer.observe(thumb);
+                else _buildThumb(thumb);
             });
         }
 
