@@ -114,9 +114,13 @@ Nothing here is a cache problem any more; it is query counts and query plans.
 
 ## What to do with this
 
-1. **`CPU_LIMIT__APP=8`, `WEB_CONCURRENCY=12`, `MEM_LIMIT__APP=4g`, `CPU_LIMIT__DB=6`** is the
-   configuration this measurement points at for 1,000 users. Nothing has measured it; the 8 is an
-   extrapolation from a linear region, and the memory figure assumes per-worker cost stays flat.
+1. **`CPU_LIMIT__APP=8`, `WEB_CONCURRENCY=12`, `MEM_LIMIT__APP=4g`, `CPU_LIMIT__DB=6`,
+   `MEM_LIMIT__DB=4g`, `UL_DB_SHARED_BUFFERS=1GB`, `UL_DB_EFFECTIVE_CACHE_SIZE=3GB`** is the
+   configuration this measurement points at for 1,000 users, and it is now what
+   `production.sample.env` holds. Nothing has measured it: the 8 is an extrapolation from a linear
+   region, and the memory figure assumes per-worker cost stays flat. The worker count has a
+   ceiling this measurement did not find — 12 workers × 4 gthread threads hold 48 connections
+   against `ul_web`'s limit of 54, so 13 is the most the role budget accepts whatever the CPU says.
 2. **P100 and P132 are the next real work** — they are the two biggest SQL costs per call, and
    neither is fixed by more CPU.
 3. **None of this describes damballa.** Production still runs `-k gevent`, `WEB_CONCURRENCY=3` and

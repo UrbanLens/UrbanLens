@@ -3265,8 +3265,11 @@ own `CPU_LIMIT__DB` of 2 cores.** Raising it is the next lever and has still not
 - **Nothing between 350 and 500 was measured**, so "the ceiling is between them" is exactly as
   precise as it sounds. The 2026-09-21 ladder below measures 500 as passing on a 4-core database,
   which supersedes that reading.
-- **Production has none of this.** The three app-tier values live in `production.sample.env` and
-  are deployed to the perf environment only.
+- **Production has none of this.** `production.sample.env` now carries the app tier *and* the
+  database sizing, and is deployed to the perf environment only. `urbanlens_production_db` runs
+  bare `postgres` with no arguments and `NanoCpus=0` (verified read-only 2026-09-21), so it has
+  neither the limits nor the `shared_buffers`/`jit=off` tuning; both need a recreate, not a
+  restart.
 - **The 30-minute window is a real trade.** A revocation that leaves the session record intact - an
   admin disabling an account, a password change invalidating other sessions - keeps drawing tiles,
   and nothing else, until the entry expires. Signing out, a flush or an expiry revokes immediately,

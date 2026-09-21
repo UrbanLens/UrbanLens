@@ -45,7 +45,7 @@ wrong way. What follows is the disposition, then the parts worth carrying forwar
 | 22 | the harness's browser-cache model suppressed 73% of its own tile load | fixed, `615041aa1` |
 | 23 | neither deployed environment runs the config the capacity work describes | **confirmed on damballa, not changed** — see below |
 | 24 | the connection-budget test never reads `production.sample.env` | fixed, this session |
-| 25 | Postgres is entirely stock | half fixed, `c46b0c9f5`; `production.sample.env`'s DB sizing waits on measured numbers |
+| 25 | Postgres is entirely stock | fixed, `c46b0c9f5` + this session's `production.sample.env` sizing from X28 |
 | 26 | nginx proxies with no keepalive | **closed by measurement** — 0.24 ms a request, 0.02% of it |
 | 27 | the "one round trip" tile cache read has no test | fixed, this session |
 | 28 | P131 asserts a PBKDF2 cost REData has already removed | confirmed by live measurement, P131 rewritten, `ac4dd7013` |
@@ -123,12 +123,25 @@ tiers ever stop sharing a Docker bridge.
   P125; the worker-class half was not recorded anywhere. **Every capacity figure in P125, X26 and
   X28 describes the `ul_perf_*` stack, not a deployment that exists.** Closing this is a rebuild and
   a recreate on a production host, so it is written down rather than done.
-- **#25 — `production.sample.env` has no DB sizing.** `docker-compose.yml` now takes
-  `UL_DB_SHARED_BUFFERS` and friends from the environment, but nothing sets them for production, and
-  `CPU_LIMIT__DB` is still the shared 2-core default that X26 measured throttling at 84.78% under 750
-  users.
 - **#10, #21** — no invariant check for write-source misattribution; no live consumer of the
   engine-neutral marker contract.
+
+## Closed after the audit
+
+**#25 — `production.sample.env` now sizes the database.** X28 supplied the numbers the sizing was
+waiting on: `CPU_LIMIT__DB=6`, `MEM_LIMIT__DB=4g`, `UL_DB_SHARED_BUFFERS=1GB`,
+`UL_DB_EFFECTIVE_CACHE_SIZE=3GB`, alongside an app tier raised to the 1,000-user extrapolation
+(`CPU_LIMIT__APP=8`, `WEB_CONCURRENCY=12`, `MEM_LIMIT__APP=4g`). Twelve workers × 4 gthread threads
+is 48 held connections against `ul_web`'s `CONNECTION LIMIT` of 54, so the worker count has a
+ceiling of 13 before the role budget — which sums to exactly the 97 a stock Postgres leaves
+non-superusers — is the binding constraint rather than CPU. `test_connection_budget_wiring.py`
+checks that arithmetic against every env sample, which is #24's fix earning its place.
+
+Verifying it turned up the sharper half of #23: `urbanlens_production_db` runs **bare `postgres`**
+with no arguments at all (read-only inspect, 2026-09-21), so production has neither the cgroup
+limits nor `jit=off`, `shared_preload_libraries` or a `shared_buffers` above the stock 128MB. The
+command is fixed at container creation, so this needs a recreate rather than a restart — the same
+production-host operation #23 is written down instead of done.
 
 ## Related
 
