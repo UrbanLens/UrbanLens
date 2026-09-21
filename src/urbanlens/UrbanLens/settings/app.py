@@ -593,6 +593,17 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "archive's range reads. Without this the browser is refused all four."
         ),
     )
+    historical_tile_upstream_concurrency: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "How many warped historical-map tiles one web process may be fetching from REData at "
+            "the same time. Its own count rather than the basemap one's, because an overlay "
+            "nobody has switched on must not be able to starve the base layer under it - and "
+            "because REData warps these on demand, so they are slower than a basemap tile rather "
+            "than faster. See basemap_tile_upstream_concurrency for why the bound exists at all."
+        ),
+    )
     basemap_tile_upstream_concurrency: int = Field(
         default=2,
         ge=1,

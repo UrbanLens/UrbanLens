@@ -106,6 +106,32 @@ class GatewayRateLimitedError(GatewayRequestError):
 MAX_PROXIED_MEDIA_BYTES = 25 * 1024 * 1024
 
 
+#: What a tile proxy will pass through to a browser under this deployment's own origin.
+#:
+#: An allow-list, because every interesting case is one a deny-list forgets. ``image/svg+xml`` is
+#: an image and can carry script; ``text/html`` served from here is a document, on a route that is
+#: ``csp_exempt`` because a policy on a tile is 1.2kB of header that can never apply.
+SERVABLE_TILE_TYPES = frozenset({"image/avif", "image/gif", "image/jpeg", "image/png", "image/webp"})
+
+
+def servable_tile_type(content_type: str | None, *, default: str = "image/png") -> str | None:
+    """The type a proxied tile may be served as.
+
+    Args:
+        content_type: What the upstream declared, header parameters and all.
+        default: What to serve a tile the upstream declared no type for. Assuming an image is the
+            long-standing behaviour and is safe alongside ``X-Content-Type-Options: nosniff``.
+
+    Returns:
+        The type to serve it as, or None when it is not something this origin should hand a
+        browser - which is a fact about the upstream, not about the coordinate.
+    """
+    declared = (content_type or "").partition(";")[0].strip().lower()
+    if not declared:
+        return default
+    return declared if declared in SERVABLE_TILE_TYPES else None
+
+
 def read_capped(response: requests.Response, *, max_bytes: int = MAX_PROXIED_MEDIA_BYTES, what: str) -> bytes:
     """Read a proxied body, refusing one larger than *max_bytes*.
 

@@ -21,10 +21,7 @@ load stalls the whole site.
 
 from __future__ import annotations
 
-import contextlib
 import logging
-import threading
-from typing import TYPE_CHECKING
 
 from csp.decorators import csp_exempt
 from django.contrib.auth.mixins import AccessMixin, LoginRequiredMixin
@@ -33,12 +30,10 @@ from django.utils.decorators import method_decorator
 from django.views import View
 
 from urbanlens.dashboard.services.core import bounded_cache
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError, servable_tile_type
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, ServiceDisabledError
+from urbanlens.dashboard.services.core.upstream_slots import UpstreamSlots as BaseUpstreamSlots
 from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -57,45 +52,17 @@ _NO_TILE = "__ul_no_tile__"
 _VECTOR_LAYER_REFUSAL = b"vector_layer_not_served"
 
 
-class UpstreamSlots:
-    """The process-wide bound on how many tiles may be fetched from REData at once.
-
-    Built on first use rather than at import so a deployment (or a test) can set the cap without
-    the module having already frozen it.
-    """
-
-    _semaphore: threading.BoundedSemaphore | None = None
-    _lock = threading.Lock()
+class UpstreamSlots(BaseUpstreamSlots):
+    """The process-wide bound on how many basemap tiles may be fetched from REData at once."""
 
     @classmethod
-    def semaphore(cls) -> threading.BoundedSemaphore:
-        """The shared semaphore, built if this is the first call."""
-        if cls._semaphore is None:
-            with cls._lock:
-                if cls._semaphore is None:
-                    cls._semaphore = threading.BoundedSemaphore(app_settings.basemap_tile_upstream_concurrency)
-        return cls._semaphore
+    def limit(cls) -> int:
+        """How many basemap tile fetches one process may have in flight.
 
-    @classmethod
-    def reset(cls) -> None:
-        """Drop the semaphore so the next call rereads the setting. Test-only."""
-        with cls._lock:
-            cls._semaphore = None
-
-    @classmethod
-    @contextlib.contextmanager
-    def hold(cls) -> Iterator[bool]:
-        """Hold one slot for the block, or yield ``False`` when none is free.
-
-        Never blocks: a request thread waiting for a slot is occupying the resource the slot
-        exists to ration, so over the cap the caller answers immediately instead.
+        Returns:
+            ``basemap_tile_upstream_concurrency``.
         """
-        acquired = cls.semaphore().acquire(blocking=False)
-        try:
-            yield acquired
-        finally:
-            if acquired:
-                cls.semaphore().release()
+        return app_settings.basemap_tile_upstream_concurrency
 
 
 class BasemapTileCatalogueView(LoginRequiredMixin, View):
@@ -122,7 +89,7 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
 
 
 def _keep_for_a_week(response: HttpResponse) -> HttpResponse:
-    """Tell the browser it may keep this answer as long as this deployment does.
+    """Tell the browser it may keep this answer as long as this deployment does, and not guess at it.
 
     A tile is immutable for a layer and coordinate, so a re-ask gets the answer the browser already
     has. Without this the proxy is asked again for every tile on every pan back over the same
@@ -137,6 +104,10 @@ def _keep_for_a_week(response: HttpResponse) -> HttpResponse:
     """
     # private: a tile is served behind a login, so a shared cache must not hold one.
     response.headers["Cache-Control"] = f"private, max-age={_TILE_CACHE_TTL}, immutable"
+    # The type the upstream declared is allow-listed before it gets here; this is the other half,
+    # for bytes that do not match the type they were allowed under. nginx sets it on the media
+    # routes only, and this one is csp_exempt.
+    response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
 
@@ -223,7 +194,13 @@ class BasemapTileView(AccessMixin, View):
                 return HttpResponse(status=503)
 
         if status == 200:
-            resolved_type = content_type or "image/png"
+            resolved_type = servable_tile_type(content_type)
+            if resolved_type is None:
+                # Not cached, and not a retryable status: the upstream will answer the next
+                # coordinate the same way, and a viewport retrying five times each would turn one
+                # broken layer into 150 calls. Uncached so a fixed upstream is visible at once.
+                logger.warning("REData answered %s %s/%s/%s with %r, which this origin will not serve", layer, z, x, y, content_type)
+                return HttpResponse(status=404)
             # Bounded like the Immich thumbnail proxy: these bytes come from a
             # vendor and land in the same shared Dragonfly that holds sessions
             # and the Channels layer - and a full store there raises rather
