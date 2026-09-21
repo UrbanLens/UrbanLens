@@ -3201,7 +3201,7 @@ own `CPU_LIMIT__DB` of 2 cores.** Raising it is the next lever and has still not
   and nothing else, until the entry expires. Signing out, a flush or an expiry revokes immediately,
   because the gate re-reads the session every time.
 
-## P132 — A global search costs ~35 queries and is over its latency budget at every concurrency measured
+## P132 — A global search is over its latency budget at every concurrency measured, and two of its ten providers are 78% of the cost
 
 `id: P132` · `status: open` · `updated: 2026-09-21`
 
@@ -3239,18 +3239,74 @@ likely source of the 67-query worst case. Nothing here is obviously an N+1 over 
 fan-out over domains, so the fix is likely to be about how many providers a query actually needs to
 ask rather than about a `select_related` somewhere.
 
-**Not started, deliberately.** Jess's call on 2026-09-20: fix the app tier's capacity first, then
-take this as its own batch. Filed so the measurement is not lost, and so the next capacity run does
-not rediscover it as a mystery.
+**Partly started.** Jess's call on 2026-09-20 was to fix the app tier's capacity first and take
+this as its own batch. The attribution below is that batch's first step; `d581f2c9e` is the only
+code change so far, and it is a statement-count change rather than a latency one.
+
+**Which provider is expensive: two of the ten are 78% of it.** Measured 2026-09-21 against the
+capacity population (1,000 accounts, 471,756 pins) by timing each provider's `search()` separately
+with a `connection.execute_wrapper` around it:
+
+| provider | queries | SQL ms | wall ms | share of SQL |
+|---|---:|---:|---:|---:|
+| **pins** | 8 | **151.5** | 188.8 | **63%** |
+| **comments** | 2 | **36.5** | 44.9 | **15%** |
+| photos | 5 | 11.6 | 23.7 | 5% |
+| wikis | 5 | 11.6 | 16.3 | 5% |
+| visits | 3 | 8.8 | 14.0 | 4% |
+| maps | 4 | 5.5 | 9.7 | 2% |
+| articles | 4 | 5.4 | 13.9 | 2% |
+| messages | 1 | 4.1 | 17.9 | 2% |
+| trips | 7 | 3.8 | 12.2 | 2% |
+| safety | 4 | 2.2 | 4.3 | 1% |
+| total | 43 | 240.9 | 345.8 | |
+
+Term `river`, which matches nothing; `Perf Pin`, which matches, gives the same shape - pins 126.3 ms
+of 258.9, comments 36.8. **So "how many providers does a query need to ask?" is the wrong question.**
+Dropping the seven cheapest providers entirely would save under a quarter of the cost and change
+what search finds. The work is inside two providers.
+
+**What is expensive inside them is a site-wide scan, not a fan-out.** Each is a leading-wildcard
+`ILIKE` against a table the viewer does not own all of, and the row counts are the site's:
+
+| statement | ms | rows discarded |
+|---|---:|---:|
+| pins, `aliases__name` probe | 52 | 55,084 |
+| pins, `location__wiki__aliases__name` probe | 46 | 51,001 |
+| pins, final row fetch (`width=10782`) | 30 | 1,859 |
+| pins, `notes__text` probe | 19 | - |
+| pins, `labels__name` probe | 14 | - |
+| comments, trip comments | 30 | 50,000, by `Seq Scan` |
+
+That is the same class of defect as the resolved P100: cost set by how much *other people* have,
+not by the viewer's own data. It is not the fan-out and it is not an N+1.
+
+**The `enable_seqscan = off` that `_semijoin` sets costs about 2x at this population.** It exists
+for P123, where at ~400 crossing rows the planner tie-breaks to a sequential scan; at 55,084 it
+forces a full index scan of the alias table instead, which reads the same rows more slowly.
+Measured on the same statements, hint on against hint off: `aliases__name` 80.7 ms against 35.4,
+`location__wiki__aliases__name` 41.7 against 29.5, identical rows discarded either way. Both
+regimes are real, so this wants a conditional rather than a removal, and the P123 regression net is
+at the small-table scale where the hint is load-bearing. Not attempted.
+
+**Duplicate queries are not the cost, despite the count.** One search issues 27 repeated statement
+shapes, which reads like the obvious target; they are 11.7 ms of 332. Commit `d581f2c9e` removed 13
+of the 60 statements (four duplicate pk fetches, nine session-setting round trips) and **SQL time
+did not measurably change** - 246-285 ms before over four runs, 244-320 ms after. Worth having for
+connection occupancy at 1,000 users; not a latency fix, and the remaining duplicates are not either.
 
 ### What this does not establish
 
-- **Which provider is expensive.** The 34.9 is an average over the whole chain; nothing here
-  attributes it per provider, and the obvious next step is to do that before changing anything.
 - **Whether the fallback re-run is the worst case.** It is the leading hypothesis for 67 queries,
   from reading the engine, not from a measurement that caught one.
 - **What a user-visible fix would be.** Fewer providers per query changes what a search finds, which
-  is a product decision, not only a performance one.
+  is a product decision, not only a performance one - and the attribution above says it would not
+  buy much anyway.
+- **Whether a trigram index on the alias/note/comment text would help.** It is the obvious answer to
+  a leading-wildcard `ILIKE` reading 55,084 rows, and P100 is a standing warning that the obvious
+  answer has been wrong here before. Untested at this population.
+- **Whether the ladder's p95 has moved.** The per-fragment figures above the fold predate
+  `d581f2c9e`; the ladder has not been re-run.
 
 ## P128 — The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is
 
