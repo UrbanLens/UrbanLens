@@ -16,8 +16,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.cache import cache
+from django.core.cache import cache, caches
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -97,7 +98,8 @@ class TileAuthorisationTests(TestCase):
         """The revocation window is whatever this timeout is, so it is written down and asserted."""
         self.client.force_login(self.user)
 
-        with mock.patch.object(cache, "set", wraps=cache.set) as writes:
+        store = caches[settings.PROXIED_BYTES_CACHE]
+        with mock.patch.object(store, "set", wraps=store.set) as writes:
             self._fetch(self.client)
 
         timeouts = [

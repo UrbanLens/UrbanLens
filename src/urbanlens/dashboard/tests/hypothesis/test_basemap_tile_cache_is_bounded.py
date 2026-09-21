@@ -23,8 +23,9 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.cache import cache
+from django.core.cache import cache, caches
 from django.urls import reverse
 from model_bakery import baker
 
@@ -33,6 +34,16 @@ from urbanlens.core.tests.testcase import TestCase
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
 _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 _CEILING = "urbanlens.dashboard.services.core.bounded_cache.MAX_CACHED_BODY_BYTES"
+
+
+def _breaking(operation: str, reason: str = "dragonfly is full"):
+    """Make one operation on the proxied-bytes store fail.
+
+    Patching ``django.core.cache.cache`` instead reaches the store that holds the sessions, which
+    the tile path stopped using - and the tile is served either way, so the test would pass
+    without proving anything.
+    """
+    return mock.patch.object(caches[settings.PROXIED_BYTES_CACHE], operation, side_effect=ConnectionError(reason))
 
 
 class _TileCase(TestCase):
@@ -86,10 +97,7 @@ class ACacheFailureIsNotA500Tests(_TileCase):
     """A full or unreachable Dragonfly is a degraded cache, not a broken map."""
 
     def test_a_cache_error_still_serves_the_tile(self) -> None:
-        with mock.patch(
-            "urbanlens.dashboard.services.core.bounded_cache.cache.set",
-            side_effect=ConnectionError("dragonfly is full"),
-        ):
+        with _breaking("set"):
             responses, _download = self._fetch(b"PNGDATA")
 
         self.assertEqual(responses[0].status_code, 200)
@@ -98,7 +106,7 @@ class ACacheFailureIsNotA500Tests(_TileCase):
     def test_a_failing_read_still_serves_the_tile(self) -> None:
         """The read is the first cache call the view makes, so an unreachable store fails here
         before any of the write paths are even reached."""
-        with mock.patch("django.core.cache.cache.get_many", side_effect=ConnectionError("dragonfly is full")):
+        with _breaking("get_many"):
             responses, _download = self._fetch(b"PNGDATA")
 
         self.assertEqual(responses[0].status_code, 200)
@@ -107,7 +115,7 @@ class ACacheFailureIsNotA500Tests(_TileCase):
     def test_a_failing_write_still_answers_a_definitive_miss(self) -> None:
         """The 404 path writes its own sentinel, so it has its own way to 500."""
         with (
-            mock.patch("django.core.cache.cache.set", side_effect=ConnectionError("dragonfly is full")),
+            _breaking("set"),
             mock.patch(_CONFIGURED, return_value=True),
             mock.patch(f"{_GATEWAY}.download_tile", return_value=(404, b"", "")),
         ):
@@ -120,7 +128,7 @@ class ACacheFailureIsNotA500Tests(_TileCase):
         cached - so a degraded store breaks every map load rather than an unlucky one."""
         from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer
 
-        with mock.patch("django.core.cache.cache.set", side_effect=ConnectionError("dragonfly is full")):
+        with _breaking("set"):
             remember_tile_viewer("some-session-key")
 
     def test_a_failing_delete_does_not_break_signing_out(self) -> None:
@@ -131,5 +139,5 @@ class ACacheFailureIsNotA500Tests(_TileCase):
         request = mock.Mock()
         request.session.get.return_value = "1"
         request.session.session_key = "some-session-key"
-        with mock.patch("django.core.cache.cache.delete", side_effect=ConnectionError("dragonfly is full")):
+        with _breaking("delete"):
             forget_tile_viewer(sender=None, request=request)

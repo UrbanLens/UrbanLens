@@ -232,6 +232,17 @@ UL_DB_APP_PASS = _app_settings.db_app_pass
 # Dragonfly/Redis for pin payloads and Django cache when configured. UL_VALKEY_URL is
 # honored too, for anything still pointed at the store this replaced.
 DRAGONFLY_URL = os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
+
+#: Cache alias for bytes proxied from somewhere else - map tiles, Immich thumbnails, Google Photos
+#: previews. Its keyspace is bounded by nobody: a tile is cached per layer and coordinate, so the
+#: number of keys is the number of coordinates anyone looked at, and the store holding them raises
+#: rather than evicting once full. Sessions and the Channels layer live in `default` and must not
+#: be what breaks when a week of panning fills it, so this points at an instance that may evict.
+PROXIED_BYTES_CACHE = "proxied_bytes"
+#: Falls back to the shared store, which is the arrangement this exists to end - so a deployment
+#: that has not provisioned the second instance still works, and is measurably not fixed.
+PROXIED_BYTES_URL = os.getenv("UL_PROXY_CACHE_URL") or DRAGONFLY_URL
+
 if DRAGONFLY_URL:
     CACHES = {
         "default": {
@@ -243,6 +254,22 @@ if DRAGONFLY_URL:
             "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
             "LOCATION": DRAGONFLY_URL,
             "KEY_PREFIX": "urbanlens",
+            "VERSION": 1,
+            "TIMEOUT": 300,
+            "OPTIONS": {
+                "max_connections": 50,
+                "socket_connect_timeout": 1,
+                "socket_timeout": 2,
+                "retry_on_timeout": True,
+                "BREAKER_SECONDS": _app_settings.cache_breaker_seconds,
+            },
+        },
+        PROXIED_BYTES_CACHE: {
+            "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
+            "LOCATION": PROXIED_BYTES_URL,
+            # Its own namespace, so pointing it at the shared instance stays legible in a dump and
+            # a flush of one is not a flush of the other.
+            "KEY_PREFIX": "urbanlens-proxied",
             "VERSION": 1,
             "TIMEOUT": 300,
             "OPTIONS": {
@@ -278,6 +305,13 @@ if DRAGONFLY_URL:
                 **({"prefix": f"asgi-test-{os.getenv('UL_TEST_DB_NAME', 'default')}"} if TESTING else {}),
             },
         },
+    }
+else:
+    # No store configured, so Django's implicit single-alias default would leave
+    # PROXIED_BYTES_CACHE unresolvable and every proxied body raising on lookup.
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+        PROXIED_BYTES_CACHE: {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": PROXIED_BYTES_CACHE},
     }
 
 DATABASE_ROUTERS = ["urbanlens.dashboard.dbrouters.DBRouter"]

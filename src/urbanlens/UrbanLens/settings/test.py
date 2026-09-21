@@ -22,8 +22,17 @@ PERF_REC = {"MODE": "none" if os.getenv("CI") else "once"}
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 # locmem: no live service needed and no cross-test bleed (network guard only allows localhost).
+#
+# Both aliases name the same location on purpose. What separates them in a deployment is which
+# Dragonfly they connect to and whether it may evict, neither of which locmem has; what a test
+# asserts is what was cached, and a second store would only mean every test seeding a proxied
+# body had to know which one. test_proxied_bytes_have_their_own_store.py covers the wiring.
 CACHES = {
     "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "urbanlens-tests",
+    },
+    PROXIED_BYTES_CACHE: {  # noqa: F405
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "urbanlens-tests",
     },

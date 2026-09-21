@@ -30,7 +30,7 @@ class TheCeilingTests(TestCase):
         self.assertTrue(bounded_cache.set_if_small("k", exact, "image/jpeg", 60, label="probe"))
 
     def test_an_unreachable_cache_is_not_an_error(self) -> None:
-        with mock.patch.object(bounded_cache.cache, "set", side_effect=ConnectionError("gone")):
+        with mock.patch.object(bounded_cache._store(), "set", side_effect=ConnectionError("gone")):
             self.assertFalse(bounded_cache.set_if_small("k", b"x", "image/jpeg", 60, label="probe"))
 
     def test_the_ceiling_is_a_thumbnail_budget_not_a_photo_one(self) -> None:
