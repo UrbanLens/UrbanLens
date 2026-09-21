@@ -3277,7 +3277,7 @@ own `CPU_LIMIT__DB` of 2 cores.** Raising it is the next lever and has still not
 
 ## P132 — A global search costs ~35 queries and is over its latency budget at every concurrency measured
 
-`id: P132` · `status: open` · `updated: 2026-09-19`
+`id: P132` · `status: open` · `updated: 2026-09-21`
 
 Measured by the capacity harness (P125), not by a synthetic benchmark: `search.panel` is the only
 endpoint over its D15 budget at *every* level the ladder ran, including 125 concurrent users where
@@ -3296,6 +3296,13 @@ endpoint cost rather than a symptom of the app tier being saturated.
 Two days and the audit's fixes later, the shape is unchanged and it is still the only endpoint over
 budget at 500 concurrent users - now the *only* endpoint over any budget there at all, which makes
 it the next thing worth fixing rather than one of several.
+
+**Doubling the app tier's workers moved it just inside the budget without touching the endpoint.**
+Re-run the same day on the same 4 cores at `WEB_CONCURRENCY=12` (X28, run `mem12-20260921T172252Z`),
+p95 was 473 ms against the 500 ms budget, down from 554. Nothing about the endpoint changed: still
+34 queries, still 238 ms of SQL a call. What changed is how long a request waited for one of the
+tier's request threads, so this is queueing relief and not a fix - and 473 against 500, on 178
+samples rather than 266, is not a margin to rely on. The endpoint cost is still the problem.
 
 **Where the queries come from, structurally.** `GlobalSearchEngine.search` fans one query out to
 ten providers - pins, photos, wikis, articles, trips, visits, direct messages, markup maps, safety,

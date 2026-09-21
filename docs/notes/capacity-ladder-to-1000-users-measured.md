@@ -59,9 +59,36 @@ doubling. The 3.68 figure is not demand; it is the ceiling with the bursts shave
 **To serve 1,000 users at the latency 500 users get, the app tier needs 8 cores.** That is the same
 50% utilisation, not a safety-factor guess: at u500 the app ran at 2.01 of 4.
 
-Memory scales with workers, not with users: 1,731–1,743 MB peak at every level from 100 users up,
-on 6 workers — about 290 MB a worker, flat. Twelve workers need roughly 3.5 GB, so an 8-core app
-tier wants `MEM_LIMIT__APP=4g`, and the current `3g` in `production.sample.env` would not hold it.
+Memory scales with workers, not with users: 1,731–1,743 MiB peak at every level from 100 users up,
+on 6 workers, and `MEM_LIMIT__APP` was the compose default of 2 GiB throughout — so the measured
+configuration was already at 85% of its own limit.
+
+## What twelve workers actually cost
+
+Run `mem12-20260921T172252Z`, the same harness at one level: 500 users, 180 s, the same 4 cores,
+`WEB_CONCURRENCY=12` and `MEM_LIMIT__APP=4g`. This is the half of the 1,000-user recommendation an
+8-core host can still check — the CPU half cannot be measured here, because chiron has 8 cores in
+total and the app tier alone would want all of them.
+
+| | 6 workers (ladder3 u500) | 12 workers (mem12 u500) |
+|---|---:|---:|
+| peak memory | 1,731 MiB | **3,180 MiB** |
+| app mean cores | 2.01 | 1.94 |
+| app throttled | 2.92% | 3.24% |
+| proxy p95 | 0.231 s | 0.225 s |
+| `search_panel` p95 | 554 ms (**over** 500) | 473 ms |
+
+**Per-worker cost is flat, and the estimate was close.** 1,731 and 3,180 MiB fit
+`285 + 241 n` MiB almost exactly: a 285 MiB shared base and 241 MiB a worker. Twelve workers want
+3,180 MiB of a 4,096 MiB limit, and a worker recycling on `--max-requests` overlapping its
+replacement takes that to about 3,421 — 84% of `4g`. `MEM_LIMIT__APP=4g` holds, which is now
+measured rather than assumed, but it is not roomy: 16 workers would not fit.
+
+**Doubling the workers on the same cores moved `search_panel` inside its budget.** 554 → 473 ms
+against 500, with everything else unchanged to within noise. Treat that as "no longer clearly
+over" rather than fixed: the shorter hold gave it 178 samples against 266, and P132's underlying
+34 queries and 238 ms of SQL a call have not moved. More threads reduced the queueing in front of
+a slow endpoint; they did not make it faster.
 
 ## The database is no longer the wall
 
@@ -117,10 +144,11 @@ Nothing here is a cache problem any more; it is query counts and query plans.
 1. **`CPU_LIMIT__APP=8`, `WEB_CONCURRENCY=12`, `MEM_LIMIT__APP=4g`, `CPU_LIMIT__DB=6`,
    `MEM_LIMIT__DB=4g`, `UL_DB_SHARED_BUFFERS=1GB`, `UL_DB_EFFECTIVE_CACHE_SIZE=3GB`** is the
    configuration this measurement points at for 1,000 users, and it is now what
-   `production.sample.env` holds. Nothing has measured it: the 8 is an extrapolation from a linear
-   region, and the memory figure assumes per-worker cost stays flat. The worker count has a
-   ceiling this measurement did not find — 12 workers × 4 gthread threads hold 48 connections
-   against `ul_web`'s limit of 54, so 13 is the most the role budget accepts whatever the CPU says.
+   `production.sample.env` holds. The memory half is measured (above); **the 8 cores are not** —
+   they are an extrapolation from a linear region, and an 8-core host cannot test an 8-core app
+   tier. The worker count has a ceiling this measurement did not find: 12 workers × 4 gthread
+   threads hold 48 connections against `ul_web`'s limit of 54, so 13 is the most the role budget
+   accepts whatever the CPU says.
 2. **P100 and P132 are the next real work** — they are the two biggest SQL costs per call, and
    neither is fixed by more CPU.
 3. **None of this describes damballa.** Production still runs `-k gevent`, `WEB_CONCURRENCY=3` and
