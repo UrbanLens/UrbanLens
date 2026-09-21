@@ -61,11 +61,15 @@ def forget_basemap_tile_catalogue() -> None:
 def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
     """REData's layer catalogue, rewritten into what a browser on this deployment can actually use.
 
-    A raster entry's vendor ``url_template`` is deliberately not passed through: it needs REData's
-    key, and handing the browser a template it cannot use would produce a layer that silently fails
-    to load. A vector entry's ``style_url`` needs no key (see REData's ``D11``) and is passed
-    through unchanged - the client fetches and renders that style document directly, and REData
-    never sees a vector tile go by.
+    A vendor ``url_template`` is deliberately not passed through: it needs REData's key, and handing
+    the browser a template it cannot use would produce a layer that silently fails to load. What is
+    published instead is this deployment's own proxy URL for that layer. A ``style_url`` needs no
+    key (REData's ``D11``) and is passed through unchanged - the client fetches and renders that
+    style document directly, and REData never sees a vector tile go by.
+
+    Since REData's ``D15`` an entry can carry both, and both are kept: ``style_url`` is what a
+    MapLibre map draws, ``url_template`` is what a Leaflet map draws, and a layer that publishes
+    only the first leaves every Leaflet map falling back to a hardcoded vendor CDN.
 
     Args:
         allow_fetch: Whether a cache miss may go to REData. False for anything rendering a page:
@@ -127,7 +131,17 @@ def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
         }
         if is_vector:
             entry["style_url"] = source["style_url"]
-        else:
+            # The two halves of a vector entry are different datasets (Protomaps' basemap and a
+            # vendor's raster), so each carries its own credit and depth - showing one's attribution
+            # over the other's bytes is a licence error, and publishing one's ceiling lets a client
+            # pan past what the other can draw. Absent on a REData that predates D15.
+            for field in ("fallback_attribution", "fallback_min_zoom", "fallback_max_zoom"):
+                if source.get(field) is not None:
+                    entry[field] = source[field]
+        # Offered whenever REData will serve the layer tile-by-tile. A raster entry always is. A
+        # vector one only since D15: before it, such a layer answered a tile request with 400, and
+        # the template's absence upstream is what distinguishes the two deployments.
+        if not is_vector or source.get("url_template"):
             entry["url_template"] = tile_url_template(source_id)
         layers.append(entry)
     if layers:
@@ -139,10 +153,10 @@ def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
 def catalogue_for_viewer(*, authenticated: bool, allow_fetch: bool = True) -> list[dict[str, Any]]:
     """:func:`basemap_tile_catalogue`, filtered to what this viewer can actually fetch.
 
-    A raster entry points at :class:`~urbanlens.dashboard.controllers.basemap_tiles.BasemapTileView`,
-    which is login-required, so offering one to a signed-out visitor (a public share page) would
-    swap a working vendor layer for a grid of 404s. A vector entry's ``style_url`` is fetched
-    straight from REData with no key, so it is offered to everyone.
+    ``url_template`` points at :class:`~urbanlens.dashboard.controllers.basemap_tiles.BasemapTileView`,
+    which is login-required, so offering it to a signed-out visitor (a public share page) would swap
+    a working vendor layer for a grid of 404s. A ``style_url`` is fetched straight from REData with
+    no key, so it is offered to everyone - and an entry carrying both keeps only the style.
 
     Args:
         authenticated: Whether the viewer is signed in to this deployment.
@@ -154,4 +168,8 @@ def catalogue_for_viewer(*, authenticated: bool, allow_fetch: bool = True) -> li
     layers = basemap_tile_catalogue(allow_fetch=allow_fetch)
     if authenticated:
         return layers
-    return [entry for entry in layers if entry.get("source_type") == "vector"]
+    # Since D15 a vector entry carries a proxy template too, so dropping the raster entries is no
+    # longer enough: the template has to come off the ones that stay, or a public share page paints
+    # a grid of 404s exactly where it currently paints a working layer. Copied rather than mutated,
+    # because these dicts are the cached catalogue every other reader shares.
+    return [{key: value for key, value in entry.items() if key != "url_template"} for entry in layers if entry.get("style_url")]

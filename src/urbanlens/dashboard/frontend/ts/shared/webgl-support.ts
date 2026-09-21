@@ -1,7 +1,9 @@
 /**
- * WebGL2 detection for the Leaflet->MapLibre engine choice (PL8). MapLibre GL JS requires WebGL2;
- * caniuse put global support at 95.73% in Aug 2026, so the remaining ~4.27% needs Leaflet kept on
- * hand as a genuine second rendering engine, not a plain "unsupported browser" message - see `D12`
+ * WebGL2 detection for the Leaflet->MapLibre engine choice (PL8). MapLibre GL JS requires WebGL2,
+ * which caniuse put at 95.73% support *globally* in Aug 2026 - this deployment's own analytics have
+ * never been measured, so the complement is not a figure for UrbanLens traffic. What actually makes
+ * Leaflet a genuine second rendering engine rather than a plain "unsupported browser" message is
+ * that nearly every map here is still Leaflet, and that does not expire when WebGL2 does - see `D12`
  * (REData's `../REData/docs/DECISIONS.md`) and `docs/designs/leaflet-to-maplibre-migration.md`
  * item 2 for the reasoning this module exists to serve.
  *

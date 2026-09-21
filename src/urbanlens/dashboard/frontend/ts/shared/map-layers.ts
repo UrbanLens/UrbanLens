@@ -141,8 +141,9 @@ const VECTOR_STYLE_DEFS: Record<string, VectorStyleDef> = {};
  * The self-hosted style document for one of the canonical sources, if this deployment serves one.
  *
  * Only `maplibre-layers.ts` can act on the result - Leaflet has no vector renderer, so a Leaflet
- * map draws the raster fallback for the same key and the two engines diverge on bytes while
- * agreeing on which layer is showing.
+ * map draws `TILE_DEFS` for the same key and the two engines diverge on bytes while agreeing on
+ * which layer is showing. Both sides are this deployment's own since `D15`; before it, the raster
+ * side of a self-hosted layer was a hardcoded vendor CDN.
  * @param kind - Canonical or legacy source key.
  */
 export function vectorStyleFor(kind: string): VectorStyleDef | null {
@@ -378,10 +379,10 @@ function applyEmbeddedCatalogue(): boolean {
  * Registers each catalogue entry into `TILE_DEFS` so `tileLayer()` resolves it by id like any
  * other source, replacing the built-in vendor URL for that id.
  *
- * Vector entries (`source_type: "vector"`) carry a `style_url` rather than an XYZ template, so
- * they land in `VECTOR_STYLE_DEFS` instead - `TILE_DEFS` describes a raster template and Leaflet
- * can only draw one of those. A vector entry therefore reaches a MapLibre map and not a Leaflet
- * one; see `maplibre-layers.ts` and `D11`.
+ * Vector entries (`source_type: "vector"`) also carry a `style_url`, which lands in
+ * `VECTOR_STYLE_DEFS` - `TILE_DEFS` describes a raster template and Leaflet can only draw one of
+ * those. Since REData's `D15` the two are not exclusive, so such an entry registers in both and the
+ * engine picks: MapLibre draws the style, Leaflet the proxied template. See `maplibre-layers.ts`.
  * @returns The ids registered, in catalogue order.
  */
 function registerCatalogue(layers: RedataLayer[]): string[] {
@@ -390,36 +391,39 @@ function registerCatalogue(layers: RedataLayer[]): string[] {
         if (!layer.id || !layer.attribution) continue;
         const key = REDATA_ID_ALIASES[layer.id] ?? layer.id;
         // Absent source_type means a pre-D11 REData deployment, which only ever served raster.
-        if (layer.source_type === "vector") {
-            if (!layer.style_url) continue;
+        const isVector = layer.source_type === "vector" && !!layer.style_url;
+        if (isVector) {
             VECTOR_STYLE_DEFS[key] = {
-                styleUrl: layer.style_url,
+                styleUrl: layer.style_url!,
                 attribution: layer.attribution,
                 minZoom: layer.min_zoom ?? 0,
                 maxZoom: layer.max_zoom ?? MAP_MAX_ZOOM,
             };
-            registered.push(key);
-            continue;
         }
-        if (!layer.url_template) continue;
-        TILE_DEFS[key] = {
-            url: layer.url_template,
-            options: {
-                // The catalogue says where a layer's tiles come from, not how this site draws it.
-                // `borders` is an overlay - its pane, its 0.6 opacity and its *transparent* error
-                // placeholder are this site's, and replacing the whole def dropped all three, so a
-                // REData `borders` layer painted at full opacity in the base layer's own pane.
-                errorTileUrl: BASE_ERROR_TILE_URL,
-                ...BUILT_IN_TILE_DEFS[key]?.options,
-                attribution: layer.attribution,
-                // Leaflet upscales past the vendor's real depth rather than
-                // dropping the layer out, matching the built-in defs above.
-                maxNativeZoom: layer.max_zoom ?? 19,
-                maxZoom: MAP_MAX_ZOOM,
-                minZoom: layer.min_zoom ?? 0,
-            },
-        };
-        registered.push(key);
+        // Registered alongside the style rather than instead of it. A vector entry's raster half is
+        // a different dataset with its own credit and depth, so those come from the `fallback_*`
+        // fields; without this the key keeps its built-in vendor URL and every Leaflet map goes on
+        // hotlinking a public CDN, which is the dependency this whole arrangement exists to end.
+        if (layer.url_template) {
+            TILE_DEFS[key] = {
+                url: layer.url_template,
+                options: {
+                    // The catalogue says where a layer's tiles come from, not how this site draws it.
+                    // `borders` is an overlay - its pane, its 0.6 opacity and its *transparent* error
+                    // placeholder are this site's, and replacing the whole def dropped all three, so a
+                    // REData `borders` layer painted at full opacity in the base layer's own pane.
+                    errorTileUrl: BASE_ERROR_TILE_URL,
+                    ...BUILT_IN_TILE_DEFS[key]?.options,
+                    attribution: (isVector ? layer.fallback_attribution : undefined) ?? layer.attribution,
+                    // Leaflet upscales past the vendor's real depth rather than
+                    // dropping the layer out, matching the built-in defs above.
+                    maxNativeZoom: (isVector ? layer.fallback_max_zoom : undefined) ?? layer.max_zoom ?? 19,
+                    maxZoom: MAP_MAX_ZOOM,
+                    minZoom: (isVector ? layer.fallback_min_zoom : undefined) ?? layer.min_zoom ?? 0,
+                },
+            };
+        }
+        if (isVector || layer.url_template) registered.push(key);
     }
     return registered;
 }
@@ -483,6 +487,13 @@ interface RedataLayer {
     style_url?: string;
     min_zoom?: number | null;
     max_zoom?: number | null;
+    /**
+     * The raster half of a vector entry, which is a different dataset from the style's - its own
+     * credit and its own depth. Absent on a REData deployment that predates `D15`.
+     */
+    fallback_attribution?: string;
+    fallback_min_zoom?: number | null;
+    fallback_max_zoom?: number | null;
 }
 
 /** Creates the geopolitical borders overlay (same tiles on every map). */
@@ -660,15 +671,17 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // Swap between streetLayer and darkLayer without touching satellite/topo.
-    // street-or-dark is the always-present bottom base; topo/satellite sit on top.
+    // street-or-dark is the bottom base; topo/satellite sit on top.
     function syncBaseLayer(): void {
-        if (isDarkActive()) {
-            if (map.hasLayer(streetLayer)) map.removeLayer(streetLayer);
-            if (!map.hasLayer(darkLayer)) darkLayer.addTo(map);
-        } else {
-            if (map.hasLayer(darkLayer)) map.removeLayer(darkLayer);
-            if (!map.hasLayer(streetLayer)) streetLayer.addTo(map);
+        // Satellite is opaque, so every street tile fetched for the same viewport is paid for -
+        // bandwidth, a proxy round trip, a MapTile row upstream - and then covered by an image.
+        // Topo keeps its base: its pane is filtered rather than opaque, so the base shows through.
+        const hidden = map.hasLayer(satelliteLayer);
+        const wanted = hidden ? null : isDarkActive() ? darkLayer : streetLayer;
+        for (const layer of [streetLayer, darkLayer]) {
+            if (layer !== wanted && map.hasLayer(layer)) map.removeLayer(layer);
         }
+        if (wanted && !map.hasLayer(wanted)) wanted.addTo(map);
         applyTopoFilter();
         syncStyleAttribute();
     }
@@ -725,13 +738,16 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     // Replaces Leaflet's on-map control on pages that render attribution elsewhere (e.g. the main map's footer).
     function attributionText(): string {
         const parts: string[] = [];
+        // Read off the def actually drawn rather than named here, because the catalogue replaces
+        // these defs at runtime and a self-hosted layer's raster half is a different dataset from
+        // the vendor default it displaces. A hardcoded credit would keep naming the old one.
+        const creditFor = (key: string, fallback: string): string => (TILE_DEFS[key]?.options?.attribution as string | undefined) ?? fallback;
         if (map.hasLayer(satelliteLayer)) {
-            parts.push("© Esri");
+            parts.push(creditFor("satellite", "© Esri"));
         } else if (map.hasLayer(topographicLayer)) {
-            parts.push("© OpenTopoMap");
+            parts.push(creditFor("topographic", "© OpenTopoMap"));
         } else {
-            // Both street and dark are CARTO-served (see TILE_DEFS) - same attribution either way.
-            parts.push("© OSM · CARTO");
+            parts.push(creditFor(isDarkActive() ? "dark" : "street", "© OSM · CARTO"));
         }
         if (weather && (map.hasLayer(weather.rain) || map.hasLayer(weather.clouds))) {
             parts.push("© OpenWeatherMap");
@@ -793,6 +809,8 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         if (key !== "topographic" && map.hasLayer(topographicLayer)) map.removeLayer(topographicLayer);
         if (key === "satellite" && !map.hasLayer(satelliteLayer)) satelliteLayer.addTo(map);
         if (key === "topographic" && !map.hasLayer(topographicLayer)) topographicLayer.addTo(map);
+        // Whether the base beneath is worth drawing depends on what is now above it.
+        syncBaseLayer();
         syncButtons();
         persistState();
     }

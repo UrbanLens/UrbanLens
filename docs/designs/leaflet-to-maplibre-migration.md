@@ -106,8 +106,12 @@ already specific and file-accurate, not because it should be treated as this rep
    against this project's actual bundler (bun) - not as part of this migration.
 2. **A WebGL2 fallback engine is required, not optional, here** - unlike REData's own staff-only
    dashboard, which shipped a plain "unsupported browser" message instead. `D12`'s decision is explicit
-   that Leaflet stays on hand as a genuine second rendering engine for the browsers that fail WebGL2 -
-   caniuse put that at 95.73% global support in Aug 2026, so ~4.27% of traffic needs it. Home Assistant is
+   that Leaflet stays on hand as a genuine second rendering engine for the browsers that fail WebGL2.
+   caniuse put WebGL2 at 95.73% support *globally* in Aug 2026; this deployment's own analytics have
+   never been measured, so "~4.27% of traffic" - as an earlier version of this item put it - was the
+   global complement restated as a UrbanLens figure, which it is not. The stronger argument does not
+   depend on it: nearly every map here is Leaflet today, and that reason does not expire when WebGL2
+   support reaches 100%. Home Assistant is
    the cited precedent for exactly that permanent dual-engine pattern - not, as an earlier version of this
    item implied, for temporarily adopting the `maplibre-gl-leaflet` *bridge*: `D12`'s own text cites Home
    Assistant adopting that bridge on 2026-08-27 and abandoning it ten days later as *corroborating evidence
@@ -115,12 +119,12 @@ already specific and file-accurate, not because it should be treated as this rep
    bridge stage here at all - see "Bridge-vs-native is decided, not open" below. "Genuine second rendering
    engine," not a migration crutch, has a document-wide consequence not yet drawn out everywhere: whatever
    each item below ports to MapLibre, the pre-existing Leaflet implementation needs to keep working for the
-   ~4.27% that stays on Leaflet, not get deleted once its MapLibre replacement lands. Item 4
+   share that stays on Leaflet, not get deleted once its MapLibre replacement lands. Item 4
    (`map-export.ts`) says this explicitly now; items 3 (`map-clusters.ts`), 6 (`leaflet-rotate`), and 7
    (`leaflet-draw`/Terra Draw) do not yet, checked on reassessment - and each may resolve differently, not
    uniformly "keep it forever": item 3's existing Leaflet clustering is this app's own code, cheap to keep
    running; item 6's `leaflet-rotate` is the unmaintained GPL-3.0 dependency item 6 itself already flagged
-   as undesirable, so a degraded (no-rotate) experience for that 4.27% may be the right call there instead
+   as undesirable, so a degraded (no-rotate) experience for that share may be the right call there instead
    of keeping it forever - though that tension is real, not dismissed: `D12`'s "genuine second rendering
    engine," rejecting REData's own staff-only dashboard's plain "unsupported browser" message, is a
    standard stated about the core mapping experience, not proven to extend to every individual tool at
@@ -156,7 +160,7 @@ already specific and file-accurate, not because it should be treated as this rep
    page-wide cached decision, so calling it again for an offscreen export instance returns the same answer
    the interactive map's own call already got - there is no scenario in this plan, as currently described,
    where WebGL2 is available but the interactive map ends up on Leaflet anyway; that would require some
-   other, currently-undescribed fallback trigger. For the ~4.27% of traffic item 2 keeps on Leaflet (WebGL2
+   other, currently-undescribed fallback trigger. For the visitors item 2 keeps on Leaflet (WebGL2
    genuinely unavailable), `map-export.ts` needs its current `getTileUrl()`-per-tile rasterization kept as
    a permanent second path, not a migration-period stopgap that gets deleted once the MapLibre one exists.
 5. **`map-image-overlays.ts`'s hand-rolled homography (Gaussian elimination) is deleted outright**, in

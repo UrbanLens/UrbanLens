@@ -333,6 +333,104 @@ class BasemapCatalogueTests(TestCase):
         with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
             self.assertEqual(self.client.get(self.url).json()["layers"], [])
 
+    def test_a_d15_entry_keeps_both_shapes(self) -> None:
+        """Since REData's D15 a self-hosted layer serves both ways, and the rewriter used to be an
+        if/else that discarded one before any client saw it - which left every Leaflet map on the
+        hardcoded vendor CDN, because a vector entry arrived with no template to draw instead."""
+        rows = [_D15_STREET]
+
+        with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
+            layers = self.client.get(self.url).json()["layers"]
+
+        self.assertEqual(len(layers), 1)
+        self.assertEqual(layers[0]["style_url"], "https://tiles.example/street.json")
+        self.assertEqual(
+            layers[0]["url_template"],
+            reverse("map.basemap_tiles", kwargs={"layer": "street", "z": 900001, "x": 900002, "y": 900003})
+            .replace("900001", "{z}")
+            .replace("900002", "{x}")
+            .replace("900003", "{y}"),
+        )
+
+    def test_a_d15_entry_carries_the_raster_half_s_own_credit_and_depth(self) -> None:
+        """The two halves are different datasets, so a client drawing one must not show the other's
+        attribution or pan past its ceiling."""
+        with mock.patch(_CONFIGURED, return_value=True), self._sources([_D15_STREET]):
+            entry = self.client.get(self.url).json()["layers"][0]
+
+        self.assertEqual(entry["attribution"], "OSM/Protomaps")
+        self.assertEqual(entry["max_zoom"], 15)
+        self.assertEqual(entry["fallback_attribution"], "Esri")
+        self.assertEqual(entry["fallback_max_zoom"], 19)
+        self.assertEqual(entry["fallback_min_zoom"], 0)
+
+
+#: A `street` entry in REData's post-D15 shape: self-hosted vector style *and* a proxied raster half.
+_D15_STREET = {
+    "id": "street",
+    "name": "Street",
+    "source_type": "vector",
+    "attribution": "OSM/Protomaps",
+    "min_zoom": 0,
+    "max_zoom": 15,
+    "style_url": "https://tiles.example/street.json",
+    "url_template": "https://redata.example/api/v1/tiles/street/{z}/{x}/{y}/",
+    "fallback_attribution": "Esri",
+    "fallback_min_zoom": 0,
+    "fallback_max_zoom": 19,
+}
+
+
+class SignedOutCatalogueTests(TestCase):
+    """What a public share page may be handed: the proxy is login-required, so a template offered to
+    an anonymous visitor paints 404s where a working layer used to be."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        baker.make(User)
+
+    def _viewer(self, rows, *, authenticated: bool):
+        from urbanlens.dashboard.services.map.basemap_catalogue import catalogue_for_viewer
+
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.list_sources", return_value=rows),
+        ):
+            return catalogue_for_viewer(authenticated=authenticated)
+
+    def test_a_signed_out_viewer_is_offered_the_style_without_the_proxy_template(self) -> None:
+        """Dropping the raster *entries* is no longer enough once a vector entry carries a template
+        of its own - it has to come off the entries that stay."""
+        entries = self._viewer([_D15_STREET], authenticated=False)
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["style_url"], "https://tiles.example/street.json")
+        self.assertNotIn("url_template", entries[0])
+
+    def test_a_signed_out_viewer_is_offered_no_raster_only_layer(self) -> None:
+        rows = [
+            {
+                "id": "satellite",
+                "name": "Satellite",
+                "attribution": "Esri",
+                "url_template": "https://redata.example/t/{z}/{x}/{y}/",
+            }
+        ]
+
+        self.assertEqual(self._viewer(rows, authenticated=False), [])
+
+    def test_a_signed_in_viewer_keeps_the_proxy_template(self) -> None:
+        entries = self._viewer([_D15_STREET], authenticated=True)
+
+        self.assertIn("url_template", entries[0])
+
+    def test_stripping_the_template_does_not_mutate_the_shared_catalogue(self) -> None:
+        """The entries are the cached catalogue every other reader gets handed."""
+        self._viewer([_D15_STREET], authenticated=False)
+        # Cached now, so this reads the same dicts the signed-out pass just filtered.
+        self.assertIn("url_template", self._viewer([_D15_STREET], authenticated=True)[0])
+
 
 class TileLogPrivacyTests(SimpleTestCase):
     """A tile URL is a coordinate somebody was looking at.

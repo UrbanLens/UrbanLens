@@ -287,7 +287,84 @@ describe("registerRedataLayers", () => {
         expect(vectorStyleFor("street")).toBeNull();
     });
 
-    test("the live catalogue's shape leaves Leaflet's default base layer on a vendor CDN", async () => {
+    test("registers both shapes of a D15 entry, so Leaflet stops falling back to a vendor CDN", async () => {
+        stubFetch({
+            body: {
+                layers: [
+                    {
+                        id: "street",
+                        source_type: "vector",
+                        style_url: "https://tiles.urbanlens.org/styles/street.json",
+                        url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/",
+                        attribution: "OSM/Protomaps",
+                        min_zoom: 0,
+                        max_zoom: 15,
+                        fallback_attribution: "Esri",
+                        fallback_min_zoom: 0,
+                        fallback_max_zoom: 19,
+                    },
+                ],
+            },
+        });
+        // One entry, registered once, even though it now fills two tables.
+        expect(await registerRedataLayers()).toEqual(["street"]);
+        expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
+
+        const state = stubLeaflet();
+        tileLayer("street");
+        expect(state.calls[0]?.url).toBe("/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/");
+    });
+
+    test("credits a D15 entry's raster half to the raster half's own source, at its own depth", async () => {
+        // The style is Protomaps at z15; the proxied tiles are Esri at z19. Showing one layer's
+        // credit over the other's bytes is a licence error, and publishing one's ceiling lets a
+        // Leaflet map stop drawing four zoom levels early.
+        stubFetch({
+            body: {
+                layers: [
+                    {
+                        id: "street",
+                        source_type: "vector",
+                        style_url: "https://x/street.json",
+                        url_template: "/proxy/street/{z}/{x}/{y}/",
+                        attribution: "OSM/Protomaps",
+                        min_zoom: 0,
+                        max_zoom: 15,
+                        fallback_attribution: "Esri",
+                        fallback_min_zoom: 2,
+                        fallback_max_zoom: 19,
+                    },
+                ],
+            },
+        });
+        await registerRedataLayers();
+
+        expect(vectorStyleFor("street")?.attribution).toBe("OSM/Protomaps");
+        expect(vectorStyleFor("street")?.maxZoom).toBe(15);
+
+        const state = stubLeaflet();
+        tileLayer("street");
+        expect(state.calls[0]?.options.attribution).toBe("Esri");
+        expect(state.calls[0]?.options.maxNativeZoom).toBe(19);
+        expect(state.calls[0]?.options.minZoom).toBe(2);
+    });
+
+    test("falls back to the entry's own attribution and zooms when a D15 entry omits the fallback fields", async () => {
+        stubFetch({
+            body: {
+                layers: [{ id: "street", source_type: "vector", style_url: "https://x/s.json", url_template: "/proxy/street/{z}/{x}/{y}/", attribution: "Only one", min_zoom: 1, max_zoom: 14 }],
+            },
+        });
+        await registerRedataLayers();
+
+        const state = stubLeaflet();
+        tileLayer("street");
+        expect(state.calls[0]?.options.attribution).toBe("Only one");
+        expect(state.calls[0]?.options.maxNativeZoom).toBe(14);
+        expect(state.calls[0]?.options.minZoom).toBe(1);
+    });
+
+    test("the pre-D15 catalogue's shape leaves Leaflet's default base layer on a vendor CDN", async () => {
         // REData's production catalogue as of 2026-09-20, with `url_template` already rewritten to
         // this deployment's proxy the way `basemap_catalogue.py` hands it to a browser. street and
         // dark went vector-only that day; the other three stayed raster.
@@ -773,6 +850,13 @@ class FakeMap {
     listenerCount(event: string): number {
         return this.handlers.get(event)?.size ?? 0;
     }
+    /** The tile URL of every layer currently on the map, so a test can say which are drawn. */
+    activeUrls(): string[] {
+        return [...this.activeLayers].map((layer) => (layer as { url?: string }).url ?? "");
+    }
+    isDrawing(fragment: string): boolean {
+        return this.activeUrls().some((url) => url.includes(fragment));
+    }
     /** Invokes every handler registered for `event`, the way real Leaflet's `Evented.fire` would. */
     fire(event: string, data: Record<string, unknown> = {}): void {
         for (const handler of this.handlers.get(event) ?? []) (handler as (arg: unknown) => void)(data);
@@ -781,9 +865,25 @@ class FakeMap {
 
 function stubLeafletForMapLayers(): void {
     (globalThis as Record<string, unknown>).L = {
-        tileLayer: () => {
-            const layer = { addTo: (map: FakeMap) => (map.addLayer(layer), layer) };
+        tileLayer: (url: string) => {
+            const layer = { url, addTo: (map: FakeMap) => (map.addLayer(layer), layer) };
             return layer;
+        },
+        // A same-origin def goes through `own-tiles.ts`'s subclass rather than `L.tileLayer`, so a
+        // stub without this breaks the moment a catalogue points a layer at this deployment's proxy.
+        TileLayer: {
+            extend: () =>
+                class {
+                    url: string;
+                    constructor(url: string) {
+                        this.url = url;
+                    }
+                    addTo(map: FakeMap) {
+                        map.addLayer(this);
+                        return this;
+                    }
+                    on() {}
+                },
         },
     };
 }
@@ -927,6 +1027,65 @@ describe("createMapLayers destroy()", () => {
         expect(map.listenerCount("contextmenu")).toBe(0);
         layers.destroy();
         expect(map.listenerCount("contextmenu")).toBe(0);
+    });
+
+    test("stops drawing the street base once an opaque satellite layer covers it", () => {
+        // Every street tile fetched under satellite is paid for and then hidden. It costs the
+        // deployment itself once those tiles go through the proxy rather than a vendor CDN.
+        stubLeafletForMapLayers();
+        const map = new FakeMap();
+        const layers = createMapLayers(map as unknown as L.Map, { contextMenu: false });
+
+        expect(map.isDrawing("cartocdn.com/light_all")).toBe(true);
+
+        layers.setBase("satellite");
+        expect(map.isDrawing("World_Imagery")).toBe(true);
+        expect(map.isDrawing("cartocdn.com/light_all")).toBe(false);
+
+        // And comes back, or leaving satellite would leave the map with no base at all.
+        layers.setBase("street");
+        expect(map.isDrawing("cartocdn.com/light_all")).toBe(true);
+    });
+
+    test("keeps the street base under topo, whose pane is filtered rather than opaque", () => {
+        stubLeafletForMapLayers();
+        const map = new FakeMap();
+        const layers = createMapLayers(map as unknown as L.Map, { contextMenu: false });
+
+        layers.setBase("topographic");
+
+        expect(map.isDrawing("opentopomap.org")).toBe(true);
+        expect(map.isDrawing("cartocdn.com/light_all")).toBe(true);
+    });
+
+    test("credits the layer actually drawn, not the vendor the built-in def happened to name", async () => {
+        // Once the catalogue replaces a def, the hardcoded credit names a vendor whose bytes are no
+        // longer on screen - which is a licence error, not a cosmetic one.
+        resetRedataLayersCacheForTests();
+        globalThis.fetch = (() =>
+            Promise.resolve({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        layers: [{ id: "street", source_type: "vector", style_url: "https://x/s.json", url_template: "/proxy/street/{z}/{x}/{y}/", attribution: "OSM/Protomaps", fallback_attribution: "Esri World Street Map" }],
+                    }),
+            } as Response)) as unknown as typeof fetch;
+        await registerRedataLayers();
+
+        stubLeafletForMapLayers();
+        // Runs the callback rather than queueing it, so the credit is readable in the test.
+        (globalThis as Record<string, unknown>).requestAnimationFrame = (cb: FrameRequestCallback) => (cb(0), 1);
+        const map = new FakeMap();
+        const credits: string[] = [];
+        createMapLayers(map as unknown as L.Map, { contextMenu: false, onAttribution: (text) => credits.push(text) });
+
+        map.fire("layeradd");
+
+        expect(credits.at(-1)).toContain("Esri World Street Map");
+        expect(credits.at(-1)).not.toContain("CARTO");
+
+        // TILE_DEFS is module state; leaving this registered would follow the other tests around.
+        resetRedataLayersCacheForTests();
     });
 
     test("cancels a pending attribution animation frame and stops scheduling new ones after destroy", () => {
