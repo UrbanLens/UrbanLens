@@ -19,8 +19,10 @@
 /**
  * Requests for this deployment's own tiles in flight at once, across every map on the page.
  *
- * Matched to the site's upstream budget - `basemap_tile_upstream_concurrency` (2) x
- * `WEB_CONCURRENCY` (3). Going wider only buys refusals; going narrower leaves the upstream idle.
+ * Matched to the site's upstream budget - `basemap_tile_upstream_concurrency` x `WEB_CONCURRENCY`,
+ * which is 2 x 3 on the compose default and 2 x 6 where `production.sample.env` is applied, so
+ * this is the floor of the two. Going wider only buys refusals; going narrower leaves the upstream
+ * idle.
  * One page is not entitled to the whole budget, but it is the only number here worth spending, and
  * a page that asks for less than it can use is slower for no one else's benefit.
  */
@@ -118,7 +120,14 @@ export function acquireOwnTileSlot(): Promise<() => void> {
  */
 export function ownTileRetryDelayMs(attempt: number, retryAfterMs = 0): number | null {
     const delay = OWN_TILE_RETRY_DELAYS_MS[attempt];
-    return delay === undefined ? null : Math.max(delay * (0.5 + Math.random()), retryAfterMs);
+    if (delay === undefined) return null;
+    // Jitter above the larger of the two rather than around the schedule alone. Clamping a
+    // jittered draw up to the server's ask hands back an exact constant, and the proxy's ask is
+    // the same second as the first scheduled delay, so half of a refused cohort would retry
+    // together. Never below either number: a retry inside the upstream's ~1.5s is refused for
+    // certain and costs one of only four attempts.
+    const floor = Math.max(delay, retryAfterMs);
+    return floor * (1 + Math.random() * 0.5);
 }
 
 /**

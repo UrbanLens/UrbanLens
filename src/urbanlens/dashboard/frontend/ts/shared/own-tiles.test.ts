@@ -132,6 +132,19 @@ describe("the retry schedule", () => {
         for (let i = 0; i < 20; i++) expect(ownTileRetryDelayMs(3, 100)!).toBeGreaterThan(1000);
     });
 
+    /**
+     * The jitter has to survive the server's ask, not be clamped away by it. Every refused tile
+     * carries the proxy's own `Retry-After: 1`, which is the same 1000ms as the first scheduled
+     * delay - so a schedule that only jitters downward from 1000 has half its draws raised back to
+     * exactly 1000, and half of every refused cohort retries in the same millisecond.
+     */
+    test("stays jittered when the server's ask matches the schedule", () => {
+        const drawn = Array.from({ length: 200 }, () => ownTileRetryDelayMs(0, 1000)!);
+
+        expect(new Set(drawn).size).toBeGreaterThan(100);
+        expect(drawn.filter((delay) => delay === 1000)).toHaveLength(0);
+    });
+
     test("a server asking for a wait does not buy the tile another attempt", () => {
         expect(ownTileRetryDelayMs(4, 30_000)).toBeNull();
     });

@@ -305,6 +305,40 @@ const OWN_TILE_LAYER = {
     },
 };
 
+/** The named entities a tile attribution actually uses, plus the ones any HTML may carry. */
+const ATTRIBUTION_ENTITIES: Record<string, string> = {
+    amp: "&",
+    copy: "©",
+    gt: ">",
+    lt: "<",
+    mdash: "—",
+    nbsp: " ",
+    ndash: "–",
+    quot: '"',
+    reg: "®",
+    trade: "™",
+};
+
+/**
+ * A `TILE_DEFS` attribution as the credit line can show it.
+ *
+ * Those strings are written for Leaflet's own attribution control, which renders them as HTML -
+ * links and `&copy;` and all. `setAttribution` writes the credit line with `textContent`, so
+ * anything left as markup is shown to the reader verbatim.
+ * @param html - The def's attribution, or a REData catalogue entry's.
+ */
+export function attributionAsText(html: string): string {
+    return html
+        .replace(/<[^>]*>/g, "")
+        .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, ref: string) => {
+            if (ref.startsWith("#x") || ref.startsWith("#X")) return String.fromCodePoint(parseInt(ref.slice(2), 16));
+            if (ref.startsWith("#")) return String.fromCodePoint(Number(ref.slice(1)));
+            return ATTRIBUTION_ENTITIES[ref.toLowerCase()] ?? whole;
+        })
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 /**
  * Resolves one of the canonical sources to the shape `buildRasterStyle` (`maplibre-raster-style.ts`)
  * needs - the MapLibre-side counterpart to `tileLayer()` above. Same resolution order (`kind` as
@@ -741,7 +775,10 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         // Read off the def actually drawn rather than named here, because the catalogue replaces
         // these defs at runtime and a self-hosted layer's raster half is a different dataset from
         // the vendor default it displaces. A hardcoded credit would keep naming the old one.
-        const creditFor = (key: string, fallback: string): string => (TILE_DEFS[key]?.options?.attribution as string | undefined) ?? fallback;
+        const creditFor = (key: string, fallback: string): string => {
+            const credit = TILE_DEFS[key]?.options?.attribution as string | undefined;
+            return credit ? attributionAsText(credit) : fallback;
+        };
         if (map.hasLayer(satelliteLayer)) {
             parts.push(creditFor("satellite", "© Esri"));
         } else if (map.hasLayer(topographicLayer)) {

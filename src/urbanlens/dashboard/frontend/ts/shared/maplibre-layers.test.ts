@@ -473,9 +473,19 @@ describe("attribution", () => {
     });
 
     test("credits the vendor behind the selected base layer", () => {
-        expect(attributionFor({}).at(-1)).toContain("OSM · CARTO");
+        expect(attributionFor({}).at(-1)).toContain("OpenStreetMap");
+        expect(attributionFor({}).at(-1)).toContain("CARTO");
         expect(attributionFor({ defaultBase: "satellite" }).at(-1)).toContain("Esri");
         expect(attributionFor({ defaultBase: "topographic" }).at(-1)).toContain("OpenTopoMap");
+    });
+
+    /** The credit is rendered with textContent, so a def's Leaflet-flavoured HTML would show as markup. */
+    test("carries no markup or entities", () => {
+        for (const options of [{}, { defaultBase: "satellite" as const }, { defaultBase: "topographic" as const }]) {
+            const text = attributionFor(options).at(-1)!;
+            expect(text).not.toMatch(/<[a-z/]/i);
+            expect(text).not.toMatch(/&[a-z#][a-z0-9]*;/i);
+        }
     });
 
     test("updates when the base layer changes", () => {
@@ -489,9 +499,55 @@ describe("attribution", () => {
         expect(seen.at(-1)).toContain("Esri");
     });
 
-    test("does not credit Esri twice when borders sit under a satellite base", () => {
+    test("does not credit the borders overlay on top of a satellite base", () => {
         const text = attributionFor({ defaultBase: "satellite", initialOverlays: ["borders"] }).at(-1)!;
-        expect(text.match(/Esri/g)).toHaveLength(1);
+
+        // Both are Esri's, so naming the boundaries set as well is noise the reader gains nothing from.
+        expect(text).not.toContain("Boundaries");
+        expect(text).toContain("Esri");
+    });
+
+    /**
+     * Crediting whoever drew the bytes on screen is a licence obligation, not decoration. Where
+     * REData serves a base layer itself, the vendor it replaced must not keep the credit - the
+     * Leaflet engine reads the live `TILE_DEFS` entry for exactly this reason and this engine has
+     * to as well, since `attributionControl` is off on every page that uses it.
+     */
+    describe("with a REData-registered raster layer", () => {
+        const realFetch = globalThis.fetch;
+
+        afterEach(() => {
+            globalThis.fetch = realFetch;
+            resetRedataLayersCacheForTests();
+        });
+
+        async function registerRaster(id: string, attribution: string): Promise<void> {
+            resetRedataLayersCacheForTests();
+            globalThis.fetch = (() =>
+                Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ layers: [{ id, source_type: "raster", url_template: "https://redata.example/{z}/{x}/{y}.png", attribution }] }),
+                } as Response)) as unknown as typeof fetch;
+            await registerRedataLayers();
+        }
+
+        test("credits the deployment's own catalogue, not the vendor it replaced", async () => {
+            await registerRaster("satellite", "© Our own imagery");
+
+            expect(attributionFor({ defaultBase: "satellite" }).at(-1)).toContain("© Our own imagery");
+        });
+
+        test("credits the catalogue's borders overlay too", async () => {
+            await registerRaster("borders", "© Our own borders");
+
+            expect(attributionFor({ initialOverlays: ["borders"] }).at(-1)).toContain("© Our own borders");
+        });
+
+        test("falls back to the vendor literal for a layer the catalogue does not carry", async () => {
+            await registerRaster("satellite", "© Our own imagery");
+
+            expect(attributionFor({ defaultBase: "topographic" }).at(-1)).toContain("OpenTopoMap");
+        });
     });
 });
 

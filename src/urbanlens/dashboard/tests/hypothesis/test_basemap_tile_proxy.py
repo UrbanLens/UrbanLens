@@ -179,6 +179,26 @@ class BasemapTileProxyTests(TestCase):
 
         self.assertEqual(response.status_code, 503)
 
+    def test_an_oversized_upstream_body_answers_503_rather_than_500(self) -> None:
+        """The third thing ``download_tile`` can raise, and the one the except tuple missed.
+        ``read_capped`` refuses a body over 25MB - or one the gateway forgot to stream - with a
+        bare ``GatewayRequestError``, which is neither an ``OSError`` nor the gateway's structured
+        type. A viewport asks for ~30 tiles at once and nothing suppresses the retry, so one
+        misbehaving layer 500s on repeat instead of degrading, and the client's backoff never
+        engages because a 500 carries no Retry-After."""
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(
+                f"{_GATEWAY}.download_tile",
+                side_effect=GatewayRequestError("basemap tile is larger than the 25MB limit for proxied media"),
+            ),
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 503)
+
     def test_unconfigured_redata_is_a_404_not_a_crash(self) -> None:
         with mock.patch(_CONFIGURED, return_value=False):
             self.assertEqual(self.client.get(self.url).status_code, 404)

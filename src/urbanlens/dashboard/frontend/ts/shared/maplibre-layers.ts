@@ -19,7 +19,7 @@
 
 import { showMapContextMenu } from "./map-context-menu";
 import { createLayersPanel } from "./map-layers-panel";
-import { normalizeBase, rasterSourceFor, vectorStyleFor } from "./map-layers";
+import { attributionAsText, normalizeBase, rasterSourceFor, vectorStyleFor } from "./map-layers";
 import type { BaseLayerKey, CustomLayerToggle, MapDarkMode, MapLayersInstance, MapLayersOptions, MapLayersState } from "./map-layers";
 import { toMapLibreTileUrls } from "./maplibre-raster-style";
 import { fetchVectorStyle } from "./maplibre-vector-style";
@@ -362,13 +362,19 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         // What is drawing the ground is what has to be credited, and a vector style is served by
         // this deployment rather than by the vendor whose raster layer it replaced.
         const vectorDef = vectorKind ? vectorStyleFor(vectorKind) : null;
-        if (vectorDef) parts.push(vectorDef.attribution);
-        else if (base === "satellite") parts.push("© Esri");
-        else if (base === "topographic") parts.push("© OpenTopoMap");
+        // A vendor literal is only the fallback: where the REData catalogue registered the layer,
+        // what drew the bytes is this deployment's own source and that is what has to be credited.
+        const creditFor = (kind: string, fallback: string): string => {
+            const credit = rasterSourceFor(kind).attribution;
+            return credit ? attributionAsText(credit) : fallback;
+        };
+        if (vectorDef) parts.push(attributionAsText(vectorDef.attribution));
+        else if (base === "satellite") parts.push(creditFor("satellite", "© Esri"));
+        else if (base === "topographic") parts.push(creditFor("topographic", "© OpenTopoMap"));
         // Both street and dark are CARTO-served (see TILE_DEFS) - same attribution either way.
-        else parts.push("© OSM · CARTO");
+        else parts.push(creditFor(effectiveBaseKind(), "© OSM · CARTO"));
         if (weatherKey && weatherOn) parts.push("© OpenWeatherMap");
-        if (bordersOn && base !== "satellite") parts.push("© Esri");
+        if (bordersOn && base !== "satellite") parts.push(creditFor("borders", "© Esri"));
         parts.push("MapLibre");
         return parts.join(" · ");
     }

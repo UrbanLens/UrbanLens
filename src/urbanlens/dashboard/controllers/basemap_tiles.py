@@ -33,6 +33,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 
 from urbanlens.dashboard.services.core import bounded_cache
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, ServiceDisabledError
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -208,7 +209,7 @@ class BasemapTileView(AccessMixin, View):
                 return HttpResponse(status=503, headers={"Retry-After": "1"})
             try:
                 status, body, content_type = RedataBasemapTilesGateway().download_tile(layer, z, x, y)
-            except (LocationContextUnavailableError, RequestCancelledError, OSError) as exc:
+            except (LocationContextUnavailableError, RequestCancelledError, GatewayRequestError, OSError) as exc:
                 logger.warning("Basemap tile fetch failed for %s %s/%s/%s: %s", layer, z, x, y, exc)
                 if isinstance(exc, ServiceDisabledError):
                     # Switched off rather than busy or unreachable, so it will still be switched off

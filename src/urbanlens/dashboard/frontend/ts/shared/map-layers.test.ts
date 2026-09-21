@@ -1113,3 +1113,45 @@ describe("createMapLayers destroy()", () => {
         expect(raf.pendingCount()).toBe(0);
     });
 });
+
+/**
+ * `setAttribution` writes the credit into the footer with `textContent`, so whatever the engine
+ * builds is shown literally. `TILE_DEFS` attributions are Leaflet-flavoured HTML - the string
+ * Leaflet's own control renders as markup - so reading one straight into the credit line puts
+ * `&copy; <a href="...">OpenStreetMap</a>` on the page as visible text.
+ */
+describe("the attribution line", () => {
+    afterEach(() => {
+        (globalThis as Record<string, unknown>).L = realL;
+        delete (globalThis as Record<string, unknown>).matchMedia;
+        document.body.innerHTML = "";
+        window.requestAnimationFrame = realRAF;
+        resetRedataLayersCacheForTests();
+    });
+
+    function creditFor(options: Parameters<typeof createMapLayers>[1] = {}): string {
+        stubLeafletForMapLayers();
+        (globalThis as Record<string, unknown>).requestAnimationFrame = (cb: FrameRequestCallback) => (cb(0), 1);
+        const map = new FakeMap();
+        const seen: string[] = [];
+        createMapLayers(map as unknown as L.Map, { ...options, contextMenu: false, onAttribution: (text) => seen.push(text) });
+        // The credit is rebuilt off layeradd/layerremove, so nothing is reported until a layer moves.
+        map.fire("layeradd");
+        return seen.at(-1)!;
+    }
+
+    test("carries no markup or entities, because the footer shows it as text", () => {
+        const text = creditFor();
+
+        expect(text).not.toMatch(/<[a-z/]/i);
+        expect(text).not.toMatch(/&[a-z#][a-z0-9]*;/i);
+    });
+
+    test("still names the vendors it is crediting", () => {
+        const text = creditFor();
+
+        expect(text).toContain("OpenStreetMap");
+        expect(text).toContain("CARTO");
+        expect(text).toContain("Leaflet");
+    });
+});
