@@ -862,6 +862,10 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),
             Index(fields=["profile", "created"], name="idxdb_pin_pfile_created"),
+            # Sorted by the key a `.distinct()` de-duplicates on, so autocomplete's search can
+            # start from one account's pins instead of walking the table in primary-key order to
+            # get presorted input (X28, P100).
+            Index(fields=["profile", "id"], name="idxdb_pin_pfile_id"),
         ]
         constraints = [
             UniqueConstraint(
