@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize static %}
 {% comment %}Navbar banner shown site-wide for each of the profile's active (unresolved) safety check-ins.{% endcomment %}
 <div id="safety-active-banner" hx-get="{% url 'safety.active_banner' %}" hx-trigger="safetyBannerRefresh from:body" hx-swap="outerHTML">
     {% for checkin in checkins %}
@@ -11,6 +11,7 @@
             <button type="button" class="safety-active-banner-close-btn"
                     data-checkin-url="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}"
                     data-banner-id="safety-active-banner-{{ checkin.uuid }}"
+                    data-csrf-token="{{ csrf_token }}"
                     title="Check in now and close">
                 <i class="material-symbols-outlined">close</i>
             </button>
@@ -18,40 +19,4 @@
     </div>
     {% endfor %}
 </div>
-<script>
-(function () {
-    // Delegated on document so this keeps working no matter how many banners
-    // render (0-N) and survives this partial being reloaded/swapped by HTMX
-    // polling - re-registering the listener each time would be harmless but
-    // wasteful, so guard with a flag on window instead.
-    if (window.__safetyActiveBannerDelegated) return;
-    window.__safetyActiveBannerDelegated = true;
-
-    document.addEventListener('click', function (event) {
-        var btn = event.target.closest('.safety-active-banner-close-btn');
-        if (!btn) return;
-        var url = btn.dataset.checkinUrl;
-        var bannerId = btn.dataset.bannerId;
-        var proceed = window.confirmDialog ? window.confirmDialog({
-            title: "Check in now?",
-            message: "This marks you as checked in and closes the active check-in.",
-            confirmLabel: "I'm safe - check in",
-            danger: false,
-        }) : Promise.resolve(window.confirm('Mark yourself checked in and close this check-in?'));
-        proceed.then(function (ok) {
-            if (!ok) return;
-            fetch(url, {
-                method: 'POST',
-                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-            }).then(function (r) {
-                if (!r.ok) throw new Error();
-                var banner = document.getElementById(bannerId);
-                if (banner) banner.remove();
-                if (window.toastr) toastr.success('Checked in - check-in closed.');
-            }).catch(function () {
-                if (window.toastr) toastr.error('Could not check in. Please try again.');
-            });
-        });
-    });
-}());
-</script>
+<script src="{% static 'js/safety-checkin-banner.js' %}"></script>

@@ -171,6 +171,7 @@ CONTEXT_PROCESSORS = [
     "urbanlens.dashboard.context_processors.add_active_checkins_banner",
     "urbanlens.dashboard.context_processors.add_demo_context",
     "urbanlens.dashboard.context_processors.add_comment_map_config",
+    "urbanlens.dashboard.context_processors.add_e2ee_urls",
 ]
 
 TEMPLATES = [

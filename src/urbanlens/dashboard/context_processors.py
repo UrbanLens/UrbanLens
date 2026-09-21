@@ -348,6 +348,35 @@ def add_comment_map_config(request: HttpRequest) -> dict[str, dict[str, Any]]:
     }
 
 
+#: Stands in for the profile slug the conversation-key URL takes, so the base path can be
+#: recovered from one reverse() call instead of hand-building the route.
+_E2EE_SLUG_PLACEHOLDER = "e2ee-slug-token"
+
+
+@deferred("e2ee_urls")
+def add_e2ee_urls(request: HttpRequest) -> dict[str, dict[str, str]]:
+    """URLs the OAuth-enrollment bootstrap script needs, once ``e2ee_needs_oauth_enroll`` gates it in.
+
+    Mirrors ``add_comment_map_config``: the request-shaped values travel with the page, and the
+    behavior that reads them (e2ee-oauth-enroll-bootstrap.js) is a cached static file.
+    """
+    keys_url = reverse("e2ee.keys")
+    conversation_key_url = reverse("e2ee.conversation_key", kwargs={"profile_slug": _E2EE_SLUG_PLACEHOLDER})
+    return {
+        "e2ee_urls": {
+            "loginParams": reverse("e2ee.login_params"),
+            "enroll": reverse("e2ee.enroll"),
+            "keys": keys_url,
+            "rewrap": reverse("e2ee.rewrap"),
+            "reset": reverse("e2ee.reset"),
+            "partnerKeyBase": keys_url,
+            "conversationKeyBase": conversation_key_url.removesuffix(f"{_E2EE_SLUG_PLACEHOLDER}/"),
+            "login": reverse("login"),
+            "faqUrl": f"{reverse('faq')}#faq-e2ee",
+        }
+    }
+
+
 #: Template flag, and the ``SiteFeature`` member it reports.
 _FEATURE_FLAGS = {
     "can_use_ai_features": "AI",
