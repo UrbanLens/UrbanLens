@@ -110,10 +110,11 @@ MapLibre draws the self-hosted style. That divergence is inherent to `D12`'s two
 ## What this cost, and the bound added because of it
 
 Turning the catalogue on converts ~30 static CDN tile requests per map page into ~30 authenticated
-Django requests. Against production REData each uncached one takes **~1.5s**, and that is REData's
-per-request key-verification cost rather than anything to do with tiles - the trivial catalogue
-endpoint takes the same 1.5s, an invalid key is rejected in 55ms. Full measurement and cause in
-**`P131`**; the fix is one hasher change in REData.
+Django requests. As measured 2026-09-19, each uncached one cost ~1.5s of REData per-request
+key-verification (PBKDF2), regardless of tile size - an invalid key was rejected in 55ms. **REData
+fixed that upstream since**, confirmed 2026-09-21: a valid key now costs about as much as an invalid
+one (~0.05s more, not ~1.4s). What an uncached tile costs now is REData's own render/cache cost
+instead, 0.43-0.98s cold on the three layers measured. Current numbers and cause in `P131`.
 
 Until that lands, `basemap_tile_upstream_concurrency` (default 2) bounds how many tiles one web
 process fetches upstream at once, answering an uncached 503 immediately over the cap rather than
@@ -158,8 +159,9 @@ else, and the catalogue is cached for a day, so any cause that outlasts a page l
 shape. The proxy now drops the cached catalogue when it is refused with `ServiceDisabledError`
 specifically - switched off rather than busy - and the next load falls back to the built-in vendor
 sources (verified: 48 vendor tiles, zero placeholders). A rate limit deliberately does not trigger
-it: being over budget for a minute is worth neither the layers nor the ~1.45s REData call that
-rebuilding the catalogue costs, and dropping it there would flap under the load that caused it.
+it: being over budget for a minute was worth neither the layers nor the ~1.45s REData call that
+rebuilding the catalogue cost at the time (now ~0.1s, `P131`), and dropping it there would flap
+under the load that caused it.
 
 ## What the vector half will need, read off the real style documents
 
@@ -210,8 +212,10 @@ per `D12`. `PL8` carries the punch list.
 
 - **`T8` §0 needs rewriting on REData's side** - the deploy it says is held has happened. Its vector
   paragraph is still accurate.
-- **`P131` is the highest-value thing REData could fix for UrbanLens right now.** It is not specific
-  to tiles; every one of the ~15 REData integrations here pays ~1.45s per call.
+- **`P131`'s original ask - a hasher change in REData - is done, confirmed 2026-09-21.** All ~15
+  REData integrations that pay per-call now pay auth cost close to nothing; `P131` itself now
+  tracks a smaller, different question (what a cold tile costs, and what that means for
+  `basemap_tile_upstream_concurrency`).
 - **The `pmtiles` dependency above is worth knowing before the bucket lands**, because it is a
   UrbanLens-side prerequisite nobody had written down and it does not become visible until a style
   URL is actually published. Worth a line in REData's own `D11` too - a client cannot consume a
